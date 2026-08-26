@@ -455,22 +455,7 @@ setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_strea
 setattr(DefaultContextAdmissionLedger, "_recover_sqlite_result", _recover_sqlite_result_method)
 setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_method)
 
-from ._status import (  # noqa: E402
-    _validate_integrity,
-    _validate_metadata,
-)
-
 setattr(DefaultContextAdmissionLedger, "_set_store_failure", _set_store_failure)
-setattr(
-    DefaultContextAdmissionLedger,
-    "_validate_integrity",
-    staticmethod(_validate_integrity),
-)
-setattr(
-    DefaultContextAdmissionLedger,
-    "_validate_metadata",
-    staticmethod(_validate_metadata),
-)
 
 from ._store import (  # noqa: E402
     _configure_connection,
@@ -480,6 +465,8 @@ from ._store import (  # noqa: E402
     _has_initialization_link,
     _recover_initialization_link,
     _validate_database_file,
+    _validate_integrity,
+    _validate_metadata,
 )
 
 setattr(DefaultContextAdmissionLedger, "_ensure_store", _ensure_store)
@@ -491,6 +478,16 @@ setattr(DefaultContextAdmissionLedger, "_ensure_private_parent", _ensure_private
 setattr(DefaultContextAdmissionLedger, "_validate_database_file", _validate_database_file)
 setattr(DefaultContextAdmissionLedger, "_connect", _connect)
 setattr(DefaultContextAdmissionLedger, "_configure_connection", _configure_connection)
+setattr(
+    DefaultContextAdmissionLedger,
+    "_validate_integrity",
+    staticmethod(_validate_integrity),
+)
+setattr(
+    DefaultContextAdmissionLedger,
+    "_validate_metadata",
+    staticmethod(_validate_metadata),
+)
 
 from ._inspection import _inspect_stream as _inspect_stream_method  # noqa: E402
 

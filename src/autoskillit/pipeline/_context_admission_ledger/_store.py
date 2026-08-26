@@ -48,6 +48,8 @@ __all__ = [
     "_has_initialization_link",
     "_ensure_private_parent",
     "_validate_database_file",
+    "_validate_integrity",
+    "_validate_metadata",
     "_connect",
     "_configure_connection",
 ]
@@ -211,6 +213,39 @@ def _validate_database_file(self) -> tuple[int, int]:
         file_mode=_DATABASE_MODE,
         reason_code="insecure-store-file",
     )
+
+
+def _validate_integrity(connection: sqlite3.Connection) -> None:
+    """Static method bound onto DefaultContextAdmissionLedger."""
+    row = connection.execute("PRAGMA integrity_check").fetchone()
+    if row != ("ok",):
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "sqlite-integrity-failed",
+        )
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise _LedgerOpenError(
+            ContextAdmissionStorageFailureReason.INTEGRITY,
+            "sqlite-foreign-key-check-failed",
+        )
+
+
+def _validate_metadata(metadata: dict[str, str]) -> None:
+    """Static method bound onto DefaultContextAdmissionLedger."""
+    expected = {
+        "schema_version": str(_SCHEMA_VERSION),
+        "encoding_version": str(CONTEXT_ADMISSION_ENCODING_VERSION),
+        "protocol_version": str(CONTEXT_ADMISSION_PROTOCOL_VERSION),
+        "store_health": ContextAdmissionStorageHealthStatus.HEALTHY.value,
+    }
+    for key, value in expected.items():
+        if metadata.get(key) != value:
+            reason = {
+                "schema_version": ContextAdmissionStorageFailureReason.UNSUPPORTED_SCHEMA,
+                "encoding_version": ContextAdmissionStorageFailureReason.UNSUPPORTED_ENCODING,
+                "protocol_version": ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
+            }.get(key, ContextAdmissionStorageFailureReason.INTEGRITY)
+            raise _LedgerOpenError(reason, f"invalid-{key.replace('_', '-')}")
 
 
 def _connect(self) -> sqlite3.Connection:

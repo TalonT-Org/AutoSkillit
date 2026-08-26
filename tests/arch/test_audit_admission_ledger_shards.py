@@ -23,7 +23,7 @@ Verifies:
 
 from __future__ import annotations
 
-import importlib
+import ast
 from pathlib import Path
 
 import pytest
@@ -170,16 +170,30 @@ def test_every_facade_read_method_delegates_to_read_shard() -> None:
 
 
 def test_every_shard_imports_without_facade() -> None:
-    """The facade must not be a load-time dependency of any shard.
+    """The facade must not be a direct import of any shard.
 
-    Each shard module must be importable as a submodule of the private
-    ``_audit_admission_ledger`` package without importing the
-    ``audit_admission_ledger`` facade module.
+    Each shard's source is AST-scanned to confirm it does not contain
+    an ``import autoskillit.pipeline.audit_admission_ledger`` or
+    ``from autoskillit.pipeline.audit_admission_ledger import ...``
+    statement. The facade is always reachable via the parent package's
+    ``__init__``, so a ``sys.modules`` snapshot alone cannot detect a
+    shard's direct dependency.
     """
+    facade_module = "autoskillit.pipeline.audit_admission_ledger"
     for py in sorted(SHARDS_DIR.glob("*.py")):
         if py.stem == "__init__":
             continue
-        importlib.import_module(f"autoskillit.pipeline._audit_admission_ledger.{py.stem}")
+        tree = ast.parse(py.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert alias.name != facade_module, (
+                        f"{py.name} imports facade via 'import {alias.name}'"
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module == facade_module:
+                raise AssertionError(
+                    f"{py.name} imports facade via 'from {node.module} import ...'"
+                )
 
 
 def test_handle_constants_single_source_in_encoders() -> None:

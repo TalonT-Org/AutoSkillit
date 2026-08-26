@@ -5,6 +5,8 @@ server corridor (``_explorer_projection.py``) and the two boot entry points
 (``pre_reveal_kitchen`` and ``open_kitchen``) call them directly.
 """
 
+from __future__ import annotations
+
 from autoskillit.core import SessionType
 
 from ._constants import EXPLORER_INELIGIBLE_SESSION_TYPES

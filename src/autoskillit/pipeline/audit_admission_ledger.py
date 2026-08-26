@@ -58,6 +58,7 @@ from autoskillit.core import (
 from autoskillit.pipeline._audit_admission_ledger import (
     _authority,
     _connections,
+    _finalization,
     _installations,
     _prepare,
     _recovery,
@@ -482,71 +483,13 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                row = connection.execute(
-                    "SELECT attempts.lifecycle, attempts.committed_outcome_json, "
-                    "response_commits.required_effect_names_json, "
-                    "response_commits.outcome_json, "
-                    "response_commits.replay_projection_json "
-                    "FROM attempts LEFT JOIN response_commits "
-                    "ON response_commits.attempt_id = attempts.attempt_id "
-                    "WHERE attempts.attempt_id = ?",
-                    (attempt_id.value,),
-                ).fetchone()
-                if row is None:
-                    raise ValueError(f"finalize_response: unknown attempt {attempt_id.value}")
-                lifecycle = AuditAttemptLifecycle(row[0])
-                if lifecycle is AuditAttemptLifecycle.RESPONSE_COMMITTED:
-                    if (
-                        row[1] != outcome_json
-                        or row[2] != required_effect_names_json
-                        or row[3] != outcome_json
-                        or row[4] != replay_projection
-                    ):
-                        raise AuditAdmissionStorageError(
-                            AuditAdmissionStorageFailureReason.INTEGRITY,
-                            "finalize-response-commit-mismatch",
-                        )
-                    _connections.commit(connection)
-                    return
-                if lifecycle is not AuditAttemptLifecycle.PUBLISHED_PENDING_FINALIZATION:
-                    raise ValueError(
-                        f"finalize_response: attempt {attempt_id.value} is not "
-                        f"PUBLISHED_PENDING_FINALIZATION (lifecycle={lifecycle.value})"
-                    )
-                acknowledged_effects = {
-                    effect_row[0]
-                    for effect_row in connection.execute(
-                        "SELECT effect_name FROM finalization_effects WHERE attempt_id = ?",
-                        (attempt_id.value,),
-                    )
-                }
-                missing_effects = set(normalized_effect_names) - acknowledged_effects
-                if missing_effects:
-                    raise AuditAdmissionStorageError(
-                        AuditAdmissionStorageFailureReason.INTEGRITY,
-                        "finalize-response-required-effects-missing",
-                    )
-                connection.execute(
-                    "INSERT INTO response_commits("
-                    "attempt_id, required_effect_names_json, outcome_json, "
-                    "replay_projection_json, committed_at"
-                    ") VALUES (?, ?, ?, ?, ?)",
-                    (
-                        attempt_id.value,
-                        required_effect_names_json,
-                        outcome_json,
-                        replay_projection,
-                        _now_iso(),
-                    ),
-                )
-                connection.execute(
-                    "UPDATE attempts SET lifecycle = ?, committed_outcome_json = ? "
-                    "WHERE attempt_id = ?",
-                    (
-                        AuditAttemptLifecycle.RESPONSE_COMMITTED.value,
-                        outcome_json,
-                        attempt_id.value,
-                    ),
+                _finalization._finalize_response_locked(
+                    connection,
+                    attempt_id,
+                    outcome_json=outcome_json,
+                    required_effect_names_json=required_effect_names_json,
+                    replay_projection=replay_projection,
+                    normalized_effect_names=normalized_effect_names,
                 )
                 _connections.commit(connection)
             except BaseException:
@@ -560,22 +503,16 @@ class DefaultAuditAdmissionLedger:
         attempt_id: AuditAttemptId,
         effect_name: str,
     ) -> dict[str, Any] | None:
-        self._validate_finalization_effect_name(effect_name)
+        _finalization._validate_finalization_effect_name(effect_name)
         with self._fence:
             connection = self._ensure_recovered()
             try:
-                self._require_finalization_effect_lifecycle(
+                return _finalization._finalization_effect_result_read(
                     connection,
                     attempt_id,
-                    operation="finalization_effect_result",
+                    effect_name,
                     allowed_lifecycles=_FINALIZATION_EFFECT_READ_LIFECYCLES,
                 )
-                row = connection.execute(
-                    "SELECT result_json FROM finalization_effects "
-                    "WHERE attempt_id = ? AND effect_name = ?",
-                    (attempt_id.value, effect_name),
-                ).fetchone()
-                return None if row is None else _json_loads(row[0])
             finally:
                 connection.close()
 
@@ -585,7 +522,7 @@ class DefaultAuditAdmissionLedger:
         effect_name: str,
         result: dict[str, Any],
     ) -> None:
-        self._validate_finalization_effect_name(effect_name)
+        _finalization._validate_finalization_effect_name(effect_name)
         if not isinstance(result, dict) or any(not isinstance(key, str) for key in result):
             raise ValueError("finalization effect result must be a string-keyed mapping")
         result_json = _json_dumps(result)
@@ -593,30 +530,12 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                self._require_finalization_effect_lifecycle(
+                _finalization._acknowledge_finalization_effect_locked(
                     connection,
                     attempt_id,
-                    operation="acknowledge_finalization_effect",
+                    effect_name,
+                    result_json,
                     allowed_lifecycles=_FINALIZATION_EFFECT_ACK_LIFECYCLES,
-                )
-                row = connection.execute(
-                    "SELECT result_json FROM finalization_effects "
-                    "WHERE attempt_id = ? AND effect_name = ?",
-                    (attempt_id.value, effect_name),
-                ).fetchone()
-                if row is not None:
-                    if row[0] != result_json:
-                        raise AuditAdmissionStorageError(
-                            AuditAdmissionStorageFailureReason.INTEGRITY,
-                            "finalization-effect-result-mismatch",
-                        )
-                    _connections.commit(connection)
-                    return
-                connection.execute(
-                    "INSERT INTO finalization_effects("
-                    "attempt_id, effect_name, result_json, acknowledged_at"
-                    ") VALUES (?, ?, ?, ?)",
-                    (attempt_id.value, effect_name, result_json, _now_iso()),
                 )
                 _connections.commit(connection)
             except BaseException:
@@ -624,33 +543,6 @@ class DefaultAuditAdmissionLedger:
                 raise
             finally:
                 connection.close()
-
-    @staticmethod
-    def _validate_finalization_effect_name(effect_name: str) -> None:
-        if not isinstance(effect_name, str) or not effect_name.strip():
-            raise ValueError("finalization effect name must be a non-empty string")
-
-    @staticmethod
-    def _require_finalization_effect_lifecycle(
-        connection: sqlite3.Connection,
-        attempt_id: AuditAttemptId,
-        *,
-        operation: str,
-        allowed_lifecycles: frozenset[AuditAttemptLifecycle],
-    ) -> AuditAttemptLifecycle:
-        row = connection.execute(
-            "SELECT lifecycle FROM attempts WHERE attempt_id = ?",
-            (attempt_id.value,),
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"{operation}: unknown attempt {attempt_id.value}")
-        lifecycle = AuditAttemptLifecycle(row[0])
-        if lifecycle not in allowed_lifecycles:
-            raise ValueError(
-                f"{operation}: attempt {attempt_id.value} is not eligible for "
-                f"finalization (lifecycle={lifecycle.value})"
-            )
-        return lifecycle
 
     # -- reads -------------------------------------------------------------
 

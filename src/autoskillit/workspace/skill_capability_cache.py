@@ -198,7 +198,7 @@ class _SkillCapabilityEvidenceCache:
                 if self._inflight.get(key) is state:
                     del self._inflight[key]
                 state.event.set()
-            except BaseException as error:
+            except Exception as error:
                 if resident_mutated:
                     self._entries.clear()
                     self._weight_bytes = 0

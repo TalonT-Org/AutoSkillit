@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+import anyio
 import pytest
 
 import autoskillit.server.tools.tools_workspace as tools_workspace
@@ -15,7 +16,11 @@ from autoskillit.config import (
     SafetyConfig,
 )
 from autoskillit.core import TestResult
-from autoskillit.core.types import AUTOSKILLIT_PRIVATE_ENV_VARS
+from autoskillit.core.types import (
+    AUTOSKILLIT_PRIVATE_ENV_VARS,
+    SubprocessResult,
+    TerminationReason,
+)
 from autoskillit.server.tools.tools_workspace import reset_test_dir, reset_workspace, test_check
 from autoskillit.workspace import CleanupResult
 from tests.conftest import _make_result
@@ -27,6 +32,35 @@ from tests.server._recipe_segment_test_helpers import (
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 test_check.__test__ = False  # type: ignore[attr-defined]
+
+
+class _FirstCallBlockingRunner:
+    """A runner that holds its first gate invocation until the test releases it."""
+
+    def __init__(self) -> None:
+        self.entered = anyio.Event()
+        self.release = anyio.Event()
+        self.call_args: list[tuple[list[str], Path, float, dict[str, object]]] = []
+
+    async def __call__(
+        self,
+        command: list[str],
+        *,
+        cwd: Path,
+        timeout: float,
+        **kwargs: object,
+    ) -> SubprocessResult:
+        self.call_args.append((command, cwd, timeout, kwargs))
+        if len(self.call_args) == 1:
+            self.entered.set()
+            await self.release.wait()
+        return SubprocessResult(
+            returncode=0,
+            stdout="= 1 passed =\n",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=12345,
+        )
 
 
 class TestResetWorkspace:
@@ -341,6 +375,81 @@ class TestTestCheck:
             f"Expected cwd={expected_resolved!r}, got {str(cwd)!r}. "
             "test_check must apply os.path.realpath() to worktree_path."
         )
+
+    @pytest.mark.anyio
+    async def test_test_check_refuses_concurrent_gate_for_same_worktree(
+        self,
+        make_tool_ctx,
+    ) -> None:
+        """Only one gate may enter a worktree while its holder process is live."""
+        runner = _FirstCallBlockingRunner()
+        make_tool_ctx(runner=runner)
+        first_results: list[str] = []
+
+        async def run_first() -> None:
+            first_results.append(await test_check(worktree_path=self.wt))
+
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(run_first)
+            await runner.entered.wait()
+            try:
+                contender = json.loads(await test_check(worktree_path=self.wt))
+            finally:
+                runner.release.set()
+
+        assert len(runner.call_args) == 1
+        assert json.loads(first_results[0])["passed"] is True
+        assert contender["passed"] is False
+        assert os.path.realpath(self.wt) in contender["error"]
+        assert str(os.getpid()) in contender["error"]
+
+    @pytest.mark.anyio
+    async def test_test_check_keeps_distinct_worktree_leases_independent(
+        self,
+        make_tool_ctx,
+        tmp_path: Path,
+    ) -> None:
+        """A shared runner may hold W1 while W2 acquires, releases, and reacquires."""
+        second_worktree = tmp_path / "second-worktree"
+        second_worktree.mkdir()
+        (second_worktree / "Taskfile.yml").write_text("version: '3'\n")
+        runner = _FirstCallBlockingRunner()
+        make_tool_ctx(runner=runner)
+        first_results: list[str] = []
+
+        async def hold_first_worktree() -> None:
+            first_results.append(await test_check(worktree_path=self.wt))
+
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(hold_first_worktree)
+            await runner.entered.wait()
+            try:
+                second_first = json.loads(await test_check(worktree_path=str(second_worktree)))
+                second_second = json.loads(await test_check(worktree_path=str(second_worktree)))
+            finally:
+                runner.release.set()
+
+        assert len(runner.call_args) == 3
+        assert json.loads(first_results[0])["passed"] is True
+        assert second_first["passed"] is True
+        assert second_second["passed"] is True
+
+    @pytest.mark.anyio
+    async def test_test_check_forwards_gate_descriptor_without_fd_breaking_wrappers(
+        self,
+        make_tool_ctx,
+    ) -> None:
+        """Gate execution must retain its lease fd through the direct runner path."""
+        tool_ctx = make_tool_ctx()
+        tool_ctx.runner.push(_make_result(0, "= 1 passed =\n", ""))
+
+        result = json.loads(await test_check(worktree_path=self.wt))
+
+        assert result["passed"] is True
+        _command, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
+        assert kwargs["pass_fds"]
+        assert kwargs["pty_mode"] is False
+        assert kwargs["systemd_scope_enabled"] is False
 
     @pytest.mark.anyio
     async def test_test_check_does_not_pass_headless_env_to_subprocess(

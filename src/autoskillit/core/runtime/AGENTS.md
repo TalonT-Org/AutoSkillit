@@ -4,7 +4,9 @@ Process-state modules for session lifecycle tracking (stdlib-only, IL-0).
 
 ## Architecture Notes
 
-All modules are stdlib-only (safe for import from hook subprocesses). `readiness.py` is the sole exception — it uses `core.io.atomic_write`.
+All modules are stdlib-only (safe for import from hook subprocesses). `readiness.py` and
+`worktree_gate_lease.py` additionally use IL-0 `core.io.atomic_write`; the latter also uses
+`core.paths.default_log_dir` so its lock cannot be deleted by worktree cleanup.
 
 `_reclamation.py` classifies kernel-derived path evidence by `Revocability` (`REVOCABLE` —
 cwd/fd/maps, a live kernel view that can genuinely become false — vs `MONOTONIC` —

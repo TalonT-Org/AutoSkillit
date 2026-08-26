@@ -23,7 +23,8 @@ AUDITED_DESTRUCTIVE_TASKFILE_OPS: dict[str, str] = {
         "for the same root, owned by the #3214 session lifecycle."
     ),
     "install-worktree::uv venv --clear": (
-        "Per-worktree environment rebuild with an accepted same-worktree concurrency residual."
+        "Per-worktree environment rebuild; the worktree gate lease closes the same-worktree "
+        "concurrency residual for every test-gate path."
     ),
 }
 

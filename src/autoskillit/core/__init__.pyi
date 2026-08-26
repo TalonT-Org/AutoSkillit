@@ -321,6 +321,8 @@ from .runtime._reclamation import veto_paths as veto_paths
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
+from .runtime.worktree_gate_lease import WorktreeGateContention as WorktreeGateContention
+from .runtime.worktree_gate_lease import WorktreeGateLease as WorktreeGateLease
 from .runtime.executable_binding import (
     executable_binding_matches_current_file as executable_binding_matches_current_file,
 )

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.arch._helpers import SRC_ROOT, _runtime_import_froms
+from tests.arch._helpers import SRC_ROOT, _runtime_import_froms, _runtime_plain_imports
 
 pytestmark = [pytest.mark.small]
 
@@ -37,7 +37,13 @@ _ALLOWED_FACADES: frozenset[str] = frozenset(
 
 
 def test_no_external_module_imports_skill_shards_directly() -> None:
-    """No module outside ``autoskillit.workspace`` may import a skill shard path."""
+    """No module outside ``autoskillit.workspace`` may import a skill shard path.
+
+    Inspects both ``from shard import X`` (``ast.ImportFrom``) and
+    ``import shard.path as alias`` / ``import shard.path`` (``ast.Import``)
+    forms so the facade-only invariant is enforced regardless of import
+    syntax used by callers.
+    """
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         rel = py_file.relative_to(SRC_ROOT)
@@ -54,6 +60,15 @@ def test_no_external_module_imports_skill_shards_directly() -> None:
                     f"{rel}:{import_from.lineno} imports from forbidden shard {module!r}; "
                     f"import from one of the facades: {sorted(_ALLOWED_FACADES)}"
                 )
+        for plain_import in _runtime_plain_imports(py_file):
+            for alias in plain_import.names:
+                if alias.name in _FORBIDDEN_SHARDS or any(
+                    alias.name.startswith(f"{shard}.") for shard in _FORBIDDEN_SHARDS
+                ):
+                    violations.append(
+                        f"{rel}:{plain_import.lineno} imports forbidden shard {alias.name!r}; "
+                        f"import from one of the facades: {sorted(_ALLOWED_FACADES)}"
+                    )
     assert not violations, (
         "External modules must not import skill shard paths directly:\n"
         + "\n".join(f"  {v}" for v in violations)

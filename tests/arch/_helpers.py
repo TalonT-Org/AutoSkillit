@@ -553,6 +553,44 @@ def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
     return result
 
 
+def _runtime_plain_imports(path: Path) -> list[ast.Import]:
+    """Return plain ``import X.Y.Z`` nodes not inside a TYPE_CHECKING guard.
+
+    Complements ``_runtime_import_froms``: the one-way-import guard treats
+    ``import shard.path as alias`` (an ``ast.Import`` node) and
+    ``from shard.path import X`` (an ``ast.ImportFrom`` node) symmetrically,
+    so both must be inspected for the invariant to actually be enforceable.
+    """
+    tree = ast.parse(path.read_text())
+    result: list[ast.Import] = []
+
+    def _walk(stmts: list) -> None:
+        for stmt in stmts:
+            if isinstance(stmt, ast.Import):
+                result.append(stmt)
+            elif isinstance(stmt, ast.If):
+                test = stmt.test
+                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+                )
+                if not is_tc:
+                    _walk(stmt.body)
+                    _walk(stmt.orelse)
+            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _walk(stmt.body)
+            elif isinstance(stmt, ast.ClassDef):
+                _walk(stmt.body)
+            elif isinstance(stmt, ast.Try):
+                _walk(stmt.body)
+                for handler in stmt.handlers:
+                    _walk(handler.body)
+                _walk(stmt.orelse)
+                _walk(getattr(stmt, "finalbody", []))
+
+    _walk(tree.body)
+    return result
+
+
 # ── Section C: Skill frontmatter and iteration helpers ───────────────────────
 
 _FM_SPLIT = _stdlib_re.compile(r"^---\n(.*?)\n?---\n?(.*)", _stdlib_re.DOTALL)

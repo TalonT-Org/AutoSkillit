@@ -1094,9 +1094,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +1 to a 67 baseline) and the seven context-admission shards (+7) added
         # by this PR (67 + 1 + 7 = 75), so the cap must move to 75 to
         # accommodate the actual on-disk count of 75 files).
-        # +_type_context_admission_persistence_envelope: Wavefront 2 persistence
-        # split (#4743) — envelope pipeline / shadow records / stream key /
-        # privacy validator moved to a sibling shard (75 + 1 = 76).
+        # +_type_context_admission_persistence_envelope: #4743 persistence split moved
+        # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,

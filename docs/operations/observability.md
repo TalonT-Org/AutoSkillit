@@ -119,9 +119,7 @@ PII-scrubbed vendor payload without normalization to `otlp.jsonl`, rotating one
 or additional package is required.
 
 `sessions.jsonl` remains the retained committed-session projection. It is not a
-joined telemetry index. The watermark-incremental walk in #4646 and the
-rebuildable derived schema/writer in #4647 are separate future consumers of the
-raw OTLP and session artifacts.
+joined telemetry index.
 
 ## Codex cook startup traces
 

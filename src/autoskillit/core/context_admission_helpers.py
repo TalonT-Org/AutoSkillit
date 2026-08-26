@@ -50,9 +50,11 @@ from .types._type_context_admission import (
     AdmissionOccurrenceRecord,
     AdmissionReservation,
     AdmissionReservationId,
+    AdmissionSequence,
     AdmissionTransition,
     AdmissionWitness,
     AdmissionWitnessId,
+    AggregateRevision,
     ChargeCommittedEffect,
     ClosedEpochAudit,
     ContextAdmissionEvent,
@@ -82,8 +84,6 @@ from .types._type_helpers import _reconciled_snapshot_counts
 if TYPE_CHECKING:
     from .types._type_context_admission import (
         AcceptInputEvent,
-        AdmissionSequence,
-        AggregateRevision,
         ResolveIndeterminateAcceptedEvent,
     )
 

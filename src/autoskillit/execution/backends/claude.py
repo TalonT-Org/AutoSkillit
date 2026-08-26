@@ -43,6 +43,7 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     SKILL_SESSION_REQUIRED_ENV,
     VARIADIC_CLAUDE_FLAGS,
+    AgentDef,
     BackendCapabilities,
     BackendConventions,
     BareResume,
@@ -456,10 +457,11 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         session_dir: Path,
         *,
         parent_sandbox_mode: str = "workspace-write",
+        agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> frozenset[str] | None:
-        del execution_role
+        del agent_defs, execution_role
         if explorer_binding_env:
             raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
         return None

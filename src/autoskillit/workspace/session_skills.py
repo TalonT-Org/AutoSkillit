@@ -17,11 +17,14 @@ from collections.abc import Set as AbstractSet
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, NotRequired, TypeAlias, TypedDict, cast
 
 from autoskillit.core import (
+    BUNDLED_EXPLORER_ROLES,
     SESSION_ADD_DIR_SUBDIR,
     SESSION_STALE_SECONDS,
+    AgentDef,
     ArtifactLease,
     ArtifactLeaseContention,
     ClaudeDirectoryConventions,
@@ -37,7 +40,9 @@ from autoskillit.core import (
     SkillFrontmatterAuthority,
     SkillProjectionContextAuthority,
     SkillResolver,
+    SkillSemanticAdaptationResult,
     SkillSemanticOperation,
+    SkillSemanticPlan,
     SkillSource,
     SkillSourceRef,
     SkillUnavailabilityPayload,
@@ -45,6 +50,7 @@ from autoskillit.core import (
     ValidatedAddDir,
     destination_location,
     get_logger,
+    load_bundled_agent_definitions,
     pkg_root,
     validate_skill_capability_roles,
     write_versioned_json,
@@ -89,6 +95,7 @@ _ExplorerBindingEnvFactory: TypeAlias = Callable[[Path], _ExplorerBindingEnv | N
 class _SessionSetupKwargs(TypedDict):
     parent_sandbox_mode: str
     execution_role: SkillExecutionRole
+    agent_defs: NotRequired[tuple[AgentDef, ...]]
     explorer_binding_env: NotRequired[_ExplorerBindingEnv]
 
 
@@ -252,9 +259,15 @@ class CompiledSessionSkillCatalog:
     backend: str
     catalog: EffectiveSkillCatalog
     unavailable: tuple[SkillUnavailableMetadata, ...]
+    required_native_roles: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     unavailability_payload: SkillUnavailabilityPayload = field(init=False)
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "required_native_roles",
+            MappingProxyType(dict(self.required_native_roles)),
+        )
         object.__setattr__(
             self,
             "unavailability_payload",
@@ -298,6 +311,32 @@ def _merge_skill_unavailability_payloads(
     )
 
 
+def _required_native_child_roles(
+    plan: SkillSemanticPlan,
+    adaptation: SkillSemanticAdaptationResult,
+) -> tuple[str, ...]:
+    return tuple(
+        sorted({adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns})
+    )
+
+
+def _session_agent_definitions(
+    required_native_roles: AbstractSet[str],
+    explorer_binding_env: _ExplorerBindingEnv | None,
+) -> tuple[AgentDef, ...]:
+    bound_explorer_roles = frozenset(explorer_binding_env or ())
+    return tuple(
+        definition
+        for definition in load_bundled_agent_definitions()
+        if not definition.reader_tools
+        and (
+            definition.name not in BUNDLED_EXPLORER_ROLES
+            or definition.name in bound_explorer_roles
+        )
+        and (definition.provisioning == "baseline" or definition.name in required_native_roles)
+    )
+
+
 def compile_session_skill_catalog(
     catalog: EffectiveSkillCatalogAuthority,
     backend: CodingAgentBackend,
@@ -307,10 +346,12 @@ def compile_session_skill_catalog(
     """Publish only skills whose mandatory semantics adapt on the selected backend."""
     supported: list[SkillCatalogEntry] = []
     unavailable: list[SkillUnavailableMetadata] = []
+    required_native_roles: dict[str, tuple[str, ...]] = {}
     for skill in catalog.skills:
         plan = skill.semantic_plan
         if plan is None:
             supported.append(cast(SkillCatalogEntry, skill))
+            required_native_roles[skill.name] = ()
             continue
         adaptation = backend.adapt_skill_semantics(plan)
         unsupported_operation = adaptation.validate_refusal_for(
@@ -328,11 +369,9 @@ def compile_session_skill_catalog(
             )
             continue
         adaptation.validate_for(plan, backend=backend.name)
+        native_spawn_targets = _required_native_child_roles(plan, adaptation)
         if finalized_native_roles is not None:
-            native_spawn_targets = {
-                adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns
-            }
-            missing_targets = sorted(native_spawn_targets - finalized_native_roles)
+            missing_targets = sorted(set(native_spawn_targets) - finalized_native_roles)
             if missing_targets:
                 unavailable.append(
                     SkillUnavailableMetadata(
@@ -346,6 +385,7 @@ def compile_session_skill_catalog(
                 )
                 continue
         supported.append(cast(SkillCatalogEntry, skill))
+        required_native_roles[skill.name] = native_spawn_targets
     filtered_names = {skill.name for skill in supported}
     namespace_sources = {
         name: source
@@ -361,6 +401,7 @@ def compile_session_skill_catalog(
             exclusions=cast(tuple[SkillExclusion, ...], tuple(catalog.exclusions)),
         ),
         unavailable=tuple(sorted(unavailable, key=lambda item: item.skill)),
+        required_native_roles=required_native_roles,
     )
 
 
@@ -416,25 +457,26 @@ def _profile_skill_infos(profile_skills_root: Path) -> tuple[SkillInfo, ...]:
     return tuple(result)
 
 
-def _materialize_profile_skill_infos(
-    generated_home: Path,
+def _compile_profile_skill_infos(
     profile_skills_source: Path,
     backend: CodingAgentBackend,
-    projection_context: SkillProjectionContextAuthority,
-    *,
-    finalized_native_roles: frozenset[str] | None,
-) -> CompiledSessionSkillCatalog:
+) -> tuple[tuple[SkillInfo, ...], CompiledSessionSkillCatalog]:
     infos = _profile_skill_infos(profile_skills_source)
     catalog = EffectiveSkillCatalog(
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
         namespace_sources={info.name: info.source for info in infos},
     )
-    compilation = compile_session_skill_catalog(
-        catalog,
-        backend,
-        finalized_native_roles=finalized_native_roles,
-    )
+    return infos, compile_session_skill_catalog(catalog, backend)
+
+
+def _materialize_profile_skill_infos(
+    generated_home: Path,
+    infos: tuple[SkillInfo, ...],
+    compilation: CompiledSessionSkillCatalog,
+    backend: CodingAgentBackend,
+    projection_context: SkillProjectionContextAuthority,
+) -> CompiledSessionSkillCatalog:
     for unavailable in compilation.unavailable:
         logger.warning(
             "profile_skill_unavailable",
@@ -476,12 +518,37 @@ def materialize_profile_skills(
     finalized_native_roles: frozenset[str] | None,
 ) -> CompiledSessionSkillCatalog:
     """Safely project the admitted skill catalog from one declared profile source."""
-    return _materialize_profile_skill_infos(
-        generated_home,
+    infos, admission_compilation = _compile_profile_skill_infos(
         profile_skills_source,
         backend,
+    )
+    compilation = admission_compilation
+    if finalized_native_roles is not None:
+        reachability_compilation = compile_session_skill_catalog(
+            admission_compilation.catalog,
+            backend,
+            finalized_native_roles=finalized_native_roles,
+        )
+        compilation = CompiledSessionSkillCatalog(
+            backend=backend.name,
+            catalog=reachability_compilation.catalog,
+            unavailable=tuple(
+                sorted(
+                    (
+                        *admission_compilation.unavailable,
+                        *reachability_compilation.unavailable,
+                    ),
+                    key=lambda item: item.skill,
+                )
+            ),
+            required_native_roles=reachability_compilation.required_native_roles,
+        )
+    return _materialize_profile_skill_infos(
+        generated_home,
+        infos,
+        compilation,
+        backend,
         projection_context,
-        finalized_native_roles=finalized_native_roles,
     )
 
 
@@ -1051,6 +1118,7 @@ class DefaultSessionSkillManager:
         skills_base.mkdir(parents=True, exist_ok=True)
 
         effective_catalog = projection_context.catalog
+        invocation_required_native_roles: set[str] = set()
         if compilation is not None:
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
@@ -1075,6 +1143,9 @@ class DefaultSessionSkillManager:
                         adaptation.validate_for(plan, backend=backend.name)
                     continue
                 adaptation.validate_for(plan, backend=backend.name)
+                invocation_required_native_roles.update(
+                    _required_native_child_roles(plan, adaptation)
+                )
                 admitted_records.append(record)
             records = tuple(admitted_records)
 
@@ -1083,6 +1154,19 @@ class DefaultSessionSkillManager:
             if effective_catalog is not None
             else SkillExecutionRole.SESSION
         )
+        profile_skills_source = (
+            backend.conventions.profile_skills_source if backend is not None else None
+        )
+        profile_skill_infos: tuple[SkillInfo, ...] = ()
+        profile_admission_compilation: CompiledSessionSkillCatalog | None = None
+        if (
+            backend is not None
+            and execution_role is SkillExecutionRole.SESSION
+            and profile_skills_source is not None
+        ):
+            profile_skill_infos, profile_admission_compilation = _compile_profile_skill_infos(
+                profile_skills_source, backend
+            )
 
         if backend is not None and backend.capabilities.mcp_config_capable:
             readiness = backend.ensure_pre_launch(session_dir=generated_home)
@@ -1098,7 +1182,36 @@ class DefaultSessionSkillManager:
             }
             if explorer_binding_env is not None:
                 setup_kwargs["explorer_binding_env"] = explorer_binding_env
+            if (
+                compilation is not None
+                or profile_admission_compilation is not None
+                or projection_context.invocation is not None
+            ):
+                required_native_roles = set(invocation_required_native_roles)
+                if compilation is not None:
+                    if not isinstance(compilation, CompiledSessionSkillCatalog):
+                        raise SkillContractError(
+                            "agent-definition provisioning requires a concrete session compilation"
+                        )
+                    for targets in compilation.required_native_roles.values():
+                        required_native_roles.update(targets)
+                if profile_admission_compilation is not None:
+                    for targets in profile_admission_compilation.required_native_roles.values():
+                        required_native_roles.update(targets)
+                setup_kwargs["agent_defs"] = _session_agent_definitions(
+                    required_native_roles,
+                    explorer_binding_env,
+                )
             finalized_native_roles = backend.setup_session_dir(generated_home, **setup_kwargs)
+
+        if finalized_native_roles is not None and projection_context.invocation is not None:
+            missing_invocation_roles = sorted(
+                invocation_required_native_roles - finalized_native_roles
+            )
+            if missing_invocation_roles:
+                raise SkillContractError(
+                    f"native child-spawn targets are unavailable: {missing_invocation_roles}"
+                )
 
         if finalized_native_roles is not None and effective_catalog is not None:
             assert backend is not None
@@ -1113,6 +1226,19 @@ class DefaultSessionSkillManager:
                 backend,
                 finalized_native_roles=finalized_native_roles,
             )
+            reachability_pruning = tuple(
+                unavailable
+                for unavailable in reachability_compilation.unavailable
+                if unavailable.operation is SkillSemanticOperation.CHILD_SPAWN
+            )
+            if reachability_pruning:
+                logger.error(
+                    "session_skill_native_role_unavailable",
+                    backend=backend.name,
+                    skills=tuple(item.skill for item in reachability_pruning),
+                    diagnostics=tuple(item.diagnostic for item in reachability_pruning),
+                    count=len(reachability_pruning),
+                )
             prior_unavailable = compilation.unavailable if compilation is not None else ()
             compilation = CompiledSessionSkillCatalog(
                 backend=backend.name,
@@ -1123,6 +1249,7 @@ class DefaultSessionSkillManager:
                         key=lambda item: item.skill,
                     )
                 ),
+                required_native_roles=reachability_compilation.required_native_roles,
             )
             effective_catalog = compilation.catalog
             records = tuple(effective_catalog.skills)
@@ -1138,21 +1265,35 @@ class DefaultSessionSkillManager:
                 (),
             )
         )
-        profile_compilation: CompiledSessionSkillCatalog | None = None
-        profile_skills_source = (
-            backend.conventions.profile_skills_source if backend is not None else None
-        )
-        if (
-            backend is not None
-            and execution_role is SkillExecutionRole.SESSION
-            and profile_skills_source is not None
-        ):
-            profile_compilation = materialize_profile_skills(
+        profile_compilation = profile_admission_compilation
+        if backend is not None and profile_compilation is not None:
+            admission_compilation = profile_compilation
+            if finalized_native_roles is not None:
+                profile_reachability_compilation = compile_session_skill_catalog(
+                    admission_compilation.catalog,
+                    backend,
+                    finalized_native_roles=finalized_native_roles,
+                )
+                profile_compilation = CompiledSessionSkillCatalog(
+                    backend=backend.name,
+                    catalog=profile_reachability_compilation.catalog,
+                    unavailable=tuple(
+                        sorted(
+                            (
+                                *admission_compilation.unavailable,
+                                *profile_reachability_compilation.unavailable,
+                            ),
+                            key=lambda item: item.skill,
+                        )
+                    ),
+                    required_native_roles=(profile_reachability_compilation.required_native_roles),
+                )
+            _materialize_profile_skill_infos(
                 generated_home,
-                profile_skills_source,
+                profile_skill_infos,
+                profile_compilation,
                 backend,
                 projection_context,
-                finalized_native_roles=finalized_native_roles,
             )
         unavailability_payload = (
             _merge_skill_unavailability_payloads(

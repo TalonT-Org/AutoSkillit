@@ -15,6 +15,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     ValidatedAddDir,
+    load_bundled_agent_definitions,
     pkg_root,
 )
 from tests.workspace._helpers import (
@@ -124,7 +125,12 @@ def test_materialization_forwards_only_server_explorer_binding_env(
             "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",
             "AUTOSKILLIT_EXPLORATION_ROLE": "semantic-code-navigator",
             "AUTOSKILLIT_EXPLORATION_SESSION_ID": "sid",
-        }
+        },
+        "repository-impact-profiler": {
+            "AUTOSKILLIT_EXPLORATION_CAPABILITY": "explore_opaque",
+            "AUTOSKILLIT_EXPLORATION_ROLE": "repository-impact-profiler",
+            "AUTOSKILLIT_EXPLORATION_SESSION_ID": "sid",
+        },
     }
 
     manager._materialize_bound_records(
@@ -136,6 +142,14 @@ def test_materialization_forwards_only_server_explorer_binding_env(
 
     assert codex_env.backend.setup_session_dir.call_args.kwargs["explorer_binding_env"] == (
         binding_env
+    )
+    assert tuple(
+        definition.name
+        for definition in codex_env.backend.setup_session_dir.call_args.kwargs["agent_defs"]
+    ) == (
+        "pluginless-explorer",
+        "repository-impact-profiler",
+        "semantic-code-navigator",
     )
 
 
@@ -276,8 +290,153 @@ def test_codex_init_session_delegates_to_setup_session_dir(
     codex_env.backend.setup_session_dir.assert_called_once_with(
         Path(str(session_path)).parent,
         parent_sandbox_mode="workspace-write",
+        agent_defs=tuple(
+            definition
+            for definition in load_bundled_agent_definitions()
+            if definition.name == "pluginless-explorer"
+        ),
         execution_role=SkillExecutionRole.SESSION,
     )
+
+
+def test_empty_codex_catalog_materializes_only_unbound_baseline(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+
+    with _managed(
+        manager,
+        "empty-baseline",
+        backend=backend,
+        names=frozenset(),
+    ) as managed:
+        assert {path.stem for path in (managed.generated_home / "agents").glob("*.toml")} == {
+            "pluginless-explorer"
+        }
+
+
+def test_bundled_codex_catalog_provisions_exact_admitted_role_union(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import (
+        CodexBackend,
+        _codex_logical_role_mapping,
+    )
+    from autoskillit.workspace import compile_session_skill_catalog
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+    catalog, context = _catalog_context(manager, backend=backend)
+    compilation = compile_session_skill_catalog(catalog, backend)
+    admitted_names = {skill.name for skill in compilation.catalog.skills}
+    admitted_roles = {
+        role for roles in compilation.required_native_roles.values() for role in roles
+    }
+    refused_only_roles: set[str] = set()
+    for skill in catalog.skills:
+        if skill.name in admitted_names or skill.semantic_plan is None:
+            continue
+        mapping = _codex_logical_role_mapping(skill.semantic_plan)
+        refused_only_roles.update(
+            mapping[spawn.role] for spawn in skill.semantic_plan.child_spawns
+        )
+    refused_only_roles -= admitted_roles
+    definitions = load_bundled_agent_definitions()
+    authored_names = {definition.name for definition in definitions}
+    refused_only_roles &= authored_names
+    assert refused_only_roles
+    expected_names = {
+        definition.name
+        for definition in definitions
+        if not definition.reader_tools
+        and definition.name not in {"repository-impact-profiler", "semantic-code-navigator"}
+        and (definition.provisioning == "baseline" or definition.name in admitted_roles)
+    }
+
+    with manager.managed_session("bundled-role-union", compilation, context) as managed:
+        generated_names = {
+            path.stem for path in (managed.generated_home / "agents").glob("*.toml")
+        }
+
+        assert generated_names == expected_names
+        assert generated_names.isdisjoint(refused_only_roles)
+        assert not any(
+            record["operation"] == "child_spawn"
+            for record in managed.unavailability_payload["unavailable"]
+        )
+
+
+def test_invocation_only_roles_are_forwarded_and_reachability_checked(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.workspace import DefaultSkillResolver, SkillProjectionContext
+
+    project_root = tmp_path / "project"
+    skill_path = project_root / ".autoskillit" / "skills" / "invocation-reader" / "SKILL.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text(
+        "---\n"
+        "name: invocation-reader\n"
+        "description: Delegate to the session log reader.\n"
+        "uses_capabilities: []\n"
+        "execution_role: session\n"
+        "semantic_version: 1\n"
+        "semantic_requirements:\n"
+        "  logical_roles:\n"
+        "  - name: autoskillit:session-log-reader\n"
+        "    purpose: inspect one session log\n"
+        "  child_spawns:\n"
+        "  - role: autoskillit:session-log-reader\n"
+        "    count: 1\n"
+        "---\n"
+        "Delegate the bounded log inspection.\n",
+        encoding="utf-8",
+    )
+    invocation = DefaultSkillResolver().resolve_invocation(
+        "invocation-reader",
+        project_root,
+        SkillExecutionRole.SESSION,
+    )
+    backend = _make_codex_backend()
+    backend.setup_session_dir.return_value = frozenset(
+        {"default", "explorer", "worker", "pluginless-explorer", "session-log-reader"}
+    )
+    manager = make_session_skill_manager()
+    context = SkillProjectionContext(
+        cwd=project_root,
+        invocation=invocation,
+        backend=backend,
+    )
+
+    manager.materialize_invocation("invocation-role", invocation, context)
+
+    assert tuple(
+        definition.name for definition in backend.setup_session_dir.call_args.kwargs["agent_defs"]
+    ) == ("pluginless-explorer", "session-log-reader")
+
+    missing_backend = _make_codex_backend()
+    missing_backend.setup_session_dir.return_value = frozenset(
+        {"default", "explorer", "worker", "pluginless-explorer"}
+    )
+    missing_context = SkillProjectionContext(
+        cwd=project_root,
+        invocation=invocation,
+        backend=missing_backend,
+    )
+    with pytest.raises(SkillContractError, match="session-log-reader"):
+        manager.materialize_invocation(
+            "missing-invocation-role",
+            invocation,
+            missing_context,
+        )
 
 
 def test_codex_managed_orchestrator_materializes_exact_catalog(
@@ -328,9 +487,10 @@ def test_codex_managed_orchestrator_rejects_discovery_collision(
         session_dir: Path,
         *,
         parent_sandbox_mode: str = "workspace-write",
+        agent_defs: tuple[object, ...] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> None:
-        del parent_sandbox_mode, execution_role
+        del agent_defs, parent_sandbox_mode, execution_role
         collision = session_dir / "skills" / collision_name
         collision.mkdir(parents=True)
         (collision / "SKILL.md").write_text("profile collision")
@@ -526,6 +686,44 @@ def test_profile_materialization_applies_semantic_and_finalized_native_role_admi
     }
     assert not (tmp_path / "generated-home" / "skills" / "join-required").exists()
     assert not (tmp_path / "generated-home" / "skills" / "profile-helper").exists()
+
+
+def test_profile_native_role_is_provisioned_before_setup_and_remains_projected(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    _write_profile_skill(
+        source_home / "skills",
+        "profile-log-reader",
+        frontmatter=(
+            "semantic_version: 1\n"
+            "semantic_requirements:\n"
+            "  logical_roles:\n"
+            "  - name: autoskillit:session-log-reader\n"
+            "    purpose: inspect one session log\n"
+            "  child_spawns:\n"
+            "  - role: autoskillit:session-log-reader\n"
+            "    count: 1\n"
+        ),
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+
+    with _managed(
+        manager,
+        "profile-native-role",
+        backend=backend,
+        names=frozenset(),
+    ) as managed:
+        assert (managed.generated_home / "agents" / "session-log-reader.toml").is_file()
+        assert (managed.generated_home / "skills" / "profile-log-reader" / "SKILL.md").is_file()
+        assert not any(
+            record["skill"] == "profile-log-reader"
+            for record in managed.unavailability_payload["unavailable"]
+        )
 
 
 def test_managed_codex_session_surfaces_profile_refusals_after_materialization(
@@ -736,6 +934,12 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         persistent_roots={"codex": tmp_path / "persistent" / "codex-sessions"},
     )
     session_id = f"ambient-{ambient_state}"
+    error_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        session_skills.logger,
+        "error",
+        lambda event, **kwargs: error_events.append((event, kwargs)),
+    )
     expected_names = {"unrelated-skill"}
     if helper_available:
         expected_names.add("helper-skill")
@@ -769,6 +973,9 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         )
         if helper_available:
             assert set(unavailable_by_skill) == {"profile-refused"}
+            assert not any(
+                event == "session_skill_native_role_unavailable" for event, _kwargs in error_events
+            )
         else:
             assert unavailable_by_skill["helper-skill"] == {
                 "backend": "codex",
@@ -777,6 +984,15 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
                 "skill": "helper-skill",
             }
             assert set(unavailable_by_skill) == {"helper-skill", "profile-refused"}
+            assert (
+                "session_skill_native_role_unavailable",
+                {
+                    "backend": "codex",
+                    "skills": ("helper-skill",),
+                    "diagnostics": ("native child-spawn targets are unavailable: ['helper']",),
+                    "count": 1,
+                },
+            ) in error_events
 
     assert session_id not in manager._session_skill_infos
     assert not (tmp_path / "persistent" / "codex-sessions" / session_id).exists()

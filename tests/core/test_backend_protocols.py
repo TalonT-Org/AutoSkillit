@@ -43,10 +43,33 @@ def test_coding_agent_backend_has_conventions_property():
 
 
 def test_coding_agent_backend_has_setup_session_dir_method():
-    from autoskillit.core import CodingAgentBackend
+    import inspect
+    import typing
+    from pathlib import Path
+
+    from autoskillit.core import AgentDef, CodingAgentBackend, SkillExecutionRole
 
     assert callable(getattr(CodingAgentBackend, "setup_session_dir", None))
     assert callable(getattr(CodingAgentBackend, "clear_explorer_binding_env", None))
+    signature = inspect.signature(CodingAgentBackend.setup_session_dir)
+    assert tuple(signature.parameters) == (
+        "self",
+        "session_dir",
+        "parent_sandbox_mode",
+        "agent_defs",
+        "explorer_binding_env",
+        "execution_role",
+    )
+    assert signature.parameters["agent_defs"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["agent_defs"].default is None
+    assert typing.get_type_hints(CodingAgentBackend.setup_session_dir) == {
+        "session_dir": Path,
+        "parent_sandbox_mode": str,
+        "agent_defs": tuple[AgentDef, ...] | None,
+        "explorer_binding_env": Mapping[str, Mapping[str, str]] | None,
+        "execution_role": SkillExecutionRole,
+        "return": frozenset[str] | None,
+    }
 
 
 def test_session_locator_has_project_log_dir_method():
@@ -189,6 +212,7 @@ def test_stub_class_satisfies_coding_agent_backend():
     from typing import Any
 
     from autoskillit.core import (
+        AgentDef,
         BackendCapabilities,
         BackendConventions,
         CmdSpec,
@@ -203,6 +227,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         ResultParser,
         ResumeSpec,
         SessionLocator,
+        SkillExecutionRole,
         SkillSemanticAdaptationResult,
         SkillSemanticPlan,
         SkillSessionConfig,
@@ -355,7 +380,9 @@ def test_stub_class_satisfies_coding_agent_backend():
             session_dir: Path,
             *,
             parent_sandbox_mode: str = "workspace-write",
+            agent_defs: tuple[AgentDef, ...] | None = None,
             explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+            execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
         ) -> frozenset[str] | None: ...
 
         def refresh_explorer_binding_env(

@@ -148,6 +148,7 @@ def kill_process_tree(
     expected_boot_id: str | None = None,
     expected_starttime_ticks: int | None = None,
     expected_create_time: float | None = None,
+    deadline: float | None = None,
 ) -> ProcessCleanupResult:
     """Observe and signal one positively identified PID tree, never a numeric PGID.
 
@@ -160,6 +161,11 @@ def kill_process_tree(
         raise ValueError("pid must be a positive integer")
     if timeout < 0:
         raise ValueError("timeout must be non-negative")
+
+    def remaining_wait(maximum: float) -> float:
+        if deadline is None:
+            return maximum
+        return min(maximum, max(0.0, deadline - time.monotonic()))
 
     if expected_boot_id is not None and read_boot_id() != expected_boot_id:
         return ProcessCleanupResult(root_pid=pid, identity_refused=True)
@@ -234,23 +240,27 @@ def kill_process_tree(
                 logger.warning("process_term_failed", pid=proc.pid, exc_info=True)
             complete = False
 
-    try:
-        _, alive_after_term = psutil.wait_procs(signal_targets, timeout=timeout)
-    except psutil.TimeoutExpired as exc:
+    term_wait = remaining_wait(timeout)
+    if term_wait == 0:
         alive_after_term = list(signal_targets)
-        logger.debug("process_term_wait_timed_out", pid=getattr(exc, "pid", pid))
-    except (psutil.Error, OSError) as exc:
-        if _is_disappearance(exc):
-            alive_after_term = []
-        else:
+    else:
+        try:
+            _, alive_after_term = psutil.wait_procs(signal_targets, timeout=term_wait)
+        except psutil.TimeoutExpired as exc:
             alive_after_term = list(signal_targets)
-        if _is_denial(exc):
-            denied_pid = getattr(exc, "pid", pid)
-            denied.add(denied_pid)
-            complete = False
-        elif not _is_disappearance(exc):
-            logger.warning("process_term_wait_failed", pid=pid, exc_info=True)
-            complete = False
+            logger.debug("process_term_wait_timed_out", pid=getattr(exc, "pid", pid))
+        except (psutil.Error, OSError) as exc:
+            if _is_disappearance(exc):
+                alive_after_term = []
+            else:
+                alive_after_term = list(signal_targets)
+            if _is_denial(exc):
+                denied_pid = getattr(exc, "pid", pid)
+                denied.add(denied_pid)
+                complete = False
+            elif not _is_disappearance(exc):
+                logger.warning("process_term_wait_failed", pid=pid, exc_info=True)
+                complete = False
 
     for proc in alive_after_term:
         try:
@@ -264,22 +274,26 @@ def kill_process_tree(
                 logger.warning("process_kill_failed", pid=proc.pid, exc_info=True)
             complete = False
 
-    try:
-        _, alive_after_kill = psutil.wait_procs(alive_after_term, timeout=_FINAL_WAIT_SECONDS)
-    except psutil.TimeoutExpired:
+    kill_wait = remaining_wait(_FINAL_WAIT_SECONDS)
+    if kill_wait == 0:
         alive_after_kill = list(alive_after_term)
-    except (psutil.Error, OSError) as exc:
-        if _is_disappearance(exc):
-            alive_after_kill = []
-        else:
+    else:
+        try:
+            _, alive_after_kill = psutil.wait_procs(alive_after_term, timeout=kill_wait)
+        except psutil.TimeoutExpired:
             alive_after_kill = list(alive_after_term)
-        if _is_denial(exc):
-            denied_pid = getattr(exc, "pid", pid)
-            denied.add(denied_pid)
-            complete = False
-        elif not _is_disappearance(exc):
-            logger.warning("process_kill_wait_failed", pid=pid, exc_info=True)
-            complete = False
+        except (psutil.Error, OSError) as exc:
+            if _is_disappearance(exc):
+                alive_after_kill = []
+            else:
+                alive_after_kill = list(alive_after_term)
+            if _is_denial(exc):
+                denied_pid = getattr(exc, "pid", pid)
+                denied.add(denied_pid)
+                complete = False
+            elif not _is_disappearance(exc):
+                logger.warning("process_kill_wait_failed", pid=pid, exc_info=True)
+                complete = False
     survivor_pids = tuple(sorted(proc.pid for proc in alive_after_kill))
     observed_pids = {observed_pid for observed_pid, _ in identities}
     terminated_pids = tuple(sorted(observed_pids - set(survivor_pids)))
@@ -318,9 +332,9 @@ class OwnedProcessGroup:
 
     The spawn-bound capability is controller-local and ends permanently when
     an ordinary poll or wait reaps the leader. Stored PIDs and PGIDs cannot
-    recreate it. Settlement observes only the bounded group scope while the
-    direct leader prevents PGID reuse; descendants that escape the group are
-    outside that guarantee.
+    recreate it. Settlement always records descendants observed through the
+    leader; abort-originated settlement may also reap descendants that escape
+    the group by revalidating those recorded identities.
     """
 
     def __init__(
@@ -550,12 +564,15 @@ class OwnedProcessGroup:
         self._observed_returncode = returncode
         return returncode
 
-    def cleanup(self, timeout: float = 2.0) -> tuple[int | None, ProcessCleanupResult]:
+    def cleanup(
+        self, timeout: float = 2.0, *, escalate: bool = False
+    ) -> tuple[int | None, ProcessCleanupResult]:
         """Settle the owned group and reap the leader with bounded waits."""
         if timeout < 0:
             raise ValueError("timeout must be non-negative")
         self.capture_snapshot()
         self._scan_group()
+        identities = set(self._snapshot.process_identities)
         self._signal_group(signal.SIGTERM)
         members = self._wait_group_members(timeout)
         escalated = False
@@ -590,10 +607,29 @@ class OwnedProcessGroup:
                 )
             returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS)
 
-        identities = set(self._snapshot.process_identities)
-        survivors = tuple(
-            sorted(pid for pid, created in identities if self._identity_is_alive((pid, created)))
+        surviving_identities = tuple(
+            sorted(identity for identity in identities if self._identity_is_alive(identity))
         )
+        if escalate and surviving_identities:
+            escalation_deadline = time.monotonic() + timeout
+            for pid, create_time in surviving_identities:
+                cleanup = kill_process_tree(
+                    pid,
+                    timeout=timeout,
+                    expected_create_time=create_time,
+                    deadline=escalation_deadline,
+                )
+                if cleanup.access_denied_pids:
+                    self._snapshot = self._snapshot.merge(
+                        ProcessObservationSnapshot(
+                            access_denied_pids=cleanup.access_denied_pids,
+                            observation_complete=False,
+                        )
+                    )
+            surviving_identities = tuple(
+                identity for identity in identities if self._identity_is_alive(identity)
+            )
+        survivors = tuple(sorted(pid for pid, _ in surviving_identities))
         observed_pids = {pid for pid, _ in identities}
         result = ProcessCleanupResult(
             root_pid=self.pid,
@@ -610,7 +646,9 @@ class OwnedProcessGroup:
             remove_tether(self._tether_path)
         return returncode, result
 
-    def settle(self, timeout: float = 2.0) -> tuple[int, ProcessCleanupResult]:
+    def settle(
+        self, timeout: float = 2.0, *, escalate: bool = False
+    ) -> tuple[int, ProcessCleanupResult]:
         """Settle the owned group and raise on incomplete cleanup.
 
         Unlike ``settle_evidence`` (logs and returns) or ``settle_preserving``
@@ -620,12 +658,14 @@ class OwnedProcessGroup:
         is unconfirmed. Returns the (returncode, ProcessCleanupResult) tuple
         on success — both fields are non-Optional.
         """
-        returncode, result = self.cleanup(timeout)
+        returncode, result = self.cleanup(timeout, escalate=escalate)
         if returncode is None or not result.complete:
             raise OwnedProcessCleanupError(self.pid, result)
         return returncode, result
 
-    def settle_evidence(self, timeout: float = 2.0) -> tuple[int | None, ProcessCleanupResult]:
+    def settle_evidence(
+        self, timeout: float = 2.0, *, escalate: bool = False
+    ) -> tuple[int | None, ProcessCleanupResult]:
         """Settle the owned group and return cleanup evidence without raising.
 
         Unlike ``settle`` (raises ``OwnedProcessCleanupError`` on incomplete
@@ -635,7 +675,7 @@ class OwnedProcessGroup:
         (``returncode if returncode is not None else -1``) before assigning into
         a non-Optional field.
         """
-        returncode, result = self.cleanup(timeout)
+        returncode, result = self.cleanup(timeout, escalate=escalate)
         if not result.complete or returncode is None:
             logger.error(
                 "owned_group_cleanup_incomplete",
@@ -645,7 +685,7 @@ class OwnedProcessGroup:
         return returncode, result
 
     def settle_preserving(
-        self, error: BaseException, timeout: float = 2.0
+        self, error: BaseException, timeout: float = 2.0, *, escalate: bool = False
     ) -> ProcessCleanupResult:
         """Settle the owned group while preserving a caller-supplied exception.
 
@@ -656,7 +696,7 @@ class OwnedProcessGroup:
         calling this method.
         """
         try:
-            _, result = self.cleanup(timeout)
+            _, result = self.cleanup(timeout, escalate=escalate)
         except BaseException as cleanup_error:
             logger.error(
                 "owned_group_cleanup_failed",

@@ -752,6 +752,32 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
         + "\n".join(violations)
     )
 
+    process_kill_tree = ast.parse(
+        (SRC_ROOT / "execution" / "process" / "_process_kill.py").read_text()
+    )
+    owned_group = next(
+        node
+        for node in process_kill_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "OwnedProcessGroup"
+    )
+    cleanup = next(
+        node
+        for node in owned_group.body
+        if isinstance(node, ast.FunctionDef) and node.name == "cleanup"
+    )
+    escalation_calls = [
+        node
+        for node in ast.walk(cleanup)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "kill_process_tree"
+        and any(keyword.arg == "expected_create_time" for keyword in node.keywords)
+    ]
+    assert escalation_calls, (
+        "OwnedProcessGroup.cleanup() must reach group-escaping survivors through "
+        "the identity-fenced kill_process_tree(..., expected_create_time=...) call"
+    )
+
 
 def _gather_import_aliases(tree: ast.AST) -> dict[str, tuple[str, str | None]]:
     """Build a map from local name → (module, attr) for every import in the tree.

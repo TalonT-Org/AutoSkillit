@@ -495,6 +495,48 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
     assert wait_timeouts == [_process_kill._FINAL_WAIT_SECONDS]
 
 
+def test_cleanup_shares_one_aggregate_deadline_across_multiple_survivors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Escaping survivors consume one escalation budget, not one timeout each."""
+    identities = ((901, 1.0), (902, 2.0))
+    clock = [100.0]
+    waits: list[float] = []
+    deadlines: list[float] = []
+    owner = _spawn_owner(monkeypatch, tmp_path)
+    owner.merge_snapshot(_process_kill.ProcessObservationSnapshot(process_identities=identities))
+    owner.process.returncode = 0
+    monkeypatch.setattr(owner, "capture_snapshot", lambda: owner.snapshot)
+    monkeypatch.setattr(owner, "_scan_group", lambda: ())
+    monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
+    monkeypatch.setattr(owner, "_identity_is_alive", lambda _identity: True)
+    monkeypatch.setattr(_process_kill.time, "monotonic", lambda: clock[0])
+
+    def fake_kill_process_tree(
+        pid: int,
+        timeout: float = 2.0,
+        *,
+        expected_create_time: float | None = None,
+        deadline: float | None = None,
+    ) -> _process_kill.ProcessCleanupResult:
+        assert expected_create_time is not None
+        assert deadline is not None
+        deadlines.append(deadline)
+        wait = min(timeout, max(0.0, deadline - clock[0]))
+        waits.append(wait)
+        clock[0] += wait
+        return _process_kill.ProcessCleanupResult(root_pid=pid, survivor_pids=(pid,))
+
+    monkeypatch.setattr(_process_kill, "kill_process_tree", fake_kill_process_tree)
+
+    _, result = owner.cleanup(timeout=0.1, escalate=True)
+
+    assert result.survivor_pids == (901, 902)
+    assert deadlines == [100.1, 100.1]
+    assert waits == [pytest.approx(0.1), 0.0]
+    assert clock[0] == pytest.approx(100.1)
+
+
 def test_settle_preserving_converts_cleanup_failure_to_evidence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -645,7 +687,7 @@ def test_settle_still_raises_on_genuinely_incomplete_evidence(
         access_denied_pids=(1234,),
         observation_complete=True,
     )
-    monkeypatch.setattr(owner, "cleanup", lambda timeout: (0, incomplete_result))
+    monkeypatch.setattr(owner, "cleanup", lambda _timeout, **_kwargs: (0, incomplete_result))
 
     with pytest.raises(_process_kill.OwnedProcessCleanupError):
         owner.settle()
@@ -673,7 +715,7 @@ def test_settle_evidence_returns_without_raising(
         access_denied_pids=(1234,) if not complete else (),
         observation_complete=complete,
     )
-    monkeypatch.setattr(owner, "cleanup", lambda timeout: (returncode, result_stub))
+    monkeypatch.setattr(owner, "cleanup", lambda _timeout, **_kwargs: (returncode, result_stub))
 
     with structlog.testing.capture_logs() as logs:
         actual_returncode, actual_result = owner.settle_evidence()

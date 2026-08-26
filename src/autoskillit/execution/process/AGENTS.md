@@ -11,4 +11,6 @@ Subprocess lifecycle management — spawn, monitor, race, kill.
 
 Both channels race concurrently in an `anyio` task group. `resolve_termination()` reads the frozen `RaceSignals` and returns `(TerminationReason, ChannelConfirmation)`. Channel A takes precedence if both fire in the same tick.
 
-`execute_termination_action()` is the sole authorized caller of `async_kill_process_tree` (enforced by test).
+Managed abort settlement reaches `kill_process_tree` through `OwnedProcessGroup.cleanup()` using
+identity-fenced descendant observations. Routine teardown remains group-scoped, while
+`execute_termination_action()` decides whether managed termination escalates beyond that scope.

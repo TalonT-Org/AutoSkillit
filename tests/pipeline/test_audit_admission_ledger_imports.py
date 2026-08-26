@@ -7,7 +7,6 @@ public import surface. The canonical path
 DefaultAuditAdmissionLedger`` continues to resolve; the sub-package is
 private (no re-export of the facade class) so consumers cannot reach
 into it.
-`` through the underscore-prefix.
 """
 
 from __future__ import annotations

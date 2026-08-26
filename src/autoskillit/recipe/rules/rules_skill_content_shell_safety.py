@@ -16,7 +16,7 @@ import regex as re
 from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._git_helpers import _GIT_REMOTE_COMMAND_RE, _LITERAL_ORIGIN_RE
-from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks
+from autoskillit.recipe._skill_placeholder_parser import extract_bash_blocks, extract_python_blocks
 from autoskillit.recipe.contracts import resolve_skill_name
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
@@ -182,7 +182,6 @@ def _check_blind_git_add_in_skill(ctx: ValidationContext) -> list[RuleFinding]:
 )
 def _check_no_interpreter_mediated_writes(ctx: ValidationContext) -> list[RuleFinding]:
     from autoskillit.hooks import _INTERPRETER_LINE_RE, _WRITE_APIS_RE
-    from autoskillit.recipe._skill_placeholder_parser import extract_python_blocks
     from autoskillit.recipe.rules.rules_skill_content import (
         _resolve_skill_md,
     )

@@ -20,6 +20,27 @@ This module exists so that:
       facade is touched.
   (c) external imports of `INTERPRETER_WRITE_ALLOWLIST`, `_PSEUDOCODE_ALLOWLIST`,
       and the regex constants continue to resolve at this path.
+
+Patchability contract — the `__all__` members fall into two categories:
+
+**Facade-patchable** (resolved through this facade at call time, so
+`patch.object(rules_skill_content, ...)` works):
+
+  - `_resolve_skill_md`
+  - `load_bundled_manifest`
+
+Sibling rule bodies call these via function-body lazy imports against
+`autoskillit.recipe.rules.rules_skill_content` so patches take effect.
+
+**Re-export-only** (defined in sibling module globals; the facade re-exports
+them for backward compatibility but patching them via the facade dotted
+string will NOT affect rule-body lookups — patch the original sibling
+module instead):
+
+  - `INTERPRETER_WRITE_ALLOWLIST`, `_POSIX_CHAR_CLASS_RE`, `_GREP_BRE_ALTERNATION_RE`,
+    `_GIT_GREP_BRE_RE`  (from `rules_skill_content_shell_safety`)
+  - `_PSEUDOCODE_ALLOWLIST`  (from `rules_skill_content_skill_contract`)
+  - `_GIT_REMOTE_COMMAND_RE`, `_LITERAL_ORIGIN_RE`  (from `_git_helpers`)
 """
 
 from __future__ import annotations
@@ -33,20 +54,20 @@ from autoskillit.recipe.contracts import load_bundled_manifest
 
 # Side-effect registration: importing each sibling fires its @semantic_rule
 # decorators, populating the rule registry exactly once per rule name. The
-# aliases use a uniform `_rsc_<category>` prefix so the facade's imports stay
-# symmetric with each other; the long form `rules_skill_content_<category>`
-# re-exports the same modules.
+# long-form aliases (`_rules_skill_content_<category>`) mirror the package-level
+# convention used in `recipe/__init__.py` so the facade's imports stay
+# symmetric with the rest of the package.
 from autoskillit.recipe.rules import (  # noqa: E402, F401
-    rules_skill_content_content_structure as _rsc_content,
+    rules_skill_content_content_structure as _rules_skill_content_content_structure,
 )
 from autoskillit.recipe.rules import (  # noqa: E402, F401
-    rules_skill_content_github_api_safety as _rsc_gh,
+    rules_skill_content_github_api_safety as _rules_skill_content_github_api_safety,
 )
 from autoskillit.recipe.rules import (  # noqa: E402, F401
-    rules_skill_content_shell_safety as _rsc_shell,
+    rules_skill_content_shell_safety as _rules_skill_content_shell_safety,
 )
 from autoskillit.recipe.rules import (  # noqa: E402, F401
-    rules_skill_content_skill_contract as _rsc_contract,
+    rules_skill_content_skill_contract as _rules_skill_content_skill_contract,
 )
 from autoskillit.recipe.rules.rules_skill_content_shell_safety import (
     _GIT_GREP_BRE_RE,

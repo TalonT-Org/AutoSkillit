@@ -573,3 +573,53 @@ def test_graphql_rule_fires_for_documentation_schema_reference_without_invocatio
     findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
+
+
+# ---------------------------------------------------------------------------
+# skill-no-issue-comments tests
+# ---------------------------------------------------------------------------
+
+_GH_ISSUE_COMMENT_RULE_ID = "skill-no-issue-comments"
+
+
+def test_skill_no_issue_comments_fires_for_gh_issue_comment_invocation(
+    tmp_path: Path,
+) -> None:
+    """Rule fires when a SKILL.md bash block uses 'gh issue comment'."""
+    skill_md = textwrap.dedent(
+        """\
+        # gh-comment-skill
+
+        ### Step 1
+        ```bash
+        gh issue comment 123 --body "thanks for the review"
+        ```
+        """
+    )
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="gh-comment-skill")
+    rule_ids = [f.rule for f in findings]
+    assert _GH_ISSUE_COMMENT_RULE_ID in rule_ids, (
+        f"Expected '{_GH_ISSUE_COMMENT_RULE_ID}' finding for 'gh issue comment' invocation, "
+        f"got: {rule_ids}"
+    )
+    matching = [f for f in findings if f.rule == _GH_ISSUE_COMMENT_RULE_ID]
+    assert all(f.severity == Severity.ERROR for f in matching)
+
+
+def test_skill_no_issue_comments_does_not_fire_for_gh_issue_edit(tmp_path: Path) -> None:
+    """Rule does NOT fire for `gh issue edit --body-file`, the correct replacement."""
+    skill_md = textwrap.dedent(
+        """\
+        # gh-edit-skill
+
+        ### Step 1
+        ```bash
+        gh issue edit 123 --body-file /tmp/updated_body.md
+        ```
+        """
+    )
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="gh-edit-skill")
+    rule_ids = [f.rule for f in findings]
+    assert _GH_ISSUE_COMMENT_RULE_ID not in rule_ids, (
+        f"Rule must not fire for 'gh issue edit --body-file', got: {rule_ids}"
+    )

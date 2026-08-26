@@ -556,17 +556,29 @@ def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
     expected_python_tag = (
         (_repo_root() / ".python-version").read_text(encoding="utf-8").strip().replace(".", "")
     )
-    assert len(expected_revision) == 40
-    assert all(character in "0123456789abcdefABCDEF" for character in expected_revision)
     assert ".python-version" in metadata_script
     assert '["tool"]["uv"]["sources"]["api-simulator"]["rev"]' in metadata_script
     assert "[0-9a-fA-F]{40}" in metadata_script
     assert r"\d+\.\d+" in metadata_script
+    metadata_lines = metadata_script.splitlines()
+    assert metadata_lines[0] == "python3 <<'PY' >> \"$GITHUB_OUTPUT\""
+    assert metadata_lines[-1] == "PY"
+    metadata_result = subprocess.run(
+        [sys.executable, "-B", "-c", "\n".join(metadata_lines[1:-1])],
+        cwd=_repo_root(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert metadata_result.returncode == 0, metadata_result.stderr
+    assert metadata_result.stdout.splitlines() == [
+        f"python_cache_tag={expected_python_tag}",
+        f"api_simulator_rev={expected_revision}",
+    ]
     assert metadata["outputs"] == {
         "python_cache_tag": "${{ steps.cache-identity.outputs.python_cache_tag }}",
         "api_simulator_rev": "${{ steps.cache-identity.outputs.api_simulator_rev }}",
     }
-    assert expected_python_tag == "311"
 
     setup_uv_steps = {
         job_name: next(

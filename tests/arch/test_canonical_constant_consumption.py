@@ -107,7 +107,7 @@ if TYPE_CHECKING:
         "package/test_generated.py",
         "from package.definition import TEST_ONLY\n",
     )
-    invalid_file = _write_synthetic_module(
+    _write_synthetic_module(
         src_root,
         "package/invalid.py",
         "from package.definition import INVALID_ONLY\nif (\n",
@@ -152,7 +152,7 @@ if TYPE_CHECKING:
     assert importers["LOCAL"] == {consumer_file}
     assert importers["package.PLAIN_ORIGINAL"] == {consumer_file}
     assert "PLAIN_LOCAL" not in importers
-    assert parse_calls == len((definition_file, facade_file, consumer_file, invalid_file))
+    assert parse_calls == 4  # definition, facade, consumer, and invalid
 
 
 def test_env_forward_constants_have_production_consumer(

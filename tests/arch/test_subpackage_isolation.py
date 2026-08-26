@@ -368,7 +368,7 @@ def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
 
 def test_pipeline_shard_size_ceiling() -> None:
     """REQ-CNST-010-Wavefront1: each shard in _context_admission_ledger is ≤750 lines."""
-    subpackage_root = SRC_ROOT / "autoskillit" / "pipeline" / "_context_admission_ledger"
+    subpackage_root = SRC_ROOT / "pipeline" / "_context_admission_ledger"
     assert subpackage_root.is_dir(), (
         f"expected private subpackage at {subpackage_root}; Wavefront 1 of #4667"
     )

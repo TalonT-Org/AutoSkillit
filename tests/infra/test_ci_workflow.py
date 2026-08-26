@@ -704,6 +704,9 @@ def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     assert "sole saver" in agent_rules
     assert "`api-simulator.rev`" in agent_rules
     assert "regenerated `uv.lock`" in agent_rules
+    assert "`fetch-depth: 0`" in agent_rules
+    assert "`AUTOSKILLIT_TEST_FILTER=conservative`" in agent_rules
+    assert "compute the merge base" in agent_rules
 
 
 def test_ci_workflow_does_not_pre_regenerate_hooks_json() -> None:

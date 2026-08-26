@@ -52,6 +52,13 @@ fix work must not incidentally broaden or narrow CI runners or filtering. Any ch
 requires an explicit CI-policy task and matching behavior-table tests in
 `tests/infra/test_ci_workflow.py`.
 
+## Test-checkout history
+
+The `test` job in `.github/workflows/tests.yml` keeps `actions/checkout` at
+`fetch-depth: 0` so the conservative test filter (`AUTOSKILLIT_TEST_FILTER=conservative`)
+has the full history required to compute the merge base. Do not make this checkout
+shallow without providing a coordinated fallback for merge-base computation.
+
 ## Rust toolchain scope
 
 `dtolnay/rust-toolchain` is only needed in jobs that compile native Python extensions

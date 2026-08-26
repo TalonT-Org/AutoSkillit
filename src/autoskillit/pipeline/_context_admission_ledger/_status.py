@@ -1,18 +1,18 @@
-"""SQLite contention, recovery, and accounting-status authorities.
+"""Ledger fault points and accounting-status authorities.
 
-Owns the :class:`_LedgerFaultPoint` and :class:`_LedgerContended` types,
-the busy/recovery SQL error-code masks, the rollback helper, the
-``_sqlite_primary_code`` classifier, and the ``_accounting_status`` /
-``_uninitialized_stream_result`` value-constructors.
+Owns the :class:`_LedgerFaultPoint` enum, the ``_ignore_fault`` callback
+default, and the ``_accounting_status`` / ``_uninitialized_stream_result``
+value-constructors. The busy/recovery SQL error-code masks, the rollback
+helper, the ``_sqlite_primary_code`` classifier, and the ``_LedgerContended``
+exception live in :mod:`._sqlite_errors` to break the cross-shard lazy-import
+cycle.
 
 Wavefront 1 of #4667.
 """
 
 from __future__ import annotations
 
-import sqlite3
 from enum import StrEnum
-from typing import Final
 
 from autoskillit.core import (
     AdmissionDecision,
@@ -28,23 +28,10 @@ from autoskillit.core import (
     MarkGenerationIndeterminateEvent,
     MarkIndeterminateEvent,
     RequestReconciliationEvent,
-    get_logger,
 )
 
-from ._codec import _zero_state  # noqa: E402
-
-logger = get_logger(__name__)
-
-_SQLITE_PRIMARY_MASK: Final = 0xFF
-_SQLITE_BUSY_CODES: Final = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
-_SQLITE_RECOVERY_CODES: Final = frozenset(
-    {
-        sqlite3.SQLITE_FULL,
-        sqlite3.SQLITE_IOERR,
-        sqlite3.SQLITE_INTERRUPT,
-        sqlite3.SQLITE_NOMEM,
-    }
-)
+from ._codec import _zero_state
+from ._sqlite_errors import _LedgerContended  # noqa: F401  (re-exported for rebind)
 
 
 class _LedgerFaultPoint(StrEnum):
@@ -57,28 +44,8 @@ class _LedgerFaultPoint(StrEnum):
     AFTER_COMMIT = "after_commit"
 
 
-class _LedgerContended(RuntimeError):
-    pass
-
-
 def _ignore_fault(fault_point: _LedgerFaultPoint) -> None:
     del fault_point
-
-
-def _rollback(connection: sqlite3.Connection) -> None:
-    if not connection.in_transaction:
-        return
-    try:
-        connection.execute("ROLLBACK")
-    except sqlite3.Error as exc:
-        # Best-effort: rollback failure is itself a store-health signal. Surface
-        # the cause via debug logging without changing the swallow behavior.
-        logger.debug("context-admission rollback failed: %s", exc)
-
-
-def _sqlite_primary_code(error: sqlite3.Error) -> int | None:
-    code = getattr(error, "sqlite_errorcode", None)
-    return code & _SQLITE_PRIMARY_MASK if isinstance(code, int) else None
 
 
 def _accounting_status(
@@ -145,12 +112,7 @@ def _set_store_failure(
 __all__ = [
     "_LedgerFaultPoint",
     "_LedgerContended",
-    "_SQLITE_PRIMARY_MASK",
-    "_SQLITE_BUSY_CODES",
-    "_SQLITE_RECOVERY_CODES",
     "_ignore_fault",
-    "_rollback",
-    "_sqlite_primary_code",
     "_accounting_status",
     "_uninitialized_stream_result",
     "_set_store_failure",

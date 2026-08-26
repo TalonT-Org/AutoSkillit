@@ -6,9 +6,14 @@ The implementation is decomposed into cohesive shards:
 * :mod:`._projection` — replay-projection and stored-health decoding
 * :mod:`._shadow` — shadow projection registry and target-constructors
 * :mod:`._state_queries` — pure state/event identity predicates
-* :mod:`._store` — sidecar/parent/file-init and connection configuration
-* :mod:`._status` — busy/recovery code masks, fault points, accounting status
+* :mod:`._store` — sidecar/parent/file-init, connection configuration, and
+  persisted-state validators
+* :mod:`._status` — fault points and accounting-status constructors
+* :mod:`._sqlite_errors` — busy/recovery code masks, ``_LedgerContended``,
+  rollback helper, ``_sqlite_primary_code`` classifier
 * :mod:`._apply` — apply transaction boundary and busy-retry commit
+* :mod:`._recover` — apply-time recovery orchestration (mid-flight rollback
+  + re-recovery + re-apply)
 * :mod:`._inspection` — inspection helpers and the ``inspect_stream`` body
 * :mod:`._storage` — filesystem and bounded SQLite primitives (originally
   ``_context_admission_storage.py``)
@@ -55,6 +60,12 @@ from ._codec import (  # noqa: F401  (used by `recover_all`, `_recovery_result`)
 from ._projection import (  # noqa: F401  (used by `recover_all`)
     _recover_stream_projection,
     _stored_stream_health,
+)
+from ._sqlite_errors import (  # noqa: E402, F401
+    _SQLITE_BUSY_CODES,
+    _LedgerContended,
+    _rollback,
+    _sqlite_primary_code,
 )
 from ._state_queries import _state_has_unresolved_work  # noqa: F401  (used by `recover_all`)
 from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure
@@ -425,9 +436,6 @@ from ._apply import (  # noqa: E402
     _persist_stream_failure as _persist_stream_failure_method,
 )
 from ._apply import (  # noqa: E402
-    _recover_sqlite_result as _recover_sqlite_result_method,
-)
-from ._apply import (  # noqa: E402
     _storage_failure_result as _storage_failure_result_method,
 )
 from ._apply import (  # noqa: E402
@@ -453,7 +461,6 @@ setattr(
     _commit_with_busy_retry_method,
 )
 setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure_method)
-setattr(DefaultContextAdmissionLedger, "_recover_sqlite_result", _recover_sqlite_result_method)
 setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_method)
 
 setattr(DefaultContextAdmissionLedger, "_set_store_failure", _set_store_failure)
@@ -494,6 +501,16 @@ from ._inspection import _inspect_stream as _inspect_stream_method  # noqa: E402
 
 setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_method)
 
+from ._recover import (  # noqa: E402
+    _recover_sqlite_result as _recover_sqlite_result_method,
+)
+
+setattr(
+    DefaultContextAdmissionLedger,
+    "_recover_sqlite_result",
+    _recover_sqlite_result_method,
+)
+
 
 # ── Local re-bind of cross-shard constants used by `recover_all` body ─────
 # Suffix `_INT` flags immutable int constants whose local rebind survives the
@@ -504,10 +521,4 @@ from ._projection import (  # noqa: E402
 )
 from ._projection import (  # noqa: E402
     _MAX_RECOVERY_ROWS as _MAX_RECOVERY_ROWS_INT,
-)
-from ._status import (  # noqa: E402, F401
-    _SQLITE_BUSY_CODES,
-    _LedgerContended,
-    _rollback,
-    _sqlite_primary_code,
 )

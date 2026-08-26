@@ -27,6 +27,11 @@ from autoskillit.core import (
     ContextAdmissionStorageHealthStatus,
 )
 
+from ._sqlite_errors import (
+    _SQLITE_BUSY_CODES,
+    _LedgerContended,
+    _sqlite_primary_code,
+)
 from ._storage import (
     _LedgerOpenError,
     fsync_directory,
@@ -103,7 +108,7 @@ def _ensure_store(self) -> None:
             )
             connection.execute("COMMIT")
         except BaseException:
-            from ._status import _rollback
+            from ._sqlite_errors import _rollback
 
             _rollback(connection)
             raise
@@ -273,12 +278,6 @@ def _connect(self) -> sqlite3.Connection:
 
 
 def _configure_connection(self, path: Path) -> sqlite3.Connection:
-    from ._status import (
-        _SQLITE_BUSY_CODES,
-        _LedgerContended,
-        _sqlite_primary_code,
-    )
-
     try:
         connection = self._connection_factory(
             f"{path.as_uri()}?mode=rw",

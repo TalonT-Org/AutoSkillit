@@ -30,7 +30,7 @@ from ._projection import (
     _recover_stream_projection,
     _stored_stream_health,
 )
-from ._status import (
+from ._sqlite_errors import (
     _SQLITE_BUSY_CODES,
     _LedgerContended,
     _rollback,

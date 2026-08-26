@@ -25,7 +25,6 @@ from autoskillit.core import (
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
-    ContextAdmissionStoreHealth,
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
@@ -56,19 +55,21 @@ from ._projection import (
     _stored_stream_health,
 )
 from ._shadow import _shadow_record
+from ._sqlite_errors import (
+    _SQLITE_BUSY_CODES,
+    _SQLITE_RECOVERY_CODES,
+    _LedgerContended,
+    _rollback,
+    _sqlite_primary_code,
+)
 from ._state_queries import (
     _state_has_unresolved_work,
     _state_retains_event,
     _validate_event_stream_identity,
 )
 from ._status import (
-    _SQLITE_BUSY_CODES,
-    _SQLITE_RECOVERY_CODES,
     _accounting_status,
-    _LedgerContended,
     _LedgerFaultPoint,
-    _rollback,
-    _sqlite_primary_code,
     _uninitialized_stream_result,
 )
 from ._storage import _LedgerOpenError
@@ -78,7 +79,6 @@ __all__ = [
     "reserve",
     "commit",
     "release",
-    "_recover_sqlite_result",
     "_commit_with_busy_retry",
     "_persist_stream_failure",
     "_storage_failure_result",
@@ -456,60 +456,6 @@ def apply(
         finally:
             if connection is not None:
                 connection.close()
-
-
-def _recover_sqlite_result(
-    self,
-    connection: sqlite3.Connection,
-    stream_key: ContextAdmissionStreamKey,
-    event: ContextAdmissionEvent,
-) -> ContextAdmissionAccountingResult:
-    _rollback(connection)
-    connection.close()
-    self._recovered = False
-    self._store_health = ContextAdmissionStoreHealth(
-        ContextAdmissionStorageHealthStatus.UNINITIALIZED
-    )
-    self._stream_health.clear()
-    self._unresolved_streams.clear()
-    recovery = self.recover_all()
-    if recovery.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-        return self._storage_failure_result(stream_key)
-    if not self._recovered:
-        return ContextAdmissionAccountingResult(
-            status=ContextAdmissionAccountingStatus.CONTENDED,
-            stream_key=stream_key,
-            reason_code="busy",
-        )
-    health = self.stream_health(stream_key)
-    if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-        return ContextAdmissionAccountingResult(
-            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
-            stream_key=stream_key,
-            failure_reason=health.failure_reason,
-            reason_code=health.reason_code,
-        )
-    inspection = self.inspect_stream(stream_key)
-    if inspection.health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-        return ContextAdmissionAccountingResult(
-            status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
-            stream_key=stream_key,
-            failure_reason=inspection.health.failure_reason,
-            reason_code=inspection.health.reason_code,
-        )
-    if inspection.health.status is ContextAdmissionStorageHealthStatus.UNINITIALIZED:
-        return ContextAdmissionAccountingResult(
-            status=ContextAdmissionAccountingStatus.CONTENDED,
-            stream_key=stream_key,
-            reason_code="busy",
-        )
-    if any(stored_event.event_id == event.event_id for stored_event in inspection.events):
-        return self.apply(stream_key, event)
-    self._set_store_failure(
-        ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
-        "sqlite-publication-absent",
-    )
-    return self._storage_failure_result(stream_key)
 
 
 def reserve(

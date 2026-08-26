@@ -34,9 +34,16 @@ def get_plan_review_agent(name: str) -> str:
         raise ResourceError(f"Unknown agent: {name}")
     content = agent_path.read_text()
     if content.startswith("---"):
+        # Accept both LF and CRLF closing fences so CRLF-authored agent
+        # definitions still drop their frontmatter before being served.
         end = content.find("\n---\n", 3)
+        if end == -1:
+            end = content.find("\r\n---\r\n", 3)
+            skip = 7
+        else:
+            skip = 5
         if end != -1:
-            content = content[end + 5 :].lstrip("\n")
+            content = content[end + skip :].lstrip("\n")
     return content
 
 

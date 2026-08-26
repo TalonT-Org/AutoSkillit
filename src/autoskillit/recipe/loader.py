@@ -17,10 +17,16 @@ def _extract_frontmatter(text: str) -> str:
     """
     if not text.startswith("---"):
         return text
-    # Skip the opening "---\n"
+    # Skip the opening delimiter — accept both LF ("---\n") and CRLF
+    # ("---\r\n") openings so CRLF-authored recipes still extract cleanly.
     after_open = text.index("\n", 0) + 1
-    # Find the closing "---"
-    close = text.index("\n---", after_open)
+    # Find the closing "---" — likewise accept both line endings.
+    lf_close = text.find("\n---", after_open)
+    crlf_close = text.find("\r\n---", after_open)
+    candidates = [idx for idx in (lf_close, crlf_close) if idx != -1]
+    if not candidates:
+        return text
+    close = min(candidates)
     return text[after_open:close]
 
 

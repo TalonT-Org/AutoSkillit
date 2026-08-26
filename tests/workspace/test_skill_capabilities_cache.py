@@ -331,3 +331,38 @@ def test_completed_entry_overflow_scans_correctly_without_retention(
     assert len(scan_calls) == 2
     assert cache.info().entry_count == 0
     assert cache.info().weight_bytes == 0
+
+
+def test_crlf_frontmatter_body_keeps_capability_mentions_outside_frontmatter(
+    evidence_cache,
+) -> None:
+    """A CRLF-delimited frontmatter must be recognised, not misread as body.
+
+    Regression guard for the resolve-review round on PR #4842: previously,
+    ``_source_lines`` only accepted ``body.startswith("---\\n")`` as the
+    frontmatter opener, so a body whose opening delimiter was followed by a
+    CRLF was treated as not having frontmatter at all. The closing ``---``
+    line was then classified as executable source and any capability mention
+    captured inside the actual frontmatter block leaked into the evidence set
+    as a ``self / outbound / executable`` occurrence. After the fix, a CRLF
+    body whose frontmatter contains a capability mention produces a non-genuine
+    (artifact-classified) evidence item, identical to its LF twin.
+    """
+    crlf_body = (
+        "---\r\nname: crlf-skill\r\ndescription: Cache fixture.\r\n"
+        "Call test_check().\r\n---\r\nUse the skill.\r\n"
+    )
+    lf_body = (
+        "---\nname: crlf-skill\ndescription: Cache fixture.\n"
+        "Call test_check().\n---\nUse the skill.\n"
+    )
+    crlf_evidence = capabilities.classify_skill_capability_evidence(crlf_body)
+    lf_evidence = capabilities.classify_skill_capability_evidence(lf_body)
+    assert crlf_evidence == lf_evidence
+    # The ``test_check`` mention lives only inside the frontmatter block; the
+    # CRLF and LF bodies must agree that the occurrence is non-genuine (its
+    # line group contains a non-executable source line, downgrading it to
+    # ``artifact`` classification), so neither call may surface a
+    # ``self / outbound / executable`` evidence item for ``test_check``.
+    assert all(not item.is_genuine for item in crlf_evidence)
+    assert all(not item.is_genuine for item in lf_evidence)

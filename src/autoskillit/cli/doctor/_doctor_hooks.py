@@ -16,13 +16,19 @@ from ._doctor_types import DoctorResult
 logger = get_logger(__name__)
 
 
+def _resolve_plugin_installed(plugin_installed: bool | None) -> bool:
+    if plugin_installed is not None:
+        return plugin_installed
+
+    from autoskillit.cli._init_helpers import _is_plugin_installed
+
+    return _is_plugin_installed()
+
+
 def _check_hook_registration(
     settings_path: Path, plugin_installed: bool | None = None
 ) -> DoctorResult:
-    if plugin_installed is None:
-        from autoskillit.cli._init_helpers import _is_plugin_installed
-
-        plugin_installed = _is_plugin_installed()
+    plugin_installed = _resolve_plugin_installed(plugin_installed)
     if plugin_installed:
         return DoctorResult(
             severity=Severity.OK,
@@ -79,10 +85,7 @@ def _check_hook_registry_drift(
             msg = f"[{scope_label}] {msg}"
         return DoctorResult(Severity.ERROR, "hook_registry_drift", msg)
     if result.missing > 0:
-        if plugin_installed is None:
-            from autoskillit.cli._init_helpers import _is_plugin_installed
-
-            plugin_installed = _is_plugin_installed()
+        plugin_installed = _resolve_plugin_installed(plugin_installed)
         if plugin_installed:
             msg = "Hooks delivered via plugin cache — settings.json drift is expected."
             if scope_label:
@@ -172,10 +175,7 @@ def _check_dual_registration(
     """Detect dual hook registration (plugin active + hooks in settings.json)."""
     from autoskillit.cli._hooks import _load_settings_data
 
-    if plugin_installed is None:
-        from autoskillit.cli._init_helpers import _is_plugin_installed
-
-        plugin_installed = _is_plugin_installed()
+    plugin_installed = _resolve_plugin_installed(plugin_installed)
     if not plugin_installed:
         return DoctorResult(
             severity=Severity.OK,

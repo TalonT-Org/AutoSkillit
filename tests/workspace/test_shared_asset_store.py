@@ -10,6 +10,7 @@ falls back cleanly, which is the new surface this stage adds.
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -33,19 +34,6 @@ def _make_source_plugin(root: Path, *, payload: bytes = b"x" * 4096) -> Path:
     assets.mkdir()
     (assets / "shared.bin").write_bytes(payload)
     return root
-
-
-def _allocated_bytes(root: Path) -> int:
-    seen: set[tuple[int, int]] = set()
-    total = 0
-    for path in (root, *root.rglob("*")):
-        path_stat = path.stat()
-        identity = (path_stat.st_dev, path_stat.st_ino)
-        if identity in seen:
-            continue
-        seen.add(identity)
-        total += path_stat.st_blocks * 512
-    return total
 
 
 def test_identical_assets_share_one_inode_across_projections(tmp_path: Path) -> None:
@@ -85,9 +73,9 @@ def test_a_projections_incremental_cost_is_bounded(tmp_path: Path) -> None:
     dest_b.mkdir(parents=True)
 
     _copy_non_skill_plugin_assets(source, dest_a)
-    before = _allocated_bytes(tmp_path)
+    before = shutil.disk_usage(tmp_path).used
     _copy_non_skill_plugin_assets(source, dest_b)
-    after = _allocated_bytes(tmp_path)
+    after = shutil.disk_usage(tmp_path).used
 
     incremental = after - before
     assert incremental < len(payload) / 4, (

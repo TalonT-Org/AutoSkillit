@@ -29,6 +29,16 @@ def test_dirty_main_repo_in_recoverable_steps() -> None:
     )
 
 
+def test_test_gate_contention_in_recoverable_steps() -> None:
+    """Gate contention must enter the existing merge-failure recovery flow."""
+    from autoskillit.core.types import MergeFailedStep
+
+    assert MergeFailedStep.TEST_GATE_CONTENTION in _RECOVERABLE_FAILED_STEPS, (
+        "TEST_GATE_CONTENTION must be recoverable so merge recipes can route it through "
+        "the established test-failure remediation path"
+    )
+
+
 # T-DM-2
 @pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
 def test_bundled_recipes_route_dirty_main_repo(recipe_name: str) -> None:
@@ -59,6 +69,34 @@ def test_bundled_recipes_route_dirty_main_repo(recipe_name: str) -> None:
             f"${{{{ result.failed_step == 'DIRTY_MAIN_REPO' }}}} to route to the "
             f"appropriate recovery step."
         )
+
+
+@pytest.mark.parametrize("recipe_name", ["implementation", "remediation", "implementation-groups"])
+def test_bundled_recipes_route_test_gate_contention(recipe_name: str) -> None:
+    """Every merge site must route contention through its existing test-failure path."""
+    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    merge_steps = {
+        name: step for name, step in recipe.steps.items() if step.tool == "merge_worktree"
+    }
+    assert merge_steps, f"{recipe_name}: no merge_worktree step found"
+
+    for step_name, step in merge_steps.items():
+        assert step.on_result is not None
+        matches = [
+            condition
+            for condition in step.on_result.conditions
+            if condition.when and "test_gate_contention" in condition.when.lower()
+        ]
+        assert len(matches) == 1, (
+            f"{recipe_name}: merge_worktree step '{step_name}' must route "
+            "test_gate_contention exactly once"
+        )
+        test_gate_route = next(
+            condition.route
+            for condition in step.on_result.conditions
+            if condition.when and "result.failed_step == 'test_gate'" in condition.when
+        )
+        assert matches[0].route == test_gate_route
 
 
 def test_every_merge_failed_step_is_classified() -> None:

@@ -36,6 +36,7 @@ _RECOVERABLE_FAILED_STEPS: frozenset[str] = frozenset(
     {
         MergeFailedStep.DIRTY_TREE,
         MergeFailedStep.TEST_GATE,
+        MergeFailedStep.TEST_GATE_CONTENTION,
         MergeFailedStep.POST_REBASE_TEST_GATE,
         MergeFailedStep.REBASE,
         MergeFailedStep.DIRTY_MAIN_REPO,
@@ -61,6 +62,7 @@ _TERMINAL_FAILED_STEPS: frozenset[str] = frozenset(
 _MERGE_FAILURE_DOMAINS: dict[str, str] = {
     MergeFailedStep.DIRTY_TREE: "code",
     MergeFailedStep.TEST_GATE: "code",
+    MergeFailedStep.TEST_GATE_CONTENTION: "code",
     MergeFailedStep.POST_REBASE_TEST_GATE: "code",
     MergeFailedStep.REBASE: "git_conflict",
     MergeFailedStep.REF_COHERENCE: "push_recovery",

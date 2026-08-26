@@ -126,6 +126,7 @@ class MergeFailedStep(StrEnum):
     DIRTY_TREE = "dirty_tree"
     DIRTY_MAIN_REPO = "dirty_main_repo"
     TEST_GATE = "test_gate"
+    TEST_GATE_CONTENTION = "test_gate_contention"
     FETCH = "fetch"
     PRE_REBASE_CHECK = "pre_rebase_check"
     MERGE_COMMITS_DETECTED = "merge_commits_detected"

@@ -204,7 +204,7 @@ async def test_perform_merge_blocks_on_failing_tests(
         tester=tester,
     )
     assert "error" in result
-    assert result["failed_step"] == MergeFailedStep.TEST_GATE
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE_CONTENTION
     assert result["state"] == MergeState.WORKTREE_INTACT
     assert result["timed_out"] is False
     assert "outer_timeout_seconds" not in result
@@ -343,7 +343,7 @@ async def test_perform_merge_returns_post_rebase_gate_contention_envelope(
 
     assert tester.call_count == 2
     assert set(result) == {"error", "failed_step", "state", "worktree_path"}
-    assert result["failed_step"] == MergeFailedStep.POST_REBASE_TEST_GATE
+    assert result["failed_step"] == MergeFailedStep.TEST_GATE_CONTENTION
     assert result["state"] == MergeState.WORKTREE_INTACT
     assert result["worktree_path"] == str(worktree)
 

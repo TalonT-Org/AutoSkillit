@@ -1,5 +1,4 @@
-"""Tests for skill-content semantic rules: undefined-bash-placeholder,
-hardcoded-origin-remote, and no-autoskillit-import-in-skill-python-block."""
+"""Tests for skill-content semantic rules, including raw shell test-gate detection."""
 
 from __future__ import annotations
 
@@ -129,6 +128,51 @@ def test_valid_skill_passes_placeholder_rule(tmp_path: Path) -> None:
 
     rule_ids = [f.rule for f in findings]
     assert "undefined-bash-placeholder" not in rule_ids
+
+
+def test_raw_shell_test_gate_instruction_is_reported(tmp_path: Path) -> None:
+    """Executable raw test gates in called skills must use test_check instead."""
+    skill_dir = tmp_path / "raw-shell-gate"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        textwrap.dedent(
+            """\
+            # raw-shell-gate
+
+            ```bash
+            task test-check
+            ```
+            """
+        )
+    )
+
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_BAD_SKILL.replace("bad-skill", "raw-shell-gate"))
+    recipe = load_recipe(recipe_path)
+
+    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+        findings = run_semantic_rules(recipe)
+
+    assert [finding.rule for finding in findings if finding.rule == "no-raw-shell-test-gate"] == [
+        "no-raw-shell-test-gate"
+    ]
+
+
+@pytest.mark.parametrize(
+    "skill_name",
+    ["retry-worktree", "implement-worktree-no-merge", "resolve-review"],
+)
+def test_canonical_test_gate_skills_do_not_trigger_raw_shell_rule(
+    tmp_path: Path, skill_name: str
+) -> None:
+    """Prohibition prose in the canonical skills must not look executable."""
+    recipe_path = tmp_path / "recipe.yaml"
+    recipe_path.write_text(_RECIPE_CALLING_TEST_SKILL.replace("test-skill", skill_name))
+    recipe = load_recipe(recipe_path)
+
+    findings = run_semantic_rules(recipe)
+
+    assert not [finding for finding in findings if finding.rule == "no-raw-shell-test-gate"]
 
 
 _MOCK_MANIFEST_WITH_PATTERNS = {

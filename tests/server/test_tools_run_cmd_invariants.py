@@ -6,11 +6,88 @@ import json
 
 import pytest
 
+from autoskillit.config import TestCheckConfig
 from autoskillit.server._guards import RECIPE_READ_DENY_TRIGGER
 from autoskillit.server.tools.tools_execution import run_cmd
 from tests.conftest import _make_result
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+class TestTestGateBypassRefusal:
+    """Configured test commands may only run through test_check or trusted smoke provenance."""
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "custom-gate verify",
+            "task test-check",
+            "task test-all",
+            "task test-filtered",
+        ],
+    )
+    async def test_refuses_test_gate_commands_before_launch(self, tool_ctx_kitchen_open, cmd):
+        tool_ctx_kitchen_open.config.test_check = TestCheckConfig(
+            command=["custom-gate", "verify"]
+        )
+
+        result = json.loads(await run_cmd(cmd=cmd, cwd="/tmp", step_name="run_tests"))
+
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+        assert "test_check" in json.dumps(result)
+        assert tool_ctx_kitchen_open.runner.call_args_list == []
+
+    @pytest.mark.anyio
+    async def test_refuses_forged_smoke_shape_without_smoke_recipe_provenance(
+        self, tool_ctx_ready_recipe, tmp_path
+    ):
+        """Matching command, cwd, and step name cannot forge smoke-test authority."""
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+
+        result = json.loads(
+            await run_cmd(
+                cmd="task test-check",
+                cwd=str(worktree),
+                step_name="run_tests",
+            )
+        )
+
+        assert result["success"] is False
+        assert result["subtype"] == "gate_error"
+        assert "test_check" in json.dumps(result)
+        assert tool_ctx_ready_recipe.tool_ctx.runner.call_args_list == []
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        "tool_ctx_ready_recipe",
+        [("smoke-test", "run_tests", {"source_dir": ".", "base_branch": "main"})],
+        indirect=True,
+    )
+    async def test_trusted_smoke_test_run_tests_step_may_launch_configured_gate(
+        self, tool_ctx_ready_recipe, tmp_path
+    ):
+        """Only the active smoke-test run_tests step can use its declared gate command."""
+        worktree = tmp_path / "worktree"
+        worktree.mkdir()
+        tool_ctx_ready_recipe.tool_ctx.runner.push(_make_result(0, "passed\n", ""))
+
+        result = json.loads(
+            await run_cmd(
+                cmd="task test-check",
+                cwd=str(worktree),
+                step_name="run_tests",
+            )
+        )
+
+        assert result["success"] is True
+        assert tool_ctx_ready_recipe.tool_ctx.runner.call_args_list[0][0] == [
+            "bash",
+            "-c",
+            "task test-check",
+        ]
 
 
 class TestRecipeReadProhibitionCmd:

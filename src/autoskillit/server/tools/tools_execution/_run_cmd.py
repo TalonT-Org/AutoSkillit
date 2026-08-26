@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shlex
 import time
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import TerminationReason, get_logger
 from autoskillit.execution import CaptureSetupError, build_sanitized_env
+from autoskillit.pipeline import ReadyRecipe, gate_error_result
 from autoskillit.server import mcp
 from autoskillit.server._guards import (
     _check_recipe_read_prohibition,
@@ -37,6 +39,7 @@ from autoskillit.server.tools._execution_helpers import (
 )
 
 if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
     from autoskillit.server._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 logger = get_logger(__name__)
@@ -45,6 +48,58 @@ _PURE_SLEEP_RE = re.compile(
     r'^(?:python3?\s+-c\s+["\']import time;\s*time\.sleep\((?P<py_secs>\d+(?:\.\d+)?)\)["\']'
     r"|sleep\s+(?P<sh_secs>\d+(?:\.\d+)?))$"
 )
+_CANONICAL_TEST_GATE_COMMANDS: frozenset[tuple[str, ...]] = frozenset(
+    {
+        ("task", "test-check"),
+        ("task", "test-all"),
+        ("task", "test-filtered"),
+    }
+)
+_SHELL_CONTROL_TOKENS = frozenset({";", "&&", "||", "|", "&"})
+
+
+def _shell_command_segments(cmd: str) -> tuple[tuple[str, ...], ...]:
+    segments: list[tuple[str, ...]] = []
+    for line in cmd.splitlines():
+        try:
+            tokens = shlex.split(line, comments=True, posix=True)
+        except ValueError:
+            continue
+        current: list[str] = []
+        for token in tokens:
+            if token in _SHELL_CONTROL_TOKENS:
+                if current:
+                    segments.append(tuple(current))
+                    current = []
+            else:
+                current.append(token)
+        if current:
+            segments.append(tuple(current))
+    return tuple(segments)
+
+
+def _is_test_gate_command(cmd: str, configured: tuple[list[str], ...]) -> bool:
+    gate_commands = _CANONICAL_TEST_GATE_COMMANDS | {
+        tuple(command) for command in configured if command
+    }
+    for segment in _shell_command_segments(cmd):
+        command = segment
+        while command and "=" in command[0] and not command[0].startswith(("/", "./")):
+            command = command[1:]
+        if any(command[: len(gate)] == gate for gate in gate_commands):
+            return True
+    return False
+
+
+def _trusted_smoke_gate_provenance(
+    tool_ctx: ToolContext,
+    prepared_segment: PreparedRecipeSegmentDelivery | None,
+) -> bool:
+    if prepared_segment is None or prepared_segment.step_name != "run_tests":
+        return False
+    with tool_ctx.recipe_execution_lock:
+        state = tool_ctx.recipe_initialization_state
+    return isinstance(state, ReadyRecipe) and state.recipe_name == "smoke-test"
 
 
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
@@ -80,6 +135,17 @@ async def run_cmd(
     try:
         prepared_segment: PreparedRecipeSegmentDelivery | None = None
         with structlog.contextvars.bound_contextvars(tool="run_cmd", cwd=cwd):
+            from autoskillit.server import _get_ctx  # circular-break
+
+            tool_ctx = _get_ctx()
+            prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
+            configured_commands = tuple(tool_ctx.config.test_check.effective_commands)
+            if _is_test_gate_command(cmd, configured_commands) and not (
+                _trusted_smoke_gate_provenance(tool_ctx, prepared_segment)
+            ):
+                return gate_error_result(
+                    "run_cmd refuses test-gate commands; use the test_check MCP tool instead"
+                )
             if not _derive_run_cmd_write_prefixes():
                 logger.debug(
                     "run_cmd: no write prefixes configured — write boundary guard inactive"
@@ -89,10 +155,6 @@ async def run_cmd(
                 ctx, "info", f"run_cmd: {cmd[:80]}", "autoskillit.run_cmd", extra={"cwd": cwd}
             )
 
-            from autoskillit.server import _get_ctx  # circular-break
-
-            tool_ctx = _get_ctx()
-            prepared_segment = _te_pkg.prepare_recipe_segment_delivery(tool_ctx, step_name)
             _start = time.monotonic()
             try:
                 m = _PURE_SLEEP_RE.match(cmd.strip())

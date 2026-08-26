@@ -24,7 +24,6 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any  # noqa: F401  (retained for forward compatibility with type stubs)
 
 from autoskillit.core import (
     AcceptInputEvent,
@@ -72,9 +71,6 @@ from ._storage import (
     reconcile_initialization_links,  # noqa: F401  (re-exported via package import path)
     require_private_file_identity,  # noqa: F401  (re-exported via package import path)
     unlink_initialization_artifact,  # noqa: F401  (re-exported via package import path)
-)
-from ._storage import (
-    validate_sidecars as _validate_sidecars,  # noqa: F401  (rebound at module load)
 )
 
 __all__ = [

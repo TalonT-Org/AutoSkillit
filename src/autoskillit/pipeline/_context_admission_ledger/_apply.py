@@ -519,7 +519,7 @@ def _recover_sqlite_result(
 def reserve(
     self,
     stream_key: ContextAdmissionStreamKey,
-    event: ContextAdmissionEvent,
+    event: ReserveRequestEvent,
 ) -> ContextAdmissionAccountingResult:
     if not isinstance(event, ReserveRequestEvent):
         raise TypeError("reserve_requires_reserve_request_event")
@@ -529,7 +529,7 @@ def reserve(
 def commit(
     self,
     stream_key: ContextAdmissionStreamKey,
-    event: ContextAdmissionEvent,
+    event: AcceptInputEvent | ResolveIndeterminateAcceptedEvent | ReconcileGenerationEvent,
 ) -> ContextAdmissionAccountingResult:
     if not isinstance(
         event,
@@ -542,7 +542,12 @@ def commit(
 def release(
     self,
     stream_key: ContextAdmissionStreamKey,
-    event: ContextAdmissionEvent,
+    event: (
+        ReleaseNonAdmissionEvent
+        | RollbackAdmissionEvent
+        | ResolveIndeterminateNonAdmissionEvent
+        | ResolveIndeterminateRollbackEvent
+    ),
 ) -> ContextAdmissionAccountingResult:
     if not isinstance(
         event,

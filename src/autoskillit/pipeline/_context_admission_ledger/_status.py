@@ -26,10 +26,13 @@ from autoskillit.core import (
     MarkGenerationIndeterminateEvent,
     MarkIndeterminateEvent,
     RequestReconciliationEvent,
+    get_logger,
 )
 
-from ._codec import _zero_state
-from ._storage import _LedgerOpenError
+from ._codec import _zero_state  # noqa: E402
+from ._storage import _LedgerOpenError  # noqa: E402
+
+_logger = get_logger(__name__)
 
 _SQLITE_PRIMARY_MASK: Final = 0xFF
 _SQLITE_BUSY_CODES: Final = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
@@ -68,10 +71,10 @@ def _rollback(connection: sqlite3.Connection) -> None:
         connection.execute("ROLLBACK")
     except sqlite3.Error as exc:
         # Best-effort rollback: a failure here is itself a store-health signal,
-        # but suppressing it preserves the existing cleanup semantics. Bind the
-        # exception so it remains visible to traceback inspectors / test debuggers
+        # but suppressing it preserves the existing cleanup semantics. Surface
+        # the cause via debug logging so it remains observable for diagnostics
         # without changing the swallow behavior.
-        del exc
+        _logger.debug("context-admission rollback failed: %s", exc)
 
 
 def _sqlite_primary_code(error: sqlite3.Error) -> int | None:

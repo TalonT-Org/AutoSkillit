@@ -163,9 +163,12 @@ class TestScanEditableInstalls:
         site = tmp_path / "site-packages"
         _make_dist_info(site, "autoskillit", "1.0", {"url": "file:///elsewhere"})
         direct_url = site / "autoskillit-1.0.dist-info" / "direct_url.json"
+        original_read_text = Path.read_text
 
-        def vanished(_path: Path) -> str:
-            raise FileNotFoundError(str(direct_url))
+        def vanished(path: Path) -> str:
+            if path == direct_url:
+                raise FileNotFoundError(str(direct_url))
+            return original_read_text(path)
 
         monkeypatch.setattr(Path, "read_text", vanished)
         result = scan_editable_installs_for_worktree(worktree, [site])

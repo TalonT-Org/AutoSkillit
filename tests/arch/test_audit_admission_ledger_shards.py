@@ -89,8 +89,6 @@ def _facade_method_body(method_name: str, src: str) -> str:
     Used by architectural-guard tests to verify each facade method delegates
     to the expected shard helper rather than inlining SQL.
     """
-    import ast
-
     tree = ast.parse(src)
     for node in tree.body:
         if isinstance(node, ast.ClassDef):
@@ -220,20 +218,59 @@ def test_recover_all_retains_double_except_discipline() -> None:
     """The ``recover_all`` double-``except`` defense-in-depth is
     load-bearing for ``TestRecovery``. Removing one arm would lose
     crash-recovery coverage.
+
+    AST inspection verifies both except arms appear as sibling handlers
+    in the same ``try`` block inside ``recover_all`` — substring matches
+    in docstrings or unrelated methods would silently pass weaker
+    assertions.
     """
-    facade_src = _read(FACADE_PATH)
-    assert "except AuditAdmissionStorageError" in facade_src
-    assert "except (OSError, sqlite3.Error)" in facade_src
+    body = _facade_method_body("recover_all", _read(FACADE_PATH))
+    assert body, "recover_all method body must be discoverable"
+    tree = ast.parse(body)
+    try_with_two_excepts = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try) and len(node.handlers) >= 2:
+            handler_types = {ast.unparse(h.type) for h in node.handlers if h.type is not None}
+            if "AuditAdmissionStorageError" in handler_types and any(
+                "OSError" in ht and "sqlite3.Error" in ht for ht in handler_types
+            ):
+                try_with_two_excepts = True
+                break
+    assert try_with_two_excepts, (
+        "recover_all must contain a single try block with sibling except arms for "
+        "AuditAdmissionStorageError and (OSError, sqlite3.Error)"
+    )
 
 
 def test_transactional_methods_use_baseexception() -> None:
     """Every transactional facade method wraps its body in
-    ``try: ... except BaseException: self._rollback(connection); raise;
+    ``try: ... except BaseException: rollback; raise;
     finally: connection.close()``. ``except BaseException`` (not
     ``except Exception``) is load-bearing — it guarantees
     ``KeyboardInterrupt`` and ``SystemExit`` rollback before re-raising.
+
+    AST inspection confirms each transactional write method owns an
+    ``except BaseException`` handler inside its body — substring matches
+    in unrelated methods or docstrings would silently pass weaker
+    assertions.
     """
     facade_src = _read(FACADE_PATH)
-    assert "except BaseException:" in facade_src, (
-        "facade must use except BaseException for transactional methods"
+    missing = []
+    for method in sorted(WRITE_METHODS):
+        body = _facade_method_body(method, facade_src)
+        if not body:
+            missing.append(f"{method}: no body found")
+            continue
+        tree = ast.parse(body)
+        if not any(
+            isinstance(h, ast.ExceptHandler)
+            and h.type is not None
+            and ast.unparse(h.type) == "BaseException"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Try)
+            for h in node.handlers
+        ):
+            missing.append(method)
+    assert not missing, "transactional facade methods missing except BaseException: " + ", ".join(
+        missing
     )

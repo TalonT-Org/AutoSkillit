@@ -40,7 +40,6 @@ def test_facade_path_still_imports_default_ledger() -> None:
 def test_facade_attribute_path_still_accessible() -> None:
     from autoskillit.pipeline import audit_admission_ledger as mod
 
-    assert mod is not None
     assert hasattr(mod, "DefaultAuditAdmissionLedger")
 
 

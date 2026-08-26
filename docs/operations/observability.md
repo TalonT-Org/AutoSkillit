@@ -79,6 +79,8 @@ sessions/
     anomalies.jsonl     # detected anomalies
     raw_stdout.jsonl    # captured headless stdout
 sessions.jsonl          # retained row per committed summary
+otlp.jsonl              # current native OTLP logs and metrics capture
+otlp.jsonl.1            # single rotated generation
 ```
 
 Session directory names are **hyphen-separated**, never underscored — see the
@@ -94,6 +96,32 @@ jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl
 # Sessions with anomalies
 jq 'select(.anomaly_count > 0)' ~/.local/share/autoskillit/logs/sessions.jsonl
 ```
+
+## Native headless OTLP capture
+
+Every headless executor invocation starts one best-effort OTLP/HTTP-JSON sink
+on an ephemeral `127.0.0.1` port. Claude Code receives its native telemetry
+activation plus log and metric exporters through environment variables. Codex
+receives equivalent run-scoped `otel.exporter` and
+`otel.metrics_exporter` command overrides. Interactive Codex launches and
+persistent user or project configuration are unchanged.
+
+The initial attempt, resume, contract nudge, and provider fallback within the
+same executor invocation share that sink. The listener closes with the
+invocation; a later orchestration retry creates a new listener in the same log
+directory. Startup, request, queue, persistence, and shutdown failures remain
+diagnostic-only and cannot change the headless result.
+
+The sink accepts the native log, metric, and trace OTLP paths, but AutoSkillit
+activates only the stable native log and metric exporters. It writes the
+PII-scrubbed vendor payload without normalization to `otlp.jsonl`, rotating one
+20 MiB generation to `otlp.jsonl.1`. No collector, daemon, telemetry database,
+or additional package is required.
+
+`sessions.jsonl` remains the retained committed-session projection. It is not a
+joined telemetry index. The watermark-incremental walk in #4646 and the
+rebuildable derived schema/writer in #4647 are separate future consumers of the
+raw OTLP and session artifacts.
 
 ## Codex cook startup traces
 

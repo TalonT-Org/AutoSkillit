@@ -19,6 +19,7 @@ from autoskillit.core import (
 from .._bounded import (
     CollectorLimits,
     CollectorSafetyError,
+    list_contained_files,
     read_contained_file,
 )
 from ._evidence import (
@@ -61,8 +62,6 @@ def _normalise_scope(scope: str) -> str:
 
 
 def _scoped_paths(root: Path, scope: str, limits: CollectorLimits) -> tuple[str, ...]:
-    from .._bounded import list_contained_files  # local to keep top-of-file imports lean
-
     prefix = _normalise_scope(scope)
     paths = list_contained_files(root, limits)
     if not prefix:

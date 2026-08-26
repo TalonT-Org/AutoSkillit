@@ -17,6 +17,7 @@ from autoskillit.core import (
     CollectorReport,
     CollectorStatus,
     MethodProvenance,
+    NodeKey,
 )
 
 from ...graph import SubjectNamespace
@@ -61,8 +62,6 @@ def collect_unsupported(
 def collect_autoskillit_toml(
     root: Path, snapshot_digest: str, path: str, limits: CollectorLimits
 ) -> CollectorReport:
-    from autoskillit.core import NodeKey
-
     collector_id = "autoskillit-manifest"
     try:
         data = tomllib.loads(read_contained_file(root, path, limits).decode("utf-8"))
@@ -102,8 +101,6 @@ def _relabel(
     *,
     subject_namespace: SubjectNamespace | None = None,
 ) -> CollectorReport:
-    from autoskillit.core import NodeKey
-
     method, version = _collector_metadata(collector_id)
     evidence = tuple(
         replace(
@@ -128,6 +125,8 @@ def _relabel(
 def collect_autoskillit_registry(
     root: Path, snapshot_digest: str, scope: str, limits: CollectorLimits
 ) -> CollectorReport:
+    # Lazy import: ``collect_python_ast`` is the only caller of stdlib ``ast`` in
+    # this shard, and most observational collects do not exercise it.
     from ._python_ast import collect_python_ast
 
     return _relabel(

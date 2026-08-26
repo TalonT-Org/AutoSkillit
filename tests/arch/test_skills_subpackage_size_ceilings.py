@@ -1,10 +1,9 @@
 """Size-ceiling guard for the workspace/skills decomposition (#4833).
 
-Every new shard plus both retained facades must stay under the warning zone
-(750 lines) and the hard ceiling (1000 lines). The existing
-``test_no_src_module_exceeds_line_limit`` already enforces the 1000-line
-hard ceiling on every source module; this guard adds the 750-line warning-zone
-assertion focused on the decomposed package.
+Every new shard plus both retained facades must stay under the 750-line
+warning zone. The 1000-line hard ceiling is enforced globally by
+``test_no_src_module_exceeds_line_limit``, so this guard only needs the
+warning-zone check focused on the decomposed package.
 """
 
 from __future__ import annotations
@@ -39,11 +38,3 @@ def test_skill_module_under_warning_zone(rel_path: str) -> None:
     assert line_count <= 750, (
         f"{rel_path}: {line_count} lines (warning zone is 750). Decompose further or justify."
     )
-
-
-@pytest.mark.parametrize("rel_path", _SKILLS_TARGETS)
-def test_skill_module_under_hard_ceiling(rel_path: str) -> None:
-    """Every decomposed module must stay under the 1000-line hard ceiling."""
-    target = SRC_ROOT / rel_path
-    line_count = len(target.read_text().splitlines())
-    assert line_count <= 1000, f"{rel_path}: {line_count} lines (hard ceiling is 1000)"

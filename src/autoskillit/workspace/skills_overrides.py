@@ -14,7 +14,13 @@ import stat
 from pathlib import Path
 from typing import NamedTuple
 
-from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, SkillContractError
+from autoskillit.core import (
+    ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
+    SkillContractError,
+    get_logger,
+)
+
+logger = get_logger(__name__)
 
 _OVERRIDE_SEARCH_DIRS = ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 
@@ -78,6 +84,12 @@ def detect_project_local_overrides(
         try:
             entries = list(search_root.iterdir())
         except OSError:
+            logger.warning(
+                "override_search_root_unreadable",
+                project_dir=str(project_dir),
+                search_dir=subdir,
+                exc_info=True,
+            )
             continue
         for entry in entries:
             if entry.is_dir() and entry.name not in seen and (entry / "SKILL.md").is_file():

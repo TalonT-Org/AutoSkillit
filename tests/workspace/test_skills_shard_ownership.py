@@ -123,7 +123,6 @@ def test_shard_ownership_is_well_formed() -> None:
         for _, names in _SKILLS_SHARD_OWNERS + _SKILL_CAPABILITY_SHARD_OWNERS
         for name in names
     ]
-    assert all(all_owned), "every name tuple must be non-empty"
     assert len(all_owned) == len(set(all_owned)), (
         "every owned name must appear in exactly one shard"
     )

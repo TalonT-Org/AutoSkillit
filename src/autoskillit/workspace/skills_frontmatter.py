@@ -17,11 +17,10 @@ import hashlib
 from dataclasses import replace
 from pathlib import Path
 
-# Module-global facade reference so monkeypatched attributes on the facade
-# module remain visible when this function dispatches sidecar/marker loaders.
 import autoskillit.workspace.skills as _skills_facade
 from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
+    ExplorationVectorDef,
     SkillContractError,
     SkillInvalidityKind,
     SkillSource,
@@ -33,8 +32,6 @@ from autoskillit.workspace.skill_format import read_skill_frontmatter
 from autoskillit.workspace.skills_records import (
     SkillInfo,
     SkillInvalidity,
-    invalidity_hints,  # noqa: F401  # re-exported via facade for back-compat
-    render_skill_invalidities,  # noqa: F401  # re-exported via facade for back-compat
 )
 
 logger = get_logger(__name__)
@@ -111,7 +108,7 @@ def _skill_info_from_frontmatter(
         activate_deps_raw = []
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
 
-    exploration_vectors: tuple = ()
+    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     exploration_sidecar_digest = ""
     if "exploration_vectors" in data:
         invalidities.append(

@@ -1,18 +1,10 @@
 """Skill resolution facade.
 
-Decomposed into the following sibling shards behind this stable facade:
-
-- ``skills_records`` — pure data types and closure BFS
-- ``skills_overrides`` — project-local override discovery
-- ``skills_exploration`` — exploration-sidecar + marker binding
-- ``skills_visibility`` — visibility policy helpers
-- ``skills_frontmatter`` — single frontmatter parse entry point
-
-The facade re-exports every public symbol and every test-imported private
-symbol the existing test suite reaches via this module. The
-``DefaultSkillResolver`` class stays co-located because every shard feeds it;
-splitting it would fragment the fall-through precedence (project-local →
-bundled → reject) that the acceptance criteria require unchanged.
+Re-exports the public surface and test-imported private symbols from the
+decomposition shards behind this stable facade. Owns ``DefaultSkillResolver``
+because every shard feeds into its fall-through precedence
+(project-local → bundled → reject); splitting it would fragment that single
+authority surface.
 """
 
 from __future__ import annotations
@@ -31,10 +23,6 @@ from autoskillit.core import (
     pkg_root,
     validate_skill_capability_roles,
 )
-
-# Re-exports — every symbol the existing test suite reaches via this facade
-# must continue to resolve. Imports create module-global bindings so
-# monkeypatch.setattr on these names updates the value subsequent reads see.
 from autoskillit.workspace.skills_exploration import (
     _bind_exploration_vector_markers,
     _load_exploration_sidecar,

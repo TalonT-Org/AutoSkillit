@@ -1,10 +1,11 @@
-"""Skill records: pure data types and the closure BFS that has no dependency on parsing,
-visibility, or resolver state.
+"""Skill records: record types, diagnostic helpers, and the transitive-closure BFS.
 
 Owns the immutable record types (``SkillInfo``, ``SkillCatalogEntry``,
 ``SkillExclusion``, ``EffectiveSkillCatalog``, ``EffectiveSkillInvocation``) plus the
 diagnostic helpers and the transitive-closure BFS over a captured catalog. These are
 the pure-data shapes that flow through every other shard and the facade.
+``SkillInfo.__post_init__`` lazily parses frontmatter via ``skill_format`` so the
+data shape still embeds the canonical parsed contract.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Any
 from autoskillit.core import (
     PACK_REGISTRY,
     SKILL_CONTRACT_REMEDIATIONS,
+    ExplorationVectorDef,
     SkillContractError,
     SkillExecutionRole,
     SkillInvalidityAuthority,
@@ -73,7 +75,7 @@ class SkillInfo:
     semantic_plan: SkillSemanticPlan | None = None
     execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
     activate_deps: tuple[str, ...] = ()
-    exploration_vectors: tuple[Any, ...] = ()  # ExplorationVectorDef
+    exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     exploration_sidecar_digest: str = ""
     canonical_content: str = ""
     canonical_digest: str = ""
@@ -99,7 +101,13 @@ class SkillInfo:
                     self.path.read_text(encoding="utf-8"),
                 )
             except (OSError, UnicodeDecodeError):
-                pass
+                logger.warning(
+                    "skill_info_canonical_content_unreadable",
+                    skill_name=self.name,
+                    source=str(self.source),
+                    path=str(self.path),
+                    exc_info=True,
+                )
         if self.canonical_content and not self.canonical_digest:
             object.__setattr__(
                 self,
@@ -151,7 +159,7 @@ class SkillCatalogEntry:
     semantic_plan: SkillSemanticPlan | None
     execution_role: SkillExecutionRole
     activate_deps: tuple[str, ...]
-    exploration_vectors: tuple[Any, ...]  # ExplorationVectorDef
+    exploration_vectors: tuple[ExplorationVectorDef, ...]
     exploration_sidecar_digest: str
     canonical_content: str
     canonical_digest: str
@@ -270,7 +278,6 @@ class EffectiveSkillInvocation:
                 or member.frontmatter is None
                 or not member.frontmatter.is_valid
             ):
-                # noqa: kept literal for upstream behaviour preservation
                 reason = (
                     render_skill_invalidities(member.invalidities)
                     if member.invalidities

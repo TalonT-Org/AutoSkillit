@@ -38,7 +38,6 @@ _EXPLORATION_VECTOR_OPEN_RE = re.compile(
     r'(?P<id>[a-z][a-z0-9]*(?:-[a-z0-9]+)*)" -->$'
 )
 _EXPLORATION_VECTOR_CLOSE = "<!-- /autoskillit:exploration-vector -->"
-# Parser constants — derived/constant across all 301 vectors at the migration census.
 _VECTOR_DEFAULT_PROFILE = RepositoryProfileId.AUTO
 _VECTOR_DEFAULT_DEPENDS_ON: tuple[str, ...] = ()
 _VECTOR_DEFAULT_SCOPE: tuple[str, ...] = (".",)
@@ -135,7 +134,7 @@ def _parse_exploration_sidecar(
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise SkillContractError(
-                f"exploration sidecar vectors[{index}] contains an invalid value"
+                f"exploration sidecar vectors[{index}] contains an invalid value: {exc}"
             ) from exc
         vectors.append(vector)
 
@@ -175,7 +174,7 @@ def _parse_exploration_sidecar(
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise SkillContractError(
-                f"exploration sidecar retained[{index}] contains an invalid value"
+                f"exploration sidecar retained[{index}] contains an invalid value: {exc}"
             ) from exc
         vectors.append(vector)
 
@@ -249,9 +248,13 @@ def replace_exploration_vector_bodies(
         for vector in bound
         if vector.disposition is ExplorationVectorDisposition.MIGRATED
     }
-    if set(replacements) != expected:
+    supplied_ids = set(replacements)
+    if supplied_ids != expected:
+        missing = sorted(expected - supplied_ids)
+        extra = sorted(supplied_ids - expected)
         raise SkillContractError(
-            "exploration vector replacements must exactly match migrated marker ids"
+            "exploration vector replacements must exactly match migrated marker ids: "
+            f"missing={missing!r}, extra={extra!r}"
         )
     normalized: dict[str, str] = {}
     for marker_id, replacement_body in replacements.items():

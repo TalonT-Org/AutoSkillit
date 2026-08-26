@@ -144,3 +144,6 @@ def _visibility_policy(
         disabled_feature_tags=disabled_feature_tags,
     )
     return disabled, custom_tags, features, experimental_enabled
+
+
+__all__: list[str] = []  # Internal shard — no public symbols; facade re-exports if needed.

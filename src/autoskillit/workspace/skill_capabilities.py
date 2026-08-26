@@ -68,8 +68,6 @@ def classify_skill_capability_evidence(
     Documentary occurrences are retained as ``artifact`` evidence so callers
     can explain why a declaration was rejected without treating it as genuine.
     """
-    # Module-global lookups so monkeypatch.setattr on the facade attribute
-    # takes effect during tests.
     evidence_cache = _SKILL_CAPABILITY_EVIDENCE_CACHE
     scanner = _scan_skill_capability_evidence_uncached
     normalize = _normalize_skill_capability_name
@@ -136,7 +134,6 @@ __all__ = [
     "_skill_capability_evidence_entry_weight_bytes",
     "_skill_capability_evidence_input_weight_bytes",
     "classify_skill_capability_evidence",
-    "detect_skill_capabilities",
     "detect_skill_capabilities",
     "parse_skill_semantic_plan",
     "validate_skill_capability_authenticity",

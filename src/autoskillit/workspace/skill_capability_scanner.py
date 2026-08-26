@@ -4,13 +4,10 @@ Owns the regex catalog (``_STATIC_PATTERNS``, ``_SELF_INITIATED_TOOLS``,
 the compiled regexes), the source-line / logical-line classification
 pipeline (``_source_lines``, ``_logical_lines``, ``_classify_context``,
 ``_evidence``), and the uncovered ``_scan_skill_capability_evidence_uncached``
-entry point that the facade wraps with caching.
-
-The ``_CLASSIFIED_CAPABILITIES != frozenset(SKILL_CAPABILITY_REGISTRY)``
-invariant check stays at the bottom of this shard because the registry
-cross-check is a scanner invariant, not a facade invariant. The check fires
-when this module is imported; the facade imports from this shard, so the
-import triggers the check.
+entry point that the facade wraps with caching. The
+``_CLASSIFIED_CAPABILITIES != frozenset(SKILL_CAPABILITY_REGISTRY)``
+registry cross-check at the bottom of the module enforces the scanner's
+own classification invariant.
 """
 
 from __future__ import annotations

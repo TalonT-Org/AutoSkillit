@@ -3,9 +3,6 @@
 Owns ``SkillCapabilityValidation``, ``SkillCapabilityAuthenticityDiagnostic``,
 ``validate_skill_capability_authenticity``, ``validate_skill_capability_declarations``,
 ``detect_skill_capabilities``. Compares declaration-vs-evidence mismatches.
-
-Imports ``SkillInvalidity`` from ``skills_records`` (single source of truth —
-the ``SkillInvalidity`` definition lives there, never redefined here).
 """
 
 from __future__ import annotations
@@ -13,8 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
-# Module-global facade reference so monkeypatch.setattr on the facade
-# attribute remains visible during tests.
 import autoskillit.workspace.skill_capabilities as _capabilities_facade
 from autoskillit.core import SkillInvalidityKind
 from autoskillit.workspace.skill_capability_scanner import SkillCapabilityEvidence

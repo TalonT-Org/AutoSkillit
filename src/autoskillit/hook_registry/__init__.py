@@ -12,7 +12,8 @@ Submodules:
 
 Public API re-exported below for backwards compatibility. The previous
 flat-module form (src/autoskillit/hook_registry.py) was removed when the
-module exceeded the REQ-CNST-010 line cap.
+module exceeded the REQ-CNST-010 line cap; consumers continue to import
+from `autoskillit.hook_registry` unchanged.
 """
 
 from __future__ import annotations
@@ -63,12 +64,14 @@ from ._risky_operations import (
     validate_lifecycle_contracts,
 )
 
-# Populate HOOK_REGISTRY after every other module-level binding is in place
-# to break the cycle through autoskillit.hooks.__init__ (which imports
-# HOOK_REGISTRY from this package). The lazy import inside _build_hook_registry
-# resolves EXEMPT_SESSION_TYPES_BY_GUARD / EXEMPT_SKILLS_BY_GUARD after that
-# cycle has unwound.
+# Defer HOOK_REGISTRY construction until every other module-level binding
+# is in place. ``_build_hook_registry()`` imports
+# ``autoskillit.hooks._hook_constants`` lazily; the cycle through
+# ``autoskillit.hooks.__init__.py`` is broken by importing it after this
+# package is fully constructed.
 HOOK_REGISTRY.extend(_build_hook_registry())
+# HOOK_REGISTRY_HASH is computed against the now-populated HOOK_REGISTRY.
+# Recompute here because the empty-list value cached at import time is stale.
 HOOK_REGISTRY_HASH = compute_registry_hash(
     HOOK_REGISTRY,
     RETIRED_SCRIPT_BASENAMES,

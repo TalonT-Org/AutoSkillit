@@ -1,16 +1,23 @@
 """Risky-operation predicates and lifecycle-contract validation.
 
-- Re-exports ``RISKY_GH_SUBCOMMANDS`` / ``RISKY_GIT_OPERATIONS`` from the
-  canonical ``autoskillit.hooks._hook_constants`` stdlib-only leaf, preserving
-  the historical ``autoskillit.hook_registry.RISKY_*`` import path. The leaf
-  is imported directly (not via ``autoskillit.hooks.__init__``) to avoid the
-  package-level import cycle: ``autoskillit.hooks`` imports ``HOOK_REGISTRY``
-  from this package, which in turn imports ``_risky_operations``.
+This module owns:
+
+- ``RISKY_GH_SUBCOMMANDS`` / ``RISKY_GIT_OPERATIONS`` re-exports from
+  ``autoskillit.hooks._hook_constants`` (the canonical authority). The
+  re-exports preserve the historical ``autoskillit.hook_registry.RISKY_*``
+  import path for every existing consumer (the values themselves were
+  moved to ``_hook_constants`` in Step A1 so that guard scripts and the
+  registry now share a single source of truth).
 - ``hook_applies_to_backend`` — whether a HookDef is reachable for a given
   backend/session-scope pair.
-- ``validate_lifecycle_contracts`` — fail-closed validation that every
-  persistent resource produced by a reachable hook has exactly one cleanup
-  owner whose lifecycle metadata matches the contract.
+- ``_contract_session_scopes`` — internal helper mapping a
+  LifecycleContractDef's session_scope to the set of deployed session
+  scopes the contract applies to.
+- ``validate_lifecycle_contracts`` — fail-closed validation: every
+  persistent resource produced by a reachable hook has exactly one
+  cleanup owner; that owner's lifecycle metadata matches the contract;
+  the producer is applicable on every scope it advertises; same-runner
+  reclaim and SessionStart ownership obligations are satisfied.
 """
 
 from __future__ import annotations
@@ -18,17 +25,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-# Import directly from the stdlib-only leaf to bypass the cycle through
-# ``autoskillit.hooks.__init__`` (which imports HOOK_REGISTRY from this
-# package). The leaf has zero ``autoskillit.*`` imports (enforced by
-# tests/hooks/test_hook_constants_authority.py::test_module_is_stdlib_only).
-from autoskillit.hooks._hook_constants import (  # noqa: F401
+from autoskillit.hooks import (  # noqa: F401
     RISKY_GH_SUBCOMMANDS,
     RISKY_GIT_OPERATIONS,
 )
 
 from ._hooks_defs import HookDef, LifecycleContractDef
 
+# The RISKY_* constants are re-exported under their historical names so that
+# every existing consumer (tests, contract checks, third-party scripts) keeps
+# importing from ``autoskillit.hook_registry`` unchanged. The values themselves
+# live in ``autoskillit.hooks._hook_constants`` (Step A1) — the single source
+# of truth shared with the guard scripts.
 __all__ = [
     "RISKY_GH_SUBCOMMANDS",
     "RISKY_GIT_OPERATIONS",

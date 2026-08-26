@@ -198,7 +198,7 @@ def _build_hook_registry() -> list[HookDef]:
     ``__init__.py`` calls this factory at the end of its import sequence,
     after every other module-level binding is in place.
     """
-    from autoskillit.hooks._hook_constants import (
+    from autoskillit.hooks import (
         EXEMPT_SESSION_TYPES_BY_GUARD,
         EXEMPT_SKILLS_BY_GUARD,
     )

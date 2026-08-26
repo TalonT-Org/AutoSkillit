@@ -47,9 +47,9 @@ def test_risky_gh_subcommands_matches_literal() -> None:
     """RISKY_GH_SUBCOMMANDS must equal the canonical 3-tuple set."""
     assert RISKY_GH_SUBCOMMANDS == frozenset(
         {
+            ("run", "download"),
+            ("release", "download"),
             ("pr", "create"),
-            ("pr", "merge"),
-            ("release", "create"),
         }
     )
 

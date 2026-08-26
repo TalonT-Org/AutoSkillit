@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-from autoskillit.hooks._hook_constants import (  # noqa: F401
+from autoskillit.hooks import (  # noqa: F401
     RISKY_GH_SUBCOMMANDS,
     RISKY_GIT_OPERATIONS,
 )

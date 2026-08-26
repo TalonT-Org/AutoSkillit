@@ -34,11 +34,11 @@ RISKY_GIT_OPERATIONS: Final[frozenset[tuple[str, ...]]] = frozenset(
     }
 )
 
-RISKY_GH_SUBCOMMANDS: Final[frozenset[tuple[str, ...]]] = frozenset(
+RISKY_GH_SUBCOMMANDS: Final[frozenset[tuple[str, str]]] = frozenset(
     {
+        ("run", "download"),
+        ("release", "download"),
         ("pr", "create"),
-        ("pr", "merge"),
-        ("release", "create"),
     }
 )
 

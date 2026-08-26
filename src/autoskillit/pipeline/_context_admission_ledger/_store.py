@@ -17,6 +17,7 @@ import os
 import secrets
 import sqlite3
 import stat
+import time
 from pathlib import Path
 from typing import Final
 
@@ -142,8 +143,6 @@ def _ensure_store(self) -> None:
 
 
 def _recover_initialization_link(self) -> None:
-    import time
-
     deadline = time.monotonic() + (self._busy_timeout_ms / 1_000)
     try:
         while self._has_initialization_link():
@@ -225,7 +224,6 @@ def _validate_database_file(self) -> tuple[int, int]:
 
 
 def _validate_integrity(connection: sqlite3.Connection) -> None:
-    """Static method bound onto DefaultContextAdmissionLedger."""
     row = connection.execute("PRAGMA integrity_check").fetchone()
     if row != ("ok",):
         raise _LedgerOpenError(
@@ -240,7 +238,6 @@ def _validate_integrity(connection: sqlite3.Connection) -> None:
 
 
 def _validate_metadata(metadata: dict[str, str]) -> None:
-    """Static method bound onto DefaultContextAdmissionLedger."""
     expected = {
         "schema_version": str(_SCHEMA_VERSION),
         "encoding_version": str(CONTEXT_ADMISSION_ENCODING_VERSION),
@@ -280,13 +277,13 @@ def _connect(self) -> sqlite3.Connection:
 
 
 def _configure_connection(self, path: Path) -> sqlite3.Connection:
+    connection = self._connection_factory(
+        f"{path.as_uri()}?mode=rw",
+        uri=True,
+        timeout=self._busy_timeout_ms / 1_000,
+        isolation_level=None,
+    )
     try:
-        connection = self._connection_factory(
-            f"{path.as_uri()}?mode=rw",
-            uri=True,
-            timeout=self._busy_timeout_ms / 1_000,
-            isolation_level=None,
-        )
         expected_pragmas = (
             ("journal_mode", "DELETE", ("delete",)),
             ("synchronous", "EXTRA", (3,)),
@@ -303,8 +300,11 @@ def _configure_connection(self, path: Path) -> sqlite3.Connection:
                 )
         return connection
     except _LedgerOpenError:
+        connection.close()
         raise
     except sqlite3.Error as exc:
         if _sqlite_primary_code(exc) in _SQLITE_BUSY_CODES:
+            connection.close()
             raise _LedgerContended from exc
+        connection.close()
         raise

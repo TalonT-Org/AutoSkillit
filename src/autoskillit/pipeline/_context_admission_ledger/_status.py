@@ -2,10 +2,7 @@
 
 Owns the :class:`_LedgerFaultPoint` enum, the ``_ignore_fault`` callback
 default, and the ``_accounting_status`` / ``_uninitialized_stream_result``
-value-constructors. The busy/recovery SQL error-code masks, the rollback
-helper, the ``_sqlite_primary_code`` classifier, and the ``_LedgerContended``
-exception live in :mod:`._sqlite_errors` to break the cross-shard lazy-import
-cycle.
+value-constructors.
 
 Wavefront 1 of #4667.
 """

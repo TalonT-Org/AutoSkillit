@@ -50,19 +50,13 @@ from autoskillit.core import (
     RollbackAdmissionEvent,
 )
 
-# Internal cross-shard re-exports used by the class body below.
-from ._codec import _stream_key_bytes  # used by `_recovery_result`
+from ._codec import _stream_key_bytes
 from ._status import _ignore_fault, _LedgerFaultPoint
-
-# Re-exports for cross-package consumers that import from the public surface.
 from ._storage import (
     SCHEMA_SQL,
     _LedgerOpenError,
 )
 
-# __all__ lists the stable public surface. The two import blocks above are
-# cross-shard glue used by the rebind block and `recover_all` body below; those
-# symbols are internal and not re-exported.
 __all__ = [
     "DefaultContextAdmissionLedger",
     "SCHEMA_SQL",
@@ -162,7 +156,7 @@ class DefaultContextAdmissionLedger:
             | ResolveIndeterminateRollbackEvent
         ),
     ) -> ContextAdmissionAccountingResult:
-        raise NotImplementedError  # bound from ._apply at module load
+        raise NotImplementedError  # rebound from ._apply at module load
 
     def inspect_stream(
         self,

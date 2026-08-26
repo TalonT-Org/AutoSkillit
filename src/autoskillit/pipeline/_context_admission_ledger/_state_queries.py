@@ -1,7 +1,7 @@
 """Pure functions over ContextAdmissionState and ContextAdmissionEvent.
 
-No SQLite or transaction concerns. Used by the apply, recovery, and inspection
-paths to inspect journal/stream identity and resolve unresolved work.
+Used by the apply, recovery, and inspection paths to inspect journal/stream
+identity and resolve unresolved work.
 
 Wavefront 1 of #4667.
 """

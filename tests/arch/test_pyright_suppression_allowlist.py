@@ -85,21 +85,6 @@ def test_type_ignore_count_budget() -> None:
         for line in path.read_text(encoding="utf-8").splitlines():
             if "# type: ignore" in line:
                 count += 1
-    # The exploration identity guard has two standalone sibling imports that static
-    # analysis cannot resolve through its runtime hooks-directory path bootstrap.
-    # The join batch machinery (#4575) adds 14 site-bounded # type: ignore comments
-    # across the declare_join_batch handler, the join ledger, and the Join-guard
-    # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
-    # cannot be statically resolved from outside the hooks/ subtree.
-    # Decomposing hook_registry.py (#4853) added 4 # type: ignore[import-not-found]
-    # suppressions on the standalone guard scripts' `from _hook_constants import`
-    # lines (Pyright cannot resolve the standalone-context import through the
-    # package-qualified path the runtime uses).
-    # The Wavefront 1 decomposition (#4667) originally added 11 site-bounded
-    # # type: ignore[attr-defined] comments inside DefaultContextAdmissionLedger;
-    # they were all structurally redundant (module-level helpers with unannotated
-    # ``self`` are implicitly ``Any``, so mypy reports them as unused-ignore).
-    # Ratcheted from 147 to 137 after the cleanup.
     budget = 137
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "

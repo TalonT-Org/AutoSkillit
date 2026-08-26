@@ -4,12 +4,6 @@ Owns the busy/locked code masks, the ``_sqlite_primary_code`` classifier, the
 ``_rollback`` cleanup helper, and the ``_LedgerContended`` exception type used
 to signal a recoverable SQLite contention to the ledger's apply/recovery loop.
 
-Split out of ``_status`` to break the cross-shard lazy-import cycle that the
-Wavefront 1 decomposition introduced: ``_store._configure_connection`` and
-``_status`` both need these symbols, and co-locating them in ``_status`` forced
-mid-function imports. The new shard has no internal dependents, so every
-consumer can import at module top.
-
 Wavefront 1 of #4667.
 """
 

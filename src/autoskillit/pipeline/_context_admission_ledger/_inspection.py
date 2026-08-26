@@ -78,7 +78,6 @@ def _fail_closed_inspection(
     stream_key: ContextAdmissionStreamKey,
     store_health: ContextAdmissionStoreHealth,
 ) -> ContextAdmissionInspectionResult:
-    """Build a fail-closed inspection whose health mirrors ``store_health``."""
     return _empty_inspection(
         stream_key,
         ContextAdmissionStreamHealth(
@@ -183,7 +182,6 @@ def _decode_inspection_projection(
     health: ContextAdmissionStreamHealth,
     read_budget: _LedgerReadBudget,
 ) -> ContextAdmissionInspectionResult:
-    """Replay the projection and assemble the inspection result."""
     projection = _recover_stream_projection(
         connection,
         stream_id,
@@ -215,7 +213,6 @@ def _map_sqlite_inspection_failure(
     connection: sqlite3.Connection | None,
     exc: sqlite3.Error,
 ) -> ContextAdmissionInspectionResult:
-    """Translate a ``sqlite3.Error`` during inspection into an inspection result."""
     primary_code = _sqlite_primary_code(exc)
     if connection is not None:
         _rollback(connection)
@@ -243,7 +240,6 @@ def _map_persistent_inspection_failure(
     connection: sqlite3.Connection | None,
     exc: ContextAdmissionValidationError | _LedgerOpenError,
 ) -> ContextAdmissionInspectionResult:
-    """Translate a decode/identity failure into a fail-closed or contended inspection."""
     reason = (
         exc.reason
         if isinstance(exc, _LedgerOpenError)

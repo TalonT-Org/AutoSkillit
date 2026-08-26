@@ -2,16 +2,7 @@
 
 Owns ``recover_all`` (the full-store re-projection walk) and
 ``_recover_sqlite_result`` (the apply-time mid-flight rollback + re-recovery
-handler). Extracted from ``_apply`` and the package facade to localize the
-cross-shard orchestration in a single shard.
-
-The ``recover_all`` body uses rebind-via-setattr methods (``_ensure_store``,
-``_connect``, ``_validate_integrity``, ``_validate_metadata``,
-``_persist_stream_failure``, ``_set_store_failure``); the rebind happens in
-``__init__.py``. Module-level helpers take ``self`` implicitly typed as
-``Any``, so mypy does not require ``# type: ignore[attr-defined]`` for
-these calls. The Wavefront 1 stub-then-rebind pattern itself is being
-addressed in the #4667 follow-ups.
+handler).
 
 Wavefront 1 of #4667.
 """
@@ -123,7 +114,8 @@ def recover_all(self) -> ContextAdmissionRecoveryResult:
                         latest_journal_sequence=int(row[6]),
                         read_budget=read_budget,
                     )[0]
-                except ContextAdmissionValidationError:
+                except ContextAdmissionValidationError as exc:
+                    logger.debug("context-admission replay decode failed: %s", exc)
                     pending_stream_failures.append(
                         (
                             stream_id,
@@ -201,9 +193,7 @@ def _prepare_recovery_state(
     """Open the store, begin the recovery transaction, validate schema/metadata.
 
     Returns ``(connection, read_budget)`` for the per-stream walk that
-    follows. The store-init, BEGIN, setlimit, integrity check, metadata
-    read+validate, and preflight are localized here so the per-stream
-    walk in :func:`recover_all` reads straight to the data.
+    follows.
     """
     self._ensure_store()
     connection = self._connect()

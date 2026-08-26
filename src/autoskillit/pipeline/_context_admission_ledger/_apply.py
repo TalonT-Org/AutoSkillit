@@ -1,9 +1,8 @@
 """Apply transaction boundary — the mutation authority.
 
 Owns the journal insertion, effect outbox insertion, shadow insertion, and
-state-update CAS wrapped in a single ``BEGIN IMMEDIATE`` transaction. The
-busy-retry ``_commit`` loop lives here. These methods are rebound onto
-:class:`DefaultContextAdmissionLedger` from ``__init__.py``.
+state-update CAS wrapped in a single ``BEGIN IMMEDIATE`` transaction, plus
+the busy-retry ``_commit`` loop.
 
 Wavefront 1 of #4667.
 """
@@ -415,14 +414,14 @@ def apply(
                 failure_reason=exc.reason,
                 reason_code=exc.reason_code,
             )
-        except ContextAdmissionValidationError as exc:
+        except ContextAdmissionValidationError:
             if connection is not None:
                 _rollback(connection)
             return ContextAdmissionAccountingResult(
                 status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
                 stream_key=stream_key,
                 failure_reason=ContextAdmissionStorageFailureReason.UNSUPPORTED_PROTOCOL,
-                reason_code=f"protocol-validation-failed:{exc}",
+                reason_code="protocol-validation-failed",
             )
         except sqlite3.Error as exc:
             primary_code = _sqlite_primary_code(exc)

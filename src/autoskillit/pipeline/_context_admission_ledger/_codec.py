@@ -1,10 +1,8 @@
 """Protocol-v1 envelope codec and stream-key serialization helpers.
 
-Pure byte-to-dataclass and dataclass-to-byte functions with no SQLite or
-transaction concerns. Owns the protocol-v1 envelope codec plus stream-key
-serialization and the type-tuple constants used to validate stored payloads,
-plus the recursive dataclass walker used to extract lineage identity from
-decoded events.
+Owns the protocol-v1 envelope codec, stream-key serialization, type-tuple
+constants used to validate stored payloads, and the recursive dataclass walker
+used to extract lineage identity from decoded events.
 
 Wavefront 1 of #4667.
 """
@@ -37,6 +35,23 @@ _MAX_STREAM_KEY_JSON_NESTING: Final = 16
 _EVENT_TYPES: Final = get_args(ContextAdmissionEvent)
 _EFFECT_TYPES: Final = get_args(AdmissionEffect)
 _STATE_TYPES: Final = get_args(ContextAdmissionState)
+
+__all__ = [
+    "_MAX_STREAM_KEY_BYTES",
+    "_MAX_STREAM_KEY_JSON_NESTING",
+    "_EVENT_TYPES",
+    "_EFFECT_TYPES",
+    "_STATE_TYPES",
+    "_stream_key_bytes",
+    "_zero_state",
+    "_encode_value",
+    "_decode_event",
+    "_decode_decision",
+    "_decode_state",
+    "_decode_stream_key",
+    "_iter_lineages",
+    "_validate_stream_key_json_bounds",
+]
 
 
 def _stream_key_bytes(stream_key: ContextAdmissionStreamKey) -> bytes:

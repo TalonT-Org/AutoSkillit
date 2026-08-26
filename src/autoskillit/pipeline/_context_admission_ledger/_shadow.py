@@ -55,6 +55,20 @@ from autoskillit.core import (
     StartGenerationEvent,
 )
 
+__all__ = [
+    "_shadow_record",
+    "_shadow_record_protocol_v1",
+    "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
+    "_CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1",
+    "_shadow_targets",
+    "_input_shadow_target",
+    "_generation_shadow_target",
+    "_find_batch",
+    "_find_generation",
+    "_find_lineages",
+    "_prior_occurrence_state",
+]
+
 _CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1: Final = 1
 
 
@@ -241,7 +255,9 @@ def _input_shadow_target(
         batch_id=batch_id,
         generation_reservation_id=None,
         window_epoch_id=(
-            reservation.window_epoch_id if reservation is not None else lineages[0].window_epoch_id
+            reservation.window_epoch_id
+            if reservation is not None
+            else (lineages[0].window_epoch_id if lineages else None)
         ),
         reserve_class=batch_value.reserve_class,
         lifecycle_state=lifecycle_state,
@@ -400,18 +416,3 @@ def _prior_occurrence_state(
         if len(states) == 1:
             return states.pop()
     return AdmissionState.PROPOSED
-
-
-__all__ = [
-    "_shadow_record",
-    "_shadow_record_protocol_v1",
-    "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
-    "_CONTEXT_ADMISSION_SHADOW_PROTOCOL_V1",
-    "_shadow_targets",
-    "_input_shadow_target",
-    "_generation_shadow_target",
-    "_find_batch",
-    "_find_generation",
-    "_find_lineages",
-    "_prior_occurrence_state",
-]

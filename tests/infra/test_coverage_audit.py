@@ -600,7 +600,7 @@ class TestBuildTestSourceMap:
 
 def test_audit_mode_returns_zero_on_coverage_read_failure(cov_ast, tmp_path, monkeypatch, capsys):
     """Audit reports unknown coverage without becoming a task gate."""
-    coverage_read_error = getattr(cov_ast, "CoverageReadError", RuntimeError)
+    coverage_read_error = cov_ast.CoverageReadError
 
     def read_failure(_db_path: Path):
         raise coverage_read_error("unreadable")

@@ -2569,12 +2569,15 @@ def test_collectors_extractors_is_a_package_not_a_module() -> None:
 def test_snapshot_facade_all_resolves() -> None:
     """Every public symbol exposed by the original snapshot.py is still resolvable.
 
-    Includes the names that test_snapshot.py monkeypatches through the facade:
-    _capture_once, activate_repository_profiles, observe_path_mode, subprocess,
-    time, DEFAULT_IGNORE_POLICY. A facade that re-exports the public surface but
-    does not expose these helpers breaks the test suite silently.
+    Includes the names that test_snapshot.py monkeypatches through the facade
+    and the names that production code resolves via _snapshot_facade lookups
+    (resolve_repository_identity, read_stable_contained_file, observe_path_mode,
+    DEFAULT_IGNORE_POLICY). A facade that re-exports the public surface but does
+    not expose these helpers breaks either the test suite or production
+    monkeypatch propagation silently.
     """
     import autoskillit.exploration.snapshot as snapshot_module
+    from autoskillit.exploration.snapshot import _artifact as artifact_shard
     from autoskillit.exploration.snapshot import _capture as capture_shard
     from autoskillit.exploration.snapshot import _records as records_shard
 
@@ -2597,6 +2600,9 @@ def test_snapshot_facade_all_resolves() -> None:
         "observe_path_mode",
         "subprocess",
         "time",
+        # Production code resolves these via _snapshot_facade lookups
+        "resolve_repository_identity",
+        "read_stable_contained_file",
         "DEFAULT_IGNORE_POLICY",
     }
     # Verify each re-export points to the correct source object so a facade
@@ -2606,6 +2612,8 @@ def test_snapshot_facade_all_resolves() -> None:
         "_capture_once": capture_shard._capture_once,
         "activate_repository_profiles": capture_shard.activate_repository_profiles,
         "observe_path_mode": capture_shard.observe_path_mode,
+        "resolve_repository_identity": capture_shard.resolve_repository_identity,
+        "read_stable_contained_file": artifact_shard.read_stable_contained_file,
     }
     data_anchors = {
         "DEFAULT_IGNORE_POLICY": records_shard.DEFAULT_IGNORE_POLICY,

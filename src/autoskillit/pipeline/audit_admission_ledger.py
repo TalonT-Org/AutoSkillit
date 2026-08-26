@@ -57,12 +57,8 @@ from autoskillit.pipeline._audit_admission_ledger import (
     _reservations,
 )
 from autoskillit.pipeline._audit_admission_ledger._encoders import (
-    _HANDLE_DIGEST_DOMAIN as _handle_digest_domain,
-)
-from autoskillit.pipeline._audit_admission_ledger._encoders import (
-    _HANDLE_PREFIX as _handle_prefix,
-)
-from autoskillit.pipeline._audit_admission_ledger._encoders import (
+    _HANDLE_DIGEST_DOMAIN,
+    _HANDLE_PREFIX,
     _json_dumps,
     _normalize_required_effect_names,
     _outcome_to_dict,
@@ -246,7 +242,7 @@ class DefaultAuditAdmissionLedger:
         reservation_handle: str,
     ) -> AuditIdentityReservation | None:
         parts = reservation_handle.split(".")
-        if len(parts) != 3 or parts[0] != _handle_prefix:
+        if len(parts) != 3 or parts[0] != _HANDLE_PREFIX:
             return None
         handle_authority_id, secret = parts[1:]
         if (
@@ -265,7 +261,7 @@ class DefaultAuditAdmissionLedger:
             connection = self._ensure_recovered()
             try:
                 handle_digest = (
-                    f"{_handle_digest_domain}:{compute_bytes_hash(secret.encode('utf-8'))}"
+                    f"{_HANDLE_DIGEST_DOMAIN}:{compute_bytes_hash(secret.encode('utf-8'))}"
                 )
                 return _reservations._resolve_reservation_handle_read(
                     connection, handle_digest=handle_digest

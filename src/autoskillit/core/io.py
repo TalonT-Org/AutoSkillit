@@ -706,7 +706,7 @@ def read_versioned_json(
         if raise_io_errors:
             raise
         return None
-    except _json.JSONDecodeError:
+    except (UnicodeDecodeError, _json.JSONDecodeError):
         return None
     if not isinstance(raw, dict):
         return None

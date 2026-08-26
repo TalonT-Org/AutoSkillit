@@ -15,19 +15,14 @@ from .._bounded import run_bounded_rg  # noqa: F401  tests pull via module alias
 from ._evidence import (
     _bounded_diagnostic_text,  # noqa: F401  tests pull via module alias
     _collector_metadata,  # noqa: F401  tests pull via module alias
-    _invalid_rg_json_diagnostic,  # noqa: F401  test-monkeypatch anchor
-    _report,  # noqa: F401  test-monkeypatch anchor
     collector_manifest_digest,
 )
 from ._file_search import (
-    _normalise_scope,  # noqa: F401  test-monkeypatch anchor
-    _scoped_paths,  # noqa: F401  test-monkeypatch anchor
     collect_artifact,
     collect_file_list,
     collect_search,
 )
 from ._observational import (
-    _relabel,  # noqa: F401  test-monkeypatch anchor
     collect_architecture,
     collect_autoskillit_registry,
     collect_autoskillit_toml,
@@ -37,11 +32,7 @@ from ._observational import (
     collect_test_map_observation,
     collect_unsupported,
 )
-from ._python_ast import (
-    _is_named_base,  # noqa: F401  test-monkeypatch anchor
-    _qualified_name,  # noqa: F401  test-monkeypatch anchor
-    collect_python_ast,
-)
+from ._python_ast import collect_python_ast
 from ._records import CollectorInvocation, CollectorProfile
 from ._registry import COLLECTOR_PROFILES
 

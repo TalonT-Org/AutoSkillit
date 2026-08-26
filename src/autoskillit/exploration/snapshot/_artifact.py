@@ -33,9 +33,7 @@ from ..identity import resolve_repository_identity
 
 # `_git` and `_index_records` are imported here from ``_capture`` rather than
 # duplicated so the deadline envelope and NUL-record parsing stay single-sourced
-# across the snapshot package. The plan forbids importing ``resolve_repository_path``
-# from ``_capture`` — this is consistent: artifact capture does its own root
-# validation but uses the same atomic capture primitives.
+# across the snapshot package.
 from ._capture import _git, _index_records  # noqa: E402
 from ._records import (
     _MAX_STABLE_ARTIFACT_ATTEMPTS,

@@ -1043,7 +1043,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
         # — #4557 decomposes three modules over the 750-line structural limit
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
-        "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
+        "recipe": 44,  # was 33; +9 from CI/graph/dataflow splits; +_binding_input.py split (#4854)
         # +_github_http review boundary and +launch_resolution authority.
         # +otlp_sink run-scoped loopback diagnostics receiver (#4628)
         "execution": 23,  # +session_index strict byte-bounded retained-index reads (#4514)
@@ -1252,11 +1252,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         1200,
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
-    ),
-    "recipe/_binding.py": (
-        1050,
-        "REQ-CNST-010-E24: #4402 keeps runtime attestation admission and its "
-        "parameter-role denial remedies beside the compile-time binding pipeline",
     ),
     "hooks/_capture_artifacts.py": (
         1200,
@@ -1597,6 +1592,11 @@ def test_no_src_module_exceeds_line_limit() -> None:
         "(add entry to _LINE_LIMIT_EXEMPTIONS with rule ID + rationale):\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_recipe_binding_no_longer_exempt() -> None:
+    """#4854 removed REQ-CNST-010-E24 — recipe/_binding.py no longer requires a size exemption."""
+    assert "recipe/_binding.py" not in _LINE_LIMIT_EXEMPTIONS
 
 
 def test_pipeline_exploration_context_is_a_package() -> None:

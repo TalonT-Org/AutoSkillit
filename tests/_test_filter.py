@@ -761,6 +761,7 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     # --- Internal utility modules (no external src importers) ---
     "_analysis": frozenset({"recipe"}),
     "_binding": frozenset({"recipe", "server"}),
+    "_binding_input": frozenset({"recipe", "server"}),
     "_analysis_bfs": frozenset({"recipe"}),
     "_analysis_blocks": frozenset({"recipe"}),
     "_analysis_detectors": frozenset({"recipe"}),

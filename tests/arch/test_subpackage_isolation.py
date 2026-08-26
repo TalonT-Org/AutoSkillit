@@ -1598,14 +1598,7 @@ def test_no_src_module_exceeds_line_limit() -> None:
 
 
 def test_pipeline_exploration_context_is_a_package() -> None:
-    """REQ-CNST-010-E22: ``pipeline/exploration_context`` is a sub-package (#4835).
-
-    Asserts the decomposition shape: the old monolithic file is gone, the
-    package directory exists, every private shard listed in the plan
-    exists, and the package's ``__init__.py`` re-exports the public-
-    contract names (``test_exploration_context_facade_re_exports_contract``
-    below is the contract test that names each re-export).
-    """
+    """REQ-CNST-010-E22: ``pipeline/exploration_context`` is a sub-package (#4835)."""
     assert not (SRC_ROOT / "pipeline" / "exploration_context.py").exists(), (
         "Old monolithic pipeline/exploration_context.py must be removed (#4835)"
     )
@@ -1678,7 +1671,7 @@ def test_pipeline_exploration_context_e22_retired() -> None:
     )
 
 
-def test_pipeline_exploration_context_shards_under_750_lines() -> None:
+def test_pipeline_exploration_context_shards_under_900_lines() -> None:
     """REQ-CNST-010-E22: every shard in the package is at most 900 lines (#4835).
 
     The pre-decomposition monolithic file was 1061 lines.  After
@@ -1688,11 +1681,6 @@ def test_pipeline_exploration_context_shards_under_750_lines() -> None:
     imports, and the package's ``__init__.py`` facade re-export
     surface, which the test also pins so the re-export facade itself
     cannot regress.
-
-    The 900-line ceiling is well under the pre-decomposition 1061-line
-    file (so this test fails on the old monolithic module) while
-    accommodating the irreducible class body that owns every
-    lease-state mutator.
     """
     package_dir = SRC_ROOT / "pipeline" / "exploration_context"
     violations: list[tuple[str, int]] = []

@@ -1,17 +1,4 @@
-"""Canonical registry tables: HOOK_REGISTRY, LIFECYCLE_CONTRACTS, retirement sets.
-
-The pre-decomposition ``hook_registry.py`` carried these tables at module
-scope. The decomposition keeps the literal data identical — every entry is
-moved verbatim, including the per-HookDef "Must stay in sync with … stdlib-only
-boundary" comments (now superseded by ``_hook_constants`` imports in Step B3).
-
-After Step B3, ``exempt_skills`` for the three guard HookDefs is sourced from
-``EXEMPT_SKILLS_BY_GUARD`` (single source of truth in ``_hook_constants``),
-and ``exempt_session_types`` for ``pr_create_guard`` is sourced from
-``EXEMPT_SESSION_TYPES_BY_GUARD``. The carve-out for ``git_ops_guard`` keeps
-its ``exempt_session_types=frozenset()`` inline (the orchestrator bypass is
-script-local; see ``test_git_ops_guard_orchestrator_exemption_is_phase_local``).
-"""
+"""Canonical registry tables: HOOK_REGISTRY, LIFECYCLE_CONTRACTS, retirement sets."""
 
 from __future__ import annotations
 
@@ -119,20 +106,6 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
 # detected by at least one command-inspecting guard registered under a
 # Bash|run_cmd matcher. Add new pairs when threat modeling identifies
 # risky gh subcommands; the coverage test will fail until a guard exists.
-#
-# Re-exported from autoskillit.hooks._hook_constants (the canonical authority)
-# via ._risky_operations for backwards compatibility with every existing
-# consumer that imports ``RISKY_GH_SUBCOMMANDS`` from
-# ``autoskillit.hook_registry``.
-
-# Risky raw git CLI operations that MUST have PreToolUse guard coverage.
-# test_risky_git_ops_coverage.py enforces that every tuple here is
-# detected by at least one command-inspecting guard registered under a
-# Bash|run_cmd matcher. Add new tuples when threat modeling identifies
-# risky git operations; the coverage test will fail until a guard exists.
-#
-# Re-exported from autoskillit.hooks._hook_constants (the canonical authority)
-# via ._risky_operations.
 
 
 # ---------------------------------------------------------------------------

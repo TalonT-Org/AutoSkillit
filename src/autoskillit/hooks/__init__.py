@@ -33,12 +33,6 @@ from autoskillit.hooks._github_mutation_analysis import analyze_github_mutations
 # consumers can import them without going through the canonical submodule.
 # ``_hook_constants`` itself remains the canonical authority and is still
 # importable directly by standalone guard scripts (via ``_HOOKS_DIR`` bootstrap).
-# Imported BEFORE autoskillit.hook_registry to break the import cycle:
-# hook_registry._risky_operations reads RISKY_* from this module, and
-# hook_registry imports here for HOOK_REGISTRY. Loading the constants first
-# ensures RISKY_* is bound before hook_registry.__init__ triggers loading
-# _risky_operations (which would otherwise see a partially-initialized
-# ``autoskillit.hooks`` and ImportError).
 from autoskillit.hooks._hook_constants import (  # noqa: E402,F401
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,

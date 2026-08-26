@@ -5,10 +5,6 @@ the implementation details; every public name re-exported here is
 also listed in ``__all__`` so ``from autoskillit.pipeline.exploration_context
 import <name>`` works for any name the pre-decomposition monolithic
 ``exploration_context.py`` advertised.
-
-Each shard that logs owns its own ``logger = get_logger(__name__)`
-so log records retain the originating module's ``__name__`` — that is
-why no ``logger`` is re-exported here.
 """
 
 from autoskillit.core import (

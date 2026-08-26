@@ -1,18 +1,27 @@
-"""Atomic, bounded repository snapshot capture and pagination identities."""
+"""Atomic repository snapshot capture.
+
+``_capture_once`` and the deadline/budget/reason plumbing it threads through.
+
+Decomposed from the original ``exploration/snapshot.py`` per #4836. The capture
+pipeline is preserved as one cohesive unit (per the #4756 capture-immunity
+rectify that introduced the deadline thread, the two-byte-accounting split, and
+the ``_CaptureAborted`` dispatch): splitting ``_capture_once`` from its direct
+helpers would separate the budget plumbing from the single loop it threads
+through.
+
+Public surface: ``capture_repository_snapshot``, ``resolve_repository_path``.
+"""
 
 from __future__ import annotations
 
 import hashlib
-import math
 import os
 import stat
 import subprocess
+import sys
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Literal, TypeVar, assert_never
+from typing import Literal
 
 from autoskillit.core import (
     RepositoryIdentity,
@@ -22,238 +31,47 @@ from autoskillit.core import (
     observe_path_mode,
 )
 
-from ._digest import qualified_digest
-from .collectors import open_contained_regular_file
-from .collectors._bounded import (
-    CollectorByteLimitError,
-    CollectorMutationError,
-    CollectorNoFollowUnsupportedError,
-    CollectorNotRegularFileError,
-    CollectorPathInvalidError,
-    CollectorRootInvalidError,
-    CollectorSafetyError,
-    read_stable_contained_file,
+from .._digest import qualified_digest
+from ..collectors import open_contained_regular_file
+from ..identity import resolve_repository_identity
+from ..pagination import PAGINATION_DIGEST_DOMAIN
+from ..profile import RepositoryProfileActivation, activate_repository_profiles
+from ._capture_stage import _capture_stage, _stage
+from ._records import (
+    DEFAULT_IGNORE_POLICY,
+    SNAPSHOT_DIGEST_DOMAIN,
+    SNAPSHOT_SCHEMA_ID,
+    SNAPSHOT_SCHEMA_VERSION,
+    CapturedRepositoryState,
+    RepositoryPathState,
+    SnapshotCaptureLimits,
+    SnapshotCaptureResult,
+    _CaptureAborted,
+    _ObservedPath,
 )
-from .identity import resolve_repository_identity
-from .pagination import PAGINATION_DIGEST_DOMAIN
-from .profile import RepositoryProfileActivation, activate_repository_profiles
 
-_StageResult = TypeVar("_StageResult")
+__all__ = [
+    # Helpers re-exported via the facade for monkeypatch sites
+    "DEFAULT_IGNORE_POLICY",
+    "_capture_once",
+    "activate_repository_profiles",
+    "capture_repository_snapshot",
+    "observe_path_mode",
+    "resolve_repository_identity",
+    "resolve_repository_path",
+    # Internal symbols used by sibling shards
+    "_git",
+    "_index_records",
+]
 
-SNAPSHOT_SCHEMA_VERSION = 1
-SNAPSHOT_SCHEMA_ID = "autoskillit.repository-snapshot.v1"
-SNAPSHOT_DIGEST_DOMAIN = b"autoskillit.repository-snapshot.v1\0"
-DEFAULT_IGNORE_POLICY = "ignored-names-modes-collapsed-v2"
-STABLE_ARTIFACT_DIGEST_DOMAIN = b"autoskillit.stable-artifact.v1\0"
-_MAX_STABLE_ARTIFACT_BYTES = 1_000_000
-_MAX_STABLE_ARTIFACT_ATTEMPTS = 3
-
-
-class ArtifactCaptureStatus(StrEnum):
-    STALE = "stale"
-    UNSUPPORTED = "unsupported"
-
-
-class ArtifactCaptureError(RuntimeError):
-    """A structured terminal failure to capture one stable artifact."""
-
-    def __init__(self, status: ArtifactCaptureStatus, stop_reason: str) -> None:
-        self.status = status
-        self.stop_reason = stop_reason
-        super().__init__(f"{status}: {stop_reason}")
-
-
-@dataclass(frozen=True, slots=True)
-class StableArtifactCapture:
-    """Immutable bytes and path-specific repository authority for one artifact."""
-
-    repository_root: Path
-    repository_identity_digest: str
-    revision: str
-    artifact_path: str
-    content: bytes
-    content_digest: str
-    size: int
-    mode: int
-    index_records: tuple[str, ...]
-    snapshot_digest: str
-
-
-@dataclass(frozen=True, slots=True)
-class SnapshotCaptureLimits:
-    """Hard bounds applied before a snapshot can become publishable."""
-
-    max_paths: int = 50_000
-    max_file_bytes: int = 64 * 1024 * 1024
-    max_total_bytes: int = 256 * 1024 * 1024
-    git_timeout_seconds: int = 30
-    capture_deadline_seconds: int = 120
-
-    def __post_init__(self) -> None:
-        for name in (
-            "max_paths",
-            "max_file_bytes",
-            "max_total_bytes",
-            "git_timeout_seconds",
-            "capture_deadline_seconds",
-        ):
-            value = getattr(self, name)
-            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-                raise ValueError(f"{name} must be a positive integer")
-
-
-@dataclass(frozen=True, slots=True)
-class RepositoryPathState:
-    """Canonical state of one worktree path without following symlinks."""
-
-    path: str
-    category: Literal["tracked", "untracked", "ignored"]
-    kind: Literal["file", "symlink", "directory", "other", "missing"]
-    mode: int
-    size: int
-    content_digest: str
-    symlink_target: str
-
-
-@dataclass(frozen=True, slots=True)
-class _ObservedPath:
-    """Internal path authority that keeps ignored-file bytes out of returned state.
-
-    ``published_bytes`` and ``identity_bytes`` diverge only for an ignored regular
-    file: its content is still read and hashed in full (``identity_bytes``) so a
-    rewrite still invalidates the fingerprint, but none of that size is charged
-    against ``max_total_bytes`` and none of it reaches the public state (``0``).
-    Every other observation reads and publishes the same bytes, so the two fields
-    are equal.
-    """
-
-    state: RepositoryPathState
-    published_bytes: int
-    identity_bytes: int
-    identity_content_digest: str
-
-
-@dataclass(frozen=True, slots=True)
-class CapturedRepositoryState:
-    """One complete repository observation used for start/end comparison."""
-
-    schema_version: int
-    worktree_root: str
-    common_git_dir: str
-    head: str
-    index_tree_digest: str
-    working_tree_digest: str
-    status_digest: str
-    ignore_policy: str
-    tracked_paths: int
-    untracked_paths: int
-    ignored_paths: int
-    missing_paths: int
-    total_published_bytes: int
-    snapshot_identity: str
-    tracked_records: tuple[tuple[str, str], ...]
-    untracked_records: tuple[tuple[str, str], ...]
-    ignored_records: tuple[tuple[str, str], ...]
-    missing_records: tuple[tuple[str, str], ...]
-    mode_records: tuple[tuple[str, str], ...]
-    symlink_records: tuple[tuple[str, str], ...]
-
-
-@dataclass(frozen=True, slots=True)
-class SnapshotCaptureResult:
-    """Atomic snapshot result; non-complete results never expose a snapshot."""
-
-    status: SnapshotCaptureStatus
-    snapshot: RepositorySnapshot | None
-    diagnostic: str = ""
-    reason: SnapshotCaptureReason | None = None
-    start_identity: str = ""
-    end_identity: str = ""
-    validated_activation: RepositoryProfileActivation | None = None
-
-    def __post_init__(self) -> None:
-        if self.status is SnapshotCaptureStatus.COMPLETE and self.reason is not None:
-            raise ValueError("complete snapshot capture cannot expose a failure reason")
-        if self.status is not SnapshotCaptureStatus.COMPLETE and self.reason is None:
-            raise ValueError("non-complete snapshot capture requires a failure reason")
-        if self.status is SnapshotCaptureStatus.COMPLETE and self.snapshot is None:
-            raise ValueError("complete snapshot capture requires a snapshot")
-        if self.status is SnapshotCaptureStatus.COMPLETE and self.validated_activation is None:
-            raise ValueError("complete snapshot capture requires a validated activation")
-        if (
-            self.status in {SnapshotCaptureStatus.STALE, SnapshotCaptureStatus.TRUNCATED}
-            and self.snapshot is None
-        ):
-            raise ValueError("terminal snapshot capture requires an atomic marker")
-        if self.status is SnapshotCaptureStatus.FAILED and self.snapshot is not None:
-            raise ValueError("failed snapshot capture cannot expose snapshot state")
-        if (
-            self.status is not SnapshotCaptureStatus.COMPLETE
-            and self.validated_activation is not None
-        ):
-            raise ValueError("non-complete snapshot capture cannot expose an activation")
-        if self.snapshot is None or self.validated_activation is None:
-            return
-        activation = self.validated_activation
-        if self.snapshot.stale or self.snapshot.truncated:
-            raise ValueError("complete snapshot capture requires complete snapshot state")
-        if self.snapshot.identity != activation.identity.repository_identity:
-            raise ValueError("snapshot and activation repository identities must match")
-        if self.snapshot.profile_activation_digest != activation.activation_digest:
-            raise ValueError("snapshot and activation digests must match")
-        if self.snapshot.profile_versions != activation.profile_versions:
-            raise ValueError("snapshot and activation profile versions must match")
-
-
-def _expected_status_for_reason(reason: SnapshotCaptureReason) -> SnapshotCaptureStatus:
-    """The one legal :class:`SnapshotCaptureStatus` for each terminal cause.
-
-    Exhaustive over every member of :class:`SnapshotCaptureReason` so a reason
-    added without an assigned status is a mypy failure at ``assert_never``
-    (pre-commit), not a mismatched ``(status, reason)`` pair discovered later by
-    a caller.
-    """
-    match reason:
-        case (
-            SnapshotCaptureReason.PATH_COUNT_EXCEEDED
-            | SnapshotCaptureReason.FILE_BYTES_EXCEEDED
-            | SnapshotCaptureReason.TOTAL_BYTES_EXCEEDED
-        ):
-            return SnapshotCaptureStatus.TRUNCATED
-        case SnapshotCaptureReason.IDENTITY_DRIFT:
-            return SnapshotCaptureStatus.STALE
-        case (
-            SnapshotCaptureReason.GIT_TIMEOUT
-            | SnapshotCaptureReason.GIT_COMMAND_FAILED
-            | SnapshotCaptureReason.ROOT_NOT_WORKTREE
-            | SnapshotCaptureReason.IDENTITY_UNRESOLVED
-            | SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED
-            | SnapshotCaptureReason.WORKTREE_UNREADABLE
-            | SnapshotCaptureReason.COLLECTOR_SAFETY_FAULT
-            | SnapshotCaptureReason.MANIFEST_DIGEST_EMPTY
-            | SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED
-        ):
-            return SnapshotCaptureStatus.FAILED
-        case _ as unreachable:
-            assert_never(unreachable)
-
-
-class _CaptureAborted(RuntimeError):
-    """A structured internal abort of one repository snapshot capture attempt."""
-
-    def __init__(
-        self, status: SnapshotCaptureStatus, reason: SnapshotCaptureReason, detail: str
-    ) -> None:
-        expected = _expected_status_for_reason(reason)
-        if status is not expected:
-            raise AssertionError(
-                f"_CaptureAborted status/reason mismatch: {reason} requires "
-                f"{expected}, got {status}"
-            )
-        self.status = status
-        self.reason = reason
-        self.detail = detail
-        super().__init__(f"{status}: {reason}: {detail}")
+# Capture the facade module so ``capture_repository_snapshot`` looks up
+# ``_capture_once`` through the package attribute; the test suite monkeypatches
+# that name on the facade and expects the patch to propagate. Without
+# late-binding through the facade, a local import in this shard would capture a
+# separate binding the patch cannot reach. The cycle resolves via
+# ``sys.modules``: the facade module entry exists by the time ``_capture.py`` is
+# loaded because the facade's ``from ._capture import`` runs first.
+_snapshot_facade = sys.modules[__package__ or "autoskillit.exploration.snapshot"]
 
 
 def _check_deadline(deadline: float) -> None:
@@ -361,7 +179,7 @@ def _path_state(
     deadline: float,
 ) -> _ObservedPath:
     path = root / relative_path
-    raw_mode = observe_path_mode(path)
+    raw_mode = _snapshot_facade.observe_path_mode(path)
     if raw_mode is None:
         return _ObservedPath(
             RepositoryPathState(
@@ -496,7 +314,7 @@ def _untracked_special_paths(root: Path, *, ignored: frozenset[str]) -> tuple[st
             relative = candidate.relative_to(root).as_posix()
             if relative in ignored:
                 continue
-            mode = observe_path_mode(candidate)
+            mode = _snapshot_facade.observe_path_mode(candidate)
             if mode is None:
                 continue
             if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode) or stat.S_ISLNK(mode)):
@@ -630,7 +448,7 @@ def _capture_once(
     index_tree_digest = qualified_digest(b"autoskillit.index-tree.v1\0", index_payload)
     working_tree_digest = qualified_digest(
         b"autoskillit.working-tree.v1\0",
-        {"ignore_policy": DEFAULT_IGNORE_POLICY, "paths": working_payload},
+        {"ignore_policy": _snapshot_facade.DEFAULT_IGNORE_POLICY, "paths": working_payload},
     )
     status_digest = f"sha256:{hashlib.sha256(raw_status).hexdigest()}"
     snapshot_payload = {
@@ -641,7 +459,7 @@ def _capture_once(
         "index_tree_digest": index_tree_digest,
         "working_tree_digest": working_tree_digest,
         "status_digest": status_digest,
-        "ignore_policy": DEFAULT_IGNORE_POLICY,
+        "ignore_policy": _snapshot_facade.DEFAULT_IGNORE_POLICY,
     }
     snapshot_identity = qualified_digest(SNAPSHOT_DIGEST_DOMAIN, snapshot_payload)
     return CapturedRepositoryState(
@@ -652,7 +470,7 @@ def _capture_once(
         index_tree_digest=index_tree_digest,
         working_tree_digest=working_tree_digest,
         status_digest=status_digest,
-        ignore_policy=DEFAULT_IGNORE_POLICY,
+        ignore_policy=_snapshot_facade.DEFAULT_IGNORE_POLICY,
         tracked_paths=len(tracked_paths),
         untracked_paths=len(untracked_paths),
         ignored_paths=len(ignored_paths),
@@ -758,7 +576,7 @@ def _terminal_snapshot(
         profile_activation_digest=activation.activation_digest,
         schema_version=SNAPSHOT_SCHEMA_ID,
         ignore_policy_digest=qualified_digest(
-            b"autoskillit.ignore-policy.v1\0", DEFAULT_IGNORE_POLICY
+            b"autoskillit.ignore-policy.v1\0", _snapshot_facade.DEFAULT_IGNORE_POLICY
         ),
         pagination_identity="",
         state=state,
@@ -766,70 +584,6 @@ def _terminal_snapshot(
         truncated=state == "truncated",
         truncation_reason=reason if state == "truncated" else None,
     )
-
-
-def _classify_capture_once_failure(exc: Exception) -> SnapshotCaptureReason:
-    """Map an exception that escaped ``_capture_once`` to its terminal cause.
-
-    Dispatches on exception class first (the source-of-truth signal), the same
-    discipline ``_artifact_unsupported_reason`` documents below: a new error
-    message that happens to share a substring with an existing case must not
-    silently misclassify. ``CollectorSafetyError`` is checked before the
-    generic ``ValueError`` arm because it is one of that class's subclasses;
-    the only member of the caught tuple left once ``TimeoutExpired``,
-    ``ValueError``, and ``RuntimeError`` are excluded is ``OSError``.
-    """
-    if isinstance(exc, subprocess.TimeoutExpired):
-        return SnapshotCaptureReason.GIT_TIMEOUT
-    if isinstance(exc, CollectorSafetyError):
-        return SnapshotCaptureReason.COLLECTOR_SAFETY_FAULT
-    if isinstance(exc, ValueError):
-        return SnapshotCaptureReason.ROOT_NOT_WORKTREE
-    if isinstance(exc, RuntimeError):
-        return SnapshotCaptureReason.GIT_COMMAND_FAILED
-    return SnapshotCaptureReason.WORKTREE_UNREADABLE
-
-
-def _stage(
-    reason: SnapshotCaptureReason,
-    func: Callable[..., _StageResult],
-    *args: object,
-    **kwargs: object,
-) -> _StageResult:
-    """Run one identity/activation operation, attaching one fixed reason to any
-    failure. Unlike ``_capture_stage`` below, this operation has exactly one
-    meaningful way to fail at this level, so no further classification is
-    needed."""
-    try:
-        return func(*args, **kwargs)
-    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
-        raise _CaptureAborted(
-            SnapshotCaptureStatus.FAILED, reason, f"{type(exc).__name__}: {exc}"
-        ) from exc
-
-
-def _capture_stage(
-    root: Path, limits: SnapshotCaptureLimits, *, deadline: float
-) -> CapturedRepositoryState:
-    """Run one ``_capture_once`` attempt, classifying any exception that escapes it.
-
-    A ``_CaptureAborted`` raised from inside ``_capture_once`` already names its
-    own cause (a budget trip or a deadline overrun) and must pass through
-    unmodified — reclassifying it here by "which stage failed" would collapse
-    all three truncation reasons onto ``GIT_COMMAND_FAILED`` and status
-    ``FAILED``, silently defeating the distinction those raise sites exist to
-    make.
-    """
-    try:
-        return _capture_once(root, limits, deadline=deadline)
-    except _CaptureAborted:
-        raise
-    except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
-        raise _CaptureAborted(
-            SnapshotCaptureStatus.FAILED,
-            _classify_capture_once_failure(exc),
-            f"{type(exc).__name__}: {exc}",
-        ) from exc
 
 
 def capture_repository_snapshot(
@@ -853,15 +607,19 @@ def capture_repository_snapshot(
     deadline = time.monotonic() + active_limits.capture_deadline_seconds
     identity_start = None
     activation_start = None
+    # Resolve monkeypatch helpers through the facade so test-suite patches
+    # propagated via ``monkeypatch.setattr(snapshot_module, ...)`` reach here.
+    resolve_identity = _snapshot_facade.resolve_repository_identity
+    activate_profiles = _snapshot_facade.activate_repository_profiles
     try:
         identity_start = _stage(
             SnapshotCaptureReason.IDENTITY_UNRESOLVED,
-            resolve_repository_identity,
+            resolve_identity,
             resolved_root,
         )
         activation_start = _stage(
             SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED,
-            activate_repository_profiles,
+            activate_profiles,
             resolved_root,
             identity=identity_start,
         )
@@ -869,12 +627,12 @@ def capture_repository_snapshot(
         end = _capture_stage(resolved_root, active_limits, deadline=deadline)
         identity_end = _stage(
             SnapshotCaptureReason.IDENTITY_UNRESOLVED,
-            resolve_repository_identity,
+            resolve_identity,
             resolved_root,
         )
         activation_end = _stage(
             SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED,
-            activate_repository_profiles,
+            activate_profiles,
             resolved_root,
             identity=identity_end,
         )
@@ -947,192 +705,6 @@ def capture_repository_snapshot(
         start_identity=start.snapshot_identity,
         end_identity=end.snapshot_identity,
         validated_activation=activation_end,
-    )
-
-
-def _artifact_path(relative_path: str) -> str:
-    if (
-        not isinstance(relative_path, str)
-        or not relative_path
-        or "\x00" in relative_path
-        or "\\" in relative_path
-    ):
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_artifact_path")
-    path = PurePosixPath(relative_path)
-    if path.is_absolute() or not path.parts or ".." in path.parts or ".git" in path.parts:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_artifact_path")
-    normalized = path.as_posix()
-    if normalized in {"", "."}:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_artifact_path")
-    return normalized
-
-
-def _artifact_deadline_remaining(deadline: float) -> float:
-    if not isinstance(deadline, (int, float)) or isinstance(deadline, bool):
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_deadline")
-    remaining = float(deadline) - time.monotonic()
-    if not math.isfinite(float(deadline)) or remaining <= 0:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "deadline_exceeded")
-    return remaining
-
-
-def _artifact_index_records(root: Path, path: str, deadline: float) -> tuple[str, ...]:
-    remaining = _artifact_deadline_remaining(deadline)
-    try:
-        raw = _git(
-            root,
-            "--literal-pathspecs",
-            "ls-files",
-            "--stage",
-            "-z",
-            "--",
-            path,
-            timeout=remaining,
-        )
-        records = _index_records(raw)
-    except subprocess.TimeoutExpired as exc:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "deadline_exceeded") from exc
-    except (OSError, RuntimeError, UnicodeError) as exc:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "index_unavailable") from exc
-    if any(record_path != path for _mode, _oid, _stage, record_path in records):
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "index_unavailable")
-    try:
-        ordered = sorted(
-            records,
-            key=lambda record: (int(record[2]), record[0], record[1], record[3]),
-        )
-    except ValueError as exc:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "index_unavailable") from exc
-    return tuple(
-        f"{mode} {object_id} {stage}\t{record_path}"
-        for mode, object_id, stage, record_path in ordered
-    )
-
-
-def _artifact_repository_identity(root: Path, deadline: float) -> RepositoryIdentity:
-    _artifact_deadline_remaining(deadline)
-    try:
-        identity = resolve_repository_identity(root).repository_identity
-    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
-        raise ArtifactCaptureError(
-            ArtifactCaptureStatus.UNSUPPORTED, "repository_identity_unavailable"
-        ) from exc
-    _artifact_deadline_remaining(deadline)
-    if Path(identity.worktree_path) != root:
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "repository_root_mismatch")
-    return identity
-
-
-def _artifact_unsupported_reason(exc: CollectorSafetyError) -> str:
-    """Map one ``CollectorSafetyError`` to a stable unsupported-reason code.
-
-    Dispatches on exception class first (the source-of-truth signal) so the
-    classifier does not silently misclassify a new error message that happens
-    to share a substring with an existing case.
-    """
-    if isinstance(exc, CollectorNoFollowUnsupportedError):
-        return "no_follow_unsupported"
-    if isinstance(exc, CollectorByteLimitError):
-        return "artifact_too_large"
-    if isinstance(exc, CollectorNotRegularFileError):
-        return "artifact_not_regular"
-    if isinstance(exc, CollectorRootInvalidError):
-        return "invalid_repository_root"
-    if isinstance(exc, CollectorPathInvalidError):
-        return "artifact_path_invalid"
-    return "artifact_unavailable"
-
-
-def capture_stable_artifact(
-    repository_root: Path,
-    artifact_path: str,
-    *,
-    deadline: float,
-    max_attempts: int = 3,
-    max_bytes: int = 1_000_000,
-) -> StableArtifactCapture:
-    """Capture one stable repository artifact within an absolute monotonic deadline."""
-
-    normalized_path = _artifact_path(artifact_path)
-    if (
-        not isinstance(max_attempts, int)
-        or isinstance(max_attempts, bool)
-        or not 1 <= max_attempts <= _MAX_STABLE_ARTIFACT_ATTEMPTS
-        or not isinstance(max_bytes, int)
-        or isinstance(max_bytes, bool)
-        or not 1 <= max_bytes <= _MAX_STABLE_ARTIFACT_BYTES
-    ):
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_capture_limits")
-    _artifact_deadline_remaining(deadline)
-    if not isinstance(repository_root, Path) or repository_root.is_symlink():
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_repository_root")
-    try:
-        root = repository_root.resolve(strict=True)
-    except OSError as exc:
-        raise ArtifactCaptureError(
-            ArtifactCaptureStatus.UNSUPPORTED, "invalid_repository_root"
-        ) from exc
-    if not root.is_dir():
-        raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_repository_root")
-
-    for _attempt in range(max_attempts):
-        identity_before = _artifact_repository_identity(root, deadline)
-        index_before = _artifact_index_records(root, normalized_path, deadline)
-        _artifact_deadline_remaining(deadline)
-        try:
-            observed = read_stable_contained_file(root, normalized_path, max_bytes=max_bytes)
-        except CollectorMutationError:
-            continue
-        except CollectorSafetyError as exc:
-            raise ArtifactCaptureError(
-                ArtifactCaptureStatus.UNSUPPORTED, _artifact_unsupported_reason(exc)
-            ) from exc
-        _artifact_deadline_remaining(deadline)
-        index_after = _artifact_index_records(root, normalized_path, deadline)
-        identity_after = _artifact_repository_identity(root, deadline)
-        if (
-            identity_before.digest != identity_after.digest
-            or identity_before.revision != identity_after.revision
-            or index_before != index_after
-        ):
-            continue
-
-        content_digest = f"sha256:{hashlib.sha256(observed.content).hexdigest()}"
-        payload = {
-            "repository_root": str(root),
-            "repository_identity_digest": identity_after.digest,
-            "revision": identity_after.revision,
-            "artifact_path": normalized_path,
-            "content_digest": content_digest,
-            "size": observed.size,
-            "mode": observed.mode,
-            "index_records": index_after,
-        }
-        return StableArtifactCapture(
-            repository_root=root,
-            repository_identity_digest=identity_after.digest,
-            revision=identity_after.revision,
-            artifact_path=normalized_path,
-            content=observed.content,
-            content_digest=content_digest,
-            size=observed.size,
-            mode=observed.mode,
-            index_records=index_after,
-            snapshot_digest=qualified_digest(STABLE_ARTIFACT_DIGEST_DOMAIN, payload),
-        )
-    raise ArtifactCaptureError(ArtifactCaptureStatus.STALE, "artifact_changed_during_capture")
-
-
-def stable_artifact_matches(
-    start: StableArtifactCapture,
-    current: StableArtifactCapture,
-) -> bool:
-    """Return whether a terminal recapture matches the original path authority."""
-
-    return (
-        start.repository_root == current.repository_root
-        and start.artifact_path == current.artifact_path
-        and start.snapshot_digest == current.snapshot_digest
     )
 
 

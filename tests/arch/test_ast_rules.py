@@ -1957,7 +1957,7 @@ _TREE_ENUMERATION_ALLOWLIST: list[tuple[Path, str]] = [
         "silently accepted",
     ),
     (
-        SRC_ROOT / "exploration" / "snapshot.py",
+        SRC_ROOT / "exploration" / "snapshot" / "_capture.py",
         "_untracked_special_paths's leaf lstat() is unguarded and raises "
         "FileNotFoundError uncaught, propagating to capture_repository_snapshot's "
         "outer except (OSError, ...) -> SnapshotCaptureStatus.FAILED; fails loud, "

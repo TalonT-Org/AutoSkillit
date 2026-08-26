@@ -4,9 +4,7 @@ Decomposed from the original ``exploration/snapshot.py`` per #4836. Public
 surface: ``capture_stable_artifact``, ``stable_artifact_matches``. Uses
 ``read_stable_contained_file`` (a different primitive from
 ``open_contained_regular_file``) because artifact capture tolerates bounded
-mutation via retry rather than failing closed at the first read. Does NOT
-import ``resolve_repository_path`` from ``_capture.py`` — it resolves the
-worktree root directly with its own ``is_symlink()`` check.
+mutation via retry rather than failing closed at the first read.
 """
 
 from __future__ import annotations
@@ -49,13 +47,12 @@ from ._records import (
 )
 
 # Capture the facade module so ``capture_stable_artifact`` looks up
-# ``read_stable_contained_file`` through the package attribute. ``test_snapshot.py``
-# monkeypatches ``snapshot_module.read_stable_contained_file`` (line 349) and
-# expects the patch to propagate; without late-binding through the facade, a
-# local import in this shard would capture a separate binding the patch cannot
-# reach. The cycle resolves via ``sys.modules``: the facade module entry exists
-# by the time ``_artifact.py`` is loaded because the facade's ``from ._artifact
-# import`` runs first.
+# ``read_stable_contained_file`` through the package attribute; the test suite
+# monkeypatches that name on the facade and expects the patch to propagate.
+# Without late-binding through the facade, a local import in this shard would
+# capture a separate binding the patch cannot reach. The cycle resolves via
+# ``sys.modules``: the facade module entry exists by the time ``_artifact.py``
+# is loaded because the facade's ``from ._artifact import`` runs first.
 _snapshot_facade = sys.modules[__package__ or "autoskillit.exploration.snapshot"]
 
 
@@ -172,9 +169,9 @@ def capture_stable_artifact(
         or not 1 <= max_bytes <= _MAX_STABLE_ARTIFACT_BYTES
     ):
         raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_capture_limits")
-    _artifact_deadline_remaining(deadline)
     if not isinstance(repository_root, Path) or repository_root.is_symlink():
         raise ArtifactCaptureError(ArtifactCaptureStatus.UNSUPPORTED, "invalid_repository_root")
+    _artifact_deadline_remaining(deadline)
     try:
         root = repository_root.resolve(strict=True)
     except OSError as exc:

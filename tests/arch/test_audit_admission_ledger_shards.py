@@ -138,18 +138,20 @@ def test_e17_retired_in_exemption_registry() -> None:
 
 
 def test_every_facade_write_method_delegates_to_locked_shard() -> None:
-    """Write public methods must exist on the facade; the SQL block
-    they delegate to lives in a ``_xxx_locked`` shard function. The
-    facade body itself contains the canonical ``with _fence: try:
-    BEGIN IMMEDIATE / <shard>_locked / COMMIT / except BaseException:
-    _rollback; raise / finally: close`` template — it does not contain
-    inline ``connection.execute("UPDATE...")`` or ``INSERT...`` strings.
+    """Write public methods must exist on the facade and delegate to a
+    ``_<method>_locked`` shard function. A regression that inlined write
+    SQL back into the facade body would break the delegation check.
+
+    Transactional ``except BaseException`` discipline is asserted by
+    ``test_transactional_methods_use_baseexception`` and is intentionally
+    not duplicated here.
     """
     facade_src = _read(FACADE_PATH)
     for method in sorted(WRITE_METHODS):
         assert f"def {method}(" in facade_src, f"missing facade method {method}"
-        assert "except BaseException:" in facade_src, (
-            f"facade method {method} must wrap with except BaseException"
+        body = _facade_method_body(method, facade_src)
+        assert f"_{method}_locked(" in body, (
+            f"facade write method {method} must delegate to _{method}_locked shard"
         )
 
 

@@ -14,8 +14,6 @@ on the facade attributes takes effect during tests
 
 from __future__ import annotations
 
-from typing import Literal
-
 from autoskillit.workspace.skill_capability_authenticity import (
     SkillCapabilityAuthenticityDiagnostic,
     SkillCapabilityValidation,
@@ -38,6 +36,9 @@ from autoskillit.workspace.skill_capability_cache import (
     _SkillCapabilityEvidenceCacheInfo,
 )
 from autoskillit.workspace.skill_capability_scanner import (
+    CapabilityActor,
+    CapabilityDirection,
+    CapabilitySourceClassification,
     SkillCapabilityEvidence,
     _normalize_skill_capability_name,
     _scan_skill_capability_evidence_uncached,
@@ -46,10 +47,6 @@ from autoskillit.workspace.skill_semantic_plan import (
     RETIRED_SEMANTIC_CAPABILITIES,
     parse_skill_semantic_plan,
 )
-
-CapabilityActor = Literal["self", "parent", "external"]
-CapabilityDirection = Literal["outbound", "inbound", "descriptive"]
-CapabilitySourceClassification = Literal["executable", "artifact"]
 
 
 def classify_skill_capability_evidence(

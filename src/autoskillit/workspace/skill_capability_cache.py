@@ -14,7 +14,7 @@ from threading import Event, RLock
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.workspace.skill_capabilities import SkillCapabilityEvidence
+    from autoskillit.workspace.skill_capability_scanner import SkillCapabilityEvidence
 
 _SkillCapabilityEvidenceKey = tuple[str, str]
 

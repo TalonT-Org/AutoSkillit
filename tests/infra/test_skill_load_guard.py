@@ -30,7 +30,12 @@ def _run_guard(
     """Run skill_load_guard.main(), return stdout."""
     from autoskillit.hooks.guards.skill_load_guard import main
 
-    stdin_content = stdin_data if isinstance(stdin_data, str) else json.dumps(stdin_data)
+    if isinstance(stdin_data, str):
+        stdin_content = stdin_data
+    else:
+        payload = dict(stdin_data)
+        payload.setdefault("cwd", str(tmp_dir.resolve()))
+        stdin_content = json.dumps(payload)
 
     env_updates: dict[str, str] = {}
     env_removals: list[str] = []
@@ -60,18 +65,16 @@ def _run_guard(
     else:
         env_removals.append("AUTOSKILLIT_AGENT_BACKEND")
 
+    env_removals.append("AUTOSKILLIT_STATE_ROOT")
     base_env = {k: v for k, v in os.environ.items() if k not in env_removals}
     base_env.update(env_updates)
 
     isolated_project_root = project_root if project_root is not None else tmp_dir
+    base_env["AUTOSKILLIT_STATE_ROOT"] = str(isolated_project_root.resolve())
 
     with (
         patch.dict(os.environ, base_env, clear=True),
         patch("sys.stdin", io.StringIO(stdin_content)),
-        patch(
-            "autoskillit.hooks.guards.skill_load_guard.find_project_root",
-            return_value=isolated_project_root,
-        ),
     ):
         buf = io.StringIO()
         with redirect_stdout(buf):

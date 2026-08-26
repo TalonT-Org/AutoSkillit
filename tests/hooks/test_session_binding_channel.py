@@ -51,10 +51,12 @@ def _run_hook(
     cwd: Path,
     env: dict[str, str],
 ) -> subprocess.CompletedProcess[str]:
+    run_env = production_interpreter_env()
+    run_env.update(env)
     return subprocess.run(
         [sys.executable, str(hook_path)],
         cwd=cwd,
-        env=env,
+        env=run_env,
         input=json.dumps(payload),
         text=True,
         capture_output=True,

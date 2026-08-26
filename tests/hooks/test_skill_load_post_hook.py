@@ -15,6 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.conftest import production_interpreter_env
+
 pytestmark = [pytest.mark.medium]
 
 _FLAG_RELPATH = ".autoskillit/temp/skill_guard_abc123.flag"
@@ -99,16 +101,13 @@ def _run_hook(
         payload.setdefault("cwd", str(tmp_dir.resolve()))
         stdin_content = json.dumps(payload)
 
-    env_base = {
-        k: v
-        for k, v in os.environ.items()
-        if k
-        not in (
-            "AUTOSKILLIT_PROVIDER_PROFILE",
-            "AUTOSKILLIT_AGENT_BACKEND",
-            "AUTOSKILLIT_STATE_ROOT",
-        )
-    }
+    env_base = production_interpreter_env()
+    for key in (
+        "AUTOSKILLIT_PROVIDER_PROFILE",
+        "AUTOSKILLIT_AGENT_BACKEND",
+        "AUTOSKILLIT_STATE_ROOT",
+    ):
+        env_base.pop(key, None)
     if provider_profile is not None:
         env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
     if agent_backend is not None:

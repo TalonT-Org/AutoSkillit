@@ -1245,16 +1245,6 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
-    "AUTOSKILLIT_PROJECTION_MANIFEST_PATH": AmbientEnvDisposition(
-        var="AUTOSKILLIT_PROJECTION_MANIFEST_PATH",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
-        ),
-    ),
     "AUTOSKILLIT_PROJECT_DIR": AmbientEnvDisposition(
         var="AUTOSKILLIT_PROJECT_DIR",
         disposition="scrub",

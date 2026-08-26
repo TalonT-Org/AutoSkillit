@@ -65,16 +65,11 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # hook config path so callers know where the file is written.
     "server/tools/tools_kitchen/_hook_config.py": "docstring example",
     "recipe/_cmd_rpc_issues.py": "ensure_results default temp_subdir matches canonical default",
-    "hooks/skill_load_post_hook.py": "stdlib-only hook; cannot use resolve_temp_dir()",
     "hooks/guards/skill_load_guard.py": "stdlib-only guard; cannot use resolve_temp_dir()",
     "core/runtime/session_provenance.py": "IL-0 stdlib-only module; cannot use resolve_temp_dir()",
     "core/runtime/kitchen_state.py": "IL-0 stdlib-only; reads hook config from canonical path",
     "workspace/skill_format.py": "write_paths validation accepts resolved canonical temp prefix",
     "hooks/guards/reset_resume_gate.py": "stdlib-only guard; cannot use resolve_temp_dir()",
-    # Justification: stdlib-only hook module used by the declare_join_batch ledger
-    # and the join guard hooks; mirrors the canonical .autoskillit/temp path
-    # construction used by _hook_settings.py and session_registry.py.
-    "hooks/_join_ledger.py": "stdlib-only join ledger; cannot use resolve_temp_dir()",
     # Justification: IL-1 evidence layer discriminates worktree-skill writes from temp
     # writes by constructing the temp prefix for path-aware filtering. The literal mirrors
     # the canonical default used by resolve_temp_dir — no resolve_temp_dir() available at

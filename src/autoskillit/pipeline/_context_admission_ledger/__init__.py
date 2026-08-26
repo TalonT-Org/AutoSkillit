@@ -336,7 +336,7 @@ class DefaultContextAdmissionLedger:
                             self._store_health.status
                             is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
                         ):
-                            raise _LedgerContended_import
+                            raise _LedgerContended
                         break
                 if (
                     self._store_health.status
@@ -346,7 +346,7 @@ class DefaultContextAdmissionLedger:
                         ContextAdmissionStorageHealthStatus.HEALTHY
                     )
                 self._recovered = True
-            except _LedgerContended_import:
+            except _LedgerContended:
                 self._stream_health.clear()
                 self._unresolved_streams.clear()
                 return ContextAdmissionRecoveryResult(
@@ -359,10 +359,10 @@ class DefaultContextAdmissionLedger:
             except _LedgerOpenError as exc:
                 self._set_store_failure(exc.reason, exc.reason_code)  # type: ignore[attr-defined]
             except sqlite3.Error as exc:
-                primary_code = _sqlite_primary_code_import(exc)
-                if primary_code in _SQLITE_BUSY_CODES_import:
+                primary_code = _sqlite_primary_code(exc)
+                if primary_code in _SQLITE_BUSY_CODES:
                     if connection is not None:
-                        _rollback_import(connection)
+                        _rollback(connection)
                     self._stream_health.clear()
                     self._unresolved_streams.clear()
                     return ContextAdmissionRecoveryResult(
@@ -422,7 +422,7 @@ class DefaultContextAdmissionLedger:
 # rebound (Wavefront 1 of #4667 — Foundation Finding 1 + Interface Finding 3).
 
 from ._apply import (  # noqa: E402
-    _commit as _commit_method,
+    _commit_with_busy_retry as _commit_with_busy_retry_method,
 )
 from ._apply import (  # noqa: E402
     _persist_stream_failure as _persist_stream_failure_method,
@@ -437,7 +437,7 @@ from ._apply import (  # noqa: E402
     apply as _apply_method,
 )
 from ._apply import (  # noqa: E402
-    commit as _commit_public_method,
+    commit as _commit_method,
 )
 from ._apply import (  # noqa: E402
     release as _release_method,
@@ -448,9 +448,13 @@ from ._apply import (  # noqa: E402
 
 setattr(DefaultContextAdmissionLedger, "apply", _apply_method)
 setattr(DefaultContextAdmissionLedger, "reserve", _reserve_method)
-setattr(DefaultContextAdmissionLedger, "commit", _commit_public_method)
+setattr(DefaultContextAdmissionLedger, "commit", _commit_method)
 setattr(DefaultContextAdmissionLedger, "release", _release_method)
-setattr(DefaultContextAdmissionLedger, "_commit", _commit_method)
+setattr(
+    DefaultContextAdmissionLedger,
+    "_commit_with_busy_retry",
+    _commit_with_busy_retry_method,
+)
 setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure_method)
 setattr(DefaultContextAdmissionLedger, "_recover_sqlite_result", _recover_sqlite_result_method)
 setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_method)
@@ -495,21 +499,18 @@ setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_method)
 
 
 # ── Local re-bind of cross-shard constants used by `recover_all` body ─────
+# Suffix `_INT` flags immutable int constants whose local rebind survives the
+# _projection module patch (monkeypatch.setattr replaces the binding in
+# _projection, not the value already imported here).
 from ._projection import (  # noqa: E402
     _MAX_RECOVERY_BYTES as _MAX_RECOVERY_BYTES_INT,
 )
 from ._projection import (  # noqa: E402
     _MAX_RECOVERY_ROWS as _MAX_RECOVERY_ROWS_INT,
 )
-from ._status import (  # noqa: E402
-    _SQLITE_BUSY_CODES as _SQLITE_BUSY_CODES_import,
-)
-from ._status import (  # noqa: E402
-    _LedgerContended as _LedgerContended_import,
-)
-from ._status import (  # noqa: E402
-    _rollback as _rollback_import,
-)
-from ._status import (  # noqa: E402
-    _sqlite_primary_code as _sqlite_primary_code_import,
+from ._status import (  # noqa: E402, F401
+    _SQLITE_BUSY_CODES,
+    _LedgerContended,
+    _rollback,
+    _sqlite_primary_code,
 )

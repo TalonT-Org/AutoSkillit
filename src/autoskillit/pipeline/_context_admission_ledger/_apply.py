@@ -78,7 +78,7 @@ __all__ = [
     "commit",
     "release",
     "_recover_sqlite_result",
-    "_commit",
+    "_commit_with_busy_retry",
     "_persist_stream_failure",
     "_storage_failure_result",
 ]
@@ -360,7 +360,7 @@ def apply(
                     "stream-publication-cas-failed",
                 )
             self._fault_callback(_LedgerFaultPoint.BEFORE_COMMIT)
-            self._commit(connection)
+            self._commit_with_busy_retry(connection)
             self._fault_callback(_LedgerFaultPoint.AFTER_COMMIT)
             self._stream_health[stream_key] = ContextAdmissionStreamHealth(
                 stream_key,
@@ -560,7 +560,7 @@ def release(
     return self.apply(stream_key, event)
 
 
-def _commit(self, connection: sqlite3.Connection) -> None:
+def _commit_with_busy_retry(self, connection: sqlite3.Connection) -> None:
     deadline = time.monotonic() + (self._busy_timeout_ms / 1_000)
     while True:
         try:

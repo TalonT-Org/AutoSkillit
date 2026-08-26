@@ -110,6 +110,7 @@ def test_skill_session_audit_authority_env_contract(
 def test_native_otlp_activation_uses_each_backends_supported_launch_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify Claude uses sink env while Codex emits run-scoped CLI overrides."""
     sink_env = _build_env("http://127.0.0.1:4318")
     for key in (
         "CLAUDE_CODE_ENABLE_TELEMETRY",

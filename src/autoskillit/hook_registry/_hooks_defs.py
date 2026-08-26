@@ -1,22 +1,11 @@
 """Frozen dataclasses and namedtuples that anchor the hook-registry data model.
 
-This module is the single source of truth for the HookDef / LifecycleContractDef
-data shapes and the matcherless-event-types constant. The pre-decomposition
-``hook_registry.py`` carried these definitions at the top of the module; the
-decomposition preserves the same shape so that every consumer (``hook_registry``
-importers, the ``HOOK_REGISTRY`` builder, ``compute_registry_hash``) sees an
-identical ABI.
-
+Single source of truth for the HookDef / LifecycleContractDef data shapes,
+the matcherless-event-types constant, and the logical-hook-component regex.
 ``_LOGICAL_HOOK_COMPONENT`` lives here (not in ``_rendering``) because the
-dataclasses are the canonical anchor for the dispatcher format, and the regex
-is the canonical validator for the dispatcher's ``logical_name`` shape. We
-import it as ``regex`` (not the stdlib ``re``) because
-``tests/arch/test_regex_import.py`` enforces stdlib-only at module scope; the
-``hook_registry`` package tree is allowlisted in that test, but the bare
-``re`` import would still fail a top-level scan. The allowlist carries the
-same boundary the pre-split file had — every consumer of the regex still
-gets a byte-identical compile, and the SHA-256 hash of the registry is
-unchanged.
+regex is the canonical validator for the dispatcher's ``logical_name`` shape.
+It is imported as ``regex`` (not stdlib ``re``) per
+``tests/arch/test_regex_import.py``'s allowlist for this package tree.
 """
 
 from __future__ import annotations

@@ -66,9 +66,7 @@ CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
 _DENY_REASON_TEMPLATE = DENY_REASON_BY_GUARD["git_ops_guard"]
 
 _EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["git_ops_guard"]
-# Script-local orchestrator bypass: HookDef.exempt_session_types stays empty per
-# tests/infra/test_session_type_exemption_enforcement.py::
-# test_git_ops_guard_orchestrator_exemption_is_phase_local — phase-local semantics.
+# Script-local orchestrator bypass; HookDef.exempt_session_types stays empty.
 _EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
 
 _RAW_WRITE_VERBS = frozenset(

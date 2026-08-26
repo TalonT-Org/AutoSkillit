@@ -1,17 +1,12 @@
 """Canonical stdlib-only authority for hook-script constants.
 
-This module is importable in two contexts:
-1. Standalone subprocess hook scripts (e.g., hooks/guards/*.py) — imported as
-   `from _hook_constants import …` after the existing `sys.path.insert(0, _HOOKS_DIR)`
-   bootstrap. No autoskillit package context is required.
-2. Inside the autoskillit package — imported as
-   `from autoskillit.hooks._hook_constants import …`. Both contexts resolve to
-   the same module object, so the constants are a single source of truth.
+Importable in two contexts:
+1. Standalone subprocess hook scripts — `from _hook_constants import …` after
+   the `sys.path.insert(0, _HOOKS_DIR)` bootstrap.
+2. Inside the autoskillit package — `from autoskillit.hooks._hook_constants import …`.
 
-Adding a new constant here is the only sanctioned way to share a value between
-the registry implementation (src/autoskillit/hook_registry/) and a guard script.
-Do not duplicate literals across these boundaries; both sides import from this
-module instead.
+Both contexts resolve to the same module object, so the constants are a
+single source of truth.
 """
 
 from __future__ import annotations
@@ -58,13 +53,9 @@ EXEMPT_SKILLS_BY_GUARD: Final[dict[str, frozenset[str]]] = {
     ),
 }
 
-# EXEMPT_SESSION_TYPES_BY_GUARD intentionally contains only `pr_create_guard`.
+# Only `pr_create_guard` registers a registry-level session-type exemption.
 # `git_ops_guard`'s orchestrator bypass is script-local (enforced in the guard
-# script after the destructive-op match) — the registry-level
-# `HookDef.exempt_session_types` for `git_ops_guard` MUST stay empty to satisfy
-# tests/infra/test_session_type_exemption_enforcement.py::
-# test_git_ops_guard_orchestrator_exemption_is_phase_local. `test_runner_guard`
-# has no session-type exemption at all.
+# after the destructive-op match); `test_runner_guard` has no exemption.
 EXEMPT_SESSION_TYPES_BY_GUARD: Final[dict[str, frozenset[str]]] = {
     "pr_create_guard": frozenset({"orchestrator"}),
 }

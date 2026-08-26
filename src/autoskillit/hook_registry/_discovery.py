@@ -1,12 +1,4 @@
-"""Claude settings path resolution across all scope tiers.
-
-``_claude_settings_path`` resolves one scope (user / project / local) to the
-absolute settings.json path given an explicit cwd. ``iter_all_scope_paths``
-yields ``(scope_label, settings_path)`` for every Claude Code settings
-scope the current project touches — the user scope always, the project
-scope when ``.claude/`` exists, and the local scope only when
-``.claude/settings.local.json`` exists.
-"""
+"""Claude settings path resolution across all scope tiers."""
 
 from __future__ import annotations
 

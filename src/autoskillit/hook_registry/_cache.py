@@ -1,14 +1,10 @@
 """Plugin-cache hook validation.
 
-Reads each hooks.json found under
-``cache_dir/<version>/hooks/hooks.json`` — the real installed layout (write
-site: ``cli/install/_marketplace.py``,
-``public_plugin_root / "hooks" / "hooks.json"``) — and checks that every
-autoskillit hook script path exists on disk. Token-bearing commands are
-expanded against ``hooks_json_path.parent.parent``: the ``<version>``
-incarnation directory, which is the plugin root Claude Code binds
-``${CLAUDE_PLUGIN_ROOT}`` to (it directly contains ``hooks/``, ``agents/``,
-``.claude-plugin/``, ``skills/``, ``recipes/``, ``assets/``).
+Reads each ``hooks.json`` under ``cache_dir/<version>/hooks/hooks.json``
+(the real installed layout) and checks that every autoskillit hook
+script path exists on disk. Token-bearing commands are expanded against
+``hooks_json_path.parent.parent`` — the ``<version>`` incarnation
+directory that Claude Code binds ``${CLAUDE_PLUGIN_ROOT}`` to.
 """
 
 from __future__ import annotations

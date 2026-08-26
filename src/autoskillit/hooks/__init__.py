@@ -30,11 +30,9 @@ from autoskillit.hooks._exploration_request_record import (
 from autoskillit.hooks._github_mutation_analysis import analyze_github_mutations
 
 # Re-export the shared stdlib-only hook constants at the package level so
-# consumers (notably autoskillit.hook_registry) can import them without
-# triggering the cross-package submodule-import guard (REQ-ARCH-001). The
-# submodule ``_hook_constants`` itself is the canonical authority and is
-# still importable directly by the standalone guard subprocess scripts
-# (which load via the ``_HOOKS_DIR`` sys.path bootstrap).
+# consumers can import them without going through the canonical submodule.
+# ``_hook_constants`` itself remains the canonical authority and is still
+# importable directly by standalone guard scripts (via ``_HOOKS_DIR`` bootstrap).
 from autoskillit.hooks._hook_constants import (  # noqa: E402,F401
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,

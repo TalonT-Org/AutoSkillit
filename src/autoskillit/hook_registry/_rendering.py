@@ -1,20 +1,8 @@
 """Hook command rendering + hooks.json generation.
 
-This module owns the single authoritative formatter for ``hooks.json`` /
-``settings.json`` entries. ``_build_hook_entry`` is shared between the two
-generation paths so path A/B divergence is structurally impossible —
-``test_generate_hooks_json_and_sync_produce_equivalent_entries`` enforces
-the equivalence.
-
-Two explicit modes for ``_build_hook_command``:
-
-- ``relocatable=True`` (hooks.json only): emits the quoted
-  ``PLUGIN_ROOT_TOKEN`` form, expanded by Claude Code at hook-invocation
-  time against the plugin version that supplied the file. ``hooks_dir``
-  is ignored and may be ``None``.
-- ``relocatable=False`` (settings.json only, dev-mode, machine-local):
-  bakes the caller-supplied absolute ``hooks_dir``. ``hooks_dir`` is
-  required.
+The single authoritative formatter for ``hooks.json`` / ``settings.json``
+entries. ``_build_hook_entry`` is shared between the two generation paths
+so path A/B divergence is structurally impossible.
 """
 
 from __future__ import annotations

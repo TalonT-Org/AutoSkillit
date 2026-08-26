@@ -73,6 +73,25 @@ def _binding_path(state_root: Path, session_id: str) -> Path:
     return state_root / ".autoskillit" / "temp" / f"skill_guard_{session_id}.flag"
 
 
+def _called_names(tree: ast.AST) -> set[str]:
+    """Return canonical names called directly, through aliases, or as attributes."""
+    import_aliases = {
+        alias.asname or alias.name: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    called: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Name):
+            called.add(import_aliases.get(node.func.id, node.func.id))
+        elif isinstance(node.func, ast.Attribute):
+            called.add(node.func.attr)
+    return called
+
+
 def test_flag_is_written_when_provider_profile_is_absent(tmp_path: Path) -> None:
     """The production-default child environment still receives a binding flag."""
     state_root = _state_root(tmp_path)
@@ -369,28 +388,20 @@ def test_writer_and_every_hook_side_reader_resolve_the_same_channel_dir(
     assert resolve_flag_dir(state_root) == expected
 
     writer_tree = ast.parse(_HOOK.read_text())
-    writer_calls = [
-        node.func.id
-        for node in ast.walk(writer_tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    ]
+    writer_calls = _called_names(writer_tree)
     assert "resolve_binding_path" in writer_calls
     assert "find_project_root" not in writer_calls
 
-    reader_paths = (
-        _HOOKS_DIR / "guards" / "skill_load_guard.py",
-        _HOOKS_DIR / "guards" / "join_claim_guard.py",
-        _HOOKS_DIR / "guards" / "join_settle_guard.py",
-        _HOOKS_DIR / "guards" / "join_followup_guard.py",
-        _HOOKS_DIR / "guards" / "join_stop_guard.py",
-    )
-    for path in reader_paths:
-        tree = ast.parse(path.read_text())
-        calls = [
-            node.func.id
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        ]
+    reader_trees = {
+        path: ast.parse(path.read_text()) for path in (_HOOKS_DIR / "guards").glob("*_guard.py")
+    }
+    readers = {
+        path: calls
+        for path, tree in reader_trees.items()
+        if (calls := _called_names(tree)) & {"resolve_binding_path", "resolve_flag_dir"}
+    }
+    assert readers, "Expected at least one hook-side binding reader"
+    for path, calls in readers.items():
         assert "resolve_state_root" in calls, path
         assert "find_project_root" not in calls, path
         expected_resolver = (

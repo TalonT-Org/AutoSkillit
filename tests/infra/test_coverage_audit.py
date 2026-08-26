@@ -646,12 +646,6 @@ def test_audit_mode_does_not_require_pytest_status(cov_ast, tmp_path, monkeypatc
 
 
 @pytest.mark.small
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bootstrap: committed oracle is pre-envelope until it is republished in this PR (#4808)"
-    ),
-)
 def test_test_source_map_is_committed():
     """Sentinel: .autoskillit/test-source-map.json must be committed to version control.
 
@@ -671,12 +665,6 @@ def test_test_source_map_is_committed():
 
 
 @pytest.mark.small
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bootstrap: committed oracle is pre-envelope until it is republished in this PR (#4808)"
-    ),
-)
 def test_load_coverage_map_reads_committed_file():
     """load_coverage_map() returns a populated dict from the committed oracle file.
 

@@ -277,12 +277,21 @@ class TestRegistration:
     def test_in_new_subdir_basenames(self):
         assert "test_runner_guard.py" in NEW_SUBDIR_BASENAMES
 
-    def test_exempt_skills_in_sync(self):
+    def test_exempt_skills_sourced_from_hook_constants(self):
+        """After the shared-authority refactor, _EXEMPT_SKILLS must equal the
+        canonical EXEMPT_SKILLS_BY_GUARD["test_runner_guard"] which equals the
+        HookDef.exempt_skills for the test_runner_guard entry.
+        """
+        from autoskillit.hooks._hook_constants import EXEMPT_SKILLS_BY_GUARD
         from autoskillit.hooks.guards.test_runner_guard import _EXEMPT_SKILLS  # noqa: PLC0415
 
         matching = [h for h in HOOK_REGISTRY if "guards/test_runner_guard.py" in h.scripts]
         assert matching, "No HookDef found for test_runner_guard.py"
-        assert matching[0].exempt_skills == _EXEMPT_SKILLS
+        assert (
+            _EXEMPT_SKILLS
+            == EXEMPT_SKILLS_BY_GUARD["test_runner_guard"]
+            == matching[0].exempt_skills
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -307,16 +307,28 @@ def test_inline_records_invalid_skill_command_for_named_token_misalignment() -> 
     assert contract is not None
     bound, failures = _inline_skill_inputs(
         step_name="verify",
-        declared_command="/autoskillit:dry-walkthrough plan_path=/tmp/plan.md",
-        effective_command="/autoskillit:dry-walkthrough plan_path=/tmp/plan.md issue_url=foo",
+        declared_command=(
+            "/autoskillit:dry-walkthrough plan_path=/tmp/plan.md issue_url=https://x"
+        ),
+        effective_command="/autoskillit:dry-walkthrough plan_path=/tmp/plan.md different=foo",
         contract=contract,
     )
     invalid_command_failures = [
         failure for failure in failures if failure.code == BindingFailureCode.INVALID_SKILL_COMMAND
     ]
     assert len(invalid_command_failures) == 1
-    assert invalid_command_failures[0].name == "skill_command"
-    assert bound == ()
+    assert invalid_command_failures[0].name == "issue_url"
+    assert any(
+        failure.code == BindingFailureCode.INVALID_SKILL_COMMAND
+        and failure.message == "declared and effective named arguments do not align"
+        for failure in failures
+    )
+    # plan_path binds successfully; issue_url stays unbound (absent) because
+    # the misalignment triggered continue before assignment.
+    names = tuple(value.name for value in bound)
+    assert names == ("plan_path", "issue_url")
+    issue_bound = next(value for value in bound if value.name == "issue_url")
+    assert issue_bound.state is BoundValueState.ABSENT
 
 
 # ---------------------------------------------------------------------------

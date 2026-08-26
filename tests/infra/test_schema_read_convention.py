@@ -9,6 +9,7 @@ ensuring symmetric read/write schema validation.
 from __future__ import annotations
 
 import ast
+import functools
 from pathlib import Path
 
 import pytest
@@ -23,10 +24,11 @@ _SHARED_READ_SIDE_VALIDATORS = {
 }
 
 
-def _scan_write_versioned_json_callers() -> set[str]:
+@functools.lru_cache(maxsize=1)
+def _scan_write_versioned_json_callers_cached() -> frozenset[str]:
     """AST-scan src/autoskillit/ for modules that call write_versioned_json.
 
-    Returns set of repo-relative module paths (e.g. "src/autoskillit/fleet/state.py").
+    Returns repo-relative module paths (e.g. "src/autoskillit/fleet/state.py").
     """
     src_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
     modules: set[str] = set()
@@ -49,13 +51,18 @@ def _scan_write_versioned_json_callers() -> set[str]:
                 modules.add(rel)
                 break  # one match per module is enough
 
-    return modules
+    return frozenset(modules)
 
 
-def _scan_read_versioned_json_callers() -> set[str]:
+def _scan_write_versioned_json_callers() -> set[str]:
+    return set(_scan_write_versioned_json_callers_cached())
+
+
+@functools.lru_cache(maxsize=1)
+def _scan_read_versioned_json_callers_cached() -> frozenset[str]:
     """AST-scan for modules that call a direct or shared versioned-JSON validator.
 
-    Returns set of repo-relative module paths.
+    Returns repo-relative module paths.
     """
     src_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
     modules: set[str] = set()
@@ -82,7 +89,11 @@ def _scan_read_versioned_json_callers() -> set[str]:
                 modules.add(rel)
                 break
 
-    return modules
+    return frozenset(modules)
+
+
+def _scan_read_versioned_json_callers() -> set[str]:
+    return set(_scan_read_versioned_json_callers_cached())
 
 
 # Documented exceptions: modules that write versioned JSON but do not read it back.
@@ -165,6 +176,48 @@ class TestSchemaReadConvention:
             assert "read_versioned_json" in call_names, (
                 f"{function_name} no longer delegates to read_versioned_json"
             )
+
+    @pytest.mark.parametrize(
+        ("scanner", "cached_scanner"),
+        [
+            pytest.param(
+                _scan_write_versioned_json_callers,
+                _scan_write_versioned_json_callers_cached,
+                id="write",
+            ),
+            pytest.param(
+                _scan_read_versioned_json_callers,
+                _scan_read_versioned_json_callers_cached,
+                id="read",
+            ),
+        ],
+    )
+    def test_scanner_cache_isolated_from_caller_mutation(
+        self, monkeypatch, scanner, cached_scanner
+    ):
+        original_parse = ast.parse
+        parse_count = 0
+
+        def counting_parse(*args, **kwargs):
+            nonlocal parse_count
+            parse_count += 1
+            return original_parse(*args, **kwargs)
+
+        monkeypatch.setattr(ast, "parse", counting_parse)
+        first_modules = scanner()
+        expected_modules = set(first_modules)
+        midpoint_cache_info = cached_scanner.cache_info()
+        midpoint_parse_count = parse_count
+
+        first_modules.add(f"src/autoskillit/sentinel_{scanner.__name__}.py")
+        second_modules = scanner()
+
+        final_cache_info = cached_scanner.cache_info()
+        assert second_modules is not first_modules
+        assert second_modules == expected_modules
+        assert final_cache_info.hits == midpoint_cache_info.hits + 1
+        assert final_cache_info.misses == midpoint_cache_info.misses
+        assert parse_count == midpoint_parse_count
 
     def test_new_write_versioned_json_caller_without_read_side_fails(self, monkeypatch):
         """Meta-test: injecting a fake writer without a reader must cause the ratchet to fail."""

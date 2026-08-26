@@ -21,6 +21,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, NotRequired, TypeAlias, TypedDict, cast
 
 from autoskillit.core import (
+    AGENT_PROVISIONING_BASELINE,
     BUNDLED_EXPLORER_ROLES,
     SESSION_ADD_DIR_SUBDIR,
     SESSION_STALE_SECONDS,
@@ -333,7 +334,10 @@ def _session_agent_definitions(
             definition.name not in BUNDLED_EXPLORER_ROLES
             or definition.name in bound_explorer_roles
         )
-        and (definition.provisioning == "baseline" or definition.name in required_native_roles)
+        and (
+            definition.provisioning == AGENT_PROVISIONING_BASELINE
+            or definition.name in required_native_roles
+        )
     )
 
 

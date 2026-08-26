@@ -12,7 +12,14 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import get_logger
 from autoskillit.execution import get_backend
 from autoskillit.hooks._hook_settings import write_join_diagnostic
-from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch, resolve_flag_dir
+from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
+from autoskillit.hooks._session_binding import (
+    SessionBindingError,
+    enumerate_binding_paths,
+    normalize_skill_name,
+    read_binding,
+    resolve_binding_path,
+)
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
@@ -30,38 +37,66 @@ def _declare_join_batch_handler(
     """Core logic for the declare_join_batch tool — testable without FastMCP."""
     # Imports are hoisted to module level (see top of file).
 
-    flag_dir = resolve_flag_dir(project_root)
-    flag_dir.mkdir(parents=True, exist_ok=True)
-    flag_path = flag_dir / f"skill_guard_{session_id}.flag"
-    binding: dict[str, object] = {}
-    if flag_path.exists():
-        try:
-            binding = json.loads(flag_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, ValueError, OSError):
-            binding = {}
-    if not isinstance(binding, dict):
-        binding = {}
+    normalized_skill_name = normalize_skill_name(skill_name)
+    binding_path = resolve_binding_path(str(project_root), session_id)
+    channel_dir = binding_path.parent
+    channel_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        binding = read_binding(binding_path)
+    except SessionBindingError:
+        binding = None
 
     # Fail-closed validation: a valid, join-bearing session binding, a loaded
     # skill entry, and the backend's fixed-set-join capability must all line
     # up before we open a wave.
-    if binding.get("binding_valid") is not True:
+    if binding is None:
+        wrong_session_error = _wrong_session_error(channel_dir, session_id)
+        if wrong_session_error is not None:
+            return {"success": False, "error": wrong_session_error}
         return {
             "success": False,
             "error": "declare_join_batch requires a valid session binding",
         }
-    if not bool(binding.get("join_required", False)):
+    if binding.session_id != session_id:
+        _emit_join_diagnostic(
+            {
+                "gate": "declare_join_batch",
+                "session_id": session_id,
+                "status": "wrong_session_id",
+            }
+        )
         return {
             "success": False,
-            "error": "declare_join_batch requires a join-bearing session binding",
+            "error": (
+                "declare_join_batch session mismatch: "
+                f"requested {session_id!r}, recorded {binding.session_id!r}"
+            ),
         }
-    loaded = binding.get("loaded_skills", [])
-    if not isinstance(loaded, list) or not any(
-        isinstance(entry, dict) and entry.get("skill_name") == skill_name for entry in loaded
-    ):
+    if not binding.binding_valid:
         return {
             "success": False,
-            "error": f"declare_join_batch: skill {skill_name!r} is not loaded in this session",
+            "error": "declare_join_batch requires a valid session binding",
+        }
+    selected_entry = next(
+        (
+            entry
+            for entry in reversed(binding.loaded_skills)
+            if normalize_skill_name(entry.skill_name) == normalized_skill_name
+        ),
+        None,
+    )
+    if selected_entry is None:
+        return {
+            "success": False,
+            "error": (
+                f"declare_join_batch: skill {normalized_skill_name!r} "
+                "is not loaded in this session"
+            ),
+        }
+    if not selected_entry.join_required:
+        return {
+            "success": False,
+            "error": (f"declare_join_batch: skill {normalized_skill_name!r} is not join-bearing"),
         }
     backend_name = (
         os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "claude-code").strip() or "claude-code"
@@ -82,13 +117,7 @@ def _declare_join_batch_handler(
         }
     # Check backend supports the requested assignments against the manifest's
     # declared child_spawn_cardinality.
-    manifest_cardinality: dict[str, object] = {}
-    for entry in loaded:
-        if isinstance(entry, dict) and entry.get("skill_name") == skill_name:
-            card = entry.get("child_spawn_cardinality", {})
-            if isinstance(card, dict):
-                manifest_cardinality = card
-            break
+    manifest_cardinality = selected_entry.child_spawn_cardinality
     # Sum declared per-role counts. Any string entry (for_each) makes the
     # total indeterminate, so we skip the strict check in that case.
     declared_count: int | None = None
@@ -100,19 +129,24 @@ def _declare_join_batch_handler(
             return {
                 "success": False,
                 "error": (
-                    f"declare_join_batch: skill {skill_name!r} declares "
+                    f"declare_join_batch: skill {normalized_skill_name!r} declares "
                     f"count={declared_count}; received {len(assignments)} assignments"
                 ),
             }
 
-    artifact_digest = str(binding.get("artifact_digest", "")) or _derive_artifact_digest(binding)
+    artifact_digest = binding.artifact_digest
+    if not artifact_digest:
+        return {
+            "success": False,
+            "error": "declare_join_batch requires a non-empty top-level artifact_digest",
+        }
     parent = top_level_parent or "top_level"
     try:
         batch = declare_batch(
-            flag_dir,
+            channel_dir,
             session_id=session_id,
             top_level_parent=parent,
-            skill_name=skill_name,
+            skill_name=normalized_skill_name,
             artifact_digest=artifact_digest,
             assignments=assignments,
         )
@@ -122,7 +156,7 @@ def _declare_join_batch_handler(
                 "gate": "declare_join_batch",
                 "session_id": session_id,
                 "top_level_parent": parent,
-                "skill_name": skill_name,
+                "skill_name": normalized_skill_name,
                 "status": "declare_refused",
             }
         )
@@ -133,11 +167,43 @@ def _declare_join_batch_handler(
             "session_id": session_id,
             "top_level_parent": parent,
             "join_batch_id": batch.get("join_batch_id", ""),
-            "skill_name": skill_name,
+            "skill_name": normalized_skill_name,
             "status": "declared",
         }
     )
     return {"success": True, "join_batch_id": batch.get("join_batch_id"), "wave": batch}
+
+
+def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | None:
+    recorded_session_ids: set[str] = set()
+    for candidate_path in enumerate_binding_paths(channel_dir):
+        try:
+            candidate = read_binding(candidate_path)
+        except SessionBindingError:
+            continue
+        if candidate is not None and candidate.session_id != requested_session_id:
+            recorded_session_ids.add(candidate.session_id)
+    if not recorded_session_ids:
+        return None
+
+    status = "wrong_session_id" if len(recorded_session_ids) == 1 else "ambiguous_session_bindings"
+    _emit_join_diagnostic(
+        {
+            "gate": "declare_join_batch",
+            "session_id": requested_session_id,
+            "status": status,
+        }
+    )
+    if len(recorded_session_ids) == 1:
+        recorded_session_id = next(iter(recorded_session_ids))
+        return (
+            "declare_join_batch session mismatch: "
+            f"requested {requested_session_id!r}, recorded {recorded_session_id!r}"
+        )
+    return (
+        "declare_join_batch session mismatch: "
+        f"requested {requested_session_id!r}, but multiple recorded bindings are ambiguous"
+    )
 
 
 def _emit_join_diagnostic(record: dict[str, object]) -> None:
@@ -154,18 +220,6 @@ def _emit_join_diagnostic(record: dict[str, object]) -> None:
             exc_info=True,
             error=str(exc),
         )
-
-
-def _derive_artifact_digest(binding: dict[str, object]) -> str:
-    """Reconstruct the artifact digest for the most recent loaded skill."""
-    loaded = binding.get("loaded_skills", [])
-    if isinstance(loaded, list) and loaded:
-        last = loaded[-1]
-        if isinstance(last, dict):
-            candidate = last.get("artifact_digest")
-            if isinstance(candidate, str) and candidate:
-                return candidate
-    return ""
 
 
 @mcp.tool(

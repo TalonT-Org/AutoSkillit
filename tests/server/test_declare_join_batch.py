@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
+from autoskillit.hooks._session_binding import (
+    SESSION_BINDING_SCHEMA_VERSION,
+    LoadedSkillEntry,
+    SessionBinding,
+)
 from autoskillit.server.tools.tools_kitchen import _declare_join_batch as declare_module
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -15,26 +19,38 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 def test_invalid_binding_cannot_open_batch_with_retained_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    flag_dir = tmp_path / "flags"
-    flag_dir.mkdir()
-    (flag_dir / "skill_guard_session-1.flag").write_text(
-        json.dumps(
-            {
-                "binding_valid": False,
-                "join_required": True,
-                "artifact_digest": "retained-from-prior-load",
-                "loaded_skills": [
-                    {
-                        "skill_name": "join-bearing",
-                        "binding_valid": False,
-                        "child_spawn_cardinality": {"explicit_slots": 1},
-                    }
-                ],
-            }
-        ),
+    binding_path = tmp_path / "flags" / "skill_guard_session-1.flag"
+    binding_path.parent.mkdir()
+    binding_path.write_text(
+        SessionBinding(
+            schema_version=SESSION_BINDING_SCHEMA_VERSION,
+            session_id="session-1",
+            join_required=True,
+            binding_valid=False,
+            artifact_digest="retained-from-prior-load",
+            loaded_skills=(
+                LoadedSkillEntry(
+                    skill_name="join-bearing",
+                    ts="2026-08-26T00:00:00+00:00",
+                    join_required=True,
+                    child_spawn_cardinality={"explicit_slots": 1},
+                    semantic_digest="semantic",
+                    adaptation_digest="adaptation",
+                    projected_digest="projected",
+                    canonical_digest="canonical",
+                    artifact_incarnation="incarnation",
+                    binding_valid=False,
+                    binding_error="invalid test binding",
+                ),
+            ),
+        ).to_json(),
         encoding="utf-8",
     )
-    monkeypatch.setattr(declare_module, "resolve_flag_dir", lambda _root: flag_dir)
+    monkeypatch.setattr(
+        declare_module,
+        "resolve_binding_path",
+        lambda _root, _session_id: binding_path,
+    )
 
     def unexpected_backend_lookup(_name: str) -> None:
         pytest.fail("invalid bindings must be rejected before backend lookup")

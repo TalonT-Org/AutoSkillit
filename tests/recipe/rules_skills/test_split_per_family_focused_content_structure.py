@@ -4,9 +4,6 @@ Covers the single `@semantic_rule` check that lives in
 `rules_skill_content_content_structure.py`:
 
   - transition-boundary-anti-confirmation
-
-These tests were relocated verbatim from `tests/recipe/test_rules_skill_content.py`
-as part of the #4852 decomposition; no test bodies were edited.
 """
 
 from __future__ import annotations

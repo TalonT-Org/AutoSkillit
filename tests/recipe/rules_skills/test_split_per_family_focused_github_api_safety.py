@@ -6,9 +6,6 @@ Covers the three `@semantic_rule` checks that live in
   - skill-no-issue-comments
   - reviews-post-requires-input-flag
   - graphql-query-requires-shell-invocation
-
-These tests were relocated verbatim from `tests/recipe/test_rules_skill_content.py`
-as part of the #4852 decomposition; no test bodies were edited.
 """
 
 from __future__ import annotations
@@ -174,10 +171,6 @@ def test_reviews_post_regex_flag_before_path(tmp_path: Path) -> None:
 _GRAPHQL_RULE_ID = "graphql-query-requires-shell-invocation"
 
 
-def _write_graphql_skill_and_run_rules(tmp_path: Path, skill_md_content: str):
-    return write_skill_and_run_rules(tmp_path, skill_md_content, skill_name="graphql-skill")
-
-
 def test_graphql_rule_fires_when_no_bash_invocation(tmp_path: Path) -> None:
     skill_md = textwrap.dedent(
         """\
@@ -193,7 +186,7 @@ def test_graphql_rule_fires_when_no_bash_invocation(tmp_path: Path) -> None:
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -221,7 +214,7 @@ def test_graphql_rule_does_not_fire_when_bash_invocation_present(tmp_path: Path)
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID not in rule_ids
 
@@ -249,7 +242,7 @@ def test_graphql_rule_fires_for_case_mismatched_variable_bindings(tmp_path: Path
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -268,7 +261,7 @@ def test_graphql_rule_fires_for_fragment_without_same_section_invocation(tmp_pat
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -293,7 +286,7 @@ def test_graphql_rule_does_not_fire_for_non_parameterized_block_with_invocation(
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID not in rule_ids
 
@@ -309,7 +302,7 @@ def test_graphql_rule_fires_for_prose_without_same_section_invocation(tmp_path: 
         Execute via `gh api graphql --input -`.
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -330,7 +323,7 @@ def test_graphql_rule_fires_for_prose_with_stdin_invocation(
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -384,7 +377,7 @@ def test_graphql_rule_accepts_literal_payload_with_variables_object(
         .replace("<BASH_BLOCK>", bash_block)
     )
 
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID not in rule_ids
@@ -422,7 +415,7 @@ def test_graphql_rule_rejects_unsafe_mutation_shapes(
         """
     )
 
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
@@ -442,7 +435,7 @@ def test_graphql_rule_accepts_fully_literal_inline_mutation(tmp_path: Path) -> N
         """
     )
 
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID not in rule_ids
@@ -465,7 +458,7 @@ def test_graphql_rule_rejects_generated_named_mutation_with_dynamic_query(
         """
     )
 
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
@@ -498,7 +491,7 @@ def test_graphql_rule_does_not_bind_variables_from_json_without_query(
         """
     )
 
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
@@ -523,7 +516,7 @@ def test_graphql_rule_rejects_single_variables_blob(tmp_path: Path) -> None:
         """
     )
 
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
 
     assert _GRAPHQL_RULE_ID in rule_ids
@@ -547,7 +540,7 @@ def test_graphql_rule_fires_for_prose_in_different_section_than_invocation(
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 
@@ -570,7 +563,7 @@ def test_graphql_rule_fires_for_documentation_schema_reference_without_invocatio
         ```
         """
     )
-    findings = _write_graphql_skill_and_run_rules(tmp_path, skill_md)
+    findings = write_skill_and_run_rules(tmp_path, skill_md, skill_name="graphql-skill")
     rule_ids = [f.rule for f in findings]
     assert _GRAPHQL_RULE_ID in rule_ids
 

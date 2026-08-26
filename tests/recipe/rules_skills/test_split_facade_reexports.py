@@ -71,7 +71,9 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
     recipe = load_recipe(recipe_yaml)
 
     # Track whether _resolve_skill_md received a non-None resolver
-    received_resolvers: list[object] = []
+    from autoskillit.core.types._type_protocols_workspace import SkillResolver
+
+    received_resolvers: list[SkillResolver | None] = []
     original_fn = _rsc._resolve_skill_md
 
     received_project_roots: list[Path | None] = []
@@ -80,15 +82,11 @@ def test_rules_pass_ctx_skill_resolver_to_resolve_skill_md(tmp_path: Path) -> No
         skill_name: str,
         *,
         project_root: Path | None,
-        resolver: object = None,
-    ) -> object:
+        resolver: SkillResolver | None = None,
+    ) -> Path | None:
         received_resolvers.append(resolver)
         received_project_roots.append(project_root)
-        return original_fn(  # type: ignore[arg-type]
-            skill_name,
-            project_root=project_root,
-            resolver=resolver,
-        )
+        return original_fn(skill_name, project_root=project_root, resolver=resolver)
 
     resolver = DefaultSkillResolver()
     ctx = make_validation_context(recipe, project_dir=tmp_path, skill_resolver=resolver)

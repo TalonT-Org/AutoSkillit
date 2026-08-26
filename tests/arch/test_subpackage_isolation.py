@@ -1562,17 +1562,9 @@ def test_no_src_module_exceeds_line_limit() -> None:
     session.py (adjudication pipeline, ~864 lines) is intentionally near this
     limit; do NOT split below 1000 lines — see REQ-CNST-010-NOTE-1.
     """
-    violations: list[str] = []
-    for py_file in sorted(SRC_ROOT.rglob("*.py")):
-        line_count = len(py_file.read_text().splitlines())
-        rel = str(py_file.relative_to(SRC_ROOT))
-        limit, _ = _LINE_LIMIT_EXEMPTIONS.get(
-            rel, _LINE_LIMIT_EXEMPTIONS.get(py_file.name, (1000, ""))
-        )
-        if line_count > limit:
-            violations.append(
-                f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (limit {limit})"
-            )
+    from tests.arch._helpers import _collect_line_limit_violations
+
+    violations = _collect_line_limit_violations(_LINE_LIMIT_EXEMPTIONS)
     assert not violations, (
         "Source modules exceeding line limit "
         "(add entry to _LINE_LIMIT_EXEMPTIONS with rule ID + rationale):\n"

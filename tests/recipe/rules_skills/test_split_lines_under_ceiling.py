@@ -54,6 +54,11 @@ def test_e11_entry_removed() -> None:
 
 def test_no_src_module_exceeds_1000_lines() -> None:
     """The architectural enforcer must still pass after E11 removal."""
-    from tests.arch.test_subpackage_isolation import test_no_src_module_exceeds_line_limit
+    from tests.arch._helpers import _collect_line_limit_violations
+    from tests.arch.test_subpackage_isolation import _LINE_LIMIT_EXEMPTIONS
 
-    test_no_src_module_exceeds_line_limit()
+    violations = _collect_line_limit_violations(_LINE_LIMIT_EXEMPTIONS)
+    assert not violations, (
+        "Source modules exceeding 1000-line limit (REQ-CNST-010):\n"
+        + "\n".join(f"  {v}" for v in violations)
+    )

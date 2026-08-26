@@ -8,9 +8,6 @@ Covers the five `@semantic_rule` checks that live in
   - executable-field-content-validity
   - source-attribution-directive
   - inline-content-in-subagent-prompt
-
-These tests were relocated verbatim from `tests/recipe/test_rules_skill_content.py`
-as part of the #4852 decomposition; no test bodies were edited.
 """
 
 from __future__ import annotations

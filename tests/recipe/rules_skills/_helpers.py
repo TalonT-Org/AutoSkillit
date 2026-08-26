@@ -57,6 +57,9 @@ def make_recipe_for_skill(skill_name: str, ingredients: dict[str, str]) -> str:
             "    with:",
             f'      skill_command: "{skill_cmd}"',
             "    on_success: done",
+            "  done:",
+            "    action: stop",
+            '    message: "Done."',
             "",
         ]
     )
@@ -69,12 +72,7 @@ def write_skill_and_run_rules(
     *,
     skill_name: str = "test-skill",
 ) -> list[RuleFinding]:
-    """Write a synthetic SKILL.md + minimal recipe, run rules, return findings.
-
-    Centralises the write-skill-write-recipe-run-rules flow that was previously
-    duplicated three times across the per-family test files (with inconsistent
-    helper names) under `tests/recipe/rules_skills/`.
-    """
+    """Write a synthetic SKILL.md + minimal recipe, run rules, return findings."""
     skill_dir = tmp_path / skill_name
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(skill_md_content)

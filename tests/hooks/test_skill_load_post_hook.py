@@ -152,9 +152,21 @@ def test_survives_malformed_stdin(tmp_path: Path) -> None:
 
 
 def test_reports_existing_binding_read_error(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A corrupt prior binding remains fail-closed and observable."""
+    from autoskillit.hooks import skill_load_post_hook as hook_module  # noqa: PLC0415
+
+    projection_root = tmp_path / "projection"
+    projection_root.mkdir()
+    manifest_path = write_projection_manifest(projection_root)
+    monkeypatch.setattr(
+        hook_module,
+        "resolve_projection_manifest_path",
+        lambda _hook_path: manifest_path,
+    )
     flag = tmp_path / _FLAG_RELPATH
     flag.parent.mkdir(parents=True)
     flag.write_text("not-json", encoding="utf-8")
@@ -165,6 +177,9 @@ def test_reports_existing_binding_read_error(
     )
 
     assert "failed to read existing flag" in capsys.readouterr().err
+    rewritten = json.loads(flag.read_text(encoding="utf-8"))
+    assert rewritten["binding_valid"] is False
+    assert rewritten["loaded_skills"][0]["binding_valid"] is True
 
 
 def test_reports_write_failure_traceback(

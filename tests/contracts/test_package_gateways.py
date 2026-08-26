@@ -412,7 +412,6 @@ def test_root_module_allowlist() -> None:
             "_probe_canary.py",
             "_recipe_delivery_framing.py",
             "_test_filter.py",
-            "hook_registry.py",
             "version.py",
         }
     )

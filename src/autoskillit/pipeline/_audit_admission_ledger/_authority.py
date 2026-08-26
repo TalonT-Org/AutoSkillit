@@ -59,7 +59,7 @@ def _commit_authority_locked(
     )
     if (
         installation_row is None
-        or installation_row.installation_version != request.installation_version.value
+        or installation_row.installation_version != request.installation_version
         or installation_row.retired
     ):
         return AuditFinalCommitOutcome(

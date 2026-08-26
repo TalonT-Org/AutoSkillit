@@ -48,7 +48,7 @@ def _commit_disposition_locked(
     installation = _installation_row_read(connection, request.recipe_execution_id)
     if (
         installation is None
-        or installation.installation_version != request.installation_version.value
+        or installation.installation_version != request.installation_version
         or installation.retired
     ):
         return AuditDispositionCommitOutcome(

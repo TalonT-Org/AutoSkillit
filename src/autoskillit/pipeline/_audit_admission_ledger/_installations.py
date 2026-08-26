@@ -27,7 +27,7 @@ __all__ = [
 
 
 class InstallationRow(NamedTuple):
-    installation_version: str
+    installation_version: InstallationVersion
     retired: bool
 
 
@@ -112,4 +112,4 @@ def _installation_row_read(
     ).fetchone()
     if row is None:
         return None
-    return InstallationRow(row[0], bool(row[1]))
+    return InstallationRow(InstallationVersion(row[0]), bool(row[1]))

@@ -63,7 +63,7 @@ def _reserve_locked(
     installation_row = _installation_row_read(connection, request.recipe_execution_id)
     if (
         installation_row is None
-        or installation_row.installation_version != request.installation_version.value
+        or installation_row.installation_version != request.installation_version
     ):
         raise ValueError(
             "reserve() requires a matching installation created via create_or_get_installation()"
@@ -116,7 +116,6 @@ def _reserve_locked(
             request=request,
             slot_key=slot_key,
             slot_id=slot_id,
-            head_key=head_key,
             current_head=current_head,
             authority_id=authority_id,
         )
@@ -260,12 +259,17 @@ def _dispatch_new_slot(
     request: AuditReservationRequest,
     slot_key: AuditSlotKey,
     slot_id: AuditSlotId,
-    head_key: str,
     current_head: AuditCycleHead | None,
     authority_id: str,
 ) -> AuditReservationOutcome:
     attempt_id = AuditAttemptId(secrets.token_hex(16))
     audit_round = AuditRound(1 if current_head is None else current_head.audit_round + 1)
+    head_key = _head_key(
+        request.recipe_execution_id,
+        request.cycle_id,
+        request.scope_id,
+        request.part_id,
+    )
     reservation = _build_reservation(
         request=request,
         slot_id=slot_id,

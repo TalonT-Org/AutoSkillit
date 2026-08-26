@@ -5,11 +5,9 @@ five ``_MAX_*`` caps govern input validation across the store and its
 launch adapter; ``EXPLORER_ROLE_NAMES`` and
 ``EXPLORER_INELIGIBLE_SESSION_TYPES`` are public re-aggregations of
 bundled-core definitions.
-
-Each shard in this package owns its own ``logger = get_logger(__name__)`
-so log records retain the originating module's ``__name__`` — that is
-why no logger is declared here.
 """
+
+from __future__ import annotations
 
 from autoskillit.core import BUNDLED_EXPLORER_ROLES, SessionType
 

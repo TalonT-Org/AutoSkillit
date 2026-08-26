@@ -7,22 +7,6 @@ server restart via a signed 0600 authority file. This module adds the same
 durability to the session-scoped path (``bind_session_scoped_durable``) and
 owns the durable-record read/write primitives (``_ExplorationLaunchAuthorityStore``)
 those two paths share.
-
-Split into a sibling module — not a new method on
-``OwnerBoundExplorationContextStore`` — because durable authority
-persistence and in-process lease management are different lifecycles
-that benefit from a sibling-module boundary. The class now lives in
-``pipeline/exploration_context/_store.py`` (the sole aggregate
-lease-state owner) and this module's ``TYPE_CHECKING``-only annotation
-imports point at that package path plus the ``_types`` shard,
-preserving the one-way runtime direction (this module finishes loading
-before ``_store.py`` triggers any re-import of it). This module has
-zero *runtime* imports from ``exploration_context`` (the only
-imports are ``TYPE_CHECKING``-only annotation imports below, erased
-before execution) so there is no runtime import cycle:
-``pipeline/exploration_context/_store.py`` imports
-``_ExplorationLaunchAuthorityStore``, ``_ReopenedLaunchAuthority``,
-and ``_safe_submit_failure_reason`` from here, not the reverse.
 """
 
 from __future__ import annotations

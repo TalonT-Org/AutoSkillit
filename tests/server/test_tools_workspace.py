@@ -438,8 +438,23 @@ class TestTestCheck:
     async def test_test_check_forwards_gate_descriptor_without_fd_breaking_wrappers(
         self,
         make_tool_ctx,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Gate execution must retain its lease fd through the direct runner path."""
+        import autoskillit.execution.testing as testing_module
+
+        class ControlledLease:
+            inherited_fds = (101, 103)
+
+            def close(self) -> None:
+                pass
+
+        lease = ControlledLease()
+        monkeypatch.setattr(
+            testing_module.WorktreeGateLease,
+            "acquire",
+            classmethod(lambda _cls, _cwd, *, invocation_id: lease),
+        )
         tool_ctx = make_tool_ctx()
         tool_ctx.runner.push(_make_result(0, "= 1 passed =\n", ""))
 
@@ -447,7 +462,7 @@ class TestTestCheck:
 
         assert result["passed"] is True
         _command, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[-1]
-        assert kwargs["pass_fds"]
+        assert kwargs["pass_fds"] == lease.inherited_fds
         assert kwargs["pty_mode"] is False
         assert kwargs["systemd_scope_enabled"] is False
 

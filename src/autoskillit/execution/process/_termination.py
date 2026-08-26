@@ -159,13 +159,12 @@ async def execute_termination_action(
             kill_reason = KillReason.INFRA_KILL
         case _ as unreachable:
             assert_never(unreachable)
-    returncode, cleanup = await anyio.to_thread.run_sync(
-        partial(
-            owner.settle_evidence,
-            escalate=action is not TerminationAction.NO_KILL,
-        ),
-        abandon_on_cancel=False,
+    settle = (
+        owner.settle_evidence
+        if action is TerminationAction.NO_KILL
+        else partial(owner.settle_evidence, escalate=True)
     )
+    returncode, cleanup = await anyio.to_thread.run_sync(settle, abandon_on_cancel=False)
     return kill_reason, returncode, cleanup
 
 

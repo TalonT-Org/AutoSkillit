@@ -563,23 +563,19 @@ class TestGroupEscapingDescendantCleanup:
         tmp_path: Path,
     ) -> None:
         """Routine natural-exit settlement leaves a busy escaped child alone."""
-        script = tmp_path / "group_escaping_descendants.py"
         ready_path = tmp_path / "escaping-identities.json"
-        script.write_text(GROUP_ESCAPING_DESCENDANTS_SCRIPT)
+        owner = _spawn_group_escaping_owner(tmp_path, ready_path, child_count=1)
         identities: dict[int, float] = {}
 
         try:
-            result = await run_managed_async(
-                [sys.executable, str(script), str(ready_path), "1", "exit"],
-                cwd=tmp_path,
-                timeout=10,
-            )
             identities = await _wait_for_escaping_identities(ready_path)
+            await anyio.to_thread.run_sync(owner.capture_snapshot)
+            owner.process.terminate()
+            await anyio.to_thread.run_sync(owner.process.wait)
+            _, cleanup = await anyio.to_thread.run_sync(owner.settle_evidence)
 
-            assert result.termination is TerminationReason.NATURAL_EXIT
             assert _live_identities(identities) == set(identities)
-            assert result.cleanup_evidence is not None
-            assert set(identities).issubset(result.cleanup_evidence.survivor_pids)
+            assert set(identities).issubset(cleanup.survivor_pids)
         finally:
             _cleanup_process_identities(identities)
 

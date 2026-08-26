@@ -626,6 +626,9 @@ class OwnedProcessGroup:
                             observation_complete=False,
                         )
                     )
+            # A signal can be accepted at the deadline before the scheduler has
+            # published process exit. Yield once without extending the signal budget.
+            time.sleep(_POLL_SECONDS)
             surviving_identities = tuple(
                 identity for identity in identities if self._identity_is_alive(identity)
             )
@@ -658,7 +661,10 @@ class OwnedProcessGroup:
         is unconfirmed. Returns the (returncode, ProcessCleanupResult) tuple
         on success — both fields are non-Optional.
         """
-        returncode, result = self.cleanup(timeout, escalate=escalate)
+        if escalate:
+            returncode, result = self.cleanup(timeout, escalate=True)
+        else:
+            returncode, result = self.cleanup(timeout)
         if returncode is None or not result.complete:
             raise OwnedProcessCleanupError(self.pid, result)
         return returncode, result
@@ -675,7 +681,10 @@ class OwnedProcessGroup:
         (``returncode if returncode is not None else -1``) before assigning into
         a non-Optional field.
         """
-        returncode, result = self.cleanup(timeout, escalate=escalate)
+        if escalate:
+            returncode, result = self.cleanup(timeout, escalate=True)
+        else:
+            returncode, result = self.cleanup(timeout)
         if not result.complete or returncode is None:
             logger.error(
                 "owned_group_cleanup_incomplete",
@@ -696,7 +705,10 @@ class OwnedProcessGroup:
         calling this method.
         """
         try:
-            _, result = self.cleanup(timeout, escalate=escalate)
+            if escalate:
+                _, result = self.cleanup(timeout, escalate=True)
+            else:
+                _, result = self.cleanup(timeout)
         except BaseException as cleanup_error:
             logger.error(
                 "owned_group_cleanup_failed",

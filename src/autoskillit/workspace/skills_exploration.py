@@ -59,6 +59,8 @@ def _load_exploration_sidecar(skill_md_path: Path) -> tuple[object | None, str]:
         raw_bytes = sidecar_path.read_bytes()
     except FileNotFoundError:
         return None, ""
+    except OSError as exc:
+        raise SkillContractError(f"cannot read exploration sidecar {sidecar_path}: {exc}") from exc
     sidecar_digest = hashlib.sha256(raw_bytes).hexdigest()
     try:
         parsed = load_yaml(raw_bytes.decode("utf-8"))
@@ -160,36 +162,32 @@ def _parse_exploration_sidecar(
             raise SkillContractError(
                 f"exploration sidecar retained[{index}] contains unknown keys: {sorted(unknown)!r}"
             )
-        try:
-            for field_name in ("id", "rationale"):
-                if not isinstance(item[field_name], str):
-                    raise SkillContractError(
-                        f"exploration sidecar retained[{index}].{field_name} must be text"
-                    )
-            vector_id = item["id"]
-            task_id = f"{skill_name}-{vector_id}"
-            frontier_item_id = f"{task_id}-frontier"
-            profile = _VECTOR_DEFAULT_PROFILE
-            vector = ExplorationVectorDef(
-                id=vector_id,
-                disposition=ExplorationVectorDisposition.RETAINED,
-                rationale=item["rationale"],
-                applicability=ExplorationVectorApplicabilityId.ALWAYS,
-                role=None,
+        for field_name in ("id", "rationale"):
+            value = item.get(field_name)
+            if not isinstance(value, str):
+                raise SkillContractError(
+                    f"exploration sidecar retained[{index}].{field_name} must be text"
+                )
+        vector_id = item["id"]
+        task_id = f"{skill_name}-{vector_id}"
+        frontier_item_id = f"{task_id}-frontier"
+        profile = _VECTOR_DEFAULT_PROFILE
+        vector = ExplorationVectorDef(
+            id=vector_id,
+            disposition=ExplorationVectorDisposition.RETAINED,
+            rationale=item["rationale"],
+            applicability=ExplorationVectorApplicabilityId.ALWAYS,
+            role=None,
+            profile=profile,
+            relationship_classes=(RelationshipKind.REFERENCES,),
+            task=ExplorationTaskSpec(
+                task_id=task_id,
+                frontier_item_id=frontier_item_id,
                 profile=profile,
-                relationship_classes=(RelationshipKind.REFERENCES,),
-                task=ExplorationTaskSpec(
-                    task_id=task_id,
-                    frontier_item_id=frontier_item_id,
-                    profile=profile,
-                    depends_on=_VECTOR_DEFAULT_DEPENDS_ON,
-                    scope=_VECTOR_DEFAULT_SCOPE,
-                ),
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise SkillContractError(
-                f"exploration sidecar retained[{index}] contains an invalid value: {exc}"
-            ) from exc
+                depends_on=_VECTOR_DEFAULT_DEPENDS_ON,
+                scope=_VECTOR_DEFAULT_SCOPE,
+            ),
+        )
         vectors.append(vector)
 
     ids = tuple(vector.id for vector in vectors)
@@ -300,8 +298,8 @@ def replace_exploration_vector_bodies(
 
 
 __all__ = [
-    "replace_exploration_vector_bodies",
     "_bind_exploration_vector_markers",
     "_load_exploration_sidecar",
     "_parse_exploration_sidecar",
+    "replace_exploration_vector_bodies",
 ]

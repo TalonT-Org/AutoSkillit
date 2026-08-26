@@ -177,6 +177,7 @@ class AgentDef:
     body: str
     codex: CodexAgentProjectionDef
     reader_tools: tuple[str, ...] = ()
+    provisioning: Literal["skill-derived", "baseline"] = "skill-derived"
 
     def __post_init__(self) -> None:
         if not _AGENT_NAME_RE.fullmatch(self.name):
@@ -195,6 +196,10 @@ class AgentDef:
             raise AgentDefinitionError("agent body cannot contain TOML triple single quotes")
         if not isinstance(self.reader_tools, tuple):
             raise AgentDefinitionError("agent reader_tools must be an immutable tuple")
+        if self.provisioning not in ("skill-derived", "baseline"):
+            raise AgentDefinitionError(
+                f"unsupported agent provisioning policy: {self.provisioning!r}"
+            )
         if any(not isinstance(tool, str) or not tool for tool in self.reader_tools):
             raise AgentDefinitionError("agent reader_tools must contain non-empty strings")
         if len(set(self.reader_tools)) != len(self.reader_tools):
@@ -343,6 +348,7 @@ def load_agent_definition(path: Path) -> AgentDef:
         body="".join(lines[closing_index + 1 :]).strip(),
         codex=_derived_codex_projection(meta, tools),
         reader_tools=reader_tools,
+        provisioning=meta.get("provisioning", "skill-derived"),
     )
 
 
@@ -381,6 +387,7 @@ def agent_definition_digest(definition: AgentDef) -> str:
         "max_turns": definition.max_turns,
         "model": definition.model,
         "name": definition.name,
+        "provisioning": definition.provisioning,
         "reader_tools": list(definition.reader_tools),
         "tools": list(definition.tools),
     }

@@ -6,10 +6,14 @@ declaration-vs-evidence authenticity check, and the semantic-plan parser
 behind one entry point; readers should import from this module rather than
 from the individual shards.
 
-Wrappers reference private shard-owned symbols through this module's globals
-at call time (not via local names bound at import time) so monkeypatch.setattr
-on the facade attributes takes effect during tests
-(``tests/workspace/conftest.py``).
+The 13 underscore-prefixed names re-exported from
+``skill_capability_cache`` below (the cache singletons and weight helpers)
+are **not** part of the public surface — they appear in this module only
+so existing tests can monkeypatch.setattr them via the facade. The
+public surface is the ``__all__`` list; everything else is internal
+re-export plumbing. Test-only — production code reaches the cache shard
+through ``classify_skill_capability_evidence``, which binds the
+facade-global cache singleton at call time.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from autoskillit.workspace.skill_capability_authenticity import (
     validate_skill_capability_authenticity,
     validate_skill_capability_declarations,
 )
-from autoskillit.workspace.skill_capability_cache import (
+from autoskillit.workspace.skill_capability_cache import (  # noqa: F401  # re-exported so tests can monkeypatch.setattr on the facade
     _SKILL_CAPABILITY_EVIDENCE_CACHE,
     _SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES,
     _SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES,
@@ -110,19 +114,7 @@ __all__ = [
     "SkillCapabilityAuthenticityDiagnostic",
     "SkillCapabilityEvidence",
     "SkillCapabilityValidation",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_INPUT_BYTES",
-    "_SKILL_CAPABILITY_EVIDENCE_RECORD_WEIGHT_BYTES",
-    "_SkillCapabilityEvidenceBuildState",
-    "_SkillCapabilityEvidenceCache",
-    "_SkillCapabilityEvidenceCacheEntry",
-    "_SkillCapabilityEvidenceCacheInfo",
-    "_retained_string_weight_bytes",
     "_scan_skill_capability_evidence_uncached",
-    "_skill_capability_evidence_entry_weight_bytes",
-    "_skill_capability_evidence_input_weight_bytes",
     "classify_skill_capability_evidence",
     "detect_skill_capabilities",
     "parse_skill_semantic_plan",

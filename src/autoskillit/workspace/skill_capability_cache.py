@@ -242,17 +242,4 @@ _SKILL_CAPABILITY_EVIDENCE_CACHE = _SkillCapabilityEvidenceCache(
 )
 
 
-__all__ = [
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES",
-    "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_INPUT_BYTES",
-    "_SKILL_CAPABILITY_EVIDENCE_RECORD_WEIGHT_BYTES",
-    "_SkillCapabilityEvidenceBuildState",
-    "_SkillCapabilityEvidenceCache",
-    "_SkillCapabilityEvidenceCacheEntry",
-    "_SkillCapabilityEvidenceCacheInfo",
-    "_retained_string_weight_bytes",
-    "_skill_capability_evidence_entry_weight_bytes",
-    "_skill_capability_evidence_input_weight_bytes",
-]
+__all__: list[str] = []  # Internal shard — cache reached via the skill_capabilities facade.

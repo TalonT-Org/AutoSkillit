@@ -42,6 +42,7 @@ Never mix the two in the same shard without an inline justification.
 from __future__ import annotations
 
 from importlib import import_module
+from pathlib import Path
 
 import pytest
 
@@ -120,20 +121,7 @@ _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 _SKILL_CAPABILITY_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "skill_capability_cache",
-        (
-            "_SKILL_CAPABILITY_EVIDENCE_CACHE",
-            "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES",
-            "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES",
-            "_SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_INPUT_BYTES",
-            "_SKILL_CAPABILITY_EVIDENCE_RECORD_WEIGHT_BYTES",
-            "_SkillCapabilityEvidenceBuildState",
-            "_SkillCapabilityEvidenceCache",
-            "_SkillCapabilityEvidenceCacheEntry",
-            "_SkillCapabilityEvidenceCacheInfo",
-            "_retained_string_weight_bytes",
-            "_skill_capability_evidence_entry_weight_bytes",
-            "_skill_capability_evidence_input_weight_bytes",
-        ),
+        (),
     ),
     (
         "skill_capability_scanner",
@@ -167,6 +155,35 @@ def _facade_public_surface() -> tuple[str, ...]:
     capabilities = import_module("autoskillit.workspace.skill_capabilities")
     names = set(getattr(skills, "__all__", ())) | set(getattr(capabilities, "__all__", ()))
     return tuple(sorted(names))
+
+
+def _workspace_shard_stems() -> tuple[set[str], set[str]]:
+    workspace_init = import_module("autoskillit.workspace")
+    pkg_init_file = workspace_init.__file__
+    assert pkg_init_file is not None
+    pkg_root = Path(pkg_init_file).parent
+    skills_stems = {p.stem for p in pkg_root.glob("skills_*.py")} - {"skills"}
+    capability_stems = set()
+    for p in pkg_root.glob("skill_capability_*.py"):
+        if p.stem != "skill_capabilities":
+            capability_stems.add(p.stem)
+    capability_stems.update(p.stem for p in pkg_root.glob("skill_semantic_*.py"))
+    return skills_stems, capability_stems
+
+
+def test_every_shard_module_is_in_ownership_table() -> None:
+    skills_stems, capability_stems = _workspace_shard_stems()
+    table_skills = {stem for stem, _ in _SKILLS_SHARD_OWNERS}
+    table_capabilities = {stem for stem, _ in _SKILL_CAPABILITY_SHARD_OWNERS}
+    assert skills_stems == table_skills, (
+        f"skills shard stems out of sync: disk has {sorted(skills_stems - table_skills)}, "
+        f"table has {sorted(table_skills - skills_stems)}"
+    )
+    assert capability_stems == table_capabilities, (
+        f"capability shard stems out of sync: disk has "
+        f"{sorted(capability_stems - table_capabilities)}, "
+        f"table has {sorted(table_capabilities - capability_stems)}"
+    )
 
 
 def test_shard_ownership_is_well_formed() -> None:

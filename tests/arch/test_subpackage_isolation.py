@@ -2523,18 +2523,21 @@ def test_capture_lifecycle_is_a_package_not_a_module() -> None:
 # -- #4836: Decompose exploration/snapshot.py and collectors/extractors.py --
 
 
-def test_snapshot_package_is_below_size_ceiling() -> None:
-    """Every shard of exploration/snapshot/ is at most 750 lines."""
-    snapshot_pkg = SRC_ROOT / "exploration" / "snapshot"
-    for shard in sorted(snapshot_pkg.glob("*.py")):
-        line_count = len(shard.read_text().splitlines())
-        assert line_count <= 750, f"{shard.name}: {line_count} lines exceeds 750"
+@pytest.mark.parametrize(
+    "package_dir",
+    [
+        SRC_ROOT / "exploration" / "snapshot",
+        SRC_ROOT / "exploration" / "collectors" / "extractors",
+    ],
+    ids=["snapshot", "extractors"],
+)
+def test_decomposed_package_is_below_size_ceiling(package_dir: Path) -> None:
+    """Every shard of a decomposed package is at most 750 lines.
 
-
-def test_extractors_package_is_below_size_ceiling() -> None:
-    """Every shard of exploration/collectors/extractors/ is at most 750 lines."""
-    extractors_pkg = SRC_ROOT / "exploration" / "collectors" / "extractors"
-    for shard in sorted(extractors_pkg.glob("*.py")):
+    Stricter than the global 1000-line guard (``test_no_src_module_exceeds_line_limit``)
+    so shard reorganisation fails early instead of colliding with the global cap.
+    """
+    for shard in sorted(package_dir.glob("*.py")):
         line_count = len(shard.read_text().splitlines())
         assert line_count <= 750, f"{shard.name}: {line_count} lines exceeds 750"
 
@@ -2900,10 +2903,16 @@ def test_extractors_symbols_live_in_their_expected_shard() -> None:
         (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.PATH_COUNT_EXCEEDED),
         (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.FILE_BYTES_EXCEEDED),
         (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.TOTAL_BYTES_EXCEEDED),
+        (SnapshotCaptureStatus.STALE, SnapshotCaptureReason.IDENTITY_DRIFT),
         (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED),
         (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.GIT_TIMEOUT),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.GIT_COMMAND_FAILED),
         (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.ROOT_NOT_WORKTREE),
         (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.IDENTITY_UNRESOLVED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.WORKTREE_UNREADABLE),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.COLLECTOR_SAFETY_FAULT),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.MANIFEST_DIGEST_EMPTY),
     ],
 )
 def test_capture_aborted_accepts_legal_status_reason_pairs(

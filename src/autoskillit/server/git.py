@@ -612,13 +612,20 @@ async def perform_merge(
         }
 
     # 8.5. Pre-deletion editable install guard
-    poisoned = scan_editable_installs_for_worktree(Path(worktree_path))
-    if poisoned:
-        descriptions = "; ".join(poisoned)
+    scan = scan_editable_installs_for_worktree(Path(worktree_path))
+    unverified_scan_reasons = list(scan.unverified)
+    if unverified_scan_reasons:
+        logger.warning(
+            "merge_worktree_editable_scan_unverified",
+            worktree_path=worktree_path,
+            unverified_scan_reasons=unverified_scan_reasons,
+        )
+    if scan.findings:
+        descriptions = "; ".join(scan.findings)
         logger.error(
             "merge_worktree_editable_install_guard",
             worktree_path=worktree_path,
-            poisoned_installs=poisoned,
+            poisoned_installs=list(scan.findings),
         )
         return {
             "error": (
@@ -632,7 +639,12 @@ async def perform_merge(
             "state": MergeState.MERGE_SUCCEEDED_CLEANUP_BLOCKED,
             "worktree_path": worktree_path,
             "merge_succeeded": True,
-            "poisoned_installs": poisoned,
+            "poisoned_installs": list(scan.findings),
+            **(
+                {"unverified_scan_reasons": unverified_scan_reasons}
+                if unverified_scan_reasons
+                else {}
+            ),
             "worktree_removed": False,
             "branch_deleted": False,
             "cleanup_succeeded": False,
@@ -674,4 +686,7 @@ async def perform_merge(
         "worktree_removed": wt_rc == 0,
         "branch_deleted": br_rc == 0,
         "cleanup_succeeded": wt_rc == 0 and br_rc == 0,
+        **(
+            {"unverified_scan_reasons": unverified_scan_reasons} if unverified_scan_reasons else {}
+        ),
     }

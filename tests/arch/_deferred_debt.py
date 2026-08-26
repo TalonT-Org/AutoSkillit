@@ -6,6 +6,7 @@ for any *new* registry of this kind."""
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Collection
 from datetime import date
 from typing import Any
 
@@ -19,6 +20,21 @@ class TrackedDeferral:
     issue: int
     rationale: str
     added_date: date
+
+
+def assert_entries_still_apply(
+    registry: dict[Any, TrackedDeferral],
+    *,
+    registry_name: str,
+    live_keys: Collection[Any],
+) -> None:
+    """Reject registry rows that no longer exempt a live violation."""
+    stale = sorted(set(registry) - set(live_keys), key=str)
+    details = [f"{key} (issue=#{registry[key].issue})" for key in stale]
+    assert not details, (
+        f"{registry_name} entries that no longer match a live violation "
+        f"(delete these rows): {details}"
+    )
 
 
 def assert_not_stale(

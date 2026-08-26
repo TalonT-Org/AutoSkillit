@@ -37,7 +37,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.arch._deferred_debt import TrackedDeferral, assert_not_stale, assert_rationale_present
+from tests.arch._deferred_debt import (
+    TrackedDeferral,
+    assert_entries_still_apply,
+    assert_not_stale,
+    assert_rationale_present,
+)
 from tests.arch._helpers import (
     _SOURCE_FILES,
     SRC_ROOT,
@@ -45,6 +50,7 @@ from tests.arch._helpers import (
     _scan_strenum_compare,
 )
 from tests.arch._rules import (
+    _BROAD_EXCEPT_EXEMPT,
     _DISPATCH_TABLE_EXEMPT_FUNCTIONS,
     RuleDescriptor,
     _rel,
@@ -289,6 +295,19 @@ def test_broad_except_with_log_call_is_not_violation(tmp_path: Path) -> None:
     violations = _scan(f)
     except_violations = [v for v in violations if "except" in v.message.lower()]
     assert not except_violations, f"Unexpected except violation: {except_violations}"
+
+
+def test_broad_except_exempt_entries_still_apply() -> None:
+    broad_handler_files = {
+        source_file.name
+        for source_file in _SOURCE_FILES
+        if any(
+            isinstance(node, ast.ExceptHandler) and _handler_is_broad(node)
+            for node in ast.walk(ast.parse(source_file.read_text()))
+        )
+    }
+    stale = sorted(_BROAD_EXCEPT_EXEMPT - broad_handler_files)
+    assert not stale, f"_BROAD_EXCEPT_EXEMPT entries without a live broad handler: {stale}"
 
 
 def test_specific_except_without_log_is_not_violation(tmp_path: Path) -> None:
@@ -1054,68 +1073,76 @@ _OSERROR_FAMILY = {
     "ConnectionResetError",
     "TimeoutError",
 }
+# The shared filesystem-observation funnel deliberately covers stat-family
+# metadata only. Content reads require explicit local exception handling.
 _FS_OBSERVATION_FUNNEL = {"observe_path_mode", "safe_mtime"}
+_ENUMERATION_READ_STAT_KIND = "enumeration-read-or-stat"
+_ENUMERATION_SORT_KEY_KIND = "sorted-key-lambda"
 
 # Deferred-debt registry: each entry pairs a real, tracked violation with a
 # staleness-enforced shape (see tests/arch/_deferred_debt.py) rather than a bare
 # (path, rationale) exemption — so a deferred fix can't sit unaddressed forever
 # without someone actively re-affirming it. _doctor_fleet.py's entry (#4768) was
 # fixed directly (see _check_stale_fleet_state) rather than deferred here.
-_ENUMERATION_STAT_ALLOWLIST: dict[Path, TrackedDeferral] = {
-    SRC_ROOT / "cli" / "_install_snapshot" / "_snapshot.py": TrackedDeferral(
-        issue=4784,
-        rationale="_matches_staged_state lstat()s two rglob()-enumerated entries with no "
-        "try/except in the function; caller chain already absorbs it via rollback()'s "
-        "except BaseException, so not a live crash today",
-        added_date=date(2026, 8, 25),
-    ),
-    SRC_ROOT / "core" / "io.py": TrackedDeferral(
-        issue=4770,
-        rationale="directory_tree_digest stats every os.walk()-enumerated entry with no "
-        "guard; 3 of 5 callers guard against this at the call site, this function does not",
-        added_date=date(2026, 8, 24),
-    ),
-    SRC_ROOT / "execution" / "_recording_skills.py": TrackedDeferral(
+_ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {
+    (
+        SRC_ROOT / "execution" / "_recording_skills.py",
+        "build_skills_manifest",
+        _ENUMERATION_READ_STAT_KIND,
+    ): TrackedDeferral(
         issue=4785,
         rationale="build_skills_manifest reads an iterdir()-enumerated skill_md with no "
         "try/except; safe today only because its one caller passes a private post-copytree "
         "directory, not a live shared one",
         added_date=date(2026, 8, 25),
     ),
-    SRC_ROOT / "execution" / "_session_retention.py": TrackedDeferral(
+    (
+        SRC_ROOT / "execution" / "_session_retention.py",
+        "apply_session_retention",
+        _ENUMERATION_READ_STAT_KIND,
+    ): TrackedDeferral(
+        issue=4771,
+        rationale="apply_session_retention reads metadata from an iterdir()-enumerated "
+        "committed session directory without local OSError handling",
+        added_date=date(2026, 8, 24),
+    ),
+    (
+        SRC_ROOT / "execution" / "_session_retention.py",
+        "apply_session_retention",
+        _ENUMERATION_SORT_KEY_KIND,
+    ): TrackedDeferral(
         issue=4771,
         rationale="unguarded stat in an iterdir()-then-sort key= over committed session dirs; "
         "moved out of session_log.py by the retention-block extraction",
         added_date=date(2026, 8, 24),
     ),
-    SRC_ROOT / "hooks" / "session_start_hook.py": TrackedDeferral(
-        issue=4772,
-        rationale="unguarded read on a glob()-enumerated kitchen-state marker inside a "
-        "broad except Exception — stdlib-only hook code, core.fs_observation is a safe "
-        "import here",
-        added_date=date(2026, 8, 24),
-    ),
-    SRC_ROOT / "recipe" / "_cmd_rpc_issues.py": TrackedDeferral(
+    (
+        SRC_ROOT / "recipe" / "_cmd_rpc_issues.py",
+        "batch_create_issues",
+        _ENUMERATION_READ_STAT_KIND,
+    ): TrackedDeferral(
         issue=4786,
         rationale="batch_create_issues reads a glob()-enumerated ticket_body_*.md with no "
         "try/except at all; no concurrent writer identified, but a hit would hard-fail "
         "the whole ticket batch, not just the racing file",
         added_date=date(2026, 8, 25),
     ),
-    SRC_ROOT / "server" / "_editable_guard.py": TrackedDeferral(
-        issue=4773,
-        rationale="unguarded read on a glob()-enumerated direct_url.json inside a broad "
-        "except Exception",
-        added_date=date(2026, 8, 24),
-    ),
-    SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py": TrackedDeferral(
+    (
+        SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py",
+        "_render_agent_definitions",
+        _ENUMERATION_READ_STAT_KIND,
+    ): TrackedDeferral(
         issue=4787,
         rationale="_render_agent_definitions reads a glob()-enumerated agent .md file with "
         "no try/except; agents_dir is a private, synchronously-populated tempdir with no "
         "identified concurrent writer at all",
         added_date=date(2026, 8, 25),
     ),
-    SRC_ROOT / "workspace" / "session_skills.py": TrackedDeferral(
+    (
+        SRC_ROOT / "workspace" / "session_skills.py",
+        "cleanup_stale",
+        _ENUMERATION_READ_STAT_KIND,
+    ): TrackedDeferral(
         issue=4774,
         rationale="unguarded stat on an iterdir()-enumerated lease-sweep candidate, no "
         "try/except nearby at all",
@@ -1222,6 +1249,17 @@ def _is_funnel_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) 
 _BROAD_EXCEPTION_COVERAGE = {"Exception", "BaseException"}
 
 
+def _handler_is_broad(handler: ast.ExceptHandler) -> bool:
+    kind = handler.type
+    if kind is None:
+        return True
+    if isinstance(kind, ast.Tuple):
+        return any(
+            isinstance(elt, ast.Name) and elt.id in _BROAD_EXCEPTION_COVERAGE for elt in kind.elts
+        )
+    return isinstance(kind, ast.Name) and kind.id in _BROAD_EXCEPTION_COVERAGE
+
+
 def _handler_covers_oserror(handler: ast.ExceptHandler) -> bool:
     kind = handler.type
     if kind is None:
@@ -1230,6 +1268,24 @@ def _handler_covers_oserror(handler: ast.ExceptHandler) -> bool:
     if isinstance(kind, ast.Tuple):
         return any(isinstance(elt, ast.Name) and elt.id in covers for elt in kind.elts)
     return isinstance(kind, ast.Name) and kind.id in covers
+
+
+def _handler_discards_exception(handler: ast.ExceptHandler) -> bool:
+    nodes = [node for stmt in handler.body for node in ast.walk(stmt)]
+    if any(isinstance(node, ast.Raise) for node in nodes):
+        return False
+    if handler.name and any(
+        isinstance(node, ast.Name) and node.id == handler.name for node in nodes
+    ):
+        return False
+    for node in nodes:
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Attribute) and node.func.attr == "exception":
+            return False
+        if any(keyword.arg == "exc_info" for keyword in node.keywords):
+            return False
+    return True
 
 
 def _comprehension_local_taint(
@@ -1257,12 +1313,12 @@ def _comprehension_local_taint(
 
 def _find_enumeration_stat_violations(
     tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
-) -> list[tuple[int, str]]:
+) -> list[tuple[int, str, str, str]]:
     """Scan every function in `tree` for an unguarded stat/read on an
     enumeration-derived path. Each function gets its own taint set — this is
     intentionally intra-function only; nested defs are analyzed separately
     when the outer walk reaches them."""
-    violations: list[tuple[int, str]] = []
+    violations: list[tuple[int, str, str, str]] = []
 
     def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         tainted: set[str] = set()
@@ -1280,10 +1336,14 @@ def _find_enumeration_stat_violations(
                 subject = _guarded_call_subject(node, aliases)
                 if subject is not None:
                     if (subject in tainted or subject in local_tainted) and not guarded:
+                        sink = _dotted_name(node.func, aliases) or "stat/read"
                         violations.append(
                             (
                                 node.lineno,
-                                f"unguarded stat/read on enumeration-derived name {subject!r}",
+                                func_node.name,
+                                _ENUMERATION_READ_STAT_KIND,
+                                f"unguarded {sink.rsplit('.', 1)[-1]} on "
+                                f"enumeration-derived name {subject!r}",
                             )
                         )
                     continue
@@ -1308,6 +1368,8 @@ def _find_enumeration_stat_violations(
                                 violations.append(
                                     (
                                         sub.lineno,
+                                        func_node.name,
+                                        _ENUMERATION_SORT_KEY_KIND,
                                         "unguarded stat in sorted/min/max key= lambda over "
                                         "an enumeration call",
                                     )
@@ -1367,6 +1429,141 @@ def _find_enumeration_stat_violations(
                             )
 
         visit_stmts(func_node.body, False)
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scan_function(node)
+    return violations
+
+
+def _find_broad_swallow_violations(
+    tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
+) -> list[tuple[int, str, str]]:
+    """Find enumeration reads whose nearest OSError handler broadly discards evidence."""
+    violations: list[tuple[int, str, str]] = []
+
+    def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        tainted: set[str] = set()
+
+        def check_expr(
+            expr: ast.expr | None,
+            handler_mode: str,
+            local_tainted: frozenset[str] = frozenset(),
+        ) -> None:
+            if expr is None or handler_mode != "destructive-broad":
+                return
+            for node in ast.walk(expr):
+                if not isinstance(node, ast.Call) or _is_funnel_call(node, aliases):
+                    continue
+                subject = _guarded_call_subject(node, aliases)
+                if subject is not None:
+                    if subject in tainted or subject in local_tainted:
+                        sink = _dotted_name(node.func, aliases) or "stat/read"
+                        violations.append(
+                            (
+                                node.lineno,
+                                func_node.name,
+                                f"broad handler discards exception from "
+                                f"{sink.rsplit('.', 1)[-1]} on {subject!r}",
+                            )
+                        )
+                    continue
+                if (
+                    isinstance(node.func, ast.Name)
+                    and node.func.id in {"sorted", "min", "max"}
+                    and node.args
+                    and _enumeration_source(node.args[0], aliases, tainted)
+                ):
+                    for keyword in node.keywords:
+                        if keyword.arg != "key" or not isinstance(keyword.value, ast.Lambda):
+                            continue
+                        lambda_node = keyword.value
+                        if len(lambda_node.args.args) != 1:
+                            continue
+                        parameter = lambda_node.args.args[0].arg
+                        for sub in ast.walk(lambda_node.body):
+                            if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
+                                continue
+                            if _guarded_call_subject(sub, aliases) == parameter:
+                                violations.append(
+                                    (
+                                        sub.lineno,
+                                        func_node.name,
+                                        "broad handler discards exception from sorted/min/max "
+                                        "key function",
+                                    )
+                                )
+
+        def handler_mode_for_try(stmt: ast.Try, inherited: str) -> str:
+            for handler in stmt.handlers:
+                if not _handler_covers_oserror(handler):
+                    continue
+                if not _handler_is_broad(handler):
+                    return "narrow"
+                return (
+                    "destructive-broad"
+                    if _handler_discards_exception(handler)
+                    else "preserving-broad"
+                )
+            return inherited
+
+        def visit_stmts(stmts: list[ast.stmt], handler_mode: str) -> None:
+            for stmt in stmts:
+                if isinstance(stmt, ast.For):
+                    if _enumeration_source(stmt.iter, aliases, tainted):
+                        tainted.update(_target_names(stmt.target))
+                    check_expr(
+                        stmt.iter,
+                        handler_mode,
+                        _comprehension_local_taint(stmt.iter, aliases, tainted),
+                    )
+                    visit_stmts(stmt.body, handler_mode)
+                    visit_stmts(stmt.orelse, handler_mode)
+                elif isinstance(stmt, ast.Assign):
+                    check_expr(
+                        stmt.value,
+                        handler_mode,
+                        _comprehension_local_taint(stmt.value, aliases, tainted),
+                    )
+                    if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                        if _mentions_tainted_name(stmt.value, tainted) or _enumeration_source(
+                            stmt.value, aliases, tainted
+                        ):
+                            tainted.add(stmt.targets[0].id)
+                elif isinstance(stmt, ast.Try):
+                    visit_stmts(stmt.body, handler_mode_for_try(stmt, handler_mode))
+                    for handler in stmt.handlers:
+                        visit_stmts(handler.body, handler_mode)
+                    visit_stmts(stmt.orelse, handler_mode)
+                    visit_stmts(stmt.finalbody, handler_mode)
+                elif isinstance(stmt, (ast.If, ast.While)):
+                    check_expr(
+                        stmt.test,
+                        handler_mode,
+                        _comprehension_local_taint(stmt.test, aliases, tainted),
+                    )
+                    visit_stmts(stmt.body, handler_mode)
+                    visit_stmts(stmt.orelse, handler_mode)
+                elif isinstance(stmt, ast.With):
+                    for item in stmt.items:
+                        check_expr(
+                            item.context_expr,
+                            handler_mode,
+                            _comprehension_local_taint(item.context_expr, aliases, tainted),
+                        )
+                    visit_stmts(stmt.body, handler_mode)
+                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    continue
+                else:
+                    for child in ast.iter_child_nodes(stmt):
+                        if isinstance(child, ast.expr):
+                            check_expr(
+                                child,
+                                handler_mode,
+                                _comprehension_local_taint(child, aliases, tainted),
+                            )
+
+        visit_stmts(func_node.body, "none")
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -1489,46 +1686,230 @@ def test_enumeration_stat_detection_rule(source: str, expected_lines: list[int])
     tree = ast.parse(source)
     aliases = _gather_import_aliases(tree)
     violations = _find_enumeration_stat_violations(tree, aliases)
-    assert sorted(lineno for lineno, _ in violations) == expected_lines
+    assert sorted(lineno for lineno, *_ in violations) == expected_lines
 
 
-def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
-    """No src file may stat/read a path obtained by enumerating a directory
-    (os.walk/os.scandir/os.listdir/.glob/.rglob/.iterdir/.scandir) without
-    routing it through core.fs_observation. Violations-by-default, explicit
-    allowlist below — each entry requires a rationale and a tracking issue.
-    """
-    allowed_files = set(_ENUMERATION_STAT_ALLOWLIST.keys())
-    rationale_by_file = {
-        path: entry.rationale for path, entry in _ENUMERATION_STAT_ALLOWLIST.items()
-    }
+def test_second_violation_in_allowlisted_file_is_reported() -> None:
+    path = SRC_ROOT / "example.py"
+    covered = (path, "covered_function", "enumeration-read-or-stat")
+    second = (path, "second_function", "enumeration-read-or-stat")
+    unexpected, stale = _partition_enumeration_violations(
+        {covered, second},
+        {
+            covered: TrackedDeferral(
+                issue=1234,
+                rationale="The covered synthetic violation remains intentionally deferred.",
+                added_date=date.today(),
+            )
+        },
+    )
+    assert unexpected == {second}
+    assert stale == set()
+
+
+def test_allowlisted_violation_is_not_reported_unexpected() -> None:
+    path = SRC_ROOT / "example.py"
+    covered = (path, "covered_function", "enumeration-read-or-stat")
+    unexpected, stale = _partition_enumeration_violations(
+        {covered},
+        {
+            covered: TrackedDeferral(
+                issue=1234,
+                rationale="The covered synthetic violation remains intentionally deferred.",
+                added_date=date.today(),
+            )
+        },
+    )
+    assert unexpected == set()
+    assert stale == set()
+
+
+@pytest.mark.parametrize(
+    ("source", "expected_lines"),
+    [
+        pytest.param(
+            "def f(d, logger):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except Exception:\n"
+            "            logger.warning('skip')\n",
+            [4],
+            id="broad_static_log_destroys_exception",
+        ),
+        pytest.param(
+            "import json\n"
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except (OSError, json.JSONDecodeError):\n"
+            "            pass\n",
+            [],
+            id="narrow_tuple_is_precise",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except Exception:\n"
+            "            raise\n",
+            [],
+            id="broad_handler_reraises",
+        ),
+        pytest.param(
+            "def f(d, logger):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except Exception as exc:\n"
+            "            logger.warning(str(exc))\n"
+            "            continue\n",
+            [],
+            id="bound_exception_is_preserved",
+        ),
+        pytest.param(
+            "def f(d, logger):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except Exception:\n"
+            "            logger.warning('skip', exc_info=True)\n"
+            "            continue\n",
+            [],
+            id="exc_info_preserves_exception",
+        ),
+        pytest.param(
+            "def f(d, failures):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except BaseException as exc:\n"
+            "            failures.append(exc)\n",
+            [],
+            id="base_exception_binding_is_preserved",
+        ),
+        pytest.param(
+            "def f(d, logger):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except Exception:\n"
+            "            logger.exception('skip')\n",
+            [],
+            id="logger_exception_preserves_traceback",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.read_text()\n"
+            "        except:\n"
+            "            continue\n",
+            [4],
+            id="bare_handler_destroys_exception",
+        ),
+    ],
+)
+def test_broad_swallow_detection_rule(source: str, expected_lines: list[int]) -> None:
+    tree = ast.parse(source)
+    aliases = _gather_import_aliases(tree)
+    violations = _find_broad_swallow_violations(tree, aliases)
+    assert sorted(lineno for lineno, *_ in violations) == expected_lines
+
+
+def test_no_enumeration_derived_broad_swallow_in_live_tree() -> None:
     violations: list[str] = []
-
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
-        if py_file in allowed_files:
+        if py_file.name in _BROAD_EXCEPT_EXEMPT:
             continue
         try:
-            source = py_file.read_text()
-            tree = ast.parse(source)
+            tree = ast.parse(py_file.read_text())
         except SyntaxError:
             continue
         aliases = _gather_import_aliases(tree)
-        for lineno, detail in _find_enumeration_stat_violations(tree, aliases):
+        for lineno, function, detail in _find_broad_swallow_violations(tree, aliases):
             violations.append(
-                f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{lineno}: {detail}"
+                f"{py_file.relative_to(SRC_ROOT.parent.parent)}:{lineno} in {function}: {detail}"
             )
+    assert not violations, (
+        "Enumeration-derived stat/read protected only by a broad handler that discards "
+        "the exception:\n" + "\n".join(violations)
+    )
+
+
+def _partition_enumeration_violations(
+    found: set[tuple[Path, str, str]],
+    allowlist: dict[tuple[Path, str, str], TrackedDeferral],
+) -> tuple[set[tuple[Path, str, str]], set[tuple[Path, str, str]]]:
+    allowlisted = set(allowlist)
+    return found - allowlisted, allowlisted - found
+
+
+def _enumeration_stat_live_findings() -> tuple[
+    set[tuple[Path, str, str]], dict[tuple[Path, str, str], list[str]]
+]:
+    found: set[tuple[Path, str, str]] = set()
+    details: dict[tuple[Path, str, str], list[str]] = {}
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        try:
+            tree = ast.parse(py_file.read_text())
+        except SyntaxError:
+            continue
+        aliases = _gather_import_aliases(tree)
+        for lineno, function, kind, detail in _find_enumeration_stat_violations(tree, aliases):
+            key = (py_file, function, kind)
+            found.add(key)
+            details.setdefault(key, []).append(
+                f"{py_file.relative_to(SRC_ROOT.parent.parent)}:{lineno} in {function}: {detail}"
+            )
+    return found, details
+
+
+def _enumeration_violation_remediation(detail: str) -> str:
+    if any(
+        marker in detail
+        for marker in ("unguarded read_text ", "unguarded read_bytes ", "unguarded open ")
+    ):
+        return (
+            "wrap the content read in a handler naming its anticipated exception classes; "
+            "core.fs_observation has no content-read wrapper"
+        )
+    return "route the stat-family read through observe_path_mode or safe_mtime"
+
+
+def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
+    """Enumeration-derived reads must use the available stat funnel or an
+    explicit local content-read handler. Deferrals are violation-specific.
+    """
+    found, details = _enumeration_stat_live_findings()
+    unexpected, _stale = _partition_enumeration_violations(found, _ENUMERATION_STAT_ALLOWLIST)
+    violations = [
+        f"  {detail}; remedy: {_enumeration_violation_remediation(detail)}"
+        for key in sorted(unexpected, key=str)
+        for detail in details[key]
+    ]
 
     assert not violations, (
-        "Enumeration-derived paths stat'd/read without routing through "
-        "core.fs_observation.observe_path_mode/safe_mtime. Route through the funnel — or "
-        "add an allowlist entry to _ENUMERATION_STAT_ALLOWLIST with rationale and a "
-        "tracking issue — for:\n"
+        "Enumeration-derived paths stat'd/read without an available, precise guard. "
+        "Apply the per-sink remedy or add a violation-specific allowlist entry with a "
+        "rationale and tracking issue for:\n"
         + "\n".join(violations)
-        + "\n\nAllowlisted files and why:\n"
+        + "\n\nAllowlisted violations and why:\n"
         + "\n".join(
-            f"  {path.relative_to(SRC_ROOT.parent.parent)}: {rationale}"
-            for path, rationale in rationale_by_file.items()
+            f"  {path.relative_to(SRC_ROOT.parent.parent)}:{function}:{kind}: {entry.rationale}"
+            for (path, function, kind), entry in _ENUMERATION_STAT_ALLOWLIST.items()
         )
+    )
+
+
+def test_enumeration_stat_allowlist_entries_still_apply() -> None:
+    found, _details = _enumeration_stat_live_findings()
+    assert_entries_still_apply(
+        _ENUMERATION_STAT_ALLOWLIST,
+        registry_name="_ENUMERATION_STAT_ALLOWLIST",
+        live_keys=found,
     )
 
 

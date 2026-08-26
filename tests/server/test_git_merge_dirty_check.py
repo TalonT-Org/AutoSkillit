@@ -15,6 +15,7 @@ from autoskillit.core import (
     TerminationReason,
     TestResult,
 )
+from autoskillit.server._editable_guard import EditableScanResult
 from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -76,7 +77,10 @@ async def test_dirty_main_repo_returns_error(tmp_path):
     runner.push(_make_result(0, " M src/foo.py\n M tests/bar.py\n"))  # step 7.6: dirty!
 
     with (
-        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch(
+            "autoskillit.server.git.scan_editable_installs_for_worktree",
+            return_value=EditableScanResult(),
+        ),
         patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
@@ -110,7 +114,10 @@ async def test_clean_main_repo_proceeds_to_merge(tmp_path):
     runner.push(_make_result(0, ""))  # branch -D
 
     with (
-        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch(
+            "autoskillit.server.git.scan_editable_installs_for_worktree",
+            return_value=EditableScanResult(),
+        ),
         patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
@@ -138,7 +145,10 @@ async def test_dirty_check_error_format(tmp_path):
     runner.push(_make_result(0, dirty_output))  # step 7.6: dirty
 
     with (
-        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch(
+            "autoskillit.server.git.scan_editable_installs_for_worktree",
+            return_value=EditableScanResult(),
+        ),
         patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
@@ -225,7 +235,10 @@ async def test_non_embedded_worktree_proceeds_past_spatial_check(tmp_path):
     runner.push(_make_result(0, ""))
 
     with (
-        patch("autoskillit.server.git.scan_editable_installs_for_worktree", return_value=[]),
+        patch(
+            "autoskillit.server.git.scan_editable_installs_for_worktree",
+            return_value=EditableScanResult(),
+        ),
         patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(

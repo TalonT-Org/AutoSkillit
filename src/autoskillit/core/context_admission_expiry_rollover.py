@@ -1,8 +1,10 @@
 """Category F — idempotency expiry and epoch rollover handlers.
 
-Wavefront 2 (#4742) extracted these from ``core/context_admission.py``:
-``_expire_idempotency`` records an idempotency-key tombstone; ``_rollover``
-seals the active epoch and starts a new one with a fresh snapshot.
+`_expire_idempotency` records an idempotency-key tombstone and seals the
+matching reservation's witness; `_rollover` closes the active epoch and
+starts a new one with a fresh snapshot. Both paths consume
+`_validate_witness_for_snapshot` so the snapshot-binding invariant is shared
+with the propose/reserve shard.
 """
 
 from __future__ import annotations

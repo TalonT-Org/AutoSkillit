@@ -200,8 +200,8 @@ _CONTEXT_ADMISSION_SHARDS: tuple[str, ...] = (
 )
 _CONTEXT_ADMISSION_SHARD_CASCADE: frozenset[str] = frozenset({"core", "pipeline", "server"})
 
-# Wavefront 2 reducer shards (Issue #4742) — decomposed the monolithic
-# ``core/context_admission.py`` into dispatch-category co-located siblings.
+# Context-admission reducer shards (Issue #4742): helpers + six
+# dispatch-category co-located siblings grouped by handler concern.
 _CONTEXT_ADMISSION_REDUCER_SHARDS: tuple[str, ...] = (
     "context_admission_helpers",
     "context_admission_propose_reserve",

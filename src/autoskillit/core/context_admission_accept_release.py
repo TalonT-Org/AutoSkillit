@@ -1,10 +1,11 @@
 """Category C — accept/release dispatch handlers.
 
-Wavefront 2 (#4742) extracted these from ``core/context_admission.py``:
-``_accept_closed_input`` handles acceptance of a closed-epoch batch;
-``_accept`` handles active-batch acceptance; ``_release_closed_batch`` and
-``_release_or_rollback`` release or rollback a batch in the active or
-closed-epoch state.
+`_accept_closed_input` handles acceptance of a closed-epoch batch;
+`_accept` handles active-batch acceptance; `_release_closed_batch` and
+`_release_or_rollback` release or rollback a batch in the active or
+closed-epoch state. These also serve as the reduce target for
+`_resolve_indeterminate_accepted` (Category D), so the closed-epoch
+acceptance path doubles as the canonical resolution entry point.
 """
 
 from __future__ import annotations

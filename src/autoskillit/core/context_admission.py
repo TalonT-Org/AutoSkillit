@@ -1,10 +1,10 @@
 """Pure reducer and coverage resolver for cumulative context admission.
 
-Wavefront 2 (#4742) decomposed the 3,007-LOC single file into dispatch-category
-shards co-located in this package. This module is now a thin gateway: it
-preserves the 8-name public surface, the match/case dispatcher, the registry
-contract, and the coverage resolver; the per-event handlers live in the
-``context_admission_*`` sibling modules.
+The reducer is split across dispatch-category shards co-located in this
+package; this module is the thin gateway that preserves the 8-name public
+surface, the match/case dispatcher, the reducer registry contract, and the
+coverage resolver, while the per-event handlers live in the sibling
+``context_admission_*`` modules.
 """
 
 from __future__ import annotations

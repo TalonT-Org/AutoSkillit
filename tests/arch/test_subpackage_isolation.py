@@ -1076,8 +1076,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # separate from core/runtime/_reclamation.py since core/runtime already imports
         # core.types and _capacity is consumed there too (avoids a circular import).
         # +context_admission_helpers + 6 dispatch-category shards (Issue #4742): the
-        # monolithic core/context_admission.py is decomposed into helpers + per-category
-        # co-located siblings. Cap moves from 41 to 48 to absorb the 7 new files.
+        # context-admission reducer is split into helpers plus per-category co-located
+        # siblings. Cap moves from 41 to 48 to absorb the 7 new files.
         "core": 48,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.

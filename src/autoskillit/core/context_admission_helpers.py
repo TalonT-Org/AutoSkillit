@@ -1,13 +1,8 @@
-"""Layer 0 + Layer 1 helpers for the context-admission reducer.
+"""Cross-category helpers for the context-admission reducer.
 
-Wavefront 2 (#4742) extracted these pure predicates/scans and state mutators
-from the monolithic ``core/context_admission.py`` so each dispatch-category
-shard can import them without dragging in unrelated handlers.
-
-Layer 0 (pure): functions with no I/O and no category-local reasoning.
-Layer 1 (state mutators): functions that return a new immutable state via
-``dataclasses.replace``-style transitions. All shards depend on this module
-rather than each other where the helper is cross-category.
+Holds every predicate, witness validation, and state mutator that more than
+one dispatch-category shard needs; importing directly from this module keeps
+sibling shards from reaching into each other for cross-category concerns.
 """
 
 from __future__ import annotations

@@ -1,10 +1,9 @@
 """Category A — propose/reserve dispatch handlers.
 
-Wavefront 2 (#4742) extracted these from ``core/context_admission.py``:
-``_open_epoch`` opens an epoch and seeds initial state; ``_propose`` registers
-a new occurrence; ``_reserve`` records a reservation request; ``_preflight``
-is the dispatcher-level idempotency / replay / staleness gate that fires
-before any dispatch handler.
+`_open_epoch` opens an epoch and seeds initial state; `_propose` registers a
+new occurrence; `_reserve` records a reservation request. `_preflight` is the
+dispatcher-level idempotency / replay / staleness gate that fires before any
+dispatch handler from `context_admission.reduce_context_admission`.
 """
 
 from __future__ import annotations

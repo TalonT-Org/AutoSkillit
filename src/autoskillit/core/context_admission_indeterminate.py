@@ -1,9 +1,11 @@
 """Category D — indeterminate and reconciliation request handlers.
 
-Wavefront 2 (#4742) extracted these from ``core/context_admission.py``:
-``_mark_indeterminate`` marks a batch as INDETERMINATE; ``_resolve_indeterminate_accepted``
-accepts a previously-indeterminate batch; ``_request_reconciliation`` queries
-for reconciliation against a batch or generation reservation.
+`_mark_indeterminate` marks a batch as INDETERMINATE;
+`_resolve_indeterminate_accepted` accepts a previously-indeterminate batch
+by delegating to Category C's `_accept_closed_input` (the deterministic
+closed-epoch acceptance path) — this is the one allowed cross-shard call
+in the dispatcher; `_request_reconciliation` queries for reconciliation
+against a batch or generation reservation.
 """
 
 from __future__ import annotations

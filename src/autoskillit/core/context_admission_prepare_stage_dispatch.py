@@ -1,9 +1,10 @@
 """Category B — prepare/stage/dispatch handlers.
 
-Wavefront 2 (#4742) extracted these from ``core/context_admission.py``:
-``_prepare`` transitions a reserved batch through manifest/representation checks;
-``_stage`` records a HISTORY_STAGED witness; ``_dispatch`` records a
-REQUEST_INCLUDED witness after a history-staged batch.
+`_prepare` transitions a reserved batch through manifest/representation checks;
+`_stage` records a HISTORY_STAGED witness; `_dispatch` records a
+REQUEST_INCLUDED witness after a history-staged batch. All three consume
+`_batch_record`, `_reservation_for`, and `_validate_witness` from
+`context_admission_helpers` rather than reaching into a sibling shard.
 """
 
 from __future__ import annotations

@@ -1,10 +1,9 @@
 """Category E — generation reservation lifecycle handlers.
 
-Wavefront 2 (#4742) extracted these from ``core/context_admission.py``:
-``_start_generation`` transitions a generation reservation to STREAMING;
-``_reconcile_closed_generation`` reconciles a generation in a closed epoch;
-``_reconcile_generation`` reconciles an active generation reservation;
-``_mark_generation_indeterminate`` marks a generation as INDETERMINATE.
+`_start_generation` transitions a generation reservation to STREAMING;
+`_reconcile_closed_generation` reconciles a generation in a closed epoch;
+`_reconcile_generation` reconciles an active generation reservation;
+`_mark_generation_indeterminate` marks a generation as INDETERMINATE.
 """
 
 from __future__ import annotations

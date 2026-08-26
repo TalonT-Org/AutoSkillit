@@ -57,7 +57,7 @@ from ._codec import (  # noqa: F401  (used by `recover_all`, `_recovery_result`)
     _decode_stream_key,
     _stream_key_bytes,
 )
-from ._projection import (  # noqa: F401  (used by `recover_all`)
+from ._projection import (  # noqa: F401  (rebound by `_recover`)
     _recover_stream_projection,
     _stored_stream_health,
 )
@@ -67,7 +67,7 @@ from ._sqlite_errors import (  # noqa: E402, F401
     _rollback,
     _sqlite_primary_code,
 )
-from ._state_queries import _state_has_unresolved_work  # noqa: F401  (used by `recover_all`)
+from ._state_queries import _state_has_unresolved_work  # noqa: F401  (rebound by `_recover`)
 from ._status import _ignore_fault, _LedgerFaultPoint, _set_store_failure
 
 # Re-exports for cross-package consumers that import from the public surface.
@@ -198,7 +198,7 @@ class DefaultContextAdmissionLedger:
         self,
         stream_key: ContextAdmissionStreamKey,
     ) -> ContextAdmissionRecoveryResult:
-        result = self.recover_all()
+        result = self.recover_all()  # type: ignore[attr-defined]
         if result.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
             return result
         with self._fence:
@@ -221,184 +221,6 @@ class DefaultContextAdmissionLedger:
                     (stream_key,) if stream_key in self._unresolved_streams else ()
                 ),
             )
-
-    def recover_all(self) -> ContextAdmissionRecoveryResult:
-        with self._fence:
-            if self._recovered:
-                return self._recovery_result()
-            connection: sqlite3.Connection | None = None
-            pending_stream_failures: list[
-                tuple[
-                    bytes,
-                    ContextAdmissionStreamKey,
-                    ContextAdmissionStorageFailureReason,
-                    str,
-                ]
-            ] = []
-            try:
-                self._ensure_store()  # type: ignore[attr-defined]
-                connection = self._connect()  # type: ignore[attr-defined]
-                connection.execute("BEGIN")
-                connection.setlimit(
-                    sqlite3.SQLITE_LIMIT_LENGTH,
-                    max(1, _MAX_RECOVERY_BYTES_INT),
-                )
-                read_budget = _LedgerReadBudget(
-                    "recovery-read-limit-exceeded",
-                    max_rows=_MAX_RECOVERY_ROWS_INT,
-                    max_bytes=_MAX_RECOVERY_BYTES_INT,
-                )
-                self._validate_integrity(connection)  # type: ignore[attr-defined]
-                metadata = dict(
-                    _read_bounded_rows(
-                        connection.execute("SELECT key, value FROM metadata"),
-                        read_budget,
-                    )
-                )
-                self._validate_metadata(metadata)  # type: ignore[attr-defined]
-                _preflight_storage_routes(connection, read_budget)
-                self._stream_health.clear()
-                self._unresolved_streams.clear()
-                stream_rows = _read_bounded_rows(
-                    connection.execute(
-                        """
-                        SELECT stream_id, stream_key, genesis_envelope, state_envelope,
-                               aggregate_revision, admission_sequence,
-                               latest_journal_sequence, health_status,
-                               failure_reason, reason_code
-                        FROM streams
-                        ORDER BY stream_id
-                        """
-                    ),
-                    read_budget,
-                )
-
-                for row in stream_rows:
-                    stream_id = bytes(row[0])
-                    stream_key = _decode_stream_key(bytes(row[1]))
-                    if stream_id != bytes(row[1]) or stream_id != _stream_key_bytes(stream_key):
-                        raise _LedgerOpenError(
-                            ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
-                            "stream-key-mismatch",
-                        )
-                    health = _stored_stream_health(stream_key, row[7], row[8], row[9])
-                    if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
-                        self._stream_health[stream_key] = health
-                        continue
-                    if health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
-                        pending_stream_failures.append(
-                            (
-                                stream_id,
-                                stream_key,
-                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                                "invalid-stream-health",
-                            )
-                        )
-                        continue
-                    try:
-                        recovered_state = _recover_stream_projection(
-                            connection,
-                            stream_id,
-                            stream_key,
-                            genesis_envelope=bytes(row[2]),
-                            materialized_state_envelope=bytes(row[3]),
-                            aggregate_revision=int(row[4]),
-                            admission_sequence=int(row[5]),
-                            latest_journal_sequence=int(row[6]),
-                            read_budget=read_budget,
-                        )[0]
-                    except ContextAdmissionValidationError:
-                        pending_stream_failures.append(
-                            (
-                                stream_id,
-                                stream_key,
-                                ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
-                                "stream-replay-decode-failed",
-                            )
-                        )
-                        continue
-                    except _LedgerOpenError as exc:
-                        pending_stream_failures.append(
-                            (
-                                stream_id,
-                                stream_key,
-                                exc.reason,
-                                exc.reason_code,
-                            )
-                        )
-                        continue
-                    self._stream_health[stream_key] = ContextAdmissionStreamHealth(
-                        stream_key,
-                        ContextAdmissionStorageHealthStatus.HEALTHY,
-                    )
-                    if _state_has_unresolved_work(recovered_state):
-                        self._unresolved_streams.add(stream_key)
-                connection.execute("COMMIT")
-                for stream_id, stream_key, reason, reason_code in pending_stream_failures:
-                    persisted = self._persist_stream_failure(  # type: ignore[attr-defined]
-                        connection,
-                        stream_id,
-                        stream_key,
-                        reason,
-                        reason_code,
-                    )
-                    if not persisted:
-                        if (
-                            self._store_health.status
-                            is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-                        ):
-                            raise _LedgerContended
-                        break
-                if (
-                    self._store_health.status
-                    is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
-                ):
-                    self._store_health = ContextAdmissionStoreHealth(
-                        ContextAdmissionStorageHealthStatus.HEALTHY
-                    )
-                self._recovered = True
-            except _LedgerContended:
-                self._stream_health.clear()
-                self._unresolved_streams.clear()
-                return ContextAdmissionRecoveryResult(
-                    status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
-                    store_health=self._store_health,
-                    stream_healths=(),
-                    recovered_streams=(),
-                    unresolved_streams=(),
-                )
-            except _LedgerOpenError as exc:
-                self._set_store_failure(exc.reason, exc.reason_code)  # type: ignore[attr-defined]
-            except sqlite3.Error as exc:
-                primary_code = _sqlite_primary_code(exc)
-                if primary_code in _SQLITE_BUSY_CODES:
-                    if connection is not None:
-                        _rollback(connection)
-                    self._stream_health.clear()
-                    self._unresolved_streams.clear()
-                    return ContextAdmissionRecoveryResult(
-                        status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
-                        store_health=self._store_health,
-                        stream_healths=(),
-                        recovered_streams=(),
-                        unresolved_streams=(),
-                    )
-                if primary_code == sqlite3.SQLITE_TOOBIG:
-                    self._set_store_failure(  # type: ignore[attr-defined]
-                        ContextAdmissionStorageFailureReason.INTEGRITY,
-                        "recovery-read-limit-exceeded",
-                    )
-                    return self._recovery_result()
-                reason = (
-                    ContextAdmissionStorageFailureReason.INTEGRITY
-                    if primary_code == sqlite3.SQLITE_CORRUPT
-                    else ContextAdmissionStorageFailureReason.IO
-                )
-                self._set_store_failure(reason, "sqlite-recovery-failed")  # type: ignore[attr-defined]
-            finally:
-                if connection is not None:
-                    connection.close()
-            return self._recovery_result()
 
     def replay(
         self,
@@ -504,6 +326,9 @@ setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_method)
 from ._recover import (  # noqa: E402
     _recover_sqlite_result as _recover_sqlite_result_method,
 )
+from ._recover import recover_all as recover_all_method  # noqa: E402
+
+setattr(DefaultContextAdmissionLedger, "recover_all", recover_all_method)
 
 setattr(
     DefaultContextAdmissionLedger,
@@ -512,13 +337,7 @@ setattr(
 )
 
 
-# ── Local re-bind of cross-shard constants used by `recover_all` body ─────
-# Suffix `_INT` flags immutable int constants whose local rebind survives the
-# _projection module patch (monkeypatch.setattr replaces the binding in
-# _projection, not the value already imported here).
-from ._projection import (  # noqa: E402
-    _MAX_RECOVERY_BYTES as _MAX_RECOVERY_BYTES_INT,
-)
-from ._projection import (  # noqa: E402
-    _MAX_RECOVERY_ROWS as _MAX_RECOVERY_ROWS_INT,
-)
+# ── Recovery rebinds ───────────────────────────────────────────────────────
+# `recover_all` lives in `_recover` and references the `_MAX_RECOVERY_BYTES`
+# / `_MAX_RECOVERY_ROWS` rebinds at module top; the `_INT` suffix is no longer
+# needed here since the consumer is in a different shard.

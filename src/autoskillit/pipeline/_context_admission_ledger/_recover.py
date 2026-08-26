@@ -1,11 +1,16 @@
-"""Apply-time recovery orchestration.
+"""Recovery orchestration: full-store recovery and apply-time mid-flight recovery.
 
-Owns ``_recover_sqlite_result``, the post-error mid-flight recovery handler
-that rolls back a failed apply transaction, resets recovered state, calls
-``self.recover_all()`` and ``self.inspect_stream()``, and re-enters
-``self.apply()`` if the recovered projection already contains the event being
-replayed. Extracted from ``_apply`` to localize the cross-shard orchestration
-in a single shard.
+Owns ``recover_all`` (the full-store re-projection walk) and
+``_recover_sqlite_result`` (the apply-time mid-flight rollback + re-recovery
+handler). Extracted from ``_apply`` and the package facade to localize the
+cross-shard orchestration in a single shard.
+
+The ``recover_all`` body uses rebind-via-setattr methods (``_ensure_store``,
+``_connect``, ``_validate_integrity``, ``_validate_metadata``,
+``_persist_stream_failure``, ``_set_store_failure``); the rebind happens in
+``__init__.py``. Until the Wavefront 1 stub-then-rebind pattern is replaced
+(see ticket), these call sites need ``# type: ignore[attr-defined]``
+suppressions.
 
 Wavefront 1 of #4667.
 """
@@ -18,13 +23,211 @@ from autoskillit.core import (
     ContextAdmissionAccountingResult,
     ContextAdmissionAccountingStatus,
     ContextAdmissionEvent,
+    ContextAdmissionRecoveryResult,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
     ContextAdmissionStoreHealth,
+    ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
+    ContextAdmissionValidationError,
 )
 
-from ._sqlite_errors import _rollback
+from ._codec import _decode_stream_key, _stream_key_bytes
+from ._projection import (
+    _MAX_RECOVERY_BYTES,
+    _MAX_RECOVERY_ROWS,
+    _recover_stream_projection,
+    _stored_stream_health,
+)
+from ._sqlite_errors import (
+    _SQLITE_BUSY_CODES,
+    _LedgerContended,
+    _rollback,
+    _sqlite_primary_code,
+)
+from ._state_queries import _state_has_unresolved_work
+from ._storage import (
+    _LedgerOpenError,
+    _LedgerReadBudget,
+    _preflight_storage_routes,
+    _read_bounded_rows,
+)
+
+
+def recover_all(self) -> ContextAdmissionRecoveryResult:
+    with self._fence:
+        if self._recovered:
+            return self._recovery_result()
+        connection: sqlite3.Connection | None = None
+        pending_stream_failures: list[
+            tuple[
+                bytes,
+                ContextAdmissionStreamKey,
+                ContextAdmissionStorageFailureReason,
+                str,
+            ]
+        ] = []
+        try:
+            self._ensure_store()  # type: ignore[attr-defined]
+            connection = self._connect()  # type: ignore[attr-defined]
+            connection.execute("BEGIN")
+            connection.setlimit(
+                sqlite3.SQLITE_LIMIT_LENGTH,
+                max(1, _MAX_RECOVERY_BYTES),
+            )
+            read_budget = _LedgerReadBudget(
+                "recovery-read-limit-exceeded",
+                max_rows=_MAX_RECOVERY_ROWS,
+                max_bytes=_MAX_RECOVERY_BYTES,
+            )
+            self._validate_integrity(connection)  # type: ignore[attr-defined]
+            metadata = dict(
+                _read_bounded_rows(
+                    connection.execute("SELECT key, value FROM metadata"),
+                    read_budget,
+                )
+            )
+            self._validate_metadata(metadata)  # type: ignore[attr-defined]
+            _preflight_storage_routes(connection, read_budget)
+            self._stream_health.clear()
+            self._unresolved_streams.clear()
+            stream_rows = _read_bounded_rows(
+                connection.execute(
+                    """
+                    SELECT stream_id, stream_key, genesis_envelope, state_envelope,
+                           aggregate_revision, admission_sequence,
+                           latest_journal_sequence, health_status,
+                           failure_reason, reason_code
+                    FROM streams
+                    ORDER BY stream_id
+                    """
+                ),
+                read_budget,
+            )
+
+            for row in stream_rows:
+                stream_id = bytes(row[0])
+                stream_key = _decode_stream_key(bytes(row[1]))
+                if stream_id != bytes(row[1]) or stream_id != _stream_key_bytes(stream_key):
+                    raise _LedgerOpenError(
+                        ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,
+                        "stream-key-mismatch",
+                    )
+                health = _stored_stream_health(stream_key, row[7], row[8], row[9])
+                if health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+                    self._stream_health[stream_key] = health
+                    continue
+                if health.status is not ContextAdmissionStorageHealthStatus.HEALTHY:
+                    pending_stream_failures.append(
+                        (
+                            stream_id,
+                            stream_key,
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "invalid-stream-health",
+                        )
+                    )
+                    continue
+                try:
+                    recovered_state = _recover_stream_projection(
+                        connection,
+                        stream_id,
+                        stream_key,
+                        genesis_envelope=bytes(row[2]),
+                        materialized_state_envelope=bytes(row[3]),
+                        aggregate_revision=int(row[4]),
+                        admission_sequence=int(row[5]),
+                        latest_journal_sequence=int(row[6]),
+                        read_budget=read_budget,
+                    )[0]
+                except ContextAdmissionValidationError:
+                    pending_stream_failures.append(
+                        (
+                            stream_id,
+                            stream_key,
+                            ContextAdmissionStorageFailureReason.REPLAY_MISMATCH,
+                            "stream-replay-decode-failed",
+                        )
+                    )
+                    continue
+                except _LedgerOpenError as exc:
+                    pending_stream_failures.append(
+                        (
+                            stream_id,
+                            stream_key,
+                            exc.reason,
+                            exc.reason_code,
+                        )
+                    )
+                    continue
+                self._stream_health[stream_key] = ContextAdmissionStreamHealth(
+                    stream_key,
+                    ContextAdmissionStorageHealthStatus.HEALTHY,
+                )
+                if _state_has_unresolved_work(recovered_state):
+                    self._unresolved_streams.add(stream_key)
+            connection.execute("COMMIT")
+            for stream_id, stream_key, reason, reason_code in pending_stream_failures:
+                persisted = self._persist_stream_failure(  # type: ignore[attr-defined]
+                    connection,
+                    stream_id,
+                    stream_key,
+                    reason,
+                    reason_code,
+                )
+                if not persisted:
+                    if (
+                        self._store_health.status
+                        is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED
+                    ):
+                        raise _LedgerContended
+                    break
+            if self._store_health.status is not ContextAdmissionStorageHealthStatus.FAIL_CLOSED:
+                self._store_health = ContextAdmissionStoreHealth(
+                    ContextAdmissionStorageHealthStatus.HEALTHY
+                )
+            self._recovered = True
+        except _LedgerContended:
+            self._stream_health.clear()
+            self._unresolved_streams.clear()
+            return ContextAdmissionRecoveryResult(
+                status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
+                store_health=self._store_health,
+                stream_healths=(),
+                recovered_streams=(),
+                unresolved_streams=(),
+            )
+        except _LedgerOpenError as exc:
+            self._set_store_failure(exc.reason, exc.reason_code)  # type: ignore[attr-defined]
+        except sqlite3.Error as exc:
+            primary_code = _sqlite_primary_code(exc)
+            if primary_code in _SQLITE_BUSY_CODES:
+                if connection is not None:
+                    _rollback(connection)
+                self._stream_health.clear()
+                self._unresolved_streams.clear()
+                return ContextAdmissionRecoveryResult(
+                    status=ContextAdmissionStorageHealthStatus.UNINITIALIZED,
+                    store_health=self._store_health,
+                    stream_healths=(),
+                    recovered_streams=(),
+                    unresolved_streams=(),
+                )
+            if primary_code == sqlite3.SQLITE_TOOBIG:
+                self._set_store_failure(  # type: ignore[attr-defined]
+                    ContextAdmissionStorageFailureReason.INTEGRITY,
+                    "recovery-read-limit-exceeded",
+                )
+                return self._recovery_result()
+            reason = (
+                ContextAdmissionStorageFailureReason.INTEGRITY
+                if primary_code == sqlite3.SQLITE_CORRUPT
+                else ContextAdmissionStorageFailureReason.IO
+            )
+            self._set_store_failure(reason, "sqlite-recovery-failed")  # type: ignore[attr-defined]
+        finally:
+            if connection is not None:
+                connection.close()
+        return self._recovery_result()
 
 
 def _recover_sqlite_result(
@@ -81,4 +284,4 @@ def _recover_sqlite_result(
     return self._storage_failure_result(stream_key)
 
 
-__all__ = ["_recover_sqlite_result"]
+__all__ = ["recover_all", "_recover_sqlite_result"]

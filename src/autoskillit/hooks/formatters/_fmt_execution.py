@@ -299,7 +299,6 @@ def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
     """Format merge_worktree result as Markdown-KV."""
     succeeded = data.get("merge_succeeded")
     has_error = "error" in data
-
     if succeeded:
         mark = _CHECK_MARK
         status = "OK"

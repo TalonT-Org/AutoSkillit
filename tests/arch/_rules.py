@@ -107,13 +107,10 @@ _PRINT_EXEMPT = frozenset(
     }
 )
 
-# Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON
-# _session_onboarding.py: CLI helper with user-facing graceful degradation (fail-open UX,
-# not a hook)
+# Standalone hook scripts: fail-open design requires silent broad excepts and print() for JSON.
 _BROAD_EXCEPT_EXEMPT = frozenset(
     {
         "_hook_settings.py",
-        "_session_onboarding.py",
         "open_kitchen_guard.py",
         "pretty_output_hook.py",
         "quota_guard.py",

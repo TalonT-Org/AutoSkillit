@@ -6,8 +6,12 @@ import json
 import shlex
 from pathlib import Path
 
+from autoskillit.core import get_logger
+
 from ._hooks_defs import HookDriftResult
 from ._registry_data import HOOK_REGISTRY, PLUGIN_ROOT_TOKEN, RETIRED_SCRIPT_BASENAMES
+
+_LOGGER = get_logger(__name__)
 
 
 def _load_settings_data(settings_path: Path) -> dict:
@@ -16,14 +20,10 @@ def _load_settings_data(settings_path: Path) -> dict:
         try:
             return json.loads(settings_path.read_text())
         except (OSError, json.JSONDecodeError) as exc:
-            # A corrupt or unreadable settings.json is indistinguishable from
-            # a missing/empty one at the drift-counting layer; surface the
-            # reason in a comment rather than silently passing.
-            import sys as _sys
-
-            print(
-                f"_load_settings_data: {settings_path} unreadable ({exc!r}); treating as empty",
-                file=_sys.stderr,
+            _LOGGER.warning(
+                "_load_settings_data: %s unreadable (%r); treating as empty",
+                settings_path,
+                exc,
             )
             return {}
     return {}

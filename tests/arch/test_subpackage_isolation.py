@@ -148,6 +148,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_api_cache",  # recipe/_api_cache.py: _LOAD_CACHE = LoadCache()
         "_contracts_manifest",  # recipe/_contracts_manifest.py: _MANIFEST_CACHE = YamlFileCache()
         "skill_capabilities",  # workspace/skill_capabilities.py: bounded evidence cache
+        "skill_capability_cache",  # bounded weighted-LRU cache singleton bound once at import time
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
@@ -1112,7 +1113,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         # +_doctor_repair isolated opt-in mutation spoke (#4710)
-        "workspace": 17,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 26,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
@@ -1123,6 +1124,14 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
         # store for verbatim plugin assets, kept separate from _projection_cache.py since
         # it must be resolvable and safe to import even when no store root is available.
+        # +9 shard modules from the skill-resolution/capability-parsing decomposition
+        # (issue #4833): skill_capability_authenticity, skill_capability_cache,
+        # skill_capability_scanner, skill_semantic_plan, skills_exploration,
+        # skills_frontmatter, skills_overrides, skills_records, skills_visibility.
+        # Each shard owns a single concern seam; the original skills.py (1550 LoC) and
+        # skill_capabilities.py (1118 LoC) become slim facades that re-export every
+        # public symbol plus the test-private helpers reached via the facade module
+        # globals (preserves monkeypatch visibility for 73 unmodified test files).
         "hooks": 25,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
@@ -1458,30 +1467,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "both SkillResult construction seams; _build_skill_result remains here as the "
         "headless orchestration authority. The 827-line residual is dominated by that "
         "single 741-line function, which owns the success-gate adjacency rule.",
-    ),
-    "workspace/skill_capabilities.py": (
-        1120,
-        "REQ-SEM-SCHEMA-001: versioned semantic declarations, closed-operation parsing, "
-        "retired-key rejection, and precise per-skill diagnostics remain co-located at "
-        "the sole skill-frontmatter validation boundary; #4507 parses runtime child "
-        "cardinality at that same boundary and classifies its dedicated typed invalidity "
-        "before the general semantic-plan failure path.",
-    ),
-    "workspace/skills.py": (
-        1550,
-        "REQ-SEM-SCHEMA-002: semantic-plan threading and invalid-override fallback remain "
-        "inside the existing precedence resolver so a rejected project-local declaration "
-        "cannot poison unrelated skills or bypass the valid bundled fallback; typed "
-        "invalidity and exclusion records remain adjacent to the resolver transitions "
-        "whose rejected candidates they describe; "
-        "REQ-CNST-010-E20: exploration-vector frontmatter parsing, canonical marker "
-        "binding, and exact migrated-body replacement stay beside the SKILL.md parser so "
-        "discovery and projection share one fail-closed content authority. Bumped to 1350 "
-        "by the exploration-vector sidecar migration: exploration.yaml loading and the "
-        "slim-schema sidecar parser stay beside the marker binder and frontmatter parser "
-        "they feed so the sidecar digest, migrated/retained vector shapes, and marker "
-        "contract remain one fail-closed parsing authority. Bumped to 1550 by typed "
-        "skill-invalidity threading and the completed explorer sidecar migration.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1500,

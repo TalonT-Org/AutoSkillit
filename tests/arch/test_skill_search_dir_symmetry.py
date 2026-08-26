@@ -23,9 +23,9 @@ def test_all_project_local_search_dirs_equals_backend_conventions_union():
 
 
 def test_override_search_dirs_is_canonical_constant():
-    """workspace/skills._OVERRIDE_SEARCH_DIRS must be the canonical constant (identity)."""
+    """Override search-dir constant must equal its canonical source by identity."""
     from autoskillit.core.types._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
-    from autoskillit.workspace.skills import _OVERRIDE_SEARCH_DIRS
+    from autoskillit.workspace.skills_overrides import _OVERRIDE_SEARCH_DIRS
 
     assert _OVERRIDE_SEARCH_DIRS is ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS, (
         "_OVERRIDE_SEARCH_DIRS must be ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS (identity, not copy)"

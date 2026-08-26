@@ -43,7 +43,7 @@ _NUMERIC_ANNOTATIONS = frozenset({"int", "float"})
 # dataclass name -> (importable module path, candidate test file(s) relative to tests/)
 _BOUNDED_LIMITS_REGISTRY: dict[str, tuple[str, tuple[str, ...]]] = {
     "SnapshotCaptureLimits": (
-        "autoskillit.exploration.snapshot",
+        "autoskillit.exploration.snapshot._records",
         ("exploration/test_snapshot.py",),
     ),
     "CollectorLimits": (

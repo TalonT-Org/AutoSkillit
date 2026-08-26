@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.medium]
 
 
 def _run_hook(
@@ -29,21 +29,35 @@ def _run_hook(
     tmp_dir: Path,
     provider_profile: str | None = "minimax",
     agent_backend: str | None = "claude-code",
+    state_root: Path | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main(), return (stdout, exit_code)."""
     from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
 
-    stdin_content = stdin_data if isinstance(stdin_data, str) else json.dumps(stdin_data)
+    root = state_root if state_root is not None else tmp_dir
+    (root / ".autoskillit").mkdir(parents=True, exist_ok=True)
+    if isinstance(stdin_data, str):
+        stdin_content = stdin_data
+    else:
+        payload = dict(stdin_data)
+        payload.setdefault("cwd", str(tmp_dir.resolve()))
+        stdin_content = json.dumps(payload)
 
     env_base = {
         k: v
         for k, v in os.environ.items()
-        if k not in ("AUTOSKILLIT_PROVIDER_PROFILE", "AUTOSKILLIT_AGENT_BACKEND")
+        if k
+        not in (
+            "AUTOSKILLIT_PROVIDER_PROFILE",
+            "AUTOSKILLIT_AGENT_BACKEND",
+            "AUTOSKILLIT_STATE_ROOT",
+        )
     }
     if provider_profile is not None:
         env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
     if agent_backend is not None:
         env_base["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
+    env_base["AUTOSKILLIT_STATE_ROOT"] = str(root.resolve())
 
     buf = io.StringIO()
     exit_code = 0
@@ -51,9 +65,6 @@ def _run_hook(
         patch.dict(os.environ, env_base, clear=True),
         contextlib.redirect_stdout(buf),
         unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)),
-        unittest.mock.patch(
-            "autoskillit.hooks.skill_load_post_hook.Path.cwd", return_value=tmp_dir
-        ),
     ):
         try:
             main()
@@ -124,5 +135,5 @@ def test_existing_flag_is_json_envelope(tmp_path: Path) -> None:
     raw = flag_path.read_text(encoding="utf-8")
     parsed = json.loads(raw)  # Raises if the hook wrote a non-JSON literal
     assert parsed["session_id"] == "abc123"
-    assert parsed["schema_version"] == 1
+    assert parsed["schema_version"] == 2
     assert "loaded_skills" in parsed

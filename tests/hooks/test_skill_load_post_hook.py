@@ -6,41 +6,59 @@ import contextlib
 import io
 import json
 import os
+import shutil
+import subprocess
+import sys
 import unittest.mock
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
+pytestmark = [pytest.mark.medium]
 
 _FLAG_RELPATH = ".autoskillit/temp/skill_guard_abc123.flag"
+_HOOKS_SOURCE = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
+
+
+def _copy_projected_hook(tmp_path: Path) -> tuple[Path, Path]:
+    """Copy the stdlib-only hook runtime under a projected plugin root."""
+    projection_root = tmp_path / "join-plugin"
+    hooks_dir = projection_root / "hooks"
+    hooks_dir.mkdir(parents=True)
+    for filename in (
+        "skill_load_post_hook.py",
+        "_hook_payload.py",
+        "_hook_settings.py",
+        "_session_binding.py",
+    ):
+        shutil.copy2(_HOOKS_SOURCE / filename, hooks_dir / filename)
+    return projection_root, hooks_dir / "skill_load_post_hook.py"
 
 
 def _write_join_bearing_projection_manifest(
-    project_root: Path,
+    projection_root: Path,
     *,
     skill_name: str,
     join_required: bool = True,
     artifact_digest: str = "artdigest-1",
-    artifact_incarnation: str = "2026-08-15T12:00:00Z/inc-7",
     semantic_digest: str = "sem-1",
     adaptation_digest: str = "adapt-1",
     projected_digest: str = "proj-1",
     canonical_digest: str = "canon-1",
     child_spawn_cardinality: dict[str, object] | None = None,
 ) -> Path:
-    """Pre-populate a projection manifest sidecar so the hook picks it up.
-
-    The hook walks ``.claude/plugins/installed/`` looking for sibling
-    ``.{plugin_dir}.autoskillit-projection.json`` files. Drop a manifest
-    in the most direct location.
-    """
-    plugins_root = project_root / ".claude" / "plugins" / "installed" / "join-plugin"
-    plugins_root.mkdir(parents=True, exist_ok=True)
-    manifest_path = plugins_root.parent / f".{plugins_root.name}.autoskillit-projection.json"
+    """Write the schema-2 sidecar beside a projected plugin root."""
+    manifest_path = projection_root.parent / (
+        f".{projection_root.name}.autoskillit-projection.json"
+    )
     payload: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "artifact_kind": "projection",
+        "projection_version": 1,
+        "semantic_key": "autoskillit@join-plugin:1",
+        "incarnation_id": "00000000000040008000000000000001",
+        "artifact_digest": artifact_digest,
         "skills": {
             skill_name: {
                 "join_required": join_required,
@@ -48,8 +66,8 @@ def _write_join_bearing_projection_manifest(
                 "adaptation_digest": adaptation_digest,
                 "projected_digest": projected_digest,
                 "canonical_digest": canonical_digest,
-                "artifact_digest": artifact_digest,
-                "artifact_incarnation": artifact_incarnation,
+                "artifact_digest": "",
+                "artifact_incarnation": "",
                 "child_spawn_cardinality": (
                     child_spawn_cardinality
                     if child_spawn_cardinality is not None
@@ -68,21 +86,48 @@ def _run_hook(
     tmp_dir: Path,
     provider_profile: str | None = None,
     agent_backend: str | None = "claude-code",
+    state_root: Path | None = None,
+    hook_path: Path | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main(), return (stdout, exit_code)."""
-    from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
-
-    stdin_content = stdin_data if isinstance(stdin_data, str) else json.dumps(stdin_data)
+    root = state_root if state_root is not None else tmp_dir
+    (root / ".autoskillit").mkdir(parents=True, exist_ok=True)
+    if isinstance(stdin_data, str):
+        stdin_content = stdin_data
+    else:
+        payload = dict(stdin_data)
+        payload.setdefault("cwd", str(tmp_dir.resolve()))
+        stdin_content = json.dumps(payload)
 
     env_base = {
         k: v
         for k, v in os.environ.items()
-        if k not in ("AUTOSKILLIT_PROVIDER_PROFILE", "AUTOSKILLIT_AGENT_BACKEND")
+        if k
+        not in (
+            "AUTOSKILLIT_PROVIDER_PROFILE",
+            "AUTOSKILLIT_AGENT_BACKEND",
+            "AUTOSKILLIT_STATE_ROOT",
+        )
     }
     if provider_profile is not None:
         env_base["AUTOSKILLIT_PROVIDER_PROFILE"] = provider_profile
     if agent_backend is not None:
         env_base["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
+    env_base["AUTOSKILLIT_STATE_ROOT"] = str(root.resolve())
+
+    if hook_path is not None:
+        completed = subprocess.run(
+            [sys.executable, str(hook_path)],
+            cwd=tmp_dir,
+            env=env_base,
+            input=stdin_content,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        return completed.stdout, completed.returncode
+
+    from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
 
     buf = io.StringIO()
     exit_code = 0
@@ -90,9 +135,6 @@ def _run_hook(
         patch.dict(os.environ, env_base, clear=True),
         contextlib.redirect_stdout(buf),
         unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)),
-        unittest.mock.patch(
-            "autoskillit.hooks.skill_load_post_hook.Path.cwd", return_value=tmp_dir
-        ),
     ):
         try:
             main()
@@ -130,15 +172,15 @@ def test_writes_flag_when_provider_profile_set(tmp_path: Path) -> None:
     assert "implement-worktree-no-merge" in flag.read_text()
 
 
-def test_skips_when_provider_profile_empty(tmp_path: Path) -> None:
-    """T1-2: No flag file when provider profile is not set."""
+def test_writes_flag_regardless_of_provider_profile(tmp_path: Path) -> None:
+    """T1-2: The session binding is written without a provider profile."""
     _run_hook(
         stdin_data=_make_skill_event(),
         tmp_dir=tmp_path,
         provider_profile=None,
     )
     flag = tmp_path / _FLAG_RELPATH
-    assert not flag.exists(), "Flag file must NOT be created when provider profile is empty"
+    assert flag.exists(), "Flag file must be created when provider profile is empty"
 
 
 def test_skips_for_non_skill_tool(tmp_path: Path) -> None:
@@ -191,11 +233,19 @@ def _run_hook_with_marker(
     provider_profile: str | None = None,
     agent_backend: str | None = "claude-code",
     completion_marker: str | None = None,
+    state_root: Path | None = None,
 ) -> tuple[str, int]:
     """Run skill_load_post_hook.main() with AUTOSKILLIT_COMPLETION_MARKER support."""
     from autoskillit.hooks.skill_load_post_hook import main  # noqa: PLC0415
 
-    stdin_content = stdin_data if isinstance(stdin_data, str) else json.dumps(stdin_data)
+    root = state_root if state_root is not None else tmp_dir
+    (root / ".autoskillit").mkdir(parents=True, exist_ok=True)
+    if isinstance(stdin_data, str):
+        stdin_content = stdin_data
+    else:
+        payload = dict(stdin_data)
+        payload.setdefault("cwd", str(tmp_dir.resolve()))
+        stdin_content = json.dumps(payload)
 
     env_base = {
         k: v
@@ -205,6 +255,7 @@ def _run_hook_with_marker(
             "AUTOSKILLIT_PROVIDER_PROFILE",
             "AUTOSKILLIT_AGENT_BACKEND",
             "AUTOSKILLIT_COMPLETION_MARKER",
+            "AUTOSKILLIT_STATE_ROOT",
         )
     }
     if provider_profile is not None:
@@ -213,6 +264,7 @@ def _run_hook_with_marker(
         env_base["AUTOSKILLIT_AGENT_BACKEND"] = agent_backend
     if completion_marker is not None:
         env_base["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
+    env_base["AUTOSKILLIT_STATE_ROOT"] = str(root.resolve())
 
     buf = io.StringIO()
     exit_code = 0
@@ -220,9 +272,6 @@ def _run_hook_with_marker(
         patch.dict(os.environ, env_base, clear=True),
         contextlib.redirect_stdout(buf),
         unittest.mock.patch("sys.stdin", io.StringIO(stdin_content)),
-        unittest.mock.patch(
-            "autoskillit.hooks.skill_load_post_hook.Path.cwd", return_value=tmp_dir
-        ),
     ):
         try:
             main()
@@ -277,8 +326,9 @@ def test_skips_flag_write_when_agent_id_present_join_bearing_skill(
     re-load must not produce a new flag that would otherwise orphan the
     parent's join ledger key.
     """
+    projection_root, hook_path = _copy_projected_hook(tmp_path)
     _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="join-bearing-skill",
         join_required=True,
     )
@@ -286,6 +336,7 @@ def test_skips_flag_write_when_agent_id_present_join_bearing_skill(
         stdin_data=_make_skill_event(skill="join-bearing-skill", agent_id="child-1"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
+        hook_path=hook_path,
     )
     flag_dir = tmp_path / ".autoskillit" / "temp"
     flags = list(flag_dir.glob("skill_guard_*.flag"))
@@ -295,8 +346,8 @@ def test_skips_flag_write_when_agent_id_present_join_bearing_skill(
     )
 
 
-def test_writes_flag_to_project_root_via_ancestor_walk(tmp_path: Path) -> None:
-    """T1-8: Flag written to project root when CWD is a subdirectory."""
+def test_writes_flag_to_state_root_when_cwd_is_a_subdirectory(tmp_path: Path) -> None:
+    """T1-8: State-root authority wins when the payload CWD is nested."""
     project = tmp_path / "project"
     (project / ".autoskillit").mkdir(parents=True)
 
@@ -305,6 +356,7 @@ def test_writes_flag_to_project_root_via_ancestor_walk(tmp_path: Path) -> None:
         stdin_data=_make_skill_event(),
         tmp_dir=deep_cwd,
         provider_profile="minimax",
+        state_root=project,
     )
     flag = project / ".autoskillit" / "temp" / "skill_guard_abc123.flag"
     assert flag.exists(), "Flag must be written to project root, not CWD"
@@ -329,12 +381,12 @@ def test_writes_flag_to_project_root_via_ancestor_walk(tmp_path: Path) -> None:
 def test_skill_load_post_hook_backend_authority(
     tmp_path: Path, agent_backend: str | None, expected_flag: bool
 ) -> None:
-    """Backend identity is the primary gate; provider profile is secondary.
+    """Backend identity is the primary gate for binding emission.
 
     Codex backend must NEVER trigger the skill-load flag even when the
     provider profile would otherwise suggest a provider-aware session.
     Unset and unrecognized backends do not silently inherit Codex's
-    exemption — they fall through to the existing profile check.
+    exemption.
     """
     (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
@@ -375,9 +427,9 @@ def test_skill_load_post_hook_backend_authority_join_bearing(
     admit a join), and Claude must write it. The projection manifest
     sidecar pre-populates the join_required bit.
     """
-    (tmp_path / ".autoskillit").mkdir(parents=True)
+    projection_root, hook_path = _copy_projected_hook(tmp_path)
     _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="implement-worktree-no-merge",
         join_required=True,
     )
@@ -386,6 +438,7 @@ def test_skill_load_post_hook_backend_authority_join_bearing(
         tmp_dir=tmp_path,
         provider_profile="anthropic",
         agent_backend=agent_backend,
+        hook_path=hook_path,
     )
     flag = tmp_path / _FLAG_RELPATH
     if expected_flag:
@@ -415,8 +468,8 @@ def test_codex_bypass_with_nonempty_profile_writes_no_flag(tmp_path: Path) -> No
 def test_unrecognized_backend_does_not_inherit_codex_exemption(tmp_path: Path) -> None:
     """An unrecognized backend + non-empty profile must still write the flag.
 
-    Unknown/future backend values fall through to the profile check
-    rather than being silently exempted as if they were Codex.
+    Unknown/future backend values are not silently exempted as if they
+    were Codex.
     """
     (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
@@ -433,17 +486,15 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     """REQ-052: A join-bearing skill load writes a complete atomic JSON envelope.
 
     The hook reads the projection manifest sidecar and writes a flag
-    file whose JSON envelope carries the full documented identity:
-    skill_name, join_required, semantic/adaptation/projected/artifact
-    digests, artifact_incarnation, child_spawn_cardinality, and
-    binding_valid=true. Every required field is asserted.
+    file whose JSON envelope carries the full documented identity,
+    including a manifest-wide artifact digest at the envelope level.
     """
+    projection_root, hook_path = _copy_projected_hook(tmp_path)
     manifest = _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="implement-worktree-no-merge",
         join_required=True,
         artifact_digest="art-abc",
-        artifact_incarnation="2026-08-15T12:00:00Z/inc-7",
         semantic_digest="sem-xyz",
         adaptation_digest="adapt-xyz",
         projected_digest="proj-xyz",
@@ -452,21 +503,22 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     )
     assert manifest.exists(), "Helper must produce a manifest sidecar"
 
-    (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
         stdin_data=_make_skill_event(skill="implement-worktree-no-merge"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
+        hook_path=hook_path,
     )
     flag = tmp_path / _FLAG_RELPATH
     assert flag.exists(), "Flag must be written for join-bearing Claude load"
 
     # Atomic JSON envelope — parse cleanly without manual coercion.
     payload = json.loads(flag.read_text())
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["session_id"] == "abc123"
     assert payload["join_required"] is True
     assert payload["binding_valid"] is True
+    assert payload["artifact_digest"] == "art-abc"
 
     # Exactly one loaded-skill entry was appended.
     assert isinstance(payload["loaded_skills"], list)
@@ -477,8 +529,7 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     assert entry["semantic_digest"] == "sem-xyz"
     assert entry["adaptation_digest"] == "adapt-xyz"
     assert entry["projected_digest"] == "proj-xyz"
-    assert entry["artifact_digest"] == "art-abc"
-    assert entry["artifact_incarnation"] == "2026-08-15T12:00:00Z/inc-7"
+    assert entry["artifact_incarnation"] == ""
     assert entry["binding_valid"] is True
     assert entry["child_spawn_cardinality"] == {"explicit_slots": 4, "max_inflight": 4}
 
@@ -491,16 +542,17 @@ def test_join_false_skill_load_keeps_join_required_false(tmp_path: Path) -> None
     default to True. Downstream join gates (background_exec_guard,
     can_release_stop) key off this bit to allow or deny dispatch.
     """
+    projection_root, hook_path = _copy_projected_hook(tmp_path)
     _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="implement-worktree-no-merge",
         join_required=False,
     )
-    (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
         stdin_data=_make_skill_event(),
         tmp_dir=tmp_path,
         provider_profile="minimax",
+        hook_path=hook_path,
     )
     flag = tmp_path / _FLAG_RELPATH
     payload = json.loads(flag.read_text())
@@ -520,10 +572,10 @@ def test_subsequent_join_false_load_does_not_downgrade_join_required(
     is the documented monotonic contract that prevents a join gate
     bypass via a nested child loading a non-join skill.
     """
-    (tmp_path / ".autoskillit").mkdir(parents=True)
+    projection_root, hook_path = _copy_projected_hook(tmp_path)
     # First load: join-bearing.
     _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="first-skill",
         join_required=True,
     )
@@ -531,10 +583,11 @@ def test_subsequent_join_false_load_does_not_downgrade_join_required(
         stdin_data=_make_skill_event(skill="first-skill", session_id="downgrade-test"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
+        hook_path=hook_path,
     )
     # Second load: join-false.
     _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="second-skill",
         join_required=False,
     )
@@ -542,6 +595,7 @@ def test_subsequent_join_false_load_does_not_downgrade_join_required(
         stdin_data=_make_skill_event(skill="second-skill", session_id="downgrade-test"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
+        hook_path=hook_path,
     )
     flag = tmp_path / ".autoskillit" / "temp" / "skill_guard_downgrade-test.flag"
     payload = json.loads(flag.read_text())
@@ -566,16 +620,17 @@ def test_fresh_session_without_join_loads_reports_join_required_false(
     join_required=false and binding_valid=true so legitimate
     named/team dispatch proceeds normally.
     """
+    projection_root, hook_path = _copy_projected_hook(tmp_path)
     _write_join_bearing_projection_manifest(
-        tmp_path,
+        projection_root,
         skill_name="non-join-skill",
         join_required=False,
     )
-    (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
         stdin_data=_make_skill_event(skill="non-join-skill", session_id="fresh"),
         tmp_dir=tmp_path,
         provider_profile="minimax",
+        hook_path=hook_path,
     )
     flag = tmp_path / ".autoskillit" / "temp" / "skill_guard_fresh.flag"
     assert flag.exists()

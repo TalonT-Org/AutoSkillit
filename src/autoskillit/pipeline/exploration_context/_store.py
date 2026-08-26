@@ -3,19 +3,6 @@
 This shard owns every mutator of in-process lease state.  The
 :mod:`._launch_adapter` shard contains pure helpers called only from
 inside the store's own locked sections.
-
-**Inner-exception-class immutability invariant.**  ``EXPLORATION_STORE_FAILURE_CODES``
-(in :mod:`._failure_codes`) is built once at module load, capturing the
-current inner exception classes as dict keys by class identity.  Inner
-exception classes are immutable after module load.
-
-**Runtime import direction is one-way.**  This shard runtime-imports
-from :mod:`autoskillit.pipeline.exploration_context_durable`; the durable
-module's only references to ``_store.py`` are inside a
-``TYPE_CHECKING`` block.  Both source files use
-``from __future__ import annotations``, so the durable module's
-``bind_session_scoped_durable`` signature annotations are strings,
-never evaluated at import time.
 """
 
 from __future__ import annotations
@@ -26,7 +13,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Generic, Literal, NoReturn, TypeVar, assert_never, cast
+from typing import Generic, Literal, NoReturn, assert_never, cast
 
 from autoskillit.core import (
     CapabilityResolution,
@@ -55,14 +42,12 @@ from ._constants import (
     EXPLORER_ROLE_NAMES,
 )
 from ._types import (
+    _T,
     ExplorationContext,
     ExplorationLaunchBinding,
     ExplorationServiceProtocol,
     _CapabilityLease,
 )
-
-_T = TypeVar("_T")
-
 
 logger = get_logger(__name__)
 
@@ -173,11 +158,7 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
 
     @classmethod
     def verified_repository_root_from_launch_environment(cls) -> Path | None:
-        """Recover only the HMAC-verified root needed to bootstrap an explorer store.
-
-        One-line delegate to the launch adapter; the durable store is
-        fully static, so no ``self``/``cls`` argument is needed.
-        """
+        """Recover only the HMAC-verified root needed to bootstrap an explorer store."""
         return launch_adapter.verified_repository_root_from_launch_environment()
 
     def __enter__(self) -> OwnerBoundExplorationContextStore[_T]:
@@ -303,7 +284,6 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         except SnapshotUnavailable as exc:
             self._raise_for_snapshot_unavailable(exc)
         snapshot_digest = issuance_snapshot.digest
-        # Direct module call (bypasses class attribute dispatch frame).
         shared_source_identity = launch_adapter._shared_source_identity(source_identities)
         with self._lock:
             if self._closed:
@@ -774,7 +754,6 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
     def _reopen_launch_environment(
         self,
     ) -> tuple[str, _ReopenedLaunchAuthority] | None:
-        """One-line delegate to :func:`._launch_adapter.reopen_launch_environment`."""
         return launch_adapter.reopen_launch_environment(
             self,
             max_ttl_seconds=self._max_ttl_seconds,

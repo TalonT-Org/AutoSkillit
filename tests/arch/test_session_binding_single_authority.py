@@ -22,11 +22,7 @@ def _constructs_binding_flag_filename(node: ast.JoinedStr) -> bool:
 
 
 def test_no_module_recomputes_the_binding_path() -> None:
-    """Only the authority may build a binding-flag filename.
-
-    The server tool remains outside this scan because its reader moves to this
-    authority in the next implementation part.
-    """
+    """Only the hook-side authority may build a binding-flag filename."""
     violations: list[str] = []
     for source_path in _HOOKS_ROOT.rglob("*.py"):
         tree = ast.parse(source_path.read_text())

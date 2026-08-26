@@ -364,10 +364,8 @@ def test_skill_load_post_hook_backend_authority(
 ) -> None:
     """Backend identity is the primary gate for binding emission.
 
-    Codex backend must NEVER trigger the skill-load flag even when the
-    provider profile would otherwise suggest a provider-aware session.
-    Unset and unrecognized backends do not silently inherit Codex's
-    exemption.
+    Codex backend must NEVER trigger the skill-load flag. Unset and
+    unrecognized backends do not silently inherit Codex's exemption.
     """
     (tmp_path / ".autoskillit").mkdir(parents=True)
     _run_hook(
@@ -447,7 +445,7 @@ def test_codex_bypass_with_nonempty_profile_writes_no_flag(tmp_path: Path) -> No
 
 
 def test_unrecognized_backend_does_not_inherit_codex_exemption(tmp_path: Path) -> None:
-    """An unrecognized backend + non-empty profile must still write the flag.
+    """An unrecognized backend must still write the flag.
 
     Unknown/future backend values are not silently exempted as if they
     were Codex.

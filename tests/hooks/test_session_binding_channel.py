@@ -348,7 +348,7 @@ def test_write_binding_closes_descriptor_when_fdopen_fails(
 def test_writer_and_every_hook_side_reader_resolve_the_same_channel_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The server reader is deliberately excluded until the next implementation part."""
+    """The writer and every hook-side reader share one channel directory."""
     from autoskillit.hooks._join_ledger import resolve_flag_dir  # noqa: PLC0415
     from autoskillit.hooks._session_binding import (  # noqa: PLC0415
         resolve_binding_path,

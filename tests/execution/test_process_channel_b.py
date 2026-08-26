@@ -431,13 +431,10 @@ class TestChannelBFullPipelineAdjudication:
         Timing notes:
         - A readiness-file handshake makes the Phase 2 discovery boundary deterministic
           before the child writes the completion marker.
-        - timeout=300s: subprocess wall-clock guard. Must be less than pytest.mark.timeout
-          (360s on the class) so run_managed_async completes before pytest kills the test.
-          Bumped to absorb xdist -n 4 event-loop scheduling jitter on WSL2 where Phase 2
-          polling can be delayed past the prior budget when the asyncio loop is saturated
-          by sibling test subprocesses (Channel-B result was unmonitored instead of
-          CHANNEL_B under one such run). _phase1_timeout=400 must exceed the
-          outer timeout so Phase 1 never fires STALE before the outer guard.
+        - timeout=300s: subprocess wall-clock guard. It allows xdist scheduler saturation
+          while remaining below the class's 360s pytest timeout, so run_managed_async
+          completes before pytest kills the test. _phase1_timeout=400 exceeds the outer
+          timeout so Phase 1 never fires STALE before the outer guard.
         - _session_id_timeout=0.5s: 0.5s is generous for session ID extraction (from stdout)
           while ensuring Phase 1 starts before the marker arrives.
         """

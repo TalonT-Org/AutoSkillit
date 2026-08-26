@@ -50,10 +50,11 @@ class TestCodexEnvPolicy:
         assert result["HOME"] == "/home/user"
 
     @pytest.mark.parametrize("source", ["base", "extras"])
-    def test_claude_activation_and_exporter_selectors_are_always_stripped(
+    def test_claude_activation_exporter_and_prefix_vars_are_always_stripped(
         self, source: str
     ) -> None:
         denied = {
+            "CLAUDE_CODE_AUTO_CONNECT_IDE": "0",
             "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
             "OTEL_LOGS_EXPORTER": "otlp",
             "OTEL_METRICS_EXPORTER": "otlp",

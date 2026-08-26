@@ -138,6 +138,10 @@ from ._terminal_table import _render_gfm_table as _render_gfm_table
 from ._terminal_table import _render_terminal_table as _render_terminal_table
 from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
+from .agent_definition import AGENT_PROVISIONING_BASELINE as AGENT_PROVISIONING_BASELINE
+from .agent_definition import (
+    AGENT_PROVISIONING_SKILL_DERIVED as AGENT_PROVISIONING_SKILL_DERIVED,
+)
 from .agent_definition import BUNDLED_EXPLORER_ROLES as BUNDLED_EXPLORER_ROLES
 from .agent_definition import (
     CODEX_DISABLED_WEB_SEARCH_POLICY as CODEX_DISABLED_WEB_SEARCH_POLICY,

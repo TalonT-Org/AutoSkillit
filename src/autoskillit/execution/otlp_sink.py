@@ -38,10 +38,12 @@ _SIGNALS = {
 }
 _FORBIDDEN_KEYS = frozenset(
     {
+        "enduser.id",
         "user.email",
         "organization.id",
         "user.account_id",
         "user.account_uuid",
+        "user.id",
     }
 )
 _COUNTER_NAMES = (
@@ -106,6 +108,7 @@ def _build_env(base_url: str) -> dict[str, str]:
         "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": "http/json",
         "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": f"{base_url}/v1/metrics",
         "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": "http/json",
+        "OTEL_METRICS_INCLUDE_ACCOUNT_UUID": "false",
         "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": f"{base_url}/v1/logs",
         "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/json",
     }

@@ -164,6 +164,71 @@ def test_bundled_agent_catalog_loads_with_unique_digests() -> None:
     )
 
 
+def test_bundled_baseline_provisioning_ledger_is_explicit() -> None:
+    definitions = load_bundled_agent_definitions()
+
+    assert sorted(
+        definition.name for definition in definitions if definition.provisioning == "baseline"
+    ) == [
+        "pluginless-explorer",
+        "repository-impact-profiler",
+        "semantic-code-navigator",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("provisioning_yaml", "expected"),
+    [("", "skill-derived"), ("provisioning: baseline\n", "baseline")],
+)
+def test_agent_provisioning_frontmatter_parses_with_default(
+    tmp_path: Path, provisioning_yaml: str, expected: str
+) -> None:
+    path = tmp_path / "provisioning.md"
+    path.write_text(
+        "---\n"
+        "name: provisioning-agent\n"
+        "description: Bounded agent\n"
+        "tools: [Read]\n"
+        f"{provisioning_yaml}"
+        "---\n\n"
+        "Return bounded evidence.\n",
+        encoding="utf-8",
+    )
+
+    assert load_agent_definition(path).provisioning == expected
+
+
+def test_invalid_agent_provisioning_fails_closed_through_markdown(tmp_path: Path) -> None:
+    path = tmp_path / "invalid-provisioning.md"
+    path.write_text(
+        "---\n"
+        "name: invalid-provisioning\n"
+        "description: Bounded agent\n"
+        "tools: [Read]\n"
+        "provisioning: always\n"
+        "---\n\n"
+        "Return bounded evidence.\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AgentDefinitionError, match="unsupported agent provisioning policy"):
+        load_agent_definition(path)
+
+
+def test_invalid_agent_provisioning_fails_closed_through_direct_construction() -> None:
+    with pytest.raises(AgentDefinitionError, match="unsupported agent provisioning policy"):
+        AgentDef(
+            name="invalid-provisioning",
+            description="Bounded agent",
+            tools=("Read",),
+            model=None,
+            max_turns=1,
+            body="Return bounded evidence.",
+            codex=CodexAgentProjectionDef(None, None, "read-only"),
+            provisioning="always",  # type: ignore[arg-type]
+        )
+
+
 def test_skill_child_roles_have_bounded_tools_and_usage_descriptions() -> None:
     definitions = {definition.name: definition for definition in load_bundled_agent_definitions()}
 
@@ -685,12 +750,14 @@ def test_definition_digest_is_domain_separated_and_content_bound() -> None:
             "disabled",
         ),
     )
+    changed_provisioning = replace(definition, provisioning="baseline")
     assert digest.startswith("sha256:")
     assert digest != agent_definition_digest(changed)
     assert digest != agent_definition_digest(changed_features)
     assert digest != agent_definition_digest(changed_agents_enabled)
     assert digest != agent_definition_digest(changed_web_search)
     assert digest != agent_definition_digest(changed_reader_tools)
+    assert digest != agent_definition_digest(changed_provisioning)
     assert agent_definition_digest(changed_web_search) != agent_definition_digest(
         changed_live_web_search
     )

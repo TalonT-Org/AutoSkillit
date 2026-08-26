@@ -182,6 +182,19 @@ __all__ = [
 logger = get_logger(__name__)
 
 
+def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
+    return {
+        role.name: (
+            role.name.removeprefix("autoskillit:")
+            if role.name.startswith("autoskillit:")
+            else "worker"
+            if role.name == "delegated-worker"
+            else role.name
+        )
+        for role in plan.logical_roles
+    }
+
+
 @dataclass(frozen=True, slots=True)
 class CodexBackend(BackendCmdBuilderBase):
     source_codex_home: Path | None = None
@@ -1109,15 +1122,7 @@ class CodexBackend(BackendCmdBuilderBase):
                     "honestly realized on this backend and must be refused at admission."
                 ),
             )
-        role_mapping: dict[str, str] = {}
-        for role in plan.logical_roles:
-            if role.name.startswith("autoskillit:"):
-                native = role.name.removeprefix("autoskillit:")
-            elif role.name == "delegated-worker":
-                native = "worker"
-            else:
-                native = role.name
-            role_mapping[role.name] = native
+        role_mapping = _codex_logical_role_mapping(plan)
         sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
         model_policy: dict[str, tuple[str, str | None]] = {}
         fragments = [

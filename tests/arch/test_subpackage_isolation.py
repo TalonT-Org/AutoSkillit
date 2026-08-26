@@ -1075,7 +1075,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # parameter injection point for execution.testing's capacity preflight, kept
         # separate from core/runtime/_reclamation.py since core/runtime already imports
         # core.types and _capacity is consumed there too (avoids a circular import).
-        "core": 41,
+        # +context_admission_helpers + 6 dispatch-category shards (Issue #4742): the
+        # context-admission reducer is split into helpers plus per-category co-located
+        # siblings. Cap moves from 41 to 48 to absorb the 7 new files.
+        "core": 48,
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -1094,7 +1097,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +1 to a 67 baseline) and the seven context-admission shards (+7) added
         # by this PR (67 + 1 + 7 = 75), so the cap must move to 75 to
         # accommodate the actual on-disk count of 75 files).
-        "core/types": 75,
+        # +_type_context_admission_persistence_envelope: #4743 persistence split moved
+        # envelope pipeline to a sibling shard (75 + 1 = 76).
+        "core/types": 76,
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1492,12 +1497,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the leases they gate, and fit under this cap post-extraction.",
     ),
     "workspace/session_skills.py": (
-        1400,
+        1550,
         "REQ-CNST-010-E13/E14: ordering-sensitive session skill materialization owns "
         "provider discovery, override precedence, filtering, dependency activation, the "
         "generated-home lease and cleanup transaction, and backend-specific layout "
         "validation; keeping those operations together preserves both assembly ordering "
-        "and the create/validate/yield/delete ownership proof",
+        "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
+        "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
     "rules_skill_content.py": (
         1200,
@@ -1515,15 +1521,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
         "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
         "and the tests/skills/ contract linters (+~60 net lines)",
-    ),
-    "core/context_admission.py": (
-        3050,
-        "REQ-CNST-010-E13: #4333 freezes one exhaustive protocol-v1 reducer and replay "
-        "surface. Keeping all closed event transitions together makes atomic batch, "
-        "idempotency, protected-pool, reconciliation, rollover, and declarative effect "
-        "semantics, released-version dispatch, and configuration-aware coverage resolution "
-        "reviewable as one state machine; splitting dispatch branches would fragment "
-        "exhaustiveness.",
     ),
     "pipeline/context_admission_ledger.py": (
         2300,
@@ -1765,6 +1762,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_recipe_execution.py",
         "core/types/_type_subprocess.py",
         "core/types/_type_context_admission_persistence.py",
+        "core/types/_type_context_admission_persistence_envelope.py",
         "core/types/_type_native_shell_capture.py",
         "core/types/_type_exploration.py",
     ):

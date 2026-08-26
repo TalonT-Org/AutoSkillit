@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -288,14 +289,49 @@ steps:
     message: done
 """
 
+_CACHE_RECIPE_WITH_BASE_BRANCH = MINIMAL_RECIPE_YAML.replace(
+    "steps:\n",
+    """ingredients:
+  base_branch:
+    description: Base branch
+    default: ""
+steps:
+""",
+)
+
+_CACHE_RECIPE_WITH_SKILL = """\
+name: myrecipe
+description: minimal skill recipe
+autoskillit_version: "0.2.0"
+steps:
+  run:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:listed-skill
+    on_success: stop
+  stop:
+    action: stop
+    message: done
+"""
+
 
 # ---------------------------------------------------------------------------
 # Cache tests
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def fresh_load_cache(monkeypatch):
+    """Install and return an isolated load cache for one test."""
+    import autoskillit.recipe._api_cache as cache_mod
+
+    cache = cache_mod.LoadCache()
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
+    return cache
+
+
 def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkeypatch):
-    """Second call for unchanged recipe returns cached result without re-running pipeline."""
+    """Canonical equal resolved defaults return the warm cached result."""
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
 
@@ -304,7 +340,7 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     recipe_yaml = recipes_dir / "myrecipe.yaml"
-    recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
+    recipe_yaml.write_text(_CACHE_RECIPE_WITH_BASE_BRANCH)
 
     calls = []
     real_validate = api_mod.validate_recipe_structure
@@ -315,8 +351,16 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
 
     monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        resolved_defaults={"unused": "same", "base_branch": "main"},
+    )
+    api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        resolved_defaults={"base_branch": "main", "unused": "same"},
+    )
 
     assert len(calls) == 1  # validate_recipe called only once across two loads
 
@@ -437,33 +481,63 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 
     import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    from autoskillit.core import BackendCapabilities, RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
 
-    # resolved_defaults affects result["ingredients_table"] but is intentionally excluded here.
-    RESULT_METADATA_ONLY_PARAMS: frozenset[str] = frozenset(
+    CACHE_BYPASS_PARAMS: frozenset[str] = frozenset(
         {
-            "recipe_info",
-            "recipe_list",
-            "resolved_defaults",
             "lister",
-            "temp_dir",
-            "backend_origin_map",
         }
     )
 
     sig = inspect.signature(api_mod.load_and_validate)
     all_params = set(sig.parameters.keys())
 
-    # Find all params NOT in the metadata-only allowlist
-    result_affecting_params = all_params - RESULT_METADATA_ONLY_PARAMS
+    # An explicit lister can affect validation, so it bypasses caching entirely.
+    cache_keyed_params = all_params - CACHE_BYPASS_PARAMS
 
     cache_snap = cache_mod.LoadCache()
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_snap)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
-    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+    recipe_path = recipes_dir / "myrecipe.yaml"
+    recipe_path.write_text(MINIMAL_RECIPE_YAML)
+    recipe_info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=recipe_path,
+        content_hash="sha256:recipe-info",
+        content=MINIMAL_RECIPE_YAML,
+    )
+    other_recipe = RecipeInfo(
+        name="other",
+        description="other test recipe",
+        source=RecipeSource.PROJECT,
+        path=recipes_dir / "other.yaml",
+    )
+    capabilities = BackendCapabilities()
+    temp_dir = tmp_path / "custom-temp"
+    temp_dir.mkdir()
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        suppressed=["z", "a"],
+        recipe_info=recipe_info,
+        recipe_list=[other_recipe, recipe_info, recipe_info],
+        resolved_defaults={"z": "last", "a": "first"},
+        ingredient_overrides={"z": "override", "a": "first-override"},
+        temp_dir=temp_dir,
+        temp_dir_relpath="custom/temp",
+        defer_unresolved=True,
+        backend_name="codex",
+        effective_backend_map={"z": "secondary", "a": "primary"},
+        backend_capabilities_map={"codex": capabilities},
+        backend_origin_map={"z": "fallback", "a": "explicit"},
+        include_finalized_projection=True,
+    )
 
     assert cache_snap._store, "cache was never populated"
     cache_key = next(iter(cache_snap._store.keys()))
@@ -472,48 +546,433 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     param_to_key_index: dict[str, int] = {
         "name": 0,
         "temp_dir_relpath": 1,
-        "project_dir": 2,
-        "suppressed": 3,
-        "ingredient_overrides": 4,
-        "defer_unresolved": 5,
-        "_exp_types_hash": 6,
-        "_user_exp_hash": 7,
-        "_method_traditions_hash": 8,
-        "_user_method_traditions_hash": 9,
-        "backend_name": 10,
-        "effective_backend_map": 11,
-        "backend_capabilities_map": 12,
-        "include_finalized_projection": 13,
+        "temp_dir": 2,
+        "project_dir": 3,
+        "suppressed": 4,
+        "recipe_info": 5,
+        "recipe_list": 6,
+        "resolved_defaults": 7,
+        "ingredient_overrides": 8,
+        "defer_unresolved": 9,
+        "backend_name": 14,
+        "effective_backend_map": 15,
+        "backend_capabilities_map": 16,
+        "backend_origin_map": 17,
+        "include_finalized_projection": 18,
     }
 
     missing_params: list[str] = []
-    for param in result_affecting_params:
+    for param in cache_keyed_params:
         if param not in param_to_key_index:
             missing_params.append(param)
 
     assert not missing_params, (
-        f"The following result-affecting parameters are not represented in the "
+        f"The following cache-keyed parameters are not represented in the "
         f"cache key construction: {missing_params}"
     )
 
-    # Verify actual values at deterministic positions
-    assert cache_key[0] == "myrecipe", f"cache_key[0] expected 'myrecipe', got {cache_key[0]!r}"
-    assert cache_key[1] == ".autoskillit/temp", (
-        f"cache_key[1] expected default temp relpath, got {cache_key[1]!r}"
+    assert len(cache_key) == 25
+    assert cache_key[0] == "myrecipe"
+    assert cache_key[1] == "custom/temp"
+    assert cache_key[2] == str(temp_dir.absolute())
+    assert cache_key[3] == str(tmp_path.absolute())
+    assert cache_key[4] == ("a", "z")
+    assert cache_key[5] == (
+        str(recipe_path.absolute()),
+        RecipeSource.PROJECT.value,
+        "sha256:recipe-info",
+        hashlib.sha256(MINIMAL_RECIPE_YAML.encode()).hexdigest(),
     )
-    assert cache_key[2] == str(tmp_path), (
-        f"cache_key[2] expected str(project_dir), got {cache_key[2]!r}"
-    )
-    assert cache_key[3] == (), (
-        f"cache_key[3] expected empty suppressed tuple, got {cache_key[3]!r}"
-    )
-    assert cache_key[4] == (), (
-        f"cache_key[4] expected empty ingredient_overrides tuple, got {cache_key[4]!r}"
-    )
-    for idx in (6, 7, 8, 9):
+    assert cache_key[6] == ("myrecipe", "other")
+    assert cache_key[7] == (("a", "first"), ("z", "last"))
+    assert cache_key[8] == (("a", "first-override"), ("z", "override"))
+    assert cache_key[9] is True
+    for idx in (10, 11, 12, 13):
         assert isinstance(cache_key[idx], str), (
             f"cache_key[{idx}] expected str hash, got {type(cache_key[idx])!r}"
         )
+    assert cache_key[14] == "codex"
+    assert cache_key[15] == (("a", "primary"), ("z", "secondary"))
+    assert cache_key[16] == (("codex", capabilities),)
+    assert cache_key[17] == (("a", "explicit"), ("z", "fallback"))
+    assert cache_key[18] is True
+    for idx in (19, 20, 21, 22, 23, 24):
+        assert isinstance(cache_key[idx], int), (
+            f"cache_key[{idx}] expected mtime or size int, got {type(cache_key[idx])!r}"
+        )
+
+
+def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, fresh_load_cache):
+    """Resolved defaults alter ingredients_table and are canonically cache-keyed."""
+    import autoskillit.recipe._api as api_mod
+
+    cache = fresh_load_cache
+    _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_BASE_BRANCH)
+
+    first = api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        resolved_defaults={"unused": "same", "base_branch": "main"},
+    )
+    equivalent = api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        resolved_defaults={"base_branch": "main", "unused": "same"},
+    )
+    distinct = api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        resolved_defaults={"base_branch": "develop", "unused": "same"},
+    )
+
+    assert first["ingredients_table"] == equivalent["ingredients_table"]
+    assert first["ingredients_table"] != distinct["ingredients_table"]
+    assert "main" in first["ingredients_table"]
+    assert "develop" in distinct["ingredients_table"]
+    assert len(cache._store) == 2
+
+
+def test_load_and_validate_cache_separates_backend_origin_maps(tmp_path, fresh_load_cache):
+    """Distinct backend origins must not reuse the same validated response."""
+    import autoskillit.recipe._api as api_mod
+
+    cache = fresh_load_cache
+    _setup_project_recipe(tmp_path, "myrecipe", MINIMAL_RECIPE_YAML)
+
+    api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        backend_origin_map={"stop": "explicit", "fallback": "configured"},
+    )
+    api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        backend_origin_map={"fallback": "configured", "stop": "explicit"},
+    )
+    api_mod.load_and_validate(
+        "myrecipe",
+        tmp_path,
+        backend_origin_map={"stop": "inherited", "fallback": "configured"},
+    )
+
+    assert len(cache._store) == 2
+    assert {key[17] for key in cache._store} == {
+        (("fallback", "configured"), ("stop", "explicit")),
+        (("fallback", "configured"), ("stop", "inherited")),
+    }
+
+
+def test_load_and_validate_cache_separates_temp_dirs_and_normalizes_defaults(
+    tmp_path, monkeypatch, fresh_load_cache
+):
+    """Temp-directory cache identity follows the effective path used for staleness."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.recipe._contracts_types import StaleItem
+
+    cache = fresh_load_cache
+    project_dir = tmp_path / "project"
+    _setup_project_recipe(project_dir, "myrecipe", MINIMAL_RECIPE_YAML)
+    cwd_a = tmp_path / "cwd-a"
+    cwd_b = tmp_path / "cwd-b"
+    cwd_a.mkdir()
+    cwd_b.mkdir()
+    default_temp_dir = api_mod.resolve_temp_dir(project_dir, None)
+    staleness_paths: list[Path] = []
+
+    def fake_staleness(*_args: Any, cache_path: Path, **_kwargs: Any) -> list[StaleItem]:
+        staleness_paths.append(cache_path)
+        return [
+            StaleItem(
+                skill="temp-dir",
+                reason="test-temp-dir",
+                stored_value="",
+                current_value=str(cache_path.parent),
+            )
+        ]
+
+    monkeypatch.setattr(api_mod, "load_recipe_card", lambda *_args: {"dataflow": []})
+    monkeypatch.setattr(api_mod, "validate_recipe_cards", lambda *_args: [])
+    monkeypatch.setattr(api_mod, "check_contract_staleness", fake_staleness)
+
+    monkeypatch.chdir(cwd_a)
+    implicit = api_mod.load_and_validate("myrecipe", project_dir)
+    explicit_default = api_mod.load_and_validate(
+        "myrecipe", project_dir, temp_dir=default_temp_dir
+    )
+    relative_from_a = api_mod.load_and_validate(
+        "myrecipe", project_dir, temp_dir=Path("relative-temp")
+    )
+    monkeypatch.chdir(cwd_b)
+    relative_from_b = api_mod.load_and_validate(
+        "myrecipe", project_dir, temp_dir=Path("relative-temp")
+    )
+
+    def stale_current_values(result: dict[str, Any]) -> list[str]:
+        return [
+            suggestion["current_value"]
+            for suggestion in result["suggestions"]
+            if suggestion["rule"] == "stale-contract"
+        ]
+
+    assert stale_current_values(implicit) == [str(default_temp_dir)]
+    assert stale_current_values(explicit_default) == [str(default_temp_dir)]
+    assert stale_current_values(relative_from_a) == [str(cwd_a / "relative-temp")]
+    assert stale_current_values(relative_from_b) == [str(cwd_b / "relative-temp")]
+    assert staleness_paths == [
+        default_temp_dir / "recipe_staleness_cache.json",
+        cwd_a / "relative-temp" / "recipe_staleness_cache.json",
+        cwd_b / "relative-temp" / "recipe_staleness_cache.json",
+    ]
+    assert len(cache._store) == 3
+
+
+def test_load_and_validate_cache_separates_same_relative_project_dir_across_cwds(
+    tmp_path, monkeypatch, fresh_load_cache
+):
+    """The same relative project path resolves independently in each current directory."""
+    import autoskillit.recipe._api as api_mod
+
+    cache = fresh_load_cache
+    project_a = tmp_path / "project-a"
+    project_b = tmp_path / "project-b"
+    _setup_project_recipe(project_a, "myrecipe", MINIMAL_RECIPE_YAML)
+    _setup_project_recipe(
+        project_b,
+        "myrecipe",
+        MINIMAL_RECIPE_YAML.replace("message: done", "message: from-project-b"),
+    )
+
+    monkeypatch.chdir(project_a)
+    first = api_mod.load_and_validate("myrecipe", project_dir=Path("."))
+    monkeypatch.chdir(project_b)
+    second = api_mod.load_and_validate("myrecipe", project_dir=Path("."))
+
+    assert first["content"] != second["content"]
+    assert len(cache._store) == 2
+    assert {key[3] for key in cache._store} == {
+        str(project_a.absolute()),
+        str(project_b.absolute()),
+    }
+
+
+def test_load_and_validate_cache_separates_caller_recipe_info_content_and_hash(
+    tmp_path, fresh_load_cache
+):
+    """A warm cache cannot serve a caller's changed RecipeInfo content or hash."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    cache = fresh_load_cache
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    frozen_recipe_path = tmp_path / "frozen-original.yaml"
+    frozen_recipe_path.write_text(MINIMAL_RECIPE_YAML)
+    changed_content = MINIMAL_RECIPE_YAML.replace("message: done", "message: changed")
+    first_info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=frozen_recipe_path,
+        content_hash="sha256:first",
+        content=MINIMAL_RECIPE_YAML,
+    )
+    changed_info = RecipeInfo(
+        name="myrecipe",
+        description="test",
+        source=RecipeSource.PROJECT,
+        path=frozen_recipe_path,
+        content_hash="sha256:changed",
+        content=changed_content,
+    )
+
+    first = api_mod.load_and_validate("myrecipe", project_dir, recipe_info=first_info)
+    changed = api_mod.load_and_validate("myrecipe", project_dir, recipe_info=changed_info)
+
+    assert first["content"] == MINIMAL_RECIPE_YAML
+    assert first["content_hash"] == "sha256:first"
+    assert changed["content"] == changed_content
+    assert changed["content_hash"] == "sha256:changed"
+    assert len(cache._store) == 2
+
+
+def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
+    tmp_path, monkeypatch, fresh_load_cache
+):
+    """Relative RecipeInfo paths use cwd, while an equivalent absolute path hits cache."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    cache = fresh_load_cache
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    cwd_a = tmp_path / "cwd-a"
+    cwd_b = tmp_path / "cwd-b"
+    path_a = _setup_project_recipe(cwd_a, "myrecipe", MINIMAL_RECIPE_YAML)
+    path_b = _setup_project_recipe(
+        cwd_b,
+        "myrecipe",
+        MINIMAL_RECIPE_YAML.replace("message: done", "message: from-cwd-b"),
+    )
+    relative_path = Path(".autoskillit/recipes/myrecipe.yaml")
+    calls = []
+    real_validate = api_mod.validate_recipe_structure
+
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.chdir(cwd_a)
+    first = api_mod.load_and_validate(
+        "myrecipe",
+        project_dir,
+        recipe_info=RecipeInfo(
+            name="myrecipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=relative_path,
+        ),
+    )
+    monkeypatch.chdir(cwd_b)
+    equivalent_absolute = api_mod.load_and_validate(
+        "myrecipe",
+        project_dir,
+        recipe_info=RecipeInfo(
+            name="myrecipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=path_a,
+        ),
+    )
+    from_other_cwd = api_mod.load_and_validate(
+        "myrecipe",
+        project_dir,
+        recipe_info=RecipeInfo(
+            name="myrecipe",
+            description="test",
+            source=RecipeSource.PROJECT,
+            path=relative_path,
+        ),
+    )
+
+    assert first == equivalent_absolute
+    assert first["content"] != from_other_cwd["content"]
+    assert len(calls) == 2
+    assert len(cache._store) == 2
+    assert {key[5][0] for key in cache._store} == {
+        str(path_a.absolute()),
+        str(path_b.absolute()),
+    }
+
+
+def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(
+    tmp_path, fresh_load_cache
+):
+    """Omitted and supplied inventories stay distinct and use stable name sets."""
+    import autoskillit.recipe._api as api_mod
+    from autoskillit.core import RecipeSource
+    from autoskillit.recipe.schema import RecipeInfo
+
+    cache = fresh_load_cache
+    campaign_path = _setup_project_recipe(
+        tmp_path, "test-campaign-no-steps", _RECIPE_CAMPAIGN_NO_STEPS
+    )
+    dispatch_target_path = _setup_project_recipe(
+        tmp_path,
+        "some-recipe",
+        MINIMAL_RECIPE_YAML.replace("name: myrecipe", "name: some-recipe"),
+    )
+    campaign = RecipeInfo(
+        name="test-campaign-no-steps",
+        description="test campaign",
+        source=RecipeSource.PROJECT,
+        path=campaign_path,
+    )
+    dispatch_target = RecipeInfo(
+        name="some-recipe",
+        description="dispatch target",
+        source=RecipeSource.PROJECT,
+        path=dispatch_target_path,
+    )
+
+    discovered = api_mod.load_and_validate(
+        "test-campaign-no-steps", tmp_path, recipe_info=campaign, recipe_list=None
+    )
+    empty = api_mod.load_and_validate(
+        "test-campaign-no-steps", tmp_path, recipe_info=campaign, recipe_list=[]
+    )
+    missing = api_mod.load_and_validate(
+        "test-campaign-no-steps",
+        tmp_path,
+        recipe_info=campaign,
+        recipe_list=[campaign],
+    )
+    listed = api_mod.load_and_validate(
+        "test-campaign-no-steps",
+        tmp_path,
+        recipe_info=campaign,
+        recipe_list=[dispatch_target, campaign, campaign],
+    )
+    reordered = api_mod.load_and_validate(
+        "test-campaign-no-steps",
+        tmp_path,
+        recipe_info=campaign,
+        recipe_list=[campaign, dispatch_target],
+    )
+
+    def has_missing_dispatch(result) -> bool:
+        return any(
+            suggestion["rule"] == "dispatch-recipe-exists" for suggestion in result["suggestions"]
+        )
+
+    assert not has_missing_dispatch(discovered)
+    assert not has_missing_dispatch(empty)
+    assert has_missing_dispatch(missing)
+    assert not has_missing_dispatch(listed)
+    assert listed == reordered
+    assert len(cache._store) == 4
+
+
+def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
+    tmp_path, monkeypatch, fresh_load_cache
+):
+    """Different caller inventories rerun validation and change unknown-skill findings."""
+    from types import SimpleNamespace
+
+    import autoskillit.recipe._api as api_mod
+
+    class InventoryLister:
+        def __init__(self, names: list[str]) -> None:
+            self._skills = [SimpleNamespace(name=name) for name in names]
+
+        def list_all(self) -> list[Any]:
+            return self._skills
+
+    cache = fresh_load_cache
+    _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_SKILL)
+    calls = []
+    real_validate = api_mod.validate_recipe_structure
+
+    def counting_validate(recipe):
+        calls.append(1)
+        return real_validate(recipe)
+
+    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    known = api_mod.load_and_validate(
+        "myrecipe", tmp_path, lister=InventoryLister(["listed-skill"])
+    )
+    unknown = api_mod.load_and_validate("myrecipe", tmp_path, lister=InventoryLister([]))
+
+    assert not any(
+        suggestion["rule"] == "unknown-skill-command" for suggestion in known["suggestions"]
+    )
+    assert any(
+        suggestion["rule"] == "unknown-skill-command" for suggestion in unknown["suggestions"]
+    )
+    assert len(calls) == 2
+    assert not cache._store
 
 
 # ---------------------------------------------------------------------------

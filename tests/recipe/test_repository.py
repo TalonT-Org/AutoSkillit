@@ -234,22 +234,32 @@ def test_in_memory_recipe_repo_rejects_recipe_objects() -> None:
         repo.add_recipe("x", Recipe(name="x", description="x"))
 
 
-def test_load_and_validate_coerces_str_project_dir_to_path(tmp_path: Path) -> None:
+def test_load_and_validate_normalizes_relative_project_dir_at_repository_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     mock_api = MagicMock(return_value={})
+    first_project = tmp_path / "first-project"
+    second_project = tmp_path / "second-project"
+    first_project.mkdir()
+    second_project.mkdir()
     foo = _make_recipe_info("test-recipe", tmp_path / "test-recipe.yaml")
-    str_dir = str(tmp_path)
+    discovered: list[Path] = []
+
+    def list_from_project(project_dir: Path) -> LoadResult[RecipeInfo]:
+        discovered.append(project_dir)
+        return _load_result(foo)
 
     with patch("autoskillit.recipe._api.load_and_validate", mock_api):
-        with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
+        with patch("autoskillit.recipe.repository.list_recipes", side_effect=list_from_project):
             with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
                 repo = DefaultRecipeRepository()
-                repo.load_and_validate("test-recipe", str_dir)
+                monkeypatch.chdir(first_project)
+                repo.load_and_validate("test-recipe", ".")
+                monkeypatch.chdir(second_project)
+                repo.load_and_validate("test-recipe", ".")
 
-    call_kwargs = mock_api.call_args
-    assert isinstance(call_kwargs.kwargs["project_dir"], Path), (
-        f"Expected Path, got {type(call_kwargs.kwargs['project_dir'])}"
-    )
-    assert call_kwargs.kwargs["project_dir"] == tmp_path
+    assert discovered == [first_project.absolute(), second_project.absolute()]
+    assert [call.kwargs["project_dir"] for call in mock_api.call_args_list] == discovered
 
 
 def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) -> None:

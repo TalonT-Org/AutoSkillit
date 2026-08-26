@@ -145,6 +145,7 @@ def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:
     from autoskillit.execution.backends import CodexBackend
     from autoskillit.execution.backends.codex import (
         CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES,
+        _codex_logical_role_mapping,
     )
     from autoskillit.workspace import DefaultSkillResolver
 
@@ -160,13 +161,11 @@ def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:
     backend = CodexBackend()
     for skill_name, plan in plans:
         assert plan is not None
+        role_mapping = _codex_logical_role_mapping(plan)
         adaptation = backend.adapt_skill_semantics(plan)
         if adaptation.unsupported_operation is not None:
             assert plan.join is not None and plan.join.required
-            continue
-        if not adaptation.logical_role_mapping:
-            continue
-        targets = {adaptation.logical_role_mapping[spawn.role] for spawn in plan.child_spawns}
+        targets = {role_mapping[spawn.role] for spawn in plan.child_spawns}
         missing = sorted(targets - allowed)
         if missing:
             violations.append(f"{skill_name}: {missing}")

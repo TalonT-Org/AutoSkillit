@@ -7,7 +7,9 @@ Bundled agent definition markdown files that serve as both **plugin agents**
 ## Layout
 
 Each `.md` file defines one agent with YAML frontmatter (`name`, `description`,
-`tools`, optional `model`, `maxTurns`) and a markdown body containing the agent's system prompt.
+`tools`, optional `model`, `maxTurns`, and `provisioning`) and a markdown body containing the
+agent's system prompt. `provisioning` defaults to `skill-derived`; `baseline` is the only other
+valid value.
 
 ## Invocation
 
@@ -79,3 +81,17 @@ two broker-bound explorers above. It is deliberately excluded from
 machinery for the two MCP-broker-tool explorers, a contract `pluginless-explorer`
 is not part of. It reads the local checkout only — substituting a remote or
 public copy of the repository is never authorized.
+
+## Codex Provisioning and Invocation
+
+Provisioning and terminal binding are separate dimensions. The three explorer definitions are
+`baseline`-provisioned. Only `semantic-code-navigator` and `repository-impact-profiler` belong to
+`BUNDLED_EXPLORER_ROLES` and require their canonical terminal bindings; `pluginless-explorer` is
+the unbound fallback.
+
+At Codex session setup, `baseline` makes an eligible custom role available without a skill
+requirement. `skill-derived` makes a custom role available only when an admitted skill requires
+it. Neither policy assigns work. At invocation time, a compiled skill's `child_spawn` declaration
+selects its native role through `spawn_agent(agent_type=...)`; native Codex built-ins require no
+authored TOML. Definitions with `reader_tools`, including `pr-source-reader`, use their dedicated
+reader corridor rather than native TOML provisioning.

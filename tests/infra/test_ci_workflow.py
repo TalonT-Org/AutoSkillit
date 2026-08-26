@@ -7,6 +7,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from types import ModuleType
@@ -521,6 +522,164 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "GITHUB_EVENT_PATH:" not in workflow_source
 
 
+def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
+    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
+    triggers = workflow.get("on", workflow.get(True))
+    assert {"push", "pull_request", "merge_group", "schedule"} <= set(triggers)
+    cron = triggers["schedule"][0]["cron"]
+    assert cron == "17 3 * * *"
+    assert int(cron.split()[0]) != 0
+
+    jobs = workflow["jobs"]
+    preflight = jobs["preflight"]
+    test_job = jobs["test"]
+    metadata = jobs["cache_metadata"]
+    primer = jobs["cache_prime"]
+
+    assert preflight["if"] == "github.event_name != 'schedule'"
+    assert test_job["if"] == "github.event_name != 'schedule'"
+    assert test_job["needs"] == ["preflight", "cache_metadata"]
+    assert "if" not in metadata
+    assert metadata["runs-on"] == "ubuntu-latest"
+    assert primer["if"] == (
+        "github.event_name == 'schedule' || "
+        "(github.event_name == 'push' && github.ref == 'refs/heads/main')"
+    )
+    assert primer["needs"] == "cache_metadata"
+    assert primer["runs-on"] == "ubuntu-latest"
+    assert "strategy" not in primer
+
+    metadata_step = next(step for step in metadata["steps"] if step.get("id") == "cache-identity")
+    metadata_script = metadata_step["run"]
+    project = tomllib.loads((_repo_root() / "pyproject.toml").read_text(encoding="utf-8"))
+    expected_revision = project["tool"]["uv"]["sources"]["api-simulator"]["rev"]
+    expected_python_tag = (
+        (_repo_root() / ".python-version").read_text(encoding="utf-8").strip().replace(".", "")
+    )
+    assert ".python-version" in metadata_script
+    assert '["tool"]["uv"]["sources"]["api-simulator"]["rev"]' in metadata_script
+    assert "[0-9a-fA-F]{40}" in metadata_script
+    assert r"\d+\.\d+" in metadata_script
+    metadata_lines = metadata_script.splitlines()
+    assert metadata_lines[0] == "python3 <<'PY' >> \"$GITHUB_OUTPUT\""
+    assert metadata_lines[-1] == "PY"
+    metadata_result = subprocess.run(
+        [sys.executable, "-B", "-c", "\n".join(metadata_lines[1:-1])],
+        cwd=_repo_root(),
+        capture_output=True,
+        text=True,
+        env=production_interpreter_env(),
+        check=False,
+    )
+    assert metadata_result.returncode == 0, metadata_result.stderr
+    assert metadata_result.stdout.splitlines() == [
+        f"python_cache_tag={expected_python_tag}",
+        f"api_simulator_rev={expected_revision}",
+    ]
+    assert metadata["outputs"] == {
+        "python_cache_tag": "${{ steps.cache-identity.outputs.python_cache_tag }}",
+        "api_simulator_rev": "${{ steps.cache-identity.outputs.api_simulator_rev }}",
+    }
+
+    setup_uv_steps = {
+        job_name: next(
+            step for step in job["steps"] if "astral-sh/setup-uv@" in step.get("uses", "")
+        )
+        for job_name, job in jobs.items()
+        if any("astral-sh/setup-uv@" in step.get("uses", "") for step in job.get("steps", []))
+    }
+    assert set(setup_uv_steps) == {"preflight", "test", "cache_prime"}
+    assert all(step["with"]["version"] == "0.9.21" for step in setup_uv_steps.values())
+    assert setup_uv_steps["test"]["with"]["enable-cache"] is False
+    assert setup_uv_steps["cache_prime"]["with"]["enable-cache"] is False
+
+    restore_pin = "actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830"
+    save_pin = "actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"
+    primary_key = (
+        "uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-"
+        "${{ needs.cache_metadata.outputs.api_simulator_rev }}-${{ hashFiles('uv.lock') }}"
+    )
+    restore_prefix = (
+        "uv-${{ runner.os }}-py${{ needs.cache_metadata.outputs.python_cache_tag }}-"
+        "${{ needs.cache_metadata.outputs.api_simulator_rev }}-"
+    )
+    for job in (test_job, primer):
+        cache_dir = next(step for step in job["steps"] if step.get("id") == "uv-cache-dir")
+        restore = next(step for step in job["steps"] if step.get("id") == "uv-cache-restore")
+        assert "uv cache dir" in cache_dir["run"]
+        assert "UV_CACHE_DIR=" in cache_dir["run"]
+        assert '"$GITHUB_ENV"' in cache_dir["run"]
+        assert "path=" in cache_dir["run"]
+        assert '"$GITHUB_OUTPUT"' in cache_dir["run"]
+        assert restore["uses"] == restore_pin
+        assert restore["with"] == {
+            "path": "${{ steps.uv-cache-dir.outputs.path }}",
+            "key": primary_key,
+            "restore-keys": restore_prefix,
+        }
+
+    test_restore = next(step for step in test_job["steps"] if step.get("id") == "uv-cache-restore")
+    test_sync = next(step for step in test_job["steps"] if "uv sync" in step.get("run", ""))
+    assert test_job["steps"].index(test_restore) < test_job["steps"].index(test_sync)
+    assert not any(
+        step.get("uses", "").startswith("actions/cache/save@") for step in test_job["steps"]
+    )
+    assert not any(step.get("uses", "").startswith("actions/cache@") for step in test_job["steps"])
+
+    save_steps = [
+        (job_name, step)
+        for job_name, job in jobs.items()
+        for step in job.get("steps", [])
+        if step.get("uses", "").startswith("actions/cache/save@")
+    ]
+    assert len(save_steps) == 1
+    save_owner, save = save_steps[0]
+    assert save_owner == "cache_prime"
+    assert save["uses"] == save_pin
+    assert save["if"] == "steps.uv-cache-restore.outputs.cache-hit != 'true'"
+    assert save["with"] == {
+        "path": "${{ steps.uv-cache-dir.outputs.path }}",
+        "key": "${{ steps.uv-cache-restore.outputs.cache-primary-key }}",
+    }
+
+    primer_steps = primer["steps"]
+    primer_restore = next(step for step in primer_steps if step.get("id") == "uv-cache-restore")
+    primer_auth = next(
+        step for step in primer_steps if "git config --global" in step.get("run", "")
+    )
+    primer_rust = next(
+        step for step in primer_steps if "dtolnay/rust-toolchain@" in step.get("uses", "")
+    )
+    primer_sync = next(step for step in primer_steps if "uv sync" in step.get("run", ""))
+    primer_prune = next(
+        step for step in primer_steps if "uv cache prune --ci" in step.get("run", "")
+    )
+    assert primer_steps.index(primer_restore) < primer_steps.index(primer_sync)
+    assert primer_steps.index(primer_auth) < primer_steps.index(primer_sync)
+    assert primer_steps.index(primer_rust) < primer_steps.index(primer_sync)
+    assert primer_steps.index(primer_sync) < primer_steps.index(primer_prune)
+    assert primer_steps.index(primer_prune) < primer_steps.index(save)
+
+    preflight_runs = [step.get("run", "") for step in preflight["steps"]]
+    assert any(run == "uv lock --check" for run in preflight_runs)
+    assert not any("uv sync" in run for run in preflight_runs)
+    test_checkout = next(
+        step for step in test_job["steps"] if step.get("uses", "").startswith("actions/checkout@")
+    )
+    assert test_checkout["with"]["fetch-depth"] == 0
+    sync_jobs = {
+        job_name
+        for job_name, job in jobs.items()
+        if any("uv sync" in step.get("run", "") for step in job.get("steps", []))
+    }
+    rust_jobs = {
+        job_name
+        for job_name, job in jobs.items()
+        if any("dtolnay/rust-toolchain@" in step.get("uses", "") for step in job.get("steps", []))
+    }
+    assert rust_jobs == sync_jobs == {"test", "cache_prime"}
+
+
 def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     contributing = (_repo_root() / "docs" / "developer" / "contributing.md").read_text(
         encoding="utf-8"
@@ -551,6 +710,14 @@ def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     assert "docs/developer/contributing.md" in agent_rules
     assert "tests/infra/test_ci_workflow.py" in agent_rules
     assert "explicit CI-policy task" in agent_rules
+    assert "explicit `actions/cache` owns their uv-cache I/O" in agent_rules
+    assert "matrix jobs restore only" in agent_rules
+    assert "sole saver" in agent_rules
+    assert "`api-simulator.rev`" in agent_rules
+    assert "regenerated `uv.lock`" in agent_rules
+    assert "`fetch-depth: 0`" in agent_rules
+    assert "`AUTOSKILLIT_TEST_FILTER=conservative`" in agent_rules
+    assert "compute the merge base" in agent_rules
 
 
 def test_ci_workflow_does_not_pre_regenerate_hooks_json() -> None:

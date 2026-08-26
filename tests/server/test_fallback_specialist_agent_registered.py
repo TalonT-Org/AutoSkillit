@@ -12,8 +12,8 @@ Deliberately does NOT add pluginless-explorer to BUNDLED_EXPLORER_ROLES: that
 set drives Codex's per-child terminal-binding machinery
 (execution/backends/_codex/explorer_projection.py, server/_explorer_projection.py's
 strict-equality discovery check) for the two broker-bound MCP-tool explorers.
-pluginless-explorer is a Claude-only, tool-restricted fallback with an
-unrelated tool surface — it is not part of that binding contract.
+pluginless-explorer is the unbound, tool-restricted fallback with an unrelated
+tool surface — it is not part of that binding contract.
 """
 
 from __future__ import annotations

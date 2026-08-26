@@ -428,6 +428,10 @@ def test_session_catalog_filters_unsupported_semantics_with_exact_metadata(
     compilation = compile_session_skill_catalog(catalog, backend)
 
     assert tuple(skill.name for skill in compilation.catalog.skills) == ("plain",)
+    assert compilation.required_native_roles == {"plain": ()}
+    assert set(compilation.required_native_roles) == {
+        skill.name for skill in compilation.catalog.skills
+    }
     assert compilation.unavailability_payload == {
         "backend": "limited",
         "unavailable": (

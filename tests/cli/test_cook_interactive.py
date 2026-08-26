@@ -316,7 +316,7 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
     assert "defined as both" in guidance and "rejected" in guidance
 
 
-def test_codex_cook_projects_only_spawnable_compose_pr_roles(
+def test_codex_cook_excludes_refused_compose_pr_roles(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -404,7 +404,7 @@ def test_codex_cook_projects_only_spawnable_compose_pr_roles(
     assert captured["mapped_targets"] == {"pr-source-reader", "pr-synthesizer"}
     role_names = captured["role_names"]
     assert isinstance(role_names, frozenset)
-    assert "pr-synthesizer" in role_names
+    assert "pr-synthesizer" not in role_names
     assert "pr-source-reader" not in role_names
 
 

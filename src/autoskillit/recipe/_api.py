@@ -111,6 +111,10 @@ from autoskillit.recipe.validator import (
 logger = get_logger(__name__)
 
 
+def _canonical_string_map(mapping: dict[str, str] | None) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted(mapping.items())) if mapping else ()
+
+
 def _t(label: str, t0: float, name: str) -> float:
     """Log elapsed time for a pipeline stage and return current time.
 
@@ -239,7 +243,7 @@ def load_and_validate(
             "since server startup."
         )
 
-    _pdir = project_dir if project_dir is not None else Path.cwd()
+    _pdir = (project_dir if project_dir is not None else Path.cwd()).absolute()
     pkg_version = _api_cache._get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
     _builtin_dir = builtin_recipes_dir()
@@ -257,6 +261,32 @@ def load_and_validate(
     _user_method_traditions_dir = _pdir / ".autoskillit" / "methodology-traditions"
     _user_method_traditions_hash = _api_cache._compute_registry_hash(_user_method_traditions_dir)
     _temp_relpath = temp_dir_relpath or ".autoskillit/temp"
+    _default_temp_dir = resolve_temp_dir(_pdir, None).absolute()
+    _effective_temp_dir = temp_dir.absolute() if temp_dir is not None else _default_temp_dir
+    _temp_dir_key = None if _effective_temp_dir == _default_temp_dir else str(_effective_temp_dir)
+    _normalized_recipe_info = (
+        dataclasses.replace(recipe_info, path=recipe_info.path.absolute())
+        if recipe_info is not None
+        else None
+    )
+    _recipe_info_key = (
+        (
+            str(_normalized_recipe_info.path),
+            _normalized_recipe_info.source.value,
+            _normalized_recipe_info.content_hash,
+            (
+                hashlib.sha256(_normalized_recipe_info.content.encode()).hexdigest()
+                if _normalized_recipe_info.content is not None
+                else None
+            ),
+        )
+        if _normalized_recipe_info is not None
+        else None
+    )
+    _recipe_list_key = (
+        tuple(sorted({info.name for info in recipe_list})) if recipe_list is not None else None
+    )
+    cacheable = lister is None
     _manifest_path = pkg_root() / "recipe" / "skill_contracts.yaml"
     _budgets_path = pkg_root() / "recipe" / "block_budgets.yaml"
     _ml_sub_area_path = BUNDLED_METHODOLOGY_TRADITIONS_DIR / "_ml_sub_area_folding.yaml"
@@ -269,17 +299,22 @@ def load_and_validate(
     cache_key = (
         name,
         _temp_relpath,
+        _temp_dir_key,
         str(_pdir),
         tuple(sorted(suppressed)) if suppressed else (),
-        tuple(sorted(ingredient_overrides.items())) if ingredient_overrides else (),
+        _recipe_info_key,
+        _recipe_list_key,
+        _canonical_string_map(resolved_defaults),
+        _canonical_string_map(ingredient_overrides),
         defer_unresolved,
         _exp_types_hash,
         _user_exp_hash,
         _method_traditions_hash,
         _user_method_traditions_hash,
         backend_name,
-        tuple(sorted(effective_backend_map.items())) if effective_backend_map else (),
+        _canonical_string_map(effective_backend_map),
         tuple(sorted(backend_capabilities_map.items())) if backend_capabilities_map else (),
+        _canonical_string_map(backend_origin_map),
         include_finalized_projection,
         _manifest_mtime,
         _manifest_size,
@@ -289,7 +324,7 @@ def load_and_validate(
         _ml_sub_area_size,
     )
 
-    cached = _api_cache._LOAD_CACHE.get(cache_key)
+    cached = _api_cache._LOAD_CACHE.get(cache_key) if cacheable else None
 
     from autoskillit.recipe import registry as _registry  # noqa: PLC0415
 
@@ -319,8 +354,8 @@ def load_and_validate(
     t0 = time.perf_counter()
 
     # Stage: find recipe
-    if recipe_info is not None:
-        match: RecipeInfo | None = recipe_info
+    if _normalized_recipe_info is not None:
+        match: RecipeInfo | None = _normalized_recipe_info
         _recipe_list = recipe_list
     else:
         match = find_recipe_by_name(name, _pdir)
@@ -606,8 +641,7 @@ def load_and_validate(
 
             # Stage: staleness check
             if contract:
-                resolved_temp = temp_dir if temp_dir is not None else resolve_temp_dir(_pdir, None)
-                staleness_cache_path = resolved_temp / "recipe_staleness_cache.json"
+                staleness_cache_path = _effective_temp_dir / "recipe_staleness_cache.json"
                 stale = check_contract_staleness(
                     contract,
                     recipe_path=match.path,
@@ -762,7 +796,8 @@ def load_and_validate(
             rule_registry_hash=_rule_hash,
             result=result,
         )
-        _api_cache._LOAD_CACHE.put(cache_key, entry)
+        if cacheable:
+            _api_cache._LOAD_CACHE.put(cache_key, entry)
 
     if result.get("valid", False):
         _api_cache._refresh_staleness_baseline()

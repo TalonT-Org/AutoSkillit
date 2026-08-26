@@ -4,6 +4,7 @@ description: "Terminal read-only fallback explorer. Used only when enable_explor
 tools: [Read, Grep, Glob]
 model: sonnet
 maxTurns: 80
+provisioning: baseline
 ---
 
 # pluginless-explorer

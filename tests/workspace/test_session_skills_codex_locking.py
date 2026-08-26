@@ -199,7 +199,7 @@ def test_managed_codex_session_materializes_profiles_under_its_existing_lease(
     )
     manager = make_session_skill_manager(codex_root=tmp_path / "persistent" / "codex-sessions")
     original_acquire = session_skills._SessionLease.acquire.__func__
-    materialize_profiles = session_skills.materialize_profile_skills
+    materialize_profiles = session_skills._materialize_profile_skill_infos
     events: list[str] = []
 
     def recording_acquire(
@@ -223,7 +223,7 @@ def test_managed_codex_session_materializes_profiles_under_its_existing_lease(
     )
     monkeypatch.setattr(
         session_skills,
-        "materialize_profile_skills",
+        "_materialize_profile_skill_infos",
         recording_profile_materialization,
     )
 

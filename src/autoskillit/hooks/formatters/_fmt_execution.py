@@ -299,7 +299,6 @@ def _fmt_merge_worktree(data: dict, _pipeline: bool) -> str:
     """Format merge_worktree result as Markdown-KV."""
     succeeded = data.get("merge_succeeded")
     has_error = "error" in data
-
     if succeeded:
         mark = _CHECK_MARK
         status = "OK"
@@ -349,6 +348,7 @@ _FMT_MERGE_WORKTREE_RENDERED: frozenset[str] = frozenset(
         "abort_failed",
         "abort_stderr",
         "poisoned_installs",
+        "unverified_scan_reasons",
         "local_sha",
         "remote_sha",
         "remote_is_ancestor",

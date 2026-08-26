@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.core.types._type_context_admission_persistence as persistence_types
+import autoskillit.core.types._type_context_admission_persistence_envelope as envelope_types
 import autoskillit.pipeline.context_admission_ledger as ledger_module
 from autoskillit.core import (
     ActiveContextAdmissionState,
@@ -308,10 +308,10 @@ def test_recovery_rejects_projection_corruption_with_exact_reason(
                     """
                 ).fetchone()[0]
             )
-            envelope = persistence_types.decode_stored_context_admission_envelope(encoded)
+            envelope = envelope_types.decode_stored_context_admission_envelope(encoded)
             assert isinstance(
                 envelope.payload,
-                persistence_types.ShadowContextAdmissionRecord,
+                envelope_types.ShadowContextAdmissionRecord,
             )
             tampered = replace(
                 envelope.payload,
@@ -324,8 +324,8 @@ def test_recovery_rejects_projection_corruption_with_exact_reason(
                 WHERE journal_sequence = 1
                 """,
                 (
-                    persistence_types.encode_stored_context_admission_envelope(
-                        persistence_types.make_stored_context_admission_envelope(tampered)
+                    envelope_types.encode_stored_context_admission_envelope(
+                        envelope_types.make_stored_context_admission_envelope(tampered)
                     ),
                 ),
             )
@@ -357,14 +357,14 @@ def test_expired_event_exact_replay_revalidates_stored_decision(
         encoded = bytes(
             connection.execute("SELECT decision_envelope FROM journal_events").fetchone()[0]
         )
-        envelope = persistence_types.decode_stored_context_admission_envelope(encoded)
-        assert isinstance(envelope.payload, persistence_types.AdmissionDecision)
+        envelope = envelope_types.decode_stored_context_admission_envelope(encoded)
+        assert isinstance(envelope.payload, envelope_types.AdmissionDecision)
         tampered = replace(envelope.payload, reason_code="validly-encoded-tamper")
         connection.execute(
             "UPDATE journal_events SET decision_envelope = ?",
             (
-                persistence_types.encode_stored_context_admission_envelope(
-                    persistence_types.make_stored_context_admission_envelope(tampered)
+                envelope_types.encode_stored_context_admission_envelope(
+                    envelope_types.make_stored_context_admission_envelope(tampered)
                 ),
             ),
         )

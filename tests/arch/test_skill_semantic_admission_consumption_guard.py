@@ -22,8 +22,9 @@ _EXPECTED_CALLERS = Counter(
     {
         (_COMPILE, "cli/session/_session_cook.py", "cook"): 1,
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
-        (_COMPILE, "workspace/session_skills.py", "_materialize_profile_skill_infos"): 1,
-        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 2,
+        (_COMPILE, "workspace/session_skills.py", "_compile_reachable_profile_skill_catalog"): 1,
+        (_COMPILE, "workspace/session_skills.py", "materialize_profile_skills"): 1,
+        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 3,
         (
             _COMPILE,
             "server/tools/_serve_helpers.py",
@@ -50,6 +51,7 @@ _EXPECTED_CALLERS = Counter(
 _COMPILATION_CONSUMERS = frozenset(
     {
         "CompiledSessionSkillCatalog",
+        "_compile_reachable_profile_skill_catalog",
         "_launch_cook_session",
         "append_skill_unavailability",
         "managed_session",

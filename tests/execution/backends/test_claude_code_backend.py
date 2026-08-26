@@ -16,6 +16,7 @@ from autoskillit.core import (
     ResultParser,
     SessionLocator,
     StreamParser,
+    load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, ClaudeStreamParser
 from tests.execution.backends._plugin_binding import plugin_binding
@@ -106,12 +107,18 @@ class TestClaudeCodeBackend:
         )
 
     def test_setup_session_dir_returns_none(self, tmp_path: Path) -> None:
-        result = ClaudeCodeBackend().setup_session_dir(tmp_path)
+        result = ClaudeCodeBackend().setup_session_dir(
+            tmp_path,
+            agent_defs=(load_bundled_agent_definitions()[0],),
+        )
         assert result is None
 
     def test_setup_session_dir_does_not_raise_or_write(self, tmp_path: Path) -> None:
         before = list(tmp_path.iterdir())
-        ClaudeCodeBackend().setup_session_dir(tmp_path)
+        ClaudeCodeBackend().setup_session_dir(
+            tmp_path,
+            agent_defs=(load_bundled_agent_definitions()[0],),
+        )
         after = list(tmp_path.iterdir())
         assert before == after
 
@@ -127,6 +134,7 @@ class TestClaudeCodeBackend:
         with pytest.raises(ValueError, match="does not support explorer binding"):
             ClaudeCodeBackend().setup_session_dir(
                 tmp_path,
+                agent_defs=(load_bundled_agent_definitions()[0],),
                 explorer_binding_env=binding_env,
             )
         with pytest.raises(ValueError, match="does not support explorer binding"):

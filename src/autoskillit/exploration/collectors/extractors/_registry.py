@@ -1,19 +1,18 @@
 """``COLLECTOR_PROFILES`` registry data and invocation factories.
 
-Decomposed from the original ``collectors/extractors.py`` per #4836. ``_collector_metadata``
-is NOT here — it lives in ``_evidence.py`` to break the ``_evidence.py`` ↔
-``_registry.py`` import cycle.
-
-The 13-entry tuple below is byte-for-byte identical to the original; the
-collector manifest digest is a stable signature of this exact ordering.
+Decomposed from the original ``collectors/extractors.py`` per #4836. The
+13-entry tuple below is byte-for-byte identical to the original; the collector
+manifest digest is a stable signature of this exact ordering.
 """
 
 from __future__ import annotations
 
-from typing import Final
+from pathlib import Path
+from typing import TYPE_CHECKING, Final
 
 from autoskillit.core import RepositoryProfileId
 
+from .._bounded import CollectorLimits
 from ._file_search import collect_artifact, collect_file_list, collect_search
 from ._observational import (
     collect_architecture,
@@ -32,6 +31,9 @@ from ._records import (
     _PerScopeCollector,
 )
 
+if TYPE_CHECKING:
+    from ._records import _InvocationReports
+
 __all__ = [
     "COLLECTOR_PROFILES",
     "_per_scope_invocation",
@@ -45,12 +47,12 @@ def _per_scope_invocation(
     collect: _PerScopeCollector,
 ) -> CollectorInvocation:
     def invoke(
-        root,
+        root: Path,
         snapshot_digest: str,
         query: str,
         scopes: tuple[str, ...],
-        limits,
-    ):
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
         del query
         return tuple(
             (
@@ -65,12 +67,12 @@ def _per_scope_invocation(
 
 def _search_invocation() -> CollectorInvocation:
     def invoke(
-        root,
+        root: Path,
         snapshot_digest: str,
         query: str,
         scopes: tuple[str, ...],
-        limits,
-    ):
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
         return (
             (
                 scopes or (".",),
@@ -89,12 +91,12 @@ def _search_invocation() -> CollectorInvocation:
 
 def _unsupported_invocation(collector_id: str) -> CollectorInvocation:
     def invoke(
-        root,
+        root: Path,
         snapshot_digest: str,
         query: str,
         scopes: tuple[str, ...],
-        limits,
-    ):
+        limits: CollectorLimits,
+    ) -> _InvocationReports:
         del query
         return tuple(
             (

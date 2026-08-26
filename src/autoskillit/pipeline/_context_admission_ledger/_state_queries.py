@@ -8,8 +8,6 @@ Wavefront 1 of #4667.
 
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
-
 from autoskillit.core import (
     ActiveContextAdmissionState,
     AdmissionState,
@@ -17,10 +15,10 @@ from autoskillit.core import (
     ContextAdmissionState,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStreamKey,
-    ContextLineage,
     GenerationState,
 )
 
+from ._codec import _iter_lineages
 from ._storage import _LedgerOpenError
 
 
@@ -72,28 +70,8 @@ def _validate_event_stream_identity(
             )
 
 
-def _iter_lineages(value: object) -> tuple[ContextLineage, ...]:
-    lineages: list[ContextLineage] = []
-
-    def visit(item: object) -> None:
-        if isinstance(item, ContextLineage):
-            lineages.append(item)
-            return
-        if isinstance(item, tuple | frozenset):
-            for child in item:
-                visit(child)
-            return
-        if is_dataclass(item):
-            for field_def in fields(item):
-                visit(getattr(item, field_def.name))
-
-    visit(value)
-    return tuple(lineages)
-
-
 __all__ = [
     "_state_has_unresolved_work",
     "_state_retains_event",
     "_validate_event_stream_identity",
-    "_iter_lineages",
 ]

@@ -10,6 +10,7 @@ Wavefront 1 of #4667.
 from __future__ import annotations
 
 import json
+from dataclasses import fields, is_dataclass
 from typing import Final, cast, get_args
 
 from autoskillit.core import (
@@ -19,6 +20,7 @@ from autoskillit.core import (
     ContextAdmissionState,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
+    ContextLineage,
     DurableContextAdmissionPayload,
     ShadowContextAdmissionRecord,
     UninitializedContextAdmissionState,
@@ -139,6 +141,25 @@ def _decode_stream_key(value: bytes) -> ContextAdmissionStreamKey:
             "noncanonical-stream-key",
         )
     return stream_key
+
+
+def _iter_lineages(value: object) -> tuple[ContextLineage, ...]:
+    lineages: list[ContextLineage] = []
+
+    def visit(item: object) -> None:
+        if isinstance(item, ContextLineage):
+            lineages.append(item)
+            return
+        if isinstance(item, tuple | frozenset):
+            for child in item:
+                visit(child)
+            return
+        if is_dataclass(item):
+            for field_def in fields(item):
+                visit(getattr(item, field_def.name))
+
+    visit(value)
+    return tuple(lineages)
 
 
 def _validate_stream_key_json_bounds(value: bytes) -> None:

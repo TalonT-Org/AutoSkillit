@@ -18,6 +18,7 @@ import pytest
 import structlog
 
 from autoskillit.execution.otlp_sink import _SIGNALS as _OTLP_SIGNALS
+from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
@@ -205,6 +206,93 @@ def test_sink_env_enables_native_claude_logs_and_metrics(local_sink: Any) -> Non
     assert "OTEL_LOG_USER_PROMPTS" not in local_sink.env
     assert "OTEL_LOG_ASSISTANT_RESPONSES" not in local_sink.env
     assert "OTEL_LOG_RAW_API_BODIES" not in local_sink.env
+
+
+@pytest.mark.parametrize(
+    ("backend", "native_id_key", "scope_name", "event_name", "channel_b_capable"),
+    (
+        (
+            "claude-code",
+            "session.id",
+            "com.anthropic.claude_code.events",
+            "api_request",
+            True,
+        ),
+        ("codex", "conversation.id", "codex_otel", "codex.sse_event", False),
+    ),
+)
+def test_native_log_id_joins_authoritative_session_record(
+    local_sink: Any,
+    tmp_path: Path,
+    backend: str,
+    native_id_key: str,
+    scope_name: str,
+    event_name: str,
+    channel_b_capable: bool,
+) -> None:
+    native_id = f"{backend}-native-session"
+    _flush(
+        tmp_path,
+        backend=backend,
+        session_id=native_id,
+        channel_b_capable=channel_b_capable,
+    )
+    log_record = {
+        "timeUnixNano": "0" if backend == "codex" else "1787770000000000000",
+        "observedTimeUnixNano": "1787770000000000001",
+        "attributes": [
+            {"key": "event.name", "value": {"stringValue": event_name}},
+            {"key": native_id_key, "value": {"stringValue": native_id}},
+            {
+                "key": "user.email",
+                "value": {"stringValue": "private-email@example.test"},
+            },
+        ],
+    }
+    payload = {
+        "resourceLogs": [
+            {
+                "resource": {"attributes": []},
+                "scopeLogs": [
+                    {
+                        "scope": {"name": scope_name},
+                        "logRecords": [log_record],
+                    }
+                ],
+            }
+        ]
+    }
+
+    status, _, response = _request(
+        local_sink,
+        "POST",
+        "/v1/logs",
+        json.dumps(payload).encode(),
+        {"Content-Type": "application/json"},
+    )
+
+    assert (status, response) == (200, {})
+    records = _wait_for_records(tmp_path / "otlp.jsonl", 1)
+    assert len(records) == 1
+    persisted_scope = records[0]["payload"]["resourceLogs"][0]["scopeLogs"][0]
+    persisted_record = persisted_scope["logRecords"][0]
+    persisted_attributes = {
+        attribute["key"]: attribute["value"]["stringValue"]
+        for attribute in persisted_record["attributes"]
+    }
+    session_row = json.loads((tmp_path / "sessions.jsonl").read_text().splitlines()[0])
+
+    assert persisted_scope["scope"]["name"] == scope_name
+    assert persisted_attributes["event.name"] == event_name
+    assert persisted_attributes[native_id_key] == session_row["session_id"] == native_id
+    assert "user.email" not in persisted_attributes
+    assert "private-email@example.test" not in json.dumps(records[0])
+    if backend == "codex":
+        assert persisted_attributes["event.name"].startswith("codex.")
+        assert persisted_record["timeUnixNano"] == "0"
+        assert persisted_record["observedTimeUnixNano"] == "1787770000000000001"
+    else:
+        assert "claude_code" in persisted_scope["scope"]["name"]
 
 
 def test_accepts_bounded_gzip_json_and_sanitizes_it(local_sink: Any, tmp_path: Path) -> None:

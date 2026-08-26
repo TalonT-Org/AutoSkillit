@@ -107,12 +107,6 @@ class DefaultAuditAdmissionLedger:
     def store_authority(self) -> AuditAdmissionStoreAuthority:
         return self._authority
 
-    # -- connection/schema -------------------------------------------------
-    # Connection plumbing lives in ``_audit_admission_ledger._connections``.
-    # The facade delegates to ``_connections.open(...)``, ``commit(...)``, and
-    # ``rollback(...)``; it does not own connection-open validation, identity
-    # checks, or the explicit COMMIT/ROLLBACK primitives.
-
     # -- health/recovery -----------------------------------------------------
 
     def store_health(self) -> AuditAdmissionStoreHealth:

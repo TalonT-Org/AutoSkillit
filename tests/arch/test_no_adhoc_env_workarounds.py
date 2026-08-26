@@ -29,13 +29,14 @@ justification, mirroring the ``_TEMP_PATH_WHITELIST`` pattern in
 from __future__ import annotations
 
 import ast
+import functools
 from pathlib import Path
 
 import pytest
 
 from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
 
-pytestmark = [pytest.mark.small]
+pytestmark = [pytest.mark.medium]
 
 TESTS_ROOT = Path(__file__).resolve().parent.parent
 
@@ -247,7 +248,8 @@ def _collect_env_call_sites(tree: ast.Module, rel: str) -> list[tuple[str, int, 
     return sites
 
 
-def _all_env_call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
+@functools.lru_cache(maxsize=1)
+def _all_env_call_sites_cached() -> tuple[tuple[tuple[str, int, str], ...], tuple[str, ...]]:
     """Return (call sites, unparseable file paths) across every tests/**/*.py file.
 
     A SyntaxError is recorded rather than silently skipped — a syntactically broken
@@ -262,7 +264,42 @@ def _all_env_call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
             unparseable.append(rel)
             continue
         sites.extend(_collect_env_call_sites(tree, rel))
-    return sites, unparseable
+    return tuple(sites), tuple(unparseable)
+
+
+def _all_env_call_sites() -> tuple[list[tuple[str, int, str]], list[str]]:
+    sites, unparseable = _all_env_call_sites_cached()
+    return list(sites), list(unparseable)
+
+
+def test_all_env_call_sites_cache_isolated_from_caller_mutation(monkeypatch) -> None:
+    original_parse = ast.parse
+    parse_count = 0
+
+    def counting_parse(*args, **kwargs):
+        nonlocal parse_count
+        parse_count += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", counting_parse)
+    first_sites, first_unparseable = _all_env_call_sites()
+    expected_sites = list(first_sites)
+    expected_unparseable = list(first_unparseable)
+    midpoint_cache_info = _all_env_call_sites_cached.cache_info()
+    midpoint_parse_count = parse_count
+
+    first_sites.append(("tests/sentinel.py", -1, "SENTINEL_ENV"))
+    first_unparseable.append("tests/sentinel_unparseable.py")
+    second_sites, second_unparseable = _all_env_call_sites()
+
+    final_cache_info = _all_env_call_sites_cached.cache_info()
+    assert second_sites is not first_sites
+    assert second_unparseable is not first_unparseable
+    assert second_sites == expected_sites
+    assert second_unparseable == expected_unparseable
+    assert final_cache_info.hits == midpoint_cache_info.hits + 1
+    assert final_cache_info.misses == midpoint_cache_info.misses
+    assert parse_count == midpoint_parse_count
 
 
 def test_no_adhoc_delenv_or_pop_for_centrally_scrubbed_vars() -> None:

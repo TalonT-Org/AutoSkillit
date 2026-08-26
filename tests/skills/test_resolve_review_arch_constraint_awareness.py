@@ -8,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from tests._arch_constraint_discovery import discover_constraint_tests
+import tests._arch_constraint_discovery as constraint_discovery
+from tests._arch_constraint_discovery import (
+    _discover_constraint_tests_cached,
+    discover_constraint_tests,
+)
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
@@ -105,6 +109,32 @@ def test_discovery_finds_known_constraints():
     assert "test_regex_import.py" in discovered, "test_regex_import.py not found"
     assert "test_clone_timeouts.py" in discovered, "test_clone_timeouts.py not found"
     assert "test_anti_pattern_guards.py" in discovered, "test_anti_pattern_guards.py not found"
+
+
+def test_discovery_cache_isolated_from_caller_mutation(monkeypatch):
+    original_parse = constraint_discovery.ast.parse
+    parse_count = 0
+
+    def counting_parse(*args, **kwargs):
+        nonlocal parse_count
+        parse_count += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(constraint_discovery.ast, "parse", counting_parse)
+    first_discovered = discover_constraint_tests()
+    expected_items = list(first_discovered.items())
+    midpoint_cache_info = _discover_constraint_tests_cached.cache_info()
+    midpoint_parse_count = parse_count
+
+    first_discovered["sentinel_constraint.py"] = Path("sentinel_constraint.py")
+    second_discovered = discover_constraint_tests()
+
+    final_cache_info = _discover_constraint_tests_cached.cache_info()
+    assert second_discovered is not first_discovered
+    assert list(second_discovered.items()) == expected_items
+    assert final_cache_info.hits == midpoint_cache_info.hits + 1
+    assert final_cache_info.misses == midpoint_cache_info.misses
+    assert parse_count == midpoint_parse_count
 
 
 # --- Catalog presence ---

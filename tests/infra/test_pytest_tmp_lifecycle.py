@@ -234,19 +234,29 @@ def test_reap_treats_recycled_pid_as_dead(tmp_path: Path) -> None:
 
 def test_reap_age_gates_markerless_and_legacy_dirs(tmp_path: Path) -> None:
     platform_root, generation, _, _ = _layout(tmp_path)
+    proc_root = tmp_path / "proc"
+    proc_root.mkdir()
     generation.mkdir(parents=True)
     legacy_tmp = platform_root / "pytest-tmp-phase-a-full"
     legacy_cache = platform_root / "pytest-cache-deadbeef"
     legacy_tmp.mkdir()
     legacy_cache.mkdir()
 
-    fresh = _run("reap", "--root", platform_root, "--legacy-age-minutes", 120)
+    fresh = _run(
+        "reap",
+        "--root",
+        platform_root,
+        "--legacy-age-minutes",
+        120,
+        "--proc-root",
+        proc_root,
+    )
     assert fresh.returncode == 0
     assert generation.exists() and legacy_tmp.exists() and legacy_cache.exists()
 
     for path in (generation, legacy_tmp, legacy_cache):
         _backdate(path, seconds=3 * 60 * 60)
-    assert _reap(platform_root).returncode == 0
+    assert _reap(platform_root, "--proc-root", proc_root).returncode == 0
     assert not generation.exists() and not legacy_tmp.exists() and not legacy_cache.exists()
 
 

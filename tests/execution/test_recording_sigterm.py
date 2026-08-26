@@ -51,37 +51,48 @@ def test_sigterm_writes_scenario_json(tmp_path):
     # ~/.autoskillit/config.yaml (e.g. any real execution markers under CWD,
     # or stale config keys from a prior schema) so the sentinel location and
     # config layers are deterministic.
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "autoskillit"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=env,
-        cwd=tmp_path,
-    )
+    stdout_path = tmp_path / "server.stdout"
+    stderr_path = tmp_path / "server.stderr"
+    with stdout_path.open("wb") as stdout_stream, stderr_path.open("wb") as stderr_stream:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "autoskillit"],
+            stdin=subprocess.PIPE,
+            stdout=stdout_stream,
+            stderr=stderr_stream,
+            env=env,
+            cwd=tmp_path,
+        )
 
-    # Wait for the filesystem sentinel — written inside the lifespan's try:
-    # block AFTER the anyio signal receiver is armed. Observing the sentinel
-    # guarantees SIGTERM will be caught by the event-loop-routed handler.
-    # Compute the path manually from the overridden state dir rather than
-    # calling readiness_sentinel_path(), because the test process's own
-    # AUTOSKILLIT_STATE_DIR may differ from the subprocess's.
-    sentinel_path = state_dir / "kitchen_state" / f"server_ready_{proc.pid}.sentinel"
-    wait_for_subprocess_ready(proc, sentinel_path, deadline_s=10.0)
+        # Wait for the filesystem sentinel — written inside the lifespan's try:
+        # block AFTER the anyio signal receiver is armed. Observing the sentinel
+        # guarantees SIGTERM will be caught by the event-loop-routed handler.
+        # Compute the path manually from the overridden state dir rather than
+        # calling readiness_sentinel_path(), because the test process's own
+        # AUTOSKILLIT_STATE_DIR may differ from the subprocess's. File-backed
+        # output prevents an unread pipe from blocking startup before the sentinel.
+        sentinel_path = state_dir / "kitchen_state" / f"server_ready_{proc.pid}.sentinel"
+        try:
+            wait_for_subprocess_ready(proc, sentinel_path, deadline_s=10.0)
 
-    # SIGTERM is the exact signal Claude Code sends on /exit. Close stdin so
-    # the stdio transport detects EOF and the event loop can fully unwind.
-    proc.stdin.close()
-    proc.stdin = None  # prevent communicate() from flushing the closed pipe
-    proc.send_signal(signal.SIGTERM)
-    try:
-        stdout_bytes, stderr_bytes = proc.communicate(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        stdout_bytes, stderr_bytes = proc.communicate()
+            # SIGTERM is the exact signal Claude Code sends on /exit. Close stdin so
+            # the stdio transport detects EOF and the event loop can fully unwind.
+            proc.stdin.close()
+            proc.send_signal(signal.SIGTERM)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        except BaseException:
+            if proc.stdin is not None and not proc.stdin.closed:
+                proc.stdin.close()
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            raise
 
-    stdout = stdout_bytes.decode(errors="replace")
-    stderr = stderr_bytes.decode(errors="replace")
+    stdout = stdout_path.read_text(errors="replace")
+    stderr = stderr_path.read_text(errors="replace")
 
     # Clean shutdown: event-loop-routed SIGTERM → scope.cancel() → finalize()
     assert proc.returncode == 0, (

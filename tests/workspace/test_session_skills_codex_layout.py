@@ -306,6 +306,7 @@ def test_empty_codex_catalog_materializes_only_unbound_baseline(
     from autoskillit.execution.backends.codex import CodexBackend
 
     source_home = _prepare_codex_profile_source(tmp_path)
+    _write_profile_skill(source_home / "skills", "profile-only")
     backend = CodexBackend(source_codex_home=source_home)
     manager = make_session_skill_manager()
 
@@ -333,8 +334,14 @@ def test_bundled_codex_catalog_provisions_exact_admitted_role_union(
     source_home = _prepare_codex_profile_source(tmp_path)
     backend = CodexBackend(source_codex_home=source_home)
     manager = make_session_skill_manager()
-    catalog, context = _catalog_context(manager, backend=backend)
+    catalog, _context = _catalog_context(manager, backend=backend)
     compilation = compile_session_skill_catalog(catalog, backend)
+    context = manager._provider.catalog_projection_context(
+        compilation.catalog,
+        manager.ephemeral_root,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
     admitted_names = {skill.name for skill in compilation.catalog.skills}
     admitted_roles = {
         role for roles in compilation.required_native_roles.values() for role in roles

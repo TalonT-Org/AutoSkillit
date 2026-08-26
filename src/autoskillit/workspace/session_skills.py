@@ -457,17 +457,12 @@ def _profile_skill_infos(profile_skills_root: Path) -> tuple[SkillInfo, ...]:
     return tuple(result)
 
 
-def _compile_profile_skill_infos(
-    profile_skills_source: Path,
-    backend: CodingAgentBackend,
-) -> tuple[tuple[SkillInfo, ...], CompiledSessionSkillCatalog]:
-    infos = _profile_skill_infos(profile_skills_source)
-    catalog = EffectiveSkillCatalog(
+def _profile_skill_catalog(infos: tuple[SkillInfo, ...]) -> EffectiveSkillCatalog:
+    return EffectiveSkillCatalog(
         skills=tuple(SkillCatalogEntry.from_skill_info(info) for info in infos),
         execution_role=SkillExecutionRole.SESSION,
         namespace_sources={info.name: info.source for info in infos},
     )
-    return infos, compile_session_skill_catalog(catalog, backend)
 
 
 def _materialize_profile_skill_infos(
@@ -518,8 +513,9 @@ def materialize_profile_skills(
     finalized_native_roles: frozenset[str] | None,
 ) -> CompiledSessionSkillCatalog:
     """Safely project the admitted skill catalog from one declared profile source."""
-    infos, admission_compilation = _compile_profile_skill_infos(
-        profile_skills_source,
+    infos = _profile_skill_infos(profile_skills_source)
+    admission_compilation = compile_session_skill_catalog(
+        _profile_skill_catalog(infos),
         backend,
     )
     compilation = admission_compilation
@@ -1164,8 +1160,10 @@ class DefaultSessionSkillManager:
             and execution_role is SkillExecutionRole.SESSION
             and profile_skills_source is not None
         ):
-            profile_skill_infos, profile_admission_compilation = _compile_profile_skill_infos(
-                profile_skills_source, backend
+            profile_skill_infos = _profile_skill_infos(profile_skills_source)
+            profile_admission_compilation = compile_session_skill_catalog(
+                _profile_skill_catalog(profile_skill_infos),
+                backend,
             )
 
         if backend is not None and backend.capabilities.mcp_config_capable:

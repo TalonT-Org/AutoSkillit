@@ -62,7 +62,10 @@ def test_coding_agent_backend_has_setup_session_dir_method():
     )
     assert signature.parameters["agent_defs"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["agent_defs"].default is None
-    assert typing.get_type_hints(CodingAgentBackend.setup_session_dir) == {
+    assert typing.get_type_hints(
+        CodingAgentBackend.setup_session_dir,
+        localns={"AgentDef": AgentDef},
+    ) == {
         "session_dir": Path,
         "parent_sandbox_mode": str,
         "agent_defs": tuple[AgentDef, ...] | None,

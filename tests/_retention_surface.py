@@ -252,29 +252,29 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- workspace.session_skills::cleanup_stale --
-    f"{_CS}::L1352": SafetyDecision(
+    f"{_CS}::L1491": SafetyDecision(
         "The candidate root directory does not exist; nothing here to scan or reclaim."
     ),
-    f"{_CS}::L1356": SafetyDecision(
+    f"{_CS}::L1495": SafetyDecision(
         "The session-leases bookkeeping subdirectory itself is not a session; a structural "
         "exclusion, not an eligibility decision."
     ),
-    f"{_CS}::L1358": SafetyDecision(
+    f"{_CS}::L1497": SafetyDecision(
         "A non-directory entry under the candidate root is a type guard, never a session "
         "directory this function reclaims."
     ),
-    f"{_CS}::L1362": RetentionDecision(
+    f"{_CS}::L1501": RetentionDecision(
         Revocability.REVOCABLE,
         "An entry with an in-process session lease held by this process is retained -- "
         "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
         "live owner reference.",
     ),
-    f"{_CS}::L1368": RetentionDecision(
+    f"{_CS}::L1507": RetentionDecision(
         Revocability.REVOCABLE,
         "Failure to acquire the non-blocking lease means another process currently holds "
         "a live lock on this entry, a directly observed live-owner reference.",
     ),
-    f"{_CS}::L1387": RetentionDecision(
+    f"{_CS}::L1526": RetentionDecision(
         Revocability.REVOCABLE,
         "Removal did not occur because the re-checked mtime under lease is fresh again or "
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"

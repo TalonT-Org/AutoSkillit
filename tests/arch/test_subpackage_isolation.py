@@ -1111,7 +1111,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         # +_doctor_repair isolated opt-in mutation spoke (#4710)
-        "workspace": 17,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 26,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
@@ -1122,6 +1122,14 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
         # store for verbatim plugin assets, kept separate from _projection_cache.py since
         # it must be resolvable and safe to import even when no store root is available.
+        # +9 shard modules from the skill-resolution/capability-parsing decomposition
+        # (issue #4833): skill_capability_authenticity, skill_capability_cache,
+        # skill_capability_scanner, skill_semantic_plan, skills_exploration,
+        # skills_frontmatter, skills_overrides, skills_records, skills_visibility.
+        # Each shard owns a single concern seam; the original skills.py (1550 LoC) and
+        # skill_capabilities.py (1118 LoC) become slim facades that re-export every
+        # public symbol plus the test-private helpers reached via the facade module
+        # globals (preserves monkeypatch visibility for 73 unmodified test files).
         "hooks": 25,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,

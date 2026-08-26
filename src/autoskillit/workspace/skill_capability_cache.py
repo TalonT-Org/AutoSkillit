@@ -180,7 +180,6 @@ class _SkillCapabilityEvidenceCache:
     ) -> tuple[SkillCapabilityEvidence, ...]:
         with self._lock:
             resident_mutated = False
-            error_to_raise: BaseException | None = None
             try:
                 if weight_bytes <= self._max_bytes:
                     resident_mutated = True
@@ -203,19 +202,19 @@ class _SkillCapabilityEvidenceCache:
                 # immediately without paying for the bookkeeping microdelay.
                 # Inflight + event cleanup runs in every case via finally so
                 # concurrent waiters in `_wait_for_build` always wake up and
-                # never deadlock.
+                # never deadlock. The bare raise re-raises the currently
+                # handled exception; finally still runs to set state.event
+                # before propagation, so waiters observe the failure state.
                 if resident_mutated and isinstance(error, Exception):
                     self._entries.clear()
                     self._weight_bytes = 0
                 state.result = None
                 state.error = error
-                error_to_raise = error
+                raise
             finally:
                 if self._inflight.get(key) is state:
                     del self._inflight[key]
                 state.event.set()
-            if error_to_raise is not None:
-                raise error_to_raise
         return result
 
 

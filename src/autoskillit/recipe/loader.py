@@ -25,7 +25,8 @@ def _extract_frontmatter(text: str) -> str:
     crlf_close = text.find("\r\n---", after_open)
     candidates = [idx for idx in (lf_close, crlf_close) if idx != -1]
     if not candidates:
-        return text
+        msg = "frontmatter closing delimiter not found"
+        raise ValueError(msg)
     close = min(candidates)
     return text[after_open:close]
 

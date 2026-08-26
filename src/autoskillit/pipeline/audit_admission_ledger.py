@@ -124,7 +124,7 @@ class DefaultAuditAdmissionLedger:
             connection: sqlite3.Connection | None = None
             try:
                 connection = _connections.open(self._authority, self._busy_timeout_ms)
-                installations, attempts = _recovery._read_installations_and_attempts(connection)
+                installations, attempts = _recovery._installations_and_attempts_read(connection)
             except AuditAdmissionStorageError as exc:
                 return self._fail_closed_recovery(exc.reason, exc.reason_code)
             except (OSError, sqlite3.Error) as exc:

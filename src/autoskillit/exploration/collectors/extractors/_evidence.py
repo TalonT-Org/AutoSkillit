@@ -1,17 +1,11 @@
 """Manifest digest, evidence-record construction, and metadata lookup.
 
 Decomposed from the original ``collectors/extractors.py`` per #4836. ``_collector_metadata``
-lives in this shard (not in ``_registry``) so ``collector_manifest_digest`` and
-``_evidence`` can both consult it without creating a ``_evidence.py`` ↔
-``_registry.py`` import cycle: ``collector_manifest_digest`` reads ``COLLECTOR_PROFILES``
-from ``_registry.py`` and ``_collector_metadata`` walks the same tuple; co-locating
-``_collector_metadata`` with ``collector_manifest_digest`` removes the need for
-``_evidence.py`` to import from ``_registry.py`` for any metadata lookup.
-
-``_evidence`` is the only function whose body consults ``_collector_metadata``;
-``_relabel`` (in ``_observational``) also consults it and is reached through a
-``from ._evidence import _collector_metadata`` import that keeps the cycle
-one-way.
+lives in this shard so the registry's ``COLLECTOR_PROFILES`` is consulted via lazy
+imports (below) at call time, breaking the ``_file_search → _evidence → _registry
+→ _file_search`` cycle that arises because ``COLLECTOR_PROFILES`` is built from
+the ``collect_*`` functions in ``_file_search`` and metadata is read back from it
+at evidence-record construction.
 """
 
 from __future__ import annotations

@@ -25,10 +25,7 @@ __all__ = [
     "_PerScopeCollector",
 ]
 
-# Type aliases colocated with ``CollectorInvocation`` because the dataclass field
-# annotation and ``_per_scope_invocation``/``_search_invocation``/``_unsupported_invocation``
-# all reference them; keeping the aliases in the same shard as the dataclass
-# avoids import cycles at field-evaluation time.
+# Type aliases colocated with the dataclass to avoid import cycles at field-evaluation time.
 _InvocationReports: TypeAlias = tuple[tuple[tuple[str, ...], CollectorReport], ...]
 _InvocationAdapter: TypeAlias = Callable[
     [Path, str, str, tuple[str, ...], CollectorLimits], _InvocationReports

@@ -1,13 +1,9 @@
 """Dataclasses, errors, schema constants, and the ``(status, reason)`` invariant.
 
 Decomposed from the original ``exploration/snapshot.py`` per #4836. ``_ObservedPath``
-moves here with its identity/published byte accounting because it is the schema
-of one observation (not the producer of one) — ``_path_state`` (the producer)
-and ``_identity_state_payload`` (the helper that surfaces the private digest)
-live in ``_capture.py``. ``_CaptureAborted.__init__`` and
-``_expected_status_for_reason`` are colocated here because the constructor's
-assertion that ``_expected_status_for_reason(reason) == status`` cannot drift
-between the two without silently breaking every raise site.
+is the schema of one observation; ``_path_state`` (the producer) lives in
+``_capture.py``. ``_CaptureAborted.__init__`` and ``_expected_status_for_reason``
+are colocated so their ``status/reason`` invariant cannot drift between them.
 """
 
 from __future__ import annotations

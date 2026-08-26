@@ -32,7 +32,7 @@ from autoskillit.workspace.session_skills import (
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
 from tests.contracts._projection_helpers import non_exploration_catalog
-from tests.workspace.test_session_skills_provider import _codex_backend
+from tests.workspace._helpers import _make_codex_backend
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -118,7 +118,7 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
     projection_context = provider.catalog_projection_context(
         catalog,
         tmp_path,
-        backend=_codex_backend(),
+        backend=_make_codex_backend(),
         durable_scripts_root=pkg_root(),
         resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
     )

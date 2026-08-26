@@ -7,7 +7,10 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from ..agent_definition import AgentDef
 
 from ._type_backend import (
     AgentSessionResult,
@@ -367,6 +370,7 @@ class CodingAgentBackend(Protocol):
         session_dir: Path,
         *,
         parent_sandbox_mode: str = "workspace-write",
+        agent_defs: tuple[AgentDef, ...] | None = None,
         explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> frozenset[str] | None: ...

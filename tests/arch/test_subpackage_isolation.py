@@ -1497,12 +1497,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the leases they gate, and fit under this cap post-extraction.",
     ),
     "workspace/session_skills.py": (
-        1400,
+        1550,
         "REQ-CNST-010-E13/E14: ordering-sensitive session skill materialization owns "
         "provider discovery, override precedence, filtering, dependency activation, the "
         "generated-home lease and cleanup transaction, and backend-specific layout "
         "validation; keeping those operations together preserves both assembly ordering "
-        "and the create/validate/yield/delete ownership proof",
+        "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
+        "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
     "rules_skill_content.py": (
         1200,

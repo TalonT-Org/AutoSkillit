@@ -7,7 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, get_args
+from typing import Any, Final, Literal, TypeAlias, get_args
 
 from ._plugin_ids import DIRECT_PREFIX, validate_agent_tool_canonical
 from .io import load_yaml
@@ -23,6 +23,8 @@ from .types import (
 
 __all__ = [
     "AGENT_DEFINITION_DIGEST_DOMAIN",
+    "AGENT_PROVISIONING_BASELINE",
+    "AGENT_PROVISIONING_SKILL_DERIVED",
     "BUNDLED_EXPLORER_ROLES",
     "CODEX_DISABLED_WEB_SEARCH_POLICY",
     "CODEX_EXPLORER_IDENTITY",
@@ -42,6 +44,8 @@ __all__ = [
 
 
 AGENT_DEFINITION_DIGEST_DOMAIN = "autoskillit.agent-definition.v1"
+AGENT_PROVISIONING_BASELINE: Final = "baseline"
+AGENT_PROVISIONING_SKILL_DERIVED: Final = "skill-derived"
 CODEX_DISABLED_WEB_SEARCH_POLICY: Literal["disabled"] = "disabled"
 CODEX_EXPLORER_IDENTITY: tuple[str, str] = ("gpt-5.6-luna", "max")
 SEMANTIC_CODE_NAVIGATOR_ROLE: str = "semantic-code-navigator"
@@ -54,6 +58,9 @@ _AGENT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _DIRECT_TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _CODEX_CLI_VERSION_RE = re.compile(r"(?:codex-cli )?(?P<version>[0-9]+\.[0-9]+\.[0-9]+)")
 _READ_ONLY_AGENT_TOOLS = frozenset({"Read", "Grep", "Glob", "LSP"})
+_AGENT_PROVISIONING_POLICIES = frozenset(
+    {AGENT_PROVISIONING_BASELINE, AGENT_PROVISIONING_SKILL_DERIVED}
+)
 _CODEX_DISABLEABLE_FEATURES = (
     "apps",
     "browser_use",
@@ -177,6 +184,7 @@ class AgentDef:
     body: str
     codex: CodexAgentProjectionDef
     reader_tools: tuple[str, ...] = ()
+    provisioning: Literal["skill-derived", "baseline"] = AGENT_PROVISIONING_SKILL_DERIVED
 
     def __post_init__(self) -> None:
         if not _AGENT_NAME_RE.fullmatch(self.name):
@@ -195,6 +203,10 @@ class AgentDef:
             raise AgentDefinitionError("agent body cannot contain TOML triple single quotes")
         if not isinstance(self.reader_tools, tuple):
             raise AgentDefinitionError("agent reader_tools must be an immutable tuple")
+        if self.provisioning not in _AGENT_PROVISIONING_POLICIES:
+            raise AgentDefinitionError(
+                f"unsupported agent provisioning policy: {self.provisioning!r}"
+            )
         if any(not isinstance(tool, str) or not tool for tool in self.reader_tools):
             raise AgentDefinitionError("agent reader_tools must contain non-empty strings")
         if len(set(self.reader_tools)) != len(self.reader_tools):
@@ -343,6 +355,7 @@ def load_agent_definition(path: Path) -> AgentDef:
         body="".join(lines[closing_index + 1 :]).strip(),
         codex=_derived_codex_projection(meta, tools),
         reader_tools=reader_tools,
+        provisioning=meta.get("provisioning", AGENT_PROVISIONING_SKILL_DERIVED),
     )
 
 
@@ -381,6 +394,7 @@ def agent_definition_digest(definition: AgentDef) -> str:
         "max_turns": definition.max_turns,
         "model": definition.model,
         "name": definition.name,
+        "provisioning": definition.provisioning,
         "reader_tools": list(definition.reader_tools),
         "tools": list(definition.tools),
     }

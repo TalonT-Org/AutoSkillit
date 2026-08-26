@@ -4,6 +4,7 @@ description: "Terminal read-only specialist for structural and semantic reposito
 tools: [mcp__autoskillit__submit_exploration_query, mcp__autoskillit__get_exploration_page, mcp__autoskillit__resume_exploration_context]
 model: sonnet
 maxTurns: 80
+provisioning: baseline
 codex:
   model: gpt-5.6-luna
   reasoning_effort: max

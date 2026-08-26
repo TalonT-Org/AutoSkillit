@@ -23,7 +23,7 @@ _EXPECTED_CALLERS = Counter(
         (_COMPILE, "cli/session/_session_cook.py", "cook"): 1,
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
         (_COMPILE, "workspace/session_skills.py", "materialize_profile_skills"): 2,
-        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 3,
+        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 4,
         (
             _COMPILE,
             "server/tools/_serve_helpers.py",

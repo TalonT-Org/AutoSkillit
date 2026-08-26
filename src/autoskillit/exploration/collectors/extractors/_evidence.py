@@ -1,11 +1,10 @@
 """Manifest digest, evidence-record construction, and metadata lookup.
 
-Decomposed from the original ``collectors/extractors.py`` per #4836. ``_collector_metadata``
-lives in this shard so the registry's ``COLLECTOR_PROFILES`` is consulted via lazy
-imports (below) at call time, breaking the ``_file_search → _evidence → _registry
-→ _file_search`` cycle that arises because ``COLLECTOR_PROFILES`` is built from
-the ``collect_*`` functions in ``_file_search`` and metadata is read back from it
-at evidence-record construction.
+Decomposed from the original ``collectors/extractors.py`` per #4836. ``COLLECTOR_PROFILES``
+is consumed here and built from this shard's downstream imports, so the cycle
+``_file_search → _evidence → _registry → _file_search`` is broken by
+lazy-importing it at call time (see ``_collector_metadata`` and
+``collector_manifest_digest``).
 """
 
 from __future__ import annotations
@@ -23,16 +22,6 @@ from autoskillit.core import (
 
 from ..._deterministic import canonical_json
 from ._records import CollectorProfile
-
-# ``COLLECTOR_PROFILES`` lives in ``_registry`` and is imported lazily inside
-# each function that needs it. The shards form a cycle:
-# ``_file_search → _evidence → _registry → _file_search`` because
-# ``_registry`` builds ``COLLECTOR_PROFILES`` from the ``collect_*`` functions
-# in ``_file_search``, which need ``_evidence`` for ``_report``/``_evidence``,
-# which need ``COLLECTOR_PROFILES`` for ``_collector_metadata``. Resolving
-# ``COLLECTOR_PROFILES`` lazily here keeps the import direction one-way: each
-# shard imports its direct dependencies at module load, but cross-shard data
-# (``COLLECTOR_PROFILES``) is looked up at call time.
 
 __all__ = [
     "collector_manifest_digest",

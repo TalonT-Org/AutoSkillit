@@ -4,11 +4,6 @@ Decomposed from the original 1,155-line ``exploration/snapshot.py`` per #4836.
 Importing shard symbols directly is fine; importing them through this facade
 guarantees the public surface (``autoskillit.exploration.snapshot.X``) survives
 future shard reorganisation.
-
-The ``# noqa: F401`` re-exports keep helpers reachable as facade attributes so
-production code that resolves them via ``_snapshot_facade.NAME`` (for test
-late-binding) and tests that monkeypatch through ``snapshot_module.NAME`` both
-work without an explicit re-export.
 """
 
 from __future__ import annotations

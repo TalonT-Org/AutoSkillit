@@ -28,6 +28,7 @@ from .._bounded import (
 )
 from ._evidence import _collector_metadata, _evidence, _report
 from ._file_search import collect_artifact
+from ._python_ast import collect_python_ast
 
 __all__ = [
     "collect_architecture",
@@ -125,10 +126,6 @@ def _relabel(
 def collect_autoskillit_registry(
     root: Path, snapshot_digest: str, scope: str, limits: CollectorLimits
 ) -> CollectorReport:
-    # Lazy import: ``collect_python_ast`` is the only caller of stdlib ``ast`` in
-    # this shard, and most observational collects do not exercise it.
-    from ._python_ast import collect_python_ast
-
     return _relabel(
         collect_python_ast(root, snapshot_digest, scope, limits), "autoskillit-registry"
     )

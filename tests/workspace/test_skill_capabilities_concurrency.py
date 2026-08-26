@@ -390,3 +390,90 @@ def test_partial_bookkeeping_failure_resets_resident_state_and_allows_retry(
     )
     retry = capabilities.classify_skill_capability_evidence(content)
     assert retry[0].capability == "test_check"
+
+
+def test_keyboard_interrupt_during_bookkeeping_wakes_waiters_and_releases_inflight(
+    evidence_cache, monkeypatch
+) -> None:
+    """A KeyboardInterrupt inside the build path must wake any concurrent waiter.
+
+    Regression guard for the resolve-review round on PR #4842: previously,
+    narrowing the build-path ``except`` from ``BaseException`` to ``Exception``
+    (or, equivalently, allowing ``KeyboardInterrupt`` to skip the cleanup
+    block in ``_complete_build``) caused concurrent waiters blocked on
+    ``_wait_for_build`` to deadlock because ``state.event`` was never set.
+    The build path must run its ``finally``-guarded inflight cleanup even when
+    interrupted by a non-``Exception`` ``BaseException`` subclass, so waiters
+    wake up and observe the failure state.
+    """
+    content = _document("interrupt", "Call test_check().")
+    scanner_entered = Event()
+    scanner_release = Event()
+    raise_event = Event()
+    interrupt = KeyboardInterrupt("interrupted during bookkeeping")
+    original_eviction = capabilities._SkillCapabilityEvidenceCache._evict_if_needed_locked
+    original_scanner = capabilities._scan_skill_capability_evidence_uncached
+
+    def interrupt_after_insertion(self) -> None:
+        raise_event.set()
+        raise interrupt
+
+    def recorded_scanner(body: str, name: str):
+        scanner_entered.set()
+        assert scanner_release.wait(2)
+        return original_scanner(body, name)
+
+    monkeypatch.setattr(
+        capabilities._SkillCapabilityEvidenceCache,
+        "_evict_if_needed_locked",
+        interrupt_after_insertion,
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        recorded_scanner,
+    )
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            builder = executor.submit(
+                capabilities.classify_skill_capability_evidence,
+                content,
+            )
+            assert scanner_entered.wait(2)
+            waiter = executor.submit(
+                capabilities.classify_skill_capability_evidence,
+                content,
+            )
+            _wait_for_cache_info(evidence_cache, lambda info: info.inflight_waiters == 1)
+            scanner_release.set()
+            assert raise_event.wait(2), "eviction override never ran"
+            with pytest.raises(KeyboardInterrupt) as builder_raised:
+                builder.result(timeout=2)
+            assert builder_raised.value is interrupt
+            # The waiter must wake up — not deadlock. A short timeout proves
+            # the inflight cleanup ran (state.event.set() in the finally).
+            # The waiter surfaces the sibling failure as a RuntimeError chained
+            # from the original interrupt; the chain must point at it.
+            with pytest.raises(RuntimeError) as waiter_raised:
+                waiter.result(timeout=2)
+            assert waiter_raised.value.__cause__ is interrupt
+    finally:
+        scanner_release.set()
+
+    info = evidence_cache.info()
+    assert info.inflight_builds == 0
+    assert info.inflight_waiters == 0
+    # Cache rollback is intentionally skipped for KeyboardInterrupt so the
+    # interrupt propagates immediately. A subsequent call rebuilds cleanly.
+    monkeypatch.setattr(
+        capabilities._SkillCapabilityEvidenceCache,
+        "_evict_if_needed_locked",
+        original_eviction,
+    )
+    monkeypatch.setattr(
+        capabilities,
+        "_scan_skill_capability_evidence_uncached",
+        original_scanner,
+    )
+    retry = capabilities.classify_skill_capability_evidence(content)
+    assert retry[0].capability == "test_check"

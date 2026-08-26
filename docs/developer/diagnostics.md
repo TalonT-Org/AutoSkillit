@@ -25,6 +25,8 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 ```
 ~/.local/share/autoskillit/logs/
 ├── sessions.jsonl                    # Retained derived index (one row per committed session)
+├── otlp.jsonl                        # Current scrubbed vendor-native OTLP capture
+├── otlp.jsonl.1                      # Single rotated generation
 └── sessions/
     └── {session_id}/                 # or pid_{pid}_{timestamp} if session_id unavailable
         ├── proc_trace.jsonl          # Full ProcSnapshot series
@@ -82,6 +84,44 @@ preserves that projection, while deterministic crash-recovery replay heals its
 current key. Historical inconsistencies for other keys remain doctor-visible.
 Publication is atomic for concurrent writers and process crashes, but does not
 promise strict power-loss durability or snapshot isolation for unlocked readers.
+
+## Native OTLP capture and correlation
+
+Headless execution enables vendor-native logs and metrics against one
+invocation-scoped loopback HTTP/JSON sink. Claude Code is activated with
+`CLAUDE_CODE_ENABLE_TELEMETRY`, `OTEL_LOGS_EXPORTER`, and
+`OTEL_METRICS_EXPORTER`. Codex derives native per-launch `[otel]` CLI overrides
+from the same sink endpoints; Claude-only activation and exporter-selection
+variables are removed from the Codex child environment. Interactive Codex and
+persistent `config.toml` files are not changed.
+
+The persisted `otlp.jsonl` wrapper adds only `signal` and `payload`; the payload
+keeps the vendor's OTLP nesting and event vocabulary. Claude log records use the
+`com.anthropic.claude_code.events` instrumentation scope and carry `session.id`.
+Codex log records retain `event.name=codex.*` and carry `conversation.id`.
+Those native values equal the corresponding `sessions.jsonl.session_id` and are
+the direct join keys:
+
+| Backend | Native log attribute | Authoritative session field |
+|---|---|---|
+| Claude Code | `session.id` | `sessions.jsonl.session_id` |
+| Codex | `conversation.id` | `sessions.jsonl.session_id` |
+
+`thread_id` remains the Codex rollout/notify and resume identifier; it is not
+the OTLP attribute name. Codex metrics may omit `conversation.id`, so the direct
+join guarantee applies to emitted log records, not every signal. Field
+availability otherwise remains whatever the vendor emitted, and Codex does not
+currently provide a stable specialized-agent identity (#4634).
+
+PII scrubbing happens recursively before persistence, including nested OTLP
+attribute lists. Native join and event-name attributes are retained while user,
+account, organization, and email identifiers are removed. Prompt, assistant,
+tool-content, and raw-API-body capture are not enabled by this integration.
+
+Consumers must preserve raw accounting and stop metadata. Do not add
+cache-read tokens to input tokens, add reasoning tokens to output tokens, or
+treat `finish_reasons=["length"]` as proof of context exhaustion.
+`sessions.jsonl` is only the retained session projection.
 
 ## Configuration
 

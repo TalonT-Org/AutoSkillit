@@ -102,6 +102,10 @@ def _decode_gzip_bounded(body: bytes) -> bytes:
 
 def _build_env(base_url: str) -> dict[str, str]:
     env = {
+        "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "OTEL_METRICS_INCLUDE_SESSION_ID": "true",
         "OTEL_EXPORTER_OTLP_ENDPOINT": base_url,
         "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
         "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": f"{base_url}/v1/traces",

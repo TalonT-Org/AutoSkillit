@@ -13,6 +13,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.otlp_sink import _build_env
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -104,6 +105,44 @@ def test_skill_session_audit_authority_env_contract(
         assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR not in non_attested.env
     else:
         assert non_attested.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == absent_value
+
+
+def test_native_otlp_activation_uses_each_backends_supported_launch_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify Claude uses sink env while Codex emits run-scoped CLI overrides."""
+    sink_env = _build_env("http://127.0.0.1:4318")
+    for key in (
+        "CLAUDE_CODE_ENABLE_TELEMETRY",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_METRICS_INCLUDE_SESSION_ID",
+    ):
+        monkeypatch.setenv(key, "hostile-ambient")
+
+    claude = ClaudeCodeBackend().build_skill_session_cmd(
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        provider_extras=sink_env,
+    )
+    codex = CodexBackend().build_skill_session_cmd(
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        provider_extras=sink_env,
+    )
+
+    for key in (
+        "CLAUDE_CODE_ENABLE_TELEMETRY",
+        "OTEL_LOGS_EXPORTER",
+        "OTEL_METRICS_EXPORTER",
+        "OTEL_METRICS_INCLUDE_SESSION_ID",
+    ):
+        assert claude.env[key] == sink_env[key]
+        assert key not in codex.env
+    assert any(value.startswith("otel.exporter=") for value in codex.cmd)
+    assert any(value.startswith("otel.metrics_exporter=") for value in codex.cmd)
 
 
 @pytest.mark.parametrize(

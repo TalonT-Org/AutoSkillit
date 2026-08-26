@@ -375,6 +375,19 @@ class CodexBackend(BackendCmdBuilderBase):
     def version_cmd(self) -> tuple[str, ...]:
         return ("codex", "--version")
 
+    @staticmethod
+    def _otlp_overrides(extras: Mapping[str, str]) -> tuple[str, ...]:
+        logs_endpoint = extras.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
+        metrics_endpoint = extras.get("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
+        if not logs_endpoint or not metrics_endpoint:
+            return ()
+        return (
+            "otel.exporter="
+            f'{{otlp-http={{endpoint={_format_toml_value(logs_endpoint)},protocol="json"}}}}',
+            "otel.metrics_exporter="
+            f'{{otlp-http={{endpoint={_format_toml_value(metrics_endpoint)},protocol="json"}}}}',
+        )
+
     def build_headless_cmd(
         self,
         prompt: str,
@@ -385,7 +398,12 @@ class CodexBackend(BackendCmdBuilderBase):
         env_extras: Mapping[str, str] | None = None,
         project_root: Path | str | None = None,
     ) -> CmdSpec:
-        cmd = _codex_exec_base(sandbox="workspace-write")
+        headless_extras = _codex_exec_extras(session_type="")
+        _merge_caller_env_extras(headless_extras, env_extras)
+        cmd = _codex_exec_base(
+            sandbox="workspace-write",
+            extra_overrides=self._otlp_overrides(headless_extras),
+        )
         if model:
             cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
@@ -394,8 +412,6 @@ class CodexBackend(BackendCmdBuilderBase):
             cmd += [CodexFlags.ADD_DIR, d]
         cmd.append(prompt)
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        headless_extras = _codex_exec_extras(session_type="")
-        _merge_caller_env_extras(headless_extras, env_extras)
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
         return CmdSpec(
             cmd=tuple(cmd), env=env, force_inactive_agent_teams=force_inactive_agent_teams
@@ -552,6 +568,7 @@ class CodexBackend(BackendCmdBuilderBase):
         _net_overrides: list[str] = []
         if network_access:
             _net_overrides.append("sandbox_workspace_write.network_access=true")
+        _net_overrides.extend(self._otlp_overrides(extras))
         cmd = _codex_exec_base(
             sandbox=sandbox_mode if sandbox_mode == "read-only" else None,
             bypass_hook_trust=_should_bypass_hook_trust(
@@ -686,7 +703,7 @@ class CodexBackend(BackendCmdBuilderBase):
 
         cmd = _codex_exec_base(
             sandbox="read-only",
-            extra_overrides=["web_search=disabled"],
+            extra_overrides=["web_search=disabled", *self._otlp_overrides(extras)],
             bypass_hook_trust=_should_bypass_hook_trust(
                 self.capabilities.hook_trust_policy,
                 automated_session=True,
@@ -857,17 +874,21 @@ class CodexBackend(BackendCmdBuilderBase):
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
-        cmd = _codex_exec_base(sandbox="read-only", json=(output_format == OutputFormat.JSON))
-        cmd.append(CodexFlags.RESUME_SUBCOMMAND)
-        cmd.append(resume_session_id)
-        cmd.append(
-            f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
-        )
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras = _codex_exec_extras(
             session_type="", include_session_baseline=True, include_agent_backend_flat=True
         )
         _merge_caller_env_extras(resume_extras, env_extras)
+        cmd = _codex_exec_base(
+            sandbox="read-only",
+            json=(output_format == OutputFormat.JSON),
+            extra_overrides=self._otlp_overrides(resume_extras),
+        )
+        cmd.append(CodexFlags.RESUME_SUBCOMMAND)
+        cmd.append(resume_session_id)
+        cmd.append(
+            f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
+        )
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if projected_codex_home is not None:
             resume_extras["CODEX_HOME"] = projected_codex_home

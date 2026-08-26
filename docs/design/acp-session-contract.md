@@ -72,6 +72,29 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `translate_model` | (model alias resolution) | Translates canonical model name to backend-specific name | Translates canonical model name to backend-specific name | — |
 | `model_config_overrides` | (model-specific CLI overrides) | Returns CLI overrides tuple for a given model | Returns CLI overrides tuple for a given model | — |
 
+### Headless OTLP builder contract
+
+The invocation-scoped sink supplies one logs endpoint and one metrics endpoint.
+Every Codex headless command builder translates a complete endpoint pair into
+the native single-line `otel.exporter={otlp-http=...}` and
+`otel.metrics_exporter={otlp-http=...}` `-c` overrides. The overrides are part
+of the finalized command before a prompt or `resume` subcommand, so launch
+contract capture records the effective telemetry configuration without another
+schema.
+
+| Codex construction surface | Run-scoped OTLP overrides | Existing behavior retained |
+|---|---|---|
+| Direct headless (`build_headless_cmd`, including `build_cmd`) | Logs and metrics | Workspace-write sandbox and prompt ordering |
+| Skill session | Logs and metrics | Optional sandbox-network override and resume construction |
+| Food truck | Logs and metrics | `web_search=disabled` and read-only sandbox |
+| Standalone resume | Logs and metrics | Positional `resume <session_id>` ordering |
+| Interactive/manual | None | Generated/user configuration and two-pass launch binding |
+
+Codex derives the command overrides before sanitizing the child environment.
+Its environment policy then removes Claude activation and exporter selectors
+from both inherited and injected inputs while retaining the OTLP endpoint values
+and the existing trusted exact-name extras contract.
+
 ### Interactive lifecycle data and ownership
 
 The backend-neutral records separate user-visible identity from launch

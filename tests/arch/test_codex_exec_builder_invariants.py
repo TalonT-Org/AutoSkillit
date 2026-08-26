@@ -14,13 +14,14 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.codex import _IMAGE_GENERATION_DISABLED, CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def _build_headless():
-    return CodexBackend().build_headless_cmd("test prompt")
+    return CodexBackend().build_headless_cmd("test prompt", env_extras=OTLP_EXTRAS)
 
 
 def _build_skill_session():
@@ -31,6 +32,7 @@ def _build_skill_session():
         model=None,
         plugin_binding=None,
         output_format=OutputFormat.JSON,
+        provider_extras=OTLP_EXTRAS,
     )
 
 
@@ -41,11 +43,14 @@ def _build_food_truck():
             plugin_binding=binding,
             cwd="/work",
             completion_marker="%%DONE%%",
+            env_extras=OTLP_EXTRAS,
         )
 
 
 def _build_resume():
-    return CodexBackend().build_resume_cmd(resume_session_id="sess-abc", prompt="continue")
+    return CodexBackend().build_resume_cmd(
+        resume_session_id="sess-abc", prompt="continue", env_extras=OTLP_EXTRAS
+    )
 
 
 ALL_BUILDERS = [_build_headless, _build_skill_session, _build_food_truck, _build_resume]
@@ -86,6 +91,13 @@ def test_exec_builders_apply_cli_sandbox_only_for_fixed_policy(
 def test_all_exec_builders_have_image_generation_disabled(builder) -> None:
     spec = builder()
     assert _IMAGE_GENERATION_DISABLED in spec.cmd
+
+
+@pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
+def test_all_exec_builders_apply_native_otlp_overrides(builder) -> None:
+    spec = builder()
+    assert any(value.startswith("otel.exporter=") for value in spec.cmd)
+    assert any(value.startswith("otel.metrics_exporter=") for value in spec.cmd)
 
 
 _REINJECTED_BY_BUILDER: dict[str, set[str]] = {

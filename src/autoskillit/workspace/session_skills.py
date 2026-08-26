@@ -508,6 +508,32 @@ def _materialize_profile_skill_infos(
     return compilation
 
 
+def _compile_reachable_profile_skill_catalog(
+    admission_compilation: CompiledSessionSkillCatalog,
+    backend: CodingAgentBackend,
+    finalized_native_roles: frozenset[str],
+) -> CompiledSessionSkillCatalog:
+    reachability_compilation = compile_session_skill_catalog(
+        admission_compilation.catalog,
+        backend,
+        finalized_native_roles=finalized_native_roles,
+    )
+    return CompiledSessionSkillCatalog(
+        backend=backend.name,
+        catalog=reachability_compilation.catalog,
+        unavailable=tuple(
+            sorted(
+                (
+                    *admission_compilation.unavailable,
+                    *reachability_compilation.unavailable,
+                ),
+                key=lambda item: item.skill,
+            )
+        ),
+        required_native_roles=reachability_compilation.required_native_roles,
+    )
+
+
 def materialize_profile_skills(
     generated_home: Path,
     profile_skills_source: Path,
@@ -524,24 +550,10 @@ def materialize_profile_skills(
     )
     compilation = admission_compilation
     if finalized_native_roles is not None:
-        reachability_compilation = compile_session_skill_catalog(
-            admission_compilation.catalog,
+        compilation = _compile_reachable_profile_skill_catalog(
+            admission_compilation,
             backend,
-            finalized_native_roles=finalized_native_roles,
-        )
-        compilation = CompiledSessionSkillCatalog(
-            backend=backend.name,
-            catalog=reachability_compilation.catalog,
-            unavailable=tuple(
-                sorted(
-                    (
-                        *admission_compilation.unavailable,
-                        *reachability_compilation.unavailable,
-                    ),
-                    key=lambda item: item.skill,
-                )
-            ),
-            required_native_roles=reachability_compilation.required_native_roles,
+            finalized_native_roles,
         )
     return _materialize_profile_skill_infos(
         generated_home,
@@ -1278,24 +1290,10 @@ class DefaultSessionSkillManager:
                     projection_context,
                 )
             else:
-                profile_reachability_compilation = compile_session_skill_catalog(
-                    profile_admission_compilation.catalog,
+                profile_compilation = _compile_reachable_profile_skill_catalog(
+                    profile_admission_compilation,
                     backend,
-                    finalized_native_roles=finalized_native_roles,
-                )
-                profile_compilation = CompiledSessionSkillCatalog(
-                    backend=backend.name,
-                    catalog=profile_reachability_compilation.catalog,
-                    unavailable=tuple(
-                        sorted(
-                            (
-                                *profile_admission_compilation.unavailable,
-                                *profile_reachability_compilation.unavailable,
-                            ),
-                            key=lambda item: item.skill,
-                        )
-                    ),
-                    required_native_roles=(profile_reachability_compilation.required_native_roles),
+                    finalized_native_roles,
                 )
                 _materialize_profile_skill_infos(
                     generated_home,

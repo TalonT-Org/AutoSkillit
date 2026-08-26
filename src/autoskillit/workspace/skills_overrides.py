@@ -2,10 +2,7 @@
 
 Owns the project-local override search configuration (``_OVERRIDE_SEARCH_DIRS``),
 the ``ProjectLocalOverride`` NamedTuple, and the discovery function
-``detect_project_local_overrides``. The facade re-exports these names so
-internal callers reach them through the facade module globals — preserving
-the monkeypatch contract on ``_OVERRIDE_SEARCH_DIRS`` used by
-``tests/arch/test_skill_search_dir_symmetry.py``.
+``detect_project_local_overrides``.
 """
 
 from __future__ import annotations

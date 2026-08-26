@@ -88,7 +88,9 @@ def _skill_info_from_frontmatter(
         caps_raw = []
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
-    from autoskillit.workspace.skill_capabilities import parse_skill_semantic_plan  # noqa: PLC0415
+    from autoskillit.workspace.skill_capabilities import (
+        parse_skill_semantic_plan,  # noqa: PLC0415  # deferred import to break the cycle with skills_frontmatter → skill_capabilities
+    )
 
     semantic_plan, semantic_diagnostics = parse_skill_semantic_plan(
         data,
@@ -129,9 +131,9 @@ def _skill_info_from_frontmatter(
                     parsed_vectors,
                 )
             else:
-                # No sidecar — check if there are markers in the body that expect one.
-                # If markers exist but no sidecar, that is an error caught by the binder
-                # when called with an empty vector tuple.
+                # No sidecar found at this skill path: leave exploration_vectors
+                # empty and let downstream enforcement decide whether the body
+                # has unbound markers that require a sidecar.
                 pass
         except SkillContractError as exc:
             invalidities.append(
@@ -186,7 +188,7 @@ def _skill_info_from_frontmatter(
         frontmatter=parsed,
         invalidities=tuple(invalidities),
     )
-    from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415
+    from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415  # deferred import to break the cycle with skills_frontmatter → skill_capabilities
         validate_skill_capability_authenticity,
     )
 

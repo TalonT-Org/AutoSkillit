@@ -1077,16 +1077,6 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "between sibling or nested sessions."
         ),
     ),
-    "AUTOSKILLIT_HOOK_EVENT": AmbientEnvDisposition(
-        var="AUTOSKILLIT_HOOK_EVENT",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
-        ),
-    ),
     "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT": AmbientEnvDisposition(
         var="AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT",
         disposition="scrub",
@@ -1104,46 +1094,6 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
             "of an unrelated lookup collection; never set as a real OS environment variable."
-        ),
-    ),
-    "AUTOSKILLIT_JOIN_FLAG_PATH": AmbientEnvDisposition(
-        var="AUTOSKILLIT_JOIN_FLAG_PATH",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
-        ),
-    ),
-    "AUTOSKILLIT_JOIN_PARENT": AmbientEnvDisposition(
-        var="AUTOSKILLIT_JOIN_PARENT",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
-        ),
-    ),
-    "AUTOSKILLIT_JOIN_REQUIRED": AmbientEnvDisposition(
-        var="AUTOSKILLIT_JOIN_REQUIRED",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
-        ),
-    ),
-    "AUTOSKILLIT_JOIN_SESSION_ID": AmbientEnvDisposition(
-        var="AUTOSKILLIT_JOIN_SESSION_ID",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
         ),
     ),
     "AUTOSKILLIT_KITCHEN_SESSION_ID": AmbientEnvDisposition(
@@ -1303,16 +1253,6 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "AutoSkillit-private session/orchestration variable in the"
             "AUTOSKILLIT_PRIVATE_ENV_VARS / _HEADLESS_EXCLUSIVE_VARS baseline; must not leak"
             "between sibling or nested sessions."
-        ),
-    ),
-    "AUTOSKILLIT_SESSION_ID": AmbientEnvDisposition(
-        var="AUTOSKILLIT_SESSION_ID",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "Real AutoSkillit orchestration/session-control environment variable read by"
-            "production code; scrubbed as internal state that must not leak across test"
-            "boundaries."
         ),
     ),
     "AUTOSKILLIT_SESSION_TYPE": AmbientEnvDisposition(

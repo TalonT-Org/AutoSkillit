@@ -376,7 +376,16 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     required_skill_fields=frozenset({"name", "description"}),
     required_session_files=frozenset(),
     session_dir_symlinks=frozenset(),
-    applicable_guards=frozenset({"skill_load_guard"}),
+    applicable_guards=frozenset(
+        {
+            "background_exec_guard",
+            "join_claim_guard",
+            "join_followup_guard",
+            "join_settle_guard",
+            "join_stop_guard",
+            "skill_load_guard",
+        }
+    ),
     write_guard_tool_names=frozenset({"Write", "Edit", "Bash", "apply_patch"}),
     env_denylist_prefixes=(),
     min_version="2.1.219",

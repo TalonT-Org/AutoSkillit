@@ -143,6 +143,10 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
 # mcp_health_advisor                     | degraded
 # skill_orchestration_guard              | works-as-is
 # background_exec_guard                  | works-as-is
+# join_claim_guard                       | not-applicable
+# join_followup_guard                    | not-applicable
+# join_settle_guard                      | not-applicable
+# join_stop_guard                        | not-applicable
 # fleet_dispatch_guard (+ resume_own. + fleet_claim)   | works-as-is
 # pretty_output_hook                     | works-as-is
 # token_summary_hook (+ quota_post)       | works-as-is

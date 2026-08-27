@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """PreToolUse guard — atomically claim one declared assignment per direct Agent call.
 
-When the session flag (or ``AUTOSKILLIT_JOIN_REQUIRED=1``) reports
-``join_required=true``, every top-level direct ``Agent`` tool_use_id must
-claim one slot in the active wave declared by ``declare_join_batch``.
+When the payload-identified session binding reports ``join_required=true``,
+every top-level direct ``Agent`` tool_use_id must claim one slot in the active
+wave declared by ``declare_join_batch``.
 The claim is recorded in the shared join ledger (``_join_ledger.py``).
 
 Denial reasons:
@@ -68,7 +68,11 @@ def main() -> None:
         # Inside a claimed child's own subagent context — exempt.
         sys.exit(0)
 
-    if not session_join_required():
+    session_id = _resolve_session_id(data)
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if not session_id or not payload_cwd:
+        sys.exit(0)
+    if not session_join_required(payload_cwd, session_id):
         sys.exit(0)
 
     tool_name = data.get("tool_name")
@@ -96,39 +100,8 @@ def main() -> None:
         sys.stdout.write(payload + "\n")
         sys.exit(0)
 
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
-    session_id = _resolve_session_id(data)
     top_level_parent = "top_level"
-    if not session_id:
-        # join_required=true is established; missing session_id is a
-        # fail-closed condition — we cannot attribute this Agent call
-        # to a declared batch, so deny rather than silently pass.
-        write_join_diagnostic(
-            {
-                "gate": "join_claim_guard",
-                "tool_use_id": tool_use_id,
-                "status": "deny",
-                "denial_reason": "missing_session_id",
-            },
-            caller="join_claim_guard",
-        )
-        denial_reason = (
-            f"{JOIN_CLAIM_DENY_TRIGGER}: session_id was not provided by the harness "
-            "for an Agent call in a join-required session."
-        )
-        payload = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": denial_reason,
-                }
-            }
-        )
-        sys.stdout.write(payload + "\n")
-        sys.exit(0)
-
     try:
         claimed = claim_assignment(
             flag_dir,

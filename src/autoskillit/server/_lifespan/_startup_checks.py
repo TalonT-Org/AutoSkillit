@@ -259,6 +259,41 @@ def run_startup_fix_required_coverage_check() -> None:
             )
 
 
+_FIXED_SET_JOIN_GUARD_STEMS = frozenset(
+    {
+        "background_exec_guard",
+        "join_claim_guard",
+        "join_followup_guard",
+        "join_settle_guard",
+        "join_stop_guard",
+    }
+)
+
+
+def run_startup_join_guard_coverage_check() -> None:
+    """Require complete join-guard coverage on every fixed-set capable backend."""
+    fixed_set_backends = 0
+    for backend_name, cls in BACKEND_REGISTRY.items():
+        try:
+            capabilities = cls().capabilities
+        except Exception as exc:
+            raise RuntimeError(
+                f"Backend {backend_name!r} constructor raised during startup "
+                f"join-guard coverage check: {exc}"
+            ) from exc
+        if not capabilities.fixed_set_join_capable:
+            continue
+        fixed_set_backends += 1
+        missing = sorted(_FIXED_SET_JOIN_GUARD_STEMS - capabilities.applicable_guards)
+        if missing:
+            raise RuntimeError(
+                f"Backend {backend_name!r} is fixed-set join capable but is missing "
+                f"required applicable_guards: {missing}"
+            )
+    if fixed_set_backends == 0:
+        raise RuntimeError("BACKEND_REGISTRY has no fixed-set join capable backend")
+
+
 def _finalize_recorder() -> None:
     """Finalize the recording subprocess runner if one is active."""
     ctx = _lifespan_pkg._get_ctx_or_none()

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """PreToolUse guard — deny non-Agent follow-up effects while a wave is unresolved.
 
-When the session flag (or ``AUTOSKILLIT_JOIN_REQUIRED=1``) reports
-``join_required=true``, a top-level parent turn (no ``agent_id`` in the
-hook payload) may not issue any non-Agent tool call before every
-expected direct ``Agent`` handle has settled. The natural tool calls
+When the payload-identified session binding reports ``join_required=true``, a
+top-level parent turn (no ``agent_id`` in the hook payload) may not issue any
+non-Agent tool call before every expected direct ``Agent`` handle has settled.
+The natural tool calls
 inside a claimed child's own subagent context (``agent_id`` present) are
 exempt — blocking them would self-lock every join.
 
@@ -77,44 +77,18 @@ def main() -> None:
     if data.get("agent_id"):
         sys.exit(0)
 
-    if not session_join_required():
+    session_id = _resolve_session_id(data)
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if not session_id or not payload_cwd:
+        sys.exit(0)
+    if not session_join_required(payload_cwd, session_id):
         sys.exit(0)
 
     tool_name = data.get("tool_name")
     if not isinstance(tool_name, str) or tool_name == "Agent":
         sys.exit(0)
 
-    session_id = _resolve_session_id(data)
-    if not session_id:
-        # join_required=true is established; missing session_id is a
-        # fail-closed condition — we cannot attribute this follow-up tool
-        # to a declared batch, so deny rather than silently pass.
-        write_join_diagnostic(
-            {
-                "gate": "join_followup_guard",
-                "tool_use_id": data.get("tool_use_id", "") if isinstance(data, dict) else "",
-                "status": "block",
-                "denial_reason": "missing_session_id",
-            },
-            caller="join_followup_guard",
-        )
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "decision": "block",
-                    "reason": (
-                        "required-join wave is unresolved: top-level parent may not invoke "
-                        f"{tool_name!r} before every declared Agent handle settles "
-                        "(session_id missing — cannot attribute to declared batch)."
-                    ),
-                }
-            )
-            + "\n"
-        )
-        sys.exit(2)
-
     top_level_parent = "top_level"
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     batch = active_batch(
         flag_dir,

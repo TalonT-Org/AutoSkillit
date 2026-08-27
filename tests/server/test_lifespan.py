@@ -243,6 +243,63 @@ def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch)
     assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
 
 
+def test_startup_refuses_when_a_fixed_set_backend_omits_a_join_guard(monkeypatch) -> None:
+    """Startup names the incomplete fixed-set backend and its missing guard."""
+    import autoskillit.server._lifespan._startup_checks as startup_checks
+    from autoskillit.core import BackendCapabilities
+    from autoskillit.server._lifespan import run_startup_join_guard_coverage_check
+
+    class IncompleteBackend:
+        capabilities = BackendCapabilities(
+            fixed_set_join_capable=True,
+            applicable_guards=frozenset(
+                {
+                    "background_exec_guard",
+                    "join_claim_guard",
+                    "join_followup_guard",
+                    "join_settle_guard",
+                }
+            ),
+        )
+
+    monkeypatch.setattr(startup_checks, "BACKEND_REGISTRY", {"incomplete": IncompleteBackend})
+
+    with pytest.raises(RuntimeError) as exc_info:
+        run_startup_join_guard_coverage_check()
+
+    message = str(exc_info.value)
+    assert "incomplete" in message
+    assert "join_stop_guard" in message
+
+
+@pytest.mark.asyncio
+async def test_startup_join_guard_coverage_check_passes_and_runs_before_readiness(
+    monkeypatch,
+) -> None:
+    """The real registry passes, and lifespan runs coverage before marking readiness."""
+    from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server._lifespan import run_startup_join_guard_coverage_check
+
+    run_startup_join_guard_coverage_check()
+    calls: list[str] = []
+    mock_ctx = MagicMock()
+    mock_ctx.runner = MagicMock()
+    mock_ctx.backend.capabilities.mcp_config_capable = False
+
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan._lifespan.run_startup_join_guard_coverage_check",
+        lambda: calls.append("coverage"),
+    )
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan._lifespan.write_readiness_sentinel",
+        lambda: calls.append("readiness"),
+    )
+
+    with patch("autoskillit.server._lifespan._get_ctx_or_none", return_value=mock_ctx):
+        async with _autoskillit_lifespan(MagicMock()):
+            assert calls == ["coverage", "readiness"]
+
+
 def test_lifespan_boot_registry_covers_all_session_types() -> None:
     """_LIFESPAN_BOOT_REGISTRY must have an entry for every SessionType value."""
     from autoskillit.core import SessionType

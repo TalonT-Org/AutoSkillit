@@ -78,8 +78,7 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 for _ds in DispatchStatus:
     if _ds not in _ALLOWED_TRANSITIONS:
         raise AssertionError(f"DispatchStatus.{_ds.name} missing from _ALLOWED_TRANSITIONS")
-# _ds intentionally leaks as the last iterated status — matches the original
-# state_types.py assertion-loop pattern.
+del _ds
 
 
 def _validate_transition(current: str, new: str, dispatch_name: str) -> None:

@@ -353,7 +353,7 @@ class TestUnknownPersistedDispatchStatus:
 
 
 class TestStateDecompositionImports:
-    def test_state_types_importable(self) -> None:
+    def test_state_records_and_transitions_importable(self) -> None:
         from autoskillit.fleet.state_records import DispatchRecord
         from autoskillit.fleet.state_transitions import DispatchStatus
 

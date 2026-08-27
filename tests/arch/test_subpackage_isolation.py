@@ -1069,7 +1069,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             decomposed into state_effects.py, state_records.py, state_transitions.py,
             state_outcomes.py, and state_error_codes.py (#4856) to split the 899-line monolith
             along effect-provenance, dispatch-record/campaign-state, transition/retry, and
-            outcome/result boundaries. Exempt at 29 files.
+            outcome/result boundaries, after which the transitional state_types.py re-export
+            facade was deleted. Exempt at 28 files.
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.

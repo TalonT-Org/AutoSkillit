@@ -87,6 +87,8 @@ from .state import (
     write_initial_state,
 )
 from .state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
+from .state_outcomes import DispatchOutcome
+from .state_records import FLEET_STATE_SCHEMA_VERSION
 from .state_recovery import (
     MAX_CONSECUTIVE_RESUME_ATTEMPTS as MAX_CONSECUTIVE_RESUME_ATTEMPTS,
 )
@@ -102,10 +104,6 @@ from .state_recovery import (
     has_completed_dispatch,
     prepare_resume,
     resolve_stale_running,
-)
-from .state_types import (
-    FLEET_STATE_SCHEMA_VERSION,
-    DispatchOutcome,
 )
 from .summary import (
     CampaignParseResult,

@@ -323,17 +323,6 @@ async def run_execution(
             identities={"resume_session_id": resume_session_id},
         )
 
-    # 996-1004: resume line offset.
-    resume_line_offset = 0  # noqa: F841 — preserved for source parity
-    if resume_session_id:
-        _resume_jsonl = (
-            _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
-            if _locator is not None
-            else None
-        )
-        if _resume_jsonl is not None and _resume_jsonl.exists():
-            _ = len(_resume_jsonl.read_text(encoding="utf-8").splitlines())  # noqa: F841 — preserved for original source parity
-
     # 1006-1017: completion_marker and sentinel_contract come from the identity
     # object held by the orchestrator's lineage preparation; the orchestrator
     # passes them in as explicit parameters (preserving the closure-captured

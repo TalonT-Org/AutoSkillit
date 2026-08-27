@@ -188,3 +188,14 @@ def resolve_state_root(payload_cwd: str) -> Path:
             current = parent
 
     return Path.cwd()
+
+
+def resolve_kitchen_state_dir(payload_cwd: str) -> Path:
+    """Resolve the campaign-scoped directory containing kitchen session markers."""
+    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
+    if state_override:
+        return Path(state_override) / "kitchen_state"
+
+    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
+    base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
+    return base / campaign_id if campaign_id else base

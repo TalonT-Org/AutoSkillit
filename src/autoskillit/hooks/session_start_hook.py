@@ -22,17 +22,8 @@ if _HOOKS_DIR not in sys.path:
 
 from _hook_payload import (  # noqa: E402
     normalize_payload_cwd,
-    resolve_state_root,
+    resolve_kitchen_state_dir,
 )
-
-
-def _get_state_dir(payload_cwd: str) -> Path:
-    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-    if state_override:
-        return Path(state_override) / "kitchen_state"
-    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-    base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
-    return base / campaign_id if campaign_id else base
 
 
 def main() -> None:
@@ -48,7 +39,7 @@ def main() -> None:
     _best_recipe_name: str | None = None
     _best_opened_at = None
     try:
-        _state_dir = _get_state_dir(normalize_payload_cwd(data.get("cwd")))
+        _state_dir = resolve_kitchen_state_dir(normalize_payload_cwd(data.get("cwd")))
         if _state_dir.is_dir():
             _ttl_hours = 24
             for _p in _state_dir.glob("*.json"):

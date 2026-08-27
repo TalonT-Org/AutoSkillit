@@ -21,6 +21,7 @@ if _HOOKS_DIR not in sys.path:
 
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
+    resolve_kitchen_state_dir,
     resolve_state_root,
 )
 
@@ -32,13 +33,7 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd:
     import tempfile
     from datetime import datetime
 
-    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-    if state_override:
-        state_dir = Path(state_override) / "kitchen_state"
-    else:
-        campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-        base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
-        state_dir = base / campaign_id if campaign_id else base
+    state_dir = resolve_kitchen_state_dir(payload_cwd)
     state_dir.mkdir(parents=True, exist_ok=True)
     marker_path = state_dir / f"{session_id}.json"
     payload = json.dumps(
@@ -121,13 +116,7 @@ def _check_recipe_reload_block(
     if tool_input.get("ingredients_only", False):
         return None
 
-    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-    if state_override:
-        state_dir = Path(state_override) / "kitchen_state"
-    else:
-        campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-        base = resolve_state_root(payload_cwd) / ".autoskillit" / "temp" / "kitchen_state"
-        state_dir = base / campaign_id if campaign_id else base
+    state_dir = resolve_kitchen_state_dir(payload_cwd)
 
     confirmed_path = state_dir / f"{session_id}_recipe_confirmed.json"
     if not confirmed_path.exists():

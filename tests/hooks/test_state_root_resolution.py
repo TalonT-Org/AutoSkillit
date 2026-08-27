@@ -27,6 +27,7 @@ if _HOOKS_SRC not in sys.path:
 
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,
+    resolve_kitchen_state_dir,
     resolve_state_root,
 )
 
@@ -48,6 +49,28 @@ def test_normalize_payload_cwd_rejects_non_absolute_values(value: object) -> Non
 
 def test_normalize_payload_cwd_preserves_absolute_values(tmp_path: Path) -> None:
     assert normalize_payload_cwd(str(tmp_path)) == str(tmp_path)
+
+
+def test_resolve_kitchen_state_dir_prefers_explicit_state_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "state"
+    monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "ignored-campaign")
+
+    assert resolve_kitchen_state_dir("") == state_dir / "kitchen_state"
+
+
+def test_resolve_kitchen_state_dir_scopes_shared_root_by_campaign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
+    monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "campaign-7")
+
+    assert resolve_kitchen_state_dir("") == (
+        tmp_path / ".autoskillit" / "temp" / "kitchen_state" / "campaign-7"
+    )
 
 
 # ---------------------------------------------------------------------------

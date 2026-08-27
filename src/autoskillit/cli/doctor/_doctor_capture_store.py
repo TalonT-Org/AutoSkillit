@@ -6,7 +6,6 @@ from pathlib import Path
 
 from autoskillit.core import Severity
 from autoskillit.hooks import CleanupBlocker, capture_store_stats
-from autoskillit.hooks._capture._types import CaptureCapacitySpec
 
 from ._doctor_types import DoctorResult
 
@@ -15,7 +14,9 @@ from ._doctor_types import DoctorResult
 # a handful of aged orphans is unremarkable churn; hundreds is the debris
 # field this whole reconciliation mechanism exists to prevent.
 _UNLEDGERED_WARNING_THRESHOLD = 100
-_RECLAMATION_DEBT_WARNING_THRESHOLD = CaptureCapacitySpec().reclamation_debt_assist_records
+# Production warns at the default assist tier, before the higher stall tier
+# begins refusing new captures. Runtime capacity overrides remain runner-local.
+_RECLAMATION_DEBT_WARNING_THRESHOLD = 256
 
 
 def _check_capture_store_stats(project_dir: Path | None = None) -> DoctorResult:

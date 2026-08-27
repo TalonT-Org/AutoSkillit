@@ -148,6 +148,7 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         ("src/autoskillit/core/types/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "DEBT_ASSIST_BUDGET"),
         ("src/autoskillit/hooks/_capture/_types.py", "HOT_PATH_LOCK_WAIT"),
+        ("src/autoskillit/hooks/_capture/_types.py", "REQUIRED_RETENTION_BYTES"),
         ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
         ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EVENT_TYPES"),
         ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EFFECT_TYPES"),

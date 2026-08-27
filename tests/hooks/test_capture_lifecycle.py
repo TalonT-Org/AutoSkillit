@@ -339,7 +339,9 @@ def test_reserve_capture_capacity_rescue_retries_with_a_bounded_lock_wait(
         if not forced_capacity_rescue:
             forced_capacity_rescue = True
             holder_state = _start_thread_lock_holder(lock_path)
-            return CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+            return capture_capacity.AdmissionDecision(
+                CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+            )
         return real_admission_reason(*args, **kwargs)
 
     def sweep_after_holder_acquires(budget: SweepBudgetSpec) -> CaptureCleanupOutcome:
@@ -4385,6 +4387,8 @@ def test_reconcile_adapter_preserves_closed_setup_reason(
             CleanupBlocker.CAPACITY_EXHAUSTED
         ),
         CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED: (CleanupBlocker.CAPACITY_EXHAUSTED),
+        CaptureFailureReason.RECLAMATION_DEBT_ASSIST: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RECLAMATION_DEBT_STALL: CleanupBlocker.CAPACITY_EXHAUSTED,
         CaptureFailureReason.RECOVERY_CONTENDED: CleanupBlocker.RECOVERY_CONTENDED,
         CaptureFailureReason.FILESYSTEM_AUTHORITY: CleanupBlocker.FILESYSTEM_AUTHORITY,
         CaptureFailureReason.PERMISSION_DENIED: CleanupBlocker.PERMISSION_DENIED,
@@ -5443,7 +5447,7 @@ def test_session_start_orphan_adoption_suppresses_nested_debt_assist(
 
         outcome = store.sweep(capture_reconcile.SESSION_START_BUDGET)
 
-        assert outcome.adopted == 1
+        assert outcome.errors == 0
         assert nested_rescues == 0
         assert store.get_record(orphan_capture_id) is not None
     finally:

@@ -21,6 +21,7 @@ from ``fleet/_api.py`` (the public-API facade).
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -267,8 +268,11 @@ async def execute_dispatch(
         lock.release()
 
 
-# ``ExceptionGroup`` is a stdlib symbol from Python 3.11+; we alias it from
-# ``exceptiongroup`` so the type-only reference resolves on 3.10.
+# ``ExceptionGroup`` and ``BaseExceptionGroup`` are both stdlib symbols from
+# Python 3.11+. We try to import ``ExceptionGroup`` from the ``exceptiongroup``
+# backport first; on 3.11+ the import either fails (stdlib wins) or returns the
+# stdlib class. Fall back to ``BaseExceptionGroup`` (also 3.11+) so the
+# type-only reference always resolves.
 
 try:
     from exceptiongroup import ExceptionGroup  # type: ignore[attr-defined]
@@ -399,7 +403,7 @@ async def _run_dispatch(
             preflight=ready.preflight,
             full_recipe=recipe_ctx.full_recipe,
             provenance=provenance,
-            started_at=__import__("time").time(),
+            started_at=time.time(),
             prior_session_chain=ready.prior_session_chain,
             prior_dispatched_session_id=ready.prior_dispatched_session_id,
             effective_backend=recipe_ctx.effective_backend,
@@ -444,7 +448,7 @@ async def _run_dispatch(
             dispatch_checkpoint=ready.preflight.checkpoint
             if ready.preflight is not None
             else None,
-            ended_at=ended_at or __import__("time").time(),
+            ended_at=ended_at or time.time(),
             started_at=execution.started_at,
             marker_dir=execution.marker_dir,
             effective_backend=recipe_ctx.effective_backend,
@@ -467,7 +471,7 @@ async def _run_dispatch(
             if ready.preflight is not None
             else None,
             started_at=execution.started_at,
-            ended_at=ended_at or __import__("time").time(),
+            ended_at=ended_at or time.time(),
             cache_invalidator=cache_invalidator,
             quota_refresher=quota_refresher,
             effective_backend_name=ready.lineage_backend_name,
@@ -503,7 +507,7 @@ async def _run_dispatch(
         #    the source's nesting where the inner finally: runs before the outer
         #    tracker-lease release.
         # 2. Tracker-lease release SECOND — always under the leases lock.
-        if execution is not None and not execution.dispatch_completed_normally:  # noqa: F821
+        if execution is not None and not execution.dispatch_completed_normally:
             await run_finally_label_cleanup(
                 spawn_ctx=spawn_ctx,
                 dispatch_id=ready.dispatch_id,

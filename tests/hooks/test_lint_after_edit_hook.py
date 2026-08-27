@@ -263,7 +263,9 @@ class TestLintBehavior:
         CWD to a per-test tmp_path outside the repo, and ruff's config discovery does
         not otherwise reach back into the repo for a file located elsewhere.
         """
-        scratch = Path(tempfile.mkdtemp(dir=Path(__file__).resolve().parent))
+        temp_root = Path(__file__).resolve().parents[2] / ".autoskillit" / "temp"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        scratch = Path(tempfile.mkdtemp(dir=temp_root))
         try:
             f = scratch / "long_line.py"
             long_var = "a" * 200

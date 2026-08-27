@@ -85,11 +85,13 @@ def test_manifest_validator_rejects_removed_per_skill_fields(
     assert not any("adaptation_digest" in error for error in errors)
 
 
-def test_sanitized_and_projection_manifest_schema_versions_are_separately_named() -> None:
-    import autoskillit.workspace._projected_artifact.materialization as materialization
-
+def test_sanitized_and_projection_manifest_schema_versions_are_distinct() -> None:
     assert SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION == 1
     assert PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION == 2
+
+
+def test_sanitized_manifest_schema_version_has_single_authority() -> None:
+    import autoskillit.workspace._projected_artifact.materialization as materialization
 
     tree = ast.parse(Path(materialization.__file__).read_text(encoding="utf-8"))
     materialize = next(

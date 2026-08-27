@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import regex as re
 
-from autoskillit.cli._mcp_names import detect_autoskillit_mcp_prefix
 from autoskillit.cli.prompts import _build_orchestrator_prompt, _get_ingredients_table
 from autoskillit.cli.session._session_launch import (
     _launch_cook_session,
@@ -27,6 +26,7 @@ from autoskillit.core import (
     SkillContractError,
     SkillExecutionRole,
     atomic_write,
+    detect_autoskillit_mcp_prefix,
     get_logger,
     pkg_root,
     resume_spec_from_cli,

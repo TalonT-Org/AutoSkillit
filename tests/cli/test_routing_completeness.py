@@ -10,8 +10,7 @@ import inspect
 
 import pytest
 
-from autoskillit.cli._mcp_names import DIRECT_PREFIX
-from autoskillit.core import INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE
+from autoskillit.core import DIRECT_PREFIX, INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE
 from autoskillit.core.types import RetryReason
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]

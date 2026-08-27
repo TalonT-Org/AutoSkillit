@@ -346,7 +346,7 @@ def _config_writer(
 
             ensure_codex_mcp_registered(config_path=Path(config_path))
         else:
-            from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
+            from autoskillit.execution import sync_hooks_to_codex_config
 
             sync_hooks_to_codex_config(
                 config_path=Path(config_path),

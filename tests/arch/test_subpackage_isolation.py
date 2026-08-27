@@ -1028,9 +1028,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             The 11 remaining top-level files (app.py + 10 small shared utilities —
             see the dict entry below) are the orchestration entry points and shared
             helpers that have no coherent subpackage home.
-            _hooks_codex.py adds Codex config.toml hook generation and sync
-    (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
-    _hooks.py for Claude Code settings.json hooks.
+            Codex config.toml hook generation and sync
+    (generate_codex_hooks_config, sync_hooks_to_codex_config) live in
+    execution/backends/_codex_hooks.py paralleling _hooks.py for Claude Code
+    settings.json hooks.
     Exempt at 11 files.
           hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
             (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
@@ -1138,11 +1139,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
         "core/runtime": 11,  # +worktree_gate_lease process-tree-lived test exclusion
-        "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
+        "cli": 9,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
-        # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
-        # _serve_guard.py, _validate.py, _workspace.py, __init__.py); no
-        # coherent subpackage home exists for any of them
+        # _init_helpers.py, _preview.py, _serve_guard.py, _validate.py,
+        # _workspace.py, __init__.py); -2 for the deleted _hooks_codex.py and
+        # _mcp_names.py facades (their symbols live in execution/backends/
+        # _codex_hooks.py and autoskillit.core respectively); no coherent
+        # subpackage home exists for any of them
         "cli/session": 11,  # +_session_onboarding.py folded in from cli/_onboarding.py,
         # first-run detection consumed only by _session_cook.py (#4670)
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;

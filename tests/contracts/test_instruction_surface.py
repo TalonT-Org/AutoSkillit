@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 

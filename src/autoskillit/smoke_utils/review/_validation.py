@@ -1,7 +1,4 @@
-"""Envelope construction and atomic validation for proof-only review-auditor outputs.
-
-Decomposed from ``_experimental_review.py`` per issue #4855.
-"""
+"""Envelope construction and atomic validation for proof-only review-auditor outputs."""
 
 from __future__ import annotations
 
@@ -12,19 +9,30 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from autoskillit.smoke_utils._review_contracts import (
+    EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY,
     EXPERIMENTAL_REVIEW_AUDITORS,
     _closed_key_set_error,
     _is_non_empty_string,
 )
 from autoskillit.smoke_utils.review._constants import (
-    _EXPERIMENTAL_DIMENSIONS,
-    _MAX_ENVELOPE_ERRORS,
-    _MAX_EXPERIMENTAL_OUTPUT_BYTES,
-    _REVIEW_SEVERITIES,
-    _STANDARD_FINDING_KEYS,
     _STANDARD_REVIEW_DIMENSIONS,
     _bounded_utf8,
 )
+
+_EXPERIMENTAL_DIMENSIONS = dict(EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY)
+
+_MAX_ENVELOPE_ERRORS = 32
+_MAX_EXPERIMENTAL_OUTPUT_BYTES = 1024 * 1024
+
+_STANDARD_FINDING_KEYS = {
+    "file",
+    "line",
+    "dimension",
+    "severity",
+    "message",
+    "requires_decision",
+}
+_REVIEW_SEVERITIES = {"critical", "warning", "info"}
 
 _EXPERIMENTAL_CANDIDATE_KEYS = {
     "file",
@@ -111,10 +119,6 @@ def build_malformed_review_envelope(
 
 def _is_positive_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
-
-
-def _as_int(value: object) -> int:
-    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _is_contained_relative_path(value: object, review_root: Path) -> bool:

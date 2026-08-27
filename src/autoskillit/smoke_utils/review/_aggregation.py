@@ -1,7 +1,4 @@
-"""Candidate aggregation and verdict derivation for the experimental review pipeline.
-
-Decomposed from ``_experimental_review.py`` per issue #4855.
-"""
+"""Candidate aggregation and verdict derivation for the experimental review pipeline."""
 
 from __future__ import annotations
 
@@ -15,10 +12,11 @@ from autoskillit.smoke_utils._review_contracts import (
     _is_non_empty_string,
 )
 from autoskillit.smoke_utils.review._constants import _STANDARD_REVIEW_DIMENSIONS
-from autoskillit.smoke_utils.review._validation import (
-    _as_int,
-    _standard_finding_validation_error,
-)
+from autoskillit.smoke_utils.review._validation import _standard_finding_validation_error
+
+
+def _as_int(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def aggregate_combined_review_candidates(

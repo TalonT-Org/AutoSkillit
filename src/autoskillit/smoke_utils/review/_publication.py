@@ -1,7 +1,5 @@
 """Rendering, publication preparation, and atomic artifact writes for the
 experimental review pipeline.
-
-Decomposed from ``_experimental_review.py`` per issue #4855.
 """
 
 from __future__ import annotations

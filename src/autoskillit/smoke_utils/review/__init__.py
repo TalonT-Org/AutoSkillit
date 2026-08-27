@@ -1,7 +1,5 @@
-"""Pure validation, aggregation, verdict derivation, publication, rendering,
-and atomic artifact-write helpers for proof-only PR review auditors.
-
-Decomposed from ``_experimental_review.py`` per issue #4855.
+"""Validation, aggregation (with verdict derivation), and publication (with
+rendering and atomic writes) helpers for proof-only PR review auditors.
 """
 
 from __future__ import annotations

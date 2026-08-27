@@ -57,8 +57,8 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_CAMPAIGN_ID",
         "autoskillit",
+        "autoskillit.fleet.dispatch._execution:run_execution",
         "autoskillit.fleet.dispatch._api:_run_dispatch",
-        "autoskillit.fleet.dispatch._api:execute_dispatch",
         "Fleet dispatch binds child hook state to the owning campaign identity.",
     ),
     HookEnvVarDef(
@@ -78,8 +78,8 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_DISPATCH_ID",
         "autoskillit",
+        "autoskillit.fleet.dispatch._execution:run_execution",
         "autoskillit.fleet.dispatch._api:_run_dispatch",
-        "autoskillit.fleet.dispatch._api:execute_dispatch",
         "Fleet dispatch binds hook diagnostics and policy to the current dispatch.",
     ),
     HookEnvVarDef(
@@ -183,8 +183,8 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     HookEnvVarDef(
         "AUTOSKILLIT_SESSION_DEADLINE",
         "autoskillit",
+        "autoskillit.fleet.dispatch._execution:run_execution",
         "autoskillit.fleet.dispatch._api:_run_dispatch",
-        "autoskillit.fleet.dispatch._api:execute_dispatch",
         "Fleet dispatch propagates the bounded child-session execution deadline.",
     ),
     HookEnvVarDef(

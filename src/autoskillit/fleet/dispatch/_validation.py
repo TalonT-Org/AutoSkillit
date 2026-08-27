@@ -89,20 +89,6 @@ async def run_pre_launch_gating(
     Provenance is REQUIRED: the orchestrator creates the tracker before
     invoking Phase A, so this function does not synthesize a fallback.
     """
-    # Lazy imports kept from the original code — Phase A reads from the
-    # `fleet.state` module only for the type lookups Phase B will perform;
-    # the imports themselves are no-ops at runtime but preserve any
-    # lazy-init ordering the rest of the dispatch engine relies on.
-    from autoskillit.fleet.state import (  # noqa: PLC0415, F401
-        DispatchRecord,
-        DispatchStateHandle,
-        append_dispatch_record,
-        normalize_dispatch_token_usage,
-        read_state,
-        upsert_dispatch_record_by_name,
-        write_captured_values,
-    )
-
     if tool_ctx.recipes is None:
         return DispatchResult(
             DispatchRejected(

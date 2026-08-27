@@ -55,12 +55,14 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
         non_none = [a for a in args if a is not type(None)]
         if type(None) in args and len(non_none) == 1:
             inner = non_none[0]
+            if inner is bool:
+                return bool(value) if value is not None else None
+            if inner in (int, float):
+                return _coerce_value(value, inner, context) if value is not None else None
             if value is None:
                 return None
-            if inner is bool:
-                return bool(value)
-            if inner in (int, float):
-                return _coerce_value(value, inner, context)
+            if not value:
+                return None
             return _coerce_value(value, inner, context)
         return value
 

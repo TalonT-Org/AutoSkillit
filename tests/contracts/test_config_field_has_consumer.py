@@ -72,13 +72,17 @@ def _iter_enforced_dataclasses() -> tuple[type, ...]:
     A dataclass imported into this module from elsewhere would not satisfy
     ``__module__`` equality below and is correctly excluded (its fields are
     that other module's responsibility).
+
+    ImportError propagates: any module in ``_DATACLASS_MODULES`` that fails to
+    import means the contract is silently enforcing ZERO dataclasses for it,
+    which is the very failure mode this test is supposed to surface. Letting
+    the error escape makes the omission loud at module-load time (entire test
+    file fails to collect) rather than letting a future rename/remove rot the
+    field-consumer check without notice.
     """
     seen: set[type] = set()
     for module_path in _DATACLASS_MODULES:
-        try:
-            mod = importlib.import_module(module_path)
-        except ImportError:
-            continue
+        mod = importlib.import_module(module_path)
         for name in getattr(mod, "__all__", ()) or vars(mod):
             obj = getattr(mod, name, None)
             if (

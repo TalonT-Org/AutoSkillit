@@ -264,20 +264,20 @@ def test_skill_name_matches_in_both_namespaced_and_bare_form(
         tmp_path,
         top_level_parent="namespaced-parent",
     )
-    mismatch = declare_module._declare_join_batch_handler(
+    cardinality_violation = declare_module._declare_join_batch_handler(
         "autoskillit:rectify",
         ["one", "two"],
         "session",
         tmp_path,
-        top_level_parent="mismatch-parent",
+        top_level_parent="cardinality-parent",
     )
 
     assert bare["success"] is True
     assert namespaced["success"] is True
     assert bare["wave"]["skill_name"] == "rectify"
     assert namespaced["wave"]["skill_name"] == "rectify"
-    assert mismatch["success"] is False
-    assert "declares count=1; received 2 assignments" in str(mismatch["error"])
+    assert cardinality_violation["success"] is False
+    assert "declares count=1; received 2 assignments" in str(cardinality_violation["error"])
 
 
 @pytest.mark.parametrize("case", ["single_candidate", "typed_mismatch", "ambiguous"])

@@ -67,25 +67,28 @@ __all__ = [
     "has_completed_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
-    # re-exported from state_types
-    "FLEET_HALTED_SENTINEL",
-    "TERMINAL_DISPATCH_STATUSES",
-    "TERMINAL_UNCLEANED_STATUSES",
-    "CampaignState",
+    # re-exported from state_effects
     "DispatchAggregatePhase",
-    "DispatchCompleted",
     "DispatchEffectName",
     "DispatchEffectPhase",
     "DispatchEffectProvenance",
     "DispatchEffectRecord",
     "DispatchProvenanceTracker",
-    "DispatchRecord",
+    "DispatchRetryDisposition",
+    # re-exported from state_outcomes
+    "DispatchCompleted",
     "DispatchRejected",
     "DispatchResult",
-    "DispatchRetryDisposition",
-    "DispatchStatus",
     "GateRecordResult",
+    # re-exported from state_records
+    "FLEET_HALTED_SENTINEL",
+    "CampaignState",
+    "DispatchRecord",
     "ResumeDecision",
+    # re-exported from state_transitions
+    "TERMINAL_DISPATCH_STATUSES",
+    "TERMINAL_UNCLEANED_STATUSES",
+    "DispatchStatus",
     # local
     "CampaignStateMutator",
     "DispatchStateHandle",

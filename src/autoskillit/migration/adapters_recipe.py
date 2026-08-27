@@ -6,10 +6,8 @@ import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-import yaml
-
 from autoskillit import __version__
-from autoskillit.core import SkillResult, dump_yaml_str, get_logger
+from autoskillit.core import SkillResult, YAMLError, dump_yaml_str, get_logger
 from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
     HeadlessMigrationAdapter,
@@ -129,6 +127,6 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
             if errors:
                 return False, "; ".join(str(e) for e in errors)
             return True, ""
-        except (OSError, ValueError, yaml.YAMLError) as exc:
+        except (OSError, ValueError, YAMLError) as exc:
             logger.warning("Recipe file validation failed", path=str(path), error=str(exc))
             return False, str(exc)

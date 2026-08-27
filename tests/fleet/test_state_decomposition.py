@@ -49,50 +49,45 @@ from autoskillit.fleet.state_transitions import (
 
 def test_state_effects_module_importable() -> None:
     """Effect enums + records + tracker import from state_effects and re-export via the facade."""
-    facade = __import__("autoskillit.fleet.state_types", fromlist=["__all__"])
-    for symbol in (
-        DispatchEffectName,
-        DispatchEffectPhase,
-        DispatchAggregatePhase,
-        DispatchRetryDisposition,
-        DispatchEffectRecord,
-        DispatchEffectProvenance,
-        DispatchProvenanceTracker,
+    for name, symbol in (
+        ("DispatchEffectName", DispatchEffectName),
+        ("DispatchEffectPhase", DispatchEffectPhase),
+        ("DispatchAggregatePhase", DispatchAggregatePhase),
+        ("DispatchRetryDisposition", DispatchRetryDisposition),
+        ("DispatchEffectRecord", DispatchEffectRecord),
+        ("DispatchEffectProvenance", DispatchEffectProvenance),
+        ("DispatchProvenanceTracker", DispatchProvenanceTracker),
     ):
-        assert getattr(facade, symbol.__name__) is symbol
+        assert getattr(state_types_facade_module, name) is symbol
 
 
 def test_state_records_module_importable() -> None:
     """DispatchRecord, CampaignState, ResumeDecision import from state_records."""
-    facade = __import__("autoskillit.fleet.state_types", fromlist=["__all__"])
-    public_records_symbols = (
-        FLEET_HALTED_SENTINEL,
-        FLEET_STATE_SCHEMA_VERSION,
-        DispatchRecord,
-        CampaignState,
-        ResumeDecision,
-    )
-    for symbol in public_records_symbols:
-        assert getattr(facade, symbol.__name__) is symbol
+    for name, symbol in (
+        ("FLEET_HALTED_SENTINEL", FLEET_HALTED_SENTINEL),
+        ("FLEET_STATE_SCHEMA_VERSION", FLEET_STATE_SCHEMA_VERSION),
+        ("DispatchRecord", DispatchRecord),
+        ("CampaignState", CampaignState),
+        ("ResumeDecision", ResumeDecision),
+    ):
+        assert getattr(state_types_facade_module, name) is symbol
 
 
 def test_state_transitions_module_importable() -> None:
-    """DispatchStatus and the transition-table symbols import from state_transitions."""
-    facade = __import__("autoskillit.fleet.state_types", fromlist=["__all__"])
-    assert getattr(facade, DispatchStatus.__name__) is DispatchStatus
+    """DispatchStatus imports from state_transitions and re-exports through the facade."""
+    assert state_types_facade_module.DispatchStatus is DispatchStatus
 
 
 def test_state_outcomes_module_importable() -> None:
     """Outcome/result types import from state_outcomes and re-export through the facade."""
-    facade = __import__("autoskillit.fleet.state_types", fromlist=["__all__"])
-    for symbol in (
-        DispatchRejected,
-        DispatchCompleted,
-        DispatchOutcome,
-        DispatchResult,
-        GateRecordResult,
+    for name, symbol in (
+        ("DispatchRejected", DispatchRejected),
+        ("DispatchCompleted", DispatchCompleted),
+        ("DispatchOutcome", DispatchOutcome),
+        ("DispatchResult", DispatchResult),
+        ("GateRecordResult", GateRecordResult),
     ):
-        assert getattr(facade, symbol.__name__) is symbol
+        assert getattr(state_types_facade_module, name) is symbol
 
 
 def test_state_error_codes_module_importable() -> None:

@@ -38,11 +38,6 @@ def registered_merge_rule_names() -> set[str]:
     return {rule.name for rule in _RULE_REGISTRY if rule.name.startswith(merge_prefixes)}
 
 
-def minimal_recipe() -> Recipe:
-    """Build a Recipe with empty steps — useful for tests that need a Recipe object."""
-    return Recipe(name="empty", description="empty recipe for split-invariant tests")
-
-
 def build_recipe(steps: dict[str, dict]) -> Recipe:
     """Build a Recipe from a YAML-loadable step dict.
 

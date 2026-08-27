@@ -1017,7 +1017,13 @@ _COMPACT_TEST_OVERRIDES = {
 
 @pytest.mark.timeout(120)
 def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, monkeypatch):
-    """Check every served recipe/mode pair for display and response invariants."""
+    """Exercise the shared recipe/mode grid across its original contracts.
+
+    Compaction preserves remediation ``rectify`` notes, while response ceilings allow
+    the recipe growth from issue #4274 Part B. The fit-by-construction ``open_kitchen``
+    rendering gate implements issue #4304 Part B REQ-B-T8, and issue #4399 requires
+    ordinary-inline content to remain visible whenever its raw response fits the ceiling.
+    """
     from autoskillit import __version__
     from autoskillit.core import load_yaml, resolve_recipe_envelope_byte_limit
     from autoskillit.execution.backends import BACKEND_REGISTRY

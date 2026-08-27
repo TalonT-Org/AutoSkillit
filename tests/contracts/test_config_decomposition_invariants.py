@@ -36,7 +36,7 @@ def test_env_layer_validation_uses_retired_remap() -> None:
     # validation loop actually visits it.
     (retired_section, retired_key), _ = next(iter(RETIRED_CONFIG_KEYS.items()))
     layer = {retired_section: {retired_key: True}}
-    _remapped, records = remap_retired_keys(layer, is_secrets_layer=False)
+    _, records = remap_retired_keys(layer, is_secrets_layer=False)
     assert records, "remap_retired_keys must record at least one remap for the retired key"
     validate_env_layer_keys()  # smoke: no exception when registry is loaded
 

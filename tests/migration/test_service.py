@@ -34,10 +34,10 @@ class TestDefaultMigrationServiceBehaviour:
     ) -> None:
         recipe_path = _seed_recipe(tmp_path, version="99.0.0")
 
-        # Patch the late-import alias that DefaultMigrationService.migrate
-        # actually resolves via its own ``from ... import`` inside migrate();
-        # patching ``loader.applicable_migrations`` is too late because
-        # service.py's local ``_applicable`` is already bound.
+        # Patch the module-level ``_applicable`` alias that the service
+        # resolves at call time. Without this patch the service would call
+        # the real registry, which currently returns 4 notes for ``0.0.1``
+        # but could return 0 for any future version that has no chain.
         monkeypatch.setattr(
             "autoskillit.migration.service._applicable",
             lambda *a, **kw: [],
@@ -65,10 +65,11 @@ class TestDefaultMigrationServiceBehaviour:
     ) -> None:
         recipe_path = _seed_recipe(tmp_path)
 
-        # Patch the late-import alias that DefaultMigrationService.migrate
-        # actually resolves via its own ``from ... import`` inside migrate();
-        # patching ``loader.applicable_migrations`` is too late because
-        # service.py's local ``_applicable`` is already bound.
+        # Patch the module-level ``_applicable`` alias so the service
+        # deterministically sees a non-empty migration chain. Without a
+        # headless runner, the recipe-migration branch fails with an
+        # explicit no-runner error, exercising the MigrationServiceError
+        # return shape.
         monkeypatch.setattr(
             "autoskillit.migration.service._applicable",
             lambda *a, **kw: [make_migration_note()],
@@ -93,10 +94,10 @@ class TestDefaultMigrationServiceBehaviour:
         temp_out.parent.mkdir(parents=True)
         temp_out.write_text("name: myrecipe\n# migrated\nautoskillit_version: '1.0.0'\n")
 
-        # Patch the late-import alias that DefaultMigrationService.migrate
-        # actually resolves via its own ``from ... import`` inside migrate();
-        # patching ``loader.applicable_migrations`` is too late because
-        # service.py's local ``_applicable`` is already bound.
+        # Patch the module-level ``_applicable`` alias so the service
+        # sees a single migration note. With the headless runner wired in,
+        # this exercises the recipe-migration success path that returns
+        # ``MigrationServiceMigrated`` with ``contracts_regenerated``.
         monkeypatch.setattr(
             "autoskillit.migration.service._applicable",
             lambda *a, **kw: [make_migration_note()],
@@ -118,16 +119,19 @@ class TestDefaultMigrationServiceBehaviour:
     ) -> None:
         recipe_path = _seed_recipe(tmp_path)
 
-        # Patch the late-import alias that DefaultMigrationService.migrate
-        # actually resolves via its own ``from ... import`` inside migrate().
+        # Patch the module-level ``_applicable`` alias so the service
+        # enters the recipe-migration branch, then have the headless
+        # runner return failure. The service must record the failure in
+        # its FailureStore and short-circuit with ``MigrationServiceError``.
         monkeypatch.setattr(
             "autoskillit.migration.service._applicable",
             lambda *a, **kw: [make_migration_note()],
         )
 
         mock_headless = AsyncMock(return_value=make_skill_result(False, result="boom"))
+        engine = default_migration_engine()
         service = DefaultMigrationService(
-            default_migration_engine(), run_headless=mock_headless, temp_dir=tmp_path / "temp"
+            engine, run_headless=mock_headless, temp_dir=tmp_path / "temp"
         )
         result = await service.migrate(recipe_path)
 
@@ -138,6 +142,18 @@ class TestDefaultMigrationServiceBehaviour:
         assert result["name"] == "myrecipe"
         # Headless runner was invoked exactly once.
         assert mock_headless.await_count == 1
+        # FailureStore.record must have been called for the failed recipe.
+        from autoskillit.migration.store import FailureStore, default_store_path
+
+        failure_store = FailureStore(
+            default_store_path(
+                tmp_path,
+                temp_dir=tmp_path / "temp",
+            )
+        )
+        assert failure_store.has_failure("myrecipe")
+        entry = failure_store.load()["myrecipe"]
+        assert entry.error == "boom"
 
     @pytest.mark.anyio
     async def test_contract_regeneration_appends_to_contracts_regenerated(

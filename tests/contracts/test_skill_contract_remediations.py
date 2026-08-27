@@ -181,6 +181,7 @@ _CORPUS_FIXTURES = (
     "missing_semantic_version.md",
     "legacy_spawner.md",
     "legacy_child_spawn_cardinality.md",
+    "resource_contract_invalid.md",
 )
 # Filename -> the `name:` value declared in that fixture's own frontmatter.
 _CORPUS_SKILL_NAMES = {
@@ -188,6 +189,7 @@ _CORPUS_SKILL_NAMES = {
     "missing_semantic_version.md": "research-helper",
     "legacy_spawner.md": "legacy-spawner",
     "legacy_child_spawn_cardinality.md": "legacy-child-spawn-cardinality",
+    "resource_contract_invalid.md": "resource-contract-invalid",
 }
 
 

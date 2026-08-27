@@ -1,4 +1,4 @@
-"""Shared primitives for the config dataclass tree.
+"""Config error class and schema-validation primitives.
 
 Owns:
   - ``ConfigSchemaError`` (the single error class config raises for schema mismatches).

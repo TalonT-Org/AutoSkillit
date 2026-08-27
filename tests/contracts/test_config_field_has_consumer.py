@@ -54,7 +54,7 @@ _INERT_TRACKED_RE = re.compile(r"inert-tracked:#[1-9]\d*")
 # enforces; the ``_config_dataclasses`` facade re-exports them but does NOT
 # own their definitions, so reflective discovery must walk the leaf modules.
 _DATACLASS_MODULES: tuple[str, ...] = (
-    "autoskillit.config._dataclasses_shared",
+    "autoskillit.config._dataclasses_errors",
     "autoskillit.config._dataclasses_test_gating",
     "autoskillit.config._dataclasses_execution",
     "autoskillit.config._dataclasses_workflow",

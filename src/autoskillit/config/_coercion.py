@@ -26,7 +26,7 @@ from autoskillit.config._config_loader import (
     _build_subsets_config,
     _to_optional_commands,
 )
-from autoskillit.config._dataclasses_shared import ConfigSchemaError
+from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.config._dataclasses_test_gating import _COMMAND_UNSET
 
 _T = TypeVar("_T")

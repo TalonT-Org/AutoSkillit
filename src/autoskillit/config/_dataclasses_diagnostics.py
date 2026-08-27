@@ -2,8 +2,9 @@
 
 Owns: ``DiagnosticsConfig``, ``LinuxTracingConfig`` (with the pytest-frame guard
 that prevents writing to ``/dev/shm`` under pytest), ``LoggingConfig``,
-``McpResponseConfig``, and ``OutputBudgetConfig`` (with the cross-validation that
-keeps response/page byte limits aligned).
+``McpResponseConfig``, ``OutputBudgetConfig`` (with the cross-validation that
+keeps response/page byte limits aligned), and ``TokenUsageConfig`` (the
+telemetry verbosity toggle for token-usage emission).
 """
 
 from __future__ import annotations

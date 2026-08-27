@@ -20,7 +20,7 @@ NEW_MODULES = [
     "_retired_keys.py",
     "_validation.py",
     "_writer.py",
-    "_dataclasses_shared.py",
+    "_dataclasses_errors.py",
     "_dataclasses_test_gating.py",
     "_dataclasses_execution.py",
     "_dataclasses_workflow.py",

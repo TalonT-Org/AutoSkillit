@@ -69,7 +69,7 @@ def _cascade_dirs(changed_file: str, tmp_path: Path) -> set[str]:
         "_retired_keys.py",
         "_validation.py",
         "_writer.py",
-        "_dataclasses_shared.py",
+        "_dataclasses_errors.py",
         "_dataclasses_test_gating.py",
         "_dataclasses_execution.py",
         "_dataclasses_workflow.py",

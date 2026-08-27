@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.config._coercion import _FIELD_OVERRIDES, _YAML_KEY_ALIASES
-from autoskillit.config._dataclasses_shared import (
+from autoskillit.config._dataclasses_errors import (
     _METADATA_KEYS,
     _SECRETS_ONLY_KEYS,
     ConfigSchemaError,

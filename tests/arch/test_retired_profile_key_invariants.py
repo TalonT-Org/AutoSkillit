@@ -28,8 +28,9 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 @pytest.mark.parametrize("retired_key", sorted(RETIRED_PROFILE_KEYS))
 def test_retired_profile_key_invariants(retired_key: str) -> None:
-    # T1: Retired entries must be lowercase strings — fail-fast at module
-    # load already enforces this; this test pins the test-side mirror.
+    # T1: Retired entries must be lowercase strings. This test is the
+    # enforcement point (the prior module-load fail-fast was removed in
+    # resolve-review #44 because the registry is a hardcoded literal).
     assert isinstance(retired_key, str)
     assert retired_key == retired_key.lower()
 

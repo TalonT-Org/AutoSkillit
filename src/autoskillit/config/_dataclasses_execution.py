@@ -1,8 +1,11 @@
-"""Execution session dataclass.
+"""Execution session dataclasses.
 
-Owns ``RunSkillConfig`` and its ``_EXIT_GRACE_BUFFER_MS`` ClassVar, the
+Owns ``RunSkillConfig`` (with its ``_EXIT_GRACE_BUFFER_MS`` ClassVar, the
 ``output_format`` derived property, and the ``__post_init__`` invariants that
-keep natural-exit grace aligned with exit-after-stop delay.
+keep natural-exit grace aligned with exit-after-stop delay) and
+``QuotaGuardConfig`` (Claude-API rate-limit cache defaults —
+credentials_path, cache_path, long_window_patterns — that gate per-session
+Claude API budget).
 """
 
 from __future__ import annotations

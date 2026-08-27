@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from autoskillit.config._dataclasses_shared import ConfigSchemaError
+from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER
 
 _DEFAULT_COMMAND: tuple[str, ...] = ("task", "test-check")

@@ -34,7 +34,7 @@ def test_facade_attribute_is_same_object_as_owner(module_path: str, attribute: s
     facade_obj = getattr(facade_mod, attribute)
     candidates = [
         "autoskillit.config._coercion",
-        "autoskillit.config._dataclasses_shared",
+        "autoskillit.config._dataclasses_errors",
         "autoskillit.config._validation",
     ]
     found_match = False

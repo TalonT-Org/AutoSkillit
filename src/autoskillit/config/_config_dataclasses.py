@@ -15,7 +15,7 @@ Symbol origin:
   - ``_dataclasses_github`` → GitHubConfig, ReportBugConfig
   - ``_dataclasses_providers`` → AgentBackendConfig, CoreRunConfig, ProvidersConfig,
     ProviderProfileDef, RETIRED_PROFILE_KEYS
-  - ``_dataclasses_shared`` → ConfigSchemaError, _METADATA_KEYS, _SECRETS_ONLY_KEYS
+  - ``_dataclasses_errors`` → ConfigSchemaError, _METADATA_KEYS, _SECRETS_ONLY_KEYS
   - ``_dataclasses_surfaces`` → PacksConfig, SkillsConfig, SubsetsConfig,
     WorkspaceConfig, WorktreeSetupConfig
   - ``_dataclasses_test_gating`` → ClassifyFixConfig, ImplementGateConfig,
@@ -43,6 +43,15 @@ from autoskillit.config._dataclasses_diagnostics import (
 )
 from autoskillit.config._dataclasses_diagnostics import (
     TokenUsageConfig as TokenUsageConfig,
+)
+from autoskillit.config._dataclasses_errors import (
+    _METADATA_KEYS as _METADATA_KEYS,
+)
+from autoskillit.config._dataclasses_errors import (
+    _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
+)
+from autoskillit.config._dataclasses_errors import (
+    ConfigSchemaError as ConfigSchemaError,
 )
 from autoskillit.config._dataclasses_execution import (
     QuotaGuardConfig as QuotaGuardConfig,
@@ -79,15 +88,6 @@ from autoskillit.config._dataclasses_providers import (
 )
 from autoskillit.config._dataclasses_providers import (
     ProvidersConfig as ProvidersConfig,
-)
-from autoskillit.config._dataclasses_shared import (
-    _METADATA_KEYS as _METADATA_KEYS,
-)
-from autoskillit.config._dataclasses_shared import (
-    _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
-)
-from autoskillit.config._dataclasses_shared import (
-    ConfigSchemaError as ConfigSchemaError,
 )
 from autoskillit.config._dataclasses_surfaces import (
     PacksConfig as PacksConfig,

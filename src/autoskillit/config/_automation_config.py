@@ -41,6 +41,7 @@ from autoskillit.config._dataclasses_diagnostics import (
     OutputBudgetConfig,
     TokenUsageConfig,
 )
+from autoskillit.config._dataclasses_errors import ConfigSchemaError
 from autoskillit.config._dataclasses_execution import QuotaGuardConfig, RunSkillConfig
 from autoskillit.config._dataclasses_fleet import FleetConfig, ProcessTetherConfig
 from autoskillit.config._dataclasses_github import (
@@ -52,7 +53,6 @@ from autoskillit.config._dataclasses_providers import (
     CoreRunConfig,
     ProvidersConfig,
 )
-from autoskillit.config._dataclasses_shared import ConfigSchemaError
 from autoskillit.config._dataclasses_surfaces import (
     PacksConfig,
     SkillsConfig,

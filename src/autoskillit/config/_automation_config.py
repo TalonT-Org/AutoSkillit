@@ -236,9 +236,11 @@ class AutomationConfig:
             return raw.get(name.upper(), {})
 
         feat = sec("features")
-        features_dict, exp_enabled = AutomationConfig._build_features_dict(
-            dict(feat) if isinstance(feat, dict) else {}
-        )
+        if not isinstance(feat, dict):
+            raise ConfigSchemaError(
+                f"features must be a mapping, got {type(feat).__name__!r}: {feat!r}"
+            )
+        features_dict, exp_enabled = AutomationConfig._build_features_dict(dict(feat))
 
         kwargs: dict[str, Any] = {}
         for f in dataclasses.fields(cls):

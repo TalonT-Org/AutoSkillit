@@ -59,12 +59,12 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
         non_none = [a for a in args if a is not type(None)]
         if type(None) in args and len(non_none) == 1:
             inner = non_none[0]
-            if inner is bool:
-                return bool(value) if value is not None else None
-            if inner in (int, float):
-                return _coerce_value(value, inner, context) if value is not None else None
-            if not value:
+            if value is None:
                 return None
+            if inner is bool:
+                return bool(value)
+            if inner in (int, float):
+                return _coerce_value(value, inner, context)
             return _coerce_value(value, inner, context)
         return value
 
@@ -73,22 +73,39 @@ def _coerce_value(value: Any, target_type: type, context: str) -> Any:
     from autoskillit.core import Utf8ByteLimit
 
     if target_type is Utf8ByteLimit:
-        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+        if isinstance(value, bool):
+            raise ConfigSchemaError(
+                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+            )
+        if isinstance(value, float) and not value.is_integer():
             raise ConfigSchemaError(
                 f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
             )
         try:
-            return Utf8ByteLimit(int(value))
+            coerced = int(value)
         except (TypeError, ValueError) as exc:
             raise ConfigSchemaError(
                 f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
             ) from exc
+        if coerced <= 0:
+            raise ConfigSchemaError(
+                f"{context} must be a positive integer for Utf8ByteLimit, got {value!r}"
+            )
+        return Utf8ByteLimit(coerced)
     if target_type is int:
+        if isinstance(value, bool):
+            raise ConfigSchemaError(f"{context} must be an integer, got {value!r}")
+        if isinstance(value, int):
+            return value
         try:
             return int(value)
         except (TypeError, ValueError) as exc:
             raise ConfigSchemaError(f"{context} must be an integer, got {value!r}") from exc
     if target_type is float:
+        if isinstance(value, bool):
+            raise ConfigSchemaError(f"{context} must be a number, got {value!r}")
+        if isinstance(value, (int, float)):
+            return float(value)
         try:
             return float(value)
         except (TypeError, ValueError) as exc:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,23 +18,21 @@ from autoskillit.core import (
     mapping_entry_byte_ranges_from_yaml,
     pkg_root,
 )
-from autoskillit.recipe._io_discovery import (
-    NON_RECIPE_DIRS as NON_RECIPE_DIRS,
-)
-from autoskillit.recipe._io_discovery import (
-    RECIPE_SCAN_DIRS as RECIPE_SCAN_DIRS,
-)
-from autoskillit.recipe._io_discovery import (
-    collect_recipes_from_candidates as collect_recipes_from_candidates,
-)
-from autoskillit.recipe._io_discovery import (
-    is_recipe_scan_path as is_recipe_scan_path,
-)
 from autoskillit.recipe._io_loading import (
     _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
 )
 from autoskillit.recipe._io_loading import (
+    NON_RECIPE_DIRS as NON_RECIPE_DIRS,
+)
+from autoskillit.recipe._io_loading import (
+    RECIPE_SCAN_DIRS as RECIPE_SCAN_DIRS,
+)
+from autoskillit.recipe._io_loading import (
+    _collect_recipes_from_candidates,
     load_recipe_dict_with_declarations,
+)
+from autoskillit.recipe._io_loading import (
+    is_recipe_scan_path as is_recipe_scan_path,
 )
 from autoskillit.recipe._io_loading import (
     substitute_scripts_placeholder as substitute_scripts_placeholder,
@@ -698,4 +696,20 @@ def _parse_step(
         pass_through=_ensure_list(data.get("pass_through", [])),
         phoropter_family=data.get("phoropter_family"),
         skip_when_true=data.get("skip_when_true"),
+    )
+
+
+def collect_recipes_from_candidates(
+    project_base: Path,
+    project_files: Iterable[Path],
+    builtin_base: Path,
+    builtin_files: Iterable[Path],
+) -> LoadResult[RecipeInfo]:
+    """Parse, deduplicate, and report collisions for recipe candidates by tier."""
+    return _collect_recipes_from_candidates(
+        project_base,
+        project_files,
+        builtin_base,
+        builtin_files,
+        parse_recipe=_parse_recipe,
     )

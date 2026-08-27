@@ -20,13 +20,15 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    DENY_TRIGGER_BY_GUARD,
+    EXEMPT_SKILLS_BY_GUARD,
+)
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
-TEST_RUNNER_DENY_TRIGGER: str = "Direct pytest invocation is prohibited"
+TEST_RUNNER_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["test_runner_guard"]
 
-# Must stay in sync with the exempt_skills frozenset on the test_runner_guard
-# HookDef in hook_registry.py — stdlib-only boundary prevents a shared import.
-_EXEMPT_SKILLS: frozenset[str] = frozenset({"implement-experiment"})
+_EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["test_runner_guard"]
 
 # Tokens that occupy a command position but are never pytest invocations.
 # Matching tokens are either exactly the prefix or prefixed with an absolute

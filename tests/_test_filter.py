@@ -1266,6 +1266,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: Codex output-budget config and generated agent contracts
             "execution/backends/test_codex_config.py",
             "execution/backends/test_codex_backend.py",
+            # hook_registry imports from autoskillit.hooks at module scope
+            # (HOOK_REGISTRY, generate_hooks_json) for the registry init wiring.
+            "hook_registry",
         }
     ),
     "hook_registry": frozenset(

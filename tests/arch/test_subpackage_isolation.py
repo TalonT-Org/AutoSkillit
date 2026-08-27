@@ -92,6 +92,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
+        "skill_capability_cache",  # bounded weighted-LRU cache singleton bound once at import time
         "_capture_store",  # cli/ops/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
@@ -1122,7 +1123,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
         # store for verbatim plugin assets, kept separate from _projection_cache.py since
         # it must be resolvable and safe to import even when no store root is available.
-        "hooks": 25,  # +_capture_process owned shell process-group boundary;
+        "hooks": 26,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
         # and request-correlated exploration identity records
@@ -1130,6 +1131,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # Bumped 24 -> 25: CI reported 25 Python files at SHA 869746ddc
         # (24 in the local git-tracked file set), so the cap must tolerate
         # whatever CI-side enumeration produced the +1 difference.
+        # Bumped 25 -> 26: issue #4853 added hooks/_hook_constants.py — the
+        # shared stdlib-only authority imported by every guard script under
+        # the standalone hooks-dir sys.path bootstrap.
         "pipeline": 19,  # +run_skill_completion server-owned receipt authority (#4457)
         # +kitchen transition authority
         # +exploration_context_durable.py: durable (0600 HMAC-signed) session-scoped
@@ -1269,17 +1273,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
         "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
     ),
-    "hooks/_capture_lifecycle.py": (
-        1250,
-        "REQ-CNST-010-E21: capture lifecycle store — the lock-retry primitive "
-        "(_acquire_flock, jittered exponential backoff bounded by the active sweep's "
-        "own budget) and directory-reconciliation orphan admission "
-        "(_admission_reason, _admit_new_record, _scan_and_adopt_orphans) must stay "
-        "adjacent to the transition/capacity accounting they share; splitting would "
-        "separate self-accounting invariants from the store methods that enforce them. "
-        "Bumped for ADR-0009's rescue-sweep-and-retry pressure immunity at both the "
-        "admission and transition gates (issue #4479).",
-    ),
     "hooks/_capture_lifecycle/_store.py": (
         1250,
         "REQ-CNST-010-E28: post-split capture-lifecycle store (#4727) — the "
@@ -1290,8 +1283,10 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "delivery wiring, sweep orchestration) shares the same self-accounting "
         "invariants the original E21 entry called out. The class body alone is "
         "~960 lines after the wrappers extract; the limit stays at 1250 to match "
-        "the pre-split E21 ceiling. Sub-ticket I retires E21 (and this entry) when "
-        "the class body is further decomposed (issue #4727).",
+        "the pre-split E21 ceiling. E21 was retired by issue #4853 (decomposing "
+        "hook_registry.py); this entry remains the load-bearing exemption for "
+        "_capture_lifecycle/_store.py until the class body is further decomposed "
+        "(issue #4727).",
     ),
     "hooks/_capture_contract.py": (
         1100,
@@ -1517,18 +1512,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection in one IL-1 authority; consistent recovery snapshots and shared "
         "row/byte budgets remain beside replay validation so storage and reducer "
         "publication invariants cannot drift across independently mutable modules.",
-    ),
-    "hook_registry.py": (
-        1200,
-        "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
-        "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
-        "module rather than a sub-package (a package split would change how hook scripts "
-        "resolve the import on the low-latency startup path). Relocatable hook commands "
-        "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
-        "relocatable command rendering, and token-aware find_broken_hook_scripts/"
-        "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
-        "detection surface. #4512 adds the exact exploration request-identity hook and "
-        "its lifecycle resource contract to the same canonical registry.",
     ),
     "exploration/snapshot.py": (
         1250,

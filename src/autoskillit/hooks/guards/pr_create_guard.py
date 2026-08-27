@@ -25,35 +25,24 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     has_interpreter_wrapped_command,
     tokenize_shell_payload_segments,
 )
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    DENY_REASON_BY_GUARD,
+    DENY_TRIGGER_BY_GUARD,
+    EXEMPT_SESSION_TYPES_BY_GUARD,
+    EXEMPT_SKILLS_BY_GUARD,
+)
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
-PR_CREATE_DENY_TRIGGER: str = "PR creation via run_cmd is prohibited"
+PR_CREATE_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["pr_create_guard"]
 
-_DENY_REASON = (
-    "PR creation via run_cmd is prohibited during recipe execution. "
-    "Use the prepare_pr → compose_pr pipeline instead. "
-    "Direct gh pr create bypasses mandatory arch-lens, annotation, and review steps."
-)
+_DENY_REASON = DENY_REASON_BY_GUARD["pr_create_guard"]
 
-# Must stay in sync with the exempt_skills frozenset on the pr_create_guard HookDef
-# in hook_registry.py — stdlib-only boundary prevents a shared import.
-_EXEMPT_SKILLS: frozenset[str] = frozenset(
-    {
-        "compose-pr",
-        "compose-research-pr",
-        "open-integration-pr",
-        "promote-to-main",
-        "pipeline-summary",
-    }
-)
-
-# Must stay in sync with the exempt_session_types frozenset on the pr_create_guard HookDef
-# in hook_registry.py — stdlib-only boundary prevents a shared import.
-_EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
+_EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["pr_create_guard"]
+_EXEMPT_SESSION_TYPES: frozenset[str] = EXEMPT_SESSION_TYPES_BY_GUARD["pr_create_guard"]
 
 
 def _is_gh_pr_create(cmd: str) -> bool:

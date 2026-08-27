@@ -46,43 +46,27 @@ from _git_command_classification import (  # type: ignore[import-not-found]  # n
 from _github_mutation_analysis import (  # type: ignore[import-not-found]  # noqa: E402
     _DYNAMIC_SHELL_TOKEN_RE,
 )
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    DENY_REASON_BY_GUARD,
+    DENY_TRIGGER_BY_GUARD,
+    EXEMPT_SKILLS_BY_GUARD,
+)
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    RISKY_GIT_OPERATIONS as _BLOCKED_GIT_OPS,
+)
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 
-GIT_OPS_DENY_TRIGGER: str = "Destructive git operation blocked in headless session"
+GIT_OPS_DENY_TRIGGER: str = DENY_TRIGGER_BY_GUARD["git_ops_guard"]
 CHECKED_OUT_REF_DENY_PREFIX: str = "Checked-out ref mutation blocked: "
 
-_DENY_REASON_TEMPLATE = (
-    "Destructive git operation '{op}' is blocked in headless skill sessions. "
-    "Create a new commit instead of amending, and avoid force-push, reset --hard, "
-    "clean -f, or checkout . in automated workflows."
-)
+_DENY_REASON_TEMPLATE = DENY_REASON_BY_GUARD["git_ops_guard"]
 
-# Must stay in sync with RISKY_GIT_OPERATIONS in hook_registry.py —
-# stdlib-only boundary prevents a shared import. test_risky_git_ops_coverage.py
-# enforces that this set covers every tuple in RISKY_GIT_OPERATIONS.
-_BLOCKED_GIT_OPS: frozenset[tuple[str, ...]] = frozenset(
-    {
-        ("commit", "--amend"),
-        ("push", "--force"),
-        ("push", "-f"),
-        ("push", "--force-with-lease"),
-        ("reset", "--hard"),
-        ("clean", "-f"),
-        ("clean", "-fd"),
-        ("checkout", "."),
-        ("checkout", "--", "."),
-    }
-)
-
-# No skill legitimately needs destructive git ops in a headless session.
-_EXEMPT_SKILLS: frozenset[str] = frozenset()
-
-# Must stay in sync with exempt_session_types on the git_ops_guard HookDef
-# in hook_registry.py — stdlib-only boundary prevents a shared import.
+_EXEMPT_SKILLS: frozenset[str] = EXEMPT_SKILLS_BY_GUARD["git_ops_guard"]
+# Script-local orchestrator bypass; HookDef.exempt_session_types stays empty.
 _EXEMPT_SESSION_TYPES: frozenset[str] = frozenset({"orchestrator"})
 
 _RAW_WRITE_VERBS = frozenset(

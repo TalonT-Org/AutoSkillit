@@ -90,7 +90,8 @@ def test_analysis_graph_exposes_guard_and_runtime_bypass_edge() -> None:
         if edge.edge_type == "runtime_skip_bypass"
     ]
 
-    assert graph.nodes["apply"]["skip_when_true"] == "context.is_silent_type"
+    apply_node = next(node for node, attrs in graph.nodes(data=True) if attrs["name"] == "apply")
+    assert graph.nodes[apply_node]["skip_when_true"] == "context.is_silent_type"
     assert [(edge.edge_type, edge.target) for edge in bypasses] == [
         ("runtime_skip_bypass", "synthesize"),
     ]

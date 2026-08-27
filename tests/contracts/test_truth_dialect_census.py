@@ -12,6 +12,8 @@ from autoskillit.recipe._rule_helpers import _is_failure_sentinel_value
 from autoskillit.recipe.schema import RecipeStep
 from autoskillit.server.tools.tools_kitchen import _compute_unlocked_steps
 
+pytestmark = pytest.mark.small
+
 _DIALECT_RATIONALES = {
     "recipe-ingredient-pruning": (
         "Legacy skip_when_false composition keeps unknown non-empty values."

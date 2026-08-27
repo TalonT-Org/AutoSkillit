@@ -14,6 +14,7 @@ from autoskillit.core import (
     RecipeFlowGeneration,
     RecipeStepGuard,
 )
+from autoskillit.recipe._api import load_and_validate
 from autoskillit.server._recipe_artifact import build_recipe_flow_generation
 from tests.server.test_tools_recipe_pull import _finalize_recipe_delivery, _payload
 
@@ -68,14 +69,22 @@ def test_recipe_flow_generation_rejects_the_previous_schema_version() -> None:
 def test_finalize_recipe_delivery_serves_guarded_flow_record(
     tool_ctx_kitchen_open,
 ) -> None:
+    result = load_and_validate("research-design", include_finalized_projection=True)
+    projection = result["_finalized_projection"]
+    assert isinstance(projection, FinalizedRecipeProjection)
+
     finalized = _finalize_recipe_delivery(
         _payload(),
         surface="get_recipe",
-        recipe_name="guarded",
+        recipe_name="research-design",
         tool_ctx=tool_ctx_kitchen_open,
-        finalized_projection=_projection(guarded=True),
+        finalized_projection=projection,
     )
 
     body = json.loads(finalized.rendered)
     records = [json.loads(record) for record in body["flow_records"]]
-    assert records[1]["guard"] == {"bypass": "synthesize", "context": "is_silent_type"}
+    apply_record = next(record for record in records if record.get("name") == "apply")
+    assert apply_record["guard"] == {
+        "bypass": "synthesize",
+        "context": "is_silent_type",
+    }

@@ -41,14 +41,6 @@ class MigrationServiceMigrated(TypedDict, total=False):
     advisories: list[str]
 
 
-# Public alias of the three return shapes; the runtime type is a dict
-# so the ``MigrationService`` Protocol (which mandates ``dict[str, Any]``)
-# continues to accept ``DefaultMigrationService`` as a structural subtype.
-MigrationServiceResult = (
-    MigrationServiceError | MigrationServiceUpToDate | MigrationServiceMigrated
-)
-
-
 class DefaultMigrationService:
     """Concrete MigrationService wrapping MigrationEngine.migrate_file.
 

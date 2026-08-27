@@ -1,10 +1,8 @@
-"""Migration engine core: dispatch logic, adapter ABCs, shared dataclasses,
-factory, and private helpers used by the skill adapter.
+"""Migration engine core: dispatch logic, adapter ABCs, and shared dataclasses.
 
-Concrete adapters live in sibling modules (``adapters_recipe``,
-``adapters_contract``, ``adapters_diagram``, ``adapters_skill``); the
-high-level service wrapper lives in ``service.py``. Import the relocated
-classes from their owning modules, not from this one.
+``MigrationEngine`` routes a ``MigrationFile`` to the adapter registered for
+its ``file_type``, writes migrated content back atomically, and runs the
+adapter's optional post-write revalidation.
 """
 
 from __future__ import annotations

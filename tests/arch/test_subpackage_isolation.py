@@ -1122,7 +1122,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
         # store for verbatim plugin assets, kept separate from _projection_cache.py since
         # it must be resolvable and safe to import even when no store root is available.
-        "hooks": 25,  # +_capture_process owned shell process-group boundary;
+        "hooks": 26,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
         # and request-correlated exploration identity records
@@ -1130,6 +1130,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # Bumped 24 -> 25: CI reported 25 Python files at SHA 869746ddc
         # (24 in the local git-tracked file set), so the cap must tolerate
         # whatever CI-side enumeration produced the +1 difference.
+        # Bumped 25 -> 26: issue #4853 added hooks/_hook_constants.py — the
+        # shared stdlib-only authority imported by every guard script under
+        # the standalone hooks-dir sys.path bootstrap.
         "pipeline": 19,  # +run_skill_completion server-owned receipt authority (#4457)
         # +kitchen transition authority
         # +exploration_context_durable.py: durable (0600 HMAC-signed) session-scoped

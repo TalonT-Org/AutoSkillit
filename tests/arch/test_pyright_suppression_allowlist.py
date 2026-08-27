@@ -91,7 +91,11 @@ def test_type_ignore_count_budget() -> None:
     # across the declare_join_batch handler, the join ledger, and the Join-guard
     # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
     # cannot be statically resolved from outside the hooks/ subtree.
-    budget = 140
+    # Decomposing hook_registry.py (#4853) added 4 # type: ignore[import-not-found]
+    # suppressions on the standalone guard scripts' `from _hook_constants import`
+    # lines (Pyright cannot resolve the standalone-context import through the
+    # package-qualified path the runtime uses).
+    budget = 144
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

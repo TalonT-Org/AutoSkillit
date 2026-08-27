@@ -1325,12 +1325,14 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         assert bounded.cursor_writes == 0
 
         store._sweep_budget = capture_reconcile.RUNNER_TAIL_BUDGET
+        store._sweep_started_monotonic = store._monotonic()
         store._sweep_records_inspected = store._sweep_replay_bytes = 0
         store._sweep_transitions = store._sweep_cursor_writes = 0
         try:
             store.get_record(_CAPTURE_ID)
         finally:
             store._sweep_budget = None
+            store._sweep_started_monotonic = None
 
         assert store._sweep_cursor_writes == 1
         decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
@@ -1416,12 +1418,14 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
             max_cursor_writes=len(capture_ids),
             max_duration_seconds=5.0,
         )
+        store._sweep_started_monotonic = store._monotonic()
         with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
             store.get_record(capture_ids[-1])
 
         assert len(encoded_capture_ids) <= len(capture_ids) * 8
     finally:
         store._sweep_budget = None
+        store._sweep_started_monotonic = None
         root.close()
         anchor.close()
 
@@ -4382,7 +4386,7 @@ def test_reconcile_adapter_preserves_closed_setup_reason(
         CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
         CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
         CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
-        CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.SNAPSHOT_INTEGRITY,
+        CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
         CaptureFailureReason.UNKNOWN_SETUP: CleanupBlocker.UNKNOWN_SETUP,
     }
     assert set(expected_blockers) == set(CaptureFailureReason)

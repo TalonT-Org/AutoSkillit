@@ -11,6 +11,7 @@ import shlex
 import stat
 import subprocess
 import sys
+import threading
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
@@ -1182,15 +1183,25 @@ def test_setup_keyboard_interrupt_emits_failure_before_reraising(
         classmethod(with_short_lock_wait),
     )
     monkeypatch.setattr(capture_admission.time, "sleep", interrupt_sleep)
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(run_capture, "printf must-not-run", str(project), _CAPTURE_ID)
+    raised: list[BaseException] = []
+
+    def invoke() -> None:
+        try:
+            run_capture("printf must-not-run", str(project), _CAPTURE_ID)
+        except BaseException as exc:
+            raised.append(exc)
+
+    worker = threading.Thread(target=invoke)
+    worker.start()
     try:
-        with pytest.raises(KeyboardInterrupt):
-            future.result(timeout=1)
+        worker.join(timeout=1)
+        assert not worker.is_alive()
     finally:
         _release_capture_lock_holder(holder)
-        executor.shutdown(wait=True, cancel_futures=True)
+        worker.join(timeout=1)
 
+    assert len(raised) == 1
+    assert isinstance(raised[0], KeyboardInterrupt)
     failure = _single_failure_marker(capfd.readouterr().err)
     assert failure.reason is CaptureFailureReason.UNKNOWN_SETUP
     assert failure.stage == "capture lifecycle store open"

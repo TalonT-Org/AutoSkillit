@@ -16,6 +16,7 @@ from autoskillit.core import (
 )
 from autoskillit.fleet.state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
 from autoskillit.fleet.state_records import (
+    FLEET_HALTED_SENTINEL,
     CampaignState,
     DispatchRecord,
     ResumeDecision,
@@ -26,7 +27,6 @@ from autoskillit.fleet.state_transitions import (
     TERMINAL_UNCLEANED_STATUSES,
     DispatchStatus,
 )
-from autoskillit.fleet.state_types import FLEET_HALTED_SENTINEL
 
 MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 

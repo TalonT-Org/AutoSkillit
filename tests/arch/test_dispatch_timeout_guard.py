@@ -28,9 +28,24 @@ _RESOLVE_SYMBOL = "resolve_dispatch_timeout"
 
 
 def _collect_function_source(tree: ast.Module, func_name: str) -> str:
+    """Return the function body source with docstrings stripped.
+
+    A bare substring match on the function source would treat any literal
+    mention of ``resolve_dispatch_timeout`` (including inside a docstring) as
+    a real call site. Strip the docstring so the substring check only fires
+    on actual references in code.
+    """
     for node in ast.walk(tree):
         if isinstance(node, ast.AsyncFunctionDef) and node.name == func_name:
-            return ast.unparse(node)
+            tree_copy = ast.Module(body=list(node.body), type_ignores=[])
+            for stmt in tree_copy.body:
+                if (
+                    isinstance(stmt, ast.Expr)
+                    and isinstance(stmt.value, ast.Constant)
+                    and isinstance(stmt.value.value, str)
+                ):
+                    stmt.value = ast.Constant(value="")  # type: ignore[attr-defined]
+            return ast.unparse(tree_copy)
     return ""
 
 

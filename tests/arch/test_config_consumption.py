@@ -45,22 +45,58 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {}
 
 
 def _config_dataclasses() -> list[type]:
-    """Every dataclass declared in the config definition module.
+    """Every dataclass owned by the config layer.
 
-    Enumerated from the module directly rather than walking AutomationConfig's
-    field tree: ProviderProfileDef is frozen and is synthesized at call time
-    inside ProvidersConfig.resolved_profiles, so it is never a declared field
-    type and a tree walk misses it — along with one of the dead fields.
+    Post-#4859 decomposition, the facade ``autoskillit.config._config_dataclasses``
+    only re-exports dataclasses — the actual definitions live in the
+    owner-bounded ``_dataclasses_<concern>.py`` leaf modules. Walking the facade
+    and matching ``obj.__module__ == facade.__name__`` returns zero because every
+    re-exported dataclass keeps its leaf module as its ``__module__``.
+
+    Discovery therefore walks each leaf module's namespace directly, mirroring
+    the pattern in ``tests/contracts/test_config_field_has_consumer.py`` so the
+    two tests stay aligned on what "a config dataclass" means.
     """
-    from autoskillit.config import _config_dataclasses as module
+    import importlib
 
-    return [
-        obj
-        for obj in vars(module).values()
-        if isinstance(obj, type)
-        and dataclasses.is_dataclass(obj)
-        and obj.__module__ == module.__name__
-    ]
+    from autoskillit.config import _config_dataclasses as facade
+
+    _DATACLASS_LEAF_MODULES: tuple[str, ...] = (
+        "autoskillit.config._dataclasses_errors",
+        "autoskillit.config._dataclasses_test_gating",
+        "autoskillit.config._dataclasses_execution",
+        "autoskillit.config._dataclasses_workflow",
+        "autoskillit.config._dataclasses_diagnostics",
+        "autoskillit.config._dataclasses_github",
+        "autoskillit.config._dataclasses_surfaces",
+        "autoskillit.config._dataclasses_fleet",
+        "autoskillit.config._dataclasses_providers",
+    )
+
+    seen: set[type] = set()
+    # Walk the facade first so re-exports retain their __module__ provenance
+    # (importing via the facade preserves leaf __module__ for already-seen
+    # classes, so we still filter on leaf-module identity).
+    for obj in vars(facade).values():
+        if (
+            isinstance(obj, type)
+            and dataclasses.is_dataclass(obj)
+            and obj.__module__ in _DATACLASS_LEAF_MODULES
+        ):
+            seen.add(obj)
+    # Also walk each leaf module directly to pick up any dataclass that the
+    # facade does not re-export (defensive: keeps this test aligned with
+    # the leaf-module contract enforced by test_config_field_has_consumer).
+    for module_name in _DATACLASS_LEAF_MODULES:
+        mod = importlib.import_module(module_name)
+        for obj in vars(mod).values():
+            if (
+                isinstance(obj, type)
+                and dataclasses.is_dataclass(obj)
+                and obj.__module__ == module_name
+            ):
+                seen.add(obj)
+    return list(seen)
 
 
 def _config_field_names() -> frozenset[str]:

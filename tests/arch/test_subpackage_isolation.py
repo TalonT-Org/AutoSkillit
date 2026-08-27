@@ -77,6 +77,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "store",  # migration/store.py: defensive exemption for future module-level construction
         "validator",  # recipe/validator.py: defensive exemption for decorator-based rule registry
         "settings",  # config/settings.py: _CONFIG_SCHEMA = _build_config_schema()
+        "_validation",  # config/_validation.py: _CONFIG_SCHEMA = _build_config_schema() (#4859)
         "_headless_path_tokens",  # execution/_headless_path_tokens.py: _OUTPUT_PATH_TOKENS
         "_probe_cache",  # execution/backends/_probe_cache.py: PROBE_CACHE_TTL = timedelta(...)
         # Typed cancellation state is required for the authenticated broker boundary (#4585).
@@ -1143,6 +1144,15 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
         "core/runtime": 11,  # +worktree_gate_lease process-tree-lived test exclusion
+        # +_dataclasses_test_gating, +_dataclasses_execution, +_dataclasses_workflow,
+        # +_dataclasses_diagnostics, +_dataclasses_github, +_dataclasses_surfaces,
+        # +_dataclasses_fleet, +_dataclasses_providers, +_dataclasses_errors,
+        # +_automation_config, +_coercion, +_coherence, +_retired_keys, +_validation,
+        # +_writer: owner-bounded decomposition of settings.py + _config_dataclasses.py
+        # from a 2-monolith IL-1 config/ package (#4859). Each new module is ≤750 lines;
+        # the only way to keep the cohesive per-concern split is to lift the file-count cap
+        # to 20 (was 10).
+        "config": 20,
         "cli": 9,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _init_helpers.py, _preview.py, _serve_guard.py, _validate.py,

@@ -17,7 +17,7 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 
 PERSISTED_ENUM_DECODERS: Mapping[str, frozenset[str]] = {
     "core/_retiring_cache.py": frozenset({"PluginArtifactKind"}),
-    "fleet/state_types.py": frozenset({"DispatchStatus"}),
+    "fleet/state_transitions.py": frozenset({"DispatchStatus"}),
     "hooks/_capture/_ledger.py": frozenset(
         {
             "CaptureDeliveryStatus",

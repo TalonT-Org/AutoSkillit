@@ -6,11 +6,8 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from autoskillit.fleet.state_types import (
-    DispatchStatus,
-    GateRecordResult,
-    _validate_transition,
-)
+from autoskillit.fleet.state_outcomes import GateRecordResult
+from autoskillit.fleet.state_transitions import DispatchStatus, _validate_transition
 
 
 def record_gate_outcome(

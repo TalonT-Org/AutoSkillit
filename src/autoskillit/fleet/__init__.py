@@ -103,7 +103,6 @@ from .state_recovery import (
     resolve_stale_running,
 )
 from .state_types import (
-    _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
     FLEET_STATE_SCHEMA_VERSION,
     DispatchOutcome,
 )

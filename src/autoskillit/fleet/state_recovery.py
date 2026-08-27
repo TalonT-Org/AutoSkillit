@@ -14,17 +14,19 @@ from autoskillit.core import (
     RetryReason,
     get_logger,
 )
-from autoskillit.fleet.state_types import (
-    _ABANDON_REASONS,
-    _INFRASTRUCTURE_FAILURE_REASONS,
-    _VISIBLE_IN_BLOCK_STATUSES,
-    FLEET_HALTED_SENTINEL,
-    TERMINAL_UNCLEANED_STATUSES,
+from autoskillit.fleet.state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
+from autoskillit.fleet.state_records import (
     CampaignState,
     DispatchRecord,
-    DispatchStatus,
     ResumeDecision,
 )
+from autoskillit.fleet.state_transitions import (
+    _ABANDON_REASONS,
+    _VISIBLE_IN_BLOCK_STATUSES,
+    TERMINAL_UNCLEANED_STATUSES,
+    DispatchStatus,
+)
+from autoskillit.fleet.state_types import FLEET_HALTED_SENTINEL
 
 MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 
@@ -440,7 +442,7 @@ def resume_campaign_from_state(
         CampaignStateMutator,
         read_state,
     )
-    from autoskillit.fleet.state_types import _clear_dispatch_for_retry  # noqa: PLC0415
+    from autoskillit.fleet.state_records import _clear_dispatch_for_retry  # noqa: PLC0415
 
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.workspace.session_skills as session_skills
+import autoskillit.workspace.session_skill_materialization as session_skill_materialization
 from autoskillit.core import (
     ClaudeDirectoryConventions,
     ManagedSessionHome,
@@ -62,7 +62,9 @@ def test_generated_home_skill_removal_rejects_non_child_path(tmp_path: Path) -> 
     outside.mkdir()
 
     with pytest.raises(SkillContractError, match="one exact child entry"):
-        session_skills._remove_generated_home_skill_entry(discovery_root, "../outside")
+        session_skill_materialization._remove_generated_home_skill_entry(
+            discovery_root, "../outside"
+        )
 
     assert outside.is_dir()
 
@@ -943,7 +945,7 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
     session_id = f"ambient-{ambient_state}"
     error_events: list[tuple[str, dict[str, object]]] = []
     monkeypatch.setattr(
-        session_skills.logger,
+        session_skill_materialization.logger,
         "error",
         lambda event, **kwargs: error_events.append((event, kwargs)),
     )

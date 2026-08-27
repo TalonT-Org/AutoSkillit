@@ -1155,7 +1155,7 @@ _ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {
         added_date=date(2026, 8, 25),
     ),
     (
-        SRC_ROOT / "workspace" / "_projected_artifact" / "materialization.py",
+        SRC_ROOT / "workspace" / "_projected_artifact" / "_publication.py",
         "_render_agent_definitions",
         _ENUMERATION_READ_STAT_KIND,
     ): TrackedDeferral(
@@ -1166,7 +1166,7 @@ _ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {
         added_date=date(2026, 8, 25),
     ),
     (
-        SRC_ROOT / "workspace" / "session_skills.py",
+        SRC_ROOT / "workspace" / "session_skill_manager.py",
         "cleanup_stale",
         _ENUMERATION_READ_STAT_KIND,
     ): TrackedDeferral(

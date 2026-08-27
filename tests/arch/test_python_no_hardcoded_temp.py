@@ -38,7 +38,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # the canonical default value for backward compatibility.
     "core/types/_type_protocols_recipe.py": "RecipeRepository.validate_from_path default arg",
     # Justification: SkillsDirectoryProvider default ctor arg matches canonical default.
-    "workspace/session_skills.py": "SkillsDirectoryProvider default arg",
+    "workspace/session_skill_provider.py": "SkillsDirectoryProvider default arg",
     # Justification: docstring example referencing the canonical default path.
     "hooks/guards/skill_cmd_guard.py": "docstring example",
     # Justification: docstring referencing the canonical default path.

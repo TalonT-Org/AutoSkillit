@@ -74,8 +74,8 @@ RECLAIMER_TARGETS: dict[str, tuple[Path, str]] = {
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",
         "reap_stale_dispatches",
     ),
-    "workspace.session_skills::cleanup_stale": (
-        SRC_ROOT / "workspace" / "session_skills.py",
+    "workspace.session_skill_manager::cleanup_stale": (
+        SRC_ROOT / "workspace" / "session_skill_manager.py",
         "cleanup_stale",
     ),
     "workspace.clone_registry::cleanup_candidates": (
@@ -120,7 +120,7 @@ RECLAIMER_TARGETS: dict[str, tuple[Path, str]] = {
 _R = "scripts.pytest_tmp_lifecycle::_reap"
 _S = "scripts.pytest_tmp_lifecycle::_safe_candidates"
 _D = "fleet._dispatch_reaper::reap_stale_dispatches"
-_CS = "workspace.session_skills::cleanup_stale"
+_CS = "workspace.session_skill_manager::cleanup_stale"
 _WGW = "workspace.worktree::remove_git_worktree"
 _WWS = "workspace.worktree::remove_worktree_sidecar"
 _SL = "execution._session_retention::apply_session_retention"
@@ -251,30 +251,30 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "still be alive -- the dispatch record is deliberately left RUNNING for a retry, "
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
-    # -- workspace.session_skills::cleanup_stale --
-    f"{_CS}::L1500": SafetyDecision(
+    # -- workspace.session_skill_manager::cleanup_stale --
+    f"{_CS}::L500": SafetyDecision(
         "The candidate root directory does not exist; nothing here to scan or reclaim."
     ),
-    f"{_CS}::L1504": SafetyDecision(
+    f"{_CS}::L504": SafetyDecision(
         "The session-leases bookkeeping subdirectory itself is not a session; a structural "
         "exclusion, not an eligibility decision."
     ),
-    f"{_CS}::L1506": SafetyDecision(
+    f"{_CS}::L506": SafetyDecision(
         "A non-directory entry under the candidate root is a type guard, never a session "
         "directory this function reclaims."
     ),
-    f"{_CS}::L1510": RetentionDecision(
+    f"{_CS}::L510": RetentionDecision(
         Revocability.REVOCABLE,
         "An entry with an in-process session lease held by this process is retained -- "
         "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
         "live owner reference.",
     ),
-    f"{_CS}::L1516": RetentionDecision(
+    f"{_CS}::L516": RetentionDecision(
         Revocability.REVOCABLE,
         "Failure to acquire the non-blocking lease means another process currently holds "
         "a live lock on this entry, a directly observed live-owner reference.",
     ),
-    f"{_CS}::L1535": RetentionDecision(
+    f"{_CS}::L535": RetentionDecision(
         Revocability.REVOCABLE,
         "Removal did not occur because the re-checked mtime under lease is fresh again or "
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"

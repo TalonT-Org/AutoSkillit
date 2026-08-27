@@ -1165,7 +1165,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         # +_doctor_repair isolated opt-in mutation spoke (#4710)
-        "workspace": 26,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 31,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
@@ -1176,6 +1176,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
         # store for verbatim plugin assets, kept separate from _projection_cache.py since
         # it must be resolvable and safe to import even when no store root is available.
+        # +session_skill_catalog, session_skill_provider, session_skill_lifecycle,
+        # session_skill_manager, session_skill_materialization: session_skills.py was
+        # decomposed into five single-owner shards behind the retained session_skills.py
+        # facade, retiring its _LINE_LIMIT_EXEMPTIONS entry. Each shard owns one
+        # concern (catalog assembly, provider resolution, fcntl.flock lease lifecycle,
+        # manager orchestration, materialization) and cannot be recombined without
+        # restoring the monolith the split removed. 26 + 5 = 31.
         "hooks": 26,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,
@@ -1536,15 +1543,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "identity checks to recover() — both belong to the same transaction boundary as "
         "the leases they gate, and fit under this cap post-extraction.",
     ),
-    "workspace/session_skills.py": (
-        1550,
-        "REQ-CNST-010-E13/E14: ordering-sensitive session skill materialization owns "
-        "provider discovery, override precedence, filtering, dependency activation, the "
-        "generated-home lease and cleanup transaction, and backend-specific layout "
-        "validation; keeping those operations together preserves both assembly ordering "
-        "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
-        "provisioning and finalized-reachability loop at the same ordering boundary.",
-    ),
     "hook_registry.py": (
         1200,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
@@ -1671,6 +1669,24 @@ def test_pipeline_exploration_context_shards_under_900_lines() -> None:
     assert not violations, (
         "Exploration-context shards exceeding the 900-line wavefront-1 ceiling:\n"
         + "\n".join(f"  {rel}: {count} lines" for rel, count in violations)
+    )
+
+
+def test_session_skills_e13_e14_exemption_is_retired() -> None:
+    """REQ-CNST-010-E13/E14 (workspace/session_skills.py) is retired without replacement.
+
+    After the shard decomposition lands, ``workspace/session_skills.py`` is a
+    thin identity-preserving facade and must be absent from
+    ``_LINE_LIMIT_EXEMPTIONS``. No replacement exemption is added and no
+    ``RETIRED_*`` or ``SKILL_CONTRACT_REMEDIATIONS`` entry is registered —
+    ordinary Python module decomposition is outside those retirement surfaces.
+    """
+    import tests.arch.test_subpackage_isolation as self_module
+
+    exemptions = self_module._LINE_LIMIT_EXEMPTIONS
+    assert "workspace/session_skills.py" not in exemptions, (
+        "E13/E14 retirement for workspace/session_skills.py was not applied; "
+        "the decomposition replaces this module with a facade under the 1000-line limit"
     )
 
 

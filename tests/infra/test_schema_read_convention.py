@@ -120,8 +120,13 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/execution/session_log.py": (
         "token_usage.json readers use dual-key fallback, not version-gated reading"
     ),
-    "src/autoskillit/workspace/session_skills.py": (
+    "src/autoskillit/workspace/session_skill_catalog.py": (
         "Per-session consumer metadata is written once and never read by AutoSkillit"
+    ),
+    "src/autoskillit/workspace/_projected_artifact/_publication.py": (
+        "The projection manifest's read side is validate_sanitized_plugin_artifact in "
+        "the sibling _validation.py shard, which reconstructs the expected manifest "
+        "independently rather than deferring to read_versioned_json."
     ),
 }
 

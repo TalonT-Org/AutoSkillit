@@ -111,7 +111,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.workspace._projected_artifact.materialization:write_generated_hooks_json",
+        writer="autoskillit.workspace._projected_artifact._publication:write_generated_hooks_json",
         artifact=(
             "hooks/hooks.json in plugin/projection roots — relocatable "
             "${CLAUDE_PLUGIN_ROOT}-form commands; written during projection staging, "
@@ -240,7 +240,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.workspace.session_skills:write_skill_unavailability_metadata",
+        writer="autoskillit.workspace.session_skill_catalog:write_skill_unavailability_metadata",
         artifact="add-dir/skill-unavailability.json",
         machine_local=False,
         detection=None,

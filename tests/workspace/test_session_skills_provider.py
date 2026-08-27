@@ -9,7 +9,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.workspace.session_skills as session_skills
+import autoskillit.workspace.session_skill_materialization as session_skill_materialization
+import autoskillit.workspace.session_skill_provider as session_skill_provider
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
     BackendConventions,
@@ -178,7 +179,7 @@ def test_session_catalog_rejects_unsupported_operation_absent_from_skill_plan(
 def test_resolve_ephemeral_root_returns_writable_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(session_skills, "_CANDIDATE_ROOTS", [tmp_path])
+    monkeypatch.setattr(session_skill_provider, "_CANDIDATE_ROOTS", [tmp_path])
     root = resolve_ephemeral_root()
     assert root.is_dir()
     probe = root / "write_test.tmp"
@@ -318,7 +319,7 @@ def test_skill_write_failure_rolls_back_unpublished_codex_home(
         del args, kwargs
         raise RuntimeError("skill write failed")
 
-    monkeypatch.setattr(session_skills, "materialize_agent_skill_tree", fail_write)
+    monkeypatch.setattr(session_skill_materialization, "materialize_agent_skill_tree", fail_write)
 
     with pytest.raises(RuntimeError, match="skill write failed"):
         manager.init_session("0123456789abcdef", catalog, context)

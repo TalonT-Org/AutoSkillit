@@ -167,7 +167,7 @@ class TestNonMachineLocalWritersAreRelocatable:
             captured.update(path=path, content=content, schema_version=schema_version)
 
         monkeypatch.setattr(
-            "autoskillit.workspace.session_skills.write_versioned_json",
+            "autoskillit.workspace.session_skill_catalog.write_versioned_json",
             capture_versioned_json,
         )
 

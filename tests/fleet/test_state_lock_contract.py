@@ -47,7 +47,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "execution/backends/_codex_session_storage.py",
         "execution/session/_session_state.py",
         "workspace/clone_registry.py",
-        "workspace/session_skills.py",
+        "workspace/session_skill_lifecycle.py",
         "fleet/state.py",
         "planner/merge.py",
         "server/tools/_overlay_state.py",  # session overlay transaction lock

@@ -295,9 +295,9 @@ class TestPublicationGateIntegration:
                 + "\n"
             )
 
-        import autoskillit.workspace._projected_artifact.materialization as _mat
+        import autoskillit.workspace._projected_artifact._publication as _pub
 
-        monkeypatch.setattr(_mat, "render_hooks_json_text", broken_render)
+        monkeypatch.setattr(_pub, "render_hooks_json_text", broken_render)
 
         catalog = session_catalog()
         authority = project_default_plugin_authority(

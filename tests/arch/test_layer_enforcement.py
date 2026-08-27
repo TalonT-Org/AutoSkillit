@@ -1668,7 +1668,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("recipe/_skill_helpers.py"): {
             "DefaultSkillResolver"
         },  # shared helper, deferred default factory fallback
-        Path("workspace/session_skills.py"): {
+        Path("workspace/session_skill_provider.py"): {
             "DefaultSkillResolver"
         },  # ephemeral session resolver fallback
         Path("smoke_utils/_telemetry.py"): {"DefaultTokenLog"},  # run_python callable

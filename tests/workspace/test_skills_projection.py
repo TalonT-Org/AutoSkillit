@@ -216,7 +216,7 @@ def test_effective_invocation_rejects_inconsistent_direct_construction(
 
 
 def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypatch) -> None:
-    import autoskillit.workspace._projected_artifact.materialization as projection_module
+    import autoskillit.workspace.skill_format as skill_format_module
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillCatalogEntry,
@@ -237,7 +237,7 @@ def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypa
         execution_role=SkillExecutionRole.SESSION,
     )
     monkeypatch.setattr(
-        projection_module,
+        skill_format_module,
         "parse_frontmatter_content",
         lambda _content: pytest.fail("projection reparsed canonical frontmatter"),
     )

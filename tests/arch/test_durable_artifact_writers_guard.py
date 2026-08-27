@@ -45,8 +45,9 @@ _SCOPED_MODULES: tuple[str, ...] = (
     "core/_retiring_cache.py",
     "core/_active_kitchens.py",
     "workspace/_projected_artifact/materialization.py",
+    "workspace/_projected_artifact/_publication.py",
     "workspace/_projected_artifact/_hook_repair.py",
-    "workspace/session_skills.py",
+    "workspace/session_skill_catalog.py",
     "cli/_hooks.py",
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
@@ -88,13 +89,13 @@ _TEMP_INDICATORS: tuple[str, ...] = (
 _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         # Projected SKILL.md documents — not a hook artifact.
-        ("workspace/_projected_artifact/materialization.py", "materialize_agent_skill_tree"),
+        ("workspace/_projected_artifact/_publication.py", "materialize_agent_skill_tree"),
         # Rewritten agent .md frontmatter (MCP tool prefixes) — not a hook artifact.
-        ("workspace/_projected_artifact/materialization.py", "_render_agent_definitions"),
+        ("workspace/_projected_artifact/_publication.py", "_render_agent_definitions"),
         # Projection manifest.json (digests only, no hook paths) — not a hook artifact.
-        ("workspace/_projected_artifact/materialization.py", "materialize_sanitized_plugin_root"),
+        ("workspace/_projected_artifact/_publication.py", "materialize_sanitized_plugin_root"),
         # Verbatim byte-for-byte asset copy — no path is baked into the copy.
-        ("workspace/_projected_artifact/materialization.py", "_copy_non_skill_plugin_assets"),
+        ("workspace/_projected_artifact/_publication.py", "_copy_non_skill_plugin_assets"),
         # Bare TOML scalars (tool_output_token_limit, auto-compact limit) — unrelated to hooks.
         ("execution/backends/_codex_config.py", "_ensure_top_level_key"),
         ("execution/backends/_codex_config.py", "_upsert_top_level_key_exact"),
@@ -264,7 +265,7 @@ def test_skill_unavailability_metadata_writer_is_registered() -> None:
         entry
         for entry in DURABLE_ARTIFACT_WRITERS
         if entry.writer
-        == "autoskillit.workspace.session_skills:write_skill_unavailability_metadata"
+        == "autoskillit.workspace.session_skill_catalog:write_skill_unavailability_metadata"
     )
 
     assert writer.artifact == "add-dir/skill-unavailability.json"

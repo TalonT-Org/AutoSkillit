@@ -91,17 +91,19 @@ def test_sanitized_and_projection_manifest_schema_versions_are_distinct() -> Non
 
 
 def test_sanitized_manifest_schema_version_has_single_authority() -> None:
-    import autoskillit.workspace._projected_artifact.materialization as materialization
+    import autoskillit.workspace._projected_artifact._publication as publication
+    import autoskillit.workspace._projected_artifact._validation as validation
 
-    tree = ast.parse(Path(materialization.__file__).read_text(encoding="utf-8"))
+    publication_tree = ast.parse(Path(publication.__file__).read_text(encoding="utf-8"))
+    validation_tree = ast.parse(Path(validation.__file__).read_text(encoding="utf-8"))
     materialize = next(
         node
-        for node in tree.body
+        for node in publication_tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "materialize_sanitized_plugin_root"
     )
     validate = next(
         node
-        for node in tree.body
+        for node in validation_tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "validate_sanitized_plugin_artifact"
     )
 

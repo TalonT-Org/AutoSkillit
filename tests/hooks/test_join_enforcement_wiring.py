@@ -201,33 +201,6 @@ def test_claim_guard_permits_an_agent_call_that_belongs_to_a_declared_wave(
     assert batch["assignments"][0]["tool_use_id"] == tool_use_id
 
 
-def test_settle_guard_records_an_outcome_from_the_payload_event_name(tmp_path: Path) -> None:
-    session_id = "settle-payload"
-    tool_use_id = "agent-1"
-    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
-    flag_dir = _declare_one_assignment(worktree, session_id=session_id)
-    claim_assignment(
-        flag_dir,
-        session_id=session_id,
-        top_level_parent="top_level",
-        tool_use_id=tool_use_id,
-    )
-    payload = _agent_payload(worktree, session_id=session_id, tool_use_id=tool_use_id)
-    payload.update({"hook_event_name": "PostToolUse", "tool_response": "complete"})
-
-    completed = _run_hook(
-        tmp_path,
-        _GUARDS_DIR / "join_settle_guard.py",
-        payload,
-        cwd=worktree,
-    )
-
-    assert completed.returncode == 0, completed.stderr
-    batch = active_batch(flag_dir, session_id=session_id, top_level_parent="top_level")
-    assert batch is not None
-    assert batch["assignments"][0]["outcome"] == OUTCOME_SUCCESS
-
-
 @pytest.mark.parametrize(
     ("event_name", "event_data", "expected_outcome"),
     _SETTLEMENT_EVENT_CASES,

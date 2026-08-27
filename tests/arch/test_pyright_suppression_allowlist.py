@@ -94,7 +94,9 @@ def test_type_ignore_count_budget() -> None:
     # Wavefront 1 (#4667) added 3 net # type: ignore comments elsewhere in the
     # codebase (rebinds via setattr make mypy unable to see methods on the class
     # at 5 site-bounded sites), bringing the count from 137 to 140.
-    budget = 140
+    # Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
+    # # type: ignore[import-not-found] suppressions on standalone guard scripts).
+    budget = 144
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

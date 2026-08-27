@@ -12,7 +12,7 @@ exists at this stage, so ``per_dispatch_state_path=None``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
@@ -47,9 +47,7 @@ class RecipeContext:
     Phase B threads into the per-dispatch state handle, lineage preparation,
     and launch tuple. ``dispatch_name`` is preserved for logging but does not
     participate in identity resolution (``effective_name`` already folds in the
-    caller override). ``provenance_snapshots`` is reserved for the orchestrator
-    to record intermediate effect provenance (e.g. pre-recipe-load effects);
-    Phase A does not populate it directly.
+    caller override).
     """
 
     effective_name: str
@@ -60,10 +58,7 @@ class RecipeContext:
     recipe: str
     task: str
     recipe_obj: Any = None  # RecipeInfo — populated by Phase A, consumed by Phase B
-    # Required by Phase B but not constructed in Phase A.
     dispatch_name: str | None = None
-    # Provenance threading
-    provenance_snapshots: dict = field(default_factory=dict)
 
 
 async def run_pre_launch_gating(

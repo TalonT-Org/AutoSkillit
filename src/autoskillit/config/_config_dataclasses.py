@@ -9,10 +9,10 @@ that compare dataclass instances by identity (e.g. ``is`` checks on
 
 Symbol origin:
   - ``_dataclasses_diagnostics`` → DiagnosticsConfig, LinuxTracingConfig,
-    LoggingConfig, McpResponseConfig, OutputBudgetConfig
-  - ``_dataclasses_execution`` → RunSkillConfig
+    LoggingConfig, McpResponseConfig, OutputBudgetConfig, TokenUsageConfig
+  - ``_dataclasses_execution`` → QuotaGuardConfig, RunSkillConfig
   - ``_dataclasses_fleet`` → FleetConfig, ProcessTetherConfig, _MAX_CONCURRENT_DISPATCHES
-  - ``_dataclasses_github`` → GitHubConfig, QuotaGuardConfig, ReportBugConfig, TokenUsageConfig
+  - ``_dataclasses_github`` → GitHubConfig, ReportBugConfig
   - ``_dataclasses_providers`` → AgentBackendConfig, CoreRunConfig, ProvidersConfig,
     ProviderProfileDef, RETIRED_PROFILE_KEYS
   - ``_dataclasses_shared`` → ConfigSchemaError, _METADATA_KEYS, _SECRETS_ONLY_KEYS
@@ -41,6 +41,12 @@ from autoskillit.config._dataclasses_diagnostics import (
 from autoskillit.config._dataclasses_diagnostics import (
     OutputBudgetConfig as OutputBudgetConfig,
 )
+from autoskillit.config._dataclasses_diagnostics import (
+    TokenUsageConfig as TokenUsageConfig,
+)
+from autoskillit.config._dataclasses_execution import (
+    QuotaGuardConfig as QuotaGuardConfig,
+)
 from autoskillit.config._dataclasses_execution import (
     RunSkillConfig as RunSkillConfig,
 )
@@ -57,13 +63,7 @@ from autoskillit.config._dataclasses_github import (
     GitHubConfig as GitHubConfig,
 )
 from autoskillit.config._dataclasses_github import (
-    QuotaGuardConfig as QuotaGuardConfig,
-)
-from autoskillit.config._dataclasses_github import (
     ReportBugConfig as ReportBugConfig,
-)
-from autoskillit.config._dataclasses_github import (
-    TokenUsageConfig as TokenUsageConfig,
 )
 from autoskillit.config._dataclasses_providers import (
     RETIRED_PROFILE_KEYS as RETIRED_PROFILE_KEYS,

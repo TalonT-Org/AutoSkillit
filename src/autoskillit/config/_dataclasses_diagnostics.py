@@ -21,6 +21,11 @@ from autoskillit.core import (
 
 
 @dataclass
+class TokenUsageConfig:
+    verbosity: str = "summary"  # "summary" | "none"
+
+
+@dataclass
 class LoggingConfig:
     level: str = "INFO"
     json_output: bool | None = None  # None = auto-detect from stderr.isatty()

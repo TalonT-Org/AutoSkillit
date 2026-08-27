@@ -1,8 +1,7 @@
 """GitHub integration dataclasses.
 
 Owns: ``GitHubConfig`` (with all helper methods — label/state lookups, lifecycle
-metadata resolution, allowed-label gating), ``ReportBugConfig``,
-``TokenUsageConfig``, and ``QuotaGuardConfig``.
+metadata resolution, allowed-label gating) and ``ReportBugConfig``.
 """
 
 from __future__ import annotations
@@ -10,28 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from autoskillit.core import LABEL_LIFECYCLE_REGISTRY, IssueLabelState
-
-
-@dataclass
-class TokenUsageConfig:
-    verbosity: str = "summary"  # "summary" | "none"
-
-
-@dataclass
-class QuotaGuardConfig:
-    enabled: bool = True
-    short_window_enabled: bool = True
-    long_window_enabled: bool = True
-    short_window_threshold: float = 85.0
-    long_window_threshold: float = 95.0
-    long_window_patterns: list[str] = field(
-        default_factory=lambda: ["seven_day", "sonnet", "opus"]
-    )
-    buffer_seconds: int = 60
-    cache_max_age: int = 300
-    cache_refresh_interval: int = 240
-    credentials_path: str = "~/.claude/.credentials.json"
-    cache_path: str = "~/.claude/autoskillit_quota_cache.json"
 
 
 @dataclass

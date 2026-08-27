@@ -8,10 +8,27 @@ keep natural-exit grace aligned with exit-after-stop delay.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from autoskillit.core import OutputFormat
+
+
+@dataclass
+class QuotaGuardConfig:
+    enabled: bool = True
+    short_window_enabled: bool = True
+    long_window_enabled: bool = True
+    short_window_threshold: float = 85.0
+    long_window_threshold: float = 95.0
+    long_window_patterns: list[str] = field(
+        default_factory=lambda: ["seven_day", "sonnet", "opus"]
+    )
+    buffer_seconds: int = 60
+    cache_max_age: int = 300
+    cache_refresh_interval: int = 240
+    credentials_path: str = "~/.claude/.credentials.json"
+    cache_path: str = "~/.claude/autoskillit_quota_cache.json"
 
 
 @dataclass

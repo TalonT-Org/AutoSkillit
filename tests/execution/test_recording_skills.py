@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.execution._recording_skills as recording_skills
 from autoskillit.execution._recording_skills import (
     _assert_agent_safe_skill_tree,
     _extract_ephemeral_add_dir,
@@ -311,19 +312,19 @@ def test_build_skills_manifest_skips_a_skill_whose_directory_becomes_a_file(
     _make_skill(skills_dir, "first")
     replaced_skill = _make_skill(skills_dir, "second")
     _make_skill(skills_dir, "third")
-    original_iterdir = Path.iterdir
-    skills_dir_observations = 0
+    original_scan_observed = recording_skills.scan_observed
+    root_scans = 0
 
-    def replace_skill_on_second_observation(path: Path):
-        nonlocal skills_dir_observations
+    def replace_skill_on_second_scan(path: Path):
+        nonlocal root_scans
         if path == skills_dir:
-            skills_dir_observations += 1
-            if skills_dir_observations == 2:
+            root_scans += 1
+            if root_scans == 2:
                 shutil.rmtree(replaced_skill)
                 replaced_skill.write_text("not a skill directory", encoding="utf-8")
-        return original_iterdir(path)
+        return original_scan_observed(path)
 
-    monkeypatch.setattr(Path, "iterdir", replace_skill_on_second_observation)
+    monkeypatch.setattr(recording_skills, "scan_observed", replace_skill_on_second_scan)
 
     manifest = build_skills_manifest(skills_dir)
 

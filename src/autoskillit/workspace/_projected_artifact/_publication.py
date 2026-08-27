@@ -248,7 +248,7 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
             continue
         try:
             content = path.read_bytes().decode("utf-8")
-        except VANISHED_ERRORS:
+        except (FileNotFoundError, NotADirectoryError):
             continue
         lines = content.splitlines(keepends=True)
         tools_line_idx: int | None = None

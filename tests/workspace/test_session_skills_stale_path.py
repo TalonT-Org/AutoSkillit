@@ -344,9 +344,9 @@ def test_cleanup_stale_skips_a_symlink_under_a_candidate_root(
     mgr = make_session_skill_manager(codex_root=None)
     target = mgr.ephemeral_root / "target"
     target.mkdir()
-    os.utime(target, (1_000_000.0, 1_000_000.0))
     symlink = mgr.ephemeral_root / "symlink"
     symlink.symlink_to(target, target_is_directory=True)
+    os.utime(symlink, (1_000_000.0, 1_000_000.0), follow_symlinks=False)
 
     assert mgr.cleanup_stale(max_age_seconds=1) == 0
     assert symlink.is_symlink()

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
+import autoskillit.execution._session_retention as session_retention
 from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
@@ -1081,19 +1082,16 @@ def test_retention_continues_when_a_session_directory_vanishes_during_the_sort(
     _make_sessions(tmp_path, count=4)
     sessions_dir = tmp_path / "sessions"
     vanishing_dir = sessions_dir / "session-0001"
-    original_stat = Path.stat
-    vanishing_dir_observations = 0
+    original_scan_observed = session_retention.scan_observed
 
-    def vanish_on_sort(path: Path, *args, **kwargs):
-        nonlocal vanishing_dir_observations
-        if path == vanishing_dir:
-            vanishing_dir_observations += 1
-            if vanishing_dir_observations == 2:
-                shutil.rmtree(path)
-                raise FileNotFoundError(path)
-        return original_stat(path, *args, **kwargs)
+    def scan_with_vanishing_entry(path: Path):
+        for entry in original_scan_observed(path):
+            if entry.path == vanishing_dir:
+                shutil.rmtree(vanishing_dir)
+                continue
+            yield entry
 
-    monkeypatch.setattr(Path, "stat", vanish_on_sort)
+    monkeypatch.setattr(session_retention, "scan_observed", scan_with_vanishing_entry)
 
     survivors = apply_session_retention(
         sessions_dir,
@@ -1103,7 +1101,6 @@ def test_retention_continues_when_a_session_directory_vanishes_during_the_sort(
         protected_ids=frozenset(),
     )
 
-    assert vanishing_dir_observations == 2
     assert survivors == {"session-0002", "session-0003"}
     assert not (sessions_dir / "session-0000").exists()
     assert not vanishing_dir.exists()

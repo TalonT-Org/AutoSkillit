@@ -136,7 +136,7 @@ def build_skills_manifest(skills_dir: Path) -> dict[str, Any]:
         skill_md = entry.path / "SKILL.md"
         try:
             content = skill_md.read_bytes()
-        except VANISHED_ERRORS:
+        except (FileNotFoundError, NotADirectoryError):
             continue
         sha256 = hashlib.sha256(content).hexdigest()
         gated = bool(_GATED_PATTERN.search(content.decode("utf-8", errors="replace")))

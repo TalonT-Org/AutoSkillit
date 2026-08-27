@@ -135,6 +135,7 @@ def test_validation_result_field_list_matches_spec() -> None:
         "recipes_dir",
         "recipe",
         "active_recipe",
+        "raw_declared",
         "raw",
         "errors",
         "suggestions",
@@ -360,6 +361,6 @@ def test_assemble_load_result_handles_recipe_none_in_error_path(tmp_path: Path) 
     pipeline_result = _run_validation_pipeline(partial, bundle, t0)
     result = _assemble_load_result(pipeline_result, bundle)
 
-    assert result["valid"] is False or "YAML parse error" in json.dumps(
+    assert result["valid"] is False and "YAML parse error" in json.dumps(
         result.get("suggestions", [])
     )

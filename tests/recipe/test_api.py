@@ -1084,7 +1084,6 @@ def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
             include_finalized_projection=include_finalized_projection,
         )
 
-    monkeypatch.setattr(orch, "load_and_validate", capturing_fn)
     monkeypatch.setattr(api_mod, "load_and_validate", capturing_fn)
 
     repo = DefaultRecipeRepository()
@@ -1310,7 +1309,7 @@ class TestFormatIngredientsTableGfmWidthCap:
 
 def test_orchestration_rules_include_stop_step_semantics():
     """orchestration_rules includes stop-step semantics when recipe has stop steps."""
-    from autoskillit.recipe._api import _build_orchestration_rules
+    from autoskillit.recipe._api_orchestration import _build_orchestration_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
@@ -1325,7 +1324,7 @@ def test_orchestration_rules_include_stop_step_semantics():
 
 def test_build_stop_step_semantics_includes_sentinel_instruction():
     """_build_stop_step_semantics() must inject sentinel emission instructions."""
-    from autoskillit.recipe._api import _build_stop_step_semantics
+    from autoskillit.recipe._api_orchestration import _build_stop_step_semantics
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(

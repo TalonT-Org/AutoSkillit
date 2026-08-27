@@ -1044,7 +1044,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
         # — #4557 decomposes three modules over the 750-line structural limit
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
-        "recipe": 45,  # was 33; +9 from CI/graph/dataflow splits; +_binding_input.py split (#4854); +_api_orchestration.py split (#4860)
+        # was 33; +9 from CI/graph/dataflow splits; +_binding_input.py split
+        # (#4854); +_api_orchestration.py split (#4860)
+        "recipe": 45,
         # +_github_http review boundary and +launch_resolution authority.
         # +otlp_sink run-scoped loopback diagnostics receiver (#4628)
         "execution": 23,  # +session_index strict byte-bounded retained-index reads (#4514)

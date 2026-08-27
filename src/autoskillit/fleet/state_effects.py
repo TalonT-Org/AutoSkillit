@@ -1,8 +1,7 @@
 """Fleet dispatch effect provenance authority.
 
 Retry-relevant effect enums, immutable snapshots, and the request-scoped
-tracker. Decomposed from ``state_types`` (#4856); new consumers should
-import from this module rather than the legacy facade.
+tracker.
 """
 
 from __future__ import annotations

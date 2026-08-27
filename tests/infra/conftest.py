@@ -47,12 +47,9 @@ def _dispatch_food_truck_json_producer() -> dict:
     import json
 
     from autoskillit.core import FleetErrorCode, fleet_error
-    from autoskillit.fleet.state_types import (
-        DispatchCompleted,
-        DispatchEffectProvenance,
-        DispatchRejected,
-        DispatchStatus,
-    )
+    from autoskillit.fleet.state_effects import DispatchEffectProvenance
+    from autoskillit.fleet.state_outcomes import DispatchCompleted, DispatchRejected
+    from autoskillit.fleet.state_transitions import DispatchStatus
 
     provenance = DispatchEffectProvenance(operation_id="formatter-coverage")
     base = DispatchCompleted(

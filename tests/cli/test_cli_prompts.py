@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._mcp_names import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
 from tests.cli._orchestrator_prompt_helpers import (
     build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
 )
@@ -442,7 +442,7 @@ def test_orchestrator_prompt_has_no_server_startup_recovery_block():
 
 def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
     """The conditional DEFERRED-TOOL RECOVERY block must not be present."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_orchestrator_prompt("test", mcp_prefix=DIRECT_PREFIX)
     assert "schemas NOT loaded — calling directly will fail" not in prompt
@@ -450,7 +450,7 @@ def test_orchestrator_prompt_has_no_deferred_tool_recovery_conditional():
 
 def test_first_action_no_toolsearch_or_bash():
     """FIRST ACTION must not reference ToolSearch or Bash."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
     start = prompt.index("FIRST ACTION")
@@ -463,7 +463,7 @@ def test_first_action_no_toolsearch_or_bash():
 
 def test_first_action_opens_with_open_kitchen():
     """FIRST ACTION step 1 must call open_kitchen directly — no preamble step."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_orchestrator_prompt("my_recipe", mcp_prefix=DIRECT_PREFIX)
     start = prompt.index("FIRST ACTION")
@@ -476,7 +476,7 @@ def test_first_action_opens_with_open_kitchen():
 
 def test_open_kitchen_prompt_no_toolsearch_or_bash():
     """open_kitchen call instruction must not reference ToolSearch or Bash."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     # Scope to the call instruction before the discipline block
@@ -489,7 +489,7 @@ def test_open_kitchen_prompt_no_toolsearch_or_bash():
 
 def test_open_kitchen_prompt_calls_open_kitchen_directly():
     """_build_open_kitchen_prompt must instruct a direct open_kitchen call."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_open_kitchen_prompt(mcp_prefix=DIRECT_PREFIX)
     assert "open_kitchen" in prompt
@@ -568,7 +568,7 @@ def test_build_orchestrator_prompt_ingredients_section_before_first_action():
 
 def test_orchestrator_prompt_contains_skill_command_format_guidance():
     """Orchestrator prompt must instruct the LLM that skill_command is a literal template."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "SKILL_COMMAND FORMATTING" in prompt, (
@@ -579,7 +579,7 @@ def test_orchestrator_prompt_contains_skill_command_format_guidance():
 
 def test_orchestrator_prompt_includes_null_context_handling():
     """System prompt must instruct the model on null/None context variable behavior."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
 
     prompt = _build_orchestrator_prompt("my-recipe", mcp_prefix=DIRECT_PREFIX)
     assert "NULL/NONE CONTEXT VARIABLES" in prompt, (

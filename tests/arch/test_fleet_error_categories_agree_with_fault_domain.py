@@ -10,7 +10,7 @@ from autoskillit.core import (
     InfrastructureFaultError,
     ProcessStaleError,
 )
-from autoskillit.fleet.state_types import get_error_category
+from autoskillit.fleet.state_error_codes import get_error_category
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

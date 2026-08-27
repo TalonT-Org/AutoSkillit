@@ -319,7 +319,7 @@ class TestOrderMcpPrefixSelection:
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """order() builds a prompt with the direct prefix when installed_plugins.json lacks key."""
-        from autoskillit.cli._mcp_names import DIRECT_PREFIX
+        from autoskillit.core import DIRECT_PREFIX
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -347,7 +347,7 @@ class TestOrderMcpPrefixSelection:
         self, mock_run: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """order() uses marketplace prefix when autoskillit is plugin-installed."""
-        from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
+        from autoskillit.core import MARKETPLACE_PREFIX
 
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"

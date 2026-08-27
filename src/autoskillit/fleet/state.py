@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import fcntl
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,31 @@ from autoskillit.core import (
     read_versioned_json,
     write_versioned_json,
 )
+from autoskillit.fleet.state_effects import (
+    DispatchAggregatePhase,
+    DispatchEffectName,
+    DispatchEffectPhase,
+    DispatchEffectProvenance,
+    DispatchEffectRecord,
+    DispatchProvenanceTracker,
+    DispatchRetryDisposition,
+)
 from autoskillit.fleet.state_gates import record_gate_outcome
+from autoskillit.fleet.state_outcomes import (
+    DispatchCompleted,
+    DispatchRejected,
+    DispatchResult,
+    GateRecordResult,
+)
+from autoskillit.fleet.state_records import (
+    _RETRY_IDENTITY_FIELDS,
+    FLEET_HALTED_SENTINEL,
+    FLEET_STATE_SCHEMA_VERSION,
+    CampaignState,
+    DispatchRecord,
+    ResumeDecision,
+    _clear_dispatch_for_retry,
+)
 from autoskillit.fleet.state_recovery import (
     find_completed_dispatch,
     has_blocking_dispatch,
@@ -24,36 +49,14 @@ from autoskillit.fleet.state_recovery import (
     has_failed_dispatch,
     resume_campaign_from_state,
 )
-from autoskillit.fleet.state_types import (
-    _ABANDON_REASONS,  # noqa: F401
-    _ALLOWED_TRANSITIONS,  # noqa: F401
-    _COMPLETED_STATUSES,  # noqa: F401
-    _INFRASTRUCTURE_FAILURE_REASONS,  # noqa: F401
-    _RETRY_IDENTITY_FIELDS,
-    _VISIBLE_IN_BLOCK_STATUSES,  # noqa: F401
-    FLEET_HALTED_SENTINEL,
-    FLEET_STATE_SCHEMA_VERSION,
+from autoskillit.fleet.state_transitions import (
     TERMINAL_DISPATCH_STATUSES,
     TERMINAL_UNCLEANED_STATUSES,
-    CampaignState,
-    DispatchAggregatePhase,
-    DispatchCompleted,
-    DispatchEffectName,
-    DispatchEffectPhase,
-    DispatchEffectProvenance,
-    DispatchEffectRecord,
-    DispatchProvenanceTracker,
-    DispatchRecord,
-    DispatchRejected,
-    DispatchResult,
-    DispatchRetryDisposition,
     DispatchStatus,
-    GateRecordResult,
-    ResumeDecision,
-    _clear_dispatch_for_retry,
-    _resume_lock,
     _validate_transition,
 )
+
+_resume_lock = threading.Lock()
 
 __all__ = [
     # re-exported from state_gates
@@ -64,25 +67,28 @@ __all__ = [
     "has_completed_dispatch",
     "has_failed_dispatch",
     "resume_campaign_from_state",
-    # re-exported from state_types
-    "FLEET_HALTED_SENTINEL",
-    "TERMINAL_DISPATCH_STATUSES",
-    "TERMINAL_UNCLEANED_STATUSES",
-    "CampaignState",
+    # re-exported from state_effects
     "DispatchAggregatePhase",
-    "DispatchCompleted",
     "DispatchEffectName",
     "DispatchEffectPhase",
     "DispatchEffectProvenance",
     "DispatchEffectRecord",
     "DispatchProvenanceTracker",
-    "DispatchRecord",
+    "DispatchRetryDisposition",
+    # re-exported from state_outcomes
+    "DispatchCompleted",
     "DispatchRejected",
     "DispatchResult",
-    "DispatchRetryDisposition",
-    "DispatchStatus",
     "GateRecordResult",
+    # re-exported from state_records
+    "FLEET_HALTED_SENTINEL",
+    "CampaignState",
+    "DispatchRecord",
     "ResumeDecision",
+    # re-exported from state_transitions
+    "TERMINAL_DISPATCH_STATUSES",
+    "TERMINAL_UNCLEANED_STATUSES",
+    "DispatchStatus",
     # local
     "CampaignStateMutator",
     "DispatchStateHandle",

@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from autoskillit.core import PreLaunchReadiness
-from autoskillit.fleet.state_types import _RETRY_IDENTITY_FIELDS, DispatchRecord
+from autoskillit.fleet.state_records import _RETRY_IDENTITY_FIELDS, DispatchRecord
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

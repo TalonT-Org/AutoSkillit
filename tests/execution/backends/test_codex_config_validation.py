@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+import autoskillit.hooks  # noqa: F401 — forces HOOK_REGISTRY population before sync_hooks_to_codex_config validates lifecycle contracts
 from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.backends import _codex_probes as probes
 
@@ -346,7 +347,7 @@ def _config_writer(
 
             ensure_codex_mcp_registered(config_path=Path(config_path))
         else:
-            from autoskillit.cli._hooks_codex import sync_hooks_to_codex_config
+            from autoskillit.execution import sync_hooks_to_codex_config
 
             sync_hooks_to_codex_config(
                 config_path=Path(config_path),

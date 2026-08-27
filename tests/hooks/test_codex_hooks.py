@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._hooks_codex import (
+from autoskillit.execution import (
     _is_autoskillit_hook_entry,
     generate_codex_hooks_config,
     sync_hooks_to_codex_config,
@@ -65,7 +65,6 @@ class TestNoThirdPartyToml:
     @pytest.mark.parametrize(
         "rel_path",
         [
-            "src/autoskillit/cli/_hooks_codex.py",
             "src/autoskillit/execution/backends/_codex_hooks.py",
         ],
     )
@@ -313,10 +312,3 @@ def test_hook_writer_facade_owns_the_shared_config_lock(
         ("hooks", config_path),
         ("lock-exit", config_path),
     ]
-
-
-def test_cli_hook_bridge_exports_the_lock_owning_facade() -> None:
-    import autoskillit.cli._hooks_codex as cli_bridge
-    import autoskillit.execution.backends._codex_hooks as hooks_module
-
-    assert cli_bridge.sync_hooks_to_codex_config is hooks_module.sync_hooks_to_codex_config

@@ -1028,9 +1028,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             The 11 remaining top-level files (app.py + 10 small shared utilities —
             see the dict entry below) are the orchestration entry points and shared
             helpers that have no coherent subpackage home.
-            _hooks_codex.py adds Codex config.toml hook generation and sync
-    (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
-    _hooks.py for Claude Code settings.json hooks.
+            Codex config.toml hook generation and sync
+    (generate_codex_hooks_config, sync_hooks_to_codex_config) live in
+    execution/backends/_codex_hooks.py paralleling _hooks.py for Claude Code
+    settings.json hooks.
     Exempt at 11 files.
           hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
             (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
@@ -1065,7 +1066,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
             server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
             state_recovery.py to reduce the 757-line monolith and centralize deserialization
             logic on DispatchRecord.from_dict. Startup warming lives here so its
-            execution/fleet imports remain layer-correct. Exempt at 24 files.
+            execution/fleet imports remain layer-correct. state_types.py was then further
+            decomposed into state_effects.py, state_records.py, state_transitions.py,
+            state_outcomes.py, and state_error_codes.py (#4856) to split the 899-line monolith
+            along effect-provenance, dispatch-record/campaign-state, transition/retry, and
+            outcome/result boundaries, after which the transitional state_types.py re-export
+            facade was deleted. Exempt at 28 files.
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
@@ -1133,11 +1139,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
         "core/runtime": 11,  # +worktree_gate_lease process-tree-lived test exclusion
-        "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
+        "cli": 9,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
-        # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
-        # _serve_guard.py, _validate.py, _workspace.py, __init__.py); no
-        # coherent subpackage home exists for any of them
+        # _init_helpers.py, _preview.py, _serve_guard.py, _validate.py,
+        # _workspace.py, __init__.py); -2 for the deleted _hooks_codex.py and
+        # _mcp_names.py facades (their symbols live in execution/backends/
+        # _codex_hooks.py and autoskillit.core respectively); no coherent
+        # subpackage home exists for any of them
         "cli/session": 11,  # +_session_onboarding.py folded in from cli/_onboarding.py,
         # first-run detection consumed only by _session_cook.py (#4670)
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
@@ -1174,7 +1182,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # non-recursive glob because the package directory is not a top-level
         # *.py file); -1 for the deleted exploration_context.py file.
         # E22 retired per #4835.
-        "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
+        "fleet": 28,  # noqa: E501  # +_startup_warm.py; +5 state_types decomposition; -1 for deleted state_types.py facade
         "recipe/rules": 66,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
         # +rules_merge_routing +rules_merge_guards +rules_merge_wait
         # +rules_merge_enrollment +rules_merge_push_symmetry (#4857

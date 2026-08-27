@@ -45,6 +45,12 @@ _WARNING_ZONE_BUDGETS: dict[str, int] = {
     "execution/github.py": 750,
     "execution/session_log.py": 750,
     "fleet/state.py": 750,
+    # Issue #4856 — state_types decomposition into 5 focused modules.
+    "fleet/state_effects.py": 750,
+    "fleet/state_records.py": 750,
+    "fleet/state_transitions.py": 750,
+    "fleet/state_outcomes.py": 750,
+    "fleet/state_error_codes.py": 750,
     "recipe/io.py": 750,
     "server/tools/tools_git.py": 750,
     "server/tools/tools_github.py": 750,

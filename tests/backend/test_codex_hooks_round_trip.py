@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.cli._hooks_codex import (
+from autoskillit.execution import (
     generate_codex_hooks_config,
     sync_hooks_to_codex_config,
 )

@@ -28,7 +28,7 @@ from autoskillit.workspace import (
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, SubprocessRunner
-    from autoskillit.fleet.state_types import DispatchRecord
+    from autoskillit.fleet.state_records import DispatchRecord
 
 logger = get_logger(__name__)
 

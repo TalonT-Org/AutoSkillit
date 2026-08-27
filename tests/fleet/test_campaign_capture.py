@@ -835,7 +835,8 @@ def test_interpolate_rejects_empty_string_campaign_ref():
 def _make_success_state(state_path, campaign_id, captures):
     """Helper: create a state file with one SUCCESS dispatch and captured values."""
     from autoskillit.fleet.state import write_captured_values, write_initial_state
-    from autoskillit.fleet.state_types import DispatchRecord, DispatchStatus
+    from autoskillit.fleet.state_records import DispatchRecord
+    from autoskillit.fleet.state_transitions import DispatchStatus
 
     dispatch = DispatchRecord(
         name="test-dispatch-1",

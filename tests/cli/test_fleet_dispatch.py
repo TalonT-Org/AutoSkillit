@@ -262,7 +262,7 @@ def test_fleet_dispatch_no_campaign_env_vars(
 
 def test_build_fleet_dispatch_prompt_includes_admitted_global_guidance() -> None:
     """Fleet dispatch prompt includes the admitted global orchestration contract."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -272,7 +272,7 @@ def test_build_fleet_dispatch_prompt_includes_admitted_global_guidance() -> None
 
 
 def test_build_fleet_dispatch_prompt_references_dispatch_tool() -> None:
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -282,7 +282,7 @@ def test_build_fleet_dispatch_prompt_references_dispatch_tool() -> None:
 
 
 def test_build_fleet_dispatch_prompt_no_campaign_manifest() -> None:
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -294,7 +294,7 @@ def test_build_fleet_dispatch_prompt_no_campaign_manifest() -> None:
 
 
 def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
-    from autoskillit.cli._mcp_names import MARKETPLACE_PREFIX
+    from autoskillit.core import MARKETPLACE_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -306,7 +306,7 @@ def test_build_fleet_dispatch_prompt_accepts_marketplace_prefix() -> None:
 
 def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:
     """Dispatch prompt must enumerate all 11 tools in the TOOL SURFACE section."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -340,7 +340,7 @@ def test_build_fleet_dispatch_prompt_lists_all_11_tools() -> None:
 
 def test_build_fleet_dispatch_prompt_retains_global_sous_chef_sections() -> None:
     """The admitted sous-chef contract remains intact in the L3 prompt."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -357,7 +357,7 @@ def test_build_fleet_dispatch_prompt_retains_global_sous_chef_sections() -> None
 
 def test_build_fleet_dispatch_prompt_has_recipe_discovery_guidance() -> None:
     """Dispatch prompt must guide recipe discovery flow."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -369,7 +369,7 @@ def test_build_fleet_dispatch_prompt_has_recipe_discovery_guidance() -> None:
 
 def test_build_fleet_dispatch_prompt_role_text() -> None:
     """Dispatch prompt must identify role as fleet dispatcher."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -380,7 +380,7 @@ def test_build_fleet_dispatch_prompt_role_text() -> None:
 
 def test_build_fleet_dispatch_prompt_has_cleanup_protocol() -> None:
     """Dispatch prompt must include batch_cleanup_clones exit instruction."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -391,7 +391,7 @@ def test_build_fleet_dispatch_prompt_has_cleanup_protocol() -> None:
 
 def test_build_fleet_dispatch_prompt_no_sleep_toolsearch_preamble() -> None:
     """Dispatch prompt must NOT include sleep/ToolSearch boot sequence."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -402,7 +402,7 @@ def test_build_fleet_dispatch_prompt_no_sleep_toolsearch_preamble() -> None:
 
 def test_build_fleet_dispatch_prompt_uses_ingredients_only() -> None:
     """_build_fleet_dispatch_prompt recipe discovery must mention ingredients_only."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -572,7 +572,7 @@ def test_fleet_dispatch_greetings_are_plain_strings() -> None:
 
 def test_build_fleet_dispatch_prompt_embeds_recipe_table() -> None:
     """_build_fleet_dispatch_prompt embeds recipe_table under AVAILABLE FOOD TRUCKS section."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )
@@ -586,7 +586,7 @@ def test_build_fleet_dispatch_prompt_embeds_recipe_table() -> None:
 
 def test_build_fleet_dispatch_prompt_no_recipe_table_section_when_none() -> None:
     """_build_fleet_dispatch_prompt omits AVAILABLE FOOD TRUCKS when recipe_table is None."""
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
     )

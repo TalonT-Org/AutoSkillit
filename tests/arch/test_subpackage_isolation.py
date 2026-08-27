@@ -3081,6 +3081,10 @@ def test_smoke_utils_review_shards_do_not_import_the_facade() -> None:
                 for alias in node.names:
                     if alias.name == "autoskillit.smoke_utils":
                         offenders.append(f"{path.name} imports autoskillit.smoke_utils facade")
+                    elif alias.name == "autoskillit.smoke_utils.review":
+                        offenders.append(
+                            f"{path.name} imports autoskillit.smoke_utils.review facade"
+                        )
     assert not offenders, "Shards must not import the smoke_utils facade:\n" + "\n".join(
         f"  {o}" for o in offenders
     )

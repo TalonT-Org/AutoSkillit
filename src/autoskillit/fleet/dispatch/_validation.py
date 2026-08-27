@@ -73,9 +73,6 @@ async def run_pre_launch_gating(
     task: str,
     ingredients: dict[str, str] | None,
     dispatch_name: str | None,
-    prior_dispatch_id: str | None,  # noqa: ARG001 — kept for signature parity with orchestrator
-    resume_session_id: str | None,  # noqa: ARG001 — kept for signature parity with orchestrator
-    native_shell_capture_mode: Any,  # noqa: ARG001 — reserved for Phase B wiring
     dispatch_backend: CodingAgentBackend | None = None,
     effective_backend_map: dict[str, str] | None = None,
     provenance: DispatchProvenanceTracker,

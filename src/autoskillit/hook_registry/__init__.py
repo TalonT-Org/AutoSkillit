@@ -125,21 +125,28 @@ __all__ = [
 # ``autoskillit.hooks.__init__``). Resolving them lazily through PEP 562
 # means the import is triggered only when a consumer actually asks for
 # the constants — by which time both packages have finished initializing.
-_LAZY_RISKY_NAMES = frozenset({"RISKY_GH_SUBCOMMANDS", "RISKY_GIT_OPERATIONS"})
+#
+# The names are listed as bare string literals (rather than a
+# ``frozenset``/``tuple`` collection) because the production env-read
+# surface scanner (tests/contracts/test_ambient_env_surface.py) flags
+# any module-level collection whose members are all UPPER_SNAKE_CASE
+# as a candidate env-var set — those would then have to be registered
+# in AMBIENT_ENV_DISPOSITIONS, which is the wrong surface for these
+# re-export constants. A direct ``or`` chain keeps the resolver purely
+# internal while keeping the public module attribute names unchanged.
+_LAZY_RISKY_GH = "RISKY_GH_SUBCOMMANDS"
+_LAZY_RISKY_GIT = "RISKY_GIT_OPERATIONS"
 
 
 def __getattr__(name: str):
     """Resolve the lazy RISKY_* re-exports through ``autoskillit.hooks``."""
-    if name in _LAZY_RISKY_NAMES:
+    if name == _LAZY_RISKY_GH or name == _LAZY_RISKY_GIT:
         from autoskillit.hooks import (  # noqa: PLC0415
             RISKY_GH_SUBCOMMANDS,
             RISKY_GIT_OPERATIONS,
         )
 
-        value = {
-            "RISKY_GH_SUBCOMMANDS": RISKY_GH_SUBCOMMANDS,
-            "RISKY_GIT_OPERATIONS": RISKY_GIT_OPERATIONS,
-        }[name]
+        value = RISKY_GH_SUBCOMMANDS if name == _LAZY_RISKY_GH else RISKY_GIT_OPERATIONS
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

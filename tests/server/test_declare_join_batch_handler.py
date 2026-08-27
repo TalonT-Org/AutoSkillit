@@ -154,7 +154,7 @@ def test_end_to_end_real_projection_real_hook_real_handler(
         assert completed.returncode == 0, completed.stderr
         additional_context = json.loads(completed.stdout)["additionalContext"]
         delivered = re.search(
-            r"skill_name='([^']+)'.*session_id='([^']+)'",
+            r'skill_name="([^"]+)".*session_id="([^"]+)"',
             additional_context,
         )
         assert delivered is not None

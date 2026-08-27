@@ -143,7 +143,8 @@ def main() -> None:
     if binding_written and new_entry.binding_valid and new_entry.join_required:
         context_parts.append(
             "JOIN DECLARATION AUTHORITY: Call declare_join_batch with the normalized bare "
-            f"skill_name='{new_entry.skill_name}' and exact session_id='{session_id}' delivered "
+            f"skill_name={json.dumps(new_entry.skill_name)} and exact "
+            f"session_id={json.dumps(session_id)} delivered "
             "by this Skill PostToolUse hook."
         )
 

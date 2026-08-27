@@ -542,6 +542,24 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     assert entry["child_spawn_cardinality"] == {"explicit_slots": 4, "max_inflight": 4}
 
 
+def test_join_authority_renders_exact_values_as_json_strings(tmp_path: Path) -> None:
+    skill_name = "join'\"bearing"
+    session_id = "session'\"quoted"
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(projection_root, skill_name=skill_name, join_required=True)
+
+    stdout, exit_code = _run_hook(
+        stdin_data=_make_skill_event(session_id=session_id, skill=skill_name),
+        tmp_dir=tmp_path,
+        hook_path=hook_path,
+    )
+
+    assert exit_code == 0
+    additional_context = json.loads(stdout)["additionalContext"]
+    assert f"skill_name={json.dumps(skill_name)}" in additional_context
+    assert f"session_id={json.dumps(session_id)}" in additional_context
+
+
 def test_join_false_skill_load_keeps_join_required_false(tmp_path: Path) -> None:
     """REQ-052: A join-false skill load writes join_required=false explicitly.
 

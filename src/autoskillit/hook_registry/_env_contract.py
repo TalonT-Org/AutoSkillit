@@ -17,6 +17,12 @@ def _validate_hook_env_contract(entries: tuple[HookEnvVarDef, ...]) -> None:
             raise AssertionError(
                 f"AutoSkillit-owned env var {entry.var!r} requires producer and entrypoint"
             )
+        if entry.provenance != "autoskillit" and (
+            entry.producer is not None or entry.entrypoint is not None
+        ):
+            raise AssertionError(
+                f"Externally-owned env var {entry.var!r} must not declare producer or entrypoint"
+            )
 
 
 HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (

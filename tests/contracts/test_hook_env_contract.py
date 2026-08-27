@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import HOOK_ENV_CONTRACT, HookEnvVarDef
+from autoskillit.hook_registry._env_contract import _validate_hook_env_contract
 from tests._ambient_env_surface import production_env_write_surface
 from tests.arch._helpers import SRC_ROOT
 
@@ -287,6 +288,26 @@ def test_hook_env_contract_entries_have_one_shape_and_substantive_rationale() ->
         if entry.provenance == "autoskillit":
             assert entry.producer and entry.entrypoint, entry
             _producer_source_file(entry.producer)
+
+
+@pytest.mark.parametrize("provenance", ("harness", "operator"))
+@pytest.mark.parametrize(
+    ("producer", "entrypoint"),
+    (("autoskillit.example:producer", None), (None, "autoskillit.example:entrypoint")),
+)
+def test_external_hook_env_channels_reject_internal_authority_metadata(
+    provenance: str, producer: str | None, entrypoint: str | None
+) -> None:
+    entry = HookEnvVarDef(
+        "AUTOSKILLIT_EXTERNAL_TEST",
+        provenance,
+        producer,
+        entrypoint,
+        "External channels must not claim AutoSkillit-owned delivery authority.",
+    )
+
+    with pytest.raises(AssertionError, match="must not declare producer or entrypoint"):
+        _validate_hook_env_contract((entry,))
 
 
 def test_autoskillit_contract_vars_have_producer_and_boundary_evidence() -> None:

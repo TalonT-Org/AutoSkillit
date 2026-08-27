@@ -348,7 +348,7 @@ async def _execute_claude_headless(
                     on_launch_resolved=observe_launch,
                     managed_attempt_id=managed_attempt_id,
                     force_inactive_agent_teams=force_inactive_agent_teams,
-                    **lineage_callbacks.attempt_kwargs,
+                    **lineage_callbacks.launch_kwargs,
                 )
             except InfrastructureFaultError as exc:
                 logger.error("headless_runner_infrastructure_fault", exc_info=True)

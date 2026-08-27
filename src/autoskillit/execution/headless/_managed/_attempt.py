@@ -382,11 +382,13 @@ class _LineageCallbacks:
 
     @property
     def attempt_kwargs(self) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"on_spec_built": self.capture_session_type}
         if self._observer is None:
-            return kwargs
-        kwargs["managed_lineage_observer"] = self._observer
-        return kwargs
+            return {}
+        return {"managed_lineage_observer": self._observer}
+
+    @property
+    def launch_kwargs(self) -> dict[str, Any]:
+        return {**self.attempt_kwargs, "on_spec_built": self.capture_session_type}
 
     def capture_session_type(self, spec: CmdSpec) -> None:
         raw_session_type = spec.env.get(SESSION_TYPE_ENV_VAR)

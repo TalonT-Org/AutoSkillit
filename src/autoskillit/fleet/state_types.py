@@ -18,11 +18,13 @@ from autoskillit.fleet.state_effects import (
     DispatchProvenanceTracker,
     DispatchRetryDisposition,
 )
+from autoskillit.fleet.state_error_codes import get_error_category
 from autoskillit.fleet.state_outcomes import (
     DispatchCompleted,
     DispatchOutcome,
     DispatchRejected,
     DispatchResult,
+    GateRecordResult,
 )
 from autoskillit.fleet.state_records import (
     FLEET_HALTED_SENTINEL,
@@ -32,6 +34,8 @@ from autoskillit.fleet.state_records import (
     ResumeDecision,
 )
 from autoskillit.fleet.state_transitions import (
+    TERMINAL_DISPATCH_STATUSES,
+    TERMINAL_UNCLEANED_STATUSES,
     DispatchStatus,
 )
 
@@ -44,11 +48,14 @@ __all__ = [
     "DispatchEffectRecord",
     "DispatchProvenanceTracker",
     "DispatchRetryDisposition",
+    # state_error_codes
+    "get_error_category",
     # state_outcomes
     "DispatchCompleted",
     "DispatchOutcome",
     "DispatchRejected",
     "DispatchResult",
+    "GateRecordResult",
     # state_records
     "CampaignState",
     "DispatchRecord",
@@ -57,4 +64,6 @@ __all__ = [
     "ResumeDecision",
     # state_transitions
     "DispatchStatus",
+    "TERMINAL_DISPATCH_STATUSES",
+    "TERMINAL_UNCLEANED_STATUSES",
 ]

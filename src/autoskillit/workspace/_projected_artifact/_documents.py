@@ -1,17 +1,9 @@
 """Projected-artifact documents — projection contexts and contract projection.
 
-Single owner of:
+Single owner of the projection context types and ``project_agent_skill_document``.
 
-- ``SkillContractRecord``, ``AgentSkillDocument``, ``SkillProjectionContext``
-- ``_SKILL_NAMESPACE_REF_RE``
-- ``_source_identity``, ``_agent_skill_namespace``
-- ``_default_base_branch`` (public-mirror consumed via the facade)
-- ``_exploration_router_plan``, ``_active_exploration_vectors``
-- ``_direct_install_projection_context``
-- ``project_agent_skill_document``
-
-Preserves exact context-bound-record validation, immutable payload maps,
-removal of machine-only frontmatter, substitutions and namespace/backend
+Projection preserves exact context-bound-record validation, immutable payload
+maps, removal of machine-only frontmatter, substitutions and namespace/backend
 sigil rewrites, semantic adaptation, exploration replacement, and every
 published digest.
 """

@@ -1,13 +1,11 @@
 """Projected-artifact validation — exact-incarnation validator.
 
 Single owner of ``validate_sanitized_plugin_artifact`` and its
-validation-only helpers. Imports ``SkillContractRecord`` from
-``_documents.py`` and ``_skill_sequence`` and
-``SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION`` from ``_publication.py``.
+validation-only helpers.
 
-Accumulates errors for manifest shape/inventory, source containment,
-symlinks, leaked machine-authority frontmatter, canonical/public digests,
-and exact projected content.
+The validator reconstructs the expected manifest independently of the
+producer in ``_publication.py`` rather than reusing the producer's builder —
+sharing one builder would mask producer bugs the validator exists to catch.
 """
 
 from __future__ import annotations

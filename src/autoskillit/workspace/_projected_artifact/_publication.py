@@ -1,19 +1,11 @@
 """Projected-artifact publication — sanitized-plugin staging and tree materialization.
 
-Single owner of:
+Single owner of the projection manifest schema, agent-skill tree
+materialization, and sanitized-plugin root staging.
 
-- ``SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION``
-- ``_skill_sequence``, ``_manifest_skill_entry``, ``_projection_skills_manifest``
-- ``_replace_directory``
-- ``materialize_agent_skill_tree``
-- ``_copy_non_skill_plugin_assets``
-- ``write_generated_hooks_json`` (registered durable writer)
-- ``_render_agent_definitions``
-- ``materialize_sanitized_plugin_root``
-
-Per-skill manifest entries are free of the retired ``artifact_digest`` and
-``artifact_incarnation`` fields fixed by issue #4847. Rendered agent
-definitions are derived from the admitted catalog as fixed by issue #4715.
+Two invariants are load-bearing: per-skill manifest entries must stay free of
+the retired ``artifact_digest`` and ``artifact_incarnation`` fields (#4847),
+and rendered agent definitions must derive from the admitted catalog (#4715).
 """
 
 from __future__ import annotations

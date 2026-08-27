@@ -31,7 +31,6 @@ from autoskillit.core import (
     SkillResult,
     get_logger,
 )
-from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
 from autoskillit.fleet._outcome import (
     _checkpoint_to_dict,
@@ -105,12 +104,18 @@ async def run_outcome_classification(
     finalize shard needs.
     """
     # Load progress (sidecar + tracker authority).
+    # ``load_dispatch_progress`` is accessed via the public facade
+    # ``autoskillit.fleet._api.load_dispatch_progress`` (lazy import) so
+    # ``monkeypatch.setattr("autoskillit.fleet._api.load_dispatch_progress", ...)``
+    # patches observed by tests reach this call site.
+    from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+
     (
         sidecar_file,
         sidecar_entries,
         dispatch_checkpoint_loaded,
         tracker_authority_error,
-    ) = load_dispatch_progress(
+    ) = _facade.load_dispatch_progress(
         tool_ctx=tool_ctx,
         dispatch_sidecar_path=dispatch_sidecar_path,
         dispatch_id=dispatch_id,

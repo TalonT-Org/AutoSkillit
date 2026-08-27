@@ -31,7 +31,7 @@ _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
         ("cli/_init_helpers.py", 557),
         # Fleet state re-import on a dispatch failure/cleanup path —
         # moved from fleet/_api.py to fleet/dispatch/_api.py in #4851.
-        ("fleet/dispatch/_api.py", 229),
+        ("fleet/dispatch/_api.py", 234),
         # Kitchen tracker-authority import inside a server lifespan
         # teardown/cleanup path.
         ("server/_lifespan/_lifespan.py", 201),

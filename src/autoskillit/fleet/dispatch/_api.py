@@ -32,7 +32,6 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
 )
-from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authority
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
 )
@@ -365,7 +364,14 @@ async def _run_dispatch(
         )
 
     # --- Orchestrator: tracker-lease retention ---
-    tracker_key, tracker_lease = retain_dispatch_tracker_authority(tool_ctx, ready.dispatch_id)
+    # Access via the public facade (not the local top-level import) so that
+    # ``monkeypatch.setattr("autoskillit.fleet._api.retain_dispatch_tracker_authority", ...)``
+    # patches observed by tests reach this call site.
+    from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+
+    tracker_key, tracker_lease = _facade.retain_dispatch_tracker_authority(
+        tool_ctx, ready.dispatch_id
+    )
 
     # --- Orchestrator: prepare_resume chokepoint (Tier-2 universal coverage) ---
     # ``prepare_resume`` is also called from ``run_lineage_preparation`` via the

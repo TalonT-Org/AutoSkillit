@@ -376,7 +376,9 @@ class TestModuleCascadePipelineGuard:
         phantoms = [
             stem
             for stem in MODULE_CASCADE_PIPELINE
-            if not graph.get(stem) and not (_SRC_ROOT / "pipeline" / f"{stem}.py").exists()
+            if not graph.get(stem)
+            and not (_SRC_ROOT / "pipeline" / f"{stem}.py").exists()
+            and not (_SRC_ROOT / "pipeline" / "_context_admission_ledger" / f"{stem}.py").exists()
         ]
         assert not phantoms, (
             "MODULE_CASCADE_PIPELINE contains stems with no consumers or source file:\n"

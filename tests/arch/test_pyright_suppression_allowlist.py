@@ -91,10 +91,11 @@ def test_type_ignore_count_budget() -> None:
     # across the declare_join_batch handler, the join ledger, and the Join-guard
     # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
     # cannot be statically resolved from outside the hooks/ subtree.
-    # Decomposing hook_registry.py (#4853) added 4 # type: ignore[import-not-found]
-    # suppressions on the standalone guard scripts' `from _hook_constants import`
-    # lines (Pyright cannot resolve the standalone-context import through the
-    # package-qualified path the runtime uses).
+    # Wavefront 1 (#4667) added 3 net # type: ignore comments elsewhere in the
+    # codebase (rebinds via setattr make mypy unable to see methods on the class
+    # at 5 site-bounded sites), bringing the count from 137 to 140.
+    # Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
+    # # type: ignore[import-not-found] suppressions on standalone guard scripts).
     budget = 144
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "

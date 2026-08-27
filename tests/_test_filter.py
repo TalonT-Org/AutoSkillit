@@ -533,6 +533,17 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
 # through to LAYER_CASCADE_CONSERVATIVE["pipeline"] (fail-open).
 MODULE_CASCADE_PIPELINE: dict[str, frozenset[str]] = {
     "context_admission_ledger": frozenset({"pipeline", "server"}),
+    "_codec": frozenset({"pipeline", "server"}),
+    "_projection": frozenset({"pipeline", "server"}),
+    "_shadow": frozenset({"pipeline", "server"}),
+    "_state_queries": frozenset({"pipeline", "server"}),
+    "_store": frozenset({"pipeline", "server"}),
+    "_storage": frozenset({"pipeline", "server"}),
+    "_sqlite_errors": frozenset({"pipeline", "server"}),
+    "_apply": frozenset({"pipeline", "server"}),
+    "_recover": frozenset({"pipeline", "server"}),
+    "_inspection": frozenset({"pipeline", "server"}),
+    "_status": frozenset({"pipeline", "server"}),
     "context": frozenset(
         {
             "pipeline",

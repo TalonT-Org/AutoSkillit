@@ -151,6 +151,18 @@ def test_survives_malformed_stdin(tmp_path: Path) -> None:
     assert exit_code == 0
 
 
+def test_non_string_skill_name_fails_closed_without_crashing(tmp_path: Path) -> None:
+    event = _make_skill_event()
+    event["tool_input"]["skill"] = []
+
+    _, exit_code = _run_hook(stdin_data=event, tmp_dir=tmp_path)
+
+    assert exit_code == 0
+    binding = json.loads((tmp_path / _FLAG_RELPATH).read_text(encoding="utf-8"))
+    assert binding["binding_valid"] is False
+    assert binding["loaded_skills"][0]["skill_name"] == ""
+
+
 def test_reports_existing_binding_read_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

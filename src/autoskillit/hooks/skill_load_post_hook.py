@@ -67,8 +67,12 @@ def main() -> None:
     if data.get("tool_name") != "Skill":
         sys.exit(0)
 
-    tool_input: dict = data.get("tool_input", {}) or {}
-    skill_name = normalize_skill_name(tool_input.get("skill", ""))
+    tool_input_value = data.get("tool_input", {})
+    tool_input: dict[str, object] = tool_input_value if isinstance(tool_input_value, dict) else {}
+    skill_name_value = tool_input.get("skill", "")
+    skill_name: str = (
+        normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
+    )
     session_id: str = data.get("session_id", "")
 
     if not session_id:

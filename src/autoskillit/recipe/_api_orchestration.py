@@ -471,7 +471,7 @@ def _run_validation_pipeline(
     source_recipe: Recipe | None = None
     active_recipe: Recipe | None = None
     _skip_resolutions: dict[str, bool | None] = {}
-    _pre_prune_steps: dict[str, Any] = {}
+    _pre_prune_steps: dict[str, RecipeStep] = {}
     _finalized_projection: FinalizedRecipeProjection | None = None
 
     name = pipeline_inputs.name

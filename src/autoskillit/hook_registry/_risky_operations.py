@@ -25,7 +25,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-from autoskillit.hooks import (  # noqa: F401
+# Imported from the stdlib-only leaf ``_hook_constants`` (not from
+# ``autoskillit.hooks``) to avoid a circular import: this module is loaded
+# by ``autoskillit.hook_registry.__init__``, which itself is imported by
+# ``autoskillit.hooks.__init__``; importing back through
+# ``autoskillit.hooks`` would observe a partially-initialized module and
+# raise ImportError. ``_hook_constants`` is stdlib-only (no
+# ``autoskillit.*`` imports) so loading it cannot re-enter the cycle.
+from autoskillit.hooks._hook_constants import (  # noqa: F401
     RISKY_GH_SUBCOMMANDS,
     RISKY_GIT_OPERATIONS,
 )

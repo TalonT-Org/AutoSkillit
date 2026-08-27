@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 from tests.arch._helpers import (
     _SOURCE_FILES,
     SRC_ROOT,

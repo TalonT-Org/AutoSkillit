@@ -44,9 +44,9 @@ Pick (1) by default; reach for (2) only when (1) is structurally impossible.
 Never mix the two in the same shard without an inline justification.
 
 Symbols whose authoritative definition lives in the facade module itself
-(``compile_skill_closure`` re-export, ``_parse_write_paths`` provider alias)
-are tracked separately as facade-retained ownership rows and are exempt from
-the per-shard declaration/re-export tests.
+(the ``compute_skill_closure`` re-export from ``skills``) are tracked
+separately as facade-retained ownership rows and are exempt from the
+per-shard declaration/re-export tests.
 """
 
 from __future__ import annotations
@@ -56,11 +56,9 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+from tests.arch._helpers import SRC_ROOT
 
-#: Package root of the installed source tree, derived once so that moving this
-#: file does not silently invalidate every path-based ownership assertion.
-SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
 
 # Symbols whose authoritative definition lives in the facade module itself
@@ -71,10 +69,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 _FACADE_RETAINED_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "session_skills",
-        (
-            "compute_skill_closure",
-            "_parse_write_paths",
-        ),
+        ("compute_skill_closure",),
     ),
 )
 
@@ -101,6 +96,7 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "SkillsDirectoryProvider",
             "_CANDIDATE_ROOTS",
+            "_parse_write_paths",
             "default_skill_resolver",
             "resolve_closure_write_dirs",
             "resolve_ephemeral_root",

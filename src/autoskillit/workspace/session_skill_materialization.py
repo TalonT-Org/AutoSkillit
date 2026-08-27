@@ -1,23 +1,11 @@
 """Session-skill materialization transaction.
 
-Single owner of the ordering-sensitive ``_materialize_session`` transaction,
-backend preflight/setup orchestration, ``_materialize_profile_skill_infos``,
-``materialize_profile_skills``, profile projection,
-``_create_inert_rollout_paths``, ``_link_generated_home_skill_view``,
-persistent discovery links, unavailability publication, session-tree
-materialization, and backend layout validation.
+Single owner of the ordering-sensitive ``_materialize_session`` transaction
+and the profile-projection helpers that share its ordering constraints.
 
-The exact 7-step operation order is preserved:
-
-1. create ``add_dir`` and ``skills_base``
-2. ordinary semantic admission, then profile discovery and admission-compile
-3. ``ensure_pre_launch``, optional explorer binding resolution, backend setup
-4. prune ordinary records by finalized roles, then prune profile records
-   while merging prior refusal evidence
-5. publish unavailability JSON before the ungated session tree
-6. apply bundled-record filtering only for backend SESSION roles
-7. materialize the tree, create persistent discovery links, create inert
-   rollout paths, and validate backend layout
+The step order in ``_materialize_session`` is load-bearing: unavailability
+JSON is published before the ungated session tree, and record pruning by
+finalized native roles happens after backend setup, never before.
 """
 
 from __future__ import annotations
@@ -26,7 +14,7 @@ import os
 import shutil
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict, cast
+from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict
 
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
@@ -285,8 +273,11 @@ def _materialize_session(
         ):
             required_native_roles = set(invocation_required_native_roles)
             if compilation is not None:
-                concrete = cast(CompiledSessionSkillCatalog, compilation)
-                for targets in concrete.required_native_roles.values():
+                if not isinstance(compilation, CompiledSessionSkillCatalog):
+                    raise SkillContractError(
+                        "agent-definition provisioning requires a concrete session compilation"
+                    )
+                for targets in compilation.required_native_roles.values():
                     required_native_roles.update(targets)
             if profile_admission_compilation is not None:
                 for targets in profile_admission_compilation.required_native_roles.values():
@@ -308,6 +299,10 @@ def _materialize_session(
 
     if finalized_native_roles is not None and effective_catalog is not None:
         assert backend is not None
+        if compilation is not None and not isinstance(compilation, CompiledSessionSkillCatalog):
+            raise SkillContractError(
+                "finalized native-role admission requires a concrete session compilation"
+            )
         reachability_compilation = compile_session_skill_catalog(
             effective_catalog,
             backend,
@@ -326,11 +321,7 @@ def _materialize_session(
                 diagnostics=tuple(item.diagnostic for item in reachability_pruning),
                 count=len(reachability_pruning),
             )
-        prior_unavailable = (
-            cast(CompiledSessionSkillCatalog, compilation).unavailable
-            if compilation is not None
-            else ()
-        )
+        prior_unavailable = compilation.unavailable if compilation is not None else ()
         compilation = CompiledSessionSkillCatalog(
             backend=backend.name,
             catalog=reachability_compilation.catalog,

@@ -64,24 +64,3 @@ def test_facade_module_level_helpers_unchanged_after_patch(
         assert rules_merge_routing._RECOVERABLE_FAILED_STEPS is not sentinel
     finally:
         monkeypatch.undo()
-
-
-def test_classify_recovery_class_closure_targets_owning_module(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Patching the facade does not change ``_classify_recovery_class``'s view
-    of the recovery signature tables.
-
-    ``_classify_recovery_class`` lives in ``rules_merge_routing`` and reads
-    its signature tables via closure on that module's ``__dict__``. Patching
-    ``rules_merge._RECOVERABLE_FAILED_STEPS`` only rebinds the facade's name;
-    the routing module retains its reference. Tests that need to override
-    recovery signatures MUST patch the routing module directly.
-    """
-    sentinel = frozenset({"FAKE"})
-    monkeypatch.setattr(rules_merge, "_RECOVERABLE_FAILED_STEPS", sentinel)
-    try:
-        assert rules_merge._RECOVERABLE_FAILED_STEPS is sentinel
-        assert rules_merge_routing._RECOVERABLE_FAILED_STEPS is not sentinel
-    finally:
-        monkeypatch.undo()

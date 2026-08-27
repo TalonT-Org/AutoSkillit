@@ -10,6 +10,7 @@ invariants rather than exercising behavior already covered elsewhere.
 from __future__ import annotations
 
 from pathlib import Path
+from types import FunctionType
 
 from autoskillit.fleet import state as state_module
 from autoskillit.fleet import state_types as state_types_facade_module
@@ -43,51 +44,84 @@ from autoskillit.fleet.state_records import (
 )
 from autoskillit.fleet.state_transitions import (
     _ALLOWED_TRANSITIONS,
+    TERMINAL_DISPATCH_STATUSES,
+    TERMINAL_UNCLEANED_STATUSES,
     DispatchStatus,
 )
 
 
+def _assert_facade_reexports(
+    expected: tuple[tuple[str, object], ...],
+    canonical_module: str,
+) -> None:
+    """Assert the facade re-exports each symbol and pins each class/function's home module.
+
+    Constants and union aliases carry no usable ``__module__`` (a ``str`` has
+    none, and ``DispatchOutcome`` reports ``types``), so the canonical-home
+    check applies only to classes and functions.
+    """
+    for name, symbol in expected:
+        assert getattr(state_types_facade_module, name) is symbol
+        if isinstance(symbol, type | FunctionType):
+            assert symbol.__module__ == canonical_module, (
+                f"{name} should live in {canonical_module}, found {symbol.__module__}"
+            )
+
+
 def test_state_effects_module_importable() -> None:
     """Effect enums + records + tracker import from state_effects and re-export via the facade."""
-    for name, symbol in (
-        ("DispatchEffectName", DispatchEffectName),
-        ("DispatchEffectPhase", DispatchEffectPhase),
-        ("DispatchAggregatePhase", DispatchAggregatePhase),
-        ("DispatchRetryDisposition", DispatchRetryDisposition),
-        ("DispatchEffectRecord", DispatchEffectRecord),
-        ("DispatchEffectProvenance", DispatchEffectProvenance),
-        ("DispatchProvenanceTracker", DispatchProvenanceTracker),
-    ):
-        assert getattr(state_types_facade_module, name) is symbol
+    _assert_facade_reexports(
+        (
+            ("DispatchEffectName", DispatchEffectName),
+            ("DispatchEffectPhase", DispatchEffectPhase),
+            ("DispatchAggregatePhase", DispatchAggregatePhase),
+            ("DispatchRetryDisposition", DispatchRetryDisposition),
+            ("DispatchEffectRecord", DispatchEffectRecord),
+            ("DispatchEffectProvenance", DispatchEffectProvenance),
+            ("DispatchProvenanceTracker", DispatchProvenanceTracker),
+        ),
+        "autoskillit.fleet.state_effects",
+    )
 
 
 def test_state_records_module_importable() -> None:
     """DispatchRecord, CampaignState, ResumeDecision import from state_records."""
-    for name, symbol in (
-        ("FLEET_HALTED_SENTINEL", FLEET_HALTED_SENTINEL),
-        ("FLEET_STATE_SCHEMA_VERSION", FLEET_STATE_SCHEMA_VERSION),
-        ("DispatchRecord", DispatchRecord),
-        ("CampaignState", CampaignState),
-        ("ResumeDecision", ResumeDecision),
-    ):
-        assert getattr(state_types_facade_module, name) is symbol
+    _assert_facade_reexports(
+        (
+            ("FLEET_HALTED_SENTINEL", FLEET_HALTED_SENTINEL),
+            ("FLEET_STATE_SCHEMA_VERSION", FLEET_STATE_SCHEMA_VERSION),
+            ("DispatchRecord", DispatchRecord),
+            ("CampaignState", CampaignState),
+            ("ResumeDecision", ResumeDecision),
+        ),
+        "autoskillit.fleet.state_records",
+    )
 
 
 def test_state_transitions_module_importable() -> None:
-    """DispatchStatus imports from state_transitions and re-exports through the facade."""
-    assert state_types_facade_module.DispatchStatus is DispatchStatus
+    """DispatchStatus and the terminal-status sets re-export through the facade."""
+    _assert_facade_reexports(
+        (
+            ("DispatchStatus", DispatchStatus),
+            ("TERMINAL_DISPATCH_STATUSES", TERMINAL_DISPATCH_STATUSES),
+            ("TERMINAL_UNCLEANED_STATUSES", TERMINAL_UNCLEANED_STATUSES),
+        ),
+        "autoskillit.fleet.state_transitions",
+    )
 
 
 def test_state_outcomes_module_importable() -> None:
     """Outcome/result types import from state_outcomes and re-export through the facade."""
-    for name, symbol in (
-        ("DispatchRejected", DispatchRejected),
-        ("DispatchCompleted", DispatchCompleted),
-        ("DispatchOutcome", DispatchOutcome),
-        ("DispatchResult", DispatchResult),
-        ("GateRecordResult", GateRecordResult),
-    ):
-        assert getattr(state_types_facade_module, name) is symbol
+    _assert_facade_reexports(
+        (
+            ("DispatchRejected", DispatchRejected),
+            ("DispatchCompleted", DispatchCompleted),
+            ("DispatchOutcome", DispatchOutcome),
+            ("DispatchResult", DispatchResult),
+            ("GateRecordResult", GateRecordResult),
+        ),
+        "autoskillit.fleet.state_outcomes",
+    )
 
 
 def test_state_error_codes_module_importable() -> None:
@@ -95,6 +129,10 @@ def test_state_error_codes_module_importable() -> None:
     assert callable(get_error_category)
     assert isinstance(_ERROR_CODE_CATEGORIES, dict)
     assert isinstance(_INFRASTRUCTURE_FAILURE_REASONS, frozenset)
+    _assert_facade_reexports(
+        (("get_error_category", get_error_category),),
+        "autoskillit.fleet.state_error_codes",
+    )
 
 
 def test_state_types_facade_does_not_reexport_underscore_helpers() -> None:

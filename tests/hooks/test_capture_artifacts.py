@@ -1208,7 +1208,7 @@ def test_setup_keyboard_interrupt_emits_failure_before_reraising(
     assert isinstance(raised[0], KeyboardInterrupt)
     failure = _single_failure_marker(capfd.readouterr().err)
     assert failure.reason is CaptureFailureReason.UNKNOWN_SETUP
-    assert failure.stage == "capture lifecycle store open"
+    assert failure.stage == "capture_lifecycle_store_open"
 
 
 def test_lifecycle_lock_contention_prevents_child_command_execution(

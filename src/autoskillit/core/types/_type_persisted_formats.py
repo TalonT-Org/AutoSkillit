@@ -81,7 +81,7 @@ PERSISTED_FORMAT_LEDGER: Mapping[str, PersistedFormatDef] = MappingProxyType(
         "fleet_campaign_state": PersistedFormatDef(
             format_id="fleet_campaign_state",
             version_constant="autoskillit.fleet.state_records.FLEET_STATE_SCHEMA_VERSION",
-            decoder_module="fleet/state_transitions.py",
+            decoder_module="fleet/state_records.py",
             enums=(
                 PersistedEnumDef(
                     enum_qualname="autoskillit.fleet.state_transitions.DispatchStatus",

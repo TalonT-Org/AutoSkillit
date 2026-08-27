@@ -203,7 +203,7 @@ class TestCaptureChainAcrossResumeBoundary:
             write_captured_values,
         )
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
         from tests.fleet._helpers import (
@@ -265,7 +265,7 @@ class TestCaptureChainAcrossResumeBoundary:
                 f"Campaign capture ref not resolved — captures lost: {result.message}"
             )
         else:
-            from autoskillit.fleet.state_types import DispatchCompleted
+            from autoskillit.fleet.state_outcomes import DispatchCompleted
 
             assert isinstance(result, DispatchCompleted), f"Unexpected result type: {type(result)}"
             assert result.dispatch_id != prior_id
@@ -379,7 +379,7 @@ class TestSessionChainAccumulatesAcrossResume:
             prior_dispatch_id=prior_id,
         )
 
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
 
         assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
 
@@ -455,7 +455,7 @@ class TestDispatchedSessionLogDirPopulated:
             quota_refresher=_noop_quota_refresher,
         )
 
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
 
         assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
 
@@ -480,7 +480,7 @@ class TestProcessIdentityPreservation:
         from autoskillit.fleet import FleetSemaphore
         from autoskillit.fleet._api import _run_dispatch
         from autoskillit.fleet.state import read_state
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
         from autoskillit.recipe.schema import Recipe, RecipeKind
         from tests.fleet._helpers import (
             _make_recipe_info,

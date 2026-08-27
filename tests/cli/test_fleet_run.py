@@ -615,7 +615,7 @@ class TestHeadlessCLIPriorFailure:
 
         async def fake_execute(**kwargs: object) -> DispatchResult:
             from autoskillit.fleet.state import read_state, reset_blocking_dispatch
-            from autoskillit.fleet.state_types import DispatchStatus
+            from autoskillit.fleet.state_transitions import DispatchStatus
 
             lifecycle.append("execute_dispatch:start")
             # The chokepoint must have reset FAILURE → PENDING before spawn.
@@ -680,7 +680,7 @@ class TestHeadlessCLIPriorFailure:
 
         # The prior record was reset to PENDING (fail-closed precondition).
         from autoskillit.fleet.state import read_state as _read_post
-        from autoskillit.fleet.state_types import DispatchStatus
+        from autoskillit.fleet.state_transitions import DispatchStatus
 
         post_state = _read_post(state_file)
         assert post_state is not None

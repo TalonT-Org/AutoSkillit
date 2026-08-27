@@ -354,13 +354,16 @@ class TestUnknownPersistedDispatchStatus:
 
 class TestStateDecompositionImports:
     def test_state_types_importable(self) -> None:
-        from autoskillit.fleet.state_types import (
-            DispatchRecord,
-            DispatchStatus,
-        )
+        from autoskillit.fleet.state_records import DispatchRecord
+        from autoskillit.fleet.state_transitions import DispatchStatus
 
         assert DispatchStatus.PENDING == "pending"
         assert hasattr(DispatchRecord, "from_dict")
+
+    def test_state_effects_importable(self) -> None:
+        from autoskillit.fleet.state_effects import DispatchProvenanceTracker
+
+        assert callable(DispatchProvenanceTracker)
 
     def test_state_gates_importable(self) -> None:
         from autoskillit.fleet.state_gates import record_gate_outcome
@@ -1567,7 +1570,7 @@ class TestDispatchStatusStateMachineInvariants:
 
     def test_every_dispatch_status_in_allowed_transitions(self) -> None:
         """Every DispatchStatus member must appear as a key in _ALLOWED_TRANSITIONS."""
-        from autoskillit.fleet.state_types import _ALLOWED_TRANSITIONS
+        from autoskillit.fleet.state_transitions import _ALLOWED_TRANSITIONS
 
         for status in DispatchStatus:
             assert status in _ALLOWED_TRANSITIONS, (
@@ -1576,7 +1579,7 @@ class TestDispatchStatusStateMachineInvariants:
 
     def test_nonterminal_status_has_outgoing_transitions(self) -> None:
         """Every non-terminal status must have at least one outgoing transition."""
-        from autoskillit.fleet.state_types import (
+        from autoskillit.fleet.state_transitions import (
             _ALLOWED_TRANSITIONS,
             TERMINAL_DISPATCH_STATUSES,
         )
@@ -1589,7 +1592,7 @@ class TestDispatchStatusStateMachineInvariants:
 
     def test_terminal_set_matches_empty_transitions(self) -> None:
         """TERMINAL_DISPATCH_STATUSES must equal the set of statuses with empty transitions."""
-        from autoskillit.fleet.state_types import (
+        from autoskillit.fleet.state_transitions import (
             _ALLOWED_TRANSITIONS,
             TERMINAL_DISPATCH_STATUSES,
         )

@@ -1065,7 +1065,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
             server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
             state_recovery.py to reduce the 757-line monolith and centralize deserialization
             logic on DispatchRecord.from_dict. Startup warming lives here so its
-            execution/fleet imports remain layer-correct. Exempt at 24 files.
+            execution/fleet imports remain layer-correct. state_types.py was then further
+            decomposed into state_effects.py, state_records.py, state_transitions.py,
+            state_outcomes.py, and state_error_codes.py (#4856) to split the 899-line monolith
+            along effect-provenance, dispatch-record/campaign-state, transition/retry, and
+            outcome/result boundaries. Exempt at 29 files.
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.

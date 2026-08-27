@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core import NamedResume, NoResume
 from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
-from autoskillit.fleet.state_types import ResumeDecision
+from autoskillit.fleet.state_records import ResumeDecision
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

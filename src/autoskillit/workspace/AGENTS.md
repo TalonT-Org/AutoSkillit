@@ -42,9 +42,17 @@ discovery links, layout validation), and `session_skill_manager.py`
 Shards import each other directly and must never import the `session_skills.py`
 facade at runtime; `TYPE_CHECKING`-guarded imports are exempt, and
 `session_skill_provider.py` and `session_skill_materialization.py` may import the
-cross-subsystem `skill_projection` facade. Each shard *and* both facades are
+cross-subsystem `skill_projection` facade. The shards deliberately sit flat in
+`workspace/` rather than under a private `_session_skills/` subpackage — the
+`test_no_external_module_imports_session_skill_shards_directly` AST guard in
+`tests/arch/test_session_skills_projected_artifact_one_way_imports.py` enforces
+the same one-way rule that the leading underscore enforces for
+`_projected_artifact/`, so a flat layout buys no enforcement gap and a
+subpackage move would force path-string churn in the fcntl/mutation
+allowlists (see `tests/_retention_surface.py`,
+`tests/infra/test_plugin_source_ratchets.py`). Each shard *and* both facades are
 capped at 750 lines
-(`tests/arch/test_session_skill_materialization_size_ceilings.py`); split further
+(`tests/arch/test_session_skills_projected_artifact_size_ceilings.py`); split further
 rather than growing past it.
 
 `skill_capabilities.py` owns a process-local, weighted LRU keyed by exact canonical

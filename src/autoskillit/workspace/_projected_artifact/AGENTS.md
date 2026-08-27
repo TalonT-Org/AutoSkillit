@@ -21,5 +21,5 @@ than the facade.
 what lets the validator catch producer bugs.
 
 Each shard *and* the `materialization.py` facade are capped at 750 lines
-(`tests/arch/test_session_skill_materialization_size_ceilings.py`);
+(`tests/arch/test_session_skills_projected_artifact_size_ceilings.py`);
 split further rather than growing past it.

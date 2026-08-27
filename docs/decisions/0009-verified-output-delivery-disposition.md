@@ -55,7 +55,7 @@ own failure is logged and does not block delivery.
 
 | Disposition | Reasons | Rationale |
 |---|---|---|
-| `PRESERVE_OUTPUT` | `ACTIVE_CAPACITY_EXHAUSTED`, `RETENTION_CAPACITY_EXHAUSTED`, `EVIDENCE_CAPACITY_EXHAUSTED`, `PROJECTED_COMPACTED_BYTES_EXHAUSTED`, `HARD_LEDGER_CAPACITY_EXHAUSTED`, `MIGRATION_BLOCKED`, `LEDGER_INTEGRITY`, `FILESYSTEM_AUTHORITY`, `PERMISSION_DENIED`, `FILESYSTEM_IO`, `RECOVERY_CONTENDED` | The fault is in ledger bookkeeping (capacity admission, migration, ledger-file I/O or integrity, lock contention) — the verified output bytes are unaffected by it. |
+| `PRESERVE_OUTPUT` | `ACTIVE_CAPACITY_EXHAUSTED`, `RETENTION_CAPACITY_EXHAUSTED`, `EVIDENCE_CAPACITY_EXHAUSTED`, `PROJECTED_COMPACTED_BYTES_EXHAUSTED`, `HARD_LEDGER_CAPACITY_EXHAUSTED`, `RECLAMATION_DEBT_ASSIST`, `RECLAMATION_DEBT_STALL`, `MIGRATION_BLOCKED`, `LEDGER_INTEGRITY`, `FILESYSTEM_AUTHORITY`, `PERMISSION_DENIED`, `FILESYSTEM_IO`, `RECOVERY_CONTENDED` | The fault is in ledger bookkeeping (capacity admission, bounded debt control, migration, ledger-file I/O or integrity, lock contention) — the verified output bytes are unaffected by it. |
 | `DISCARD_OUTPUT` | `SNAPSHOT_INTEGRITY`, `UNKNOWN_SETUP` | The fault is (or may be) in the output itself — a checksum mismatch, tamper detection, or an unclassified condition that cannot be trusted to be bookkeeping-only. |
 
 `PRESERVE_OUTPUT` is an eligibility classification only. It never manufactures
@@ -66,6 +66,12 @@ disposition reached before those two facts are established does not unlock
 delivery — the guard falls through to the ordinary fail-closed handler in
 that case, matching the pre-existing behavior for every failure that occurs
 before verification completes.
+
+The reclamation-debt stall occurs before the child starts. Its
+`PRESERVE_OUTPUT` classification therefore supplies no output or delivery
+authority: the runner emits the ordinary structured setup failure and never
+enters degraded delivery because neither a verified snapshot nor a completed
+child exists.
 
 ### 3. Exit-code parity under degraded delivery
 

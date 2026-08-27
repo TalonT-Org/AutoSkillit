@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass
 from enum import StrEnum
 
-from . import _descriptor, _failure_policy
+from . import _descriptor, _failure_policy, _lifecycle_policy
 from ._module_identity import register_module_aliases
 
 register_module_aliases(__name__)
@@ -27,7 +27,14 @@ __all__ = [
     "LockWaitSpec",
     "SweepAttempt",
     "SweepBudgetSpec",
+    "DEBT_ASSIST_BUDGET",
+    "DEBT_ASSIST_MAX_TRANSITIONS",
     "HOT_PATH_LOCK_WAIT",
+    "MEASURED_BYTES_PER_RECORD",
+    "REQUIRED_RETENTION_BYTES",
+    "SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND",
+    "SUPPORTED_PEAK_ADMISSIONS_PER_SECOND",
+    "SUPPORTED_PEAK_PRODUCERS",
     "classify_cleanup_outcome",
     "lock_wait_for_budget",
 ]
@@ -148,6 +155,8 @@ class CaptureCapacitySpec:
     max_retained_records: int = 4096
     max_evidence_records: int = 4096
     max_tombstones: int = 256
+    reclamation_debt_assist_records: int = 256
+    reclamation_debt_stall_records: int = 512
     compaction_low_bytes: int = 15 * 1024 * 1024 // 4
     compaction_high_bytes: int = 31 * 1024 * 1024 // 8
     hard_ledger_bytes: int = 4 * 1024 * 1024
@@ -168,6 +177,9 @@ class CaptureCapacitySpec:
         if (
             any(type(value) is not int or value <= 0 for value in integer_values)
             or self.max_retained_records > self.max_operational_records
+            or not self.reclamation_debt_assist_records
+            < self.reclamation_debt_stall_records
+            < self.max_operational_records
             or not self.compaction_low_bytes < self.compaction_high_bytes
             or self.compaction_high_bytes + self.recovery_headroom_bytes > self.hard_ledger_bytes
         ):
@@ -180,6 +192,8 @@ class CaptureCapacityReason(StrEnum):
     EVIDENCE_CAPACITY = "evidence_capacity_exhausted"
     PROJECTED_COMPACTED_BYTES = "projected_compacted_bytes_exhausted"
     HARD_LEDGER_CAPACITY = "hard_ledger_capacity_exhausted"
+    RECLAMATION_DEBT_ASSIST = "reclamation_debt_assist"
+    RECLAMATION_DEBT_STALL = "reclamation_debt_stall"
 
 
 class SweepAttempt(StrEnum):
@@ -366,6 +380,41 @@ TRANSITION_RESCUE_BUDGET = SweepBudgetSpec(
     max_transitions=256,
     max_cursor_writes=32,
     max_duration_seconds=0.25,
+    max_directory_entries_scanned=0,
+)
+
+# Static sustained-admission envelope for the shared project store. Issue
+# #4511 observed 13-16 concurrent producers and found that roughly one hour of
+# fleet admissions filled the 1,962-record window. One admission per producer
+# every 30 seconds declares the sustained envelope represented by that event;
+# short bursts above it consume remaining byte headroom, while sustained excess
+# is governed by debt assist and stall admission.
+SUPPORTED_PEAK_PRODUCERS = 16
+SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND = 1.0 / 30.0
+SUPPORTED_PEAK_ADMISSIONS_PER_SECOND = (
+    SUPPORTED_PEAK_PRODUCERS * SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND
+)
+MEASURED_BYTES_PER_RECORD = 2004
+REQUIRED_RETENTION_BYTES = math.ceil(
+    SUPPORTED_PEAK_ADMISSIONS_PER_SECOND
+    * _lifecycle_policy.SWEEP_GRACE_SECONDS
+    * MEASURED_BYTES_PER_RECORD
+)
+
+if CaptureCapacitySpec().compaction_low_bytes < REQUIRED_RETENTION_BYTES:
+    raise AssertionError(
+        "production capture capacity must cover the supported admission envelope "
+        "for the complete sweep-grace interval"
+    )
+
+DEBT_ASSIST_MAX_TRANSITIONS = 16
+DEBT_ASSIST_BUDGET = SweepBudgetSpec(
+    max_records_inspected=4096,
+    max_replay_bytes=4 * 1024 * 1024,
+    max_attempts=16,
+    max_transitions=DEBT_ASSIST_MAX_TRANSITIONS,
+    max_cursor_writes=16,
+    max_duration_seconds=0.05,
     max_directory_entries_scanned=0,
 )
 

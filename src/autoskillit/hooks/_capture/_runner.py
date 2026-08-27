@@ -286,9 +286,15 @@ def _policy_capacity(value: object) -> CaptureCapacitySpec | None:
     if not validated:
         return None
     try:
-        return replace(CaptureCapacitySpec(), **validated)
+        candidate = replace(CaptureCapacitySpec(), **validated)
     except (TypeError, ValueError):
         return None
+    if (
+        candidate.compaction_low_bytes < _types.REQUIRED_RETENTION_BYTES
+        or candidate.hard_ledger_bytes > _capture_lifecycle.MAX_LEDGER_BYTES
+    ):
+        return None
+    return candidate
 
 
 def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
@@ -623,9 +629,14 @@ def run_capture(
             failure_stage = "capture writer duplication"
             artifact_writer_fd = _duplicate_artifact_writer(artifact)
         except BaseException as exc:
+            reason = _capture_failure_policy.runtime_failure_reason(exc)
             failure = _capture_replay.failure_transport(
-                reason=_capture_failure_policy.runtime_failure_reason(exc),
-                stage=failure_stage,
+                reason=reason,
+                stage=(
+                    "capture setup"
+                    if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
+                    else failure_stage
+                ),
                 detail=f"{failure_stage} failed",
                 shell_returncode=None,
                 settlement=None,

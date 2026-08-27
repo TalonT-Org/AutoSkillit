@@ -134,6 +134,7 @@ class SweepStorePort(TransitionStorePort, Protocol):
         records: Records,
         compaction_epoch: int,
         size: int,
+        now: float,
     ) -> bool: ...
 
 

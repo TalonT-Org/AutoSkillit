@@ -128,6 +128,7 @@ def _admission_reason(
     records: Mapping[str, Any],
     candidate: Any,
     compaction_epoch: int,
+    now: float,
 ) -> Any:
     """Return the capacity reason a candidate would be refused, or None."""
     return _capacity_admission_reason(
@@ -137,6 +138,8 @@ def _admission_reason(
         spec=store._capacity,
         active_limit=min(MAX_ACTIVE_RECORDS, store._capacity.max_operational_records),
         sizer=store._ledger_view.sizer,
+        now=now,
+        sweep_active=store._sweep_budget is not None,
     )
 
 
@@ -146,6 +149,7 @@ def _admit_new_record(
     records: dict[str, Any],
     compaction_epoch: int,
     size: int,
+    now: float,
 ) -> bool:
     """Admit a brand-new (never-before-tracked) record if capacity allows.
 
@@ -157,7 +161,7 @@ def _admit_new_record(
     bypass it (#4440) — capacity-exhausted candidates are silently
     skipped, deferred to a later invocation once cleanup frees room.
     """
-    if _admission_reason(store, records, record, compaction_epoch) is not None:
+    if _admission_reason(store, records, record, compaction_epoch, now).reason is not None:
         return False
     store._append_locked(record, records, compaction_epoch, size)
     if store._sweep_budget is not None:

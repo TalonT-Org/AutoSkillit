@@ -100,12 +100,23 @@ terminal transition; an abandoned producer becomes eligible one hour after its
 durable creation time. Eligibility is reclaimed only on the next enabled,
 trusted trigger, not by a wall-clock scheduler.
 
+Admission participates in that trigger-owned model. When store-wide due debt
+reaches the assist threshold, the admitting runner performs one debt-scaled
+sweep under a fixed 50 ms/16-transition ceiling before retrying its admission.
+At the higher stall threshold, admission is refused until reclamation lowers
+the observed debt. This adds no owner or scheduler: the assist is work
+performed by the existing `same_runner` role on its existing trigger.
+
 There are two installed cleanup roles. Every valid runner invocation performs
 one bounded tail sweep after all producer resources and the writer lease are
 released. The independent cleanup-only `capture_lifecycle_hook.py` performs a
 bounded `SessionStart` sweep in interactive and headless sessions.
 Cleanup failure is fail-open and cannot replace the mapped command result. If
 hooks are disabled, neither owner runs and eligible artifacts remain.
+Trigger-only ownership remains adequate while assist work stays bounded and
+at least one installed reclamation owner retains a positive directory-scan
+budget. Removing either condition requires a new ownership decision; the
+read-only doctor must not become a scheduler implicitly.
 
 Deletion is confined to the shared store's identity-revalidated quarantine
 transaction. Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts are
@@ -182,6 +193,14 @@ exempt). `DS-012` in
 bookkeeping failure discards or misreports a verified primary result outside
 of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`
 classification applied to a reason that should be `DISCARD_OUTPUT`).
+
+The same enforcement surface bounds admission by measured reclamation debt:
+assist and stall are admission-only capacity reasons, and import-time totality
+requires their gate, failure, disposition, detail, and blocker classifications.
+The production compaction floor is derived from the code-owned sustained
+admission envelope, the canonical one-hour sweep grace, and the incident's
+measured bytes per record. Runtime policy overrides below that derived floor
+are rejected in favor of the safe production default.
 
 ## Consequences
 

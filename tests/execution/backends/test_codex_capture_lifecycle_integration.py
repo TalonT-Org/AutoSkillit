@@ -30,7 +30,7 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
-from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT, CaptureCapacitySpec
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureArtifact,
@@ -247,6 +247,46 @@ def _seed_saturated_store(
     root.close()
     anchor.close()
     return first_due, session_due, live, session_hold
+
+
+def _seed_projected_compacted_store(project: Path) -> None:
+    """Create a valid, non-due ledger record just past the compacted limit."""
+    anchor = open_project_anchor(str(project))
+    root = open_capture_root(anchor, create=True)
+    try:
+        capacity = CaptureCapacitySpec()
+        nonce_size = capture_ledger.MAX_FRAME_BYTES - 2 * 1024
+        record_count = capacity.compaction_low_bytes // nonce_size + 2
+        now = time.time()
+        ledger = project.joinpath(*CAPTURE_PATH_COMPONENTS, LEDGER_NAME)
+        with ledger.open("ab") as stream:
+            for index in range(record_count):
+                capture_id = f"{index:016x}"
+                record = CaptureLifecycleRecord(
+                    capture_id=capture_id,
+                    state=CaptureState.RESERVED,
+                    staging_name=f".capture-staging-{capture_id}-{index + 1:016x}",
+                    public_name=f"shell_{capture_id}.log",
+                    project_identity=(anchor.identity.device, anchor.identity.inode),
+                    root_identity=(root.identity.device, root.identity.inode),
+                    created_at=now,
+                    next_attempt_at=now + 14_400.0,
+                    incarnation=f"{index + 1:032x}",
+                    revision=1,
+                    compaction_epoch=1,
+                    deletion_nonce="x" * nonce_size,
+                )
+                stream.write(
+                    capture_ledger.encode_frame(
+                        capture_ledger.record_to_dict(record),
+                        compaction_epoch=record.compaction_epoch,
+                    )
+                )
+            stream.flush()
+            os.fsync(stream.fileno())
+    finally:
+        root.close()
+        anchor.close()
 
 
 def _snapshot_codex_hooks(
@@ -531,6 +571,46 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
             artifact.release_lease()
         session_hold.close_artifact_fd()
         session_hold.release_lease()
+
+
+def test_installed_hook_reports_projected_compacted_capacity_at_capture_setup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, _generated_home, project, decoy_cwd = _snapshot_codex_hooks(
+        tmp_path,
+        monkeypatch,
+    )
+    _seed_projected_compacted_store(project)
+    pre_tool_command = _installed_command(config, "PreToolUse", "shell_capture_hook")
+    sentinel = project / "projected-compacted-command-ran"
+    runner = _rewritten_runner(
+        pre_tool_command,
+        project=project,
+        decoy_cwd=decoy_cwd,
+        turn_id="projected-compacted-capacity",
+        user_command=f"printf should-not-run > {shlex.quote(str(sentinel))}",
+    )
+
+    completed = subprocess.run(
+        ["bash", "-c", runner],
+        capture_output=True,
+        text=True,
+        cwd=decoy_cwd,
+        timeout=_TIMEOUT_SECONDS,
+        check=False,
+    )
+    failures = [
+        parse_capture_failure_v3(line.encode())
+        for line in completed.stderr.splitlines()
+        if line.startswith("[AutoSkillit shell capture failure v3:")
+    ]
+
+    assert completed.returncode == 1
+    assert len(failures) == 1
+    assert failures[0].reason is CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
+    assert failures[0].stage == "capture_setup"
+    assert not sentinel.exists()
 
 
 @pytest.mark.parametrize("headless", [False, True])

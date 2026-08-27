@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 
-from . import _ledger
+from . import _ledger, _sweep
 from ._failure_policy import CAPACITY_FAILURE_REASONS, CaptureFailureReason
 from ._module_identity import register_module_aliases
-from ._types import CaptureCapacityReason, CaptureCapacitySpec
+from ._types import DEBT_ASSIST_MAX_TRANSITIONS, CaptureCapacityReason, CaptureCapacitySpec
 
 register_module_aliases(__name__)
 
@@ -35,6 +36,8 @@ CAPACITY_REASON_GATES: dict[CaptureCapacityReason, frozenset[CapacityGate]] = {
     CaptureCapacityReason.HARD_LEDGER_CAPACITY: frozenset(
         {CapacityGate.ADMISSION, CapacityGate.TRANSITION}
     ),
+    CaptureCapacityReason.RECLAMATION_DEBT_ASSIST: frozenset({CapacityGate.ADMISSION}),
+    CaptureCapacityReason.RECLAMATION_DEBT_STALL: frozenset({CapacityGate.ADMISSION}),
 }
 
 # Import-time totality assertion: a new CaptureCapacityReason member
@@ -50,6 +53,14 @@ for _key, _gates in CAPACITY_REASON_GATES.items():
         raise AssertionError(f"CAPACITY_REASON_GATES[{_key!r}] has empty gate set")
 
 Record = _ledger.CaptureLifecycleRecord
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionDecision:
+    """One admission classification and its optional bounded assist hint."""
+
+    reason: CaptureCapacityReason | None
+    assist_transition_limit: int | None = None
 
 
 class CompactedFrameSizer:
@@ -112,6 +123,8 @@ _REASON_DETAILS = {
     CaptureCapacityReason.EVIDENCE_CAPACITY: "evidence record capacity reached",
     CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: "compacted lifecycle capacity reached",
     CaptureCapacityReason.HARD_LEDGER_CAPACITY: "hard lifecycle ledger capacity reached",
+    CaptureCapacityReason.RECLAMATION_DEBT_ASSIST: "reclamation debt requires bounded assist",
+    CaptureCapacityReason.RECLAMATION_DEBT_STALL: "reclamation debt admission ceiling reached",
 }
 if set(_REASON_DETAILS) != set(CaptureCapacityReason):
     raise AssertionError("_REASON_DETAILS must cover exactly the CaptureCapacityReason members")
@@ -126,6 +139,8 @@ _FAILURE_REASONS = {
     CaptureCapacityReason.HARD_LEDGER_CAPACITY: (
         CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
     ),
+    CaptureCapacityReason.RECLAMATION_DEBT_ASSIST: (CaptureFailureReason.RECLAMATION_DEBT_ASSIST),
+    CaptureCapacityReason.RECLAMATION_DEBT_STALL: (CaptureFailureReason.RECLAMATION_DEBT_STALL),
 }
 if frozenset(_FAILURE_REASONS.values()) != CAPACITY_FAILURE_REASONS:
     raise AssertionError(
@@ -186,30 +201,43 @@ def admission_reason(
     spec: CaptureCapacitySpec,
     active_limit: int,
     sizer: CompactedFrameSizer,
-) -> CaptureCapacityReason | None:
+    now: float,
+    sweep_active: bool,
+) -> AdmissionDecision:
     projected = _projected(records, candidate)
-    operational = sum(
-        record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
-        for record in projected.values()
-    )
-    retained = sum(
-        record.state not in {_ledger.CaptureState.DELETED, _ledger.CaptureState.TAMPERED}
-        and record.retention_phase is _ledger.CaptureRetentionPhase.ACTIVE
-        for record in projected.values()
-    )
-    forensic = sum(record.state is _ledger.CaptureState.TAMPERED for record in projected.values())
+    operational = retained = forensic = due = 0
+    terminal_states = {_ledger.CaptureState.DELETED}
+    for record in projected.values():
+        is_forensic = record.state is _ledger.CaptureState.TAMPERED
+        is_operational = record.state is not _ledger.CaptureState.DELETED and not is_forensic
+        operational += is_operational
+        retained += (
+            is_operational and record.retention_phase is _ledger.CaptureRetentionPhase.ACTIVE
+        )
+        forensic += is_forensic
+        due += _sweep.is_due_record(record, now, terminal_states)
     if operational > active_limit:
-        return CaptureCapacityReason.ACTIVE_CAPACITY
+        return AdmissionDecision(CaptureCapacityReason.ACTIVE_CAPACITY)
     if retained > spec.max_retained_records:
-        return CaptureCapacityReason.RETENTION_CAPACITY
+        return AdmissionDecision(CaptureCapacityReason.RETENTION_CAPACITY)
     if operational + forensic > spec.max_evidence_records:
-        return CaptureCapacityReason.EVIDENCE_CAPACITY
+        return AdmissionDecision(CaptureCapacityReason.EVIDENCE_CAPACITY)
     encoded = sizer.total_bytes(projected, compaction_epoch, spec)
     if encoded + spec.recovery_headroom_bytes > spec.hard_ledger_bytes:
-        return CaptureCapacityReason.HARD_LEDGER_CAPACITY
+        return AdmissionDecision(CaptureCapacityReason.HARD_LEDGER_CAPACITY)
     if encoded > spec.compaction_low_bytes:
-        return CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
-    return None
+        return AdmissionDecision(CaptureCapacityReason.PROJECTED_COMPACTED_BYTES)
+    if due >= spec.reclamation_debt_stall_records:
+        return AdmissionDecision(CaptureCapacityReason.RECLAMATION_DEBT_STALL)
+    if due >= spec.reclamation_debt_assist_records and not sweep_active:
+        return AdmissionDecision(
+            CaptureCapacityReason.RECLAMATION_DEBT_ASSIST,
+            min(
+                DEBT_ASSIST_MAX_TRANSITIONS,
+                due - spec.reclamation_debt_assist_records + 1,
+            ),
+        )
+    return AdmissionDecision(None)
 
 
 def transition_reason(

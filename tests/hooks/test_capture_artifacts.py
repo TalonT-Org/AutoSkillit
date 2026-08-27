@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.hooks._capture._authority as capture_authority
+import autoskillit.hooks._capture._failure_policy as capture_failure_policy
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture._runner as capture_runner
@@ -980,6 +981,80 @@ def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     assert '"status":"capture_failed"' in captured.err
     assert "shell capture v2:" not in captured.out + captured.err
     assert not (project / "command_ran").exists()
+
+
+def test_reclamation_debt_stall_emits_structured_failure_without_starting_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    capacity = capture_types.CaptureCapacitySpec(
+        max_operational_records=4,
+        max_retained_records=4,
+        max_evidence_records=4,
+        reclamation_debt_assist_records=1,
+        reclamation_debt_stall_records=2,
+    )
+    anchor, root = _open_authority(project)
+    try:
+        seed_store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=lambda: 0.0,
+            lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+            capacity=capacity,
+        )
+        for capture_id in ("a" * 16, "b" * 16):
+            seed_store.reserve_capture(capture_id)
+    finally:
+        root.close()
+        anchor.close()
+
+    factory = capture_runner.CaptureLifecycleStore.from_open_authorities
+
+    def due_store(
+        anchor: capture_authority.ProjectAnchor,
+        root: capture_authority.CaptureRoot,
+        *,
+        lock_wait: capture_types.LockWaitSpec,
+        capacity: capture_types.CaptureCapacitySpec | None = None,
+    ) -> CaptureLifecycleStore:
+        return factory(
+            anchor,
+            root,
+            wall_clock=lambda: 10**12,
+            lock_wait=lock_wait,
+            capacity=capacity,
+        )
+
+    monkeypatch.setattr(
+        capture_runner.CaptureLifecycleStore,
+        "from_open_authorities",
+        due_store,
+    )
+    monkeypatch.setattr(
+        capture_runner,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(capacity=capacity),
+    )
+
+    sentinel = project / "command_ran"
+    assert (
+        capture_runner._main(
+            _runner_args(command=f"printf ran > {shlex.quote(str(sentinel))}", cwd=str(project))
+        )
+        == 1
+    )
+
+    failure = _single_failure_marker(capfd.readouterr().err)
+    assert failure.reason is CaptureFailureReason.RECLAMATION_DEBT_STALL
+    assert (
+        capture_failure_policy.FAILURE_DISPOSITIONS[failure.reason].disposition
+        is capture_failure_policy.CaptureFailureDisposition.PRESERVE_OUTPUT
+    )
+    assert not sentinel.exists()
 
 
 @pytest.mark.parametrize("root_shape", ["blocking_file", "symlink"])

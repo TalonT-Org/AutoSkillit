@@ -50,7 +50,14 @@ from autoskillit.hooks._capture._snapshot import (
 from autoskillit.hooks._capture._syntax import PUBLIC_NAME_RE
 from autoskillit.hooks._capture._types import (
     BLOCKER_FAMILY,
+    DEBT_ASSIST_BUDGET,
+    DEBT_ASSIST_MAX_TRANSITIONS,
     HOT_PATH_LOCK_WAIT,
+    MEASURED_BYTES_PER_RECORD,
+    REQUIRED_RETENTION_BYTES,
+    SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND,
+    SUPPORTED_PEAK_ADMISSIONS_PER_SECOND,
+    SUPPORTED_PEAK_PRODUCERS,
     TRANSITION_RESCUE_BUDGET,
     CaptureCapacitySpec,
     CaptureCleanupOutcome,
@@ -192,21 +199,13 @@ class _Clock:
 def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
     mapping = capture_capacity._FAILURE_REASONS
 
-    assert mapping == {
-        CaptureCapacityReason.ACTIVE_CAPACITY: (CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED),
-        CaptureCapacityReason.RETENTION_CAPACITY: (
-            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED
-        ),
-        CaptureCapacityReason.EVIDENCE_CAPACITY: (
-            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED
-        ),
-        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
-            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
-        ),
-        CaptureCapacityReason.HARD_LEDGER_CAPACITY: (
-            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
-        ),
-    }
+    assert tuple(mapping) == tuple(CaptureCapacityReason)
+    assert mapping[CaptureCapacityReason.RECLAMATION_DEBT_ASSIST] is (
+        CaptureFailureReason.RECLAMATION_DEBT_ASSIST
+    )
+    assert mapping[CaptureCapacityReason.RECLAMATION_DEBT_STALL] is (
+        CaptureFailureReason.RECLAMATION_DEBT_STALL
+    )
 
 
 def test_capture_enum_mappings_are_total_drift_guards() -> None:
@@ -563,21 +562,23 @@ def test_mutation_then_boundary_admission_matches_uncached_decision(
             compaction_high_bytes=projected_bytes,
             hard_ledger_bytes=projected_bytes + store._capacity.recovery_headroom_bytes + 1,
         )
-        cold_reason = capture_capacity.admission_reason(
+        cold_decision = capture_capacity.admission_reason(
             records,
             candidate,
             compaction_epoch=compaction_epoch,
             spec=boundary_capacity,
             active_limit=boundary_capacity.max_operational_records,
             sizer=capture_capacity.CompactedFrameSizer(),
+            now=store._wall_clock(),
+            sweep_active=False,
         )
-        assert cold_reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+        assert cold_decision.reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
 
         monkeypatch.setattr(store, "_capacity", boundary_capacity)
         with pytest.raises(CaptureCapacityError) as failure:
             store.reserve_capture("f" * 16)
 
-        assert failure.value.reason is cold_reason
+        assert failure.value.reason is cold_decision.reason
     finally:
         root.close()
         anchor.close()
@@ -1296,6 +1297,8 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
             max_retained_records=8,
             max_evidence_records=8,
             max_tombstones=1,
+            reclamation_debt_assist_records=6,
+            reclamation_debt_stall_records=7,
             compaction_low_bytes=low,
             compaction_high_bytes=high,
             hard_ledger_bytes=high + 5120,
@@ -1397,6 +1400,8 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
             max_retained_records=128,
             max_evidence_records=128,
             max_tombstones=1,
+            reclamation_debt_assist_records=126,
+            reclamation_debt_stall_records=127,
             compaction_low_bytes=low,
             compaction_high_bytes=low + 4096,
             hard_ledger_bytes=low + 8192,
@@ -4444,9 +4449,11 @@ def test_evidence_capacity_counts_operational_and_forensic_records(tmp_path: Pat
         clock,
         capacity=replace(
             CaptureCapacitySpec(),
-            max_operational_records=2,
+            max_operational_records=3,
             max_retained_records=2,
             max_evidence_records=2,
+            reclamation_debt_assist_records=1,
+            reclamation_debt_stall_records=2,
         ),
     )
     first = store.reserve_capture(_CAPTURE_ID)
@@ -4480,9 +4487,11 @@ def test_retention_occupancy_has_distinct_capacity_reason(tmp_path: Path) -> Non
         clock,
         capacity=replace(
             CaptureCapacitySpec(),
-            max_operational_records=2,
+            max_operational_records=3,
             max_retained_records=1,
             max_evidence_records=3,
+            reclamation_debt_assist_records=1,
+            reclamation_debt_stall_records=2,
         ),
     )
     try:
@@ -4515,6 +4524,8 @@ def test_projected_compacted_bytes_preserve_recovery_headroom(tmp_path: Path) ->
                 max_retained_records=8,
                 max_evidence_records=8,
                 max_tombstones=2,
+                reclamation_debt_assist_records=6,
+                reclamation_debt_stall_records=7,
                 compaction_low_bytes=hard_bound // 3,
                 compaction_high_bytes=hard_bound // 2,
                 hard_ledger_bytes=hard_bound,
@@ -4564,6 +4575,8 @@ def test_recovery_transition_compacts_within_reserved_headroom(
                 max_retained_records=8,
                 max_evidence_records=8,
                 max_tombstones=2,
+                reclamation_debt_assist_records=6,
+                reclamation_debt_stall_records=7,
                 compaction_low_bytes=encoded - 4,
                 compaction_high_bytes=encoded - 3,
                 hard_ledger_bytes=encoded,
@@ -5123,3 +5136,339 @@ def test_emit_owner_diagnostic_healthy_case_is_silent() -> None:
     written: list[str] = []
     capture_reconcile.emit_owner_diagnostic(outcome, owner="runner_tail", write=written.append)
     assert written == []
+
+
+def _debt_capacity(
+    *,
+    assist_records: int = 2,
+    stall_records: int = 4,
+    max_records: int = 16,
+) -> CaptureCapacitySpec:
+    return replace(
+        CaptureCapacitySpec(),
+        max_operational_records=max_records,
+        max_retained_records=max_records,
+        max_evidence_records=max_records,
+        reclamation_debt_assist_records=assist_records,
+        reclamation_debt_stall_records=stall_records,
+    )
+
+
+def _future_admission_candidate(
+    records: dict[str, CaptureLifecycleRecord],
+    clock: _Clock,
+) -> CaptureLifecycleRecord:
+    source = next(iter(records.values()))
+    return replace(
+        source,
+        capture_id="f" * 16,
+        staging_name=f".capture-staging-{'f' * 16}-{'e' * 16}",
+        public_name=f"shell_{'f' * 16}.log",
+        created_at=clock.wall(),
+        next_attempt_at=clock.wall() + SWEEP_GRACE_SECONDS,
+        incarnation="e" * 32,
+        revision=1,
+    )
+
+
+def _admission_decision_for_due_records(
+    store: CaptureLifecycleStore,
+    clock: _Clock,
+    records: dict[str, CaptureLifecycleRecord] | None = None,
+):
+    with store._locked():
+        loaded_records, compaction_epoch, _size = store._load_locked()
+        decision_records = loaded_records if records is None else records
+        return store._admission_reason(
+            decision_records,
+            _future_admission_candidate(decision_records, clock),
+            compaction_epoch,
+            clock.wall(),
+        )
+
+
+def test_concurrent_admission_never_succeeds_from_stall_level_debt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admission records its locked debt observation before a concurrent sweep runs."""
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=3, max_records=8),
+    )
+    failed_capture_id = "a" * 16
+    successful_capture_id = "b" * 16
+    decision_barrier = threading.Barrier(2)
+    release_failed_decision = threading.Event()
+    observations: dict[str, tuple[int, CaptureCapacityReason | None]] = {}
+    real_admission_reason = store._admission_reason
+
+    def observe_admission(
+        records: dict[str, CaptureLifecycleRecord],
+        candidate: CaptureLifecycleRecord,
+        compaction_epoch: int,
+        now: float,
+    ):
+        decision = real_admission_reason(records, candidate, compaction_epoch, now)
+        due_records = sum(
+            capture_sweep.is_due_record(record, now, {CaptureState.DELETED})
+            for record in records.values()
+        )
+        observations[candidate.capture_id] = (due_records, decision.reason)
+        if candidate.capture_id == failed_capture_id:
+            decision_barrier.wait(timeout=3)
+            assert release_failed_decision.wait(timeout=3)
+        return decision
+
+    monkeypatch.setattr(store, "_admission_reason", observe_admission)
+    try:
+        _reserve_many(store, 3)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            failed = executor.submit(store.reserve_capture, failed_capture_id)
+            decision_barrier.wait(timeout=3)
+            sweeping = executor.submit(store.sweep, _sweep_budget(6, 1.0))
+            release_failed_decision.set()
+
+            with pytest.raises(CaptureCapacityError) as failure:
+                failed.result(timeout=3)
+            outcome = sweeping.result(timeout=3)
+            admitted = executor.submit(store.reserve_capture, successful_capture_id).result(
+                timeout=3
+            )
+
+        assert failure.value.reason is CaptureCapacityReason.RECLAMATION_DEBT_STALL
+        assert outcome.deleted >= 3
+        assert admitted.state is CaptureState.RESERVED
+        assert observations[failed_capture_id] == (
+            3,
+            CaptureCapacityReason.RECLAMATION_DEBT_STALL,
+        )
+        successful_observation = observations[successful_capture_id]
+        assert successful_observation[0] < store._capacity.reclamation_debt_stall_records
+        assert successful_observation[1] is None
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize("due_count", (3, 4))
+def test_reclamation_debt_stall_refuses_equal_and_greater_debt(
+    tmp_path: Path,
+    due_count: int,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=3),
+    )
+    try:
+        _reserve_many(store, due_count)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.reserve_capture(f"{due_count + 8:016x}")
+
+        assert failure.value.reason is CaptureCapacityReason.RECLAMATION_DEBT_STALL
+        assert failure.value.failure_reason is CaptureFailureReason.RECLAMATION_DEBT_STALL
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize(
+    ("due_count", "expected_limit"),
+    (
+        (2, 1),
+        (5, 4),
+        (DEBT_ASSIST_MAX_TRANSITIONS + 2, DEBT_ASSIST_MAX_TRANSITIONS),
+    ),
+)
+def test_reclamation_debt_assist_limit_scales_and_caps(
+    tmp_path: Path,
+    due_count: int,
+    expected_limit: int,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(
+            assist_records=2,
+            stall_records=DEBT_ASSIST_MAX_TRANSITIONS + 4,
+            max_records=64,
+        ),
+    )
+    try:
+        _reserve_many(store, due_count)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        decision = _admission_decision_for_due_records(store, clock)
+
+        assert decision.reason is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST
+        assert decision.assist_transition_limit == expected_limit
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reclamation_debt_assist_uses_carried_budget_and_retries_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=8),
+    )
+    observed_budgets: list[SweepBudgetSpec] = []
+    outcomes: list[CaptureCleanupOutcome] = []
+    real_sweep = store.sweep
+    attempts = 0
+    expected = object()
+
+    def observe_sweep(budget: SweepBudgetSpec) -> CaptureCleanupOutcome:
+        outcome = real_sweep(budget)
+        observed_budgets.append(budget)
+        outcomes.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(store, "sweep", observe_sweep)
+    try:
+        store.reserve_capture("0" * 16)
+        assert observed_budgets == []
+        _reserve_many(store, 4)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        def attempt() -> object:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise CaptureCapacityError(
+                    CaptureCapacityReason.RECLAMATION_DEBT_ASSIST,
+                    assist_transition_limit=4,
+                )
+            return expected
+
+        result = store._with_capacity_rescue(
+            attempt,
+            rescuable_reasons=frozenset({CaptureCapacityReason.RECLAMATION_DEBT_ASSIST}),
+        )
+
+        expected_budget = replace(DEBT_ASSIST_BUDGET, max_transitions=4)
+        assert result is expected
+        assert attempts == 2
+        assert observed_budgets == [expected_budget]
+        assert outcomes[0].transitions <= expected_budget.max_transitions
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reclamation_debt_assist_is_suppressed_only_during_a_sweep(tmp_path: Path) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=4),
+    )
+    try:
+        _reserve_many(store, 4)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+        assist_records = dict(tuple(records.items())[:2])
+        candidate = _future_admission_candidate(assist_records, clock)
+
+        assert (
+            store._admission_reason(
+                assist_records, candidate, compaction_epoch, clock.wall()
+            ).reason
+            is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST
+        )
+        store._sweep_budget = DEBT_ASSIST_BUDGET
+        try:
+            assert (
+                store._admission_reason(
+                    assist_records, candidate, compaction_epoch, clock.wall()
+                ).reason
+                is None
+            )
+            assert (
+                store._admission_reason(records, candidate, compaction_epoch, clock.wall()).reason
+                is CaptureCapacityReason.RECLAMATION_DEBT_STALL
+            )
+        finally:
+            store._sweep_budget = None
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_session_start_orphan_adoption_suppresses_nested_debt_assist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=4, max_records=8),
+    )
+    artifacts = []
+    nested_rescues = 0
+    real_with_capacity_rescue = store._with_capacity_rescue
+    orphan_capture_id = "c" * 16
+    orphan_name = f"shell_{orphan_capture_id}.log"
+
+    def observe_capacity_rescue(*args, **kwargs):
+        nonlocal nested_rescues
+        nested_rescues += 1
+        return real_with_capacity_rescue(*args, **kwargs)
+
+    try:
+        for capture_id in ("a" * 16, "b" * 16):
+            artifacts.append(create_capture_artifact(root, capture_id, store))
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+        fd = os.open(orphan_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 1
+        os.utime(orphan_name, (old, old), dir_fd=root.fd)
+        monkeypatch.setattr(store, "_with_capacity_rescue", observe_capacity_rescue)
+
+        outcome = store.sweep(capture_reconcile.SESSION_START_BUDGET)
+
+        assert outcome.adopted == 1
+        assert nested_rescues == 0
+        assert store.get_record(orphan_capture_id) is not None
+    finally:
+        for artifact in artifacts:
+            artifact.close_artifact_fd()
+            artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_capacity_window_covers_the_supported_retention_envelope() -> None:
+    expected_admission_rate = SUPPORTED_PEAK_PRODUCERS * SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND
+    expected_retention_bytes = math.ceil(
+        expected_admission_rate * SWEEP_GRACE_SECONDS * MEASURED_BYTES_PER_RECORD
+    )
+
+    assert SUPPORTED_PEAK_ADMISSIONS_PER_SECOND == expected_admission_rate
+    assert REQUIRED_RETENTION_BYTES == expected_retention_bytes
+    assert CaptureCapacitySpec().compaction_low_bytes >= REQUIRED_RETENTION_BYTES
+
+
+def test_installed_reclamation_owners_include_a_directory_scan_budget() -> None:
+    installed_owner_budgets = (
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+        capture_reconcile.SESSION_START_BUDGET,
+    )
+
+    assert any(budget.max_directory_entries_scanned > 0 for budget in installed_owner_budgets)

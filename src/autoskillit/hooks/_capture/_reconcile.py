@@ -9,9 +9,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import _authority, _migration, _orphan_scan
+from . import _authority, _migration, _orphan_scan, _sweep
 from ._failure_policy import CaptureFailureReason, runtime_failure_reason
-from ._lifecycle_policy import CaptureRetentionPhase
+from ._lifecycle_policy import CaptureRetentionPhase, CaptureState
 from ._module_identity import register_module_aliases
 from ._syntax import PUBLIC_NAME_RE
 from ._types import (
@@ -75,6 +75,8 @@ _FAILURE_BLOCKERS = {
     CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
     CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
     CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.RECLAMATION_DEBT_ASSIST: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.RECLAMATION_DEBT_STALL: CleanupBlocker.CAPACITY_EXHAUSTED,
     CaptureFailureReason.FILESYSTEM_AUTHORITY: CleanupBlocker.FILESYSTEM_AUTHORITY,
     CaptureFailureReason.PERMISSION_DENIED: CleanupBlocker.PERMISSION_DENIED,
     CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
@@ -149,6 +151,10 @@ class CaptureStoreStats:
 
     blocker: CleanupBlocker
     live_records: int = 0
+    # ACTIVE finalized records become due without entering ELIGIBLE; this
+    # field is the true store-wide due count, while eligible_records remains
+    # the narrow ABANDONED-only retention phase counter.
+    due_records: int = 0
     eligible_records: int = 0
     deleting_records: int = 0
     ledger_bytes: int = 0
@@ -206,6 +212,11 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                     1
                     for record in records.values()
                     if record.retention_phase is not CaptureRetentionPhase.DELETED
+                ),
+                due_records=_sweep.count_due_records(
+                    records.values(),
+                    now,
+                    {CaptureState.DELETED},
                 ),
                 eligible_records=sum(
                     1

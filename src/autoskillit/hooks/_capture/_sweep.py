@@ -67,6 +67,24 @@ class NamePattern(Protocol):
     def fullmatch(self, value: str) -> object | None: ...
 
 
+def is_due_record(
+    record: SweepRecord,
+    now: float,
+    terminal_states: Collection[object],
+) -> bool:
+    """Return whether one non-terminal lifecycle record is due."""
+    return record.state not in terminal_states and record.next_attempt_at <= now
+
+
+def count_due_records(
+    records: Iterable[SweepRecord],
+    now: float,
+    terminal_states: Collection[object],
+) -> int:
+    """Count due records without sweep ordering or materialization."""
+    return sum(is_due_record(record, now, terminal_states) for record in records)
+
+
 def bounded_due_keys(
     records: Iterable[SweepRecord],
     now: float,
@@ -86,7 +104,7 @@ def bounded_due_keys(
             continue
         key = DueKey(record.next_attempt_at, record.capture_id)
         rebuild_key = key if rebuild_key is None else max(rebuild_key, key)
-        if record.next_attempt_at <= now:
+        if is_due_record(record, now, terminal_states):
             due.append(key)
     due.sort()
     return due, complete, inspected, rebuild_key
@@ -773,6 +791,7 @@ def adopt_orphan(
     """
     with store._locked():
         records, compaction_epoch, size = store._load_locked()
+        now = store._wall_clock()
         tracked = {
             record.public_name
             for record in records.values()
@@ -788,7 +807,7 @@ def adopt_orphan(
             raise lifecycle_error("cannot inspect orphan-adoption candidate") from exc
         if not stat.S_ISREG(value.st_mode):
             return False
-        if store._wall_clock() - value.st_mtime < _orphan_scan.ADOPTION_AGE_SECONDS:
+        if now - value.st_mtime < _orphan_scan.ADOPTION_AGE_SECONDS:
             return False
         try:
             candidate = adopted_orphan_record(
@@ -797,11 +816,11 @@ def adopt_orphan(
                 root_identity=store._root_identity,
                 artifact_identity=(value.st_dev, value.st_ino),
                 observed_size=value.st_size,
-                now=store._wall_clock(),
+                now=now,
             )
         except LedgerCodecError:
             return False
-        return store._admit_new_record(candidate, records, compaction_epoch, size)
+        return store._admit_new_record(candidate, records, compaction_epoch, size, now)
 
 
 def scan_and_adopt_orphans(

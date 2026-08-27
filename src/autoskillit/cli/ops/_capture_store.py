@@ -54,7 +54,8 @@ def _print_stats(stats: CaptureStoreStats) -> None:
         return
     print(
         "capture-store ledger: "
-        f"live={stats.live_records} eligible={stats.eligible_records} "
+        f"live={stats.live_records} due_records={stats.due_records} "
+        f"eligible_abandoned={stats.eligible_records} "
         f"deleting={stats.deleting_records} ledger_bytes={stats.ledger_bytes}"
     )
     print(
@@ -80,7 +81,7 @@ def run_capture_store(*, reclaim: bool = False) -> None:
         outcome = reconcile_capture_store(project_cwd, RECLAIM_BUDGET)
         print(
             f"  pass {pass_index}: deleted={outcome.deleted} transitions={outcome.transitions} "
-            f"remaining_due={outcome.remaining_due} errors={outcome.errors} "
+            f"remaining_due_this_pass={outcome.remaining_due} errors={outcome.errors} "
             f"blocker={outcome.blocker.value}"
         )
         if outcome.errors:

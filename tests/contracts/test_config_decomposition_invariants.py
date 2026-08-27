@@ -96,7 +96,7 @@ def test_fleet_and_process_tether_validate_called_in_from_dynaconf() -> None:
     ProcessTetherConfig.validate = _record_tether  # type: ignore[method-assign]
     try:
         from_dynaconf = auto_mod.AutomationConfig.from_dynaconf
-        layer = {
+        layer: dict[str, dict[str, object]] = {
             "fleet": {"max_concurrent_dispatches": 4},
             "process_tether": {"headless_command_timeout": 300},
         }

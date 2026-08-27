@@ -15,7 +15,15 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hook_registry import HOOK_REGISTRY
+import autoskillit.hooks  # noqa: F401,I001  (side effect: populates HOOK_REGISTRY)
+
+# Force HOOK_REGISTRY population before computing the EXPECTED_* constants
+# below. The hook_registry package (PR #4853) defers list construction to
+# ``autoskillit.hooks.__init__`` to break an import cycle; importing
+# ``autoskillit.hooks`` here at conftest load triggers that post-import
+# population so the cached invariants match the test-time list. The import
+# is a side-effect-only dependency (no symbol from the module is referenced).
+from autoskillit.hook_registry import HOOK_REGISTRY  # noqa: I001
 
 
 @pytest.fixture
@@ -96,14 +104,9 @@ def _compute_expected_non_inert() -> int:
     return count
 
 
-# Force HOOK_REGISTRY population before computing derived constants. The
-# hook_registry package (PR #4853) defers list construction to
-# ``autoskillit.hooks.__init__`` to break an import cycle; importing
-# ``autoskillit.hooks`` here triggers that post-import population so
-# ``_compute_total_probe_count()`` and ``_compute_expected_non_inert()``
-# see the populated list rather than the empty placeholder.
-import autoskillit.hooks  # noqa: F401  (side effect: populates HOOK_REGISTRY)
-
+# Derive EXPECTED counts after HOOK_REGISTRY population (see top-of-file
+# side-effect import). The functions above iterate HOOK_REGISTRY, which is
+# populated by ``import autoskillit.hooks`` at conftest load time.
 EXPECTED_TOTAL_PROBE_COUNT: int = _compute_total_probe_count()
 EXPECTED_NON_INERT_COMBINATIONS: int = _compute_expected_non_inert()
 

@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
     from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
-    assert SKILL_PROJECTION_VERSION == 7
+    assert SKILL_PROJECTION_VERSION == 8
     assert SKILL_SESSION_CONTRACT_SCHEMA_VERSION == 5
 
 

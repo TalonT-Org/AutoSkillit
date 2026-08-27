@@ -22,6 +22,7 @@ __all__ = [
     "KNOWN_BLOCKED_SKILL_IDS",
     "KNOWN_DEGRADED_SKILL_IDS",
     "RETIRED_SKILL_NAMES",
+    "RETIRED_SKILL_RESOURCE_IDS",
     "RETIRED_AGENT_NAMES",
     "RETIRED_INTAKE_RULE_IDS",
     "RetiredArtifactShape",
@@ -42,6 +43,8 @@ RETIRED_SKILL_NAMES: frozenset[str] = frozenset(
         "vis-lens-domain-norms",  # Retired; renamed to vis-lens-methodology-norms
     }
 )
+
+RETIRED_SKILL_RESOURCE_IDS: frozenset[str] = frozenset()
 
 if any(n != n.lower() for n in RETIRED_SKILL_NAMES):
     raise AssertionError(

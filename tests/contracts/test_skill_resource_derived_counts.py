@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 
 import pytest
-from autoskillit.workspace.skill_resources import load_skill_resource
 
 from autoskillit.core import pkg_root
+from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]

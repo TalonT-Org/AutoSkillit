@@ -19,8 +19,10 @@ from autoskillit.core import (
     render_intake_digest,
 )
 from autoskillit.execution.backends._claude_prompt import CODEX_CO_INJECTED_POLICIES
-from autoskillit.hooks._command_classification import command_has_blocked_protected_path_read
-from autoskillit.hooks.guards.recipe_read_guard import _CMD_PATH_PATTERNS
+from autoskillit.hooks._command_classification import (
+    PROTECTED_SOURCE_PATH_PATTERNS,
+    command_has_blocked_protected_path_read,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -53,11 +55,12 @@ KNOWN_BLOCKED_AGENTS_MD: dict[str, str] = {
     ),
 }
 
-# One positive control per _CMD_PATH_PATTERNS entry: proves the predicate is live.
+# One positive control per protected-source pattern: proves the predicate is live.
 _BLOCKED_CONTROLS = (
     "src/autoskillit/recipes/implementation.yaml",
     "src/autoskillit/skills_extended/rectify/SKILL.md",
     "src/autoskillit/agents/wp-elaborator.md",
+    "src/autoskillit/skill_resources/foo.md",
 )
 
 
@@ -167,7 +170,9 @@ def test_no_rule_names_a_path_class_the_harness_denies() -> None:
                 probe_paths = list(_PATH_CLASS_PROBE_PATHS[path_class])
             for probe_path in probe_paths:
                 cmd = _PROBE_TEMPLATE.format(path=probe_path)
-                is_blocked = command_has_blocked_protected_path_read(cmd, _CMD_PATH_PATTERNS)
+                is_blocked = command_has_blocked_protected_path_read(
+                    cmd, PROTECTED_SOURCE_PATH_PATTERNS
+                )
                 if probe_path in KNOWN_BLOCKED_AGENTS_MD:
                     assert is_blocked, (
                         f"{probe_path} is a declared exception but is no longer blocked — "
@@ -182,13 +187,13 @@ def test_no_rule_names_a_path_class_the_harness_denies() -> None:
     if seen_agents_md:
         for blocked_path in KNOWN_BLOCKED_AGENTS_MD:
             cmd = _PROBE_TEMPLATE.format(path=blocked_path)
-            assert command_has_blocked_protected_path_read(cmd, _CMD_PATH_PATTERNS), (
+            assert command_has_blocked_protected_path_read(cmd, PROTECTED_SOURCE_PATH_PATTERNS), (
                 f"{blocked_path} must still be blocked by the harness"
             )
 
     for control_path in _BLOCKED_CONTROLS:
         cmd = _PROBE_TEMPLATE.format(path=control_path)
-        assert command_has_blocked_protected_path_read(cmd, _CMD_PATH_PATTERNS), (
+        assert command_has_blocked_protected_path_read(cmd, PROTECTED_SOURCE_PATH_PATTERNS), (
             f"Positive control {control_path} must be blocked — the predicate may be dead"
         )
 

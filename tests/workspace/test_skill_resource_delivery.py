@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from autoskillit.workspace.skill_resources import SkillResourceDef, load_skill_resource
 
 from autoskillit.core import (
     BackendConventions,
@@ -19,7 +18,6 @@ from autoskillit.core import (
     SkillSource,
     pkg_root,
 )
-from autoskillit.execution.backends import get_backend
 from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.workspace import (
     DefaultSessionSkillManager,
@@ -32,6 +30,7 @@ from autoskillit.workspace import (
     project_direct_install_authority,
 )
 from autoskillit.workspace._projection_cache import public_plugin_asset_digest
+from autoskillit.workspace.skill_resources import SkillResourceDef, load_skill_resource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     SkillInfo,
@@ -92,7 +91,14 @@ def test_resource_sections_are_backend_identical(tmp_path: Path) -> None:
         projected = [
             project_agent_skill_document(
                 backend_entry,
-                SkillProjectionContext(cwd=tmp_path, catalog=catalog, backend=get_backend(name)),
+                SkillProjectionContext(
+                    cwd=tmp_path,
+                    catalog=catalog,
+                    backend=SimpleNamespace(
+                        name=name,
+                        conventions=BackendConventions(),
+                    ),
+                ),
             )
             for name in ("claude-code", "codex")
         ]

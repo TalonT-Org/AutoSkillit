@@ -17,6 +17,17 @@ from dataclasses import dataclass
 from enum import StrEnum, auto
 from typing import Protocol, cast
 
+PROTECTED_SOURCE_PATH_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml"),
+    re.compile(r"src/autoskillit/skills(?:_extended)?/.*/SKILL\.md"),
+    re.compile(r"src/autoskillit/agents/.*\.md"),
+    re.compile(r"src/autoskillit/skill_resources/.*\.md"),
+]
+
+DECLARABLE_SOURCE_PATH_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern.pattern) for pattern in PROTECTED_SOURCE_PATH_PATTERNS
+)
+
 _INTERPRETER_RE = re.compile(
     r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?|perl|ruby|node)\s+"
     r"(?:-[ce]\s|.*<<)"

@@ -34,6 +34,7 @@ from autoskillit.hooks._capture_artifacts import (
 from autoskillit.hooks._command_classification import (
     _INTERPRETER_LINE_RE,
     _WRITE_APIS_RE,
+    PROTECTED_SOURCE_PATH_PATTERNS,
     command_has_blocked_protected_path_read,
 )
 from autoskillit.hooks._exploration_request_record import (
@@ -82,6 +83,7 @@ __all__ = [
     "QUOTA_BUDGET_EXCEEDED_TRIGGER",
     "QUOTA_POST_WARNING_TRIGGER",
     "QUOTA_POST_BUDGET_EXCEEDED_TRIGGER",
+    "PROTECTED_SOURCE_PATH_PATTERNS",
     "REVIEW_LOOP_DENY_TRIGGER",
     "CaptureStoreStats",
     "CleanupBlocker",

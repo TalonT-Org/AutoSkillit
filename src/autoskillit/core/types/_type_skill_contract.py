@@ -42,14 +42,14 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
         "activate_deps",
         "execution_role",
         "exploration_vectors",
+        "requires_resources",
         "semantic_version",
         "semantic_requirements",
         "uses_capabilities",
     }
 )
-# Bumped because child cardinality now emits exactly one explicit authority and
-# migrated exploration calls are guarded by the parent-selected ready set.
-SKILL_PROJECTION_VERSION = 7
+# Static resources are now compiled into projected SKILL.md bytes.
+SKILL_PROJECTION_VERSION = 8
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 5
 PARENT_SANDBOX_MODES: frozenset[str] = frozenset({"read-only", "workspace-write"})
 _CANONICAL_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")

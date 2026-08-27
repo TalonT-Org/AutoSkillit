@@ -139,6 +139,16 @@ class TestRecipeReadProhibitionCmd:
         assert result["subtype"] == "gate_error"
 
     @pytest.mark.anyio
+    async def test_denies_skill_resource_md_path(self, tool_ctx_kitchen_open):
+        result = json.loads(
+            await run_cmd(
+                cmd="cat src/autoskillit/skill_resources/foo.md",
+                cwd="/tmp",
+            )
+        )
+        assert result["subtype"] == "gate_error"
+
+    @pytest.mark.anyio
     async def test_allows_benign_cmd(self, tool_ctx_kitchen_open):
         tool_ctx_kitchen_open.runner.push(_make_result(0, "hello\n", ""))
         result = json.loads(await run_cmd(cmd="echo hello", cwd="/tmp"))

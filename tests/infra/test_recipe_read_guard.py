@@ -79,6 +79,15 @@ class TestRunCmdBlocking:
         )
         assert _is_denied(out)
 
+    def test_denies_cat_skill_resource_md(self):
+        out = _run_guard(
+            {
+                "tool_name": "mcp__mcp-autoskillit__run_cmd",
+                "tool_input": {"cmd": "cat src/autoskillit/skill_resources/foo.md"},
+            }
+        )
+        assert _is_denied(out)
+
     def test_allows_unrelated_command(self):
         out = _run_guard(
             {

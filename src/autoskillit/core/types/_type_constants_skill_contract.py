@@ -68,6 +68,15 @@ _SKILL_CONTRACT_REMEDIATION_DEFS = (
         ),
     ),
     SkillContractRemediationDef(
+        kind=SkillInvalidityKind.RESOURCE_CONTRACT_INVALID,
+        introduced_in="0.10.1071",
+        action=RemediationAction.ADVISORY,
+        hint=(
+            "declare only registered ids from src/autoskillit/skill_resources/ "
+            "in requires_resources"
+        ),
+    ),
+    SkillContractRemediationDef(
         kind=SkillInvalidityKind.RESERVED_FIELD,
         introduced_in="0.10.929",
         action=RemediationAction.ADVISORY,

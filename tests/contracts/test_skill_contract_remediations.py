@@ -226,6 +226,14 @@ async def test_corpus_is_valid_or_deterministically_migratable(
     info = _current_info()
     if not info.invalidities:
         return  # validates cleanly today — nothing more to prove
+    actions = {
+        SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].action for invalidity in info.invalidities
+    }
+    if actions == {RemediationAction.ADVISORY}:
+        assert all(
+            SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].hint for invalidity in info.invalidities
+        )
+        return
 
     file = MigrationFile(name=skill_name, path=skill_path, file_type="skill", current_version=None)
     adapter = SkillMigrationAdapter()

@@ -75,6 +75,7 @@ class ClassificationResult:
     dispatched_session_id: str | None  # for finalize to override skill_result.session_id
     skill_result: SkillResult  # for finalize_state_write
     result_success: bool
+    dispatch_checkpoint: SessionCheckpoint | None  # for finalize resume_checkpoint serialization
 
 
 async def run_outcome_classification(
@@ -316,6 +317,7 @@ async def run_outcome_classification(
         ),
         skill_result=skill_result,
         result_success=result_success,
+        dispatch_checkpoint=dispatch_checkpoint,
     )
 
 
@@ -350,6 +352,13 @@ async def finalize_state_write(
     extended_chain = classification.extended_chain
     project_log_dir = classification.project_log_dir
     _issue_urls_raw = spawn_ctx.issue_urls_raw
+    # Prefer the loader-emitted checkpoint (carries tracker-file progress
+    # and sidecar entries populated mid-flight) over the lineage-prep input
+    # which only sees the resume_session_id path. Without this fallback the
+    # tracker-bridge resumable flow (test_single_issue_killed_with_tracker_progress_is_resumable)
+    # serializes an empty resume_checkpoint.
+    if dispatch_checkpoint is None:
+        dispatch_checkpoint = classification.dispatch_checkpoint
 
     # Build the DispatchRecord.
     record = DispatchRecord(

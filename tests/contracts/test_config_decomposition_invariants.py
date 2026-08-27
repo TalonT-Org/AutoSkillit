@@ -58,9 +58,8 @@ def test_fleet_and_process_tether_validate_called_in_from_dynaconf() -> None:
 
 def test_unset_sentinel_lives_in_automation_config_module() -> None:
     """`_UNSET` is owned by `_automation_config.py` (where its only consumer lives),
-    not by `_coherence.py`. The facade re-exports it under both names for internal
-    import-path stability across the existing test reach-ins, but the OWNER module
-    is unambiguous."""
+    not by `_coherence.py`. `_coherence.py` may re-export the same object for facade
+    compatibility but must not own the binding."""
     import autoskillit.config._automation_config as auto_mod
 
     assert hasattr(auto_mod, "_UNSET"), "_UNSET must be defined in _automation_config.py"

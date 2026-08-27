@@ -17,7 +17,6 @@ import anyio
 from autoskillit.core import (
     CAMPAIGN_ID_ENV_VAR,
     DISPATCH_ID_ENV_VAR,
-    SESSION_TYPE_ENV_VAR,
     ClosureAuthoritySpec,
     CmdSpec,
     CodingAgentBackend,
@@ -34,7 +33,6 @@ from autoskillit.core import (
     RecipeIdentity,
     ResolvedLaunchContract,
     RetryReason,
-    SessionType,
     SkillResult,
     WriteBehaviorSpec,
     collect_version_snapshot,
@@ -294,35 +292,7 @@ async def _execute_claude_headless(
     lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
     launch_logged = False
     spec: CmdSpec | None = None
-    captured_session_type: SessionType | None = None
     current_launch_contract: ResolvedLaunchContract | None = None
-
-    def build_spec_with_session_type(
-        binding: PluginLaunchBinding | None,
-        attempt_provider_extras: Mapping[str, str] | None,
-        managed_attempt_id: str | None = None,
-    ) -> CmdSpec:
-        nonlocal captured_session_type
-        if managed_attempt_id is None:
-            unmanaged_build_spec = cast(
-                Callable[
-                    [PluginLaunchBinding | None, Mapping[str, str] | None],
-                    CmdSpec,
-                ],
-                build_spec,
-            )
-            attempt_spec = unmanaged_build_spec(binding, attempt_provider_extras)
-        else:
-            attempt_spec = build_spec(
-                binding,
-                attempt_provider_extras,
-                managed_attempt_id,
-            )
-        raw_session_type = attempt_spec.env.get(SESSION_TYPE_ENV_VAR)
-        captured_session_type = (
-            SessionType(raw_session_type) if raw_session_type is not None else None
-        )
-        return attempt_spec
 
     def observe_launch(contract: ResolvedLaunchContract) -> None:
         nonlocal current_launch_contract
@@ -345,7 +315,7 @@ async def _execute_claude_headless(
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
                 _result, spec = await _run_headless_attempt(
-                    build_spec_with_session_type,
+                    build_spec,
                     runner=runner,
                     backend=_step_backend,
                     launch_resolver=launch_resolver,
@@ -608,7 +578,6 @@ async def _execute_claude_headless(
             provider=provider_outcome,
         )
 
-        # One immutable value feeds the event, summary.json, and sessions.jsonl.
         terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
         if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
             if result is None:
@@ -656,7 +625,7 @@ async def _execute_claude_headless(
                     current_launch_contract.digest if current_launch_contract is not None else ""
                 ),
                 "native_shell_capture": terminal_capture_diagnostic,
-                "session_type": captured_session_type,
+                "session_type": lineage_callbacks.session_type,
             }
             if result is not None:
                 assert spec is not None

@@ -140,6 +140,7 @@ class TestDispatchFoodTruck:
             )
         )
         minimal_ctx.runner = runner
+        minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
         authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.plugin_authority = authority
         minimal_ctx.backend = ClaudeCodeBackend()

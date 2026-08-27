@@ -327,6 +327,7 @@ async def test_managed_session_type_reaches_runner_and_session_index(
     runner = MockSubprocessRunner()
     runner.set_default(result)
     minimal_ctx.runner = runner
+    minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
     backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "-p", "test"),

@@ -11,7 +11,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.execution import get_backend
-from autoskillit.hooks._hook_settings import _validate_session_id, write_join_diagnostic
+from autoskillit.hooks._hook_settings import validate_session_id, write_join_diagnostic
 from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
 from autoskillit.hooks._session_binding import (
     SessionBindingError,
@@ -38,7 +38,7 @@ def _declare_join_batch_handler(
     # Imports are hoisted to module level (see top of file).
 
     try:
-        _validate_session_id(session_id)
+        validate_session_id(session_id)
     except ValueError as exc:
         return {"success": False, "error": str(exc)}
 

@@ -200,7 +200,7 @@ def _resolve_quota_disable_state_dir() -> Path:
     return base / campaign_id if campaign_id else base
 
 
-def _validate_session_id(session_id: str) -> str:
+def validate_session_id(session_id: str) -> str:
     """Reject empty or path-traversal session IDs. Returns the validated ID."""
     if not isinstance(session_id, str) or not session_id:
         raise ValueError("session_id must be a non-empty string")
@@ -215,7 +215,7 @@ def _validate_session_id(session_id: str) -> str:
 
 def quota_disable_marker_path(session_id: str) -> Path:
     """Resolve the per-session quota-disable marker path. Raises on invalid IDs."""
-    _validate_session_id(session_id)
+    validate_session_id(session_id)
     return _resolve_quota_disable_state_dir() / f"{session_id}_quota_guard_disabled.json"
 
 
@@ -258,7 +258,7 @@ def read_quota_disable_marker(session_id: str) -> dict | None:
     expired markers. Never raises.
     """
     try:
-        _validate_session_id(session_id)
+        validate_session_id(session_id)
     except ValueError:
         return None
     marker_path = quota_disable_marker_path(session_id)

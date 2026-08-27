@@ -55,7 +55,7 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 
 ### Session Summary Fields
 
-`summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`.
+`summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`.
 
 ### Anomaly Types
 
@@ -84,6 +84,14 @@ preserves that projection, while deterministic crash-recovery replay heals its
 current key. Historical inconsistencies for other keys remain doctor-visible.
 Publication is atomic for concurrent writers and process crashes, but does not
 promise strict power-loss durability or snapshot isolation for unlocked readers.
+
+Schema-v8 index rows store the validated managed-launch classification in
+`sessions.jsonl.session_type`, using the canonical headless values `skill`,
+`orchestrator`, or `fleet`. Pre-v8 rows can omit the additive field; v8 rows
+without a validated managed-launch classification store `null`. Backend-native
+L0 leaves do not create AutoSkillit session rows, and interactive CLI sessions
+remain outside this headless-only field. See the authoritative
+[orchestration-level mapping](../orchestration-levels.md).
 
 ## Native OTLP capture and correlation
 
@@ -158,6 +166,9 @@ jq 'select(.anomaly_count > 0)' ~/.local/share/autoskillit/logs/sessions.jsonl
 
 # Failed sessions
 jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl
+
+# Managed L2 orchestrator sessions
+jq 'select(.session_type == "orchestrator")' ~/.local/share/autoskillit/logs/sessions.jsonl
 
 # View anomalies for a specific session
 cat ~/.local/share/autoskillit/logs/sessions/{session_id}/anomalies.jsonl | jq .

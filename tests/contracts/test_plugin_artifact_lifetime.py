@@ -591,7 +591,7 @@ def test_projection_prune_preserves_validation_skip_when_writer_close_fails(
     from autoskillit.workspace._projection_cache import projected_artifact_lease_path
 
     projections_root = tmp_path / "projections"
-    stale = projections_root / "invalid-stale-projection"
+    stale = projections_root / ("a" * 24)
     stale.mkdir(parents=True)
     real_close = ArtifactLease.close
     close_calls = 0

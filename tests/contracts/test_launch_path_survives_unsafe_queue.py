@@ -214,7 +214,9 @@ def test_launch_binding_survives_an_unreadable_stale_projection_manifest(
         _flush_structlog_proxy_caches()
 
     assert any(
-        entry.get("event") == "projected_plugin_prune_identity_unavailable" for entry in logs
+        entry.get("event") == "projected_plugin_reconcile"
+        and entry.get("disposition") == "deferred_unavailable"
+        for entry in logs
     )
 
 

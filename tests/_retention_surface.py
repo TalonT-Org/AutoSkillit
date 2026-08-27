@@ -102,6 +102,10 @@ RECLAIMER_TARGETS: dict[str, tuple[Path, str]] = {
         SRC_ROOT / "workspace" / "_projection_cache.py",
         "prune_stale_projections",
     ),
+    "workspace._projection_cache::_reconcile_projection_entry": (
+        SRC_ROOT / "workspace" / "_projection_cache.py",
+        "_reconcile_projection_entry",
+    ),
     "core._plugin_artifact_retirement::try_reclaim": (
         SRC_ROOT / "core" / "_plugin_artifact_retirement.py",
         "try_reclaim",
@@ -126,6 +130,7 @@ _WWS = "workspace.worktree::remove_worktree_sidecar"
 _SL = "execution._session_retention::apply_session_retention"
 _SW = "hooks._capture._sweep::sweep_one"
 _PP = "workspace._projection_cache::prune_stale_projections"
+_PRE = "workspace._projection_cache::_reconcile_projection_entry"
 _PC = "core._plugin_artifact_retirement::try_reclaim"
 _CT = "cli.install._plugin_artifact::sweep_due"
 
@@ -345,25 +350,55 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._projection_cache::prune_stale_projections --
-    f"{_PP}::L496": SafetyDecision(
+    f"{_PP}::L663": SafetyDecision(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L515": RetentionDecision(
+    # -- workspace._projection_cache::_reconcile_projection_entry --
+    f"{_PRE}::L587": SafetyDecision(
+        "A foreign user-writable cache entry is classified as deferred rather than "
+        "aborting launch."
+    ),
+    f"{_PRE}::L590": SafetyDecision(
+        "The caller-selected active projection is intentionally excluded from stale "
+        "reconciliation."
+    ),
+    f"{_PRE}::L592": SafetyDecision(
+        "A recognized non-projection namespace belongs to another lifecycle owner and "
+        "remains untouched."
+    ),
+    f"{_PRE}::L594": SafetyDecision(
+        "A projection outside the exact scanned root fails the direct-child ownership guard."
+    ),
+    f"{_PRE}::L602": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PP}::L526": SafetyDecision(
+    f"{_PRE}::L604": SafetyDecision(
+        "Lease acquisition failed operationally, so reconciliation defers without "
+        "claiming deletion authority."
+    ),
+    f"{_PRE}::L610": SafetyDecision(
         "Manifest validation failed while resolving the candidate's identity; an inspection "
         "failure, not evidence the candidate is still live."
     ),
-    f"{_PP}::L533": SafetyDecision(
+    f"{_PRE}::L612": SafetyDecision(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PP}::L540": SafetyDecision(
+    f"{_PRE}::L615": SafetyDecision(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
+    ),
+    f"{_PRE}::L617": SafetyDecision(
+        "A new exact retirement record was durably created; this reports successful disposition."
+    ),
+    f"{_PRE}::L618": SafetyDecision(
+        "The exact retirement record already exists, so no duplicate durable mutation is needed."
+    ),
+    f"{_PRE}::L620": SafetyDecision(
+        "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
+        "retryable."
     ),
     # -- core._plugin_artifact_retirement::try_reclaim --
     f"{_PC}::L180": SafetyDecision(

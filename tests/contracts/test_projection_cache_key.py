@@ -529,11 +529,12 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
                 == 0
             )
             logger.warning.assert_called_once()
-            assert logger.warning.call_args.args == ("projected_plugin_prune_validation_failed",)
-            assert logger.warning.call_args.kwargs["projection_path"] == str(
-                orphan.identity.managed_path
-            )
-            assert logger.warning.call_args.kwargs["error"]
+            assert logger.warning.call_args.args == ("projected_plugin_reconcile",)
+            assert logger.warning.call_args.kwargs == {
+                "path": str(orphan.identity.managed_path),
+                "entry_class": "projection_root",
+                "disposition": "deferred_invalid_identity",
+            }
         finally:
             orphan.close()
             active.close()

@@ -1143,7 +1143,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         # +_doctor_repair isolated opt-in mutation spoke (#4710)
-        "workspace": 26,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 31,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
@@ -1154,6 +1154,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_shared_asset_store.py (S3-1): the machine-scoped content-addressed hardlink
         # store for verbatim plugin assets, kept separate from _projection_cache.py since
         # it must be resolvable and safe to import even when no store root is available.
+        # +session_skill_catalog, session_skill_provider, session_skill_lifecycle,
+        # session_skill_manager, session_skill_materialization: session_skills.py was
+        # decomposed into five single-owner shards behind the retained session_skills.py
+        # facade, retiring its _LINE_LIMIT_EXEMPTIONS entry. Each shard owns one
+        # concern (catalog assembly, provider resolution, fcntl.flock lease lifecycle,
+        # manager orchestration, materialization) and cannot be recombined without
+        # restoring the monolith the split removed. 26 + 5 = 31.
         "hooks": 26,  # +_capture_process owned shell process-group boundary;
         # +_hook_payload shared payload parser for guards  # noqa: E501
         # +context/audit admission ledgers, recipe initialization, exploration lifecycle,

@@ -96,6 +96,14 @@ def _compute_expected_non_inert() -> int:
     return count
 
 
+# Force HOOK_REGISTRY population before computing derived constants. The
+# hook_registry package (PR #4853) defers list construction to
+# ``autoskillit.hooks.__init__`` to break an import cycle; importing
+# ``autoskillit.hooks`` here triggers that post-import population so
+# ``_compute_total_probe_count()`` and ``_compute_expected_non_inert()``
+# see the populated list rather than the empty placeholder.
+import autoskillit.hooks  # noqa: F401  (side effect: populates HOOK_REGISTRY)
+
 EXPECTED_TOTAL_PROBE_COUNT: int = _compute_total_probe_count()
 EXPECTED_NON_INERT_COMBINATIONS: int = _compute_expected_non_inert()
 

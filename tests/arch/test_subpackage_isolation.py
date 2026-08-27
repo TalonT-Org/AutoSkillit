@@ -1175,7 +1175,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # *.py file); -1 for the deleted exploration_context.py file.
         # E22 retired per #4835.
         "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
-        "recipe/rules": 61,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
+        "recipe/rules": 66,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
+        # +rules_merge_routing +rules_merge_guards +rules_merge_wait
+        # +rules_merge_enrollment +rules_merge_push_symmetry (#4857
+        # decomposed rules_merge.py into 5 sibling modules)
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate

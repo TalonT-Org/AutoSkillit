@@ -36,7 +36,7 @@ async def test_fleet_dispatch_surfaces_plus_n_more_for_combined_overflow(tool_ct
 
     with patch("autoskillit.fleet._api.execute_dispatch", new_callable=AsyncMock):
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
 
         result = await _run_dispatch(
             tool_ctx=tool_ctx,
@@ -70,7 +70,7 @@ async def test_fleet_dispatch_no_indicator_at_exactly_six(tool_ctx):
 
     with patch("autoskillit.fleet._api.execute_dispatch", new_callable=AsyncMock):
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
 
         result = await _run_dispatch(
             tool_ctx=tool_ctx,

@@ -128,7 +128,14 @@ class TestDeployedArtifactExecutability:
         ) as binding:
             assert binding.plugin_dir is not None
             projected_hooks = json.loads((binding.plugin_dir / "hooks" / "hooks.json").read_text())
-            payload = json.dumps({"tool_name": "Read", "tool_input": {}})
+            payload = json.dumps(
+                {
+                    "tool_name": "Read",
+                    "tool_input": {},
+                    "session_id": "projection-executability",
+                    "cwd": str(tmp_path),
+                }
+            )
             for event_type, entries in projected_hooks.get("hooks", {}).items():
                 for entry in entries:
                     for hook in entry.get("hooks", []):

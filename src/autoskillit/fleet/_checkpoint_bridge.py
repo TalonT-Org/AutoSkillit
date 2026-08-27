@@ -24,7 +24,7 @@ from autoskillit.core import (
 )
 from autoskillit.fleet.sidecar import IssueSidecarEntry, read_sidecar_from_path
 from autoskillit.fleet.state import CampaignStateMutator
-from autoskillit.fleet.state_types import DispatchStatus
+from autoskillit.fleet.state_transitions import DispatchStatus
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext

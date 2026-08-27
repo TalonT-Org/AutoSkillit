@@ -69,7 +69,7 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     "idle_output_timeout": "execution",
     # Embedded verbatim into the runtime orchestration_rules/
     # stop_step_semantics payload served to the orchestrating agent
-    # (_api.py:_build_stop_step_semantics).
+    # (_api_orchestration.py:_build_stop_step_semantics).
     "message": "execution",
     # Server-side RecipeStep fallback — the one EXECUTION_TUNING param this
     # plan newly wires (previously parsed and lint-validated but read by

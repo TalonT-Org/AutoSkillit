@@ -2,7 +2,7 @@
 
 Issue #4112 defense-in-depth: the canonical extraction function lives in
 ``_issue_url_helpers.py``, and any raw ``.get()`` call elsewhere in ``fleet/``
-(except ``_issue_url_helpers.py`` itself and ``state_types.py``, which
+(except ``_issue_url_helpers.py`` itself and ``state_records.py``, which
 deserializes ``DispatchRecord`` from its own JSON dict) would re-introduce the
 singular/plural key mismatch that orphaned labels for the 7th time.
 
@@ -34,8 +34,8 @@ HOOK_GUARD_PATH = (
 
 # Files exempt from the raw-``get`` ban:
 # - ``_issue_url_helpers.py``: defines the canonical accessor.
-# - ``state_types.py``: deserializes ``DispatchRecord`` from its own JSON dict.
-EXEMPT_FILES: frozenset[str] = frozenset({"_issue_url_helpers.py", "state_types.py"})
+# - ``state_records.py``: deserializes ``DispatchRecord`` from its own JSON dict.
+EXEMPT_FILES: frozenset[str] = frozenset({"_issue_url_helpers.py", "state_records.py"})
 
 BANNED_KEYS: frozenset[str] = frozenset({"issue_url", "issue_urls"})
 

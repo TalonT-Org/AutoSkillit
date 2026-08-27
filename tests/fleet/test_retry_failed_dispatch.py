@@ -19,7 +19,8 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 from autoskillit.fleet.state import _clear_dispatch_for_retry
-from autoskillit.fleet.state_types import _RETRY_IDENTITY_FIELDS, _validate_transition
+from autoskillit.fleet.state_records import _RETRY_IDENTITY_FIELDS
+from autoskillit.fleet.state_transitions import _validate_transition
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

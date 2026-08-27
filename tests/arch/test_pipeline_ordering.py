@@ -17,7 +17,7 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-_API_PATH = SRC_ROOT / "recipe" / "_api.py"
+_API_PATH = SRC_ROOT / "recipe" / "_api_orchestration.py"
 
 
 def _find_function_node(tree: ast.Module, func_name: str) -> ast.FunctionDef:
@@ -44,31 +44,41 @@ def _find_call_line(func_body: list[ast.stmt], func_name: str, *, last: bool = F
 
 
 def test_semantic_rules_run_after_pruning() -> None:
-    """AST guard: in load_and_validate(), _prune_skipped_steps must be called
+    """AST guard: in the orchestrator module, _prune_skipped_steps must be called
     BEFORE run_semantic_rules (or make_validation_context, which builds the
     context passed to run_semantic_rules).
 
-    This prevents future regressions where someone moves the semantic rules
-    block before the pruning block, reintroducing the pre-prune validity bug.
+    The pipeline was extracted from ``load_and_validate`` into
+    ``_run_validation_pipeline`` by issue #4860; this guard scans the entire
+    module to verify the ordering invariant is preserved across the split.
     """
     source = _API_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source)
-    func = _find_function_node(tree, "load_and_validate")
 
-    prune_line = _find_call_line(func.body, "_prune_skipped_steps")
-    semantic_line = _find_call_line(func.body, "run_semantic_rules", last=True)
-    ctx_line = _find_call_line(func.body, "make_validation_context", last=True)
+    # Scan module-level helpers + load_and_validate (they may delegate to helpers).
+    scan_bodies: list[ast.stmt] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scan_bodies.extend(node.body)
+    if not scan_bodies:
+        func = _find_function_node(tree, "load_and_validate")
+        scan_bodies = func.body
+    synthetic = ast.Module(body=scan_bodies, type_ignores=[])
+
+    prune_line = _find_call_line(synthetic.body, "_prune_skipped_steps")
+    semantic_line = _find_call_line(synthetic.body, "run_semantic_rules", last=True)
+    ctx_line = _find_call_line(synthetic.body, "make_validation_context", last=True)
 
     assert prune_line > 0, (
-        f"_prune_skipped_steps call not found in load_and_validate() in {_API_PATH}"
+        f"_prune_skipped_steps call not found in orchestrator module at {_API_PATH}"
     )
     assert semantic_line > 0, (
-        f"run_semantic_rules call not found in load_and_validate() in {_API_PATH}"
+        f"run_semantic_rules call not found in orchestrator module at {_API_PATH}"
     )
 
     assert prune_line < semantic_line, (
         f"_prune_skipped_steps (line {prune_line}) must be called BEFORE "
-        f"run_semantic_rules (line {semantic_line}) in load_and_validate(). "
+        f"run_semantic_rules (line {semantic_line}) in the orchestrator module. "
         f"Pre-prune semantic findings poison the validity computation."
     )
 

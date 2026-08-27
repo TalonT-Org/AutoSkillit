@@ -55,6 +55,28 @@ def test_recipe_init_surface_unchanged():
     assert callable(make_validation_context)
 
 
+def test_orchestration_importable_from_submodule():
+    """Issue #4860: the orchestration module is importable and exposes the phase API."""
+    from autoskillit.recipe._api_orchestration import (
+        _assemble_load_result,
+        _resolve_cache_inputs,
+        _resolve_recipe_match,
+        _run_validation_pipeline,
+        load_and_validate,
+    )
+
+    assert all(
+        callable(f)
+        for f in (
+            _assemble_load_result,
+            _resolve_cache_inputs,
+            _resolve_recipe_match,
+            _run_validation_pipeline,
+            load_and_validate,
+        )
+    )
+
+
 def test_analysis_graph_no_toplevel_networkx_import():
     import ast
     from pathlib import Path

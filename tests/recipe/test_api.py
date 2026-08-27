@@ -332,8 +332,8 @@ def fresh_load_cache(monkeypatch):
 
 def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkeypatch):
     """Canonical equal resolved defaults return the warm cached result."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -343,20 +343,20 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
     recipe_yaml.write_text(_CACHE_RECIPE_WITH_BASE_BRANCH)
 
     calls = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
 
-    api_mod.load_and_validate(
+    orch.load_and_validate(
         "myrecipe",
         tmp_path,
         resolved_defaults={"unused": "same", "base_branch": "main"},
     )
-    api_mod.load_and_validate(
+    orch.load_and_validate(
         "myrecipe",
         tmp_path,
         resolved_defaults={"base_branch": "main", "unused": "same"},
@@ -366,8 +366,8 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
 
 
 def test_default_cache_excludes_server_only_finalized_projection(tmp_path, monkeypatch):
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     cache = cache_mod.LoadCache()
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
@@ -375,14 +375,14 @@ def test_default_cache_excludes_server_only_finalized_projection(tmp_path, monke
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
-    default_result = api_mod.load_and_validate("myrecipe", tmp_path)
+    default_result = orch.load_and_validate("myrecipe", tmp_path)
 
     assert "_finalized_projection" not in default_result
     assert len(cache._store) == 1
     default_entry = next(iter(cache._store.values()))
     assert "_finalized_projection" not in default_entry.result
 
-    server_result = api_mod.load_and_validate(
+    server_result = orch.load_and_validate(
         "myrecipe",
         tmp_path,
         include_finalized_projection=True,
@@ -394,8 +394,8 @@ def test_default_cache_excludes_server_only_finalized_projection(tmp_path, monke
 
 def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, monkeypatch):
     """Changing the recipe file mtime causes a cache miss."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -405,25 +405,25 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
     recipe_yaml.write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
     recipe_yaml.touch()
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     assert len(calls) == 2  # both calls ran full pipeline
 
 
 def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, monkeypatch):
     """Package version change invalidates the cache."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -432,25 +432,25 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
     monkeypatch.setattr(cache_mod, "_get_pkg_version", lambda: "99.99.99")
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     assert len(calls) == 2
 
 
 def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monkeypatch):
     """Adding a new recipe file to the project directory invalidates the cache."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -459,19 +459,19 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
     (recipes_dir / "newrecipe.yaml").write_text(
         MINIMAL_RECIPE_YAML.replace("myrecipe", "newrecipe")
     )
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     assert len(calls) == 2
 
@@ -479,8 +479,8 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
 def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_path, monkeypatch):
     import inspect
 
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import BackendCapabilities, RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -490,7 +490,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
         }
     )
 
-    sig = inspect.signature(api_mod.load_and_validate)
+    sig = inspect.signature(orch.load_and_validate)
     all_params = set(sig.parameters.keys())
 
     # An explicit lister can affect validation, so it bypasses caching entirely.
@@ -521,7 +521,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
     temp_dir = tmp_path / "custom-temp"
     temp_dir.mkdir()
 
-    api_mod.load_and_validate(
+    orch.load_and_validate(
         "myrecipe",
         tmp_path,
         suppressed=["z", "a"],
@@ -604,22 +604,22 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 
 def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, fresh_load_cache):
     """Resolved defaults alter ingredients_table and are canonically cache-keyed."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_BASE_BRANCH)
 
-    first = api_mod.load_and_validate(
+    first = orch.load_and_validate(
         "myrecipe",
         tmp_path,
         resolved_defaults={"unused": "same", "base_branch": "main"},
     )
-    equivalent = api_mod.load_and_validate(
+    equivalent = orch.load_and_validate(
         "myrecipe",
         tmp_path,
         resolved_defaults={"base_branch": "main", "unused": "same"},
     )
-    distinct = api_mod.load_and_validate(
+    distinct = orch.load_and_validate(
         "myrecipe",
         tmp_path,
         resolved_defaults={"base_branch": "develop", "unused": "same"},
@@ -634,22 +634,22 @@ def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, 
 
 def test_load_and_validate_cache_separates_backend_origin_maps(tmp_path, fresh_load_cache):
     """Distinct backend origins must not reuse the same validated response."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", MINIMAL_RECIPE_YAML)
 
-    api_mod.load_and_validate(
+    orch.load_and_validate(
         "myrecipe",
         tmp_path,
         backend_origin_map={"stop": "explicit", "fallback": "configured"},
     )
-    api_mod.load_and_validate(
+    orch.load_and_validate(
         "myrecipe",
         tmp_path,
         backend_origin_map={"fallback": "configured", "stop": "explicit"},
     )
-    api_mod.load_and_validate(
+    orch.load_and_validate(
         "myrecipe",
         tmp_path,
         backend_origin_map={"stop": "inherited", "fallback": "configured"},
@@ -667,6 +667,7 @@ def test_load_and_validate_cache_separates_temp_dirs_and_normalizes_defaults(
 ):
     """Temp-directory cache identity follows the effective path used for staleness."""
     import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.recipe._contracts_types import StaleItem
 
     cache = fresh_load_cache
@@ -690,20 +691,18 @@ def test_load_and_validate_cache_separates_temp_dirs_and_normalizes_defaults(
             )
         ]
 
-    monkeypatch.setattr(api_mod, "load_recipe_card", lambda *_args: {"dataflow": []})
-    monkeypatch.setattr(api_mod, "validate_recipe_cards", lambda *_args: [])
-    monkeypatch.setattr(api_mod, "check_contract_staleness", fake_staleness)
+    monkeypatch.setattr(orch, "load_recipe_card", lambda *_args: {"dataflow": []})
+    monkeypatch.setattr(orch, "validate_recipe_cards", lambda *_args: [])
+    monkeypatch.setattr(orch, "check_contract_staleness", fake_staleness)
 
     monkeypatch.chdir(cwd_a)
-    implicit = api_mod.load_and_validate("myrecipe", project_dir)
-    explicit_default = api_mod.load_and_validate(
-        "myrecipe", project_dir, temp_dir=default_temp_dir
-    )
-    relative_from_a = api_mod.load_and_validate(
+    implicit = orch.load_and_validate("myrecipe", project_dir)
+    explicit_default = orch.load_and_validate("myrecipe", project_dir, temp_dir=default_temp_dir)
+    relative_from_a = orch.load_and_validate(
         "myrecipe", project_dir, temp_dir=Path("relative-temp")
     )
     monkeypatch.chdir(cwd_b)
-    relative_from_b = api_mod.load_and_validate(
+    relative_from_b = orch.load_and_validate(
         "myrecipe", project_dir, temp_dir=Path("relative-temp")
     )
 
@@ -730,7 +729,7 @@ def test_load_and_validate_cache_separates_same_relative_project_dir_across_cwds
     tmp_path, monkeypatch, fresh_load_cache
 ):
     """The same relative project path resolves independently in each current directory."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     cache = fresh_load_cache
     project_a = tmp_path / "project-a"
@@ -743,9 +742,9 @@ def test_load_and_validate_cache_separates_same_relative_project_dir_across_cwds
     )
 
     monkeypatch.chdir(project_a)
-    first = api_mod.load_and_validate("myrecipe", project_dir=Path("."))
+    first = orch.load_and_validate("myrecipe", project_dir=Path("."))
     monkeypatch.chdir(project_b)
-    second = api_mod.load_and_validate("myrecipe", project_dir=Path("."))
+    second = orch.load_and_validate("myrecipe", project_dir=Path("."))
 
     assert first["content"] != second["content"]
     assert len(cache._store) == 2
@@ -759,7 +758,7 @@ def test_load_and_validate_cache_separates_caller_recipe_info_content_and_hash(
     tmp_path, fresh_load_cache
 ):
     """A warm cache cannot serve a caller's changed RecipeInfo content or hash."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -786,8 +785,8 @@ def test_load_and_validate_cache_separates_caller_recipe_info_content_and_hash(
         content=changed_content,
     )
 
-    first = api_mod.load_and_validate("myrecipe", project_dir, recipe_info=first_info)
-    changed = api_mod.load_and_validate("myrecipe", project_dir, recipe_info=changed_info)
+    first = orch.load_and_validate("myrecipe", project_dir, recipe_info=first_info)
+    changed = orch.load_and_validate("myrecipe", project_dir, recipe_info=changed_info)
 
     assert first["content"] == MINIMAL_RECIPE_YAML
     assert first["content_hash"] == "sha256:first"
@@ -800,7 +799,7 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
     tmp_path, monkeypatch, fresh_load_cache
 ):
     """Relative RecipeInfo paths use cwd, while an equivalent absolute path hits cache."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -817,15 +816,15 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
     )
     relative_path = Path(".autoskillit/recipes/myrecipe.yaml")
     calls = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
     monkeypatch.chdir(cwd_a)
-    first = api_mod.load_and_validate(
+    first = orch.load_and_validate(
         "myrecipe",
         project_dir,
         recipe_info=RecipeInfo(
@@ -836,7 +835,7 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
         ),
     )
     monkeypatch.chdir(cwd_b)
-    equivalent_absolute = api_mod.load_and_validate(
+    equivalent_absolute = orch.load_and_validate(
         "myrecipe",
         project_dir,
         recipe_info=RecipeInfo(
@@ -846,7 +845,7 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
             path=path_a,
         ),
     )
-    from_other_cwd = api_mod.load_and_validate(
+    from_other_cwd = orch.load_and_validate(
         "myrecipe",
         project_dir,
         recipe_info=RecipeInfo(
@@ -871,7 +870,7 @@ def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(
     tmp_path, fresh_load_cache
 ):
     """Omitted and supplied inventories stay distinct and use stable name sets."""
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -897,25 +896,25 @@ def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(
         path=dispatch_target_path,
     )
 
-    discovered = api_mod.load_and_validate(
+    discovered = orch.load_and_validate(
         "test-campaign-no-steps", tmp_path, recipe_info=campaign, recipe_list=None
     )
-    empty = api_mod.load_and_validate(
+    empty = orch.load_and_validate(
         "test-campaign-no-steps", tmp_path, recipe_info=campaign, recipe_list=[]
     )
-    missing = api_mod.load_and_validate(
+    missing = orch.load_and_validate(
         "test-campaign-no-steps",
         tmp_path,
         recipe_info=campaign,
         recipe_list=[campaign],
     )
-    listed = api_mod.load_and_validate(
+    listed = orch.load_and_validate(
         "test-campaign-no-steps",
         tmp_path,
         recipe_info=campaign,
         recipe_list=[dispatch_target, campaign, campaign],
     )
-    reordered = api_mod.load_and_validate(
+    reordered = orch.load_and_validate(
         "test-campaign-no-steps",
         tmp_path,
         recipe_info=campaign,
@@ -941,7 +940,7 @@ def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
     """Different caller inventories rerun validation and change unknown-skill findings."""
     from types import SimpleNamespace
 
-    import autoskillit.recipe._api as api_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     class InventoryLister:
         def __init__(self, names: list[str]) -> None:
@@ -953,17 +952,15 @@ def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
     cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_SKILL)
     calls = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
-    known = api_mod.load_and_validate(
-        "myrecipe", tmp_path, lister=InventoryLister(["listed-skill"])
-    )
-    unknown = api_mod.load_and_validate("myrecipe", tmp_path, lister=InventoryLister([]))
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
+    known = orch.load_and_validate("myrecipe", tmp_path, lister=InventoryLister(["listed-skill"]))
+    unknown = orch.load_and_validate("myrecipe", tmp_path, lister=InventoryLister([]))
 
     assert not any(
         suggestion["rule"] == "unknown-skill-command" for suggestion in known["suggestions"]
@@ -982,8 +979,8 @@ def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
 
 def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     """load_and_validate calls the timing helper for each pipeline stage."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -992,14 +989,14 @@ def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     stage_calls: list[str] = []
-    real_t = api_mod._t
+    real_t = orch._t
 
     def capturing_t(label: str, t0: float, name: str) -> float:
         stage_calls.append(label)
         return real_t(label, t0, name)
 
-    monkeypatch.setattr(api_mod, "_t", capturing_t)
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    monkeypatch.setattr(orch, "_t", capturing_t)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     # At minimum: find_recipe, yaml_parse, validate_recipe, semantic_rules
     assert len(stage_calls) >= 4
@@ -1041,11 +1038,12 @@ def test_load_recipe_result_is_typed() -> None:
 
 def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
     """DefaultRecipeRepository.load_and_validate passes a pre-resolved RecipeInfo to _api."""
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.recipe import _api as api_mod
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     captured = {}
-    real_fn = api_mod.load_and_validate
+    real_fn = orch.load_and_validate
 
     def capturing_fn(
         name,
@@ -1311,7 +1309,7 @@ class TestFormatIngredientsTableGfmWidthCap:
 
 def test_orchestration_rules_include_stop_step_semantics():
     """orchestration_rules includes stop-step semantics when recipe has stop steps."""
-    from autoskillit.recipe._api import _build_orchestration_rules
+    from autoskillit.recipe._api_orchestration import _build_orchestration_rules
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
@@ -1326,7 +1324,7 @@ def test_orchestration_rules_include_stop_step_semantics():
 
 def test_build_stop_step_semantics_includes_sentinel_instruction():
     """_build_stop_step_semantics() must inject sentinel emission instructions."""
-    from autoskillit.recipe._api import _build_stop_step_semantics
+    from autoskillit.recipe._api_orchestration import _build_stop_step_semantics
     from autoskillit.recipe.schema import Recipe, RecipeStep
 
     recipe = Recipe(
@@ -1555,8 +1553,8 @@ def test_compute_registry_hash_content_based(tmp_path: Path) -> None:
 
 def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
     """load_and_validate reuses match.content_hash for the result's content_hash field."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1578,15 +1576,15 @@ def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkey
         content_hash="sha256:abcd1234deadbeef",
     )
 
-    result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info)
+    result = orch.load_and_validate("myrecipe", tmp_path, recipe_info=info)
 
     assert result.get("content_hash") == "sha256:abcd1234deadbeef"
 
 
 def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
     """list_recipes is called exactly once when recipe_info is not provided."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1596,23 +1594,23 @@ def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
     recipe_path.write_text(MINIMAL_RECIPE_YAML)
 
     call_count = {"n": 0}
-    original_list_recipes = api_mod.list_recipes
+    original_list_recipes = orch.list_recipes
 
     def counting_list_recipes(*args, **kwargs):
         call_count["n"] += 1
         return original_list_recipes(*args, **kwargs)
 
-    monkeypatch.setattr(api_mod, "list_recipes", counting_list_recipes)
+    monkeypatch.setattr(orch, "list_recipes", counting_list_recipes)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     assert call_count["n"] == 1
 
 
 def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path, monkeypatch):
     """list_recipes is not called when recipe_list is provided alongside recipe_info."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1636,9 +1634,9 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
     def raising_list_recipes(*args, **kwargs):
         raise AssertionError("list_recipes must not be called when recipe_list is provided")
 
-    monkeypatch.setattr(api_mod, "list_recipes", raising_list_recipes)
+    monkeypatch.setattr(orch, "list_recipes", raising_list_recipes)
 
-    result = api_mod.load_and_validate("myrecipe", tmp_path, recipe_info=info, recipe_list=[info])
+    result = orch.load_and_validate("myrecipe", tmp_path, recipe_info=info, recipe_list=[info])
 
     assert "error" not in result
     assert result.get("content_hash") is not None
@@ -1646,8 +1644,8 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
 
 def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, monkeypatch):
     """Changing the rule registry hash invalidates the cache."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
@@ -1659,28 +1657,28 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     calls: list[int] = []
-    real_validate = api_mod.validate_recipe_structure
+    real_validate = orch.validate_recipe_structure
 
     def counting_validate(recipe):
         calls.append(1)
         return real_validate(recipe)
 
-    monkeypatch.setattr(api_mod, "validate_recipe_structure", counting_validate)
+    monkeypatch.setattr(orch, "validate_recipe_structure", counting_validate)
 
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     from autoskillit.recipe import registry as reg_mod
 
     monkeypatch.setattr(reg_mod, "RULE_REGISTRY_HASH", "changed-hash-value")
-    api_mod.load_and_validate("myrecipe", tmp_path)
+    orch.load_and_validate("myrecipe", tmp_path)
 
     assert len(calls) == 2
 
 
 def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     """Stale process raises ProcessStaleError instead of evaluating recipes."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import ProcessStaleError
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
@@ -1696,13 +1694,13 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     with pytest.raises(ProcessStaleError, match="stale"):
-        api_mod.load_and_validate("myrecipe", tmp_path)
+        orch.load_and_validate("myrecipe", tmp_path)
 
 
 def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
     """load_and_validate raises RecipeNotFoundError for nonexistent recipes."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import RecipeNotFoundError
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
@@ -1710,13 +1708,13 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
 
     with pytest.raises(RecipeNotFoundError, match="nonexistent_recipe"):
-        api_mod.load_and_validate("nonexistent_recipe", tmp_path)
+        orch.load_and_validate("nonexistent_recipe", tmp_path)
 
 
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     """Staleness detection clears YamlFileCache + lru_cache helpers."""
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
     from autoskillit.core import ProcessStaleError
     from autoskillit.recipe._api_cache import _MISSING
     from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE
@@ -1754,7 +1752,7 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     with pytest.raises(ProcessStaleError):
-        api_mod.load_and_validate("myrecipe", tmp_path)
+        orch.load_and_validate("myrecipe", tmp_path)
 
     assert _BUDGETS_CACHE._value is _MISSING
     assert _MANIFEST_CACHE._value is _MISSING
@@ -1766,8 +1764,8 @@ def test_mid_process_yaml_only_update(tmp_path, monkeypatch):
     """YAML-only change to skill_contracts.yaml produces different load_and_validate results."""
     import yaml
 
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
     import autoskillit.recipe._contracts_manifest as manifest_mod
     from autoskillit.recipe._api_cache import YamlFileCache
 
@@ -1793,7 +1791,7 @@ def test_mid_process_yaml_only_update(tmp_path, monkeypatch):
     manifest_path.write_text(yaml.dump(manifest_v1))
 
     monkeypatch.setattr(manifest_mod, "pkg_root", lambda: fake_pkg)
-    monkeypatch.setattr(api_mod, "pkg_root", lambda: fake_pkg)
+    monkeypatch.setattr(orch, "pkg_root", lambda: fake_pkg)
 
     recipe_content = """\
 name: yaml-update-test
@@ -1818,7 +1816,7 @@ steps:
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "yaml-update-test.yaml").write_text(recipe_content)
 
-    result1 = api_mod.load_and_validate("yaml-update-test", tmp_path)
+    result1 = orch.load_and_validate("yaml-update-test", tmp_path)
     suggestions1 = result1.get("suggestions", [])
     undeclared1 = [s for s in suggestions1 if s.get("rule") == "undeclared-capture-key"]
     assert len(undeclared1) >= 1, (
@@ -1838,7 +1836,7 @@ steps:
     }
     manifest_path.write_text(yaml.dump(manifest_v2))
 
-    result2 = api_mod.load_and_validate("yaml-update-test", tmp_path)
+    result2 = orch.load_and_validate("yaml-update-test", tmp_path)
     suggestions2 = result2.get("suggestions", [])
     undeclared2 = [s for s in suggestions2 if s.get("rule") == "undeclared-capture-key"]
     assert undeclared2 == [], (
@@ -1960,8 +1958,8 @@ def test_load_and_validate_always_invokes_compute_recipe_validity(
     no code path through load_and_validate can return a valid value that didn't come
     from compute_recipe_validity.
     """
-    import autoskillit.recipe._api as api_mod
     import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe._api_orchestration as orch
 
     cache_mod._LOAD_CACHE.clear()
 
@@ -1969,7 +1967,7 @@ def test_load_and_validate_always_invokes_compute_recipe_validity(
     _setup_project_recipe(tmp_path, "test-recipe-with-rules", _RECIPE_WITH_RULES)
 
     sentinel_valid = object()
-    monkeypatch.setattr(api_mod, "compute_recipe_validity", lambda *a, **kw: sentinel_valid)
+    monkeypatch.setattr(orch, "compute_recipe_validity", lambda *a, **kw: sentinel_valid)
 
     from autoskillit.recipe._api import load_and_validate
 
@@ -2100,6 +2098,7 @@ def test_suggestions_accumulation_preserves_over_bound_tail(
 ) -> None:
     """Domain validation preserves every finding before delivery projection."""
     import autoskillit.recipe._api as api
+    import autoskillit.recipe._api_orchestration as orch
 
     recipe_dir = tmp_path / ".autoskillit" / "recipes"
     recipe_dir.mkdir(parents=True, exist_ok=True)
@@ -2119,8 +2118,8 @@ steps:
     recipe_path = recipe_dir / "test-suggestions-cap.yaml"
     recipe_path.write_text(recipe_yaml)
     injected = [{"rule": f"injected-{index}", "message": "x" * 500} for index in range(100)]
-    monkeypatch.setattr(api, "run_semantic_rules", lambda _ctx: [])
-    monkeypatch.setattr(api, "findings_to_dicts", lambda _findings: list(injected))
+    monkeypatch.setattr(orch, "run_semantic_rules", lambda _ctx: [])
+    monkeypatch.setattr(orch, "findings_to_dicts", lambda _findings: list(injected))
     result = api.load_and_validate(
         "test-suggestions-cap",
         project_dir=tmp_path,
@@ -2128,3 +2127,16 @@ steps:
     suggestions = result.get("suggestions", [])
     assert len(json.dumps(suggestions).encode("utf-8")) > 32_000
     assert injected[-1] in suggestions
+
+
+def test_api_re_exports_load_and_validate() -> None:
+    """Lock the public-API re-export: ``_api.load_and_validate`` IS the orchestrator.
+
+    Issue #4860 moved the function body into ``_api_orchestration``. This test
+    fails if a future refactor silently decouples the facade from the
+    orchestrator (e.g. by duplicating the function or restoring an in-_api body).
+    """
+    from autoskillit.recipe import _api, _api_orchestration
+
+    assert _api.load_and_validate is _api_orchestration.load_and_validate
+    assert _api.load_and_validate.__module__ == "autoskillit.recipe._api_orchestration"

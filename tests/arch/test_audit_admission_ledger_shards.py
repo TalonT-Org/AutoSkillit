@@ -5,8 +5,11 @@ Verifies:
 - Every shard module is at most 750 lines (issue ceiling, stricter than
   REQ-CNST-010's 1000-line default).
 - The facade is under 1000 lines after the split.
-- The ``pipeline/`` directory still has exactly 19 top-level Python
-  files (one facade + 18 existing).
+- The ``pipeline/`` directory still has exactly 17 top-level Python
+  files (one facade + 16 existing); Wavefront 1 of #4667 moved
+  ``_context_admission_storage.py`` into the new
+  ``_context_admission_ledger`` subpackage, dropping the count from
+  18 to 17 after this audit-admission shard split landed.
 - ``pipeline/audit_admission_ledger.py`` is not in
   ``_LINE_LIMIT_EXEMPTIONS`` after the split (E17 retired).
 - Every public method on the facade has either a ``_locked`` shard
@@ -37,7 +40,7 @@ FACADE_PATH = PIPELINE_DIR / "audit_admission_ledger.py"
 
 CEILING_LINES = 750
 FACADE_CEILING_LINES = 1000
-EXPECTED_PIPELINE_PY_COUNT = 18
+EXPECTED_PIPELINE_PY_COUNT = 17
 
 REQUIRED_SHARDS = {
     "__init__.py",

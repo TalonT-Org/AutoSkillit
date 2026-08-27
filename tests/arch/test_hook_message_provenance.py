@@ -42,17 +42,18 @@ _EXEMPT_LITERALS = frozenset(
         # Stop completion gate docstring describes the platform's success/completion
         # marker by name; the gate itself emits PolicyEvent-rendered messages.
         "Stop completion gate — block success/Stop until the active wave is complete.\n\n"
-        "When the session flag (or ``AUTOSKILLIT_JOIN_REQUIRED=1``) reports\n"
-        "``join_required=true``, the Stop event may only release Claude when the\n"
-        "ledger shows a fully-complete wave. Partial, failed, cancelled,\n"
-        "interrupted, missing, or unresolved waves block Stop with a\n"
-        "deterministic reason so the existing AutoSkillit success/completion marker\n"
-        "cannot be emitted prematurely.\n\n"
+        "When the payload-identified session binding reports ``join_required=true``, the\n"
+        "Stop event may only release Claude when the ledger shows a fully-complete wave.\n"
+        "Partial, failed, cancelled, interrupted, missing, or unresolved waves block Stop\n"
+        "with a deterministic reason so the existing AutoSkillit success/completion\n"
+        "marker cannot be emitted prematurely.\n\n"
         "In a clean session (no join-bearing skill loaded) this guard is a no-op.\n\n"
         "``Stop`` is the correct gate surface — per official documentation it\n"
         "fires once per turn and exit code 2 prevents Claude from stopping while\n"
         "continuing the conversation. This blocks premature completion between\n"
         "waves as well as at the end of the whole conversation.\n\n"
+        "Unlike PreToolUse and PostToolUse guards, Stop fails closed for malformed input\n"
+        "or a missing session identity: a false release would lose the active wave.\n\n"
         "Stdlib-only — no autoskillit imports.\n",
     }
 )

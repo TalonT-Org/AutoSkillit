@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.pipeline.context_admission_ledger as ledger_module
+import autoskillit.pipeline._context_admission_ledger._codec as codec_module
 from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
@@ -53,7 +53,7 @@ def test_recovery_remains_incomplete_when_failure_marker_is_contended(
     try:
         connection.execute(
             "DELETE FROM shadow_decisions WHERE stream_id = ?",
-            (ledger_module._stream_key_bytes(failed_key),),
+            (codec_module._stream_key_bytes(failed_key),),
         )
         connection.commit()
     finally:

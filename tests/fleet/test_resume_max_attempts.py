@@ -7,10 +7,14 @@ import pytest
 from autoskillit.core import FleetErrorCode as FEC
 from autoskillit.fleet import DispatchStatus
 from autoskillit.fleet.state import _write_state as write_state
+from autoskillit.fleet.state_records import (
+    FLEET_STATE_SCHEMA_VERSION,
+    CampaignState,
+    DispatchRecord,
+)
 from autoskillit.fleet.state_recovery import (
     resume_campaign_from_state,
 )
-from autoskillit.fleet.state_types import FLEET_STATE_SCHEMA_VERSION, CampaignState, DispatchRecord
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

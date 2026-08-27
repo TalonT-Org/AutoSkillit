@@ -15,7 +15,7 @@ from autoskillit.execution.db import DefaultDatabaseReader
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
 from autoskillit.execution.testing import DefaultTestRunner
-from autoskillit.migration.engine import DefaultMigrationService
+from autoskillit.migration.service import DefaultMigrationService
 from autoskillit.pipeline.context import ToolContext
 from autoskillit.pipeline.context_admission_ledger import (
     DefaultContextAdmissionLedger,

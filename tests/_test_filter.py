@@ -533,6 +533,17 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
 # through to LAYER_CASCADE_CONSERVATIVE["pipeline"] (fail-open).
 MODULE_CASCADE_PIPELINE: dict[str, frozenset[str]] = {
     "context_admission_ledger": frozenset({"pipeline", "server"}),
+    "_codec": frozenset({"pipeline", "server"}),
+    "_projection": frozenset({"pipeline", "server"}),
+    "_shadow": frozenset({"pipeline", "server"}),
+    "_state_queries": frozenset({"pipeline", "server"}),
+    "_store": frozenset({"pipeline", "server"}),
+    "_storage": frozenset({"pipeline", "server"}),
+    "_sqlite_errors": frozenset({"pipeline", "server"}),
+    "_apply": frozenset({"pipeline", "server"}),
+    "_recover": frozenset({"pipeline", "server"}),
+    "_inspection": frozenset({"pipeline", "server"}),
+    "_status": frozenset({"pipeline", "server"}),
     "context": frozenset(
         {
             "pipeline",
@@ -670,10 +681,12 @@ SUBPKG_CASCADE_EXECUTION: dict[str, frozenset[str]] = {
             "server",
             "migration/test_engine.py",
             "migration/test_engine_contract.py",
+            "migration/test_engine_decomposition.py",
             "migration/test_engine_diagram.py",
             "migration/test_engine_hierarchy.py",
             "migration/test_engine_recipe.py",
             "migration/test_engine_skill.py",
+            "migration/test_service.py",
             "test_llm_triage.py",
             "cli/test_session_launch.py",
             "cli/test_order_resume.py",
@@ -738,6 +751,13 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     "rules_issue_scope_threading": frozenset({"recipe"}),
     "rules_loop_counter": frozenset({"recipe"}),
     "rules_merge": frozenset({"recipe"}),
+    "rules_merge_context": frozenset({"recipe"}),
+    "rules_merge_enrollment": frozenset({"recipe"}),
+    "rules_merge_guards": frozenset({"recipe"}),
+    "rules_merge_push_symmetry": frozenset({"recipe"}),
+    "rules_merge_queue": frozenset({"recipe"}),
+    "rules_merge_routing": frozenset({"recipe"}),
+    "rules_merge_wait": frozenset({"recipe"}),
     "rules_packs": frozenset({"recipe"}),
     "rules_reachability": frozenset({"recipe"}),
     "rules_recipe": frozenset({"recipe"}),
@@ -881,6 +901,22 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
         }
     ),
     "_api": frozenset(
+        {
+            "recipe",
+            "server/test_tools_list_recipes.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_mcp_overrides.py",
+            "server/test_service_wrappers.py",
+            "cli/test_cli_prompts.py",
+            "infra/test_pretty_output_recipe.py",
+            "contracts/test_tools_recipe_contracts.py",
+            "contracts/test_package_gateways.py",
+        }
+    ),
+    "_api_orchestration": frozenset(
         {
             "recipe",
             "server/test_tools_list_recipes.py",

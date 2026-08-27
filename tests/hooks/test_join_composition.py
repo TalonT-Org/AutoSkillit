@@ -24,7 +24,13 @@ from autoskillit.hooks._join_ledger import (
     can_release_stop,
     claim_assignment,
     declare_batch,
+    resolve_flag_dir,
     settle_assignment,
+)
+from autoskillit.hooks._session_binding import (
+    SessionBinding,
+    resolve_binding_path,
+    write_binding,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
@@ -233,19 +239,19 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     from contextlib import redirect_stdout
     from unittest.mock import patch
 
-    flag_dir = tmp_path
-    flag_path = flag_dir / "skill_guard_s1.flag"
-    flag_path.write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "session_id": "s1",
-                "join_required": True,
-                "binding_valid": True,
-                "loaded_skills": [],
-            }
+    worktree = tmp_path / "worktree"
+    (worktree / ".autoskillit").mkdir(parents=True)
+    flag_dir = resolve_flag_dir(worktree)
+    write_binding(
+        resolve_binding_path(str(worktree), "s1"),
+        SessionBinding(
+            schema_version=2,
+            session_id="s1",
+            join_required=True,
+            binding_valid=True,
+            artifact_digest="",
+            loaded_skills=(),
         ),
-        encoding="utf-8",
     )
 
     # Use background_exec_guard (the production denial path for join-
@@ -254,6 +260,7 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     event = {
         "tool_name": "Agent",
         "session_id": "s1",
+        "cwd": str(worktree),
         "tool_input": {
             "prompt": "reviewer",
             "name": "reviewer",
@@ -262,7 +269,6 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     }
     env_snapshot = {
         "AUTOSKILLIT_SESSION_TYPE": "skill",
-        "AUTOSKILLIT_JOIN_FLAG_PATH": str(flag_path),
         "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
     }
     with (

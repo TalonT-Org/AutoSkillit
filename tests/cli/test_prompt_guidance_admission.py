@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 
-from autoskillit.cli._mcp_names import DIRECT_PREFIX
+from autoskillit.core import DIRECT_PREFIX
 from tests.cli._orchestrator_prompt_helpers import compiled_orchestrator_prompt_inputs
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]

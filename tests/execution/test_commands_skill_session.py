@@ -72,7 +72,11 @@ class TestBuildSkillSessionCmdSharedBehavior:
     @pytest.mark.parametrize(
         ("backend", "expected"),
         [
-            (ClaudeCodeBackend(), "skill_load_guard"),
+            (
+                ClaudeCodeBackend(),
+                "background_exec_guard,join_claim_guard,join_followup_guard,"
+                "join_settle_guard,join_stop_guard,skill_load_guard",
+            ),
             (CodexBackend(), "write_guard"),
         ],
     )

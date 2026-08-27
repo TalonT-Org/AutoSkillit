@@ -181,7 +181,7 @@ def test_orchestrator_prompt_has_parallel_retry_note() -> None:
     """REQ-PROMPT-013: Orchestrator prompt must mirror parallel-aware retry note."""
     import re
 
-    from autoskillit.cli._mcp_names import DIRECT_PREFIX
+    from autoskillit.core import DIRECT_PREFIX
     from tests.cli._orchestrator_prompt_helpers import (
         build_orchestrator_prompt as _build_orchestrator_prompt,
     )

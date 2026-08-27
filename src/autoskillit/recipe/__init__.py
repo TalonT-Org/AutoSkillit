@@ -172,7 +172,16 @@ from autoskillit.recipe.rules import rules_merge as _rules_merge  # noqa: E402 F
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_merge_context as _rules_merge_context,
 )
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_merge_enrollment as _rules_merge_enrollment,
+)
+from autoskillit.recipe.rules import rules_merge_guards as _rules_merge_guards  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402 F401
+    rules_merge_push_symmetry as _rules_merge_push_symmetry,
+)
 from autoskillit.recipe.rules import rules_merge_queue as _rules_merge_queue  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_merge_routing as _rules_merge_routing  # noqa: E402 F401
+from autoskillit.recipe.rules import rules_merge_wait as _rules_merge_wait  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_model as _rules_model  # noqa: E402 F401
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_note_shape_contradiction as _rules_note_shape_contradiction,

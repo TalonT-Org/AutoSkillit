@@ -578,7 +578,7 @@ def safe_upsert_section(
 
     Operates on raw text — safe to use on files that fail TOML parsing. Only
     suitable for ``[single.section]`` headers; for ``[[array.of.tables]]``
-    headers use a dedicated helper (``_upsert_hooks_text`` in cli/_hooks_codex.py).
+    headers use a dedicated helper (``_upsert_hooks_text`` in execution/backends/_codex_hooks.py).
 
     If ``section_header`` is found, the region from that header to the next
     line starting with ``[`` (or ``end_marker``, or EOF) is replaced with

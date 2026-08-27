@@ -113,7 +113,7 @@ class TestResumeJSONLPreflight:
         from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.fleet.state import upsert_dispatch_record_by_name
-        from autoskillit.fleet.state_types import DispatchRejected
+        from autoskillit.fleet.state_outcomes import DispatchRejected
 
         _setup_dispatch(tool_ctx, monkeypatch)
 
@@ -235,7 +235,7 @@ class TestResumeSuccessGuard:
         """_run_dispatch returns cached SUCCESS when prior dispatch already succeeded."""
         from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
         from autoskillit.fleet._api import execute_dispatch
-        from autoskillit.fleet.state_types import DispatchCompleted
+        from autoskillit.fleet.state_outcomes import DispatchCompleted
 
         _setup_dispatch(tool_ctx, monkeypatch)
 

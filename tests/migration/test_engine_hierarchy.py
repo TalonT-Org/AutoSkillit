@@ -6,14 +6,14 @@ import inspect
 
 import pytest
 
+from autoskillit.migration.adapters_contract import ContractMigrationAdapter
+from autoskillit.migration.adapters_diagram import DiagramMigrationAdapter
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.engine import (
     AdvisoryMigrationAdapter,
-    ContractMigrationAdapter,
     DeterministicMigrationAdapter,
-    DiagramMigrationAdapter,
     HeadlessMigrationAdapter,
     MigrationAdapter,
-    RecipeMigrationAdapter,
 )
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]

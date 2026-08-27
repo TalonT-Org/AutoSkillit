@@ -20,9 +20,11 @@ _PYRIGHT_RE = re.compile(r"#\s*pyright:\s*ignore|#.*--\s*pyright:\s*ignore")
 PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
     (
         "recipe/__init__.py",
-        307,
+        316,
     ): "lazy-registry: method added by _register_rule_module() side effects",
-    ("recipe/_api.py", 332): "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()",
+    ("recipe/_api_orchestration.py", 327): (
+        "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()"
+    ),
 }
 
 TEST_ALLOWLIST: dict[tuple[str, int], str] = {
@@ -91,11 +93,16 @@ def test_type_ignore_count_budget() -> None:
     # across the declare_join_batch handler, the join ledger, and the Join-guard
     # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
     # cannot be statically resolved from outside the hooks/ subtree.
-    # Decomposing hook_registry.py (#4853) added 4 # type: ignore[import-not-found]
-    # suppressions on the standalone guard scripts' `from _hook_constants import`
-    # lines (Pyright cannot resolve the standalone-context import through the
-    # package-qualified path the runtime uses).
-    budget = 144
+    # Wavefront 1 (#4667) added 3 net # type: ignore comments elsewhere in the
+    # codebase (rebinds via setattr make mypy unable to see methods on the class
+    # at 5 site-bounded sites), bringing the count from 137 to 140.
+    # Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
+    # # type: ignore[import-not-found] suppressions on standalone guard scripts).
+    # Bumped from 144 to 155 after rebase onto develop (#4851 adds 9 site-bounded
+    # # type: ignore comments in fleet/dispatch/_*.py for cross-phase SpawnContext /
+    # DispatchResult field threading that pyright cannot narrow through the
+    # module-attribute indirection used for monkeypatch-friendly imports).
+    budget = 155
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

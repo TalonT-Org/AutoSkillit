@@ -6,10 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.migration.engine import (
-    ContractMigrationAdapter,
-    MigrationFile,
-)
+from autoskillit.migration.adapters_contract import ContractMigrationAdapter
+from autoskillit.migration.engine import MigrationFile
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 

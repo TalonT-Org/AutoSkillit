@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import regex as re
-
 from autoskillit.core import Severity, get_logger
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._rule_helpers import _SKILL_CMD_PATTERN, count_skill_args
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.rules.rules_merge_routing import _FAILED_STEP_PATTERN
 from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
 
-_FAILED_STEP_PATTERN = re.compile(r"result\.failed_step\s*==\s*['\"](\w+)['\"]")
 _TEST_GATE_FAILURES = frozenset({"test_gate", "post_rebase_test_gate"})
 
 

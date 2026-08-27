@@ -232,7 +232,16 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.required_skill_fields == frozenset({"name", "description"})
     assert CLAUDE_CODE_CAPABILITIES.required_session_files == frozenset()
     assert CLAUDE_CODE_CAPABILITIES.session_dir_symlinks == frozenset()
-    assert CLAUDE_CODE_CAPABILITIES.applicable_guards == frozenset({"skill_load_guard"})
+    assert CLAUDE_CODE_CAPABILITIES.applicable_guards == frozenset(
+        {
+            "background_exec_guard",
+            "join_claim_guard",
+            "join_followup_guard",
+            "join_settle_guard",
+            "join_stop_guard",
+            "skill_load_guard",
+        }
+    )
     assert CLAUDE_CODE_CAPABILITIES.write_guard_tool_names == frozenset(
         {"Write", "Edit", "Bash", "apply_patch"}
     )

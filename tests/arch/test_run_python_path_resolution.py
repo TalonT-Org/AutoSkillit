@@ -87,7 +87,7 @@ _GUARDED_PARAMS = {"output_dir", "workspace", "diagnostics_log_dir", "project_di
 def test_smoke_utils_path_params_always_guarded_absolute() -> None:
     """Every Path(path_param) in smoke_utils must be preceded by an is_absolute() guard."""
     violations = []
-    for py_file in sorted(_SMOKE_UTILS_DIR.glob("*.py")):
+    for py_file in sorted(_SMOKE_UTILS_DIR.rglob("*.py")):
         tree = ast.parse(py_file.read_text(), filename=str(py_file))
         for func_node in ast.walk(tree):
             if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -219,7 +219,7 @@ def test_path_like_args_registry_complete() -> None:
 
     unregistered: list[str] = []
 
-    for py_file in sorted(_SMOKE_UTILS_DIR.glob("*.py")):
+    for py_file in sorted(_SMOKE_UTILS_DIR.rglob("*.py")):
         source = py_file.read_text()
         tree = ast.parse(source, filename=str(py_file))
 

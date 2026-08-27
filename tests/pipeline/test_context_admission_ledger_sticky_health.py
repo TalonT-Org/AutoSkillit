@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.pipeline.context_admission_ledger as ledger_module
+import autoskillit.pipeline._context_admission_ledger._storage as storage_module
 from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
@@ -228,7 +228,7 @@ def test_post_recovery_open_failure_sets_sticky_store_health(
     assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
 
     def raise_permanent_open_failure() -> sqlite3.Connection:
-        raise ledger_module._LedgerOpenError(
+        raise storage_module._LedgerOpenError(
             ContextAdmissionStorageFailureReason.CONFIGURATION,
             "post-recovery-open-failed",
         )

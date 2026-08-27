@@ -23,6 +23,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 from tests.arch._helpers import (
     _SOURCE_FILES,
     SRC_ROOT,
@@ -191,9 +192,9 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
     {
         ("src/autoskillit/core/types/_type_dimensions.py", "ASCII_YAML_POLICY"),
         ("src/autoskillit/hooks/_capture/_types.py", "TRANSITION_RESCUE_BUDGET"),
-        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EVENT_TYPES"),
-        ("src/autoskillit/pipeline/context_admission_ledger.py", "_EFFECT_TYPES"),
-        ("src/autoskillit/pipeline/context_admission_ledger.py", "_STATE_TYPES"),
+        ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EVENT_TYPES"),
+        ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_EFFECT_TYPES"),
+        ("src/autoskillit/pipeline/_context_admission_ledger/_codec.py", "_STATE_TYPES"),
         (
             "src/autoskillit/server/tools/tools_kitchen/_open_kitchen_transition.py",
             "_OPEN_KITCHEN_REQUEST_CTX",
@@ -363,8 +364,38 @@ def test_context_admission_ledger_singletons_are_assignment_scoped() -> None:
     assert {
         target
         for path, target in _SINGLETON_SAFE_ASSIGNMENTS
-        if path == "src/autoskillit/pipeline/context_admission_ledger.py"
+        if path == "src/autoskillit/pipeline/_context_admission_ledger/_codec.py"
     } == {"_EVENT_TYPES", "_EFFECT_TYPES", "_STATE_TYPES"}
+
+
+def test_pipeline_shard_size_ceiling() -> None:
+    """REQ-CNST-010-Wavefront1: each shard in _context_admission_ledger is ≤750 lines."""
+    subpackage_root = SRC_ROOT / "pipeline" / "_context_admission_ledger"
+    assert subpackage_root.is_dir(), (
+        f"expected private subpackage at {subpackage_root}; Wavefront 1 of #4667"
+    )
+    offenders: list[str] = []
+    for py_file in sorted(subpackage_root.rglob("*.py")):
+        line_count = len(py_file.read_text(encoding="utf-8").splitlines())
+        if line_count > 750:
+            offenders.append(f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (max 750)")
+    assert not offenders, "Pipeline shards exceed the 750-line ceiling:\n  " + "\n  ".join(
+        offenders
+    )
+
+
+def test_pipeline_facade_reexports_subpackage_symbols() -> None:
+    """Wavefront 1 of #4667: top-level facade must re-export DefaultContextAdmissionLedger."""
+    import autoskillit.pipeline._context_admission_ledger as subpackage
+    import autoskillit.pipeline.context_admission_ledger as facade
+
+    assert facade.DefaultContextAdmissionLedger is subpackage.DefaultContextAdmissionLedger, (
+        "Facade's DefaultContextAdmissionLedger must be the same class object as "
+        "the subpackage's, so the public import path stays stable."
+    )
+    assert facade.__all__ == ["DefaultContextAdmissionLedger"], (
+        f"Facade __all__ must list only DefaultContextAdmissionLedger; got {facade.__all__}"
+    )
 
 
 def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -> None:
@@ -465,14 +496,16 @@ def test_pyproject_cyclopts_minimum_version() -> None:
 
 def test_no_yaml_safe_load_in_migration_engine() -> None:
     """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
-    src = (Path(__file__).parent.parent.parent / "src/autoskillit/migration/engine.py").read_text()
+    src = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/migration/adapters_contract.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute) and func.attr == "safe_load":
                 pytest.fail(
-                    f"migration/engine.py line {node.lineno}: "
+                    f"migration/adapters_contract.py line {node.lineno}: "
                     f"direct yaml.safe_load call found; use load_yaml from core.io instead"
                 )
 
@@ -998,9 +1031,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             The 11 remaining top-level files (app.py + 10 small shared utilities —
             see the dict entry below) are the orchestration entry points and shared
             helpers that have no coherent subpackage home.
-            _hooks_codex.py adds Codex config.toml hook generation and sync
-    (generate_codex_hooks_config, sync_hooks_to_codex_config) paralleling
-    _hooks.py for Claude Code settings.json hooks.
+            Codex config.toml hook generation and sync
+    (generate_codex_hooks_config, sync_hooks_to_codex_config) live in
+    execution/backends/_codex_hooks.py paralleling _hooks.py for Claude Code
+    settings.json hooks.
     Exempt at 11 files.
           hooks/ — REQ-CNST-003-E6: hooks/ hosts one standalone script per hook event
             (PreToolUse, PostToolUse, SessionStart). Each script must remain a separate
@@ -1035,7 +1069,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
             server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
             state_recovery.py to reduce the 757-line monolith and centralize deserialization
             logic on DispatchRecord.from_dict. Startup warming lives here so its
-            execution/fleet imports remain layer-correct. Exempt at 24 files.
+            execution/fleet imports remain layer-correct. state_types.py was then further
+            decomposed into state_effects.py, state_records.py, state_transitions.py,
+            state_outcomes.py, and state_error_codes.py (#4856) to split the 899-line monolith
+            along effect-provenance, dispatch-record/campaign-state, transition/retry, and
+            outcome/result boundaries, after which the transitional state_types.py re-export
+            facade was deleted. Exempt at 28 files.
     """
     EXEMPTIONS: dict[str, int] = {
         # +generation-bound replay store and post-enforcement initialization commits.
@@ -1045,7 +1084,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
         # — #4557 decomposes three modules over the 750-line structural limit
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
-        "recipe": 44,  # was 33; +9 from CI/graph/dataflow splits; +_binding_input.py split (#4854)
+        # was 33; +9 from CI/graph/dataflow splits; +_binding_input.py split
+        # (#4854); +_api_orchestration.py split (#4860)
+        "recipe": 45,
         # +_github_http review boundary and +launch_resolution authority.
         # +otlp_sink run-scoped loopback diagnostics receiver (#4628)
         "execution": 23,  # +session_index strict byte-bounded retained-index reads (#4514)
@@ -1112,11 +1153,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # the only way to keep the cohesive per-concern split is to lift the file-count cap
         # to 20 (was 10).
         "config": 20,
-        "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
+        "cli": 9,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
-        # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
-        # _serve_guard.py, _validate.py, _workspace.py, __init__.py); no
-        # coherent subpackage home exists for any of them
+        # _init_helpers.py, _preview.py, _serve_guard.py, _validate.py,
+        # _workspace.py, __init__.py); -2 for the deleted _hooks_codex.py and
+        # _mcp_names.py facades (their symbols live in execution/backends/
+        # _codex_hooks.py and autoskillit.core respectively); no coherent
+        # subpackage home exists for any of them
         "cli/session": 11,  # +_session_onboarding.py folded in from cli/_onboarding.py,
         # first-run detection consumed only by _session_cook.py (#4670)
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
@@ -1153,8 +1196,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # non-recursive glob because the package directory is not a top-level
         # *.py file); -1 for the deleted exploration_context.py file.
         # E22 retired per #4835.
-        "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
-        "recipe/rules": 61,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
+        "fleet": 28,  # noqa: E501  # +_startup_warm.py; +5 state_types decomposition; -1 for deleted state_types.py facade
+        "recipe/rules": 66,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
+        # +rules_merge_routing +rules_merge_guards +rules_merge_wait
+        # +rules_merge_enrollment +rules_merge_push_symmetry (#4857
+        # decomposed rules_merge.py into 5 sibling modules)
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
@@ -1180,7 +1226,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "execution/headless": 15,  # +_headless_adjudication from _headless_result (#4664)
         "execution/session": 20,  # +codec and lineage siblings decomposed out (#4664)
         # +_codex_catalog shared validated catalog projection (#4585)
-        "smoke_utils": 12,  # +_review_design split from _review
+        "smoke_utils": 11,  # +_review_design split from _review; -_experimental_review.py
+        # removed by decomposition into smoke_utils/review/ sub-package (#4855).
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []
@@ -1379,23 +1426,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "marker binder; extracting them would create an artificial module boundary while "
         "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
     ),
-    "fleet/_api.py": (
-        1595,
-        "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
-        "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
-        "co-located with the execution engine that calls them. Bumped to 1200 by the "
-        "fleet-resume-precondition-chokepoint plan: prepare_resume chokepoint, "
-        "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines. "
-        "Bumped to 1550 for #4417's per-effect dispatch provenance checkpoints and "
-        "post-start crash persistence; those checkpoints must remain adjacent to the "
-        "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
-        "shell lineage decision and provenance snapshot remain on the same dispatch "
-        "transaction boundary after conflict resolution. Bumped to 1590 for shared "
-        "tracker-authority retention and cleanup on every dispatch outcome boundary. "
-        "Bumped to 1595 for #4597 rectify: warm_failure_path_imports() call at the "
-        "fleet-dispatch entry point, one of the three self-invocation entry points "
-        "this mid-session-upgrade-immunity fix warms.",
-    ),
     "server/_recipe_delivery.py": (
         750,
         "REQ-CNST-010-E12: #4557 decomposes recipe delivery into _recipe_delivery.py "
@@ -1515,28 +1545,17 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
         "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
-    "pipeline/context_admission_ledger.py": (
-        2300,
-        "REQ-CNST-010-E15: #4334 keeps the crash-safe SQLite transaction boundary, "
-        "journal replay verification, sticky health fencing, and exhaustive shadow "
-        "projection in one IL-1 authority; consistent recovery snapshots and shared "
-        "row/byte budgets remain beside replay validation so storage and reducer "
-        "publication invariants cannot drift across independently mutable modules.",
-    ),
-    "exploration/snapshot.py": (
-        1250,
-        "REQ-CNST-010-E30: #4756 exploration-capture-immunity rectify. Part A routes "
-        "the enumeration-derived worktree walk through the shared observation funnel "
-        "and honours git's ignored-directory collapse decision; Part B moves the "
-        "capture status/reason enums to IL-0, splits published/identity byte "
-        "accounting so ignored-file bytes stop charging the budgets, threads a "
-        "capture deadline through the hashing loop and the two _capture_once calls, "
-        "and replaces the untyped truncation signal with a status-classified "
-        "_CaptureAborted dispatch. The capture pipeline (_capture_once, _path_state, "
-        "_hash_file, _untracked_special_paths) is one cohesive atomic-capture unit "
-        "that a prior pass (#4735) already extracted this module's siblings out of; "
-        "splitting it further would separate the deadline/budget/reason plumbing "
-        "from the single capture loop it threads through.",
+    "hook_registry.py": (
+        1200,
+        "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
+        "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
+        "module rather than a sub-package (a package split would change how hook scripts "
+        "resolve the import on the low-latency startup path). Relocatable hook commands "
+        "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
+        "relocatable command rendering, and token-aware find_broken_hook_scripts/"
+        "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
+        "detection surface. #4512 adds the exact exploration request-identity hook and "
+        "its lifecycle resource contract to the same canonical registry.",
     ),
 }
 
@@ -1723,8 +1742,8 @@ def test_isolated_modules_do_not_import_server_or_cli() -> None:
         pkg_dir = SRC_ROOT / pkg_name
         if not pkg_dir.is_dir():
             continue
-        for py_file in sorted(pkg_dir.glob("*.py")):
-            label = f"{pkg_name}/{py_file.name}"
+        for py_file in sorted(pkg_dir.rglob("*.py")):
+            label = f"{pkg_name}/{py_file.relative_to(pkg_dir)}"
             _check_file(py_file, label)
 
     assert not violations, "Root-level isolated modules import server/ or cli/:\n" + "\n".join(
@@ -1991,7 +2010,7 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     """
     lister_targets = {
         "src/autoskillit/recipe/_skill_helpers.py",
-        "src/autoskillit/recipe/_api.py",
+        "src/autoskillit/recipe/_api_orchestration.py",
     }
     src_root = Path(__file__).resolve().parents[2]
     missing: list[str] = []
@@ -2424,7 +2443,12 @@ def test_ops_decomposition_has_expected_siblings() -> None:
 
 @pytest.mark.parametrize(
     "facade_pkg",
-    ["autoskillit.cli.prompts", "autoskillit.cli.ops", "autoskillit.cli.install"],
+    [
+        "autoskillit.cli.prompts",
+        "autoskillit.cli.ops",
+        "autoskillit.cli.install",
+        "autoskillit.smoke_utils.review",
+    ],
 )
 def test_cli_facade_all_resolves(facade_pkg: str) -> None:
     """Guard: facade ``__all__`` entries resolve and match submodule declarations.
@@ -2491,3 +2515,624 @@ def test_capture_lifecycle_is_a_package_not_a_module() -> None:
     assert (hooks / "_capture_lifecycle" / "_admission.py").exists(), (
         "_capture_lifecycle/_admission.py must contain the admission helpers"
     )
+
+
+# -- #4836: Decompose exploration/snapshot.py and collectors/extractors.py --
+
+
+@pytest.mark.parametrize(
+    "package_dir",
+    [
+        SRC_ROOT / "exploration" / "snapshot",
+        SRC_ROOT / "exploration" / "collectors" / "extractors",
+    ],
+    ids=["snapshot", "extractors"],
+)
+def test_decomposed_package_is_below_size_ceiling(package_dir: Path) -> None:
+    """Every shard of a decomposed package is at most 750 lines.
+
+    Stricter than the global 1000-line guard (``test_no_src_module_exceeds_line_limit``)
+    so shard reorganisation fails early instead of colliding with the global cap.
+    """
+    for shard in sorted(package_dir.glob("*.py")):
+        line_count = len(shard.read_text().splitlines())
+        assert line_count <= 750, f"{shard.name}: {line_count} lines exceeds 750"
+
+
+def test_snapshot_is_a_package_not_a_module() -> None:
+    """REQ-CNST-010-DECOMPOSE-3: snapshot.py is replaced by snapshot/ directory package."""
+    assert not (SRC_ROOT / "exploration" / "snapshot.py").exists()
+    snapshot_dir = SRC_ROOT / "exploration" / "snapshot"
+    assert snapshot_dir.is_dir()
+    assert (snapshot_dir / "__init__.py").is_file()
+    for required in ("_records.py", "_capture.py", "_artifact.py"):
+        assert (snapshot_dir / required).is_file(), f"missing shard {required}"
+
+
+def test_collectors_extractors_is_a_package_not_a_module() -> None:
+    """REQ-CNST-010-DECOMPOSE-3: collectors/extractors.py is replaced by collectors/extractors/."""
+    assert not (SRC_ROOT / "exploration" / "collectors" / "extractors.py").exists()
+    extractors_dir = SRC_ROOT / "exploration" / "collectors" / "extractors"
+    assert extractors_dir.is_dir()
+    assert (extractors_dir / "__init__.py").is_file()
+    for required in (
+        "_records.py",
+        "_evidence.py",
+        "_file_search.py",
+        "_python_ast.py",
+        "_observational.py",
+        "_registry.py",
+    ):
+        assert (extractors_dir / required).is_file(), f"missing shard {required}"
+
+
+def test_snapshot_facade_all_resolves() -> None:
+    """Every public symbol exposed by the original snapshot.py is still resolvable.
+
+    Includes the names that test_snapshot.py monkeypatches through the facade
+    and the names that production code resolves via _snapshot_facade lookups
+    (resolve_repository_identity, read_stable_contained_file, observe_path_mode,
+    DEFAULT_IGNORE_POLICY). A facade that re-exports the public surface but does
+    not expose these helpers breaks either the test suite or production
+    monkeypatch propagation silently.
+    """
+    import autoskillit.exploration.snapshot as snapshot_module
+    from autoskillit.exploration.snapshot import _artifact as artifact_shard
+    from autoskillit.exploration.snapshot import _capture as capture_shard
+    from autoskillit.exploration.snapshot import _records as records_shard
+
+    facade_names = {
+        # Public API surface (was 11 names)
+        "ArtifactCaptureError",
+        "ArtifactCaptureStatus",
+        "StableArtifactCapture",
+        "SnapshotCaptureLimits",
+        "SnapshotCaptureReason",
+        "SnapshotCaptureResult",
+        "SnapshotCaptureStatus",
+        "capture_repository_snapshot",
+        "capture_stable_artifact",
+        "resolve_repository_path",
+        "stable_artifact_matches",
+        # Helpers tests monkeypatch through the facade
+        "_capture_once",
+        "activate_repository_profiles",
+        "observe_path_mode",
+        # Production code resolves these via _snapshot_facade lookups
+        "resolve_repository_identity",
+        "read_stable_contained_file",
+        "DEFAULT_IGNORE_POLICY",
+    }
+    stdlib_modules: set[str] = set()
+    function_anchors = {
+        "_capture_once": capture_shard._capture_once,
+        "activate_repository_profiles": capture_shard.activate_repository_profiles,
+        "observe_path_mode": capture_shard.observe_path_mode,
+        "resolve_repository_identity": capture_shard.resolve_repository_identity,
+        "read_stable_contained_file": artifact_shard.read_stable_contained_file,
+    }
+    data_anchors = {
+        "DEFAULT_IGNORE_POLICY": records_shard.DEFAULT_IGNORE_POLICY,
+    }
+    for name in facade_names:
+        assert hasattr(snapshot_module, name), (
+            f"snapshot facade missing {name} — test_snapshot.py monkeypatch sites "
+            f"rely on this re-export"
+        )
+        if name in stdlib_modules:
+            assert getattr(snapshot_module, name) is __import__(name), (
+                f"snapshot facade {name} must re-export the stdlib module"
+            )
+        elif name in function_anchors:
+            assert getattr(snapshot_module, name) is function_anchors[name], (
+                f"snapshot facade {name} must re-export the function defined in its source shard"
+            )
+        elif name in data_anchors:
+            assert getattr(snapshot_module, name) == data_anchors[name], (
+                f"snapshot facade {name} must re-export the value defined in its source shard"
+            )
+
+
+def test_collectors_extractors_facade_all_resolves() -> None:
+    """Every public symbol exposed by the original extractors.py is still resolvable."""
+    import autoskillit.exploration.collectors.extractors as extractors
+
+    expected = {
+        "COLLECTOR_PROFILES",
+        "CollectorInvocation",
+        "CollectorProfile",
+        "collect_architecture",
+        "collect_artifact",
+        "collect_autoskillit_registry",
+        "collect_autoskillit_toml",
+        "collect_coverage_observation",
+        "collect_file_list",
+        "collect_generated_artifact",
+        "collect_python_ast",
+        "collect_python_stub",
+        "collect_search",
+        "collect_test_map_observation",
+        "collect_unsupported",
+        "collector_manifest_digest",
+    }
+    for name in expected:
+        assert hasattr(extractors, name), f"extractors facade missing {name}"
+
+
+def test_snapshot_shards_do_not_import_the_facade() -> None:
+    """Internal snapshot shards must not import the public snapshot facade.
+
+    One-way dependency: shards depend on core/stdlib, facade depends on shards.
+    A shard importing the facade (via either ``import X`` or ``from X import Y``)
+    re-introduces the cycle the decomposition removed.
+    """
+    import ast as _ast
+
+    FORBIDDEN_MODULES = {"autoskillit.exploration.snapshot", "autoskillit.exploration"}
+    snapshot_dir = SRC_ROOT / "exploration" / "snapshot"
+    for shard in sorted(snapshot_dir.glob("_*.py")):
+        tree = _ast.parse(shard.read_text())
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.ImportFrom) and node.module:
+                if any(
+                    node.module == m or node.module.startswith(m + ".") for m in FORBIDDEN_MODULES
+                ):
+                    pytest.fail(
+                        f"snapshot/{shard.name}: {node.lineno}: "
+                        f"`from {node.module} import ...` violates one-way graph"
+                    )
+            elif isinstance(node, _ast.Import):
+                for alias in node.names:
+                    if any(
+                        alias.name == m or alias.name.startswith(m + ".")
+                        for m in FORBIDDEN_MODULES
+                    ):
+                        pytest.fail(
+                            f"snapshot/{shard.name}: {node.lineno}: "
+                            f"`import {alias.name}` violates one-way graph"
+                        )
+
+
+def test_extractors_shards_do_not_import_the_facade() -> None:
+    """Internal extractors shards must not import the public extractors facade."""
+    import ast as _ast
+
+    FORBIDDEN_MODULES = {
+        "autoskillit.exploration.collectors.extractors",
+        "autoskillit.exploration.collectors",
+    }
+    extractors_dir = SRC_ROOT / "exploration" / "collectors" / "extractors"
+    for shard in sorted(extractors_dir.glob("_*.py")):
+        tree = _ast.parse(shard.read_text())
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.ImportFrom) and node.module:
+                if any(
+                    node.module == m or node.module.startswith(m + ".") for m in FORBIDDEN_MODULES
+                ):
+                    pytest.fail(
+                        f"extractors/{shard.name}: {node.lineno}: "
+                        f"`from {node.module} import ...` violates one-way graph"
+                    )
+            elif isinstance(node, _ast.Import):
+                for alias in node.names:
+                    if any(
+                        alias.name == m or alias.name.startswith(m + ".")
+                        for m in FORBIDDEN_MODULES
+                    ):
+                        pytest.fail(
+                            f"extractors/{shard.name}: {node.lineno}: "
+                            f"`import {alias.name}` violates one-way graph"
+                        )
+
+
+SNAPSHOT_SYMBOL_HOMES: dict[str, str] = {
+    # _records.py (dataclasses, errors, status/reason, identity/published split)
+    "ArtifactCaptureStatus": "_records",
+    "ArtifactCaptureError": "_records",
+    "StableArtifactCapture": "_records",
+    "SnapshotCaptureLimits": "_records",
+    "RepositoryPathState": "_records",
+    "_ObservedPath": "_records",
+    "CapturedRepositoryState": "_records",
+    "SnapshotCaptureResult": "_records",
+    "_CaptureAborted": "_records",
+    "_expected_status_for_reason": "_records",
+    # Module constants — colocated with records because they identify the schema
+    "SNAPSHOT_SCHEMA_VERSION": "_records",
+    "SNAPSHOT_SCHEMA_ID": "_records",
+    "SNAPSHOT_DIGEST_DOMAIN": "_records",
+    "DEFAULT_IGNORE_POLICY": "_records",
+    "STABLE_ARTIFACT_DIGEST_DOMAIN": "_records",
+    "_MAX_STABLE_ARTIFACT_BYTES": "_records",
+    "_MAX_STABLE_ARTIFACT_ATTEMPTS": "_records",
+    # _capture.py (atomic capture pipeline — must stay cohesive per #4756 / E30 rationale)
+    "_check_deadline": "_capture",
+    "_git": "_capture",
+    "_decode_path": "_capture",
+    "_nul_paths": "_capture",
+    "_index_records": "_capture",
+    "_hash_file": "_capture",
+    "_path_state": "_capture",
+    "_state_payload": "_capture",
+    "_identity_state_payload": "_capture",
+    "_untracked_special_paths": "_capture",
+    "_capture_once": "_capture",
+    "_snapshot_pagination_identity": "_capture",
+    "_complete_snapshot": "_capture",
+    "_terminal_snapshot": "_capture",
+    "capture_repository_snapshot": "_capture",
+    "resolve_repository_path": "_capture",
+    # _capture_stage.py (extracted via §7.6 size-rebalance protocol)
+    "_classify_capture_once_failure": "_capture_stage",
+    "_stage": "_capture_stage",
+    "_capture_stage": "_capture_stage",
+    # _artifact.py (stable-artifact capture, separate public API)
+    "_artifact_path": "_artifact",
+    "_artifact_deadline_remaining": "_artifact",
+    "_artifact_index_records": "_artifact",
+    "_artifact_repository_identity": "_artifact",
+    "_artifact_unsupported_reason": "_artifact",
+    "capture_stable_artifact": "_artifact",
+    "stable_artifact_matches": "_artifact",
+}
+
+EXTRACTORS_SYMBOL_HOMES: dict[str, str] = {
+    # _records.py
+    "CollectorInvocation": "_records",
+    "CollectorProfile": "_records",
+    # _COLLECTOR_VERSION lives in _records because CollectorProfile.version
+    # uses it as a runtime dataclass default (avoids _records ↔ _evidence cycle)
+    "_COLLECTOR_VERSION": "_records",
+    # _evidence.py (manifest digest + report/evidence helpers + metadata lookup)
+    "collector_manifest_digest": "_evidence",
+    "_OBSERVATION_UNCERTAINTY": "_evidence",
+    "_RG_DECODE_DETAIL_MAX_BYTES": "_evidence",
+    "_RG_DECODE_RAW_LINE_MAX_BYTES": "_evidence",
+    "_RG_DECODE_DIAGNOSTIC_MAX_BYTES": "_evidence",
+    "_InvocationReports": "_records",  # colocation rationale in shard docstring
+    "_InvocationAdapter": "_records",
+    "_PerScopeCollector": "_records",
+    "_report": "_evidence",
+    "_bounded_diagnostic_text": "_evidence",
+    "_invalid_rg_json_diagnostic": "_evidence",
+    "_evidence": "_evidence",
+    # _collector_metadata lives in _evidence because collector_manifest_digest
+    # and _evidence both consult it; moving COLLECTOR_PROFILES to _registry would
+    # create a transitive cycle (avoids _evidence ↔ _registry cycle)
+    "_collector_metadata": "_evidence",
+    # _file_search.py
+    "_normalise_scope": "_file_search",
+    "_scoped_paths": "_file_search",
+    "collect_artifact": "_file_search",
+    "collect_file_list": "_file_search",
+    "collect_search": "_file_search",
+    # _python_ast.py
+    "_qualified_name": "_python_ast",
+    "_is_named_base": "_python_ast",
+    "collect_python_ast": "_python_ast",
+    # _observational.py
+    "collect_unsupported": "_observational",
+    "collect_autoskillit_toml": "_observational",
+    "collect_observational_artifact": "_observational",
+    "_relabel": "_observational",
+    "collect_autoskillit_registry": "_observational",
+    "collect_architecture": "_observational",
+    "collect_python_stub": "_observational",
+    "collect_generated_artifact": "_observational",
+    "collect_coverage_observation": "_observational",
+    "collect_test_map_observation": "_observational",
+    # _registry.py (COLLECTOR_PROFILES data + invocation factories only)
+    "_per_scope_invocation": "_registry",
+    "_search_invocation": "_registry",
+    "_unsupported_invocation": "_registry",
+    "COLLECTOR_PROFILES": "_registry",
+}
+
+
+def test_snapshot_symbols_live_in_their_expected_shard() -> None:
+    """Every symbol in SNAPSHOT_SYMBOL_HOMES is defined in exactly its named shard."""
+    import ast as _ast
+
+    snapshot_dir = SRC_ROOT / "exploration" / "snapshot"
+    defined: dict[str, list[str]] = {}
+    for shard_file in sorted(snapshot_dir.glob("_*.py")):
+        tree = _ast.parse(shard_file.read_text())
+        stem = shard_file.stem  # e.g., "_records"
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                defined.setdefault(node.name, []).append(stem)
+            elif isinstance(node, _ast.AnnAssign) and isinstance(node.target, _ast.Name):
+                if node.value is None:
+                    continue
+                defined.setdefault(node.target.id, []).append(stem)
+            elif isinstance(node, _ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, _ast.Name):
+                        defined.setdefault(target.id, []).append(stem)
+    failures = []
+    for sym, expected_shard in SNAPSHOT_SYMBOL_HOMES.items():
+        homes = defined.get(sym, [])
+        if homes != [expected_shard]:
+            failures.append(f"{sym}: expected [{expected_shard}], found {homes}")
+    assert not failures, "snapshot symbol(s) not in their expected shard:\n" + "\n".join(
+        f"  {f}" for f in failures
+    )
+
+
+def test_extractors_symbols_live_in_their_expected_shard() -> None:
+    """Every symbol in EXTRACTORS_SYMBOL_HOMES is defined in exactly its named shard."""
+    import ast as _ast
+
+    extractors_dir = SRC_ROOT / "exploration" / "collectors" / "extractors"
+    defined: dict[str, list[str]] = {}
+    for shard_file in sorted(extractors_dir.glob("_*.py")):
+        tree = _ast.parse(shard_file.read_text())
+        stem = shard_file.stem
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                defined.setdefault(node.name, []).append(stem)
+            elif isinstance(node, _ast.AnnAssign) and isinstance(node.target, _ast.Name):
+                if node.value is None:
+                    continue
+                defined.setdefault(node.target.id, []).append(stem)
+            elif isinstance(node, _ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, _ast.Name):
+                        defined.setdefault(target.id, []).append(stem)
+    failures = []
+    for sym, expected_shard in EXTRACTORS_SYMBOL_HOMES.items():
+        homes = defined.get(sym, [])
+        if homes != [expected_shard]:
+            failures.append(f"{sym}: expected [{expected_shard}], found {homes}")
+    assert not failures, "extractors symbol(s) not in their expected shard:\n" + "\n".join(
+        f"  {f}" for f in failures
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [
+        # Matching pairs — must succeed (raises nothing)
+        (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.PATH_COUNT_EXCEEDED),
+        (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.FILE_BYTES_EXCEEDED),
+        (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.TOTAL_BYTES_EXCEEDED),
+        (SnapshotCaptureStatus.STALE, SnapshotCaptureReason.IDENTITY_DRIFT),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.GIT_TIMEOUT),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.GIT_COMMAND_FAILED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.ROOT_NOT_WORKTREE),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.IDENTITY_UNRESOLVED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.PROFILE_ACTIVATION_FAILED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.WORKTREE_UNREADABLE),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.COLLECTOR_SAFETY_FAULT),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.MANIFEST_DIGEST_EMPTY),
+    ],
+)
+def test_capture_aborted_accepts_legal_status_reason_pairs(
+    status: SnapshotCaptureStatus,
+    reason: SnapshotCaptureReason,
+) -> None:
+    """Every legal (status, reason) pair constructs cleanly."""
+    from autoskillit.exploration.snapshot._records import _CaptureAborted
+
+    _CaptureAborted(status, reason, "detail")  # must not raise
+
+
+@pytest.mark.parametrize(
+    ("status", "reason"),
+    [
+        # Mismatched pairs — assertion must fire
+        (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.GIT_TIMEOUT),
+        (SnapshotCaptureStatus.TRUNCATED, SnapshotCaptureReason.CAPTURE_DEADLINE_EXCEEDED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.PATH_COUNT_EXCEEDED),
+        (SnapshotCaptureStatus.FAILED, SnapshotCaptureReason.FILE_BYTES_EXCEEDED),
+        (SnapshotCaptureStatus.COMPLETE, SnapshotCaptureReason.PATH_COUNT_EXCEEDED),
+    ],
+)
+def test_capture_aborted_rejects_illegal_status_reason_pairs(
+    status: SnapshotCaptureStatus,
+    reason: SnapshotCaptureReason,
+) -> None:
+    """An illegal (status, reason) pair must trigger the __init__ assertion."""
+    from autoskillit.exploration.snapshot._records import _CaptureAborted
+
+    with pytest.raises(AssertionError):
+        _CaptureAborted(status, reason, "detail")
+
+
+def test_collector_registry_preserves_13_entries_in_order() -> None:
+    """Decomposition must not change the COLLECTOR_PROFILES tuple."""
+    from autoskillit.exploration.collectors import COLLECTOR_PROFILES
+    from autoskillit.exploration.collectors.extractors import collector_manifest_digest
+
+    expected_ids = (
+        "contained-artifact",
+        "contained-list",
+        "bounded-rg-search",
+        "python-ast",
+        "native-lsp",
+        "native-tree-sitter",
+        "autoskillit-registry",
+        "autoskillit-manifest",
+        "autoskillit-architecture",
+        "python-stub",
+        "generated-artifact",
+        "coverage-observation",
+        "test-map-observation",
+    )
+    actual_ids = tuple(p.collector_id for p in COLLECTOR_PROFILES)
+    assert actual_ids == expected_ids
+    actual_digest = collector_manifest_digest()
+    expected_digest = "0b5d94f7f018c4bf7df84a370cabfb4b5e32c09dfedb6ca3d43e04e1ed2126df"
+    assert actual_digest == expected_digest, (
+        f"COLLECTOR_PROFILES digest drifted from {expected_digest!r} to {actual_digest!r}. "
+        f"This signals a registry change (added/removed collector, reordered tuple, "
+        f"changed method/profile string, or version bump in _COLLECTOR_VERSION). "
+        f"Inspect git log for collector changes; if the change is intentional, "
+        f"update expected_digest in test_collector_registry_preserves_13_entries_in_order."
+    )
+
+
+def test_e30_exemption_is_retired() -> None:
+    """REQ-CNST-010-E30 is retired without replacement after #4836 lands."""
+    import tests.arch.test_subpackage_isolation as self_module
+
+    exemptions = self_module._LINE_LIMIT_EXEMPTIONS
+    assert "exploration/snapshot.py" not in exemptions, (
+        "E30 must be removed from _LINE_LIMIT_EXEMPTIONS; "
+        "snapshot.py no longer exists as a module after decomposition"
+    )
+
+
+def test_ignored_bytes_accounting_originates_in_records_shard() -> None:
+    """_ObservedPath and the identity-state-payload logic live in the right shards.
+
+    The two-byte-accounting split (#4756) keeps _ObservedPath with its
+    identity_content_digest field in _records.py; the producer
+    (_path_state) and the payload helper that surfaces the private digest
+    (_identity_state_payload) stay in _capture.py.
+    """
+    records_path = SRC_ROOT / "exploration" / "snapshot" / "_records.py"
+    capture_path = SRC_ROOT / "exploration" / "snapshot" / "_capture.py"
+    records_text = records_path.read_text()
+    capture_text = capture_path.read_text()
+    assert "class _ObservedPath" in records_text, "_ObservedPath must live in _records.py"
+    assert "identity_content_digest" in records_text, "_records.py owns identity/published split"
+    assert "class _ObservedPath" not in capture_text, "_ObservedPath stays in _records.py"
+    assert "def _identity_state_payload" in capture_text, (
+        "_identity_state_payload lives in _capture.py where _path_state threads the public digest"
+    )
+
+
+# ── REQ-CNST-010-DECOMPOSE-4: smoke_utils/review/ sub-package layout (#4855) ──
+
+REVIEW_FUNCTION_ANCHORS: dict[str, str] = {
+    "build_malformed_review_envelope": "_validation",
+    "validate_experimental_auditor_outputs": "_validation",
+    "deletion_regression_is_eligible": "_validation",
+    "aggregate_combined_review_candidates": "_aggregation",
+    "determine_experimental_review_verdict": "_aggregation",
+    "render_review_finding_body": "_publication",
+    "normalize_local_review_finding": "_publication",
+    "prepare_experimental_review_publication": "_publication",
+    "publish_experimental_review_artifacts": "_publication",
+}
+
+
+def test_smoke_utils_review_subpackage_is_a_package() -> None:
+    """REQ-CNST-010-DECOMPOSE-4: #4855 splits _experimental_review.py into a
+    smoke_utils/review/ sub-package of focused shards."""
+    review = SRC_ROOT / "smoke_utils" / "review"
+    assert not (SRC_ROOT / "smoke_utils" / "_experimental_review.py").exists(), (
+        "_experimental_review.py must be removed (replaced by smoke_utils/review/ package)"
+    )
+    assert (review / "__init__.py").exists(), (
+        "smoke_utils/review/__init__.py must exist as a regular package marker"
+    )
+    for shard in ("_constants.py", "_validation.py", "_aggregation.py", "_publication.py"):
+        assert (review / shard).exists(), (
+            f"smoke_utils/review/{shard} must exist as a private shard"
+        )
+
+
+def test_smoke_utils_review_facade_re_exports_contract() -> None:
+    """REQ-CNST-010-DECOMPOSE-4: smoke_utils facade must re-export every public
+    symbol from smoke_utils/review/ as the same object identity AND each symbol
+    must be owned by its expected shard."""
+    import importlib
+
+    facade = importlib.import_module("autoskillit.smoke_utils")
+    review = importlib.import_module("autoskillit.smoke_utils.review")
+    declared = set(getattr(review, "__all__", ()))
+    assert declared, "smoke_utils/review/__all__ is empty or missing"
+
+    missing_from_facade = sorted(name for name in declared if not hasattr(facade, name))
+    assert not missing_from_facade, f"smoke_utils facade does not re-export: {missing_from_facade}"
+    identity_mismatch = sorted(
+        name for name in declared if getattr(facade, name) is not getattr(review, name)
+    )
+    assert not identity_mismatch, (
+        f"smoke_utils facade re-exports {identity_mismatch} as a different object "
+        f"than smoke_utils.review"
+    )
+
+    # Shard-ownership assertions: each public symbol must be DEFINED (not merely
+    # imported) in its declared shard module. Catches a misplacement such as
+    # render_review_finding_body accidentally defined in _validation.py
+    # instead of _publication.py — checking identity alone passes when the
+    # function is re-exported from another shard.
+    for name, expected_shard in REVIEW_FUNCTION_ANCHORS.items():
+        shard_module = importlib.import_module(f"autoskillit.smoke_utils.review.{expected_shard}")
+        assert hasattr(shard_module, name), (
+            f"{name} must be defined in {expected_shard}.py per REVIEW_FUNCTION_ANCHORS"
+        )
+        symbol = getattr(shard_module, name)
+        assert getattr(symbol, "__module__", "") == (
+            f"autoskillit.smoke_utils.review.{expected_shard}"
+        ), (
+            f"{name} should be defined in {expected_shard}.py "
+            f"but is defined in {getattr(symbol, '__module__', 'unknown')}"
+        )
+        assert getattr(facade, name) is symbol, (
+            f"{name} is declared in {expected_shard}.py but facade resolves to a different object"
+        )
+
+
+def test_smoke_utils_review_shards_do_not_import_the_facade() -> None:
+    """REQ-CNST-010-DECOMPOSE-4: shards must not import the parent facade (avoids
+    re-entrant facade imports)."""
+    import ast
+
+    review = SRC_ROOT / "smoke_utils" / "review"
+    offenders: list[str] = []
+    for path in review.glob("*.py"):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                # Sibling submodule imports (autoskillit.smoke_utils.review._X)
+                # are allowed. Direct parent facade imports are forbidden.
+                if node.module == "autoskillit.smoke_utils":
+                    offenders.append(f"{path.name} imports from autoskillit.smoke_utils facade")
+                elif node.module == "autoskillit" and any(
+                    alias.name == "smoke_utils" for alias in node.names
+                ):
+                    offenders.append(
+                        f"{path.name} imports autoskillit.smoke_utils via autoskillit alias"
+                    )
+                elif (node.level or 0) >= 2:
+                    # Relative parent import (`from .. import ...` reaches
+                    # autoskillit.smoke_utils when invoked from review/*).
+                    offenders.append(
+                        f"{path.name} uses relative parent import (level={node.level})"
+                    )
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "autoskillit.smoke_utils":
+                        offenders.append(f"{path.name} imports autoskillit.smoke_utils facade")
+                    elif alias.name == "autoskillit.smoke_utils.review":
+                        offenders.append(
+                            f"{path.name} imports autoskillit.smoke_utils.review facade"
+                        )
+    assert not offenders, "Shards must not import the smoke_utils facade:\n" + "\n".join(
+        f"  {o}" for o in offenders
+    )
+
+
+def test_smoke_utils_review_shard_sizes_are_balanced() -> None:
+    """REQ-CNST-010-DECOMPOSE-4: every shard in smoke_utils/review/ is at most
+    750 lines per the issue #4855 acceptance criterion ('every extracted source
+    module is at most 750 lines'). The facade ``__init__.py`` and the shared
+    constants shard are exempt from the 25-line substance floor — both are
+    intentionally narrow surfaces (declarative API + shared constants/helpers)."""
+    review = SRC_ROOT / "smoke_utils" / "review"
+    too_small = [
+        path.name
+        for path in review.glob("*.py")
+        if path.name not in ("__init__.py", "_constants.py")
+        and len(path.read_text().splitlines()) < 25
+    ]
+    too_large = [
+        path.name for path in review.glob("*.py") if len(path.read_text().splitlines()) > 750
+    ]
+    assert not too_small, f"smoke_utils/review/ shards below 25 lines: {too_small}"
+    assert not too_large, f"smoke_utils/review/ shards above 750 lines: {too_large}"

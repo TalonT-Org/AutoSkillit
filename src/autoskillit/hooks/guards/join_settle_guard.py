@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PostToolUse / PostToolUseFailure settlement — record claimed handle outcomes.
 
-When ``join_required=true`` in the session flag (or env mirror), every
+When ``join_required=true`` in the payload-identified session binding, every
 claimed direct ``Agent`` handle must be settled with one of:
 
     * ``success``         — substantive public result evidence received;
@@ -23,7 +23,6 @@ Stdlib-only — no autoskillit imports.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -79,7 +78,6 @@ def _resolve_outcome(event_type: str, payload: dict[str, object]) -> str | None:
 
 
 def main() -> None:
-    event_type = os.environ.get("AUTOSKILLIT_HOOK_EVENT", "").strip()
     try:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
@@ -93,7 +91,14 @@ def main() -> None:
     if data.get("agent_id"):
         sys.exit(0)
 
-    if not session_join_required():
+    event_type = data.get("hook_event_name")
+    if not isinstance(event_type, str):
+        sys.exit(0)
+    sid = data.get("session_id", "")
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    if not isinstance(sid, str) or not sid or not payload_cwd:
+        sys.exit(0)
+    if not session_join_required(payload_cwd, sid):
         sys.exit(0)
 
     tool_name = data.get("tool_name")
@@ -108,24 +113,6 @@ def main() -> None:
     if not isinstance(tool_use_id, str) or not tool_use_id:
         sys.exit(0)
 
-    sid = data.get("session_id", "")
-    if not isinstance(sid, str) or not sid:
-        # join_required=true is established; missing session_id means
-        # we cannot record the settlement. Emit a structured diagnostic
-        # so the missing record is observable instead of silent.
-        write_join_diagnostic(
-            {
-                "gate": "join_settle_guard",
-                "tool_use_id": tool_use_id,
-                "outcome": outcome,
-                "status": "settle_skipped",
-                "denial_reason": "missing_session_id",
-            },
-            caller="join_settle_guard",
-        )
-        sys.exit(0)
-
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     top_level_parent = "top_level"
     batch = None

@@ -284,7 +284,12 @@ def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -
         target
         for path, target in _SINGLETON_SAFE_ASSIGNMENTS
         if path == "src/autoskillit/hooks/_capture/_types.py"
-    } == {"DEBT_ASSIST_BUDGET", "HOT_PATH_LOCK_WAIT", "TRANSITION_RESCUE_BUDGET"}
+    } == {
+        "DEBT_ASSIST_BUDGET",
+        "HOT_PATH_LOCK_WAIT",
+        "REQUIRED_RETENTION_BYTES",
+        "TRANSITION_RESCUE_BUDGET",
+    }
     unrelated = tmp_path / "_types.py"
     unrelated.write_text("TRANSITION_RESCUE_BUDGET = SweepBudgetSpec()\n")
 

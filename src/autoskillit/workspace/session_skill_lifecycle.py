@@ -126,9 +126,9 @@ class _SessionLease:
             )
         except ArtifactLeaseContention:
             return None
-        except BaseException as exc:
+        except BaseException:
             logger.error("session_lease_acquisition_failed", exc_info=True)
-            raise exc
+            raise
         return cls(lease=lease)
 
     def release(self) -> None:

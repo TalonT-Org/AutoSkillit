@@ -56,7 +56,7 @@ from autoskillit.workspace.skill_projection import (
 from autoskillit.workspace.skills import SkillInfo
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend, CompiledSessionSkillCatalogAuthority
+    from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
 

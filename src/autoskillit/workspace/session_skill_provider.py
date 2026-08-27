@@ -151,8 +151,7 @@ class SkillsDirectoryProvider:
         Substitutes ``{{AUTOSKILLIT_TEMP}}`` with the configured temp dir relpath.
         Tier 1 skills (which contain no placeholder) are unaffected.
         """
-        # Explicit pkg_root() — get_skill_content has no plugin artifact binding
-        # (it serves the activate/init paths that read from the dev checkout).
+        # No artifact binding — get_skill_content serves dev-checkout readers only.
         return self.project_skill_info(
             skill_info,
             cwd=cwd,

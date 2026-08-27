@@ -74,7 +74,7 @@ def complete_failure_with_state(
             )
         except Exception:
             _logger.warning(
-                "_complete_failure_with_state: managed lineage close failed",
+                "complete_failure_with_state: managed lineage close failed",
                 exc_info=True,
             )
     if state_path is None or effective_name is None:
@@ -95,7 +95,7 @@ def complete_failure_with_state(
         )
     except Exception:
         _logger.warning(
-            "_complete_failure_with_state: per-dispatch state write failed",
+            "complete_failure_with_state: per-dispatch state write failed",
             exc_info=True,
         )
         return DispatchResult(completed, per_dispatch_state_path=None)

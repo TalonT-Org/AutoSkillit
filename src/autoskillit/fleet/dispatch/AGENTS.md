@@ -36,7 +36,7 @@ is now threaded via three records:
 * `LineagePreparationResult` (returned by `run_lineage_preparation`).
 * `ClassificationResult` (returned by `run_outcome_classification`).
 
-`_complete_failure_with_state` is a free function in `_errors.py`,
+`complete_failure_with_state` is a free function in `_errors.py`,
 callable from Phase A (state_path=None), Phase B (post-identity), and
 Phase C (spawn-error gate).
 

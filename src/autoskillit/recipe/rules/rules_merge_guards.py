@@ -9,6 +9,8 @@ from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe._rule_helpers import _is_loop_guard_step
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
+_FAILED_STEP_WORD_RE = re.compile(r"\bfailed_step\b")
+
 
 def _is_commit_guard(step_name: str, ctx: ValidationContext) -> bool:
     """Return True if step_name is a commit_guard predecessor for merge_worktree.
@@ -65,7 +67,7 @@ def _check_merge_fix_cycle_without_guard(ctx: ValidationContext) -> list[RuleFin
 
         fix_routes: set[str] = set()
         for cond in step.on_result.conditions:
-            if cond.when and re.search(r"\bfailed_step\b", cond.when):
+            if cond.when and _FAILED_STEP_WORD_RE.search(cond.when):
                 fix_routes.add(cond.route)
 
         if not fix_routes:

@@ -8,7 +8,6 @@ narrow or break that behavior.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import cast
 
@@ -80,31 +79,31 @@ def _cascade_dirs(changed_file: str, tmp_path: Path) -> set[str]:
         "_dataclasses_providers.py",
     ],
 )
-def test_new_module_falls_through_to_config_cascade(new_module: str, tmp_path: Path) -> None:
+def test_new_module_falls_through_to_config_cascade(
+    new_module: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Each new module fails open into LAYER_CASCADE_CONSERVATIVE['config'].
 
     NOTE: this test verifies the absence of accidental narrowing. It does not
     claim cascade coverage was added — none was, by design. If a future reviewer
     wants narrower cascade for a specific module, add it to MODULE_CASCADE_CONFIG
     AND add a contract test asserting the narrower scope.
+
+    Uses ``monkeypatch.chdir`` so the CWD change is automatically reverted at
+    teardown, keeping the test safe under pytest-xdist and avoiding any chance
+    of a finally-block exception masking an assertion failure.
     """
-    cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        dir_names = _cascade_dirs(f"src/autoskillit/config/{new_module}", tmp_path)
-    finally:
-        os.chdir(cwd)
+    monkeypatch.chdir(tmp_path)
+    dir_names = _cascade_dirs(f"src/autoskillit/config/{new_module}", tmp_path)
     assert "config" in dir_names, f"new module {new_module} must cascade to config"
 
 
 @pytest.mark.parametrize("stem", ["settings.py", "_config_dataclasses.py"])
-def test_existing_facades_still_fail_open(stem: str, tmp_path: Path) -> None:
+def test_existing_facades_still_fail_open(
+    stem: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The renamed-thin settings.py and _config_dataclasses.py keep their fail-open behavior."""
-    cwd = os.getcwd()
-    try:
-        os.chdir(tmp_path)
-        dir_names = _cascade_dirs(f"src/autoskillit/config/{stem}", tmp_path)
-    finally:
-        os.chdir(cwd)
+    monkeypatch.chdir(tmp_path)
+    dir_names = _cascade_dirs(f"src/autoskillit/config/{stem}", tmp_path)
     for pkg in ["config", "execution", "server", "cli"]:
         assert pkg in dir_names, f"{stem} must still cascade to {pkg}"

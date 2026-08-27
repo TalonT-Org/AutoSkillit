@@ -136,9 +136,11 @@ class TestDispatchFoodTruck:
                 stderr="",
                 termination=TerminationReason.NATURAL_EXIT,
                 pid=55555,
+                proc_snapshots=[],
             )
         )
         minimal_ctx.runner = runner
+        minimal_ctx.config.linux_tracing.log_dir = str(tmp_path)
         authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.plugin_authority = authority
         minimal_ctx.backend = ClaudeCodeBackend()
@@ -164,6 +166,8 @@ class TestDispatchFoodTruck:
         assert "AskUserQuestion" in cmd
         assert len(authority.leases) == 1
         assert authority.leases[0].closed is True
+        entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+        assert entry["session_type"] == "orchestrator"
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_returns_skill_result(self, minimal_ctx, tmp_path: Path):

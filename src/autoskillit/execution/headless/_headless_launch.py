@@ -139,6 +139,7 @@ async def _run_headless_attempt(
     lifecycle_observation_enabled: bool,
     force_inactive_agent_teams: bool = False,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    on_spec_built: Callable[[CmdSpec], None] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
 ) -> tuple[SubprocessResult, CmdSpec]:
@@ -178,6 +179,8 @@ async def _run_headless_attempt(
             adapter.secret_environment,
             inherited_fds=adapter.inherited_fds,
         )
+        if on_spec_built is not None:
+            on_spec_built(spec)
         effective_idle = idle_output_timeout
         if spec.process_idle_timeout_ms > 0:
             spec_idle = spec.process_idle_timeout_ms / 1000.0

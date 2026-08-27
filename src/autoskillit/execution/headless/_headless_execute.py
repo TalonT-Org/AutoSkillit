@@ -348,7 +348,7 @@ async def _execute_claude_headless(
                     on_launch_resolved=observe_launch,
                     managed_attempt_id=managed_attempt_id,
                     force_inactive_agent_teams=force_inactive_agent_teams,
-                    **lineage_callbacks.attempt_kwargs,
+                    **lineage_callbacks.launch_kwargs,
                 )
             except InfrastructureFaultError as exc:
                 logger.error("headless_runner_infrastructure_fault", exc_info=True)
@@ -578,7 +578,6 @@ async def _execute_claude_headless(
             provider=provider_outcome,
         )
 
-        # One immutable value feeds the event, summary.json, and sessions.jsonl.
         terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
         if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
             if result is None:
@@ -626,6 +625,7 @@ async def _execute_claude_headless(
                     current_launch_contract.digest if current_launch_contract is not None else ""
                 ),
                 "native_shell_capture": terminal_capture_diagnostic,
+                "session_type": lineage_callbacks.session_type,
             }
             if result is not None:
                 assert spec is not None

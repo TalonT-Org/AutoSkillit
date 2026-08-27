@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from autoskillit.core import (
+    SESSION_TYPE_ENV_VAR,
     CmdSpec,
     CodingAgentBackend,
     ManagedHeadlessSessionKind,
@@ -20,6 +21,7 @@ from autoskillit.core import (
     NativeShellCaptureReason,
     PluginLaunchBinding,
     PluginLoadMode,
+    SessionType,
     SkillResult,
     SubprocessResult,
     ValidatedAddDir,
@@ -366,6 +368,11 @@ class _LineageCallbacks:
     ) -> None:
         self._observer = observer
         self._downstream = downstream
+        self._session_type: SessionType | None = None
+
+    @property
+    def session_type(self) -> SessionType | None:
+        return self._session_type
 
     @property
     def on_candidate(self) -> Callable[[str], None] | None:
@@ -378,6 +385,14 @@ class _LineageCallbacks:
         if self._observer is None:
             return {}
         return {"managed_lineage_observer": self._observer}
+
+    @property
+    def launch_kwargs(self) -> dict[str, Any]:
+        return {**self.attempt_kwargs, "on_spec_built": self.capture_session_type}
+
+    def capture_session_type(self, spec: CmdSpec) -> None:
+        raw_session_type = spec.env.get(SESSION_TYPE_ENV_VAR)
+        self._session_type = SessionType(raw_session_type) if raw_session_type else None
 
     def _observe_candidate(self, session_id: str) -> None:
         assert self._observer is not None

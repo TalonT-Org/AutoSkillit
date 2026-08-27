@@ -96,7 +96,8 @@ class TestBackendAuthorityInSessionsJsonl:
             "outcome_invariant_violated": False,
             "outcome_qualifier": None,
             "native_shell_capture": None,
-            "schema_version": 7,
+            "session_type": None,
+            "schema_version": 8,
         }
         assert entry["backend_authority"] is None
         assert entry["launch_contract_digest"] == ""
@@ -143,7 +144,9 @@ class TestBackendAuthorityInSessionsJsonl:
         )
         assert summary["backend_authority"] is None
         assert summary["launch_contract_digest"] == ""
+        assert summary["session_type"] is None
         lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
         entry = json.loads(lines[-1])
         assert entry["backend_authority"] is None
         assert entry["launch_contract_digest"] == ""
+        assert entry["session_type"] is None

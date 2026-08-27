@@ -72,7 +72,11 @@ _logger = get_logger(__name__)
 
 
 class DispatchSpawnFailed(RuntimeError):
-    """Raised when a dispatch cannot complete its initialization."""
+    """Raised when a dispatch cannot complete its initialization callback path.
+
+    Carries the structured ``error_code`` so callers can branch on the
+    specific failure mode without parsing the message text.
+    """
 
     def __init__(self, error_code: FleetErrorCode, message: str) -> None:
         super().__init__(message)

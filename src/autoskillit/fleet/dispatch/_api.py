@@ -455,8 +455,9 @@ async def _run_dispatch(
             else None,
             ended_at=ended_at or __import__("time").time(),
             started_at=execution.started_at,
-            marker_dir=None,
+            marker_dir=execution.marker_dir,
             effective_backend=recipe_ctx.effective_backend,
+            dispatch_sidecar_path=execution.dispatch_sidecar_path,
         )
         result = await finalize_state_write(  # type: ignore[call-arg]
             classification=classification,
@@ -489,8 +490,12 @@ async def _run_dispatch(
             effective_name=recipe_ctx.effective_name,
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
-            dispatch_sidecar_path=str(Path(ready.handle.state_path) / "sidecar.jsonl"),
-            marker_dir=None,
+            dispatch_sidecar_path=(
+                execution.dispatch_sidecar_path
+                if execution is not None
+                else str(Path(ready.handle.state_path) / "sidecar.jsonl")
+            ),
+            marker_dir=execution.marker_dir if execution is not None else None,
             skill_result=None,
             state_path=ready.state_path,
         )

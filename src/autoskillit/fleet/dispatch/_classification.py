@@ -108,7 +108,7 @@ async def run_outcome_classification(
     marker_dir: Path | None,
     effective_backend: CodingAgentBackend | None,
     recipe: str,
-    _locator: Any = None,
+    dispatch_sidecar_path: str,
     resume_line_offset: int = 0,
     prior_ids: list[str] | None = None,
     tracker_lease_input: Any = None,
@@ -128,7 +128,7 @@ async def run_outcome_classification(
         tracker_authority_error,
     ) = load_dispatch_progress(
         tool_ctx=tool_ctx,
-        dispatch_sidecar_path=str(state_path),  # type: ignore[arg-type]
+        dispatch_sidecar_path=dispatch_sidecar_path,
         dispatch_id=dispatch_id,
         backend_name=effective_backend.name if effective_backend else "",
         recipe=recipe,
@@ -148,20 +148,6 @@ async def run_outcome_classification(
         if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
             extended_chain.append(prior_dispatched_session_id)
 
-        for sid in extended_chain:
-            path = (
-                _locator.session_log_path(str(tool_ctx.project_dir), sid)
-                if _locator is not None
-                else None
-            )
-            if path is not None:
-                additional_jsonl_paths.append(path)
-
-        jsonl_path = (
-            _locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
-            if _locator is not None
-            else None
-        )
         if resume_line_offset and skill_result.session_id and resume_session_id:
             if skill_result.session_id != resume_session_id:
                 _logger.warning(
@@ -173,7 +159,7 @@ async def run_outcome_classification(
         parsed_result = parse_l3_result_block(
             stdout=skill_result.result or "",
             expected_dispatch_id=dispatch_id,
-            assistant_messages_path=jsonl_path,
+            assistant_messages_path=None,
             prior_dispatch_ids=prior_ids if prior_ids else None,
             additional_jsonl_paths=additional_jsonl_paths or None,
             resume_line_offset=resume_line_offset,
@@ -283,12 +269,9 @@ async def run_outcome_classification(
             )
 
     # 1484-1501: project_log_dir + session_id continuity warning.
-    project_log_dir = ""
-    if _locator is not None:
-        try:
-            project_log_dir = str(_locator.project_log_dir(str(tool_ctx.project_dir)))
-        except OSError:
-            _logger.warning("project_log_dir_unavailable", exc_info=True)
+    # The orchestrator now threads marker_dir through (resolved from
+    # `_locator.project_log_dir` inside run_execution), so we just stringify it.
+    project_log_dir = str(marker_dir) if marker_dir is not None else ""
 
     if (
         resume_session_id

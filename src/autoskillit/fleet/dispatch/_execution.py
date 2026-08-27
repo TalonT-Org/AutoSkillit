@@ -87,6 +87,8 @@ class ExecutionResult:
     started_at: float
     ended_at: float | None
     dispatch_completed_normally: bool
+    marker_dir: Path | None
+    dispatch_sidecar_path: str
     spawn_failure_dispatch_result: DispatchResult | None
 
 
@@ -147,6 +149,19 @@ async def run_execution(
         list(prior_completion_markers) if prior_completion_markers is not None else []
     )
 
+    # 944: derive the session locator for JSONL resolution.
+    _locator = effective_backend.session_locator() if effective_backend is not None else None
+
+    # 1110-1117: marker_dir resolution — moved up so the early-return
+    # ExecutionResult constructors can populate marker_dir even when the
+    # function exits before reaching the original resolution site.
+    marker_dir: Path | None = None
+    if _locator is not None:
+        try:
+            marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
+        except OSError:
+            pass
+
     # 905-915: halt-reason check — short-circuit before any state mutation.
     if halted_reason is not None:
         return ExecutionResult(
@@ -155,6 +170,8 @@ async def run_execution(
             started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
+            marker_dir=marker_dir,
+            dispatch_sidecar_path=dispatch_sidecar_path,
             spawn_failure_dispatch_result=DispatchResult(
                 outcome=DispatchRejected(
                     error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
@@ -201,6 +218,8 @@ async def run_execution(
             started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
+            marker_dir=marker_dir,
+            dispatch_sidecar_path=dispatch_sidecar_path,
             spawn_failure_dispatch_result=complete_failure_with_state(
                 error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
                 message="Food-truck dispatch initialization failed.",
@@ -215,8 +234,9 @@ async def run_execution(
             ),
         )
 
-    # 944: derive the session locator for JSONL resolution.
-    _locator = effective_backend.session_locator() if effective_backend is not None else None
+    # 944: derive the session locator — moved to the function preamble so
+    # the early-return ExecutionResult constructors can populate marker_dir.
+    # (Original location below is removed.)
 
     # 946-994: resume JSONL resolution + EFFECTIVE_RESUME_BINDING provenance.
     if resume_session_id:
@@ -252,6 +272,8 @@ async def run_execution(
                         started_at=started_at,
                         ended_at=None,
                         dispatch_completed_normally=False,
+                        marker_dir=marker_dir,
+                        dispatch_sidecar_path=dispatch_sidecar_path,
                         spawn_failure_dispatch_result=complete_failure_with_state(
                             error_code=FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
                             message=f"JSONL log for session {resume_session_id} not found",
@@ -272,6 +294,8 @@ async def run_execution(
                     started_at=started_at,
                     ended_at=None,
                     dispatch_completed_normally=False,
+                    marker_dir=marker_dir,
+                    dispatch_sidecar_path=dispatch_sidecar_path,
                     spawn_failure_dispatch_result=complete_failure_with_state(
                         error_code=FleetErrorCode.FLEET_RESUME_SESSION_MISSING,
                         message=f"JSONL log for session {resume_session_id} not found",
@@ -321,14 +345,7 @@ async def run_execution(
     skill_result: SkillResult | None = None
     ended_at: float | None = None
 
-    # 1110-1117: marker_dir resolution + import execution_marker.
-    marker_dir: Path | None = None
-    if _locator is not None:
-        try:
-            marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
-        except OSError:
-            pass
-
+    # execution_marker is needed by the spawn-context blocks further below.
     from autoskillit.core import execution_marker  # noqa: PLC0415
 
     # 1040-1108: closures captured by tool_ctx.executor.dispatch_food_truck.
@@ -491,6 +508,8 @@ async def run_execution(
             started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
+            marker_dir=marker_dir,
+            dispatch_sidecar_path=dispatch_sidecar_path,
             spawn_failure_dispatch_result=complete_failure_with_state(
                 error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
                 message=spawn_ctx.spawn_error[0],
@@ -522,5 +541,7 @@ async def run_execution(
         started_at=started_at,
         ended_at=ended_at,
         dispatch_completed_normally=_dispatch_completed_normally,
+        marker_dir=marker_dir,
+        dispatch_sidecar_path=dispatch_sidecar_path,
         spawn_failure_dispatch_result=None,
     )

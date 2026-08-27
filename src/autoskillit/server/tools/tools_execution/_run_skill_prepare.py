@@ -368,9 +368,8 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
             if not state.output_dir and "output_dir" in _recipe_step.with_args:
                 _recipe_output_dir = _recipe_step.with_args["output_dir"]
                 # Skip values containing unresolved template references —
-                # load() returns raw YAML without ingredient resolution,
-                # so ${{ context.* }} placeholders may survive.
-                if "${{" not in _recipe_output_dir:
+                # a finalized projection may retain ${{ context.* }} placeholders.
+                if isinstance(_recipe_output_dir, str) and "${{" not in _recipe_output_dir:
                     state.output_dir = _recipe_output_dir
                     logger.warning(
                         "output_dir_resolved_from_recipe",
@@ -389,10 +388,9 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
                 and "${{" not in _recipe_step.model
             ):
                 # Skip values containing unresolved template references —
-                # load() returns raw YAML without ingredient resolution,
-                # so ${{ inputs.* }}/${{ context.* }} placeholders may
-                # survive (see the output_dir fallback above for the
-                # same guard). A raw template string is never a valid
+                # ${{ inputs.* }}/${{ context.* }} placeholders may survive
+                # (see the output_dir fallback above for the same guard).
+                # A template string is never a valid
                 # --model value.
                 state.effective_model = _recipe_step.model
                 logger.warning(

@@ -23,8 +23,10 @@ __all__ = [
     "BoundValue",
     "BoundValueOrigin",
     "BoundValueState",
+    "FinalizedRecipeStep",
     "FinalizedRecipeSegment",
     "FinalizedRecipeProjection",
+    "RECIPE_TERMINAL_TARGETS",
     "RecipeBindingProjection",
     "RecipeFlowEdge",
     "RUNTIME_ADMISSION_BY_ROLE",
@@ -38,6 +40,9 @@ __all__ = [
 
 
 BoundScalar: TypeAlias = str | int | bool
+
+
+RECIPE_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 
 class ToolWireType(StrEnum):
@@ -400,6 +405,46 @@ class RecipeFlowEdge:
 
 
 @dataclass(frozen=True, slots=True)
+class FinalizedRecipeStep:
+    """Execution-relevant fields retained for one finalized recipe step."""
+
+    name: str
+    tool: str | None = None
+    skill_name: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    with_args: dict[str, object] = field(default_factory=dict)
+    stale_threshold: int | None = None
+    idle_output_timeout: int | None = None
+    action: str | None = None
+    skip_when_false: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError("FinalizedRecipeStep.name must be a non-empty string")
+        for field_name in (
+            "tool",
+            "skill_name",
+            "provider",
+            "model",
+            "action",
+            "skip_when_false",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, str):
+                raise TypeError(f"FinalizedRecipeStep.{field_name} must be a string or None")
+        if not isinstance(self.with_args, Mapping):
+            raise TypeError("FinalizedRecipeStep.with_args must be a mapping")
+        if any(not isinstance(name, str) for name in self.with_args):
+            raise TypeError("FinalizedRecipeStep.with_args keys must be strings")
+        for field_name in ("stale_threshold", "idle_output_timeout"):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, int):
+                raise TypeError(f"FinalizedRecipeStep.{field_name} must be an int or None")
+        object.__setattr__(self, "with_args", dict(self.with_args))
+
+
+@dataclass(frozen=True, slots=True)
 class FinalizedRecipeSegment:
     """One finalized segment and the earlier steps that can deliver it."""
 
@@ -441,6 +486,8 @@ class FinalizedRecipeProjection:
     ordered_step_names: tuple[str, ...]
     entrypoint: str
     ordered_flow_edges: tuple[RecipeFlowEdge, ...]
+    ordered_steps: tuple[FinalizedRecipeStep, ...]
+    ingredient_names: frozenset[str]
     delivery_segments: tuple[FinalizedRecipeSegment, ...] = ()
 
     def __post_init__(self) -> None:
@@ -463,6 +510,21 @@ class FinalizedRecipeProjection:
         if self.entrypoint != ordered_step_names[0]:
             raise ValueError("FinalizedRecipeProjection.entrypoint must be the first ordered step")
 
+        ordered_steps = tuple(self.ordered_steps)
+        if any(not isinstance(step, FinalizedRecipeStep) for step in ordered_steps):
+            raise TypeError(
+                "FinalizedRecipeProjection.ordered_steps must contain FinalizedRecipeStep entries"
+            )
+        if tuple(step.name for step in ordered_steps) != ordered_step_names:
+            raise ValueError(
+                "FinalizedRecipeProjection.ordered_steps must exactly match ordered_step_names"
+            )
+        ingredient_names = frozenset(self.ingredient_names)
+        if any(not isinstance(name, str) or not name for name in ingredient_names):
+            raise ValueError(
+                "FinalizedRecipeProjection.ingredient_names must contain non-empty strings"
+            )
+
         ordered_flow_edges = tuple(self.ordered_flow_edges)
         if any(not isinstance(edge, RecipeFlowEdge) for edge in ordered_flow_edges):
             raise TypeError(
@@ -472,6 +534,34 @@ class FinalizedRecipeProjection:
         if any(edge.source not in step_names for edge in ordered_flow_edges):
             raise ValueError(
                 "FinalizedRecipeProjection flow-edge sources must be finalized step names"
+            )
+        if any(
+            edge.target not in step_names and edge.target not in RECIPE_TERMINAL_TARGETS
+            for edge in ordered_flow_edges
+        ):
+            raise ValueError(
+                "FinalizedRecipeProjection flow-edge targets must be finalized step names "
+                "or terminal targets"
+            )
+
+        reachable = {self.entrypoint}
+        pending = [self.entrypoint]
+        while pending:
+            source = pending.pop()
+            for edge in ordered_flow_edges:
+                if (
+                    edge.source != source
+                    or edge.target not in step_names
+                    or edge.target in reachable
+                ):
+                    continue
+                reachable.add(edge.target)
+                pending.append(edge.target)
+        unreachable = tuple(name for name in ordered_step_names if name not in reachable)
+        if unreachable:
+            raise ValueError(
+                "FinalizedRecipeProjection finalized steps must be entrypoint-reachable: "
+                f"{unreachable!r}"
             )
 
         delivery_segments = tuple(self.delivery_segments)
@@ -511,5 +601,11 @@ class FinalizedRecipeProjection:
                     )
 
         object.__setattr__(self, "ordered_step_names", ordered_step_names)
+        object.__setattr__(self, "ordered_steps", ordered_steps)
+        object.__setattr__(self, "ingredient_names", ingredient_names)
         object.__setattr__(self, "ordered_flow_edges", ordered_flow_edges)
         object.__setattr__(self, "delivery_segments", delivery_segments)
+
+    def for_step(self, name: str) -> FinalizedRecipeStep | None:
+        """Return the finalized record for ``name`` when it exists."""
+        return next((step for step in self.ordered_steps if step.name == name), None)

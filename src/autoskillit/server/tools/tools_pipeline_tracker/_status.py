@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 
 def _build_tracker_steps(
-    active_steps: dict[str, object], skipped: set[str]
+    active_steps: Mapping[str, object], skipped: set[str]
 ) -> dict[str, dict[str, str]]:
     return {
         name: {"status": "skipped"} if name in skipped else {"status": "pending"}

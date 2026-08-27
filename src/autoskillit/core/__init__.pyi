@@ -918,6 +918,7 @@ from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
 from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
 from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
+from .types import FinalizedRecipeStep as FinalizedRecipeStep
 from .types import FleetErrorCode as FleetErrorCode
 from .types import FleetLock as FleetLock
 from .types import FleetSessionEnv as FleetSessionEnv
@@ -1086,6 +1087,7 @@ from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeExemptionFitnessError as RecipeExemptionFitnessError
 from .types import RecipeFlowEdge as RecipeFlowEdge
+from .types import RECIPE_TERMINAL_TARGETS as RECIPE_TERMINAL_TARGETS
 from .types import RecipeFlowGeneration as RecipeFlowGeneration
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError

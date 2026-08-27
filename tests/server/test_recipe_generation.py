@@ -20,6 +20,7 @@ from autoskillit.core import (
     BindingMode,
     BoundStepInvocation,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeExecutionSnapshot,
@@ -57,6 +58,8 @@ def _projection() -> FinalizedRecipeProjection:
         ordered_step_names=("step",),
         entrypoint="step",
         ordered_flow_edges=(),
+        ordered_steps=(FinalizedRecipeStep(name="step", tool="run_skill", skill_name="example"),),
+        ingredient_names=frozenset(),
     )
 
 

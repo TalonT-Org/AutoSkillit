@@ -1,0 +1,21 @@
+name: deferred-skip-only
+description: Deferred guards retain their otherwise skip-only landing step.
+kitchen_rules:
+  - Follow the declared routes.
+ingredients:
+  enabled:
+    description: Whether to run the guarded step.
+steps:
+  guarded:
+    tool: run_python
+    with:
+      step_name: guarded
+    skip_when_false: inputs.enabled
+    on_success: Z
+    on_skip: Y
+  Y:
+    action: stop
+    message: Skipped.
+  Z:
+    action: stop
+    message: Completed.

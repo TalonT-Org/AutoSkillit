@@ -8,11 +8,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from autoskillit.core import RecipeExecutionId
+from autoskillit.core import FinalizedRecipeStep, RecipeExecutionId, RecipeFlowEdge
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.server._recipe_execution import get_recipe_execution
-from tests.server._helpers import _configure_admitted_recipe, _with_finalized_projection
+from tests.server._helpers import (
+    _configure_admitted_recipe,
+    _make_finalized_projection,
+    _with_finalized_projection,
+)
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -25,6 +29,18 @@ def _make_deferred_recall_ctx(name: str) -> MagicMock:
     ctx.kitchen_id = "test-kitchen"
     ctx.gate_infrastructure_ready = True
     return ctx
+
+
+def test_finalized_projection_attachment_requires_an_exact_projection() -> None:
+    """The serve-fixture helper cannot silently fabricate routing authority."""
+    result: dict[str, object] = {}
+    with pytest.raises(TypeError):
+        _with_finalized_projection(result)  # type: ignore[call-arg]
+
+    projection = _make_finalized_projection(steps=(FinalizedRecipeStep(name="entry"),))
+    attached = _with_finalized_projection(result, projection=projection)
+
+    assert attached["_finalized_projection"] is projection
 
 
 def _compiled_recipe_payload() -> dict:
@@ -57,7 +73,21 @@ def _compiled_recipe_payload() -> dict:
         "post_prune_step_names": ["verify"],
         "dispatch_feasible": True,
     }
-    return _with_finalized_projection(result, binding_projection=bind_recipe(recipe))
+    projection = _make_finalized_projection(
+        steps=(
+            FinalizedRecipeStep(
+                name="verify",
+                tool="run_skill",
+                with_args={
+                    "skill_command": "/autoskillit:dry-walkthrough",
+                    "cwd": "/repo",
+                    "skill_inputs": {"plan_path": "/tmp/plan.md"},
+                },
+            ),
+        ),
+        binding_projection=bind_recipe(recipe),
+    )
+    return _with_finalized_projection(result, projection=projection)
 
 
 @pytest.mark.anyio
@@ -121,8 +151,8 @@ async def test_recipe_open_atomically_installs_compiled_execution(
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
-    """Deferred-recall path populates active_recipe_steps from the freshly loaded recipe."""
+async def test_deferred_recall_installs_active_recipe_projection():
+    """Deferred recall installs the exact finalized projection and its step map."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
@@ -138,8 +168,24 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
         "suggestions": [],
         "post_prune_step_names": ["build", "test"],
     }
+    projection = _make_finalized_projection(
+        steps=(
+            FinalizedRecipeStep(name="build"),
+            FinalizedRecipeStep(name="test"),
+        ),
+        edges=(
+            RecipeFlowEdge(
+                source="build",
+                edge_type="success",
+                target="test",
+                condition=None,
+                result_field=None,
+            ),
+        ),
+    )
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=projection,
     )
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/.autoskillit/recipes/test-recipe.yaml")
@@ -154,10 +200,8 @@ async def test_deferred_recall_sets_active_recipe_steps_from_recipe():
 
     parsed = json.loads(result)
     assert parsed["success"] is True
-    assert mock_ctx.active_recipe_steps == {
-        "build": {"cmd": "task build"},
-        "test": {"cmd": "task test"},
-    }
+    assert mock_ctx.active_recipe_projection is projection
+    assert mock_ctx.active_recipe_steps == {step.name: step for step in projection.ordered_steps}
 
 
 @pytest.mark.anyio
@@ -178,7 +222,8 @@ async def test_deferred_recall_clears_recipe_cache_when_cache_load_fails():
             "recipe_version": "1.0",
             "suggestions": [],
             "post_prune_step_names": [],
-        }
+        },
+        projection=_make_finalized_projection(),
     )
     _configure_admitted_recipe(mock_ctx, Path("/fake/.autoskillit/recipes/test-recipe.yaml"))
     admitted_recipe = mock_ctx.recipes.load.return_value
@@ -186,7 +231,9 @@ async def test_deferred_recall_clears_recipe_cache_when_cache_load_fails():
         admitted_recipe,
         RuntimeError("cache load failed"),
     ]
-    mock_ctx.active_recipe_steps = {"stale": {"cmd": "old"}}
+    stale_projection = _make_finalized_projection(steps=(FinalizedRecipeStep(name="stale"),))
+    mock_ctx.active_recipe_projection = stale_projection
+    mock_ctx.active_recipe_steps = {step.name: step for step in stale_projection.ordered_steps}
     mock_ctx.active_recipe_ingredients = frozenset({"stale"})
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
@@ -303,7 +350,22 @@ def _make_pre_revealed_ctx(name: str) -> MagicMock:
         "post_prune_step_names": ["build", "test"],
     }
     ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        ctx.recipes.load_and_validate.return_value
+        ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(
+            steps=(
+                FinalizedRecipeStep(name="build"),
+                FinalizedRecipeStep(name="test"),
+            ),
+            edges=(
+                RecipeFlowEdge(
+                    source="build",
+                    edge_type="success",
+                    target="test",
+                    condition=None,
+                    result_field=None,
+                ),
+            ),
+        ),
     )
     return ctx
 
@@ -457,7 +519,16 @@ async def test_deferred_recall_preserves_active_locks(tmp_path):
 
     ctx = _make_deferred_recall_ctx("test-recipe")
     ctx.project_dir = tmp_path
-    ctx.active_recipe_steps = {"investigate": MagicMock(skip_when_false="inputs.investigate")}
+    existing_projection = _make_finalized_projection(
+        steps=(
+            FinalizedRecipeStep(
+                name="investigate",
+                skip_when_false="inputs.investigate",
+            ),
+        ),
+    )
+    ctx.active_recipe_projection = existing_projection
+    ctx.active_recipe_steps = {step.name: step for step in existing_projection.ordered_steps}
     ctx.active_recipe_ingredients = frozenset(["investigate"])
     ctx.gate.enabled = True
     ctx.recipes.load_and_validate.return_value = {
@@ -474,7 +545,11 @@ async def test_deferred_recall_preserves_active_locks(tmp_path):
         "post_prune_step_names": ["investigate"],
     }
     ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        ctx.recipes.load_and_validate.return_value
+        ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(
+            steps=(FinalizedRecipeStep(name="investigate"),),
+            ingredient_names=frozenset({"investigate"}),
+        ),
     )
 
     mock_recipe_info = MagicMock()

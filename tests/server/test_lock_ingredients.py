@@ -8,7 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server._helpers import _with_finalized_projection
+from autoskillit.core import FinalizedRecipeStep, RecipeFlowEdge
+from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -18,6 +19,29 @@ def _make_step_mock(skip_when_false: str | None = None) -> MagicMock:
     step = MagicMock()
     step.skip_when_false = skip_when_false
     return step
+
+
+def _set_active_recipe_steps(ctx: MagicMock, steps: dict[str, MagicMock]) -> None:
+    """Install fixture steps through the same finalized authority as production."""
+    finalized_steps = tuple(
+        FinalizedRecipeStep(name=name, skip_when_false=step.skip_when_false)
+        for name, step in steps.items()
+    )
+    projection = _make_finalized_projection(
+        steps=finalized_steps,
+        edges=tuple(
+            RecipeFlowEdge(
+                source=source.name,
+                edge_type="success",
+                target=target.name,
+                condition=None,
+                result_field=None,
+            )
+            for source, target in zip(finalized_steps, finalized_steps[1:], strict=False)
+        ),
+    )
+    ctx.active_recipe_projection = projection
+    ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
 
 
 class TestLockIngredientsBasic:
@@ -31,11 +55,14 @@ class TestLockIngredientsBasic:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-            "build": _make_step_mock(None),
-            "fix-worktree": _make_step_mock("inputs.investigate"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "investigate": _make_step_mock("inputs.investigate"),
+                "build": _make_step_mock(None),
+                "fix-worktree": _make_step_mock("inputs.investigate"),
+            },
+        )
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
@@ -64,7 +91,7 @@ class TestLockIngredientsBasic:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {"investigate": _make_step_mock("inputs.investigate")}
+        _set_active_recipe_steps(ctx, {"investigate": _make_step_mock("inputs.investigate")})
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
@@ -148,7 +175,7 @@ class TestLockIngredientsUnlock:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {"investigate": _make_step_mock("inputs.investigate")}
+        _set_active_recipe_steps(ctx, {"investigate": _make_step_mock("inputs.investigate")})
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
@@ -221,9 +248,12 @@ class TestUnlockRebuildsLockedSteps:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "fix-worktree": _make_step_mock("inputs.investigate"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "fix-worktree": _make_step_mock("inputs.investigate"),
+            },
+        )
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
@@ -257,9 +287,12 @@ class TestLockIngredientsUnknownKeyValidation:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "audit_impl": _make_step_mock("inputs.audit_impl"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "audit_impl": _make_step_mock("inputs.audit_impl"),
+            },
+        )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
@@ -278,9 +311,12 @@ class TestLockIngredientsUnknownKeyValidation:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "audit_impl": _make_step_mock("inputs.audit_impl"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "audit_impl": _make_step_mock("inputs.audit_impl"),
+            },
+        )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
@@ -301,9 +337,12 @@ class TestLockIngredientsUnknownKeyValidation:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "audit_impl": _make_step_mock("inputs.audit_impl"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "audit_impl": _make_step_mock("inputs.audit_impl"),
+            },
+        )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
@@ -324,9 +363,12 @@ class TestLockIngredientsUnknownKeyValidation:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "audit_impl": _make_step_mock("inputs.audit_impl"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "audit_impl": _make_step_mock("inputs.audit_impl"),
+            },
+        )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
@@ -345,9 +387,12 @@ class TestLockIngredientsUnknownKeyValidation:
 
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
-        ctx.active_recipe_steps = {
-            "audit_impl": _make_step_mock("inputs.audit_impl"),
-        }
+        _set_active_recipe_steps(
+            ctx,
+            {
+                "audit_impl": _make_step_mock("inputs.audit_impl"),
+            },
+        )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
         with patch("autoskillit.server._get_ctx", return_value=ctx):
@@ -385,7 +430,8 @@ class TestAuthorityFeedbackConsistency:
                 "diagram": None,
                 "ingredients_table": "--- TABLE ---",
                 "post_prune_step_names": ["do"],
-            }
+            },
+            projection=_make_finalized_projection(steps=(FinalizedRecipeStep(name="do"),)),
         )
         mock_ctx.recipes.load_and_validate.side_effect = lambda *_args, **_kwargs: dict(
             recipe_result
@@ -469,7 +515,10 @@ class TestLockIngredientsConcurrentFlock:
             try:
                 ctx = _make_mock_ctx()
                 ctx.project_dir = tmp_path
-                ctx.active_recipe_steps = {f"step-{pipeline_id}": _make_step_mock(None)}
+                _set_active_recipe_steps(
+                    ctx,
+                    {f"step-{pipeline_id}": _make_step_mock(None)},
+                )
                 with patch("autoskillit.server._get_ctx", return_value=ctx):
                     from autoskillit.server.tools.tools_kitchen import lock_ingredients
 

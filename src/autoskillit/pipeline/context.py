@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import threading
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +32,8 @@ from autoskillit.core import (
     ContextAdmissionLedger,
     DatabaseReader,
     ExplorationContextStoreProtocol,
+    FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     FleetLock,
     GateState,
     GitHubApiLog,
@@ -191,8 +194,11 @@ class ToolContext:
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
     active_recipe_features: frozenset[str] | None — feature names declared by the loaded recipe
                           (frozenset() when kitchen open but no recipe loaded; None when closed)
-    active_recipe_steps:  dict[str, Any] | None — step definitions cached from the loaded recipe
-                          ({} when kitchen open but no recipe loaded; None when closed)
+    active_recipe_steps:  Mapping[str, FinalizedRecipeStep] | None — finalized step definitions
+                          for the loaded recipe ({} when kitchen open but no recipe loaded;
+                          None when closed)
+    active_recipe_projection: FinalizedRecipeProjection | None — the authoritative finalized
+                          execution graph for the loaded recipe (None when no recipe is active)
     active_recipe_ingredients: frozenset[str] | None — ingredient keys declared by the loaded
                           recipe (frozenset() when kitchen open but no recipe loaded; None when
                           closed)
@@ -284,7 +290,12 @@ class ToolContext:
     )
     active_recipe_packs: frozenset[str] | None = field(default_factory=lambda: None)
     active_recipe_features: frozenset[str] | None = field(default_factory=lambda: None)
-    active_recipe_steps: dict[str, Any] | None = field(default_factory=lambda: None)
+    active_recipe_steps: Mapping[str, FinalizedRecipeStep] | None = field(
+        default_factory=lambda: None
+    )
+    active_recipe_projection: FinalizedRecipeProjection | None = field(
+        default_factory=lambda: None
+    )
     active_recipe_ingredients: frozenset[str] | None = field(default_factory=lambda: None)
     session_serve_overrides: ServeOverridesSnapshot | None = field(default_factory=lambda: None)
     session_serve_defer_unresolved: bool = field(default=False)

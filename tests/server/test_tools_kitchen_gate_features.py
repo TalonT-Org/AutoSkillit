@@ -9,7 +9,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -447,7 +447,8 @@ def test_recipe_resource_returns_composed_content():
         "valid": True,
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     mock_ctx.backend = None
     mock_ctx.session_serve_overrides = None

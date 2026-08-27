@@ -10,6 +10,62 @@ from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 
+def test_deferred_guard_preserves_skip_only_route_in_finalized_projection(tmp_path) -> None:
+    """A deferred guard retains the target reachable only through ``on_skip``."""
+    from pathlib import Path
+    from shutil import copyfile
+
+    from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge
+    from autoskillit.recipe._api import load_and_validate
+
+    fixture = Path(__file__).with_name("fixtures") / "deferred_skip_only.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    copyfile(fixture, recipes_dir / fixture.name)
+
+    result = load_and_validate(
+        "deferred-skip-only",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+        defer_unresolved=True,
+        include_finalized_projection=True,
+    )
+
+    assert result["valid"], result["errors"]
+    projection = result["_finalized_projection"]
+    assert isinstance(projection, FinalizedRecipeProjection)
+    assert RecipeFlowEdge(source="guarded", edge_type="skip", target="Y") in (
+        projection.ordered_flow_edges
+    )
+    assert "Y" in projection.ordered_step_names
+
+
+def test_deferred_guard_reports_missing_skip_target_before_sweeping(tmp_path) -> None:
+    """Deferred skip routes are validated before they can be filtered from the graph."""
+    from pathlib import Path
+
+    from autoskillit.recipe._api import load_and_validate
+
+    fixture = Path(__file__).with_name("fixtures") / "deferred_skip_only.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "deferred-skip-missing.yaml").write_text(
+        fixture.read_text()
+        .replace("name: deferred-skip-only", "name: deferred-skip-missing")
+        .replace("on_skip: Y", "on_skip: missing_target")
+    )
+
+    result = load_and_validate(
+        "deferred-skip-missing",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+        defer_unresolved=True,
+    )
+
+    assert not result["valid"]
+    assert any("missing_target" in error for error in result["errors"])
+
+
 def _make_recipe_with_skip_guard(step_name: str, ref: str, default: str | None) -> Recipe:
     ingredient_name = ref[len("inputs.") :] if ref.startswith("inputs.") else ref
     return Recipe(
@@ -39,7 +95,7 @@ class TestPruneSkippedStepsDeferral:
         from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 
         recipe = _make_recipe_with_skip_guard("review", "inputs.review_approach", default="false")
-        pruned, resolutions = _prune_skipped_steps(
+        pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
             recipe, ingredient_overrides={}, defer_unresolved=True
         )
         assert "review" in pruned.steps, "Step was pruned despite missing override"
@@ -52,7 +108,7 @@ class TestPruneSkippedStepsDeferral:
         from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 
         recipe = _make_recipe_with_skip_guard("review", "inputs.review_approach", default="false")
-        pruned, resolutions = _prune_skipped_steps(
+        pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
             recipe,
             ingredient_overrides={"review_approach": "false"},
             defer_unresolved=True,

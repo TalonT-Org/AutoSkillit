@@ -13,7 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from autoskillit.core.types._type_constants import SOUS_CHEF_MANDATORY_SECTIONS
-from tests.server._helpers import _configure_admitted_recipe, _with_finalized_projection
+from tests.server._helpers import (
+    _configure_admitted_recipe,
+    _make_finalized_projection,
+    _with_finalized_projection,
+)
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -33,7 +37,8 @@ async def test_sous_chef_discipline_not_in_open_kitchen_result(tmp_path, monkeyp
         "diagram": None,
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     _configure_admitted_recipe(mock_ctx, tmp_path / "implementation.yaml")
     mock_ctx.config.migration.suppressed = []
@@ -73,7 +78,8 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
         "diagram": None,
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     _configure_admitted_recipe(mock_ctx, tmp_path / "implementation.yaml")
     mock_ctx.config.migration.suppressed = []

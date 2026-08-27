@@ -667,7 +667,7 @@ steps:
         manifest=_manifest(),
         ingredient_values={"private_root": "/private root", "keep": "true"},
     )
-    pruned, _resolutions = _prune_skipped_steps(recipe, {"keep": "true"})
+    pruned, _resolutions, _deferred_guard_state = _prune_skipped_steps(recipe, {"keep": "true"})
     post = bind_recipe(
         pruned,
         manifest=_manifest(),

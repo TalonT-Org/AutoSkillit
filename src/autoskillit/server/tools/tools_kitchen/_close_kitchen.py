@@ -93,6 +93,7 @@ def _close_kitchen_handler() -> None:
     ctx.active_recipe_packs = None
     ctx.active_recipe_features = None
     ctx.active_recipe_steps = None
+    ctx.active_recipe_projection = None
     ctx.active_recipe_ingredients = None
     ctx.session_serve_overrides = None
     ctx.session_serve_defer_unresolved = False

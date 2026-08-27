@@ -1,0 +1,12 @@
+name: composed-projection-child
+description: Child recipe used to verify composed effective projections.
+ingredients:
+  child_only:
+    description: Ingredient declared only by the child recipe.
+    default: child-value
+steps:
+  child_step:
+    tool: run_python
+    with:
+      step_name: child_step
+    on_success: done

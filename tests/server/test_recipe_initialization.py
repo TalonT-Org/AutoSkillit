@@ -16,9 +16,11 @@ from autoskillit.core import (
     RECIPE_FLOW_SCHEMA_VERSION,
     FinalizedRecipeProjection,
     FinalizedRecipeSegment,
+    FinalizedRecipeStep,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
     RecipeExecutionCredential,
+    RecipeFlowEdge,
     RecipeFlowGeneration,
 )
 from autoskillit.pipeline import (
@@ -109,6 +111,8 @@ def _stage(tool_ctx, tmp_path) -> InitializingRecipe:
             ordered_step_names=("step",),
             entrypoint="step",
             ordered_flow_edges=(),
+            ordered_steps=(FinalizedRecipeStep(name="step"),),
+            ingredient_names=frozenset(),
         ),
     )
 
@@ -175,7 +179,20 @@ def test_segmented_completion_credential_is_scoped_to_initial_bodies() -> None:
         binding_projection=RecipeBindingProjection({}),
         ordered_step_names=("initial", "future"),
         entrypoint="initial",
-        ordered_flow_edges=(),
+        ordered_flow_edges=(
+            RecipeFlowEdge(
+                source="initial",
+                edge_type="success",
+                target="future",
+                condition=None,
+                result_field=None,
+            ),
+        ),
+        ordered_steps=(
+            FinalizedRecipeStep(name="initial"),
+            FinalizedRecipeStep(name="future"),
+        ),
+        ingredient_names=frozenset(),
         delivery_segments=(
             FinalizedRecipeSegment(name="S0", ordered_step_names=("initial",)),
             FinalizedRecipeSegment(name="S1", ordered_step_names=("future",)),

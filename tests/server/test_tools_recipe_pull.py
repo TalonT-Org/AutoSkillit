@@ -26,6 +26,7 @@ from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     HostClientAttestation,
     RecipeArtifactGeneration,
     RecipeBindingProjection,
@@ -143,6 +144,8 @@ def _test_projection() -> FinalizedRecipeProjection:
         ordered_step_names=("first",),
         entrypoint="first",
         ordered_flow_edges=(),
+        ordered_steps=(FinalizedRecipeStep(name="first"),),
+        ingredient_names=frozenset(),
     )
 
 

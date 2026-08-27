@@ -10,10 +10,14 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import (
+    RECIPE_TERMINAL_TARGETS,
     SKILL_TOOLS,
+    RecipeFlowEdge,
     YAMLError,
     load_yaml,
 )
+from autoskillit.recipe._analysis_bfs import bfs_reachable
+from autoskillit.recipe._analysis_graph import RouteEdge, _extract_routing_edges
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import _parse_recipe, find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
@@ -75,6 +79,110 @@ def _derive_rate_limit_routes(recipe: Recipe) -> Recipe:
         if step.on_context_limit is not None:
             steps[name] = dataclasses.replace(step, on_rate_limit=step.on_context_limit)
     return dataclasses.replace(recipe, steps=steps)
+
+
+def _effective_routing_edges(
+    recipe: Recipe,
+    deferred_guard_state: dict[str, tuple[str, str | None]] | None = None,
+) -> tuple[RecipeFlowEdge, ...]:
+    """Return the executable routes for the finalized recipe graph.
+
+    This is the one route authority after composition, guard pruning, and
+    rate-limit derivation. Deferred guards retain a synthetic skip edge even
+    though their serving ``RecipeStep`` has its configuration fields cleared.
+    """
+    edges: list[RecipeFlowEdge] = []
+    deferred = deferred_guard_state or {}
+    for step_name, step in recipe.steps.items():
+        for edge in _extract_routing_edges(step):
+            if edge.edge_type == "exhausted" and step.action is not None:
+                continue
+            edges.append(
+                RecipeFlowEdge(
+                    source=step_name,
+                    edge_type=edge.edge_type,
+                    target=edge.target,
+                    condition=edge.condition,
+                    result_field=(
+                        step.on_result.field
+                        if edge.edge_type == "result_condition"
+                        and step.on_result is not None
+                        and step.on_result.field
+                        else None
+                    ),
+                )
+            )
+        guard_state = deferred.get(step_name)
+        if guard_state is not None and guard_state[1] is not None:
+            edges.append(
+                RecipeFlowEdge(
+                    source=step_name,
+                    edge_type="skip",
+                    target=guard_state[1],
+                    condition=guard_state[0],
+                    result_field=None,
+                )
+            )
+    return tuple(edges)
+
+
+def _validate_effective_routing_edges(
+    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
+) -> list[str]:
+    """Return errors for targets outside the active effective graph."""
+    step_names = frozenset(recipe.steps)
+    return [
+        f"Step '{edge.source}' routes to unknown step '{edge.target}'"
+        for edge in edges
+        if edge.target not in step_names and edge.target not in RECIPE_TERMINAL_TARGETS
+    ]
+
+
+def _sweep_unreachable_steps(
+    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
+) -> tuple[Recipe, tuple[str, ...]]:
+    """Remove active steps unreachable from the finalized entrypoint."""
+    if not recipe.steps:
+        return recipe, ()
+
+    step_names = frozenset(recipe.steps)
+    graph: dict[str, set[str]] = {name: set() for name in recipe.steps}
+    for edge in edges:
+        if edge.target in step_names:
+            graph[edge.source].add(edge.target)
+
+    entrypoint = next(iter(recipe.steps))
+    reachable = {entrypoint} | bfs_reachable(graph, entrypoint)
+
+    unreachable = tuple(name for name in recipe.steps if name not in reachable)
+    if not unreachable:
+        return recipe, ()
+    return (
+        dataclasses.replace(
+            recipe,
+            steps={name: step for name, step in recipe.steps.items() if name in reachable},
+        ),
+        unreachable,
+    )
+
+
+def _analysis_edges_from_effective_routes(
+    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
+) -> dict[str, tuple[RouteEdge, ...]]:
+    """Project the terminal-inclusive authority into analysis-only step edges."""
+    step_names = frozenset(recipe.steps)
+    grouped: dict[str, list[RouteEdge]] = {name: [] for name in recipe.steps}
+    for edge in edges:
+        if edge.target in step_names:
+            grouped[edge.source].append(
+                RouteEdge(
+                    edge_type=edge.edge_type,
+                    target=edge.target,
+                    condition=edge.condition,
+                    capture_available=edge.edge_type in {"success", "result_condition"},
+                )
+            )
+    return {source: tuple(source_edges) for source, source_edges in grouped.items()}
 
 
 def _step_block_pattern(escaped_name: str) -> str:
@@ -436,7 +544,7 @@ def _prune_skipped_steps(
     recipe: Any,
     ingredient_overrides: dict[str, str] | None = None,
     defer_unresolved: bool = False,
-) -> tuple[Any, dict[str, bool | None]]:
+) -> tuple[Any, dict[str, bool | None], dict[str, tuple[str, str | None]]]:
     """Evaluate skip_when_false guards and prune steps Python-side.
 
     Iterates all steps with a skip_when_false field. For each:
@@ -445,8 +553,10 @@ def _prune_skipped_steps(
     - None (deferred): when defer_unresolved=True and the ingredient is absent from
       overrides, the step is kept with skip_when_false cleared and resolution None.
 
-    Returns a tuple of (pruned_recipe, resolutions) where resolutions maps
+    Returns a tuple of (pruned_recipe, resolutions, deferred_guard_state) where resolutions maps
     step_name -> bool | None (True = kept, False = pruned, None = deferred).
+    ``deferred_guard_state`` retains each deferred guard's pre-clear reference
+    and redirect-resolved ``on_skip`` target.
     """
     overrides = ingredient_overrides or {}
     resolutions: dict[str, bool | None] = {}
@@ -474,11 +584,18 @@ def _prune_skipped_steps(
 
     redirects = _resolve_skip_redirects(recipe.steps, resolutions)
     steps: dict[str, RecipeStep] = {}
+    deferred_guard_state: dict[str, tuple[str, str | None]] = {}
     for name, step in recipe.steps.items():
         resolution = resolutions.get(name, True)
         if resolution is False:
             continue
         if name in resolutions:
+            if resolution is None and step.skip_when_false is not None:
+                target = step.on_skip
+                deferred_guard_state[name] = (
+                    step.skip_when_false,
+                    redirects.get(target, target) if target is not None else None,
+                )
             step = dataclasses.replace(
                 step,
                 skip_when_false=None,
@@ -494,7 +611,7 @@ def _prune_skipped_steps(
             working,
             steps=_move_step_to_front(working.steps, entry),
         )
-    return working, resolutions
+    return working, resolutions, deferred_guard_state
 
 
 _MODEL_COND_RE = re.compile(

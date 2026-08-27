@@ -65,6 +65,7 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "active_recipe_features",
         "active_recipe_steps",
         "active_recipe_ingredients",
+        "active_recipe_projection",
         "recipe_initialization_state",
         "recipe_terminal_response_cache",
         "kitchen_open_state",

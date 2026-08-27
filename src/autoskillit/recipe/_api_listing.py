@@ -148,7 +148,7 @@ def validate_from_path(
         )
         _pre_prune_findings = run_semantic_rules(pre_prune_ctx)
         try:
-            recipe, _skip_resolutions = _prune_skipped_steps(
+            recipe, _skip_resolutions, _deferred_guard_state = _prune_skipped_steps(
                 recipe, ingredient_overrides, defer_unresolved=False
             )
         except ValueError as exc:

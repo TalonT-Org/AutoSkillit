@@ -12,6 +12,7 @@ from autoskillit.server.tools.tools_recipe import validate_recipe
 from tests.server._helpers import (
     _PATCHED_DEFAULTS,
     _configure_admitted_recipe,
+    _make_finalized_projection,
     _with_finalized_projection,
 )
 
@@ -631,7 +632,8 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
                 "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
             ),
             "success": True,
-        }
+        },
+        projection=_make_finalized_projection(),
     )
     tool_ctx_kitchen_open.recipes = MagicMock()
     tool_ctx_kitchen_open.recipes.load_and_validate.return_value = _load_result

@@ -267,6 +267,7 @@ def test_finalized_projection_rejects_an_empty_entrypoint() -> None:
     with pytest.raises(ValueError, match="entrypoint must be a non-empty string"):
         FinalizedRecipeProjection(
             binding_projection=RecipeBindingProjection(invocations={}),
+            ingredient_names=frozenset(),
             ordered_step_names=("step",),
             entrypoint="",
             ordered_flow_edges=(),

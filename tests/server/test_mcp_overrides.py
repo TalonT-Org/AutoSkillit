@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
 from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -18,7 +18,10 @@ def _make_mock_recipes(load_result: dict) -> MagicMock:
     """Create a mock recipe repository that returns the given load result."""
     mock = MagicMock()
     if load_result.get("valid") is True:
-        load_result = _with_finalized_projection(load_result)
+        load_result = _with_finalized_projection(
+            load_result,
+            projection=_make_finalized_projection(),
+        )
     mock.load_and_validate.return_value = load_result
     mock.find.return_value = MagicMock(path=Path("/fake/test-recipe.yaml"))
     mock.load.return_value = MagicMock(steps={}, ingredients={})

@@ -15,6 +15,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import (
     CodingAgentBackend,
+    FinalizedRecipeProjection,
     FleetErrorCode,
     NativeShellCaptureMode,
     SessionCheckpoint,
@@ -50,11 +51,11 @@ from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._preflight import (
-    _check_dispatch_feasibility,
-    filter_steps_by_post_prune,
+from autoskillit.server.tools._preflight import _check_dispatch_feasibility
+from autoskillit.server.tools._serve_helpers import (
+    build_backend_capabilities_map,
+    pop_finalized_recipe_projection,
 )
-from autoskillit.server.tools._serve_helpers import build_backend_capabilities_map
 from autoskillit.server.tools.tools_fleet_dispatch._campaign_state import (
     _confirm_campaign_state_write,
     _dispatch_effect_identities,
@@ -327,6 +328,7 @@ async def dispatch_food_truck(
         # spawning a subprocess.
         _fleet_load_result: dict[str, Any] = {}
         _effective_backend_map: dict[str, str] | None = None
+        _fleet_finalized_projection: FinalizedRecipeProjection | None = None
         if tool_ctx.recipes is not None:
             try:
                 _preflight_recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
@@ -353,26 +355,28 @@ async def dispatch_food_truck(
                     backend_name=_override_backend.name if _override_backend else None,
                     effective_backend_map=_effective_backend_map,
                     backend_capabilities_map=_preflight_backend_capabilities_map,
+                    include_finalized_projection=True,
                 )
+                if _fleet_load_result.get("valid", False):
+                    _fleet_finalized_projection = pop_finalized_recipe_projection(
+                        _fleet_load_result
+                    )
             except Exception:
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
 
-        _active_recipe_steps: dict[str, Any] | None = None
-        if _fleet_load_result and tool_ctx.recipes is not None:
-            try:
-                _recipe_info = tool_ctx.recipes.find(recipe, tool_ctx.project_dir)
-                if _recipe_info is not None:
-                    _recipe_obj = tool_ctx.recipes.load(_recipe_info.path)
-                    _active_recipe_steps = filter_steps_by_post_prune(
-                        _recipe_obj.steps,
-                        _fleet_load_result.get("post_prune_step_names", []),
-                    )
-            except Exception:
-                logger.warning("dispatch_food_truck_preflight_recipe_load_failed", exc_info=True)
+        _active_recipe_steps = (
+            {step.name: step for step in _fleet_finalized_projection.ordered_steps}
+            if _fleet_finalized_projection is not None
+            else None
+        )
 
-        if _override_backend is not None and _active_recipe_steps is not None:
+        if (
+            _override_backend is not None
+            and _active_recipe_steps is not None
+            and _fleet_finalized_projection is not None
+        ):
             _preflight_err = _check_dispatch_feasibility(
-                post_prune_step_names=_fleet_load_result.get("post_prune_step_names", []),
+                post_prune_step_names=list(_fleet_finalized_projection.ordered_step_names),
                 active_recipe_steps=_active_recipe_steps,
                 backend=_override_backend,
                 config_providers=tool_ctx.config.providers,

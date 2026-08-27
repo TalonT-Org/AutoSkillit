@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from autoskillit.core import FaultDomain
+from tests.server._helpers import _make_finalized_projection_from_recipe_steps
 
 
 def _write_tracker(tmp_path, pipeline_id, steps, dependencies, kitchen_id="test-kitchen"):
@@ -34,10 +35,14 @@ def _setup_project(tmp_path, tool_ctx_kitchen_open, active_recipe_steps=None):
     tool_ctx_kitchen_open.project_dir = tmp_path
     if active_recipe_steps is None:
         active_recipe_steps = {
-            "rectify": RecipeStep(name="rectify"),
+            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
             "review_approach": RecipeStep(name="review_approach"),
         }
-    tool_ctx_kitchen_open.active_recipe_steps = active_recipe_steps
+    projection = _make_finalized_projection_from_recipe_steps(active_recipe_steps)
+    tool_ctx_kitchen_open.active_recipe_projection = projection
+    tool_ctx_kitchen_open.active_recipe_steps = {
+        step.name: step for step in projection.ordered_steps
+    }
 
 
 def _publish_success_receipt(

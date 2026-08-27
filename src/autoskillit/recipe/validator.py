@@ -379,6 +379,7 @@ def _finalize_delivery_segments(
         later_targets = {
             edge.target
             for edge in _extract_routing_edges(recipe.steps[step_name])
+            if not (edge.edge_type == "exhausted" and recipe.steps[step_name].action is not None)
             if edge.target in segment_index and segment_index[edge.target] > route_source_index
         }
         missing_targets = sorted(later_targets - targets)

@@ -5,11 +5,13 @@ from __future__ import annotations
 import difflib
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
+    FinalizedRecipeStep,
     get_logger,
 )
 from autoskillit.server import mcp
@@ -33,7 +35,7 @@ def _write_ingredient_locks(
     pipeline_id: str,
     new_locked: dict[str, str] | None,
     unlock_keys: list[str] | None,
-    active_steps: dict,
+    active_steps: Mapping[str, FinalizedRecipeStep],
 ) -> dict:
     """Atomically read-modify-write ingredient locks under the session lock."""
 
@@ -55,7 +57,7 @@ def _write_ingredient_locks(
 
 
 def _compute_unlocked_steps(
-    active_steps: dict, current_pipeline_li: dict[str, str]
+    active_steps: Mapping[str, FinalizedRecipeStep], current_pipeline_li: dict[str, str]
 ) -> dict[str, bool]:
     """Compute unlocked_steps from active_recipe_steps and remaining ingredients.
 
@@ -64,11 +66,7 @@ def _compute_unlocked_steps(
     """
     unlocked_steps: dict[str, bool] = {}
     for step_name, step_obj in active_steps.items():
-        swf = (
-            getattr(step_obj, "skip_when_false", None)
-            if hasattr(step_obj, "skip_when_false")
-            else None
-        )
+        swf = step_obj.skip_when_false
         if swf:
             ingredient_name = swf.removeprefix("inputs.")
             if ingredient_name in current_pipeline_li:

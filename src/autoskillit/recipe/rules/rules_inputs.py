@@ -15,14 +15,13 @@ from autoskillit.core import (
     Severity,
     get_logger,
 )
-from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis import ValidationContext, bfs_reachable
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,
 )
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
-from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
 logger = get_logger(__name__)
 
@@ -223,7 +222,7 @@ def _check_shadowed_required_inputs(ctx: ValidationContext) -> list[RuleFinding]
 
 @semantic_rule(
     name="unreachable-step",
-    description="Steps that no other step routes to (and are not the entry point) are dead code.",
+    description="Steps not reachable from the entry point are dead code.",
     severity=Severity.WARNING,
 )
 def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
@@ -231,32 +230,17 @@ def _check_unreachable_steps(ctx: ValidationContext) -> list[RuleFinding]:
     if not wf.steps:
         return []
 
-    referenced: set[str] = set()
-    for step in wf.steps.values():
-        for field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
-            target = getattr(step, field, None)
-            if target:
-                referenced.add(target)
-        if step.on_result:
-            referenced.update(step.on_result.routes.values())
-            for cond in step.on_result.conditions:
-                referenced.add(cond.route)
-        if step.on_exhausted:
-            referenced.add(step.on_exhausted)
-    for sentinel in _TERMINAL_TARGETS:
-        if sentinel not in wf.steps:
-            referenced.discard(sentinel)
-
     first_step = next(iter(wf.steps))
+    reachable = {first_step} | bfs_reachable(ctx.step_graph, first_step)
     findings: list[RuleFinding] = []
     for step_name in wf.steps:
-        if step_name != first_step and step_name not in referenced:
+        if step_name not in reachable:
             findings.append(
                 make_finding(
                     rule_name="unreachable-step",
                     step_name=step_name,
-                    message=f"Step '{step_name}' is not the entry point and no other step "
-                    f"routes to it. It will never execute. Remove it or add routing.",
+                    message=f"Step '{step_name}' is not reachable from the entry point. "
+                    "It will never execute. Remove it or add routing.",
                 )
             )
     return findings

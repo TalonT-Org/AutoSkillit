@@ -442,6 +442,58 @@ def test_unreachable_steps_detects_orphan() -> None:
     assert any(f.rule == "unreachable-step" and "orphan" in f.message for f in findings)
 
 
+def test_unreachable_steps_detects_an_entire_stranded_chain() -> None:
+    """Reachability, not indegree, determines whether every step is reported."""
+    wf = _make_workflow(
+        {
+            "entry": {"tool": "run_cmd", "on_success": "done"},
+            "stranded_root": {"tool": "run_cmd", "on_success": "stranded_child"},
+            "stranded_child": {"tool": "run_cmd", "on_success": "done"},
+            "done": {"action": "stop", "message": "Done."},
+        }
+    )
+
+    findings = run_semantic_rules(wf)
+    messages = "\n".join(
+        finding.message for finding in findings if finding.rule == "unreachable-step"
+    )
+
+    assert "stranded_root" in messages
+    assert "stranded_child" in messages
+
+
+def test_unreachable_steps_reports_the_full_pruned_remediation_island() -> None:
+    """The rule sees every step disconnected by the audit-implementation guard."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe._recipe_composition import _prune_skipped_steps
+    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+    from autoskillit.recipe.rules.rules_inputs import _check_unreachable_steps
+
+    recipe = load_recipe(builtin_recipes_dir() / "remediation.yaml")
+    pruned, _resolutions, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"audit_impl": "false"}
+    )
+
+    findings = _check_unreachable_steps(make_validation_context(pruned))
+
+    assert {finding.step_name for finding in findings} == {
+        "check_audit_remediation_loop",
+        "reset_test_fix_counter",
+        "reset_merge_test_fix_counter",
+        "reset_merge_fix_counter",
+        "reset_ref_push_counter",
+        "pre_remediation_merge",
+        "inter_part_push_pre_remediation",
+        "commit_guard_pre_remediation",
+        "main_repo_guard_pre_remediation",
+        "check_ref_push_loop_pre_remediation",
+        "ref_push_pre_remediation",
+        "remediate",
+        "make_plan",
+        "salvage_plan",
+    }
+
+
 def test_unreachable_steps_first_step_clean() -> None:
     wf = _make_workflow(
         {

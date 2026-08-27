@@ -14,6 +14,7 @@ import regex as re
 from autoskillit.core import (
     FEATURE_REGISTRY,
     RECIPE_PACK_TAGS,
+    RECIPE_TERMINAL_TARGETS,
     CaptureEntrySpec,
     DispatchGateType,
     RecipeSource,
@@ -89,7 +90,7 @@ class StepResultRoute:
 # Terminal routing sentinels: valid on_exhausted targets that are not step names.
 # "escalate": triggers orchestrator-level escalation (stop-with-escalation).
 # "done": terminates the recipe cleanly without escalation.
-_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
+_TERMINAL_TARGETS = RECIPE_TERMINAL_TARGETS
 
 
 def _coerce_capture_dict(d: dict) -> dict[str, CaptureEntrySpec]:

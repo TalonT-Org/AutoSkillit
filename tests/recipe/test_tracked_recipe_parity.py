@@ -12,6 +12,8 @@ import ast
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -64,6 +66,39 @@ def _patch_pkg_root(monkeypatch: pytest.MonkeyPatch, builtin_root: Path) -> None
 def test_untracked_recipe_analysis_has_no_errors_in_this_checkout() -> None:
     analysis = analyze_untracked_recipes(_PROJECT_ROOT)
     assert not analysis.errors, "\n".join(analysis.errors)
+
+
+def test_report_header_skips_recipe_analysis_outside_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests import _tracked_recipes
+    from tests import conftest as root_conftest
+
+    monkeypatch.setattr(root_conftest, "_AMBIENT_ENV_AT_STARTUP", {})
+
+    def unexpected_recipe_analysis(_project_root: Path) -> None:
+        pytest.fail("recipe analysis must not run outside a Git checkout")
+
+    monkeypatch.setattr(_tracked_recipes, "analyze_untracked_recipes", unexpected_recipe_analysis)
+
+    config = cast(pytest.Config, SimpleNamespace(rootpath=tmp_path))
+    assert root_conftest.pytest_report_header(config) is None
+
+
+def test_report_header_surfaces_recipe_analysis_failure_inside_git(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests import _tracked_recipes
+    from tests import conftest as root_conftest
+
+    def failed_recipe_analysis(_project_root: Path) -> None:
+        raise RuntimeError("recipe inventory failed")
+
+    monkeypatch.setattr(_tracked_recipes, "analyze_untracked_recipes", failed_recipe_analysis)
+
+    config = cast(pytest.Config, SimpleNamespace(rootpath=_PROJECT_ROOT))
+    with pytest.raises(RuntimeError, match="recipe inventory failed"):
+        root_conftest.pytest_report_header(config)
 
 
 def _calls_to_all_validated_recipe_functions(py_file: Path) -> list[int]:

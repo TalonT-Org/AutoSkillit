@@ -54,7 +54,9 @@ def pytest_report_header(config: pytest.Config) -> list[str] | None:
     lines = []
     if contaminated:
         lines.append(f"ambient env scrubbed ({len(contaminated)}): {', '.join(contaminated)}")
-    lines.extend(format_untracked_recipe_report(analyze_untracked_recipes(_Path(config.rootpath))))
+    rootpath = _Path(config.rootpath)
+    if any((parent / ".git").exists() for parent in (rootpath, *rootpath.parents)):
+        lines.extend(format_untracked_recipe_report(analyze_untracked_recipes(rootpath)))
     return lines or None
 
 

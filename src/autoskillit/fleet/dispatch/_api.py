@@ -454,7 +454,7 @@ async def _run_dispatch(
             if ready.preflight is not None
             else None,
             ended_at=ended_at or __import__("time").time(),
-            started_at=execution.ended_at or 0.0,
+            started_at=execution.started_at,
             marker_dir=None,
             effective_backend=recipe_ctx.effective_backend,
         )
@@ -474,7 +474,7 @@ async def _run_dispatch(
             dispatch_checkpoint=ready.preflight.checkpoint
             if ready.preflight is not None
             else None,
-            started_at=execution.ended_at or 0.0,
+            started_at=execution.started_at,
             ended_at=ended_at or __import__("time").time(),
             cache_invalidator=cache_invalidator,
             quota_refresher=quota_refresher,

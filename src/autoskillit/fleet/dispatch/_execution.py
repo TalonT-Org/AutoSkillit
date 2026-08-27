@@ -9,7 +9,6 @@ caller consumes to drive outcome classification.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import time
 from collections.abc import Sequence
@@ -85,6 +84,7 @@ class ExecutionResult:
 
     skill_result: SkillResult | None
     spawn_context: SpawnContext
+    started_at: float
     ended_at: float | None
     dispatch_completed_normally: bool
     spawn_failure_dispatch_result: DispatchResult | None
@@ -152,6 +152,7 @@ async def run_execution(
         return ExecutionResult(
             skill_result=None,
             spawn_context=spawn_ctx,
+            started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
             spawn_failure_dispatch_result=DispatchResult(
@@ -197,6 +198,7 @@ async def run_execution(
         return ExecutionResult(
             skill_result=None,
             spawn_context=spawn_ctx,
+            started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
             spawn_failure_dispatch_result=complete_failure_with_state(
@@ -247,6 +249,7 @@ async def run_execution(
                     return ExecutionResult(
                         skill_result=None,
                         spawn_context=spawn_ctx,
+                        started_at=started_at,
                         ended_at=None,
                         dispatch_completed_normally=False,
                         spawn_failure_dispatch_result=complete_failure_with_state(
@@ -266,6 +269,7 @@ async def run_execution(
                 return ExecutionResult(
                     skill_result=None,
                     spawn_context=spawn_ctx,
+                    started_at=started_at,
                     ended_at=None,
                     dispatch_completed_normally=False,
                     spawn_failure_dispatch_result=complete_failure_with_state(
@@ -404,163 +408,118 @@ async def run_execution(
         bind_dispatch_launch_contract(state_path, effective_name, launch_contract)
 
     # 1119-1202: dispatch the inner work.
-    try:
-        provenance.start(
-            DispatchEffectName.PROCESS_SPAWN,
-            identities={"dispatch_id": dispatch_id},
-        )
-        async with execution_marker(
-            marker_dir,
-            caller_session_id,
-            "dispatch",
+    provenance.start(
+        DispatchEffectName.PROCESS_SPAWN,
+        identities={"dispatch_id": dispatch_id},
+    )
+    async with execution_marker(
+        marker_dir,
+        caller_session_id,
+        "dispatch",
+    ):
+        async with _dispatch_heartbeat(
+            dispatches_dir or tool_ctx.temp_dir / "dispatches", dispatch_id
         ):
-            async with _dispatch_heartbeat(
-                dispatches_dir or tool_ctx.temp_dir / "dispatches", dispatch_id
-            ):
-                skill_result = await tool_ctx.executor.dispatch_food_truck(  # type: ignore[union-attr]
-                    orchestrator_prompt=prompt,
-                    cwd=str(tool_ctx.project_dir),
-                    completion_marker=completion_marker,
-                    plugin_authority=plugin_authority,
-                    capability_preparation=capability_preparation,
-                    prior_completion_markers=(
-                        cast(
-                            "Sequence[str] | None",
-                            prior_completion_markers if prior_completion_markers else None,
-                        )
-                    ),
-                    resume_session_id=resume_session_id,
-                    resume_checkpoint=resume_checkpoint,
-                    kitchen_id=tool_ctx.kitchen_id,
-                    order_id=dispatch_id,
-                    campaign_id=tool_ctx.kitchen_id,
-                    dispatch_id=dispatch_id,
-                    caller_session_id=caller_session_id,
-                    project_dir=str(tool_ctx.project_dir),
-                    marker_dir=marker_dir,
-                    session_id=caller_session_id,
-                    on_session_id_resolved=_on_session_id,
-                    timeout=resolved_timeout,
-                    idle_output_timeout=float(idle_output_timeout)
-                    if idle_output_timeout is not None
-                    else None,
-                    env_extras={
-                        "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
-                        "AUTOSKILLIT_CAMPAIGN_ID": tool_ctx.kitchen_id,
-                        "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
-                        "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
-                            started_at + resolved_timeout,
-                            os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
-                        ),
-                        **(
-                            {
-                                FLEET_INSPECTOR_MODEL_ENV_VAR: (
-                                    tool_ctx.config.fleet.inspector_model
-                                )
-                            }
-                            if tool_ctx.config.fleet.inspector_model
-                            else {}
-                        ),
-                    },
-                    requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
-                    on_spawn=_on_spawn,
-                    sentinel_contract=sentinel_contract,
-                    resume_message=resume_message,
-                    backend_authority=(
-                        BackendAuthority(
-                            backend=dispatch_backend.name,
-                            kind=BackendAuthorityKind.CALLER,
-                            tier=BackendAuthorityTier.CALLER,
-                            key_path="dispatch.backend",
-                        )
-                        if dispatch_backend is not None
-                        else None
-                    ),
-                    native_shell_capture_decision=capture_decision,
-                    managed_lineage_ref=managed_lineage_ref,
-                    on_launch_resolved=_on_launch_resolved,
-                )
-
-        # L2 fail-closed spawn gate: check closure-scoped error state.
-        # If _on_spawn recorded a transition failure (and killed the child
-        # via kill_process_tree), translate it to a structured envelope
-        # instead of letting the dispatch proceed on a stale record.
-        if spawn_ctx.spawn_error:
-            return ExecutionResult(
-                skill_result=None,
-                spawn_context=spawn_ctx,
-                ended_at=None,
-                dispatch_completed_normally=False,
-                spawn_failure_dispatch_result=complete_failure_with_state(
-                    error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-                    message=spawn_ctx.spawn_error[0],
-                    dispatch_status=DispatchStatus.FAILURE,
-                    dispatched_session_id=(
-                        spawn_ctx.dispatched_session_id[0]
-                        if spawn_ctx.dispatched_session_id
-                        else ""
-                    ),
-                    dispatch_id=dispatch_id,
-                    managed_lineage_ref=managed_lineage_ref,
-                    provenance=provenance,
-                    state_path=state_path,
-                    effective_name=effective_name,
-                    tool_ctx=tool_ctx,
+            skill_result = await tool_ctx.executor.dispatch_food_truck(  # type: ignore[union-attr]
+                orchestrator_prompt=prompt,
+                cwd=str(tool_ctx.project_dir),
+                completion_marker=completion_marker,
+                plugin_authority=plugin_authority,
+                capability_preparation=capability_preparation,
+                prior_completion_markers=(
+                    cast(
+                        "Sequence[str] | None",
+                        prior_completion_markers if prior_completion_markers else None,
+                    )
                 ),
-            )
-        if (
-            skill_result is not None
-            and skill_result.session_id
-            and not spawn_ctx.dispatched_session_id
-        ):
-            _on_session_id(skill_result.session_id)
-
-        ended_at = max(time.time(), started_at + 1e-6)
-        _dispatch_completed_normally = True
-    except asyncio.CancelledError:
-        # 1208-1290: shielded cancellation cleanup.
-        from autoskillit.fleet.dispatch._cleanup import handle_cancellation  # noqa: PLC0415
-
-        await handle_cancellation(
-            spawn_ctx=spawn_ctx,
-            tool_ctx=tool_ctx,
-            dispatch_id=dispatch_id,
-            effective_name=effective_name,
-            managed_lineage_ref=managed_lineage_ref,
-            provenance=provenance,
-            dispatch_sidecar_path=dispatch_sidecar_path,
-            marker_dir=marker_dir,
-            skill_result=skill_result,
-            state_path=state_path,
-        )
-        raise
-    except Exception:
-        # 1292-1305: unshielded failure lineage close + re-raise.
-        from autoskillit.fleet.dispatch._cleanup import handle_generic_exception  # noqa: PLC0415
-
-        await handle_generic_exception(
-            tool_ctx=tool_ctx,
-            managed_lineage_ref=managed_lineage_ref,
-        )
-        raise
-    finally:
-        # 1306-1332: label cleanup only when we did NOT complete normally.
-        if not _dispatch_completed_normally:
-            from autoskillit.fleet.dispatch._cleanup import (  # noqa: PLC0415
-                run_finally_label_cleanup,
-            )
-
-            await run_finally_label_cleanup(
-                spawn_ctx=spawn_ctx,
+                resume_session_id=resume_session_id,
+                resume_checkpoint=resume_checkpoint,
+                kitchen_id=tool_ctx.kitchen_id,
+                order_id=dispatch_id,
+                campaign_id=tool_ctx.kitchen_id,
                 dispatch_id=dispatch_id,
-                dispatch_sidecar_path=dispatch_sidecar_path,
-                tool_ctx=tool_ctx,
-                provenance=provenance,
+                caller_session_id=caller_session_id,
+                project_dir=str(tool_ctx.project_dir),
+                marker_dir=marker_dir,
+                session_id=caller_session_id,
+                on_session_id_resolved=_on_session_id,
+                timeout=resolved_timeout,
+                idle_output_timeout=float(idle_output_timeout)
+                if idle_output_timeout is not None
+                else None,
+                env_extras={
+                    "AUTOSKILLIT_PROJECT_DIR": str(tool_ctx.project_dir),
+                    "AUTOSKILLIT_CAMPAIGN_ID": tool_ctx.kitchen_id,
+                    "AUTOSKILLIT_DISPATCH_ID": dispatch_id,
+                    "AUTOSKILLIT_SESSION_DEADLINE": select_child_session_deadline(
+                        started_at + resolved_timeout,
+                        os.environ.get("AUTOSKILLIT_SESSION_DEADLINE", ""),
+                    ),
+                    **(
+                        {FLEET_INSPECTOR_MODEL_ENV_VAR: (tool_ctx.config.fleet.inspector_model)}
+                        if tool_ctx.config.fleet.inspector_model
+                        else {}
+                    ),
+                },
+                requires_packs=list(full_recipe.requires_packs) or ["kitchen-core"],
+                on_spawn=_on_spawn,
+                sentinel_contract=sentinel_contract,
+                resume_message=resume_message,
+                backend_authority=(
+                    BackendAuthority(
+                        backend=dispatch_backend.name,
+                        kind=BackendAuthorityKind.CALLER,
+                        tier=BackendAuthorityTier.CALLER,
+                        key_path="dispatch.backend",
+                    )
+                    if dispatch_backend is not None
+                    else None
+                ),
+                native_shell_capture_decision=capture_decision,
+                managed_lineage_ref=managed_lineage_ref,
+                on_launch_resolved=_on_launch_resolved,
             )
+
+    # L2 fail-closed spawn gate: check closure-scoped error state.
+    # If _on_spawn recorded a transition failure (and killed the child
+    # via kill_process_tree), translate it to a structured envelope
+    # instead of letting the dispatch proceed on a stale record.
+    if spawn_ctx.spawn_error:
+        return ExecutionResult(
+            skill_result=None,
+            spawn_context=spawn_ctx,
+            started_at=started_at,
+            ended_at=None,
+            dispatch_completed_normally=False,
+            spawn_failure_dispatch_result=complete_failure_with_state(
+                error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+                message=spawn_ctx.spawn_error[0],
+                dispatch_status=DispatchStatus.FAILURE,
+                dispatched_session_id=(
+                    spawn_ctx.dispatched_session_id[0] if spawn_ctx.dispatched_session_id else ""
+                ),
+                dispatch_id=dispatch_id,
+                managed_lineage_ref=managed_lineage_ref,
+                provenance=provenance,
+                state_path=state_path,
+                effective_name=effective_name,
+                tool_ctx=tool_ctx,
+            ),
+        )
+    if (
+        skill_result is not None
+        and skill_result.session_id
+        and not spawn_ctx.dispatched_session_id
+    ):
+        _on_session_id(skill_result.session_id)
+
+    ended_at = max(time.time(), started_at + 1e-6)
+    _dispatch_completed_normally = True
 
     return ExecutionResult(
         skill_result=skill_result,
         spawn_context=spawn_ctx,
+        started_at=started_at,
         ended_at=ended_at,
         dispatch_completed_normally=_dispatch_completed_normally,
         spawn_failure_dispatch_result=None,

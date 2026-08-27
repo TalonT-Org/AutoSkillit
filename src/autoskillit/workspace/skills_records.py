@@ -75,7 +75,7 @@ class SkillInfo:
     execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
     activate_deps: tuple[str, ...] = ()
     required_resources: tuple[str, ...] = ()
-    resource_digests: Mapping[str, str] = MappingProxyType({})
+    resource_digests: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     exploration_sidecar_digest: str = ""
     canonical_content: str = ""

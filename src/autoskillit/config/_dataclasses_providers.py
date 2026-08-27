@@ -5,10 +5,7 @@ frozen/slots registry entry for a named profile), ``ProvidersConfig`` (the
 ``providers`` section with ``resolved_profiles`` coercion), and
 ``AgentBackendConfig`` (the ``agent_backend`` section).
 
-Also owns the ``RETIRED_PROFILE_KEYS`` registry plus the module-load invariant
-``_NON_LOWER_RETIRED_PROFILE_KEYS``. The invariant lives next to the registry so
-it fires whenever any caller imports ``RETIRED_PROFILE_KEYS`` — not only when
-they happen to import the retired-keys section config module.
+Also owns the ``RETIRED_PROFILE_KEYS`` registry.
 """
 
 from __future__ import annotations
@@ -28,17 +25,6 @@ RETIRED_PROFILE_KEYS: frozenset[str] = frozenset(
         "context_window",
     }
 )
-
-# Fail fast at module load; an explicit raise keeps the check active under `python -O`.
-_NON_LOWER_RETIRED_PROFILE_KEYS = sorted(
-    k for k in RETIRED_PROFILE_KEYS if not isinstance(k, str) or k != k.lower()
-)
-if _NON_LOWER_RETIRED_PROFILE_KEYS:
-    raise AssertionError(
-        f"RETIRED_PROFILE_KEYS entries must be lowercase str; offenders: "
-        f"{_NON_LOWER_RETIRED_PROFILE_KEYS!r}"
-    )
-del _NON_LOWER_RETIRED_PROFILE_KEYS
 
 
 @dataclass

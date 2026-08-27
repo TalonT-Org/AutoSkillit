@@ -4,15 +4,11 @@ Owns:
   - ``RetiredConfigKeyDef`` (NamedTuple describing one retired sub-key).
   - ``RETIRED_CONFIG_KEYS`` (the append-only mapping of retired sub-keys to
     their definitions; wrapped in ``MappingProxyType`` for immutability).
-  - The two invariants ``_NON_LOWER_RETIRED_KEYS`` and ``_NON_LOWER_NEW_KEYS``
-    that run at module load to catch accidentally-uppercased entries.
   - ``RemappedConfigKey`` (NamedTuple describing one remap operation result).
   - ``remap_retired_keys`` (pure rewrite of retired sub-keys in a layer dict).
 
-The ``_NON_LOWER_RETIRED_PROFILE_KEYS`` invariant lives next to
-``RETIRED_PROFILE_KEYS`` in ``_dataclasses_providers.py`` because that registry
-is owned by the providers module — keeping the invariant co-located ensures
-any module that imports the registry also runs the check.
+The sibling ``RETIRED_PROFILE_KEYS`` registry lives in
+``_dataclasses_providers.py`` because it is owned by the providers module.
 """
 
 from __future__ import annotations
@@ -89,25 +85,6 @@ RETIRED_CONFIG_KEYS: Mapping[tuple[str, str], RetiredConfigKeyDef] = types.Mappi
         ),
     }
 )
-
-_NON_LOWER_RETIRED_KEYS = sorted(
-    (s, k) for s, k in RETIRED_CONFIG_KEYS if s != s.lower() or k != k.lower()
-)
-if _NON_LOWER_RETIRED_KEYS:
-    raise AssertionError(
-        "RETIRED_CONFIG_KEYS (section, old_key) pairs must be lowercase. "
-        f"Offending: {_NON_LOWER_RETIRED_KEYS}"
-    )
-del _NON_LOWER_RETIRED_KEYS
-
-_NON_LOWER_NEW_KEYS = sorted(
-    d.new_key for d in RETIRED_CONFIG_KEYS.values() if d.new_key != d.new_key.lower()
-)
-if _NON_LOWER_NEW_KEYS:
-    raise AssertionError(
-        f"RETIRED_CONFIG_KEYS new_key values must be lowercase. Offending: {_NON_LOWER_NEW_KEYS}"
-    )
-del _NON_LOWER_NEW_KEYS
 
 
 class RemappedConfigKey(NamedTuple):

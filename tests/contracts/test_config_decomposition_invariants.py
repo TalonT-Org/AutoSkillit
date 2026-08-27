@@ -74,13 +74,13 @@ def test_unset_sentinel_lives_in_automation_config_module() -> None:
         )
 
 
-def test_retired_profile_keys_invariant_fires_with_owner_module() -> None:
-    """`_NON_LOWER_RETIRED_PROFILE_KEYS` invariant lives next to `RETIRED_PROFILE_KEYS`
-    in `_dataclasses_providers.py`, so it fires whenever anyone loads the registry."""
+def test_retired_profile_keys_registry_loaded() -> None:
+    """`RETIRED_PROFILE_KEYS` lives in `_dataclasses_providers.py` so it loads with
+    the providers config section."""
     import autoskillit.config._dataclasses_providers as prov_mod
 
-    src = Path(cast(str, prov_mod.__file__)).read_text()
-    assert "RETIRED_PROFILE_KEYS" in src
-    assert "_NON_LOWER" in src or "lower()" in src, (
-        "Lowercase invariant check missing from _dataclasses_providers.py"
-    )
+    assert hasattr(prov_mod, "RETIRED_PROFILE_KEYS")
+    assert isinstance(prov_mod.RETIRED_PROFILE_KEYS, frozenset)
+    for key in prov_mod.RETIRED_PROFILE_KEYS:
+        assert isinstance(key, str)
+        assert key == key.lower()

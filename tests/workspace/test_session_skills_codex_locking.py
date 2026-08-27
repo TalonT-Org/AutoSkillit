@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.workspace.session_skill_lifecycle as session_skill_lifecycle
+import autoskillit.workspace.session_skill_materialization as session_skill_materialization
 import autoskillit.workspace.session_skills as session_skills
 from tests.workspace._helpers import (
     _BodyFailure,
@@ -64,14 +66,14 @@ def test_managed_codex_home_cleans_up_once_when_body_raises(
     mgr = make_session_skill_manager(codex_root=codex_root)
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    real_rmtree = session_skills.shutil.rmtree
+    real_rmtree = session_skill_lifecycle.shutil.rmtree
     removed: list[Path] = []
 
     def recording_rmtree(path: Path, *args, **kwargs) -> None:
         removed.append(Path(path))
         real_rmtree(path, *args, **kwargs)
 
-    monkeypatch.setattr(session_skills.shutil, "rmtree", recording_rmtree)
+    monkeypatch.setattr(session_skill_lifecycle.shutil, "rmtree", recording_rmtree)
 
     with pytest.raises(KeyboardInterrupt, match="stop"):
         with _managed(
@@ -122,16 +124,16 @@ def test_managed_codex_home_lease_acquisition_failure_precedes_home_mutation(
     project_dir.mkdir()
 
     def fail_acquire(
-        cls: type[session_skills._SessionLease],
+        cls: type[session_skill_lifecycle._SessionLease],
         path: Path,
         *,
         blocking: bool,
-    ) -> session_skills._SessionLease | None:
+    ) -> session_skill_lifecycle._SessionLease | None:
         del cls, path, blocking
         raise OSError("lease open failed")
 
     monkeypatch.setattr(
-        session_skills._SessionLease,
+        session_skill_lifecycle._SessionLease,
         "acquire",
         classmethod(fail_acquire),
     )
@@ -158,20 +160,20 @@ def test_managed_codex_home_never_reacquires_its_lease_after_initialization(
     mgr = make_session_skill_manager(codex_root=codex_root)
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    original_acquire = session_skills._SessionLease.acquire.__func__
+    original_acquire = session_skill_lifecycle._SessionLease.acquire.__func__
     calls: list[Path] = []
 
     def recording_acquire(
-        cls: type[session_skills._SessionLease],
+        cls: type[session_skill_lifecycle._SessionLease],
         path: Path,
         *,
         blocking: bool,
-    ) -> session_skills._SessionLease | None:
+    ) -> session_skill_lifecycle._SessionLease | None:
         calls.append(path)
         return original_acquire(cls, path, blocking=blocking)
 
     monkeypatch.setattr(
-        session_skills._SessionLease,
+        session_skill_lifecycle._SessionLease,
         "acquire",
         classmethod(recording_acquire),
     )
@@ -198,16 +200,16 @@ def test_managed_codex_session_materializes_profiles_under_its_existing_lease(
         profile_skills_source=profile_source,
     )
     manager = make_session_skill_manager(codex_root=tmp_path / "persistent" / "codex-sessions")
-    original_acquire = session_skills._SessionLease.acquire.__func__
-    materialize_profiles = session_skills._materialize_profile_skill_infos
+    original_acquire = session_skill_lifecycle._SessionLease.acquire.__func__
+    materialize_profiles = session_skill_materialization._materialize_profile_skill_infos
     events: list[str] = []
 
     def recording_acquire(
-        cls: type[session_skills._SessionLease],
+        cls: type[session_skill_lifecycle._SessionLease],
         path: Path,
         *,
         blocking: bool,
-    ) -> session_skills._SessionLease | None:
+    ) -> session_skill_lifecycle._SessionLease | None:
         events.append("lease")
         return original_acquire(cls, path, blocking=blocking)
 
@@ -217,7 +219,7 @@ def test_managed_codex_session_materializes_profiles_under_its_existing_lease(
         return materialize_profiles(*args, **kwargs)
 
     monkeypatch.setattr(
-        session_skills._SessionLease,
+        session_skill_lifecycle._SessionLease,
         "acquire",
         classmethod(recording_acquire),
     )
@@ -259,7 +261,7 @@ def test_session_lease_rejects_non_lock_path(tmp_path: Path) -> None:
     invalid_path = tmp_path / ".session-leases" / "lease"
 
     with pytest.raises(ValueError, match=r"\.lock suffix"):
-        session_skills._SessionLease.acquire(invalid_path, blocking=True)
+        session_skill_lifecycle._SessionLease.acquire(invalid_path, blocking=True)
 
     assert not invalid_path.parent.exists()
 
@@ -273,7 +275,7 @@ def test_session_lease_refuses_symlinked_lock_directory(tmp_path: Path) -> None:
     lock_root.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(OSError):
-        session_skills._SessionLease.acquire(
+        session_skill_lifecycle._SessionLease.acquire(
             lock_root / "0123456789abcdef.lock",
             blocking=True,
         )
@@ -290,7 +292,7 @@ def test_session_lease_refuses_symlinked_lock_file(tmp_path: Path) -> None:
     lock_path.symlink_to(outside)
 
     with pytest.raises(OSError):
-        session_skills._SessionLease.acquire(lock_path, blocking=True)
+        session_skill_lifecycle._SessionLease.acquire(lock_path, blocking=True)
 
     assert outside.read_text(encoding="utf-8") == "sentinel"
 
@@ -362,9 +364,9 @@ def test_managed_cleanup_preserves_a_lone_release_failure(
     mgr = make_session_skill_manager(codex_root=codex_root)
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    real_release = session_skills._SessionLease.release
+    real_release = session_skill_lifecycle._SessionLease.release
 
-    def fail_after_release(lease: session_skills._SessionLease) -> None:
+    def fail_after_release(lease: session_skill_lifecycle._SessionLease) -> None:
         real_release(lease)
         raise _ReleaseFailure("release failed")
 
@@ -373,7 +375,7 @@ def test_managed_cleanup_preserves_a_lone_release_failure(
             mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
         ):
             monkeypatch.setattr(
-                session_skills._SessionLease,
+                session_skill_lifecycle._SessionLease,
                 "release",
                 fail_after_release,
             )
@@ -389,13 +391,13 @@ def test_managed_cleanup_groups_body_deletion_and_release_failures_in_order(
     mgr = make_session_skill_manager(codex_root=codex_root)
     project_dir = tmp_path / "project"
     project_dir.mkdir()
-    real_release = session_skills._SessionLease.release
+    real_release = session_skill_lifecycle._SessionLease.release
 
     def fail_delete(path: Path) -> bool:
         del path
         raise _DeletionFailure("delete failed")
 
-    def fail_after_release(lease: session_skills._SessionLease) -> None:
+    def fail_after_release(lease: session_skill_lifecycle._SessionLease) -> None:
         real_release(lease)
         raise _ReleaseFailure("release failed")
 
@@ -403,9 +405,9 @@ def test_managed_cleanup_groups_body_deletion_and_release_failures_in_order(
         with _managed(
             mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
         ):
-            monkeypatch.setattr(session_skills, "_remove_and_verify", fail_delete)
+            monkeypatch.setattr(session_skill_lifecycle, "_remove_and_verify", fail_delete)
             monkeypatch.setattr(
-                session_skills._SessionLease,
+                session_skill_lifecycle._SessionLease,
                 "release",
                 fail_after_release,
             )

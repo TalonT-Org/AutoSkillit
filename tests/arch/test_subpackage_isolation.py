@@ -1531,15 +1531,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "identity checks to recover() — both belong to the same transaction boundary as "
         "the leases they gate, and fit under this cap post-extraction.",
     ),
-    "workspace/session_skills.py": (
-        1550,
-        "REQ-CNST-010-E13/E14: ordering-sensitive session skill materialization owns "
-        "provider discovery, override precedence, filtering, dependency activation, the "
-        "generated-home lease and cleanup transaction, and backend-specific layout "
-        "validation; keeping those operations together preserves both assembly ordering "
-        "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
-        "provisioning and finalized-reachability loop at the same ordering boundary.",
-    ),
     "hook_registry.py": (
         1200,
         "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
@@ -1666,6 +1657,24 @@ def test_pipeline_exploration_context_shards_under_900_lines() -> None:
     assert not violations, (
         "Exploration-context shards exceeding the 900-line wavefront-1 ceiling:\n"
         + "\n".join(f"  {rel}: {count} lines" for rel, count in violations)
+    )
+
+
+def test_session_skills_e13_e14_exemption_is_retired() -> None:
+    """REQ-CNST-010-E13/E14 (workspace/session_skills.py) is retired without replacement.
+
+    After the shard decomposition lands, ``workspace/session_skills.py`` is a
+    thin identity-preserving facade and must be absent from
+    ``_LINE_LIMIT_EXEMPTIONS``. No replacement exemption is added and no
+    ``RETIRED_*`` or ``SKILL_CONTRACT_REMEDIATIONS`` entry is registered —
+    ordinary Python module decomposition is outside those retirement surfaces.
+    """
+    import tests.arch.test_subpackage_isolation as self_module
+
+    exemptions = self_module._LINE_LIMIT_EXEMPTIONS
+    assert "workspace/session_skills.py" not in exemptions, (
+        "E13/E14 retirement for workspace/session_skills.py was not applied; "
+        "the decomposition replaces this module with a facade under the 1000-line limit"
     )
 
 

@@ -49,22 +49,26 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.workspace._projected_artifact._documents import (
+    SkillProjectionContext,
+    _default_base_branch,
+    _direct_install_projection_context,
+)
 from autoskillit.workspace._projected_artifact._hook_repair import (
     ProjectedArtifactHooksInvalid,
     validate_staged_plugin_hooks,
 )
-from autoskillit.workspace._projected_artifact.materialization import (
-    SkillProjectionContext,
+from autoskillit.workspace._projected_artifact._publication import (
     _copy_non_skill_plugin_assets,
-    _default_base_branch,
-    _direct_install_projection_context,
     _projection_skills_manifest,
     _render_agent_definitions,
     _replace_directory,
     _skill_sequence,
     materialize_agent_skill_tree,
-    validate_sanitized_plugin_artifact,
     write_generated_hooks_json,
+)
+from autoskillit.workspace._projected_artifact._validation import (
+    validate_sanitized_plugin_artifact,
 )
 from autoskillit.workspace._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,

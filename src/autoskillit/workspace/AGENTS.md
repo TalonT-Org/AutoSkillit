@@ -28,8 +28,17 @@ pre-existing install.
 
 Clone paths live under `RUNS_DIR` (resolved by `_clone_detect.py`). `clone_registry.py`
 coordinates deferred cleanup across concurrent pipeline sessions using file-based locking.
-`session_skills.py` builds per-session ephemeral copies of the bundled skill set so that
-headless sessions can use a filtered subset without polluting the installed package.
+`session_skills.py` is the stable identity-preserving facade for per-session ephemeral
+copies of the bundled skill set so that headless sessions can use a filtered subset
+without polluting the installed package. The canonical owners are
+`session_skill_catalog.py` (catalog compilation, finalized-role reachability, profile
+admission helpers, and the durable unavailability writer), `session_skill_provider.py`
+(`SkillsDirectoryProvider`, ephemeral-root discovery, closure write-dir resolution),
+`session_skill_lifecycle.py` (lock path, `_SessionLease`, persistent-root resolution,
+stateless lease/removal primitives), `session_skill_materialization.py` (the
+ordering-sensitive `_materialize_session` transaction, profile projection, persistent
+discovery links, layout validation), and `session_skill_manager.py`
+(`DefaultSessionSkillManager` and `_InitializedSession`).
 
 `skill_capabilities.py` owns a process-local, weighted LRU keyed by exact canonical
 content and normalized logical skill name. The cache bounds resident entries and

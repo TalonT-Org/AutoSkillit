@@ -122,7 +122,7 @@ def test_validate_session_exists_false_for_unknown(make_session_skill_manager) -
 
 def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) -> None:
     """cleanup_stale emits a structured log event when removing stale dirs."""
-    import autoskillit.workspace.session_skills as skills_mod
+    import autoskillit.workspace.session_skill_manager as skills_mod
 
     mgr = make_session_skill_manager()
     session_dir = mgr.ephemeral_root / "sess-stale"

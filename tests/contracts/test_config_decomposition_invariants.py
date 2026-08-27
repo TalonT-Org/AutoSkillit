@@ -62,11 +62,22 @@ def test_fleet_and_process_tether_validate_called_in_from_dynaconf() -> None:
     """from_dynaconf invokes .validate() on FleetConfig and ProcessTetherConfig.
 
     Behavioral check: stub out FleetConfig.validate and ProcessTetherConfig.validate
-    with sentinels that record their calls, then run from_dynaconf against a layer
-    that exercises both sections. Assert both sentinels fired.
+    with sentinels that record their calls, then run from_dynaconf against a
+    Dynaconf-shaped input that exercises both sections. Assert both sentinels fired.
     """
     import autoskillit.config._automation_config as auto_mod
     from autoskillit.config._dataclasses_fleet import FleetConfig, ProcessTetherConfig
+
+    class _DynaconfStub:
+        """Minimal duck-typed Dynaconf stand-in exposing as_dict()."""
+
+        def __init__(self, layer: dict[str, dict[str, object]]) -> None:
+            # from_dynaconf reads sections via raw.get(name.upper(), {}), so the
+            # layer keys must be UPPERCASE to match what Dynaconf.as_dict() emits.
+            self._layer = {k.upper(): v for k, v in layer.items()}
+
+        def as_dict(self) -> dict[str, dict[str, object]]:
+            return self._layer
 
     fleet_calls: list[bool] = []
     tether_calls: list[bool] = []
@@ -84,13 +95,12 @@ def test_fleet_and_process_tether_validate_called_in_from_dynaconf() -> None:
     FleetConfig.validate = _record_fleet  # type: ignore[method-assign]
     ProcessTetherConfig.validate = _record_tether  # type: ignore[method-assign]
     try:
-        # Build a layer that touches both fleet and process_tether sections.
         from_dynaconf = auto_mod.AutomationConfig.from_dynaconf
         layer = {
             "fleet": {"max_concurrent_dispatches": 4},
             "process_tether": {"headless_command_timeout": 300},
         }
-        from_dynaconf(layer)
+        from_dynaconf(_DynaconfStub(layer))
     finally:
         FleetConfig.validate = orig_fleet_validate  # type: ignore[method-assign]
         ProcessTetherConfig.validate = orig_tether_validate  # type: ignore[method-assign]

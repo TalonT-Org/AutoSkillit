@@ -11,7 +11,11 @@ from typing import Any, cast
 import pytest
 
 from autoskillit.config import OutputBudgetConfig
-from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY, FinalizedRecipeProjection
+from autoskillit.core import (
+    RECIPE_DELIVERY_SURFACE_REGISTRY,
+    FinalizedRecipeProjection,
+    RecipeSource,
+)
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
@@ -22,8 +26,11 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_generation import RecipeGenerationStore
 from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
+from tests._tracked_recipes import tracked_recipe_paths
 
-BUNDLED_RECIPE_PATHS = tuple(sorted(builtin_recipes_dir().glob("*.yaml")))
+BUNDLED_RECIPE_PATHS = tracked_recipe_paths(
+    Path(__file__).resolve().parents[3], RecipeSource.BUILTIN
+)
 CONTRACT_RECIPE_PATHS = tuple(sorted((builtin_recipes_dir() / "contracts").glob("*.yaml")))
 ALL_DELIVERY_SURFACES = tuple(RECIPE_DELIVERY_SURFACE_REGISTRY)
 

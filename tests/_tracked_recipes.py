@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
+from autoskillit.core import RecipeSource
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import LoadResult
 from autoskillit.recipe.io import (
@@ -33,6 +34,7 @@ from autoskillit.recipe.io import (
     load_recipe,
 )
 from autoskillit.recipe.schema import RecipeInfo
+from tests._git_inventory import git_ls_files
 
 _PROJECT_RECIPES_RELPATH = ".autoskillit/recipes"
 _GIT_TIMEOUT_SECONDS = 10
@@ -81,27 +83,10 @@ def _builtin_recipes_pathspec(project_root: Path) -> str:
     return os.path.relpath(builtin_recipes, project_root)
 
 
-def _git_ls_files(project_root: Path, pathspec: str) -> list[str]:
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(project_root), "ls-files", "-z", "--", pathspec],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=_GIT_TIMEOUT_SECONDS,
-        )
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(
-            f"tracked_recipe_paths: 'git ls-files -- {pathspec}' failed for "
-            f"project_root={project_root!s}: {exc}"
-        ) from exc
-    return [entry for entry in proc.stdout.split("\0") if entry]
-
-
 def _candidate_paths(project_root: Path, root_relpath: str) -> set[Path]:
     root = PurePosixPath(root_relpath)
     candidates: set[Path] = set()
-    for line in _git_ls_files(project_root, root_relpath):
+    for line in git_ls_files(project_root, root_relpath, allow_empty=True):
         line_path = PurePosixPath(line)
         try:
             rel_to_root = line_path.relative_to(root)
@@ -129,18 +114,60 @@ def tracked_recipe_load_result(project_root: Path) -> LoadResult[RecipeInfo]:
     return result
 
 
-def _tracked_recipe_infos(project_root: Path) -> tuple[RecipeInfo, ...]:
-    return tuple(tracked_recipe_load_result(project_root).items)
+def _tracked_recipe_infos(
+    project_root: Path,
+    *,
+    source: RecipeSource | None = None,
+    scan_dirs: tuple[str, ...] | None = None,
+) -> tuple[RecipeInfo, ...]:
+    infos = tracked_recipe_load_result(project_root).items
+    if source is None and scan_dirs is None:
+        return tuple(infos)
+
+    resolved_root = project_root.resolve()
+    bases = {
+        RecipeSource.PROJECT: resolved_root / _PROJECT_RECIPES_RELPATH,
+        RecipeSource.BUILTIN: (pkg_root() / "recipes").resolve(),
+    }
+
+    def matches(info: RecipeInfo) -> bool:
+        if source is not None and info.source is not source:
+            return False
+        if scan_dirs is None:
+            return True
+        relative = info.path.relative_to(bases[info.source])
+        scan_dir = "." if len(relative.parts) == 1 else relative.parts[0]
+        return scan_dir in scan_dirs
+
+    return tuple(info for info in infos if matches(info))
 
 
-def tracked_recipe_paths(project_root: Path) -> tuple[Path, ...]:
+def tracked_recipe_paths(
+    project_root: Path,
+    *,
+    source: RecipeSource | None = None,
+    scan_dirs: tuple[str, ...] | None = None,
+) -> tuple[Path, ...]:
     """Recipe files that exist in git's index — the set CI will also see."""
-    return tuple(info.path for info in _tracked_recipe_infos(project_root))
+    return tuple(
+        info.path
+        for info in _tracked_recipe_infos(project_root, source=source, scan_dirs=scan_dirs)
+    )
 
 
-def tracked_recipe_names(project_root: Path) -> tuple[str, ...]:
+def tracked_recipe_names(
+    project_root: Path,
+    *,
+    source: RecipeSource | None = None,
+    scan_dirs: tuple[str, ...] | None = None,
+) -> tuple[str, ...]:
     """Recipe ``name:`` values for recipe files that exist in git's index."""
-    return tuple(sorted(info.name for info in _tracked_recipe_infos(project_root)))
+    return tuple(
+        sorted(
+            info.name
+            for info in _tracked_recipe_infos(project_root, source=source, scan_dirs=scan_dirs)
+        )
+    )
 
 
 class RecipeStrayAnalysis(NamedTuple):

@@ -24,19 +24,22 @@ from autoskillit.core import (
     SkillSource,
     pkg_root,
 )
+from autoskillit.core.types import RecipeSource
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.recipe.contracts import resolve_skill_name
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import load_recipe
 from autoskillit.workspace.session_skills import (
     DefaultSessionSkillManager,
     SkillsDirectoryProvider,
 )
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests._tracked_recipes import tracked_recipe_paths
 from tests.contracts._projection_helpers import non_exploration_catalog
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 _PREFIXED_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def test_ephemeral_skill_md_namespace_matches_session_delivery(tmp_path: Path) -> None:
@@ -76,7 +79,13 @@ def test_bundled_recipe_skill_targets_resolve_and_materialize(tmp_path: Path) ->
     """Every static recipe skill target survives resolver and generated-home projection."""
     targets: set[str] = set()
     required_packs: set[str] = set()
-    for recipe_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for recipe_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(recipe_path)
         required_packs.update(recipe.requires_packs)
         for step_name, step in recipe.steps.items():

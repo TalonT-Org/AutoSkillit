@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -13,6 +12,7 @@ from autoskillit.core.types._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.workspace.skill_format import read_skill_frontmatter
 from autoskillit.workspace.skills import DefaultSkillResolver
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -36,16 +36,9 @@ _REQUIRED_JOIN_SKILLS = frozenset(
 
 
 def _tracked_project_local_skill_paths() -> tuple[Path, ...]:
-    result = subprocess.run(
-        ["git", "ls-files", "--", *ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS],
-        cwd=_REPOSITORY_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
     return tuple(
         _REPOSITORY_ROOT / relative_path
-        for relative_path in result.stdout.splitlines()
+        for relative_path in git_ls_files(_REPOSITORY_ROOT, *ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS)
         if Path(relative_path).name == "SKILL.md"
     )
 

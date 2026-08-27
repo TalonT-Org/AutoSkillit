@@ -1047,7 +1047,9 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     from tests._tracked_recipes import tracked_recipe_names
 
     project_root = Path(__file__).resolve().parent.parent.parent
+    recipe_names = tracked_recipe_names(project_root)
     remediation_note_checked = False
+    checked_recipe_modes: set[tuple[str, str]] = set()
     measured_modes: set[tuple[str, str, bool]] = set()
     maxima = {name: (0, "", "") for name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY}
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
@@ -1062,7 +1064,7 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _scripts_dir = str(builtin_scripts_dir())
 
-    for recipe_name in tracked_recipe_names(project_root):
+    for recipe_name in recipe_names:
         for mode_name, overrides in _COMPACT_TEST_OVERRIDES.items():
             resolved = dict(overrides, source_dir=str(project_root))
             loaded_result = load_and_validate(
@@ -1072,6 +1074,7 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
                 resolved_defaults=resolved,
                 temp_dir=tmp_path,
             )
+            checked_recipe_modes.add((recipe_name, mode_name))
             content = loaded_result.get("content")
             if content:
                 original_parsed = load_yaml(content)
@@ -1223,6 +1226,14 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
 
     assert remediation_note_checked, (
         "property=remediation note coverage; recipe=remediation; mode=all"
+    )
+    assert checked_recipe_modes == {
+        (recipe_name, mode_name)
+        for recipe_name in recipe_names
+        for mode_name in _COMPACT_TEST_OVERRIDES
+    }, (
+        "property=recipe/mode grid coverage; "
+        f"actual={checked_recipe_modes!r}; expected=all tracked recipes and modes"
     )
     max_bytes, max_recipe, max_mode = maximum
     assert not over_budget, (

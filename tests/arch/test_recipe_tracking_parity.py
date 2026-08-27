@@ -8,7 +8,6 @@ parametrized test matrix locally while remaining invisible to CI.
 
 from __future__ import annotations
 
-import ast
 import os
 import subprocess
 from pathlib import Path
@@ -18,8 +17,10 @@ from typing import cast
 import pytest
 
 import autoskillit.recipe.io as recipe_io
+from autoskillit.core import RecipeSource
 from autoskillit.recipe import all_validated_recipe_names
-from autoskillit.recipe.io import list_recipes, load_recipe
+from autoskillit.recipe.io import RECIPE_SCAN_DIRS, list_recipes, load_recipe
+from tests._git_inventory import git_ls_files
 from tests._tracked_recipes import (
     analyze_untracked_recipes,
     format_untracked_recipe_report,
@@ -28,10 +29,9 @@ from tests._tracked_recipes import (
     tracked_recipe_paths,
 )
 
-pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_THIS_FILE = Path(__file__).resolve()
 
 _GIT_ENV = {
     **os.environ,
@@ -101,52 +101,6 @@ def test_report_header_surfaces_recipe_analysis_failure_inside_git(
         root_conftest.pytest_report_header(config)
 
 
-def _calls_to_all_validated_recipe_functions(py_file: Path) -> list[int]:
-    target_names = {"all_validated_recipe_names", "all_validated_recipe_paths"}
-    try:
-        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
-    except SyntaxError:
-        return []
-    lines: list[int] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-        if name in target_names:
-            lines.append(node.lineno)
-    return lines
-
-
-def test_parametrized_modules_source_from_tracked_recipes() -> None:
-    """No test file outside the two intentional exceptions may call
-    all_validated_recipe_names/all_validated_recipe_paths — recipe
-    parametrization must source from tests._tracked_recipes."""
-    tests_root = _PROJECT_ROOT / "tests"
-    exempt = {
-        (tests_root / "recipe" / "test_io_discovery.py").resolve(),
-        _THIS_FILE,
-    }
-
-    violations: dict[Path, list[int]] = {}
-    for py_file in sorted(tests_root.rglob("*.py")):
-        resolved = py_file.resolve()
-        if resolved in exempt:
-            continue
-        lines = _calls_to_all_validated_recipe_functions(py_file)
-        if lines:
-            violations[resolved] = lines
-
-    assert not violations, (
-        "Found calls to all_validated_recipe_names/all_validated_recipe_paths "
-        "outside tests/recipe/test_io_discovery.py (which legitimately tests "
-        "list_recipes() directly). Recipe-parametrized tests must enumerate via "
-        "tests._tracked_recipes.tracked_recipe_names/tracked_recipe_paths so the "
-        "matrix reflects git's tracked state, not the live working tree:\n"
-        + "\n".join(f"  {p}: lines {lines}" for p, lines in sorted(violations.items()))
-    )
-
-
 def _init_git_repo(repo_dir: Path) -> None:
     subprocess.run(
         ["git", "init", "-q"], cwd=repo_dir, check=True, capture_output=True, env=_GIT_ENV
@@ -167,6 +121,81 @@ def _git_commit(repo_dir: Path, *paths: Path, message: str) -> None:
         check=True,
         capture_output=True,
         env=_GIT_ENV,
+    )
+
+
+def test_tracked_recipe_accessors_default_to_all_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builtin_root = tmp_path / "fake_pkg"
+    _patch_pkg_root(monkeypatch, builtin_root)
+    project_recipe = tmp_path / ".autoskillit" / "recipes" / "t19-project.yaml"
+    builtin_recipe = builtin_root / "recipes" / "t19-builtin.yaml"
+    for path, name in (
+        (project_recipe, "t19-project"),
+        (builtin_recipe, "t19-builtin"),
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_minimal_recipe_yaml(name), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, project_recipe, builtin_recipe, message="add tracked recipes")
+
+    assert git_ls_files(tmp_path, ".autoskillit/recipes") == (
+        ".autoskillit/recipes/t19-project.yaml",
+    )
+    assert tracked_recipe_paths(tmp_path) == tuple(
+        sorted((project_recipe.resolve(), builtin_recipe.resolve()))
+    )
+    assert tracked_recipe_names(tmp_path) == ("t19-builtin", "t19-project")
+
+
+def test_tracked_recipe_builtin_accessors_exclude_nested_recipes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builtin_root = tmp_path / "fake_pkg"
+    _patch_pkg_root(monkeypatch, builtin_root)
+    builtin_recipe = builtin_root / "recipes" / "t19-builtin.yaml"
+    nested_recipe = builtin_root / "recipes" / "campaigns" / "t19-campaign.yaml"
+    for path, name in (
+        (builtin_recipe, "t19-builtin"),
+        (nested_recipe, "t19-campaign"),
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_minimal_recipe_yaml(name), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, builtin_recipe, nested_recipe, message="add bundled recipes")
+
+    assert tracked_recipe_paths(tmp_path, source=RecipeSource.BUILTIN, scan_dirs=(".",)) == (
+        builtin_recipe.resolve(),
+    )
+    assert tracked_recipe_names(tmp_path, source=RecipeSource.BUILTIN, scan_dirs=(".",)) == (
+        "t19-builtin",
+    )
+
+
+def test_tracked_recipe_project_accessors_include_every_scan_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    project_recipes: list[Path] = []
+    for scan_dir in RECIPE_SCAN_DIRS:
+        suffix = "root" if scan_dir == "." else scan_dir
+        recipe = recipes_dir / scan_dir / f"t19-project-{suffix}.yaml"
+        recipe.parent.mkdir(parents=True, exist_ok=True)
+        recipe.write_text(_minimal_recipe_yaml(f"t19-project-{suffix}"), encoding="utf-8")
+        project_recipes.append(recipe)
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, *project_recipes, message="add project recipes")
+
+    assert tracked_recipe_paths(tmp_path, source=RecipeSource.PROJECT) == tuple(
+        sorted(recipe.resolve() for recipe in project_recipes)
+    )
+    assert tracked_recipe_names(tmp_path, source=RecipeSource.PROJECT) == tuple(
+        sorted(
+            f"t19-project-{'root' if scan_dir == '.' else scan_dir}"
+            for scan_dir in RECIPE_SCAN_DIRS
+        )
     )
 
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import RecipeSource
 from autoskillit.recipe.io import (
-    RECIPE_SCAN_DIRS,
     _parse_recipe,
     load_recipe,
 )
@@ -471,13 +471,7 @@ class TestValidateRecipe:
 
 
 def _project_local_recipes() -> list[Path]:
-    base = _PROJECT_ROOT / ".autoskillit" / "recipes"
-    paths: list[Path] = []
-    for subdir in RECIPE_SCAN_DIRS:
-        scan_dir = base / subdir
-        if scan_dir.is_dir():
-            paths.extend(sorted(scan_dir.glob("*.yaml")))
-    return paths
+    return list(tracked_recipe_paths(_PROJECT_ROOT, source=RecipeSource.PROJECT))
 
 
 @pytest.mark.parametrize("recipe_yaml", _project_local_recipes(), ids=lambda p: p.stem)

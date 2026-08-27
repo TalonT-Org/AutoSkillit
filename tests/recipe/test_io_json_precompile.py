@@ -11,12 +11,13 @@ import yaml
 
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe._io_loading import load_recipe_dict, load_recipe_dict_with_declarations
-from autoskillit.recipe.io import (
-    builtin_recipes_dir,
-    collect_recipes_from_candidates,
-)
+from autoskillit.recipe.io import collect_recipes_from_candidates
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_BUILTIN_RECIPES_PATHSPEC = "src/autoskillit/recipes"
 
 _MINIMAL_RECIPE = {
     "name": "test-recipe",
@@ -29,6 +30,14 @@ _MINIMAL_RECIPE = {
 
 def _write_yaml(path: Path, data: dict) -> None:
     path.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
+
+
+def _tracked_builtin_recipe_paths() -> list[Path]:
+    return sorted(
+        _PROJECT_ROOT / path
+        for path in git_ls_files(_PROJECT_ROOT, _BUILTIN_RECIPES_PATHSPEC)
+        if path.endswith(".yaml")
+    )
 
 
 def _compile_json(yaml_path: Path) -> None:
@@ -247,7 +256,7 @@ def test_collect_recipes_cache_tracks_json_sidecar_state(tmp_path):
 
 
 def test_compile_recipes_roundtrip():
-    for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
+    for yaml_path in _tracked_builtin_recipe_paths():
         data = load_yaml(yaml_path)
         json_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         roundtripped = json.loads(json_text)
@@ -255,7 +264,7 @@ def test_compile_recipes_roundtrip():
 
 
 def test_bundled_json_files_are_fresh():
-    for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
+    for yaml_path in _tracked_builtin_recipe_paths():
         json_path = yaml_path.with_suffix(".json")
         assert json_path.exists(), f"Missing JSON sibling for {yaml_path.name}"
 

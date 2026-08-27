@@ -245,7 +245,15 @@ class TestBuildTestScope:
             "docs",
         ]:
             (tests_root / d).mkdir(parents=True, exist_ok=True)
-        (tests_root / "infra" / "test_pretty_output_hook_infra.py").touch()
+        for test_path in [
+            "infra/test_pretty_output_hook_infra.py",
+            "arch/test_recipe_tracking_parity.py",
+            "arch/test_recipe_enumeration_authority.py",
+            "contracts/test_recipe_name_ledger.py",
+        ]:
+            path = tests_root / test_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
 
         result = build_test_scope(
             changed_files={"src/autoskillit/execution/headless.py"},
@@ -266,6 +274,14 @@ class TestBuildTestScope:
         assert "test_pretty_output_hook_infra.py" in result_names, (
             "infra file missing from cascade"
         )
+        for expected_path in [
+            Path("tests/arch/test_recipe_tracking_parity.py"),
+            Path("tests/arch/test_recipe_enumeration_authority.py"),
+            Path("tests/contracts/test_recipe_name_ledger.py"),
+        ]:
+            assert tests_root.parent / expected_path in result, (
+                f"execution cascade missing {expected_path}"
+            )
         assert "infra" not in result_names, "whole infra/ dir should not be in cascade"
         assert "skills" not in result_names, "skills/ dir should not be in execution layer cascade"
 

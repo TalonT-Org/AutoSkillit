@@ -10,15 +10,17 @@ import pytest
 
 import autoskillit.recipe._skill_helpers as _sh
 from autoskillit.core import Severity
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _RULE_NAME = "skill-write-path-recipe-alignment"
 
-_BUNDLED_RECIPES_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _make_recipe_yaml(skill_name: str, output_dir: str) -> str:
@@ -191,7 +193,13 @@ def test_rule_fires_on_synthetic_pre_fix_divergence(tmp_path: Path) -> None:
 
 
 def _bundled_recipe_paths() -> list[Path]:
-    return sorted(_BUNDLED_RECIPES_DIR.glob("*.yaml"))
+    return sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    )
 
 
 @pytest.mark.parametrize(

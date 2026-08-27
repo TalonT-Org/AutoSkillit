@@ -447,13 +447,11 @@ def project_agent_skill_document(
                     vectors,
                     replacements,
                 )
-                # Splice the preamble as the first body content after the
-                # frontmatter close delimiter. This placement is mode-neutral
-                # and section-agnostic — it precedes every marker regardless
-                # of which section the marker belongs to.
+                # Insert the preamble after the second `---` line (the frontmatter
+                # close delimiter) so it precedes every body marker regardless
+                # of which section owns the marker.
                 if materialized.preamble:
                     frontmatter_close = "---\n"
-                    # Find the second occurrence of "---\n" (closing delimiter)
                     first_idx = content.find(frontmatter_close)
                     if first_idx >= 0:
                         second_idx = content.find(

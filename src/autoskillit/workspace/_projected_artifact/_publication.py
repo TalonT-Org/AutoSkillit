@@ -55,9 +55,20 @@ def _skill_sequence(
 
 def _replace_directory(staging: Path, destination: Path) -> None:
     if destination.is_symlink() or (destination.exists() and not destination.is_dir()):
-        destination.unlink()
+        kind = "symlink" if destination.is_symlink() else "file"
+        try:
+            destination.unlink()
+        except OSError as exc:
+            raise SkillContractError(
+                f"failed to unlink non-directory projection target ({kind}): {destination}"
+            ) from exc
     elif destination.exists():
-        shutil.rmtree(destination)
+        try:
+            shutil.rmtree(destination)
+        except OSError as exc:
+            raise SkillContractError(
+                f"failed to remove existing projection tree: {destination}"
+            ) from exc
     os.replace(staging, destination)
 
 
@@ -111,7 +122,7 @@ def materialize_agent_skill_tree(
             atomic_write(skill_dir / "SKILL.md", document.content)
             documents[skill.name] = document
         _replace_directory(staging, destination)
-    except Exception:
+    except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
     return documents
@@ -317,7 +328,7 @@ def materialize_sanitized_plugin_root(
         skill_infos = _skill_sequence(catalog)
         documents = materialize_agent_skill_tree(staging / "skills", skill_infos, context)
         _replace_directory(staging, destination)
-    except Exception:
+    except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
 

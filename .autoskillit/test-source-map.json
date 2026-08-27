@@ -1,11 +1,4 @@
 {
-  "provenance": {
-    "generated_at": "2026-08-26T05:47:41.360849+00:00",
-    "source_commit": "35f09bb0b22538eb55304435e74252591e4e6343",
-    "pytest_exit_code": 0,
-    "tool_version": "0.10.1050",
-    "source_file_count": 691
-  },
   "map": {
     "src/autoskillit/__init__.py": [
       "tests/server/test_enable_exploration.py",
@@ -13855,6 +13848,16 @@
       "tests/server/test_tools_run_skill_retry.py",
       "tests/server/test_tools_status_kitchen.py"
     ],
+    "src/autoskillit/fleet/dispatch/__init__.py": [],
+    "src/autoskillit/fleet/dispatch/_api.py": [],
+    "src/autoskillit/fleet/dispatch/_classification.py": [],
+    "src/autoskillit/fleet/dispatch/_cleanup.py": [],
+    "src/autoskillit/fleet/dispatch/_errors.py": [],
+    "src/autoskillit/fleet/dispatch/_execution.py": [],
+    "src/autoskillit/fleet/dispatch/_heartbeat.py": [],
+    "src/autoskillit/fleet/dispatch/_lineage.py": [],
+    "src/autoskillit/fleet/dispatch/_pid.py": [],
+    "src/autoskillit/fleet/dispatch/_validation.py": [],
     "src/autoskillit/fleet/result_parser.py": [
       "tests/fleet/test_api.py",
       "tests/fleet/test_api_dispatch_marker.py",
@@ -37272,6 +37275,13 @@
       "tests/server/test_tools_git_merge_cleanup.py",
       "tests/workspace/test_worktree.py"
     ]
+  },
+  "provenance": {
+    "generated_at": "2026-08-27T04:52:50.246715+00:00",
+    "pytest_exit_code": 0,
+    "source_commit": "3263246ffe59235b20991ddae69aace90b6f5370",
+    "source_file_count": 701,
+    "tool_version": "0.10.1063"
   },
   "schema_version": 1
 }

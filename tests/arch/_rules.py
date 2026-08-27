@@ -161,6 +161,12 @@ _STRENUM_SRC_COMPARE_EXEMPT_PATHS: frozenset[str] = frozenset(
         "cli/_validate.py",  # ValidationResult.status: plain str property, not a StrEnum
         "execution/process/_process_monitor.py",  # psutil Connection.status: plain str
         "fleet/_api.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome
+        # LineagePreparationResult.outcome is a Literal, not SessionOutcome.
+        "fleet/dispatch/_api.py",
+        # L3ParseResult.outcome is a Literal, not SessionOutcome.
+        "fleet/dispatch/_classification.py",
+        # LineagePreparationResult.outcome is a Literal, not SessionOutcome.
+        "fleet/dispatch/_lineage.py",
         "fleet/_checkpoint_bridge.py",  # IssueSidecarEntry.status: Literal[...], not StrEnum
         "fleet/_outcome.py",  # classify_dispatch_outcome: Literal comparisons
         "fleet/_sidecar_synthesis.py",  # L3ParseResult.outcome: Literal[...], not SessionOutcome

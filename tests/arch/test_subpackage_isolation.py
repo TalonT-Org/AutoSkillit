@@ -1412,23 +1412,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "marker binder; extracting them would create an artificial module boundary while "
         "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
     ),
-    "fleet/_api.py": (
-        1595,
-        "REQ-CNST-010-E6: fleet dispatch engine — evaluate_skip_when inlined here to avoid "
-        "a 16th fleet/ module (sub-package file ceiling); keeps dispatch-related helpers "
-        "co-located with the execution engine that calls them. Bumped to 1200 by the "
-        "fleet-resume-precondition-chokepoint plan: prepare_resume chokepoint, "
-        "closure-scoped _spawn_error, and _write_pid fail-closed contract add ~33 lines. "
-        "Bumped to 1550 for #4417's per-effect dispatch provenance checkpoints and "
-        "post-start crash persistence; those checkpoints must remain adjacent to the "
-        "side effects whose ambiguity they record. Bumped to 1575 so the managed native "
-        "shell lineage decision and provenance snapshot remain on the same dispatch "
-        "transaction boundary after conflict resolution. Bumped to 1590 for shared "
-        "tracker-authority retention and cleanup on every dispatch outcome boundary. "
-        "Bumped to 1595 for #4597 rectify: warm_failure_path_imports() call at the "
-        "fleet-dispatch entry point, one of the three self-invocation entry points "
-        "this mid-session-upgrade-immunity fix warms.",
-    ),
     "server/_recipe_delivery.py": (
         750,
         "REQ-CNST-010-E12: #4557 decomposes recipe delivery into _recipe_delivery.py "

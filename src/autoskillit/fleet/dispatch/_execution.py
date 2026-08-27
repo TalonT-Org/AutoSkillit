@@ -31,11 +31,11 @@ from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.fleet.dispatch._heartbeat import _dispatch_heartbeat
 from autoskillit.fleet.dispatch._pid import _write_pid
 from autoskillit.fleet.state import DispatchStatus
-from autoskillit.fleet.state_types import (
+from autoskillit.fleet.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
-    DispatchResult,
 )
+from autoskillit.fleet.state_outcomes import DispatchResult
 
 if TYPE_CHECKING:
     from autoskillit.core import (

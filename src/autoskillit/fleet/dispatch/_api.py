@@ -50,13 +50,15 @@ from autoskillit.fleet.dispatch._execution import SpawnContext, run_execution
 from autoskillit.fleet.dispatch._lineage import run_lineage_preparation
 from autoskillit.fleet.dispatch._validation import run_pre_launch_gating
 from autoskillit.fleet.sidecar import sidecar_path
-from autoskillit.fleet.state_types import (
+from autoskillit.fleet.state import DispatchStatus
+from autoskillit.fleet.state_effects import (
     DispatchAggregatePhase,
-    DispatchCompleted,
     DispatchProvenanceTracker,
+)
+from autoskillit.fleet.state_outcomes import (
+    DispatchCompleted,
     DispatchRejected,
     DispatchResult,
-    DispatchStatus,
 )
 
 if TYPE_CHECKING:

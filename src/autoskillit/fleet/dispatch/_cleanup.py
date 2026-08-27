@@ -29,7 +29,7 @@ from autoskillit.core import (
 )
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
 from autoskillit.fleet.dispatch._execution import SpawnContext
-from autoskillit.fleet.state_types import DispatchEffectName, DispatchProvenanceTracker
+from autoskillit.fleet.state_effects import DispatchEffectName, DispatchProvenanceTracker
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult

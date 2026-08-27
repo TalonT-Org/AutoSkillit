@@ -46,11 +46,11 @@ from autoskillit.fleet.state import (
     upsert_dispatch_record_by_name,
     write_captured_values,
 )
-from autoskillit.fleet.state_types import (
+from autoskillit.fleet.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
-    DispatchResult,
 )
+from autoskillit.fleet.state_outcomes import DispatchResult
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend

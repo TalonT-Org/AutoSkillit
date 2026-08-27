@@ -11,6 +11,8 @@ one module is what stops those three from drifting apart again.
 from __future__ import annotations
 
 import hashlib
+import os
+import shutil
 import stat
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
@@ -588,6 +590,14 @@ def _reconcile_projection_entry(
 
     if entry_class is ProjectionEntryClass.ACTIVE_ROOT:
         return ProjectionReconcileDisposition.SKIPPED_ACTIVE
+    if entry_class is ProjectionEntryClass.RESIDUE_STAGING_ROOT:
+        return _resume_projection_residue(
+            entry,
+            root=root,
+            home=home,
+            owner=owner,
+            active_key=active_key,
+        )
     if entry_class is not ProjectionEntryClass.PROJECTION_ROOT:
         return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
     if entry.parent != root:
@@ -607,7 +617,12 @@ def _reconcile_projection_entry(
             try:
                 identity = owner.identity_for_path(entry)
             except PluginArtifactValidationError:
-                return ProjectionReconcileDisposition.DEFERRED_INVALID_IDENTITY
+                return _quarantine_invalid_projection(
+                    entry,
+                    root=root,
+                    owner=owner,
+                    active_key=active_key,
+                )
             except PluginArtifactUnavailableError:
                 return ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE
             appended = owner.enqueue_retirement(identity, not_before)
@@ -620,6 +635,124 @@ def _reconcile_projection_entry(
         return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
     finally:
         writer.close_preserving()
+
+
+def _revalidate_projection_mutation_target(
+    entry: Path,
+    *,
+    root: Path,
+    active_key: str,
+    owner: ProjectedPluginRetirementOwner,
+) -> ProjectionReconcileDisposition | None:
+    """Recheck write authority and shape immediately before a residue rename."""
+    try:
+        if not owner._contains(entry) or entry.parent != root or entry.name == active_key:
+            return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+        exists = entry.exists() or entry.is_symlink()
+        if not exists:
+            return ProjectionReconcileDisposition.ALREADY_ABSENT
+        if entry.is_symlink() or not entry.is_dir():
+            return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    except OSError:
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    return None
+
+
+def _teardown_projection_residue(*, staging: Path, manifest: Path) -> None:
+    """Finish the rename-committed residue transition in crash-safe order."""
+    if manifest.exists() or manifest.is_symlink():
+        manifest.unlink()
+    shutil.rmtree(staging)
+
+
+def _quarantine_invalid_projection(
+    entry: Path,
+    *,
+    root: Path,
+    owner: ProjectedPluginRetirementOwner,
+    active_key: str,
+) -> ProjectionReconcileDisposition:
+    """Atomically quarantine and remove one permanently invalid projection."""
+    refusal = _revalidate_projection_mutation_target(
+        entry,
+        root=root,
+        active_key=active_key,
+        owner=owner,
+    )
+    if refusal is not None:
+        return refusal
+
+    staging = residue_staging_path(entry)
+    manifest = owner.manifest_path(entry)
+    try:
+        staging_present = staging.exists() or staging.is_symlink()
+        if staging_present:
+            if staging.is_symlink() or not staging.is_dir():
+                return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+            _teardown_projection_residue(staging=staging, manifest=manifest)
+            refusal = _revalidate_projection_mutation_target(
+                entry,
+                root=root,
+                active_key=active_key,
+                owner=owner,
+            )
+            if refusal is not None:
+                return refusal
+        refusal = _revalidate_projection_mutation_target(
+            entry,
+            root=root,
+            active_key=active_key,
+            owner=owner,
+        )
+        if refusal is not None:
+            return refusal
+        os.rename(entry, staging)
+        _teardown_projection_residue(staging=staging, manifest=manifest)
+    except OSError:
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    return ProjectionReconcileDisposition.RECONCILED
+
+
+def _resume_projection_residue(
+    entry: Path,
+    *,
+    root: Path,
+    home: ManagedHome,
+    owner: ProjectedPluginRetirementOwner,
+    active_key: str,
+) -> ProjectionReconcileDisposition:
+    """Resume teardown for a deterministic residue staging directory."""
+    match = _RESIDUE_STAGING_ROOT_RE.fullmatch(entry.name)
+    if match is None:
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    managed_path = root / match.group("key")
+    if entry != residue_staging_path(managed_path) or managed_path.name == active_key:
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    try:
+        present = entry.exists() or entry.is_symlink()
+        if not present:
+            return ProjectionReconcileDisposition.ALREADY_ABSENT
+        if entry.is_symlink() or not entry.is_dir() or not owner._contains(entry):
+            return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+        writer = ArtifactLease.acquire_exclusive(
+            owner.lease_path(managed_path),
+            blocking=False,
+        )
+    except ArtifactLeaseContention:
+        return ProjectionReconcileDisposition.DEFERRED_CONTENDED
+    except (OSError, RuntimeError):
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    try:
+        with _InstallLock(home):
+            _teardown_projection_residue(
+                staging=entry,
+                manifest=owner.manifest_path(managed_path),
+            )
+    except (OSError, RuntimeError):
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    finally:
+        writer.close_preserving()
+    return ProjectionReconcileDisposition.RESUMED
 
 
 def _log_projection_reconcile(
@@ -658,10 +791,21 @@ def prune_stale_projections(
     """Reconcile every cache entry and count newly queued stale identities."""
     root = Path(projections_root).expanduser().resolve(strict=False)
     owner = ProjectedPluginRetirementOwner(root, home=home, active_key=active_key)
-    with _InstallLock(home):
-        if not root.is_dir():
+    try:
+        if not home.contains(owner.managed_root):
             return 0
-        entries = tuple(sorted(root.iterdir(), key=lambda item: item.name))
+        with _InstallLock(home):
+            if not root.is_dir():
+                return 0
+            entries = tuple(sorted(root.iterdir(), key=lambda item: item.name))
+    except (OSError, RuntimeError):
+        logger.warning(
+            "projected_plugin_reconcile",
+            path=str(root),
+            entry_class="projection_root",
+            disposition=ProjectionReconcileDisposition.DEFERRED_IO_ERROR.value,
+        )
+        return 0
 
     created = 0
     not_before = datetime.now(UTC) + timedelta(hours=_PROJECTION_GRACE_HOURS)

@@ -13,8 +13,9 @@ import pytest
 
 import autoskillit.workspace._projection_cache as projection_cache
 from autoskillit.core import (
+    ArtifactLeaseContention,
     PluginArtifactUnavailableError,
-    PluginArtifactValidationError,
+    managed_home_for,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
@@ -105,36 +106,26 @@ def test_reconcile_never_enqueues_protected_lease_or_staging_entries(
         not_before=datetime.now(UTC),
     )
 
-    assert disposition is projection_cache.ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    expected = (
+        projection_cache.ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+        if name.endswith("autoskillit-residue-0123456789abcdef")
+        else projection_cache.ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    )
+    assert disposition is expected
     owner.lease_path.assert_not_called()
     owner.identity_for_path.assert_not_called()
     owner.enqueue_retirement.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    ("error", "expected"),
-    [
-        (
-            PluginArtifactValidationError("bad identity"),
-            projection_cache.ProjectionReconcileDisposition.DEFERRED_INVALID_IDENTITY,
-        ),
-        (
-            PluginArtifactUnavailableError("identity unavailable"),
-            projection_cache.ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE,
-        ),
-    ],
-)
-def test_reconcile_defers_invalid_or_unavailable_projection_identities(
+def test_reconcile_unavailable_projection_identity_does_not_mutate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    error: Exception,
-    expected: projection_cache.ProjectionReconcileDisposition,
 ) -> None:
     entry = tmp_path / _STALE_KEY
     entry.mkdir()
     owner = Mock()
     owner.lease_path.return_value = tmp_path / "lease.lock"
-    owner.identity_for_path.side_effect = error
+    owner.identity_for_path.side_effect = PluginArtifactUnavailableError("identity unavailable")
     monkeypatch.setattr(projection_cache, "_InstallLock", lambda _home: nullcontext())
     monkeypatch.setattr(
         projection_cache.ArtifactLease,
@@ -151,11 +142,206 @@ def test_reconcile_defers_invalid_or_unavailable_projection_identities(
         not_before=datetime.now(UTC),
     )
 
-    assert disposition is expected
+    assert disposition is projection_cache.ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE
     owner.enqueue_retirement.assert_not_called()
+    assert entry.is_dir()
+    assert not projection_cache.residue_staging_path(entry).exists()
 
 
-def test_schema_drift_is_contained_while_stale_projection_stays_deferred(
+def test_reconcile_resumes_deterministic_residue_after_crash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "projections"
+    root.mkdir()
+    managed_path = root / _STALE_KEY
+    residue = projection_cache.residue_staging_path(managed_path)
+    residue.mkdir()
+    manifest = projection_cache.projected_artifact_manifest_path(managed_path)
+    manifest.write_text("{}", encoding="utf-8")
+    owner = Mock()
+    owner._contains.return_value = True
+    owner.lease_path.return_value = projection_cache.projected_artifact_lease_path(managed_path)
+    owner.manifest_path.return_value = manifest
+    monkeypatch.setattr(projection_cache, "_InstallLock", lambda _home: nullcontext())
+    monkeypatch.setattr(
+        projection_cache.ArtifactLease,
+        "acquire_exclusive",
+        lambda *_args, **_kwargs: _ClosePreservingWriter(),
+    )
+
+    disposition = projection_cache._reconcile_projection_entry(
+        residue,
+        root=root,
+        home=object(),
+        owner=owner,
+        active_key=_ACTIVE_KEY,
+        not_before=datetime.now(UTC),
+    )
+
+    assert disposition is projection_cache.ProjectionReconcileDisposition.RESUMED
+    assert not residue.exists()
+    assert not manifest.exists()
+    owner.lease_path.assert_called_once_with(managed_path)
+
+
+def test_residue_resume_defers_when_the_original_key_lease_is_contended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "projections"
+    root.mkdir()
+    managed_path = root / _STALE_KEY
+    residue = projection_cache.residue_staging_path(managed_path)
+    residue.mkdir()
+    manifest = projection_cache.projected_artifact_manifest_path(managed_path)
+    manifest.write_text("{}", encoding="utf-8")
+    lease_path = projection_cache.projected_artifact_lease_path(managed_path)
+    owner = Mock()
+    owner._contains.return_value = True
+    owner.lease_path.return_value = lease_path
+    owner.manifest_path.return_value = manifest
+    monkeypatch.setattr(projection_cache, "_InstallLock", lambda _home: nullcontext())
+
+    def contend(path: Path, **_kwargs: object) -> _ClosePreservingWriter:
+        assert path == lease_path
+        raise ArtifactLeaseContention(path)
+
+    monkeypatch.setattr(
+        projection_cache.ArtifactLease,
+        "acquire_exclusive",
+        contend,
+    )
+
+    disposition = projection_cache._reconcile_projection_entry(
+        residue,
+        root=root,
+        home=object(),
+        owner=owner,
+        active_key=_ACTIVE_KEY,
+        not_before=datetime.now(UTC),
+    )
+
+    assert disposition is projection_cache.ProjectionReconcileDisposition.DEFERRED_CONTENDED
+    assert residue.is_dir()
+    assert manifest.is_file()
+    owner.lease_path.assert_called_once_with(managed_path)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected"),
+    [
+        ("disappear", projection_cache.ProjectionReconcileDisposition.ALREADY_ABSENT),
+        ("symlink", projection_cache.ProjectionReconcileDisposition.DEFERRED_UNMANAGED),
+    ],
+)
+def test_quarantine_refuses_targets_that_change_before_rename(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    expected: projection_cache.ProjectionReconcileDisposition,
+) -> None:
+    root = tmp_path / "projections"
+    root.mkdir()
+    entry = root / _STALE_KEY
+    entry.mkdir()
+    owner = Mock()
+    owner._contains.return_value = True
+    owner.manifest_path.return_value = projection_cache.projected_artifact_manifest_path(entry)
+    revalidate = projection_cache._revalidate_projection_mutation_target
+    calls = 0
+
+    def mutate_after_initial_validation(
+        target: Path,
+        **kwargs: object,
+    ) -> projection_cache.ProjectionReconcileDisposition | None:
+        nonlocal calls
+        refusal = revalidate(target, **kwargs)
+        calls += 1
+        if calls == 1:
+            target.rmdir()
+            if mutation == "symlink":
+                outside = tmp_path / "outside"
+                outside.mkdir()
+                target.symlink_to(outside, target_is_directory=True)
+        return refusal
+
+    monkeypatch.setattr(
+        projection_cache,
+        "_revalidate_projection_mutation_target",
+        mutate_after_initial_validation,
+    )
+
+    disposition = projection_cache._quarantine_invalid_projection(
+        entry,
+        root=root,
+        owner=owner,
+        active_key=_ACTIVE_KEY,
+    )
+
+    assert disposition is expected
+    assert not projection_cache.residue_staging_path(entry).exists()
+    assert calls == 2
+
+
+def test_residue_resume_retries_after_rmtree_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "projections"
+    root.mkdir()
+    managed_path = root / _STALE_KEY
+    residue = projection_cache.residue_staging_path(managed_path)
+    residue.mkdir()
+    manifest = projection_cache.projected_artifact_manifest_path(managed_path)
+    manifest.write_text("{}", encoding="utf-8")
+    owner = Mock()
+    owner._contains.return_value = True
+    owner.lease_path.return_value = projection_cache.projected_artifact_lease_path(managed_path)
+    owner.manifest_path.return_value = manifest
+    monkeypatch.setattr(projection_cache, "_InstallLock", lambda _home: nullcontext())
+    monkeypatch.setattr(
+        projection_cache.ArtifactLease,
+        "acquire_exclusive",
+        lambda *_args, **_kwargs: _ClosePreservingWriter(),
+    )
+    rmtree = projection_cache.shutil.rmtree
+    attempts = 0
+
+    def fail_once(path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("rmtree failed")
+        rmtree(path)
+
+    monkeypatch.setattr(projection_cache.shutil, "rmtree", fail_once)
+
+    first = projection_cache._reconcile_projection_entry(
+        residue,
+        root=root,
+        home=object(),
+        owner=owner,
+        active_key=_ACTIVE_KEY,
+        not_before=datetime.now(UTC),
+    )
+    second = projection_cache._reconcile_projection_entry(
+        residue,
+        root=root,
+        home=object(),
+        owner=owner,
+        active_key=_ACTIVE_KEY,
+        not_before=datetime.now(UTC),
+    )
+
+    assert first is projection_cache.ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    assert second is projection_cache.ProjectionReconcileDisposition.RESUMED
+    assert attempts == 2
+    assert not residue.exists()
+    assert not manifest.exists()
+
+
+def test_schema_drift_is_contained_while_stale_projection_is_reconciled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -178,12 +364,13 @@ def test_schema_drift_is_contained_while_stale_projection_stays_deferred(
         warnings.simplefilter("always")
         queued = projection_cache.prune_stale_projections(
             root,
-            home=object(),
+            home=managed_home_for(tmp_path),
             active_key=_ACTIVE_KEY,
         )
 
     assert queued == 0
-    assert candidate.is_dir()
+    assert not candidate.exists()
+    assert not projection_cache.projected_artifact_manifest_path(candidate).exists()
     assert not any("schema_drift" in str(warning.message) for warning in captured)
 
 
@@ -202,7 +389,7 @@ def test_prune_contains_classifier_value_errors_and_reports_the_disposition(
     assert (
         projection_cache.prune_stale_projections(
             root,
-            home=object(),
+            home=managed_home_for(tmp_path),
             active_key=_ACTIVE_KEY,
         )
         == 0
@@ -242,7 +429,7 @@ def test_prune_enumerates_every_direct_child_and_counts_only_new_queue_entries(
     monkeypatch.setattr(
         projection_cache,
         "ProjectedPluginRetirementOwner",
-        lambda *_args, **_kwargs: object(),
+        lambda *_args, **_kwargs: Mock(managed_root=root),
     )
     monkeypatch.setattr(projection_cache, "_reconcile_projection_entry", reconcile)
     monkeypatch.setattr(
@@ -254,7 +441,7 @@ def test_prune_enumerates_every_direct_child_and_counts_only_new_queue_entries(
     assert (
         projection_cache.prune_stale_projections(
             root,
-            home=object(),
+            home=managed_home_for(tmp_path),
             active_key=_ACTIVE_KEY,
         )
         == 1

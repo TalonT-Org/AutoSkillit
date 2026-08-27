@@ -350,53 +350,65 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._projection_cache::prune_stale_projections --
-    f"{_PP}::L663": SafetyDecision(
+    f"{_PP}::L796": SafetyDecision(
+        "The managed-home boundary does not contain the projection owner root, so mutation "
+        "is refused before enumeration."
+    ),
+    f"{_PP}::L799": SafetyDecision(
         "The projections root does not exist; there is nothing here to prune."
     ),
+    f"{_PP}::L808": SafetyDecision(
+        "An operational failure inspecting the projection root defers reconciliation "
+        "without risking launch availability."
+    ),
     # -- workspace._projection_cache::_reconcile_projection_entry --
-    f"{_PRE}::L587": SafetyDecision(
+    f"{_PRE}::L589": SafetyDecision(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
     ),
-    f"{_PRE}::L590": SafetyDecision(
+    f"{_PRE}::L592": SafetyDecision(
         "The caller-selected active projection is intentionally excluded from stale "
         "reconciliation."
     ),
-    f"{_PRE}::L592": SafetyDecision(
+    f"{_PRE}::L594": SafetyDecision(
+        "A deterministic residue staging entry delegates to its original-key locked "
+        "resume transition."
+    ),
+    f"{_PRE}::L602": SafetyDecision(
         "A recognized non-projection namespace belongs to another lifecycle owner and "
         "remains untouched."
     ),
-    f"{_PRE}::L594": SafetyDecision(
+    f"{_PRE}::L604": SafetyDecision(
         "A projection outside the exact scanned root fails the direct-child ownership guard."
     ),
-    f"{_PRE}::L602": RetentionDecision(
+    f"{_PRE}::L612": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PRE}::L604": SafetyDecision(
+    f"{_PRE}::L614": SafetyDecision(
         "Lease acquisition failed operationally, so reconciliation defers without "
         "claiming deletion authority."
     ),
-    f"{_PRE}::L610": SafetyDecision(
-        "Manifest validation failed while resolving the candidate's identity; an inspection "
-        "failure, not evidence the candidate is still live."
+    f"{_PRE}::L620": SafetyDecision(
+        "A permanently invalid projection delegates to the terminal quarantine transition "
+        "under the held lease and lock."
     ),
-    f"{_PRE}::L612": SafetyDecision(
+    f"{_PRE}::L627": SafetyDecision(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PRE}::L615": SafetyDecision(
+    f"{_PRE}::L630": SafetyDecision(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),
-    f"{_PRE}::L617": SafetyDecision(
+    f"{_PRE}::L632": SafetyDecision(
         "A new exact retirement record was durably created; this reports successful disposition."
     ),
-    f"{_PRE}::L618": SafetyDecision(
+    f"{_PRE}::L633": SafetyDecision(
         "The exact retirement record already exists, so no duplicate durable mutation is needed."
     ),
-    f"{_PRE}::L620": SafetyDecision(
+    f"{_PRE}::L635": SafetyDecision(
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),

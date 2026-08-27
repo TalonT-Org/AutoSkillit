@@ -535,7 +535,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
     ),
-    "hooks/_hook_settings.py:315": (
+    "hooks/_hook_settings.py:316": (
         "The `env_var` function parameter of _resolve_int() is supplied dynamically per caller;"
         "not a module-level literal or resolvable constant."
     ),

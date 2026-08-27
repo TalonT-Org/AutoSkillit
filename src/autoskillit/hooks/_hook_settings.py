@@ -15,6 +15,7 @@ imports, no ``autoskillit.*`` imports. It runs unchanged under the bare
 Python interpreter used by Claude Code hook subprocesses.
 """
 
+import importlib
 import json
 import os
 import sys
@@ -22,15 +23,6 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-
-if __package__:
-    from ._session_binding import SessionBindingError, read_binding, resolve_binding_path
-else:
-    from _session_binding import (  # type: ignore[import-not-found,no-redef]
-        SessionBindingError,
-        read_binding,
-        resolve_binding_path,
-    )
 
 # Keep in sync with _HOOK_CONFIG_PATH_COMPONENTS in hooks/_fmt_primitives.py
 # (stdlib-only boundary prevents a shared import).
@@ -514,9 +506,16 @@ def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object]
     Missing, unreadable, malformed, or mismatched binding artifacts retain the
     existing permissive policy and are treated as no binding.
     """
+    # Some projected hooks consume settings without carrying join artifacts, so
+    # load this dependency only on the join-binding path.
+    module_name = f"{__package__}._session_binding" if __package__ else "_session_binding"
+    binding_module = importlib.import_module(module_name)
+    resolve_path = getattr(binding_module, "resolve_binding_path")
+    read_binding = getattr(binding_module, "read_binding")
+    binding_error = getattr(binding_module, "SessionBindingError")
     try:
-        binding = read_binding(resolve_binding_path(payload_cwd, session_id))
-    except SessionBindingError:
+        binding = read_binding(resolve_path(payload_cwd, session_id))
+    except binding_error:
         return None
     if binding is None or binding.session_id != session_id:
         return None

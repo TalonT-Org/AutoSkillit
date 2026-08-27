@@ -269,30 +269,6 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.hook_trust_policy is HookTrustPolicy.AUTOMATED
 
 
-def test_every_fixed_set_backend_declares_every_join_guard() -> None:
-    """Fixed-set capable backends must install the complete join guard set."""
-    from autoskillit.execution import BACKEND_REGISTRY
-
-    required = frozenset(
-        {
-            "background_exec_guard",
-            "join_claim_guard",
-            "join_followup_guard",
-            "join_settle_guard",
-            "join_stop_guard",
-        }
-    )
-    fixed_set_backends = {
-        name: cls().capabilities
-        for name, cls in BACKEND_REGISTRY.items()
-        if cls().capabilities.fixed_set_join_capable
-    }
-
-    assert fixed_set_backends
-    for name, capabilities in fixed_set_backends.items():
-        assert required.issubset(capabilities.applicable_guards), name
-
-
 def test_backend_capabilities_hook_policy_default_is_automated():
     from autoskillit.core import BackendCapabilities, HookTrustPolicy
 

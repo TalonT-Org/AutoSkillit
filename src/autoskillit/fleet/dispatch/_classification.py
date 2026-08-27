@@ -1,14 +1,13 @@
 """Phase E: outcome classification + final state write — moved from fleet/_api.py (#4851).
 
 Holds the two final-pass functions:
-* ``run_outcome_classification`` — lines 1334-1482: parses the L3 result
-  block, classifies the dispatch outcome, runs the sidecar-synthesis
-  fallback, applies the tracker-authority error override, branches on
-  ``SUCCESS`` to fire ``COMMIT`` provenance, and computes the terminal
-  lineage state.
-* ``finalize_state_write`` — lines 1484-1589: persists the ``DispatchRecord``
-  + captures, updates effect-provenance, runs ``_post_dispatch_cleanup``,
-  and returns the ``DispatchResult`` envelope.
+* ``run_outcome_classification`` parses the L3 result block, classifies the
+  dispatch outcome, runs the sidecar-synthesis fallback, applies the
+  tracker-authority error override, branches on ``SUCCESS`` to fire
+  ``COMMIT`` provenance, and computes the terminal lineage state.
+* ``finalize_state_write`` persists the ``DispatchRecord`` + captures,
+  updates effect-provenance, runs ``_post_dispatch_cleanup``, and returns
+  the ``DispatchResult`` envelope.
 """
 
 from __future__ import annotations
@@ -117,7 +116,7 @@ async def run_outcome_classification(
     Returns a ``ClassificationResult`` carrying every field the orchestrator's
     finalize shard needs.
     """
-    # 1334-1346: load progress (sidecar + tracker authority).
+    # Load progress (sidecar + tracker authority).
     (
         sidecar_file,
         sidecar_entries,
@@ -289,7 +288,7 @@ async def run_outcome_classification(
             returned_session_id=skill_result.session_id,
         )
 
-    # 1502-1517: SUCCESS → COMMIT provenance.
+    # SUCCESS → COMMIT provenance.
     if final_status == DispatchStatus.SUCCESS:
         provenance.start(
             DispatchEffectName.COMMIT,
@@ -355,7 +354,7 @@ async def finalize_state_write(
     quota_refresher: Callable[..., Any],
     effective_backend_name: str = "",
 ) -> DispatchResult:
-    """Lines 1484-1589: persist DispatchRecord + captures + post-cleanup envelope."""
+    """Phase E — persist the DispatchRecord + captures and return the envelope."""
     skill_result = classification.skill_result
     parsed_result = classification.parsed_result
     final_status = classification.final_status
@@ -366,7 +365,7 @@ async def finalize_state_write(
     project_log_dir = classification.project_log_dir
     _issue_urls_raw = spawn_ctx.issue_urls_raw
 
-    # 1519-1549: build the DispatchRecord.
+    # Build the DispatchRecord.
     record = DispatchRecord(
         name=effective_name,
         status=final_status,
@@ -403,7 +402,7 @@ async def finalize_state_write(
         managed_lineage_ref=managed_lineage_ref,
     )
 
-    # 1551-1559: SUCCESS + capture extraction.
+    # SUCCESS + capture extraction.
     extracted: dict[str, str] = {}
     if (
         final_status == DispatchStatus.SUCCESS
@@ -414,7 +413,7 @@ async def finalize_state_write(
     ):
         extracted = _extract_captures(capture, parsed_result.payload)
 
-    # 1561-1572: persist state + captures + provenance confirmation.
+    # Persist state + captures + provenance confirmation.
     provenance.start(
         DispatchEffectName.CAMPAIGN_STATE_WRITE,
         identities={"dispatch_id": dispatch_id, "state_path": state_path},
@@ -428,14 +427,14 @@ async def finalize_state_write(
         identities={"dispatch_id": dispatch_id, "state_path": state_path},
     )
 
-    # 1573-1574: refresh provenance snapshot on the persisted record.
+    # Refresh provenance snapshot on the persisted record.
     record.effect_provenance = provenance.snapshot().to_dict()
     upsert_dispatch_record_by_name(state_path, record)
 
     # 1575: post-dispatch cleanup (quota cache invalidation + background refresh).
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
-    # 1577-1589: build and return the DispatchResult envelope.
+    # Build and return the DispatchResult envelope.
     return build_dispatch_result(
         parsed_result=parsed_result,
         result_success=classification.result_success,

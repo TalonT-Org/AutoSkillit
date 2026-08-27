@@ -80,10 +80,7 @@ PERSISTED_FORMAT_LEDGER: Mapping[str, PersistedFormatDef] = MappingProxyType(
         ),
         "fleet_campaign_state": PersistedFormatDef(
             format_id="fleet_campaign_state",
-            version_constant="autoskillit.fleet.state_types.FLEET_STATE_SCHEMA_VERSION",
-            # decoder_module and enum_qualname point at the canonical home
-            # (fleet/state_transitions); version_constant resolves through the
-            # state_types facade for backward compat.
+            version_constant="autoskillit.fleet.state_records.FLEET_STATE_SCHEMA_VERSION",
             decoder_module="fleet/state_transitions.py",
             enums=(
                 PersistedEnumDef(

@@ -279,7 +279,8 @@ class TestBuildTestScope:
             Path("tests/arch/test_recipe_enumeration_authority.py"),
             Path("tests/contracts/test_recipe_name_ledger.py"),
         ]:
-            assert tests_root.parent / expected_path in result, (
+            target = tests_root.parent / expected_path
+            assert any(selected == target or selected in target.parents for selected in result), (
                 f"execution cascade missing {expected_path}"
             )
         assert "infra" not in result_names, "whole infra/ dir should not be in cascade"

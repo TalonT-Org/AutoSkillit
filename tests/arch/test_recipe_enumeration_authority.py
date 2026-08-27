@@ -50,6 +50,11 @@ _LIVE_ENUMERATION_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("tests/recipe/test_delivery_segments.py", "glob"),
         # Contract cards are generated artifacts, rather than the recipe test matrix.
         ("tests/recipe/test_bundled_recipes_dispatch_ready.py", "_CONTRACT_STEMS"),
+        # This parameter set is derived from the generated contract-card stems above.
+        (
+            "tests/recipe/test_bundled_recipes_dispatch_ready.py",
+            "_RECIPES_WITH_CONTRACTS",
+        ),
         # Contract cards are generated artifacts, rather than the recipe test matrix.
         ("tests/arch/test_recipe_contract_freshness.py", "_CONTRACT_STEMS"),
         # This module deliberately compares the live loader with Git's tracked inventory.

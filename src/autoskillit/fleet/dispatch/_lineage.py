@@ -49,7 +49,6 @@ from autoskillit.fleet.state_types import (
     DispatchEffectName,
     DispatchProvenanceTracker,
     DispatchResult,
-    DispatchStatus,
 )
 from autoskillit.workspace import default_skill_resolver, prepare_skill_projection
 
@@ -352,46 +351,21 @@ async def run_lineage_preparation(
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
     # Phase B failure path — all calls below this point pass
-    # ``managed_lineage_ref=None`` because ``prepare_food_truck_lineage`` has
-    # not yet assigned the lineage ref. The legacy closure's free-variable
-    # lookup would have read the latest value here, but the latest value is
-    # still ``None`` (the only assignment is after the try-block).
-    def _complete_failure_with_state(
-        error_code: FleetErrorCode,
-        message: str,
-        *,
-        dispatch_status: DispatchStatus = DispatchStatus.REFUSED,
-        dispatched_session_id: str = "",
-    ) -> DispatchResult:
-        """Post-dispatch-id failure path — writes per-dispatch state only.
-
-        Thin wrapper that mirrors the legacy closure's argument signature
-        (default-arg ``dispatch_status``, ``dispatched_session_id``) and
-        threads the local variables as keyword arguments to the free
-        ``complete_failure_with_state`` helper in ``_errors.py``. Always passes
-        ``managed_lineage_ref=None`` because Phase B has not yet entered the
-        managed-lineage assignment branch.
-        """
-        return complete_failure_with_state(
-            error_code=error_code,
-            message=message,
-            dispatch_status=dispatch_status,
-            dispatched_session_id=dispatched_session_id,
-            dispatch_id=dispatch_id,
-            managed_lineage_ref=managed_lineage_ref,
-            provenance=provenance,
-            state_path=state_path,
-            effective_name=effective_name,
-            tool_ctx=tool_ctx,
-        )
-
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
         if unknown:
-            return _complete_failure_with_state(
-                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                f"Unknown ingredient keys: {sorted(unknown)}. "
-                f"Valid keys: {sorted(full_recipe.ingredients.keys())}",
+            return complete_failure_with_state(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=(
+                    f"Unknown ingredient keys: {sorted(unknown)}. "
+                    f"Valid keys: {sorted(full_recipe.ingredients.keys())}"
+                ),
+                dispatch_id=dispatch_id,
+                managed_lineage_ref=managed_lineage_ref,
+                provenance=provenance,
+                state_path=state_path,
+                effective_name=effective_name,
+                tool_ctx=tool_ctx,
             )
 
     missing_required = [
@@ -402,10 +376,18 @@ async def run_lineage_preparation(
         and key not in effective_ingredients
     ]
     if missing_required:
-        return _complete_failure_with_state(
-            FleetErrorCode.FLEET_MISSING_INGREDIENT,
-            f"Missing required ingredients: {sorted(missing_required)}. "
-            f"These have no default and must be supplied.",
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_MISSING_INGREDIENT,
+            message=(
+                f"Missing required ingredients: {sorted(missing_required)}. "
+                f"These have no default and must be supplied."
+            ),
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
         )
 
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
@@ -419,9 +401,15 @@ async def run_lineage_preparation(
             )
         except ValueError as exc:
             _logger.warning("ingredient interpolation failed", exc_info=True)
-            return _complete_failure_with_state(
-                FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
-                str(exc),
+            return complete_failure_with_state(
+                error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
+                message=str(exc),
+                dispatch_id=dispatch_id,
+                managed_lineage_ref=managed_lineage_ref,
+                provenance=provenance,
+                state_path=state_path,
+                effective_name=effective_name,
+                tool_ctx=tool_ctx,
             )
 
     quota_result = await quota_checker(tool_ctx.config.quota_guard)
@@ -432,9 +420,15 @@ async def run_lineage_preparation(
         timeout_sec, tool_ctx.config.fleet.default_timeout_sec
     )
     if tool_ctx.executor is None:
-        return _complete_failure_with_state(
-            FleetErrorCode.FLEET_MANIFEST_MISSING,
-            "Executor not configured.",
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_MANIFEST_MISSING,
+            message="Executor not configured.",
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
         )
 
     lineage_backend_name = (
@@ -494,9 +488,15 @@ async def run_lineage_preparation(
             lineage_backend_name=lineage_backend_name,
         )
     except FoodTruckLineageInitializationError:
-        return _complete_failure_with_state(
-            FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
-            "Food-truck dispatch initialization failed.",
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_L3_STARTUP_OR_CRASH,
+            message="Food-truck dispatch initialization failed.",
+            dispatch_id=dispatch_id,
+            managed_lineage_ref=managed_lineage_ref,
+            provenance=provenance,
+            state_path=state_path,
+            effective_name=effective_name,
+            tool_ctx=tool_ctx,
         )
 
     handle = lineage_preparation.handle

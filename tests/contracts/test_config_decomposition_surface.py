@@ -18,6 +18,8 @@ import pytest
 
 from autoskillit.config import __all__ as PUBLIC_SYMBOLS
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 @pytest.mark.parametrize("symbol", sorted(PUBLIC_SYMBOLS))
 def test_public_symbol_importable_from_package(symbol: str) -> None:

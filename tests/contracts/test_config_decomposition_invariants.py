@@ -7,6 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 def test_retired_key_remap_across_modules(tmp_path: Path) -> None:
     """`RETIRED_CONFIG_KEYS` (settings/_retired_keys.py) + remap + write still wire."""

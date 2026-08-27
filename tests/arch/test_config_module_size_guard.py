@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
 CONFIG_DIR = Path("src/autoskillit/config")
 LINE_BUDGET = 750
 

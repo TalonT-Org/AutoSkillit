@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 NEW_MODULES = [
     "_automation_config.py",
     "_coercion.py",

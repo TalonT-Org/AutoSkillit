@@ -18,6 +18,8 @@ from tests._test_filter import (  # type: ignore[import-not-found]
     build_test_scope,
 )
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 def _make_tests_root(tmp_path: Path) -> Path:
     tests_root = tmp_path / "tests"

@@ -12,6 +12,8 @@ import importlib
 
 import pytest
 
+pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
+
 
 @pytest.mark.parametrize(
     "module_path,attribute",

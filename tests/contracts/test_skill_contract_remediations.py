@@ -23,7 +23,8 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceRef,
 )
-from autoskillit.migration.engine import MigrationFile, SkillMigrationAdapter
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter
+from autoskillit.migration.engine import MigrationFile
 from autoskillit.workspace import (
     render_skill_invalidities,
     validate_skill_capability_authenticity,
@@ -140,7 +141,9 @@ async def test_migration_adapter_rejects_a_kind_it_does_not_know(
     patched[SkillInvalidityKind.FIELD_SHAPE] = patched[SkillInvalidityKind.FIELD_SHAPE]._replace(
         action=RemediationAction.DETERMINISTIC
     )
-    monkeypatch.setattr("autoskillit.migration.engine.SKILL_CONTRACT_REMEDIATIONS", patched)
+    monkeypatch.setattr(
+        "autoskillit.migration.adapters_skill.SKILL_CONTRACT_REMEDIATIONS", patched
+    )
 
     file = MigrationFile(
         name="broken-field-shape", path=skill_path, file_type="skill", current_version=None

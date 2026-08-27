@@ -7,16 +7,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from autoskillit.migration.adapters_contract import ContractMigrationAdapter
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
-    MIGRATE_RECIPES_MAX_RETRIES,
-    ContractMigrationAdapter,
     MigrationEngine,
     MigrationFile,
     MigrationResult,
-    RecipeMigrationAdapter,
-    SkillMigrationAdapter,
-    default_migration_engine,
 )
+from autoskillit.migration.service import default_migration_engine
 
 from .conftest import make_migration_note, make_skill_result
 
@@ -41,7 +40,7 @@ class TestMigrationEngine:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [],
         )
         mock_headless = AsyncMock()
@@ -74,7 +73,7 @@ class TestMigrationEngine:
         temp_out.write_text(new_content)
 
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(True))
@@ -99,7 +98,7 @@ class TestMigrationEngine:
         recipe_path.write_text("name: test\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(False, "headless session failed"))
@@ -127,7 +126,7 @@ class TestMigrationEngine:
         # temp output file intentionally NOT created
 
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(True))
@@ -184,28 +183,3 @@ class TestMigrationEngine:
         assert result.success is False
         assert result.error == "post-migration validation failed: contract remains invalid"
         assert source.read_text() == "invalid migrated content\n"
-
-
-class TestMigrateRecipesConstant:
-    @pytest.mark.anyio
-    async def test_failed_headless_retries_match_constant(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
-        recipe_path.parent.mkdir(parents=True)
-        recipe_path.write_text("name: myrecipe\n")
-        monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
-            lambda *a, **kw: [make_migration_note()],
-        )
-        mock_rh = AsyncMock(return_value=make_skill_result(False, "boom"))
-        adapter = RecipeMigrationAdapter()
-        file = MigrationFile(
-            name="myrecipe",
-            path=recipe_path,
-            file_type="recipe",
-            current_version="0.0.1",
-        )
-        result = await adapter.migrate(file, run_headless=mock_rh, temp_dir=tmp_path)
-        assert not result.success
-        assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES

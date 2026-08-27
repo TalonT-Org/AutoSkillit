@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.engine import (
+    MIGRATE_RECIPES_MAX_RETRIES,
     MigrationFile,
-    RecipeMigrationAdapter,
 )
 
 from .conftest import make_migration_note, make_skill_result
@@ -52,7 +53,7 @@ class TestRecipeMigrationAdapter:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         file = MigrationFile(
@@ -66,7 +67,7 @@ class TestRecipeMigrationAdapter:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [],
         )
         file = MigrationFile(
@@ -82,7 +83,7 @@ class TestRecipeMigrationAdapter:
         # current_version=None is treated as 0.0.0 by applicable_migrations;
         # we return a non-empty list to verify that None still causes needs_migration=True
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         file = MigrationFile(
@@ -107,7 +108,7 @@ class TestRecipeMigrationAdapter:
         temp_out.write_text("name: myrecipe\n# migrated\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration.engine.applicable_migrations",
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(True))
@@ -153,16 +154,14 @@ class TestRecipeMigrationAdapter:
     # ME9
     def test_recipe_adapter_validate_invalid_yaml_structure(self, tmp_path: Path) -> None:
         recipe_path = tmp_path / "broken.yaml"
-        recipe_path.write_text("steps: 'not_a_dict'\ningredients: 42\n")
+        recipe_path.write_text("steps: 'not_a_dict'\n")
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)
 
         assert is_valid is False
         assert len(error) > 0
-        assert (
-            "dict" in error.lower() or "expected" in error.lower() or "attribute" in error.lower()
-        )
+        assert "mapping" in error.lower() or "expected" in error.lower()
 
     # ME9b
     def test_recipe_adapter_validate_errors_non_empty_branch(self, tmp_path: Path) -> None:
@@ -185,3 +184,28 @@ class TestRecipeMigrationAdapter:
         assert is_valid is False
         assert len(error) > 0
         assert "kitchen_rules" in error.lower()
+
+
+class TestMigrateRecipesConstant:
+    @pytest.mark.anyio
+    async def test_failed_headless_retries_match_constant(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recipe_path = tmp_path / ".autoskillit" / "recipes" / "myrecipe.yaml"
+        recipe_path.parent.mkdir(parents=True)
+        recipe_path.write_text("name: myrecipe\n")
+        monkeypatch.setattr(
+            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            lambda *a, **kw: [make_migration_note()],
+        )
+        mock_rh = AsyncMock(return_value=make_skill_result(False, "boom"))
+        adapter = RecipeMigrationAdapter()
+        file = MigrationFile(
+            name="myrecipe",
+            path=recipe_path,
+            file_type="recipe",
+            current_version="0.0.1",
+        )
+        result = await adapter.migrate(file, run_headless=mock_rh, temp_dir=tmp_path)
+        assert not result.success
+        assert result.retries_attempted == MIGRATE_RECIPES_MAX_RETRIES

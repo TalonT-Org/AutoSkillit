@@ -26,7 +26,7 @@ class TestContractMigrationAdapterValidate:
     """P7-2: ContractMigrationAdapter.validate uses _load_yaml, not yaml.safe_load."""
 
     def test_valid_contract_returns_true(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
+        from autoskillit.migration.adapters_contract import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_text("skill_hashes:\n  my-skill: abc123\n")
@@ -36,7 +36,7 @@ class TestContractMigrationAdapterValidate:
         assert msg == ""
 
     def test_missing_skill_hashes_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
+        from autoskillit.migration.adapters_contract import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_text("other_field: value\n")
@@ -46,7 +46,7 @@ class TestContractMigrationAdapterValidate:
         assert "skill_hashes" in msg
 
     def test_invalid_yaml_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
+        from autoskillit.migration.adapters_contract import ContractMigrationAdapter
 
         f = tmp_path / "contract.yaml"
         f.write_bytes(b":\tbad: yaml: [unclosed\n")
@@ -56,7 +56,7 @@ class TestContractMigrationAdapterValidate:
         assert msg != ""
 
     def test_missing_file_returns_false(self, tmp_path: Path) -> None:
-        from autoskillit.migration.engine import ContractMigrationAdapter
+        from autoskillit.migration.adapters_contract import ContractMigrationAdapter
 
         adapter = ContractMigrationAdapter()
         ok, msg = adapter.validate(tmp_path / "nonexistent.yaml")

@@ -43,7 +43,7 @@ class SkillContractRemediationDef(NamedTuple):
 # SkillInvalidityKind must have an entry here, enforced by a guard test in
 # tests/contracts/. The resolver (workspace/skills.py) renders `hint` into
 # SkillExclusion records, composition-root warnings, and doctor findings;
-# migration/engine.py's SkillMigrationAdapter renders every DETERMINISTIC
+# migration/adapters_skill.py's SkillMigrationAdapter renders every DETERMINISTIC
 # entry into an actual frontmatter rewrite.
 _SKILL_CONTRACT_REMEDIATION_DEFS = (
     SkillContractRemediationDef(

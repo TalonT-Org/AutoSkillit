@@ -290,7 +290,8 @@ def test_default_recipe_repository_has_apply_triage_gate():
 
 def test_default_migration_service_satisfies_migration_service():
     from autoskillit.core import MigrationService
-    from autoskillit.migration.engine import DefaultMigrationService, MigrationEngine
+    from autoskillit.migration.engine import MigrationEngine
+    from autoskillit.migration.service import DefaultMigrationService
 
     assert isinstance(DefaultMigrationService(MigrationEngine([])), MigrationService)
 

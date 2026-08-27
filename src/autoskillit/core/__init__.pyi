@@ -668,7 +668,6 @@ from .types import RETIRED_SKILL_RESOURCE_IDS as RETIRED_SKILL_RESOURCE_IDS
 from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
-from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import RUN_SKILL_ATTESTATION_PARAMS as RUN_SKILL_ATTESTATION_PARAMS
@@ -698,6 +697,7 @@ from .types import STANDALONE_AUDIT_EVIDENCE_KIND as STANDALONE_AUDIT_EVIDENCE_K
 from .types import (
     STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION as STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
 )
+from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
@@ -885,6 +885,8 @@ from .types import CoverageState as CoverageState
 from .types import CrossDomainAssessment as CrossDomainAssessment
 from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
+from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
+from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
 from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
@@ -919,7 +921,6 @@ from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
 from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
-from .types import RecipeStepGuard as RecipeStepGuard
 from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
 from .types import FinalizedRecipeStep as FinalizedRecipeStep
 from .types import FleetErrorCode as FleetErrorCode
@@ -1088,9 +1089,6 @@ from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionId as RecipeExecutionId
 from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
-from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
-from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
-from .types import normalize_declared_truth as normalize_declared_truth
 from .types import RecipeExemptionFitnessError as RecipeExemptionFitnessError
 from .types import RecipeFlowEdge as RecipeFlowEdge
 from .types import RecipeFlowGeneration as RecipeFlowGeneration
@@ -1103,6 +1101,7 @@ from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDe
 from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
+from .types import RecipeStepGuard as RecipeStepGuard
 from .types import ReconcileGenerationEvent as ReconcileGenerationEvent
 from .types import (
     ReconciliationEscalationEffect as ReconciliationEscalationEffect,
@@ -1308,6 +1307,7 @@ from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
+from .types import normalize_declared_truth as normalize_declared_truth
 from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
 from .types import parse_plan_paths as parse_plan_paths

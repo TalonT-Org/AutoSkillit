@@ -80,7 +80,8 @@ skills:
     inputs:
     - name: evaluation_dashboard
       type: file_path
-      required: true
+      required: false
+      absence_value: ""
     - name: experiment_plan
       type: file_path
       required: true

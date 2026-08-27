@@ -273,7 +273,6 @@ def test_quota_check_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
     """
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("AUTOSKILLIT_SESSION_DEADLINE", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0, resets_at=None)
     _write_hook_config(

@@ -11,13 +11,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 # Stdin is one-shot from Claude Code — must buffer before subprocess.
 _HOOKS_DIR = Path(__file__).parent
 _HOOKS_DIR_TEXT = str(_HOOKS_DIR.resolve())
 if _HOOKS_DIR_TEXT not in sys.path:
     sys.path.insert(0, _HOOKS_DIR_TEXT)
 
-from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+from _hook_settings import (  # noqa: E402
     write_dispatch_diagnostic,
 )
 
@@ -36,10 +38,7 @@ def _degrade(
     reason: str,
     message: str,
 ) -> None:
-    try:
-        write_dispatch_diagnostic(event_kind, logical_name, reason)
-    except Exception:
-        pass
+    write_dispatch_diagnostic(event_kind, logical_name, reason)
     print(message, file=sys.stderr)
     raise SystemExit(0)
 

@@ -51,9 +51,6 @@ def test_recipe_confirmation_marker_round_trips_through_state_root(
     foreign_cwd = tmp_path / "foreign"
     project_dir.mkdir()
     foreign_cwd.mkdir()
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(project_dir))
 
     _run_standalone_hook(
@@ -118,9 +115,6 @@ def test_session_start_sweeps_kitchen_marker_from_state_root(
     )
     transcript = tmp_path / "resumed.jsonl"
     transcript.write_text("resumed", encoding="utf-8")
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(project_dir))
 
     _run_standalone_hook(

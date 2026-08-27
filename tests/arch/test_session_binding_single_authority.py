@@ -30,7 +30,8 @@ def _constructs_binding_flag_filename(tree: ast.Module) -> bool:
         and id(node) not in docstring_nodes
     ]
     has_binding_prefix = any(
-        "skill_guard_" in value and "_denials" not in value for value in literals
+        "skill_guard_" in value and "_denials" not in value and "<session_id>" not in value
+        for value in literals
     )
     return has_binding_prefix and any(".flag" in value for value in literals)
 

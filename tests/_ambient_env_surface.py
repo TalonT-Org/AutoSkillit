@@ -906,7 +906,7 @@ FORWARDING_SITES: dict[str, str] = {
         "PROTECTED_CAPTURE_ENV_VARS; the exclusion happens outside the single expression this"
         "scanner inspects."
     ),
-    "hooks/_dispatch.py:53": (
+    "hooks/_dispatch.py:80": (
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),
@@ -1499,6 +1499,24 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "Real AutoSkillit orchestration/session-control environment variable read by"
             "production code; scrubbed as internal state that must not leak across test"
             "boundaries."
+        ),
+    ),
+    "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE": AmbientEnvDisposition(
+        var="AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Real AutoSkillit quota-policy override read by production hook code; scrubbed "
+            "as internal state that must not leak across test boundaries."
+        ),
+    ),
+    "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS": AmbientEnvDisposition(
+        var="AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Real AutoSkillit quota-policy override read by production hook code; scrubbed "
+            "as internal state that must not leak across test boundaries."
         ),
     ),
     "AUTOSKILLIT_QUOTA_GUARD__DISABLED": AmbientEnvDisposition(

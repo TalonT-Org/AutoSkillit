@@ -95,6 +95,7 @@ def test_projection_hook_repair_uses_versioned_manifest_helpers() -> None:
         "write_versioned_json",
     }
     for call in versioned_calls:
-        assert len(call.args) >= 2
+        version_arg = 1 if call.func.id == "read_versioned_json" else 2
+        assert len(call.args) > version_arg
         assert ast.unparse(call.args[0]) == "manifest_path"
-        assert ast.unparse(call.args[1]) == "PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION"
+        assert ast.unparse(call.args[version_arg]) == "PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION"

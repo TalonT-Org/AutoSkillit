@@ -119,9 +119,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # _hook_repair.py — hooks.json self-heal for plugin cache and projection scopes,
     # triggered by the in-process repair primitive instead of startup drift detection
     # (co-owned with Claude plugin system). Cache repair at line 257; projection repair
-    # at line 352 rewrites hooks.json. The manifest update uses the versioned helper.
-    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 257),
-    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 352),
+    # at line 365 rewrites hooks.json. The manifest update uses the versioned helper.
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 260),
+    ("src/autoskillit/workspace/_projected_artifact/_hook_repair.py", 365),
     # tools_kitchen/_hook_config.py — hook config, quota guard, and git_ops_policy
     ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 96),
     ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 115),

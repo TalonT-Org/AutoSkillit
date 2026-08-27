@@ -2,6 +2,7 @@
 
 Submodules:
   _hooks_defs        — HookDef, LifecycleContractDef, HookDriftResult dataclasses
+  _env_contract      — hook environment-variable contract data and validation
   _registry_data     — HOOK_REGISTRY, LIFECYCLE_CONTRACTS, retirement tables, paths
   _risky_operations  — RISKY_GIT_OPERATIONS, RISKY_GH_SUBCOMMANDS, lifecycle validation
   _hashing           — compute_registry_hash + HOOK_REGISTRY_HASH + canonical payload
@@ -29,6 +30,7 @@ from ._drift import (
     canonical_script_basenames,
     find_broken_hook_scripts,
 )
+from ._env_contract import HOOK_ENV_CONTRACT
 from ._hashing import (
     _canonical_registry_payload,
     compute_registry_hash,
@@ -42,7 +44,6 @@ from ._hooks_defs import (
 )
 from ._registry_data import (  # noqa: F401  (_build_hook_registry consumed by autoskillit.hooks.__init__)
     FAIL_CLOSED_GUARD_BASENAMES,
-    HOOK_ENV_CONTRACT,
     HOOK_REGISTRY,
     HOOKS_DIR,
     LIFECYCLE_CONTRACTS,

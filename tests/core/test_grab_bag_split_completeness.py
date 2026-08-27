@@ -383,7 +383,7 @@ def test_pre_split_test_types_inventory_is_frozen() -> None:
 def test_pre_split_test_type_constants_inventory_is_frozen() -> None:
     """The pre-split inventory must be a frozen set with no leading-dot or duplicate names."""
     assert isinstance(_PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES, frozenset)
-    assert len(_PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES) == 74
+    assert len(_PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES) == 70
     for name in _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES:
         assert "." not in name, f"Invalid name with dot: {name}"
 

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 from autoskillit.core import (
     ArtifactLease,
     ModelIdentity,
+    SessionType,
     atomic_write,
     default_log_dir,
     get_logger,
@@ -175,6 +176,7 @@ def flush_session_log(
     outcome_invariant_violated: bool = False,
     outcome_qualifier: str | None = None,
     native_shell_capture: NativeShellCaptureDiagnostic | None = None,
+    session_type: SessionType | None = None,
     is_crash_recovery: bool = False,
 ) -> None:
     """Flush session diagnostics to disk.
@@ -196,6 +198,7 @@ def flush_session_log(
     effective_write_path_warnings: list[str] = (
         write_path_warnings if write_path_warnings is not None else []
     )
+    session_type_value = session_type.value if session_type is not None else None
     log_root = resolve_log_dir(log_dir)
     if session_id and is_resume:
         dir_name = f"{session_id}_{start_ts.replace(':', '-')}"
@@ -497,6 +500,7 @@ def flush_session_log(
             "ndjson_unknown_event_count": ndjson_unknown_event_count,
             "ndjson_unknown_item_count": ndjson_unknown_item_count,
             "native_shell_capture": native_shell_capture_projection,
+            "session_type": session_type_value,
         }
         if versions is not None:
             summary["versions"] = {
@@ -651,10 +655,11 @@ def flush_session_log(
             "outcome_invariant_violated": outcome_invariant_violated,
             "outcome_qualifier": outcome_qualifier,
             "native_shell_capture": native_shell_capture_projection,
+            "session_type": session_type_value,
             "model_identifier": effective_model_id,
             "configured_model": model_identity.configured_model,
             "profile_name": model_identity.profile_name,
-            "schema_version": 7,
+            "schema_version": 8,
         }
         index_path = log_root / "sessions.jsonl"
         index_rows = [

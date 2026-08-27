@@ -23,6 +23,7 @@ _RESEARCH_SUB_RECIPE_PATHS: list[Path] = sorted(
     for path in git_ls_files(
         _PROJECT_ROOT,
         "src/autoskillit/recipes/sub-recipes/research-*.yaml",
+        allow_empty=True,
     )
 )
 

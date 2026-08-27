@@ -29,7 +29,9 @@ from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_pa
 from tests._tracked_recipes import tracked_recipe_paths
 
 BUNDLED_RECIPE_PATHS = tracked_recipe_paths(
-    Path(__file__).resolve().parents[3], RecipeSource.BUILTIN
+    Path(__file__).resolve().parents[3],
+    source=RecipeSource.BUILTIN,
+    scan_dirs=(".",),
 )
 CONTRACT_RECIPE_PATHS = tuple(sorted((builtin_recipes_dir() / "contracts").glob("*.yaml")))
 ALL_DELIVERY_SURFACES = tuple(RECIPE_DELIVERY_SURFACE_REGISTRY)

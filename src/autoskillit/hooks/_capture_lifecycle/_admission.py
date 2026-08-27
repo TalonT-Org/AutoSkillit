@@ -111,6 +111,8 @@ def _acquire_flock(
         if remaining <= 0:
             raise LockContended from contended
         time.sleep(min(delay, remaining))
+        if deadline - store._monotonic() <= 0:
+            raise LockContended from contended
         try:
             fcntl.flock(fd, operation)
             return

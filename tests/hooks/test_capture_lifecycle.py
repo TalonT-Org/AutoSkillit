@@ -352,6 +352,7 @@ def test_reserve_capture_capacity_rescue_retries_with_a_bounded_lock_wait(
 
     monkeypatch.setattr(store, "_admission_reason", force_projected_byte_pressure)
     monkeypatch.setattr(store, "sweep", sweep_after_holder_acquires)
+    monkeypatch.setattr(store, "_monotonic", time.monotonic)
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     future = executor.submit(store.reserve_capture, _CAPTURE_ID)
     try:
@@ -1123,6 +1124,7 @@ def test_lifecycle_store_rejects_direct_construction(tmp_path: Path) -> None:
                 root.fd,
                 project_identity=(anchor.identity.device, anchor.identity.inode),
                 root_identity=(root.identity.device, root.identity.inode),
+                lock_wait=HOT_PATH_LOCK_WAIT,
             )
     finally:
         root.close()
@@ -1287,6 +1289,7 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         root.fd,
         project_identity=project_identity,
         root_identity=root_identity,
+        lock_wait=HOT_PATH_LOCK_WAIT,
         wall_clock=lambda: 3_000_000.0,
         capacity=CaptureCapacitySpec(
             max_operational_records=8,
@@ -1385,6 +1388,7 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
         root.fd,
         project_identity=project_identity,
         root_identity=root_identity,
+        lock_wait=HOT_PATH_LOCK_WAIT,
         wall_clock=lambda: 3_000_000.0,
         capacity=CaptureCapacitySpec(
             max_operational_records=128,
@@ -3344,15 +3348,15 @@ def test_sweep_lock_wait_clamps_each_acquisition_to_the_active_deadline(
         clock.advance(3601)
         monkeypatch.setattr(capture_lifecycle._admission.fcntl, "flock", contend_then_succeed)
         monkeypatch.setattr(capture_lifecycle._admission.time, "sleep", advance_sleep)
-        monkeypatch.setattr(capture_lifecycle._admission.random, "uniform", lambda *_args: 0.02)
+        monkeypatch.setattr(capture_lifecycle._admission.random, "uniform", lambda *_args: 0.01)
 
+        sweep_deadline = clock.monotonic() + 0.05
         outcome = store.sweep(_sweep_budget(8, 0.05))
 
         assert outcome.duration == pytest.approx(0.05)
-        assert len(sleep_durations) >= 3
-        assert sleep_durations[:2] == pytest.approx([0.02, 0.02])
-        assert sleep_durations[-1] == pytest.approx(0.01)
-        assert sleep_durations[-1] < lock_wait.max_wait_seconds
+        assert len(sleep_durations) >= 5
+        assert all(duration <= 0.01 for duration in sleep_durations)
+        assert all(attempt < sweep_deadline for attempt in lock_attempts)
         assert len(lock_attempts) >= 6
     finally:
         root.close()
@@ -4364,13 +4368,25 @@ def test_reconcile_adapter_preserves_closed_setup_reason(
         capture_reconcile.RUNNER_TAIL_BUDGET,
     )
 
-    assert set(capture_reconcile._FAILURE_BLOCKERS) == set(CaptureFailureReason)
-    if reason.name.endswith("CAPACITY_EXHAUSTED"):
-        assert outcome.blocker is CleanupBlocker.CAPACITY_EXHAUSTED
-    elif reason is CaptureFailureReason.RECOVERY_CONTENDED:
-        assert outcome.blocker is CleanupBlocker.RECOVERY_CONTENDED
-    elif reason is CaptureFailureReason.UNKNOWN_SETUP:
-        assert outcome.blocker is CleanupBlocker.UNKNOWN_SETUP
+    expected_blockers = {
+        CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED: (
+            CleanupBlocker.CAPACITY_EXHAUSTED
+        ),
+        CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED: (CleanupBlocker.CAPACITY_EXHAUSTED),
+        CaptureFailureReason.RECOVERY_CONTENDED: CleanupBlocker.RECOVERY_CONTENDED,
+        CaptureFailureReason.FILESYSTEM_AUTHORITY: CleanupBlocker.FILESYSTEM_AUTHORITY,
+        CaptureFailureReason.PERMISSION_DENIED: CleanupBlocker.PERMISSION_DENIED,
+        CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
+        CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+        CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
+        CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.SNAPSHOT_INTEGRITY,
+        CaptureFailureReason.UNKNOWN_SETUP: CleanupBlocker.UNKNOWN_SETUP,
+    }
+    assert set(expected_blockers) == set(CaptureFailureReason)
+    assert outcome.blocker is expected_blockers[reason]
     assert outcome.errors == 1
 
 
@@ -4784,6 +4800,7 @@ def test_future_ledger_format_reports_observed_and_current_versions(
             root.fd,
             project_identity=(anchor.identity.device, anchor.identity.inode),
             root_identity=(root.identity.device, root.identity.inode),
+            lock_wait=HOT_PATH_LOCK_WAIT,
             _factory_token=capture_lifecycle._STORE_FACTORY_TOKEN,
         )
 

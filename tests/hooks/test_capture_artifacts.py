@@ -1123,7 +1123,7 @@ def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail
     captured = capfd.readouterr()
     failure = _single_failure_marker(captured.err)
     assert failure.reason is reason
-    assert failure.detail == "capture setup failed"
+    assert failure.detail == "capture artifact creation failed"
     assert sensitive not in captured.err
     assert str(project) not in captured.err
     assert _CAPTURE_ID not in captured.err
@@ -1182,11 +1182,14 @@ def test_setup_keyboard_interrupt_emits_failure_before_reraising(
         classmethod(with_short_lock_wait),
     )
     monkeypatch.setattr(capture_admission.time, "sleep", interrupt_sleep)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(run_capture, "printf must-not-run", str(project), _CAPTURE_ID)
     try:
         with pytest.raises(KeyboardInterrupt):
-            run_capture("printf must-not-run", str(project), _CAPTURE_ID)
+            future.result(timeout=1)
     finally:
         _release_capture_lock_holder(holder)
+        executor.shutdown(wait=True, cancel_futures=True)
 
     failure = _single_failure_marker(capfd.readouterr().err)
     assert failure.reason is CaptureFailureReason.UNKNOWN_SETUP

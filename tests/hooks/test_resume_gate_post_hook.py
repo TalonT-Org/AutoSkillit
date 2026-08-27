@@ -64,7 +64,7 @@ def test_resume_gate_lock_contention_stops_at_its_fake_deadline(
     """A held resume-gate lock cannot turn its post-hook into an unbounded wait."""
     from autoskillit.hooks import resume_gate_post_hook as hook_module  # noqa: PLC0415
 
-    timestamps = iter((0.0, 1.0, 2.0))
+    timestamps = iter((0.0, 0.1, 0.25))
     sleeps: list[float] = []
     attempts = 0
 

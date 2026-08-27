@@ -42,16 +42,14 @@ async def handle_cancellation(
     *,
     spawn_ctx: SpawnContext,
     tool_ctx: ToolContext,
-    dispatch_id: str,
     effective_name: str,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
     provenance: DispatchProvenanceTracker,
-    dispatch_sidecar_path: str,
     marker_dir: Path | None,
     skill_result: SkillResult | None,
     state_path: Path,
 ) -> NoReturn:
-    """Lines 1208-1290: asyncio.CancelledError handler.
+    """Phase D handler for asyncio.CancelledError.
 
     Fires the shielded lineage close → process tree kill → state interrupted
     write sequence, then re-raises. The orchestrator's outer except clause

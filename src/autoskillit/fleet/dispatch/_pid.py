@@ -10,22 +10,14 @@ state. Raising the exception from ``_on_spawn`` is NOT safe because
 outer ``execute_dispatch`` wrapper. The caller therefore inspects the
 returned error string (or the closure-scoped ``_spawn_error`` list) and
 translates it into a ``FLEET_L3_STARTUP_OR_CRASH`` envelope.
-
-Returns:
-    None on success; the formatted error message string on failure (also
-    recorded via the side-effect of having killed the child).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from autoskillit.core import get_logger
 from autoskillit.fleet.state_types import DispatchEffectName, DispatchProvenanceTracker
-
-if TYPE_CHECKING:
-    pass
 
 _logger = get_logger(__name__)
 
@@ -45,7 +37,23 @@ def _write_pid(
     *,
     enforce_max_resume_attempts: bool = False,
 ) -> str | None:
-    """on_spawn callback: atomically mark dispatch as running with dispatched_pid."""
+    """on_spawn callback: atomically mark dispatch as running with dispatched_pid.
+
+    Fail-closed: if ``mark_dispatch_running`` raises (e.g. illegal state
+    transition), the spawned child is killed via ``kill_process_tree`` (the
+    canonical sync kill primitive used by ``_dispatch_reaper``) and the
+    exception's message string is returned to the caller via closure-scoped
+    state. Raising the exception from ``_on_spawn`` is NOT safe because
+    ``_execute_claude_headless`` catches runner exceptions and returns
+    ``SkillResult.crashed`` — the propagated exception would never reach the
+    outer ``execute_dispatch`` wrapper. The caller therefore inspects the
+    returned error string (or the closure-scoped ``_spawn_error`` list) and
+    translates it into a ``FLEET_L3_STARTUP_OR_CRASH`` envelope.
+
+    Returns:
+        None on success; the formatted error message string on failure (also
+        recorded via the side-effect of having killed the child).
+    """
     from autoskillit.execution import kill_process_tree  # noqa: PLC0415
     from autoskillit.fleet import mark_dispatch_running
 

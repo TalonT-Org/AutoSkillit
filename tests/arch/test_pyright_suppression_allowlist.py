@@ -96,11 +96,11 @@ def test_type_ignore_count_budget() -> None:
     # at 5 site-bounded sites), bringing the count from 137 to 140.
     # Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
     # # type: ignore[import-not-found] suppressions on standalone guard scripts).
-    # Bumped from 144 to 150 after rebase onto develop (#4851 adds 5 site-bounded
+    # Bumped from 144 to 155 after rebase onto develop (#4851 adds 9 site-bounded
     # # type: ignore comments in fleet/dispatch/_*.py for cross-phase SpawnContext /
     # DispatchResult field threading that pyright cannot narrow through the
     # module-attribute indirection used for monkeypatch-friendly imports).
-    budget = 150
+    budget = 155
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

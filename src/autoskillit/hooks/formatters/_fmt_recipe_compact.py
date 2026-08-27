@@ -305,7 +305,7 @@ def compact_recipe_display(yaml_text: str) -> str:
     structural YAML indentation. All tools, actions, routes, commands,
     captures, messages, notes, and guard fields are preserved as parsed
     values — see
-    tests/infra/test_pretty_output_recipe.py::test_compact_recipe_display_preserves_execution_semantics.
+    tests/infra/test_pretty_output_recipe.py::test_pretty_output_recipe_grid_preserves_semantics_and_budgets.
     """
     text = _strip_top_level_fields(yaml_text, _TOP_LEVEL_STRIP_FIELDS)
     text = _strip_step_descriptions(text)

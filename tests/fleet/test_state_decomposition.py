@@ -9,6 +9,8 @@ invariants rather than exercising behavior already covered elsewhere.
 
 from __future__ import annotations
 
+import ast
+import threading
 from pathlib import Path
 from types import FunctionType
 
@@ -179,14 +181,33 @@ def test_dispatch_status_retry_eligibility_reaches_pending() -> None:
 
 def test_resume_lock_lives_in_state_module() -> None:
     """The _resume_lock moved to state.py — the facade no longer owns it."""
-    assert hasattr(state_module, "_resume_lock")
+    assert isinstance(state_module._resume_lock, type(threading.Lock()))
     assert not hasattr(state_types_facade_module, "_resume_lock")
 
 
-def test_fleet_module_count_within_new_exemption() -> None:
-    """The fleet/ module count stays within the new EXEMPTIONS cap."""
-    fleet_dir = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "fleet"
-    count = sum(1 for _ in fleet_dir.glob("*.py"))
-    assert count <= 29, (
-        f"fleet/ has {count} top-level .py files; EXEMPTIONS['fleet'] bumped to 29 for #4856"
+def test_state_transitions_does_not_import_state_records() -> None:
+    """The documented one-way arrow state_records -> state_transitions is enforced, not just prose.
+
+    state_transitions.py's docstring claims it imports nothing from
+    state_records. Nothing else in the suite pins that direction:
+    test_layer_enforcement.py covers cross-package arrows only, and the
+    import-linter contracts do not describe intra-fleet edges.
+    """
+    transitions_source = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "autoskillit"
+        / "fleet"
+        / "state_transitions.py"
+    )
+    tree = ast.parse(transitions_source.read_text(encoding="utf-8"))
+    offenders = [
+        node.module
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module is not None
+        and "state_records" in node.module
+    ]
+    assert not offenders, (
+        f"state_transitions must not import from state_records; found {offenders}"
     )

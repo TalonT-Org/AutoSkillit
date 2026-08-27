@@ -13,8 +13,8 @@ from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
     MigrationEngine,
     MigrationFile,
-    default_migration_engine,
 )
+from autoskillit.migration.factory import default_migration_engine
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
@@ -126,6 +126,20 @@ class TestDiagramMigrationAdapter:
         valid, msg = adapter.validate(md)
         assert valid is False
         assert "missing" in msg
+
+    def test_diagram_adapter_validate_fails_on_undecodable_bytes(self, tmp_path: Path) -> None:
+        """validate() reports a failure instead of raising on non-UTF-8 content.
+
+        ``UnicodeDecodeError`` is a ``ValueError``, not an ``OSError``, so a
+        narrow ``except OSError`` would let it escape and break the
+        ``tuple[bool, str]`` contract every caller relies on.
+        """
+        md = tmp_path / "test.md"
+        md.write_bytes(b"\xff\xfe not valid utf-8")
+        adapter = DiagramMigrationAdapter()
+        valid, msg = adapter.validate(md)
+        assert valid is False
+        assert msg != ""
 
     def test_default_engine_includes_diagram_adapter(self) -> None:
         """default_migration_engine() registers the DiagramMigrationAdapter."""

@@ -11,8 +11,8 @@ from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
     MigrationFile,
-    default_migration_engine,
 )
+from autoskillit.migration.factory import default_migration_engine
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 

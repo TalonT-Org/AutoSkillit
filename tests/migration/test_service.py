@@ -10,8 +10,8 @@ import pytest
 from autoskillit.migration.engine import (
     AdvisoryResult,
     MigrationResult,
-    default_migration_engine,
 )
+from autoskillit.migration.factory import default_migration_engine
 from autoskillit.migration.service import DefaultMigrationService
 
 from .conftest import make_migration_note, make_skill_result

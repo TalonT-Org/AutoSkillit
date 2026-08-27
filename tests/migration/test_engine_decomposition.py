@@ -17,6 +17,7 @@ from autoskillit.migration.engine import (
     MigrationFile,
     MigrationResult,
 )
+from autoskillit.workspace import read_skill_frontmatter
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
@@ -50,6 +51,7 @@ def test_engine_module_under_line_ceiling() -> None:
         "adapters_contract.py",
         "adapters_diagram.py",
         "adapters_skill.py",
+        "factory.py",
         "service.py",
     ],
 )
@@ -166,10 +168,17 @@ async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
     assert result.name == "legacy-child-spawn-cardinality"
     assert result.success is True, f"migration failed: {result.error!r}"
     # An early return on the "nothing to migrate" path leaves migrated_content
-    # as None, so this pins that the normalizer actually ran and rewrote the
-    # implicit cardinality into an explicit ``count: 1``.
+    # as None, so this pins that the normalizer actually ran.
     assert result.migrated_content is not None, (
         "migrate() returned success without producing content — the "
         "child-cardinality branch was never reached"
     )
-    assert "count: 1" in result.migrated_content
+    # Parse the result rather than substring-matching, so YAML quoting or
+    # flow-style changes cannot make this assertion pass or fail spuriously.
+    skill_path.write_text(result.migrated_content, encoding="utf-8")
+    parsed = read_skill_frontmatter(skill_path)
+    assert parsed.data is not None, f"migrated frontmatter did not parse: {parsed.error!r}"
+    spawns = parsed.data["semantic_requirements"]["child_spawns"]
+    assert spawns == [{"role": "worker", "count": 1}], (
+        f"implicit cardinality was not normalized to an explicit count: {spawns!r}"
+    )

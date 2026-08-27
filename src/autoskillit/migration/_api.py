@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import RetryReason, SkillResult, resolve_temp_dir
-from autoskillit.migration.engine import MigrationFile, default_migration_engine
+from autoskillit.migration.engine import MigrationFile
+from autoskillit.migration.factory import default_migration_engine
 from autoskillit.migration.loader import applicable_migrations
 
 

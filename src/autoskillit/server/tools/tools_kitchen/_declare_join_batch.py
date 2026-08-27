@@ -86,7 +86,7 @@ def _declare_join_batch_handler(
         (
             entry
             for entry in reversed(binding.loaded_skills)
-            if normalize_skill_name(entry.skill_name) == normalized_skill_name
+            if entry.skill_name == normalized_skill_name
         ),
         None,
     )

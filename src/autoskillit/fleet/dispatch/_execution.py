@@ -34,7 +34,6 @@ from autoskillit.fleet.state import DispatchStatus
 from autoskillit.fleet.state_types import (
     DispatchEffectName,
     DispatchProvenanceTracker,
-    DispatchRejected,
     DispatchResult,
 )
 
@@ -68,7 +67,6 @@ class SpawnContext:
     dispatched_session_id: list[str] = field(default_factory=list)
     issue_urls_raw: str = ""
     prior_ids: list[str] = field(default_factory=list)
-    prior_completion_markers: list[str | None] = field(default_factory=list)
     spawn_error: list[str] = field(default_factory=list)
 
 
@@ -83,7 +81,6 @@ class ExecutionResult:
     """
 
     skill_result: SkillResult | None
-    spawn_context: SpawnContext
     started_at: float
     ended_at: float | None
     dispatch_completed_normally: bool
@@ -107,13 +104,11 @@ async def run_execution(
     prompt: str,
     plugin_authority: Any,
     capability_preparation: Any,
-    authoritative_cwd: Path,
     preflight: ResumePreflight | None,
     full_recipe: Any,
     provenance: DispatchProvenanceTracker,
     started_at: float,
     prior_session_chain: list[str],
-    prior_dispatched_session_id: str | None,
     effective_backend: CodingAgentBackend | None,
     caller_session_id: str,
     idle_output_timeout: int | None,
@@ -125,12 +120,9 @@ async def run_execution(
     dispatch_backend: CodingAgentBackend | None,
     completion_marker: str = "",
     sentinel_contract: Any = None,
-    halted_reason: str | None = None,
     caller_backend_name: str = "",
     dispatches_dir: Path | None = None,
-    recipe: str = "",
     resolved_timeout: float = 0.0,
-    effective_ingredients: dict[str, str] | None = None,
 ) -> ExecutionResult:
     """Phase C: lines 905-1207 of the legacy ``_run_dispatch``.
 
@@ -145,9 +137,6 @@ async def run_execution(
     # Populate the spawn_ctx with the inputs the closures will need.
     spawn_ctx.issue_urls_raw = issue_urls_raw
     spawn_ctx.prior_ids = list(prior_ids)
-    spawn_ctx.prior_completion_markers = (
-        list(prior_completion_markers) if prior_completion_markers is not None else []
-    )
 
     # 944: derive the session locator for JSONL resolution.
     _locator = effective_backend.session_locator() if effective_backend is not None else None
@@ -161,27 +150,6 @@ async def run_execution(
             marker_dir = _locator.project_log_dir(str(tool_ctx.project_dir))
         except OSError:
             pass
-
-    # 905-915: halt-reason check — short-circuit before any state mutation.
-    if halted_reason is not None:
-        return ExecutionResult(
-            skill_result=None,
-            spawn_context=spawn_ctx,
-            started_at=started_at,
-            ended_at=None,
-            dispatch_completed_normally=False,
-            marker_dir=marker_dir,
-            dispatch_sidecar_path=dispatch_sidecar_path,
-            spawn_failure_dispatch_result=DispatchResult(
-                outcome=DispatchRejected(
-                    error_code=FleetErrorCode.FLEET_CAMPAIGN_HALTED,
-                    message=halted_reason,
-                    effect_provenance=provenance.snapshot(),
-                    dispatch_id=dispatch_id,
-                ),
-                per_dispatch_state_path=state_path,
-            ),
-        )
 
     # 917-942: state-record upsert before spawn.
     from autoskillit.fleet.state import (  # noqa: PLC0415
@@ -214,7 +182,6 @@ async def run_execution(
         _logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
         return ExecutionResult(
             skill_result=None,
-            spawn_context=spawn_ctx,
             started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
@@ -233,10 +200,6 @@ async def run_execution(
                 tool_ctx=tool_ctx,
             ),
         )
-
-    # 944: derive the session locator — moved to the function preamble so
-    # the early-return ExecutionResult constructors can populate marker_dir.
-    # (Original location below is removed.)
 
     # 946-994: resume JSONL resolution + EFFECTIVE_RESUME_BINDING provenance.
     if resume_session_id:
@@ -268,7 +231,6 @@ async def run_execution(
                 else:
                     return ExecutionResult(
                         skill_result=None,
-                        spawn_context=spawn_ctx,
                         started_at=started_at,
                         ended_at=None,
                         dispatch_completed_normally=False,
@@ -290,7 +252,6 @@ async def run_execution(
             else:
                 return ExecutionResult(
                     skill_result=None,
-                    spawn_context=spawn_ctx,
                     started_at=started_at,
                     ended_at=None,
                     dispatch_completed_normally=False,
@@ -323,14 +284,6 @@ async def run_execution(
             identities={"resume_session_id": resume_session_id},
         )
 
-    # 1006-1017: completion_marker and sentinel_contract come from the identity
-    # object held by the orchestrator's lineage preparation; the orchestrator
-    # passes them in as explicit parameters (preserving the closure-captured
-    # values from the original ``_run_dispatch``).
-    # (sidecar_path, started_at, closure-list init are handled in the function
-    # parameter list / SpawnContext population.)
-
-    _dispatch_completed_normally = False
     skill_result: SkillResult | None = None
     ended_at: float | None = None
 
@@ -493,7 +446,6 @@ async def run_execution(
     if spawn_ctx.spawn_error:
         return ExecutionResult(
             skill_result=None,
-            spawn_context=spawn_ctx,
             started_at=started_at,
             ended_at=None,
             dispatch_completed_normally=False,
@@ -522,14 +474,12 @@ async def run_execution(
         _on_session_id(skill_result.session_id)
 
     ended_at = max(time.time(), started_at + 1e-6)
-    _dispatch_completed_normally = True
 
     return ExecutionResult(
         skill_result=skill_result,
-        spawn_context=spawn_ctx,
         started_at=started_at,
         ended_at=ended_at,
-        dispatch_completed_normally=_dispatch_completed_normally,
+        dispatch_completed_normally=True,
         marker_dir=marker_dir,
         dispatch_sidecar_path=dispatch_sidecar_path,
         spawn_failure_dispatch_result=None,

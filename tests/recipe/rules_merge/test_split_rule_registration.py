@@ -63,8 +63,6 @@ def test_facade_imports_trigger_every_sibling_registration() -> None:
     The facade side-effect-imports every sibling module, so importing the
     facade alone is sufficient for all nine rules to register.
     """
-    from tests.recipe.rules_merge._helpers import registered_merge_rule_names
-
     registered = registered_merge_rule_names()
     assert set(EXPECTED_RULE_NAMES).issubset(registered), (
         f"Facade import did not register all expected merge rules. "

@@ -14,6 +14,8 @@ import threading
 from pathlib import Path
 from types import FunctionType
 
+import pytest
+
 from autoskillit.fleet import state as state_module
 from autoskillit.fleet import state_types as state_types_facade_module
 from autoskillit.fleet.state_effects import (
@@ -50,6 +52,8 @@ from autoskillit.fleet.state_transitions import (
     TERMINAL_UNCLEANED_STATUSES,
     DispatchStatus,
 )
+
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
 
 def _assert_facade_reexports(

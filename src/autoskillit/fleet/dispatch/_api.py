@@ -61,8 +61,6 @@ from autoskillit.fleet.state_types import (
 )
 
 if TYPE_CHECKING:
-    from exceptiongroup import ExceptionGroup
-
     from autoskillit.core import (
         CodingAgentBackend,
         NativeShellCaptureMode,
@@ -70,14 +68,25 @@ if TYPE_CHECKING:
     )
     from autoskillit.pipeline.context import ToolContext
 
+try:
+    from exceptiongroup import ExceptionGroup  # type: ignore[attr-defined]
+except ImportError:
+    ExceptionGroup = BaseExceptionGroup  # type: ignore[assignment,misc]
+
 _logger = get_logger(__name__)
 
 
 class DispatchSpawnFailed(RuntimeError):
-    """Raised when a dispatch cannot complete its initialization callback path.
+    """Spawn-time failure signal for the execute_dispatch callback path.
 
-    Carries the structured ``error_code`` so callers can branch on the
-    specific failure mode without parsing the message text.
+    Raised when a dispatch cannot complete its initialization callback. Carries
+    the structured ``error_code`` so callers can branch on the specific failure
+    mode without parsing the message text.
+
+    Attributes:
+        error_code: The structured ``FleetErrorCode`` describing why the
+            dispatch could not be spawned.
+        message: Human-readable detail string for diagnostic logs.
     """
 
     def __init__(self, error_code: FleetErrorCode, message: str) -> None:
@@ -269,18 +278,6 @@ async def execute_dispatch(
         lock.release()
 
 
-# ``ExceptionGroup`` and ``BaseExceptionGroup`` are both stdlib symbols from
-# Python 3.11+. We try to import ``ExceptionGroup`` from the ``exceptiongroup``
-# backport first; on 3.11+ the import either fails (stdlib wins) or returns the
-# stdlib class. Fall back to ``BaseExceptionGroup`` (also 3.11+) so the
-# type-only reference always resolves.
-
-try:
-    from exceptiongroup import ExceptionGroup  # type: ignore[attr-defined]
-except ImportError:
-    ExceptionGroup = BaseExceptionGroup  # type: ignore[assignment,misc]
-
-
 async def _run_dispatch(
     tool_ctx: ToolContext,
     recipe: str,
@@ -305,10 +302,12 @@ async def _run_dispatch(
     provenance: DispatchProvenanceTracker | None = None,
     native_shell_capture_mode: NativeShellCaptureMode | None = None,
 ) -> DispatchResult:
-    """Inner dispatch body — composed of phase shards.
+    """Inner dispatch body — called after lock acquisition.
 
-    For a high-level overview of which lines each phase owns, see the file
-    docstring. The transaction-ordering contract is enumerated in issue #4851.
+    Composes the per-phase shards (validation → lineage → execution →
+    classification → finalize). The lock-acquisition precondition is
+    established by the caller in ``execute_dispatch``; this function
+    assumes the fleet lock is held.
     """
     provenance = provenance or DispatchProvenanceTracker()
     # --- Phase A: pre-launch gating ---
@@ -366,16 +365,12 @@ async def _run_dispatch(
     tracker_key, tracker_lease = retain_dispatch_tracker_authority(tool_ctx, ready.dispatch_id)
 
     # --- Spawn context: closure-scoped state threaded across phases ---
-    spawn_ctx = SpawnContext(
-        issue_urls_raw="",  # populated below
-        prior_ids=[],
-    )
-
-    # Populate prior_ids, issue_urls_raw from the recipe context + lineage prep
     from autoskillit.fleet._issue_url_helpers import extract_issue_urls  # noqa: PLC0415
 
-    spawn_ctx.issue_urls_raw = extract_issue_urls(recipe_ctx.effective_ingredients)
-    spawn_ctx.prior_ids = ready.prior_session_chain[:]
+    spawn_ctx = SpawnContext(
+        issue_urls_raw=extract_issue_urls(recipe_ctx.effective_ingredients),
+        prior_ids=ready.prior_session_chain[:],
+    )
     prior_markers: list[str | None] | None = (
         [f"%%L3_DONE::{pid[:8]}%%" for pid in spawn_ctx.prior_ids] if spawn_ctx.prior_ids else None
     )
@@ -400,13 +395,11 @@ async def _run_dispatch(
             prompt=ready.launch_tuple[0],
             plugin_authority=ready.launch_tuple[1],
             capability_preparation=ready.launch_tuple[2],
-            authoritative_cwd=ready.launch_tuple[3],
             preflight=ready.preflight,
             full_recipe=recipe_ctx.full_recipe,
             provenance=provenance,
             started_at=time.time(),
             prior_session_chain=ready.prior_session_chain,
-            prior_dispatched_session_id=ready.prior_dispatched_session_id,
             effective_backend=recipe_ctx.effective_backend,
             caller_session_id=caller_session_id,
             idle_output_timeout=idle_output_timeout,
@@ -446,16 +439,14 @@ async def _run_dispatch(
             prior_dispatched_session_id=ready.prior_dispatched_session_id,
             resume_session_id=ready.resume_session_id,
             idle_output_timeout=idle_output_timeout,
-            dispatch_checkpoint=ready.preflight.checkpoint
-            if ready.preflight is not None
-            else None,
+            dispatch_checkpoint=ready.resume_checkpoint,
             ended_at=ended_at or time.time(),
             started_at=execution.started_at,
             marker_dir=execution.marker_dir,
             effective_backend=recipe_ctx.effective_backend,
             dispatch_sidecar_path=execution.dispatch_sidecar_path,
         )
-        result = await finalize_state_write(  # type: ignore[call-arg]
+        result = await finalize_state_write(
             classification=classification,
             spawn_ctx=spawn_ctx,
             tool_ctx=tool_ctx,
@@ -468,29 +459,21 @@ async def _run_dispatch(
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
             capture=capture,
-            dispatch_checkpoint=ready.preflight.checkpoint
-            if ready.preflight is not None
-            else None,
+            dispatch_checkpoint=ready.resume_checkpoint,
             started_at=execution.started_at,
             ended_at=ended_at or time.time(),
             cache_invalidator=cache_invalidator,
             quota_refresher=quota_refresher,
             effective_backend_name=ready.lineage_backend_name,
         )
-        return result  # type: ignore[return-value]
+        return result
     except asyncio.CancelledError:
         await handle_cancellation(
             spawn_ctx=spawn_ctx,
             tool_ctx=tool_ctx,
-            dispatch_id=ready.dispatch_id,
             effective_name=recipe_ctx.effective_name,
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
-            dispatch_sidecar_path=(
-                execution.dispatch_sidecar_path
-                if execution is not None
-                else str(sidecar_path(ready.dispatch_id, tool_ctx.project_dir))
-            ),
             marker_dir=execution.marker_dir if execution is not None else None,
             skill_result=None,
             state_path=ready.state_path,
@@ -512,7 +495,7 @@ async def _run_dispatch(
             await run_finally_label_cleanup(
                 spawn_ctx=spawn_ctx,
                 dispatch_id=ready.dispatch_id,
-                dispatch_sidecar_path=str(Path(ready.handle.state_path) / "sidecar.jsonl"),
+                dispatch_sidecar_path=str(sidecar_path(ready.dispatch_id, tool_ctx.project_dir)),
                 tool_ctx=tool_ctx,
                 provenance=provenance,
             )

@@ -350,7 +350,6 @@ async def run_lineage_preparation(
         )
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
 
-    # Phase B failure path — all calls below this point pass
     if effective_ingredients:
         unknown = set(effective_ingredients.keys()) - set(full_recipe.ingredients.keys())
         if unknown:
@@ -518,10 +517,6 @@ async def run_lineage_preparation(
     prior_session_chain = list(lineage_preparation.prior_session_chain)
     prior_dispatched_session_id = lineage_preparation.prior_dispatched_session_id
 
-    # Tracker-lease retain is the orchestrator's responsibility (Phase C entry
-    # boundary). Phase B hands back the lineage + launch tuple so the caller
-    # can retain the lease with full visibility into the resumed handle.
-
     return LineagePreparationResult(
         outcome="ready",
         prior_success_dispatch_result=None,
@@ -543,7 +538,7 @@ async def run_lineage_preparation(
                 prompt,
                 food_truck_plugin_authority,
                 food_truck_capability_preparation,
-                state_path,
+                _lineage_anchor,
             ),
         ),
     )

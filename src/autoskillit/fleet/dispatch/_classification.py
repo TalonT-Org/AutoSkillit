@@ -111,14 +111,11 @@ async def run_outcome_classification(
     dispatch_sidecar_path: str,
     resume_line_offset: int = 0,
     prior_ids: list[str] | None = None,
-    tracker_lease_input: Any = None,
 ) -> ClassificationResult:
-    """Lines 1334-1482: classify the dispatch outcome.
+    """Phase E — classifies the dispatch outcome.
 
     Returns a ``ClassificationResult`` carrying every field the orchestrator's
-    finalize shard needs. ``prior_ids`` and ``resume_line_offset`` are read
-    from ``spawn_ctx`` when not explicitly provided; the orchestrator passes
-    them for clarity.
+    finalize shard needs.
     """
     # 1334-1346: load progress (sidecar + tracker authority).
     (
@@ -141,12 +138,27 @@ async def run_outcome_classification(
     additional_jsonl_paths: list[Path] = []
     parsed_result: Any = None
 
-    # 1350-1385: parse L3 result block (or skip on timeout).
     if skill_result.subtype == "timeout":
         parsed_result = None
     else:
         if prior_dispatched_session_id and prior_dispatched_session_id not in extended_chain:
             extended_chain.append(prior_dispatched_session_id)
+
+        _locator = effective_backend.session_locator() if effective_backend is not None else None
+        for sid in extended_chain:
+            path = (
+                _locator.session_log_path(str(tool_ctx.project_dir), sid)
+                if _locator is not None
+                else None
+            )
+            if path is not None:
+                additional_jsonl_paths.append(path)
+
+        jsonl_path = (
+            _locator.session_log_path(str(tool_ctx.project_dir), skill_result.session_id or "")
+            if _locator is not None
+            else None
+        )
 
         if resume_line_offset and skill_result.session_id and resume_session_id:
             if skill_result.session_id != resume_session_id:
@@ -159,13 +171,12 @@ async def run_outcome_classification(
         parsed_result = parse_l3_result_block(
             stdout=skill_result.result or "",
             expected_dispatch_id=dispatch_id,
-            assistant_messages_path=None,
+            assistant_messages_path=jsonl_path,
             prior_dispatch_ids=prior_ids if prior_ids else None,
             additional_jsonl_paths=additional_jsonl_paths or None,
             resume_line_offset=resume_line_offset,
         )
 
-    # 1387-1402: dispatched_issue_count + sidecar synthesis fallback.
     _issue_urls_raw = spawn_ctx.issue_urls_raw
     _dispatched_issue_list = [u.strip() for u in _issue_urls_raw.split(",") if u.strip()]
     dispatched_issue_count = len(_dispatched_issue_list)
@@ -180,7 +191,6 @@ async def run_outcome_classification(
             dispatched_issue_count=dispatched_issue_count,
         )
 
-    # 1404-1410: classify outcome.
     final_status, reason = classify_dispatch_outcome(
         parsed_result,
         skill_result,
@@ -194,13 +204,11 @@ async def run_outcome_classification(
         and parsed_result.payload
         and parsed_result.payload.get("success", False)
     )
-    # 1417-1420: tracker-authority error override.
     if tracker_authority_error is not None:
         final_status = DispatchStatus.FAILURE
         reason = tracker_authority_error
         result_success = False
 
-    # 1421-1439: terminal lineage state.
     if final_status != DispatchStatus.RESUMABLE:
         terminal_state = (
             ManagedHeadlessSessionTerminalState.SUCCEEDED
@@ -221,7 +229,6 @@ async def run_outcome_classification(
                 exc_info=True,
             )
 
-    # 1441-1457: branch extraction from sidecar entries.
     _branch_name = ""
     if sidecar_entries and tool_ctx.runner is not None:
         for _entry in sidecar_entries:
@@ -240,7 +247,6 @@ async def run_outcome_classification(
                     _logger.debug("branch_name_extraction_failed", exc_info=True)
                 break
 
-    # 1459-1482: outcome-driven label cleanup.
     _labels_cleaned = False
     if final_status not in (DispatchStatus.SUCCESS, DispatchStatus.RESUMABLE):
         from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
@@ -268,8 +274,7 @@ async def run_outcome_classification(
                 identities={"dispatch_id": dispatch_id},
             )
 
-    # 1484-1501: project_log_dir + session_id continuity warning.
-    # The orchestrator now threads marker_dir through (resolved from
+    # The orchestrator threads marker_dir through (resolved from
     # `_locator.project_log_dir` inside run_execution), so we just stringify it.
     project_log_dir = str(marker_dir) if marker_dir is not None else ""
 

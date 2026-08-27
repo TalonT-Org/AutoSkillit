@@ -1535,13 +1535,17 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
         "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
-    "pipeline/audit_admission_ledger.py": (
-        2300,
-        "REQ-CNST-010-E17: #4419 keeps installation fencing, reservation and attempt "
-        "transitions, trusted head/preflight publication, disposition CAS, and recovery "
-        "inside one crash-safe SQLite authority. Splitting the transactional state machine "
-        "would let independently mutable storage paths drift from its atomic publication "
-        "and fail-closed health invariants.",
+    "hook_registry.py": (
+        1200,
+        "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
+        "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
+        "module rather than a sub-package (a package split would change how hook scripts "
+        "resolve the import on the low-latency startup path). Relocatable hook commands "
+        "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
+        "relocatable command rendering, and token-aware find_broken_hook_scripts/"
+        "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
+        "detection surface. #4512 adds the exact exploration request-identity hook and "
+        "its lifecycle resource contract to the same canonical registry.",
     ),
     "exploration/snapshot.py": (
         1250,

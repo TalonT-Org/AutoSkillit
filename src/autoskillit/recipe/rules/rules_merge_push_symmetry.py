@@ -6,6 +6,7 @@ from autoskillit.core import Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import _build_success_step_graph
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 
 
 @semantic_rule(
@@ -37,14 +38,13 @@ def _check_merge_site_push_symmetry(ctx: ValidationContext) -> list[RuleFinding]
     findings: list[RuleFinding] = []
     success_graph = _build_success_step_graph(ctx.recipe)
 
-    def _success_fallthrough_target(step: object) -> str | None:
-        on_result = getattr(step, "on_result", None)
+    def _success_fallthrough_target(step: RecipeStep) -> str | None:
+        on_result = step.on_result
         if on_result is not None and on_result.conditions:
             for cond in on_result.conditions:
                 if cond.when is None:
                     return cond.route
-        on_success = getattr(step, "on_success", None)
-        return on_success
+        return step.on_success
 
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "merge_worktree":
@@ -65,10 +65,10 @@ def _check_merge_site_push_symmetry(ctx: ValidationContext) -> list[RuleFinding]
             current_step = ctx.recipe.steps.get(current)
             if current_step is None:
                 continue
-            if getattr(current_step, "tool", None) == "push_to_remote":
+            if current_step.tool == "push_to_remote":
                 push_found = True
                 break
-            if getattr(current_step, "tool", None) == "merge_worktree":
+            if current_step.tool == "merge_worktree":
                 earlier_merge = current
                 break
             queue.extend(success_graph.get(current, set()))

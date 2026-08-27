@@ -130,6 +130,15 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.hooks._session_binding:write_binding",
+        artifact=(
+            "skill_guard_<session_id>.flag — the session-binding channel between "
+            "the skill-load hook and the join consumers"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer=(
             "autoskillit.workspace._projected_artifact._hook_repair:"
             "repair_broken_plugin_cache_hooks"

@@ -47,6 +47,7 @@ def _write_kitchen_marker(session_id: str, recipe_name: str | None, payload_cwd:
             "opened_at": datetime.now(UTC).isoformat(),
             "recipe_name": recipe_name,
             "marker_version": 1,
+            # content_hash and composite_hash consumer ownership — inert-tracked:#4878
             "content_hash": "",
             "composite_hash": "",
         }

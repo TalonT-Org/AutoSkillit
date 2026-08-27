@@ -50,6 +50,7 @@ _SCOPED_MODULES: tuple[str, ...] = (
     "cli/_hooks.py",
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
+    "hooks/_session_binding.py",
     "server/_lifespan/__init__.py",
     "server/_lifespan/_startup_checks.py",
     "server/_lifespan/_session_boots.py",
@@ -228,6 +229,11 @@ def test_registered_writers_have_a_matching_call_site() -> None:
         "DURABLE_ARTIFACT_WRITERS entries with no matching write call site in their "
         f"scoped module (stale registration?): {stale}"
     )
+
+
+def test_session_binding_writer_is_registered() -> None:
+    """The cross-process session-binding publisher is a durable writer."""
+    assert "autoskillit.hooks._session_binding:write_binding" in _REGISTERED_WRITERS
 
 
 def test_codex_reconciliation_audit_no_clobber_writer_is_registered() -> None:

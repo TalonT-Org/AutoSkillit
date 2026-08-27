@@ -25,6 +25,7 @@ from tests._ambient_env_surface import (
     DYNAMIC_READ_EXEMPTIONS,
     FORWARDING_SITES,
     production_env_read_surface,
+    production_env_write_surface,
 )
 from tests.arch._helpers import SRC_ROOT
 
@@ -116,6 +117,107 @@ def test_scanner_resolves_all_keyword_argument_env_reads(
         f"{name}: {expected_var!r} not resolved into surface.names "
         f"(names={sorted(surface.names)}, unresolved={surface.unresolved})"
     )
+
+
+_WRITE_SURFACE_CASES: tuple[tuple[str, str, str, str, str], ...] = (
+    (
+        "subprocess_env_carrier",
+        "import os\nimport subprocess\n\n\ndef run() -> None:\n"
+        '    env = {"SYNTHETIC_WRITE_TO_SUBPROCESS": "1"}\n'
+        '    subprocess.run(["true"], env=env)\n',
+        "SYNTHETIC_WRITE_TO_SUBPROCESS",
+        "env",
+        "subprocess.run(env)",
+    ),
+    (
+        "backend_extra_env_handoff",
+        "def prepare_interactive_launch(*, extra_env: dict[str, str]) -> None: ...\n\n\n"
+        "def run() -> None:\n"
+        '    extra_env = {"SYNTHETIC_EXTRA_ENV_HANDOFF": "1"}\n'
+        "    prepare_interactive_launch(extra_env=extra_env)\n",
+        "SYNTHETIC_EXTRA_ENV_HANDOFF",
+        "extra_env",
+        "prepare_interactive_launch(extra_env)",
+    ),
+    (
+        "backend_cook_env_merge",
+        "class Backend:\n"
+        "    def build_interactive_cmd(self, *, env_extras: dict[str, str]) -> None: ...\n\n\n"
+        "def run(backend: Backend, base: dict[str, str]) -> None:\n"
+        '    cook_env_extras = {**base, "SYNTHETIC_COOK_ENV_MERGE": "1"}\n'
+        "    backend.build_interactive_cmd(env_extras=cook_env_extras)\n",
+        "SYNTHETIC_COOK_ENV_MERGE",
+        "cook_env_extras",
+        "build_interactive_cmd(env_extras)",
+    ),
+    (
+        "setdefault_env_carrier",
+        "import subprocess\n\n\ndef run() -> None:\n"
+        "    env: dict[str, str] = {}\n"
+        '    env.setdefault("SYNTHETIC_SETDEFAULT_WRITE", "1")\n'
+        '    subprocess.run(["true"], env=env)\n',
+        "SYNTHETIC_SETDEFAULT_WRITE",
+        "env",
+        "subprocess.run(env)",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "name,source,expected_var,expected_carrier,expected_boundary",
+    _WRITE_SURFACE_CASES,
+    ids=[case[0] for case in _WRITE_SURFACE_CASES],
+)
+def test_write_scanner_reports_only_delivery_proven_environment_writes(
+    tmp_path: Path,
+    name: str,
+    source: str,
+    expected_var: str,
+    expected_carrier: str,
+    expected_boundary: str,
+) -> None:
+    module = tmp_path / f"synthetic_{name}.py"
+    module.write_text(source)
+    surface = production_env_write_surface(tmp_path)
+    writes = [write for write in surface.writes if write.file == module.name]
+    assert any(
+        write.var == expected_var
+        and write.carrier == expected_carrier
+        and write.boundary == expected_boundary
+        for write in writes
+    ), writes
+
+
+@pytest.mark.parametrize(
+    "name,source",
+    (
+        (
+            "unrelated_mapping",
+            "def build() -> dict[str, str]:\n"
+            '    metadata = {"SYNTHETIC_UNRELATED_MAPPING": "1"}\n'
+            "    return metadata\n",
+        ),
+        (
+            "unreached_env",
+            'def build() -> None:\n    env = {"SYNTHETIC_UNREACHED_ENV": "1"}\n    print(env)\n',
+        ),
+        (
+            "carrier_alias",
+            "import subprocess\n\n\ndef run() -> None:\n"
+            "    env: dict[str, str] = {}\n"
+            "    child_env = env\n"
+            '    child_env["SYNTHETIC_ALIASED_ENV"] = "1"\n'
+            '    subprocess.run(["true"], env=child_env)\n',
+        ),
+    ),
+)
+def test_write_scanner_rejects_unproven_or_aliased_carriers(
+    tmp_path: Path, name: str, source: str
+) -> None:
+    module = tmp_path / f"synthetic_{name}.py"
+    module.write_text(source)
+    surface = production_env_write_surface(tmp_path)
+    assert not surface.writes
 
 
 _T6_CASES: tuple[tuple[str, str, str], ...] = (

@@ -208,10 +208,6 @@ _PRE_SPLIT_TEST_TYPE_CONSTANTS_NAMES: frozenset[str] = frozenset(
         "test_free_range_tools_contains_expected_names",
         # test_type_constants_env.py
         "test_session_type_cook_order_not_in_core_types",
-        "test_codex_schema_version_value",
-        "test_codex_schema_version_in_all",
-        "test_codex_schema_version_importable_from_types",
-        "test_codex_schema_version_importable_from_core",
         "test_claude_code_mcp_tool_idle_timeout_env_var_value",
         "test_claude_code_mcp_tool_idle_timeout_env_var_in_all",
         "test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_types",
@@ -333,10 +329,6 @@ _SPLIT_TARGETS: dict[str, str] = {  # noqa: E501 — table-style mapping, one te
     "test_evidence_reader_tools_are_exact_internal_subset": "tests.core.test_type_constants_tool_classification",  # noqa: E501
     "test_free_range_tools_contains_expected_names": "tests.core.test_type_constants_tool_classification",  # noqa: E501
     "test_session_type_cook_order_not_in_core_types": "tests.core.test_type_constants_env",
-    "test_codex_schema_version_value": "tests.core.test_type_constants_env",
-    "test_codex_schema_version_in_all": "tests.core.test_type_constants_env",
-    "test_codex_schema_version_importable_from_types": "tests.core.test_type_constants_env",
-    "test_codex_schema_version_importable_from_core": "tests.core.test_type_constants_env",
     "test_claude_code_mcp_tool_idle_timeout_env_var_value": "tests.core.test_type_constants_env",
     "test_claude_code_mcp_tool_idle_timeout_env_var_in_all": "tests.core.test_type_constants_env",
     "test_claude_code_mcp_tool_idle_timeout_env_var_importable_from_types": "tests.core.test_type_constants_env",  # noqa: E501

@@ -19,6 +19,8 @@ from autoskillit.core import (
     installed_plugin_artifact_manifest_path,
     installed_plugin_semantic_key,
     read_installed_plugin_artifact_identity,
+    read_versioned_json,
+    write_versioned_json,
 )
 from autoskillit.hook_registry import (
     PLUGIN_ROOT_TOKEN,
@@ -29,6 +31,7 @@ from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
 )
 from autoskillit.workspace._projection_cache import (
+    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     projected_artifact_lease_path,
     projected_artifact_manifest_path,
     projected_plugin_artifact_digest,
@@ -347,6 +350,16 @@ def repair_broken_projection_hooks(
                 original_manifest = (
                     manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None
                 )
+                manifest_data = None
+                if manifest_path.is_file():
+                    manifest_data = read_versioned_json(
+                        manifest_path,
+                        PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+                    )
+                    if manifest_data is None:
+                        raise RuntimeError(
+                            "projection manifest schema is missing, corrupt, or unsupported"
+                        )
                 fresh = _relocate_existing_hooks(json.loads(original_hooks))
                 try:
                     atomic_write(
@@ -354,13 +367,13 @@ def repair_broken_projection_hooks(
                         json.dumps(fresh, indent=2) + "\n",
                         strict_durability=True,
                     )
-                    if manifest_path.is_file():
-                        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    if manifest_data is not None:
                         new_digest = projected_plugin_artifact_digest(projection_dir)
                         manifest_data["artifact_digest"] = new_digest
-                        atomic_write(
+                        write_versioned_json(
                             manifest_path,
-                            json.dumps(manifest_data, indent=2) + "\n",
+                            manifest_data,
+                            PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
                             strict_durability=True,
                         )
                     remaining = find_broken_hook_scripts(

@@ -37,10 +37,12 @@ from ._hooks_defs import (
     _LOGICAL_HOOK_COMPONENT,
     _MATCHERLESS_EVENT_TYPES,
     HookDef,
+    HookEnvVarDef,
     LifecycleContractDef,
 )
 from ._registry_data import (  # noqa: F401  (_build_hook_registry consumed by autoskillit.hooks.__init__)
     FAIL_CLOSED_GUARD_BASENAMES,
+    HOOK_ENV_CONTRACT,
     HOOK_REGISTRY,
     HOOKS_DIR,
     LIFECYCLE_CONTRACTS,
@@ -84,10 +86,12 @@ HOOK_REGISTRY_HASH = compute_registry_hash(
 __all__ = [
     "FAIL_CLOSED_GUARD_BASENAMES",
     "HOOKS_DIR",
+    "HOOK_ENV_CONTRACT",
     "HOOK_REGISTRY",
     "HOOK_REGISTRY_HASH",
     "HookDef",
     "HookDriftResult",
+    "HookEnvVarDef",
     "LifecycleContractDef",
     "LIFECYCLE_CONTRACTS",
     "NEW_SUBDIR_BASENAMES",

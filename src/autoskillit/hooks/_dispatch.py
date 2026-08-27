@@ -13,6 +13,13 @@ from pathlib import Path
 
 # Stdin is one-shot from Claude Code — must buffer before subprocess.
 _HOOKS_DIR = Path(__file__).parent
+_HOOKS_DIR_TEXT = str(_HOOKS_DIR.resolve())
+if _HOOKS_DIR_TEXT not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR_TEXT)
+
+from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    write_dispatch_diagnostic,
+)
 
 _RETIRED_MAPPING: dict[str, str] = {
     "guards/leaf_orchestration_guard": "guards/skill_orchestration_guard",
@@ -20,6 +27,21 @@ _RETIRED_MAPPING: dict[str, str] = {
     "guards/headless_orchestration_guard": "guards/skill_orchestration_guard",
     "guards/mcp_health_guard": "guards/mcp_health_advisor",
 }
+
+
+def _degrade(
+    *,
+    event_kind: str,
+    logical_name: str,
+    reason: str,
+    message: str,
+) -> None:
+    try:
+        write_dispatch_diagnostic(event_kind, logical_name, reason)
+    except Exception:
+        pass
+    print(message, file=sys.stderr)
+    raise SystemExit(0)
 
 
 def main() -> None:
@@ -35,18 +57,24 @@ def main() -> None:
         if resolved:
             target = _HOOKS_DIR / (resolved + ".py")
         else:
-            print(
-                f"[autoskillit dispatch] unknown hook: {logical_name} — degrading gracefully",
-                file=sys.stderr,
+            _degrade(
+                event_kind="unknown_target",
+                logical_name=logical_name,
+                reason=f"unknown hook: {logical_name}",
+                message=(
+                    f"[autoskillit dispatch] unknown hook: {logical_name} — degrading gracefully"
+                ),
             )
-            sys.exit(0)
 
     if not target.is_file():
-        print(
-            f"[autoskillit dispatch] retired target missing: {target} — degrading gracefully",
-            file=sys.stderr,
+        _degrade(
+            event_kind="retired_target_missing",
+            logical_name=logical_name,
+            reason=f"retired target missing: {target}",
+            message=(
+                f"[autoskillit dispatch] retired target missing: {target} — degrading gracefully"
+            ),
         )
-        sys.exit(0)
 
     stdin_data = sys.stdin.buffer.read()
 
@@ -61,11 +89,14 @@ def main() -> None:
             env=env,
         )
     except OSError as exc:
-        print(
-            f"[autoskillit dispatch] exec failed for {target}: {exc} — degrading gracefully",
-            file=sys.stderr,
+        _degrade(
+            event_kind="exec_failure",
+            logical_name=logical_name,
+            reason=f"exec failed for {target}: {exc}",
+            message=(
+                f"[autoskillit dispatch] exec failed for {target}: {exc} — degrading gracefully"
+            ),
         )
-        sys.exit(0)
     sys.exit(result.returncode)
 
 

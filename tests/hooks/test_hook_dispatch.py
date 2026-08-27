@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import shlex
 import subprocess
@@ -20,6 +21,12 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
 
 
+def _copy_dispatcher(hooks_dir: Path) -> None:
+    """Install the dispatcher with its stdlib-only settings sibling."""
+    (hooks_dir / "_dispatch.py").write_text(DISPATCH_SCRIPT.read_text())
+    (hooks_dir / "_hook_settings.py").write_text((HOOKS_DIR / "_hook_settings.py").read_text())
+
+
 @pytest.fixture()
 def hook_env(tmp_path: Path) -> Path:
     """Create a temporary hooks directory with _dispatch.py and a test target."""
@@ -27,8 +34,7 @@ def hook_env(tmp_path: Path) -> Path:
     guards_dir = hooks_dir / "guards"
     guards_dir.mkdir(parents=True)
 
-    dispatch_src = DISPATCH_SCRIPT.read_text()
-    (hooks_dir / "_dispatch.py").write_text(dispatch_src)
+    _copy_dispatcher(hooks_dir)
 
     target_script = guards_dir / "quota_guard.py"
     target_script.write_text(
@@ -49,8 +55,7 @@ def stdin_echo_env(tmp_path: Path) -> Path:
     guards_dir = hooks_dir / "guards"
     guards_dir.mkdir(parents=True)
 
-    dispatch_src = DISPATCH_SCRIPT.read_text()
-    (hooks_dir / "_dispatch.py").write_text(dispatch_src)
+    _copy_dispatcher(hooks_dir)
 
     target_script = guards_dir / "echo_hook.py"
     target_script.write_text(
@@ -82,8 +87,7 @@ class TestDispatchResolution:
         guards_dir = hooks_dir / "guards"
         guards_dir.mkdir(parents=True)
 
-        dispatch_src = DISPATCH_SCRIPT.read_text()
-        (hooks_dir / "_dispatch.py").write_text(dispatch_src)
+        _copy_dispatcher(hooks_dir)
 
         target = guards_dir / "skill_orchestration_guard.py"
         target.write_text(
@@ -152,6 +156,63 @@ class TestRetiredMappingIntegrity:
             )
 
 
+@pytest.mark.parametrize(
+    ("case", "expected_diagnostic", "expected_event_kind"),
+    [
+        ("unknown", "unknown hook: guards/not_a_registered_hook", "unknown_target"),
+        ("missing_retired", "retired target missing:", "retired_target_missing"),
+        ("exec_oserror", "exec failed for", "exec_failure"),
+    ],
+)
+def test_dispatch_degrades_with_observable_exit_zero_diagnostic(
+    case: str,
+    expected_diagnostic: str,
+    expected_event_kind: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dispatch failures remain visible without turning hook invocation fatal."""
+    from autoskillit.hooks import _dispatch
+
+    logical_name = "guards/not_a_registered_hook"
+    if case == "missing_retired":
+        logical_name = "guards/retired_but_missing"
+        monkeypatch.setattr(
+            _dispatch,
+            "_RETIRED_MAPPING",
+            {logical_name: "guards/no_longer_present"},
+        )
+    elif case == "exec_oserror":
+        logical_name = "guards/quota_guard"
+
+        def _raise_oserror(*_args: object, **_kwargs: object) -> None:
+            raise OSError("simulated exec failure")
+
+        monkeypatch.setattr(_dispatch.subprocess, "run", _raise_oserror)
+
+    monkeypatch.setattr(sys, "argv", ["_dispatch.py", logical_name])
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"{}")))
+    monkeypatch.setenv("AUTOSKILLIT_LOG_DIR", str(tmp_path))
+
+    with pytest.raises(SystemExit) as exit_info:
+        _dispatch.main()
+
+    assert exit_info.value.code == 0
+    assert expected_diagnostic in capsys.readouterr().err
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "hook_dispatch_diagnostics.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    ]
+    assert len(records) == 1
+    assert records[0]["event_kind"] == expected_event_kind
+    assert records[0]["logical_hook_name"] == logical_name
+    assert expected_diagnostic in records[0]["reason"]
+
+
 class TestCrossVersionSimulation:
     def test_stale_command_still_resolves_after_rename(self, tmp_path: Path) -> None:
         """Simulates the temporal bug: hook installed at version N, script renamed at N+1."""
@@ -159,8 +220,7 @@ class TestCrossVersionSimulation:
         guards_dir = hooks_dir / "guards"
         guards_dir.mkdir(parents=True)
 
-        dispatch_src = DISPATCH_SCRIPT.read_text()
-        (hooks_dir / "_dispatch.py").write_text(dispatch_src)
+        _copy_dispatcher(hooks_dir)
 
         target = guards_dir / "skill_orchestration_guard.py"
         target.write_text(

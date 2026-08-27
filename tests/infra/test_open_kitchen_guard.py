@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import fcntl
+import inspect
+import io
 import json
+import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,6 +21,180 @@ from tests._helpers import seed_registry_owner
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
+
+
+def _run_standalone_hook(
+    hook_main: Callable[[], None],
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    payload: dict,
+    cwd: Path,
+) -> None:
+    """Run a stdlib hook in-process with hook-shaped stdin and a foreign cwd."""
+    monkeypatch.chdir(cwd)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    with pytest.raises(SystemExit) as exit_info:
+        hook_main()
+    assert exit_info.value.code == 0
+
+
+def test_recipe_confirmation_marker_round_trips_through_state_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A recipe-confirmed marker is read by the guard outside the hook cwd."""
+    from autoskillit.hooks import recipe_confirmed_post_hook
+    from autoskillit.hooks.guards import open_kitchen_guard
+
+    project_dir = tmp_path / "project"
+    foreign_cwd = tmp_path / "foreign"
+    project_dir.mkdir()
+    foreign_cwd.mkdir()
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(project_dir))
+
+    _run_standalone_hook(
+        recipe_confirmed_post_hook.main,
+        monkeypatch,
+        cwd=foreign_cwd,
+        payload={
+            "cwd": str(project_dir),
+            "session_id": "session-confirmed",
+            "tool_response": json.dumps({"result": json.dumps({"success": True})}),
+        },
+    )
+
+    marker_path = (
+        project_dir
+        / ".autoskillit"
+        / "temp"
+        / "kitchen_state"
+        / "session-confirmed_recipe_confirmed.json"
+    )
+    assert json.loads(marker_path.read_text(encoding="utf-8"))["session_id"] == "session-confirmed"
+
+    _run_standalone_hook(
+        open_kitchen_guard.main,
+        monkeypatch,
+        cwd=foreign_cwd,
+        payload={
+            "cwd": str(project_dir),
+            "tool_name": "mcp__autoskillit__open_kitchen",
+            "tool_input": {"name": "implementation"},
+            "session_id": "session-confirmed",
+            "hook_event_name": "PreToolUse",
+        },
+    )
+
+    response = json.loads(capsys.readouterr().out)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_session_start_sweeps_kitchen_marker_from_state_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The session-start marker sweep uses its supplied state root, not process cwd."""
+    from autoskillit.hooks import session_start_hook
+
+    project_dir = tmp_path / "project"
+    foreign_cwd = tmp_path / "foreign"
+    project_dir.mkdir()
+    foreign_cwd.mkdir()
+    marker_path = project_dir / ".autoskillit" / "temp" / "kitchen_state" / "stale.json"
+    marker_path.parent.mkdir(parents=True)
+    marker_path.write_text(
+        json.dumps(
+            {
+                "session_id": "stale",
+                "opened_at": (datetime.now(UTC) - timedelta(hours=25)).isoformat(),
+                "recipe_name": "implementation",
+            }
+        ),
+        encoding="utf-8",
+    )
+    transcript = tmp_path / "resumed.jsonl"
+    transcript.write_text("resumed", encoding="utf-8")
+    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
+    monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(project_dir))
+
+    _run_standalone_hook(
+        session_start_hook.main,
+        monkeypatch,
+        cwd=foreign_cwd,
+        payload={"cwd": str(project_dir), "transcript_path": str(transcript)},
+    )
+
+    assert not marker_path.exists()
+
+
+def test_hook_config_is_read_from_state_root_outside_hook_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quota settings honor the state-root config when a hook runs elsewhere."""
+    from autoskillit.hooks import _hook_settings
+
+    project_dir = tmp_path / "project"
+    foreign_cwd = tmp_path / "foreign"
+    project_dir.mkdir()
+    foreign_cwd.mkdir()
+    hook_config = project_dir / ".autoskillit" / "temp" / ".hook_config.json"
+    hook_config.parent.mkdir(parents=True)
+    hook_config.write_text(
+        json.dumps(
+            {
+                "quota_guard": {
+                    "cache_path": "/state-root/quota-cache.json",
+                    "cache_max_age": 123,
+                    "buffer_seconds": 45,
+                    "disabled": True,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(project_dir))
+    monkeypatch.chdir(foreign_cwd)
+
+    settings = _hook_settings.resolve_quota_settings()
+
+    assert settings.cache_path == "/state-root/quota-cache.json"
+    assert settings.cache_max_age == 123
+    assert settings.buffer_seconds == 45
+    assert settings.disabled is True
+
+
+def test_kitchen_marker_hash_fields_share_one_inert_tracked_annotation() -> None:
+    """Placeholder hashes remain one deliberately tracked compatibility surface."""
+    from autoskillit.hooks.guards.open_kitchen_guard import _write_kitchen_marker
+
+    lines = inspect.getsource(_write_kitchen_marker).splitlines()
+    content_hash_line = next(
+        index for index, line in enumerate(lines) if '"content_hash":' in line
+    )
+    composite_hash_line = next(
+        index for index, line in enumerate(lines) if '"composite_hash":' in line
+    )
+    annotations = [
+        (index, match)
+        for index, line in enumerate(lines)
+        if (match := re.search(r"inert-tracked:#([1-9][0-9]*)", line))
+    ]
+
+    assert len(annotations) == 1
+    annotation_line, _ = annotations[0]
+    assert annotation_line + 1 == content_hash_line
+    assert composite_hash_line == content_hash_line + 1
+    assert "content_hash" in lines[annotation_line]
+    assert "composite_hash" in lines[annotation_line]
+    assert "inert-tracked:" not in lines[content_hash_line]
+    assert "inert-tracked:" not in lines[composite_hash_line]
 
 
 def _run_guard(env_extra: dict, tool_input: dict) -> dict:

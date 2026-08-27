@@ -36,9 +36,6 @@ from autoskillit.fleet._native_shell_capture import (
     prepare_food_truck_lineage,
     resolve_dispatch_timeout,
 )
-from autoskillit.fleet._outcome import (
-    _sanitize_managed_capture_diagnostics as _sanitize_managed_capture_diagnostics,
-)
 from autoskillit.fleet._outcome import build_success_short_circuit as _build_success_short_circuit
 from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.fleet.state import (

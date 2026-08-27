@@ -10,7 +10,8 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 FILE_COUNT_LIMITS: dict[str, int] = {
     "core": 48,
-    "core/types": 76,
+    # Phase 1 adds _type_truth; phase 2 removes _type_tradition_manifest.
+    "core/types": 77,
     "core/runtime": 11,
     "config": 20,
     "recipe": 45,

@@ -502,6 +502,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_phoropter": frozenset({"core"}),
     "_type_tradition_manifest": frozenset({"core"}),
+    "_type_truth": frozenset({"core", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
     "bash_write_targets": frozenset({"core", "execution", "recipe", "server"}),

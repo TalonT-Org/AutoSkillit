@@ -90,6 +90,7 @@ class TestCoreSubpackages:
             "_type_subprocess",
             "_type_token",
             "_type_tradition_manifest",
+            "_type_truth",
         }
         actual = {p.stem for p in (SRC / "core" / "types").glob("_type_*.py")}
         assert actual == expected

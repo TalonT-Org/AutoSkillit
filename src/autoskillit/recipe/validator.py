@@ -6,7 +6,7 @@ to break the circular import between validator.py and the rule modules.
 
 from __future__ import annotations
 
-import re
+import regex as re
 
 from autoskillit.core import (
     RECIPE_TERMINAL_TARGETS,

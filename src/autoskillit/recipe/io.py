@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from pathlib import Path
+from collections.abc import Iterable, Iterator
+from functools import cache
+from pathlib import Path, PurePosixPath
 from typing import Any, cast
 
 from autoskillit.core import (
@@ -73,6 +74,13 @@ NON_RECIPE_DIRS: frozenset[str] = frozenset(
 )
 
 
+def is_recipe_scan_path(rel_to_root: PurePosixPath) -> bool:
+    """Return whether a recipe-relative path has the live discovery shape."""
+    if len(rel_to_root.parts) == 1:
+        return "." in RECIPE_SCAN_DIRS
+    return len(rel_to_root.parts) == 2 and rel_to_root.parts[0] in RECIPE_SCAN_DIRS
+
+
 def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
     """Parse a YAML recipe file into a Recipe dataclass.
 
@@ -135,27 +143,32 @@ def list_recipes(
     exclude_dispatch_only: bool = False,
 ) -> LoadResult[RecipeInfo]:
     """Find available recipes from project and built-in sources."""
-    seen: set[str] = set()
-    items: list[RecipeInfo] = []
-    errors: list[LoadReport] = []
-
     project_base = project_dir / ".autoskillit" / "recipes"
     builtin_base = pkg_root() / "recipes"
 
-    for subdir in RECIPE_SCAN_DIRS:
-        project_dir_scan = project_base / subdir
-        _collect_recipes(RecipeSource.PROJECT, project_dir_scan, seen, items, errors)
+    def live_recipe_files(base: Path) -> Iterator[Path]:
+        for subdir in RECIPE_SCAN_DIRS:
+            directory = base / subdir
+            if not directory.is_dir():
+                continue
+            for path in directory.iterdir():
+                if path.suffix in (".yaml", ".yml") and path.is_file():
+                    yield path
 
-    for subdir in RECIPE_SCAN_DIRS:
-        builtin_dir_scan = builtin_base / subdir
-        _collect_recipes(RecipeSource.BUILTIN, builtin_dir_scan, seen, items, errors)
-
-    filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
+    result = collect_recipes_from_candidates(
+        project_base,
+        live_recipe_files(project_base),
+        builtin_base,
+        live_recipe_files(builtin_base),
+    )
+    filtered = (
+        [r for r in result.items if r.kind not in exclude_kinds] if exclude_kinds else result.items
+    )
     if exclude_dispatch_only:
         filtered = [r for r in filtered if not r.dispatch_only]
     return LoadResult(
         items=sorted(filtered, key=lambda r: (group_rank(r), _registry_position(r), r.name)),
-        errors=errors,
+        errors=result.errors,
     )
 
 
@@ -704,44 +717,117 @@ def _parse_step(
     )
 
 
-def _collect_recipes(
-    source: RecipeSource,
-    directory: Path,
-    seen: set[str],
-    result: list[RecipeInfo],
-    errors: list[LoadReport],
-) -> None:
-    if not directory.is_dir():
-        return
-    for f in sorted(directory.iterdir()):
-        if f.suffix in (".yaml", ".yml") and f.is_file():
-            try:
-                raw = f.read_text(encoding="utf-8")
-                data, declared_data = load_recipe_dict_with_declarations(f, raw_text=raw)
-                recipe = _parse_recipe(data, declared_data=declared_data)
-                if recipe.name and recipe.name not in seen:
-                    seen.add(recipe.name)
-                    from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415
-                        compute_recipe_hash as _crh,
-                    )
+@cache
+def _parse_recipe_candidate(
+    path: Path,
+    _yaml_mtime_ns: int,
+    _yaml_ctime_ns: int,
+    _yaml_size: int,
+    _json_exists: bool,
+    _json_mtime_ns: int | None,
+    _json_ctime_ns: int | None,
+    _json_size: int | None,
+) -> tuple[Recipe, str]:
+    """Parse one recipe for a metadata fingerprint supplied by its enumerator."""
+    raw = path.read_text(encoding="utf-8")
+    data, declared_data = load_recipe_dict_with_declarations(path, raw_text=raw)
+    return _parse_recipe(data, declared_data=declared_data), raw
 
-                    result.append(
-                        RecipeInfo(
-                            name=recipe.name,
-                            description=recipe.description,
-                            source=source,
-                            path=f,
-                            summary=recipe.summary,
-                            version=recipe.version,
-                            recipe_version=recipe.recipe_version,
-                            content_hash=_crh(f),
-                            content=raw,
-                            kind=recipe.kind,
-                            experimental=recipe.experimental,
-                            requires_packs=recipe.requires_packs,
-                            dispatch_only=recipe.dispatch_only,
-                        )
-                    )
+
+def collect_recipes_from_candidates(
+    project_base: Path,
+    project_files: Iterable[Path],
+    builtin_base: Path,
+    builtin_files: Iterable[Path],
+) -> LoadResult[RecipeInfo]:
+    """Parse, deduplicate, and report collisions for recipe candidates by tier."""
+    items: list[RecipeInfo] = []
+    errors: list[LoadReport] = []
+    seen: dict[str, RecipeInfo] = {}
+
+    def record_failure(path: Path, exc: Exception) -> None:
+        logger.warning("Failed to load recipe file", path=str(path), error=str(exc))
+        errors.append(LoadReport(path=path, error=str(exc)))
+
+    def collect_tier(source: RecipeSource, base: Path, files: Iterable[Path]) -> None:
+        ordered: list[tuple[tuple[int, str], Path]] = []
+        for path in files:
+            try:
+                relative_path = path.relative_to(base)
+                scan_dir = "." if len(relative_path.parts) == 1 else relative_path.parts[0]
+                ordered.append(((RECIPE_SCAN_DIRS.index(scan_dir), path.name), path))
             except Exception as exc:
-                logger.warning("Failed to load recipe file", path=str(f), error=str(exc))
-                errors.append(LoadReport(path=f, error=str(exc)))
+                record_failure(path, exc)
+
+        for _, path in sorted(ordered):
+            try:
+                yaml_stat = path.stat()
+                json_path = path.with_suffix(".json")
+                try:
+                    json_stat = json_path.stat()
+                except OSError:
+                    json_stat = None
+                # Performance-only metadata cache; exotic same-metadata writes can evade it,
+                # but Git enumeration is always rerun.
+                recipe, raw = _parse_recipe_candidate(
+                    path,
+                    yaml_stat.st_mtime_ns,
+                    yaml_stat.st_ctime_ns,
+                    yaml_stat.st_size,
+                    json_stat is not None,
+                    json_stat.st_mtime_ns if json_stat is not None else None,
+                    json_stat.st_ctime_ns if json_stat is not None else None,
+                    json_stat.st_size if json_stat is not None else None,
+                )
+                if not recipe.name:
+                    continue
+
+                incumbent = seen.get(recipe.name)
+                if incumbent is not None:
+                    if incumbent.source == source:
+                        errors.append(
+                            LoadReport(
+                                path=path,
+                                error=(
+                                    f"Recipe name {recipe.name!r} is declared by both "
+                                    f"{incumbent.path} and {path}; same-tier duplicate names "
+                                    "have no defined precedence."
+                                ),
+                            )
+                        )
+                    else:
+                        logger.info(
+                            "recipe_name_shadowed",
+                            name=recipe.name,
+                            winner=str(incumbent.path),
+                            shadowed=str(path),
+                        )
+                    continue
+
+                from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415
+                    compute_recipe_hash as _crh,
+                )
+
+                recipe_info = RecipeInfo(
+                    name=recipe.name,
+                    description=recipe.description,
+                    source=source,
+                    path=path,
+                    summary=recipe.summary,
+                    version=recipe.version,
+                    recipe_version=recipe.recipe_version,
+                    content_hash=_crh(path),
+                    content=raw,
+                    kind=recipe.kind,
+                    experimental=recipe.experimental,
+                    requires_packs=list(recipe.requires_packs),
+                    dispatch_only=recipe.dispatch_only,
+                )
+                seen[recipe.name] = recipe_info
+                items.append(recipe_info)
+            except Exception as exc:
+                record_failure(path, exc)
+
+    collect_tier(RecipeSource.PROJECT, project_base, project_files)
+    collect_tier(RecipeSource.BUILTIN, builtin_base, builtin_files)
+    return LoadResult(items=items, errors=errors)

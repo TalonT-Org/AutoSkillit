@@ -360,7 +360,7 @@ def test_load_and_validate_skips_file_read_when_content_in_recipe_info(
     _write_valid_recipe(recipe_path)
 
     # Pre-compute the result while Path.read_text is still real; content is
-    # already populated by Phase 2 (_collect_recipes stores raw text).
+    # already populated by Phase 2 (recipe discovery stores raw text).
     pre_result = recipe_io.list_recipes(tmp_path)
     assert any(r.content is not None for r in pre_result.items if r.name == "my-recipe")
 

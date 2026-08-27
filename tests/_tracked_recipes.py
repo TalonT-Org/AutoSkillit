@@ -10,12 +10,11 @@ real files that were never committed to this repository. The test suite,
 however, wants its parametrization source to match exactly what git (and
 therefore CI) sees.
 
-This module scans git's index directly for the same two roots
-``list_recipes()`` scans — project-local ``.autoskillit/recipes`` and the
-built-in ``pkg_root()/recipes`` — restricted to ``RECIPE_SCAN_DIRS``
-subdirectories, and intersects the result with what ``list_recipes()``
-actually returns so a git-tracked but otherwise-rejected file (malformed
-YAML, duplicate ``name:``) is never yielded.
+This module scans git's index directly for the same two roots production scans
+— project-local ``.autoskillit/recipes`` and the built-in
+``pkg_root()/recipes``. It delegates ordering, parsing, and duplicate handling
+to the production collection engine, while retaining Git's index as the
+parametrization authority.
 """
 
 from __future__ import annotations
@@ -23,15 +22,19 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.recipe.io import NON_RECIPE_DIRS, RECIPE_SCAN_DIRS, list_recipes
+from autoskillit.core.types import LoadResult
+from autoskillit.recipe.io import (
+    collect_recipes_from_candidates,
+    is_recipe_scan_path,
+    load_recipe,
+)
 from autoskillit.recipe.schema import RecipeInfo
 
 _PROJECT_RECIPES_RELPATH = ".autoskillit/recipes"
 _GIT_TIMEOUT_SECONDS = 10
-
-_infos_cache: dict[Path, tuple[RecipeInfo, ...]] = {}
 
 
 def _repo_toplevel(project_root: Path) -> Path:
@@ -94,19 +97,6 @@ def _git_ls_files(project_root: Path, pathspec: str) -> list[str]:
     return [entry for entry in proc.stdout.split("\0") if entry]
 
 
-def _matches_scan_dirs(rel_to_root: PurePosixPath) -> bool:
-    """True if a path relative to a recipes root is a direct child of a
-    RECIPE_SCAN_DIRS subdirectory (mirroring _collect_recipes' non-recursive
-    directory.iterdir() scan)."""
-    parts = rel_to_root.parts
-    if len(parts) == 1:
-        return "." in RECIPE_SCAN_DIRS
-    if len(parts) == 2:
-        subdir = parts[0]
-        return subdir in RECIPE_SCAN_DIRS and subdir not in NON_RECIPE_DIRS
-    return False
-
-
 def _candidate_paths(project_root: Path, root_relpath: str) -> set[Path]:
     root = PurePosixPath(root_relpath)
     candidates: set[Path] = set()
@@ -118,34 +108,28 @@ def _candidate_paths(project_root: Path, root_relpath: str) -> set[Path]:
             continue
         if PurePosixPath(line).suffix not in (".yaml", ".yml"):
             continue
-        if not _matches_scan_dirs(rel_to_root):
+        if not is_recipe_scan_path(rel_to_root):
             continue
         candidates.add((project_root / line).resolve())
     return candidates
 
 
-def _tracked_recipe_infos(project_root: Path) -> tuple[RecipeInfo, ...]:
+def tracked_recipe_load_result(project_root: Path) -> LoadResult[RecipeInfo]:
+    """Return the Git-indexed recipe collection, including load errors."""
     resolved_root = project_root.resolve()
-    cached = _infos_cache.get(resolved_root)
-    if cached is not None:
-        return cached
-
     builtin_relpath = _builtin_recipes_pathspec(resolved_root)
-    candidates = _candidate_paths(resolved_root, _PROJECT_RECIPES_RELPATH)
-    candidates |= _candidate_paths(resolved_root, builtin_relpath)
-
-    infos = tuple(
-        sorted(
-            (
-                info
-                for info in list_recipes(resolved_root).items
-                if info.path.resolve() in candidates
-            ),
-            key=lambda info: info.path,
-        )
+    result = collect_recipes_from_candidates(
+        resolved_root / _PROJECT_RECIPES_RELPATH,
+        _candidate_paths(resolved_root, _PROJECT_RECIPES_RELPATH),
+        (pkg_root() / "recipes").resolve(),
+        _candidate_paths(resolved_root, builtin_relpath),
     )
-    _infos_cache[resolved_root] = infos
-    return infos
+    result.items.sort(key=lambda info: info.path)
+    return result
+
+
+def _tracked_recipe_infos(project_root: Path) -> tuple[RecipeInfo, ...]:
+    return tuple(tracked_recipe_load_result(project_root).items)
 
 
 def tracked_recipe_paths(project_root: Path) -> tuple[Path, ...]:
@@ -156,3 +140,69 @@ def tracked_recipe_paths(project_root: Path) -> tuple[Path, ...]:
 def tracked_recipe_names(project_root: Path) -> tuple[str, ...]:
     """Recipe ``name:`` values for recipe files that exist in git's index."""
     return tuple(sorted(info.name for info in _tracked_recipe_infos(project_root)))
+
+
+class RecipeStrayAnalysis(NamedTuple):
+    errors: tuple[str, ...]
+    report_paths: tuple[Path, ...]
+
+
+def _on_disk_recipe_paths(base: Path) -> set[Path]:
+    if not base.is_dir():
+        return set()
+    return {
+        path.resolve()
+        for path in base.rglob("*")
+        if path.is_file()
+        and path.suffix in (".yaml", ".yml")
+        and is_recipe_scan_path(PurePosixPath(path.relative_to(base).as_posix()))
+    }
+
+
+def analyze_untracked_recipes(project_root: Path) -> RecipeStrayAnalysis:
+    """Classify untracked recipe-shaped files without changing test outcomes."""
+    resolved_root = project_root.resolve()
+    builtin_relpath = _builtin_recipes_pathspec(resolved_root)
+    project_base = resolved_root / _PROJECT_RECIPES_RELPATH
+    builtin_base = (pkg_root() / "recipes").resolve()
+    tracked_paths = _candidate_paths(resolved_root, _PROJECT_RECIPES_RELPATH)
+    tracked_paths |= _candidate_paths(resolved_root, builtin_relpath)
+    stray_paths = sorted(
+        (_on_disk_recipe_paths(project_base) | _on_disk_recipe_paths(builtin_base)) - tracked_paths
+    )
+    tracked_by_name = {
+        info.name: info.path for info in tracked_recipe_load_result(resolved_root).items
+    }
+
+    errors: list[str] = []
+    report_paths: list[Path] = []
+    for path in stray_paths:
+        try:
+            recipe = load_recipe(path)
+        except Exception as exc:
+            errors.append(f"Untracked recipe cannot be loaded: {path}: {exc}")
+            continue
+        tracked_path = tracked_by_name.get(recipe.name)
+        if recipe.name and tracked_path is not None:
+            errors.append(
+                f"Untracked recipe {path} shares name {recipe.name!r} "
+                f"with tracked recipe {tracked_path}. Use `git check-ignore -v {path}` "
+                "to identify why the file is untracked."
+            )
+            continue
+        report_paths.append(path)
+    return RecipeStrayAnalysis(tuple(errors), tuple(report_paths))
+
+
+def format_untracked_recipe_report(analysis: RecipeStrayAnalysis) -> list[str]:
+    """Format report-only local recipes for pytest's session header."""
+    if not analysis.report_paths:
+        return []
+    return [
+        "untracked non-colliding recipes (report only):",
+        *(
+            f"  {path} (use `git check-ignore -v {path}` to identify the responsible rule; "
+            f"use `git add -f {path}` to deliberately track it)"
+            for path in analysis.report_paths
+        ),
+    ]

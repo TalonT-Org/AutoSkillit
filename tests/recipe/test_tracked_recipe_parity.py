@@ -15,10 +15,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import pkg_root
+import autoskillit.recipe.io as recipe_io
 from autoskillit.recipe import all_validated_recipe_names
-from autoskillit.recipe.io import RECIPE_SCAN_DIRS
-from tests._tracked_recipes import tracked_recipe_names, tracked_recipe_paths
+from autoskillit.recipe.io import list_recipes, load_recipe
+from tests._tracked_recipes import (
+    analyze_untracked_recipes,
+    format_untracked_recipe_report,
+    tracked_recipe_load_result,
+    tracked_recipe_names,
+    tracked_recipe_paths,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -33,67 +39,31 @@ _GIT_ENV = {
     "GIT_COMMITTER_EMAIL": "test@test.local",
 }
 
-_MINIMAL_RECIPE_YAML = (
-    "name: t19-tracked-recipe\n"
-    "description: minimal recipe for tracked-recipe parity test\n"
-    "steps:\n"
-    "  done:\n"
-    "    action: stop\n"
-    "    message: Done.\n"
-)
+
+def _minimal_recipe_yaml(name: str) -> str:
+    return (
+        f"name: {name}\n"
+        "description: minimal recipe for tracked-recipe parity test\n"
+        "steps:\n"
+        "  done:\n"
+        "    action: stop\n"
+        "    message: Done.\n"
+    )
+
 
 _INVALID_RECIPE_YAML = "steps: not-a-mapping\n"
 
 
-def _on_disk_recipe_files(base: Path) -> set[Path]:
-    found: set[Path] = set()
-    for subdir in RECIPE_SCAN_DIRS:
-        scan_dir = base / subdir
-        if not scan_dir.is_dir():
-            continue
-        for f in scan_dir.iterdir():
-            if f.suffix in (".yaml", ".yml") and f.is_file():
-                found.add(f.resolve())
-    return found
+def _patch_pkg_root(monkeypatch: pytest.MonkeyPatch, builtin_root: Path) -> None:
+    from tests import _tracked_recipes
+
+    monkeypatch.setattr(_tracked_recipes, "pkg_root", lambda: builtin_root)
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: builtin_root)
 
 
-def _git_tracked_files_under(project_root: Path, base: Path) -> set[Path]:
-    relpath = os.path.relpath(base, project_root)
-    proc = subprocess.run(
-        ["git", "-C", str(project_root), "ls-files", "-z", "--", relpath],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=10,
-    )
-    lines = [entry for entry in proc.stdout.split("\0") if entry]
-    return {(project_root / line).resolve() for line in lines}
-
-
-def test_no_untracked_recipe_is_present_in_working_tree() -> None:
-    """Every .yaml/.yml file directly under a RECIPE_SCAN_DIRS subdirectory of
-    either recipe root must be tracked by git."""
-    project_base = _PROJECT_ROOT / ".autoskillit" / "recipes"
-    builtin_base = pkg_root() / "recipes"
-
-    stray: list[Path] = []
-    for base in (project_base, builtin_base):
-        on_disk = _on_disk_recipe_files(base)
-        tracked = _git_tracked_files_under(_PROJECT_ROOT, base)
-        stray.extend(sorted(on_disk - tracked))
-
-    assert not stray, (
-        "Untracked recipe-shaped .yaml/.yml file(s) found under a scanned recipe "
-        "directory. These inflate the recipe-parametrized test matrix locally "
-        "while being invisible to CI, since CI only ever sees git's tracked "
-        "state:\n"
-        + "\n".join(f"  {p}" for p in stray)
-        + "\nNote a file can be present-but-untracked either because it was "
-        "never `git add`ed, or because it is excluded via .git/info/exclude "
-        "(which `git status --porcelain` alone will not surface — use "
-        "`git status --porcelain --ignored` to see it). Either `git add` the "
-        "file or remove it."
-    )
+def test_untracked_recipe_analysis_has_no_errors_in_this_checkout() -> None:
+    analysis = analyze_untracked_recipes(_PROJECT_ROOT)
+    assert not analysis.errors, "\n".join(analysis.errors)
 
 
 def _calls_to_all_validated_recipe_functions(py_file: Path) -> list[int]:
@@ -165,45 +135,198 @@ def _git_commit(repo_dir: Path, *paths: Path, message: str) -> None:
     )
 
 
-def test_untracked_recipe_does_not_change_parametrization(
+def test_untracked_duplicate_name_cannot_evict_tracked_project_recipe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Adding a second, untracked/invalid recipe file after the first
-    tracked_recipe_paths() call must not change what a subsequent call
-    returns."""
-    from tests import _tracked_recipes
-
-    # pkg_root() must resolve inside project_root's own repo (tmp_path here);
-    # point it at an unrelated empty subtree of the same repo so the
-    # invariant holds without contributing any builtin-side candidates.
-    monkeypatch.setattr(_tracked_recipes, "pkg_root", lambda: tmp_path / "fake_pkg")
-
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     tracked_recipe = recipes_dir / "t19-tracked.yaml"
-    tracked_recipe.write_text(_MINIMAL_RECIPE_YAML, encoding="utf-8")
-
+    tracked_recipe.write_text(_minimal_recipe_yaml("t19-shared"), encoding="utf-8")
     _init_git_repo(tmp_path)
-    _git_commit(tmp_path, tracked_recipe, message="add tracked recipe")
+    _git_commit(tmp_path, tracked_recipe, message="add tracked project recipe")
 
-    first = tracked_recipe_paths(tmp_path)
-    assert first == (tracked_recipe.resolve(),)
+    (recipes_dir / "t19-a-stray.yaml").write_text(
+        _minimal_recipe_yaml("t19-shared"), encoding="utf-8"
+    )
 
-    stray_recipe = recipes_dir / "t19-untracked-stray.yaml"
+    assert tracked_recipe_paths(tmp_path) == (tracked_recipe.resolve(),)
+    assert "t19-shared" in tracked_recipe_names(tmp_path)
+
+
+def test_untracked_project_recipe_cannot_evict_tracked_bundled_recipe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builtin_root = tmp_path / "fake_pkg"
+    _patch_pkg_root(monkeypatch, builtin_root)
+    builtin_recipe = builtin_root / "recipes" / "t19-bundled.yaml"
+    builtin_recipe.parent.mkdir(parents=True)
+    builtin_recipe.write_text(_minimal_recipe_yaml("t19-shared"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, builtin_recipe, message="add tracked bundled recipe")
+
+    project_recipe = tmp_path / ".autoskillit" / "recipes" / "t19-z-stray.yaml"
+    project_recipe.parent.mkdir(parents=True)
+    project_recipe.write_text(_minimal_recipe_yaml("t19-shared"), encoding="utf-8")
+
+    assert "t19-shared" in tracked_recipe_names(tmp_path)
+
+
+def test_untracked_valid_recipe_does_not_inflate_tracked_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    tracked_recipe = recipes_dir / "t19-tracked.yaml"
+    tracked_recipe.write_text(_minimal_recipe_yaml("t19-tracked"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, tracked_recipe, message="add tracked project recipe")
+
+    (recipes_dir / "t19-stray.yaml").write_text(
+        _minimal_recipe_yaml("t19-local-only"), encoding="utf-8"
+    )
+
+    assert "t19-local-only" not in tracked_recipe_names(tmp_path)
+
+
+def test_tracked_enumeration_cache_key_covers_the_builtin_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    builtin_a = tmp_path / "fake_pkg_a"
+    builtin_b = tmp_path / "fake_pkg_b"
+    recipe_a = builtin_a / "recipes" / "t19-a.yaml"
+    recipe_b = builtin_b / "recipes" / "t19-b.yaml"
+    recipe_a.parent.mkdir(parents=True)
+    recipe_b.parent.mkdir(parents=True)
+    recipe_a.write_text(_minimal_recipe_yaml("t19-builtin-a"), encoding="utf-8")
+    recipe_b.write_text(_minimal_recipe_yaml("t19-builtin-b"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, recipe_a, message="add first bundled recipe")
+    _git_commit(tmp_path, recipe_b, message="add second bundled recipe")
+
+    _patch_pkg_root(monkeypatch, builtin_a)
+    first = tracked_recipe_names(tmp_path)
+    _patch_pkg_root(monkeypatch, builtin_b)
+    second = tracked_recipe_names(tmp_path)
+
+    assert first == ("t19-builtin-a",)
+    assert second == ("t19-builtin-b",)
+
+
+def test_untracked_recipe_colliding_with_tracked_name_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    tracked_recipe = recipes_dir / "t19-tracked.yaml"
+    tracked_recipe.write_text(_minimal_recipe_yaml("t19-shared"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, tracked_recipe, message="add tracked project recipe")
+    stray_recipe = recipes_dir / "t19-stray.yaml"
+    stray_recipe.write_text(_minimal_recipe_yaml("t19-shared"), encoding="utf-8")
+
+    analysis = analyze_untracked_recipes(tmp_path)
+
+    assert len(analysis.errors) == 1
+    assert str(stray_recipe.resolve()) in analysis.errors[0]
+    assert str(tracked_recipe.resolve()) in analysis.errors[0]
+    assert "git check-ignore -v" in analysis.errors[0]
+
+
+def test_untracked_non_colliding_recipe_is_reported_but_not_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    tracked_recipe = recipes_dir / "t19-tracked.yaml"
+    tracked_recipe.write_text(_minimal_recipe_yaml("t19-tracked"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, tracked_recipe, message="add tracked project recipe")
+    stray_recipe = recipes_dir / "t19-local-only.yaml"
+    stray_recipe.write_text(_minimal_recipe_yaml("t19-local-only"), encoding="utf-8")
+
+    analysis = analyze_untracked_recipes(tmp_path)
+    report = "\n".join(format_untracked_recipe_report(analysis))
+
+    assert not analysis.errors
+    assert analysis.report_paths == (stray_recipe.resolve(),)
+    assert str(stray_recipe.resolve()) in report
+    assert "git check-ignore -v" in report
+    assert "git add -f" in report
+
+
+def test_untracked_invalid_recipe_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _init_git_repo(tmp_path)
+    stray_recipe = recipes_dir / "t19-invalid.yaml"
     stray_recipe.write_text(_INVALID_RECIPE_YAML, encoding="utf-8")
 
-    second = tracked_recipe_paths(tmp_path)
-    assert second == first
+    analysis = analyze_untracked_recipes(tmp_path)
+
+    assert len(analysis.errors) == 1
+    assert str(stray_recipe.resolve()) in analysis.errors[0]
 
 
-def test_tracked_set_matches_loader_on_clean_checkout() -> None:
-    """On a clean checkout (no untracked recipe strays, per T17), the
-    tracked-recipe set must exactly match what the production loader
-    discovers."""
+def test_tracked_enumeration_reports_no_load_errors_on_this_checkout() -> None:
+    assert not tracked_recipe_load_result(_PROJECT_ROOT).errors
+
+
+def test_tracked_enumeration_reports_missing_indexed_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    tracked_recipe = recipes_dir / "t19-tracked.yaml"
+    tracked_recipe.write_text(_minimal_recipe_yaml("t19-tracked"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, tracked_recipe, message="add tracked project recipe")
+    tracked_recipe.unlink()
+
+    result = tracked_recipe_load_result(tmp_path)
+
+    assert not result.items
+    assert [report.path for report in result.errors] == [tracked_recipe.resolve()]
+
+
+def test_tracked_enumeration_observes_a_mid_session_index_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    first_recipe = recipes_dir / "t19-first.yaml"
+    first_recipe.write_text(_minimal_recipe_yaml("t19-first"), encoding="utf-8")
+    _init_git_repo(tmp_path)
+    _git_commit(tmp_path, first_recipe, message="add first tracked recipe")
+
+    first = tracked_recipe_names(tmp_path)
+    second_recipe = recipes_dir / "t19-second.yaml"
+    second_recipe.write_text(_minimal_recipe_yaml("t19-second"), encoding="utf-8")
+    _git_commit(tmp_path, second_recipe, message="add second tracked recipe")
+
+    assert first == ("t19-first",)
+    assert tracked_recipe_names(tmp_path) == ("t19-first", "t19-second")
+
+
+def test_tracked_paths_are_identical_objects_to_loader_paths() -> None:
+    tracked_paths = set(tracked_recipe_paths(_PROJECT_ROOT))
+    loader_paths = {recipe.path for recipe in list_recipes(_PROJECT_ROOT).items}
+    assert tracked_paths <= loader_paths
+
+
+def test_tracked_set_is_a_loader_subset_with_reported_local_only_recipes() -> None:
     tracked = set(tracked_recipe_names(_PROJECT_ROOT))
     loader = set(all_validated_recipe_names(_PROJECT_ROOT))
-    assert tracked == loader, (
-        f"tracked_recipe_names diverges from all_validated_recipe_names:\n"
-        f"  only in tracked: {sorted(tracked - loader)}\n"
-        f"  only in loader:  {sorted(loader - tracked)}"
-    )
+    analysis = analyze_untracked_recipes(_PROJECT_ROOT)
+    report_names = {load_recipe(path).name for path in analysis.report_paths}
+
+    assert tracked <= loader
+    assert loader - tracked <= report_names

@@ -41,15 +41,21 @@ _real_rmtree = shutil.rmtree
 
 def pytest_report_header(config: pytest.Config) -> list[str] | None:
     from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
+    from tests._tracked_recipes import (
+        analyze_untracked_recipes,
+        format_untracked_recipe_report,
+    )
 
     contaminated = sorted(
         var
         for var, entry in AMBIENT_ENV_DISPOSITIONS.items()
         if entry.disposition == "scrub" and var in _AMBIENT_ENV_AT_STARTUP
     )
-    if not contaminated:
-        return None
-    return [f"ambient env scrubbed ({len(contaminated)}): {', '.join(contaminated)}"]
+    lines = []
+    if contaminated:
+        lines.append(f"ambient env scrubbed ({len(contaminated)}): {', '.join(contaminated)}")
+    lines.extend(format_untracked_recipe_report(analyze_untracked_recipes(_Path(config.rootpath))))
+    return lines or None
 
 
 _LAYER_DIRS: frozenset[str] = frozenset(

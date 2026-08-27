@@ -2041,9 +2041,8 @@ def test_load_and_validate_non_dict_steps_value_returns_invalid(tmp_path: Path) 
     """A YAML with steps: [foo, bar] (list instead of mapping) must produce valid=False
     with a clear error, not an uncaught AttributeError.
 
-    Non-dict steps YAML cannot be discovered by list_recipes (the new ValueError
-    guard in _parse_recipe causes _collect_recipes to skip it), so we construct
-    a RecipeInfo directly.
+    Non-dict steps YAML cannot be discovered by list_recipes (the ValueError
+    guard during recipe discovery skips it), so we construct a RecipeInfo directly.
     """
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core.types import RecipeSource

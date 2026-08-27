@@ -15,6 +15,7 @@ imports, no ``autoskillit.*`` imports. It runs unchanged under the bare
 Python interpreter used by Claude Code hook subprocesses.
 """
 
+import importlib
 import json
 import os
 import sys
@@ -499,38 +500,30 @@ def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
             print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)
 
 
-def read_session_binding() -> dict[str, object] | None:
-    """Read the ``AUTOSKILLIT_JOIN_FLAG_PATH`` flag file as JSON.
+def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:
+    """Read the binding identified by the hook payload.
 
-    Returns the parsed dict on success, or ``None`` when the path is unset,
-    the file is unreadable, the JSON is malformed, or the top-level value
-    is not a dict. OSError on read is treated as 'no binding present' so
-    callers can fall through to the env-mirror ``AUTOSKILLIT_JOIN_REQUIRED``.
+    Missing, unreadable, malformed, or mismatched binding artifacts retain the
+    existing permissive policy and are treated as no binding.
     """
-    flag_path = os.environ.get("AUTOSKILLIT_JOIN_FLAG_PATH", "").strip()
-    if not flag_path:
-        return None
+    # Some projected hooks consume settings without carrying join artifacts, so
+    # load this dependency only on the join-binding path.
+    module_name = f"{__package__}._session_binding" if __package__ else "_session_binding"
+    binding_module = importlib.import_module(module_name)
+    resolve_path = getattr(binding_module, "resolve_binding_path")
+    read_binding = getattr(binding_module, "read_binding")
+    binding_error = getattr(binding_module, "SessionBindingError")
     try:
-        with open(flag_path, encoding="utf-8") as handle:
-            raw = handle.read()
-    except OSError:
+        binding = read_binding(resolve_path(payload_cwd, session_id))
+    except binding_error:
         return None
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
+    if binding is None or binding.session_id != session_id:
         return None
+    parsed = json.loads(binding.to_json())
     return parsed if isinstance(parsed, dict) else None
 
 
-def session_join_required() -> bool:
-    """True when the session flag reports ``join_required=true`` or the
-    ``AUTOSKILLIT_JOIN_REQUIRED=1`` env mirror is set.
-
-    The flag is consulted first; the env mirror is the documented fallback
-    for hooks that lose access to the binding file (e.g. when the
-    filesystem error is transient). Either signal alone is sufficient.
-    """
-    binding = read_session_binding()
-    if binding is not None and bool(binding.get("join_required", False)):
-        return True
-    return os.environ.get("AUTOSKILLIT_JOIN_REQUIRED") == "1"
+def session_join_required(payload_cwd: str, session_id: str) -> bool:
+    """Return whether the payload-identified binding requires a fixed-set join."""
+    binding = read_session_binding(payload_cwd, session_id)
+    return binding is not None and bool(binding.get("join_required", False))

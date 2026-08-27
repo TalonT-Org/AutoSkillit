@@ -47,6 +47,7 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,
     run_startup_install_state_check,
+    run_startup_join_guard_coverage_check,
 )
 from autoskillit.server._state import deferred_initialize
 
@@ -150,6 +151,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         from autoskillit.server import _state  # circular-break
 
         run_startup_fix_required_coverage_check()
+        run_startup_join_guard_coverage_check()
 
         event = _asyncio.Event()
         _state._startup_ready = event

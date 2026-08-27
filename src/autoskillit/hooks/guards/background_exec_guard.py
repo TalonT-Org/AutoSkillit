@@ -12,12 +12,11 @@ Join-bound sessions additionally reject:
     teams are active — confirmed via code.claude.com/docs/en/agent-teams);
   * ``run_in_background=true`` (the original ADR-0001 prohibition);
   * ``ScheduleWakeup`` (deferral/stall escape hatch).
-The guard reads the session flag as JSON; ``join_required=true`` activates the
-join-bound deny set. When the binding flag is configured but unreadable
-or malformed, the guard defaults to non-join semantics rather than promoting
-to ``join_required=true`` — the launch policy and active session binding are
-authoritative, and a transient file-system error during hook invocation must
-not lock the agent out of legitimate work.
+The guard derives session identity from the hook payload; a binding with
+``join_required=true`` activates the join-bound deny set. An absent, unreadable,
+or malformed binding defaults to non-join semantics because a transient
+file-system error during hook invocation must not lock the agent out of
+legitimate work.
 """
 
 from __future__ import annotations
@@ -30,6 +29,7 @@ _HOOKS_DIR = str(__file__).rsplit("/", 1)[0].rsplit("/", 1)[0]
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
 )
@@ -65,6 +65,8 @@ def main() -> None:
         data = json.loads(sys.stdin.read())
     except (json.JSONDecodeError, ValueError, OSError):
         sys.exit(0)  # fail-open on malformed input
+    if not isinstance(data, dict):
+        sys.exit(0)
 
     in_subagent_context = bool(data.get("agent_id"))
 
@@ -85,7 +87,16 @@ def main() -> None:
     # --- Join-bound session enforcement (Claude, all session types) ---
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
     # blocking them would self-lock every join.
-    join_required = is_governed and not in_subagent_context and session_join_required()
+    session_id = data.get("session_id")
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    join_required = (
+        is_governed
+        and not in_subagent_context
+        and isinstance(session_id, str)
+        and bool(session_id)
+        and bool(payload_cwd)
+        and session_join_required(payload_cwd, session_id)
+    )
 
     if join_required and tool_name == "Agent":
         selector = []

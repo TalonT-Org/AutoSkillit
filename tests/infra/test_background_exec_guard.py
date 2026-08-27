@@ -6,6 +6,7 @@ import io
 import json
 import os
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -28,11 +29,7 @@ def _run_guard(
     from autoskillit.hooks.guards.background_exec_guard import main
 
     stdin_content = raw_stdin if raw_stdin is not None else json.dumps(event)
-    env_snapshot = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in ("AUTOSKILLIT_HEADLESS", "AUTOSKILLIT_SESSION_TYPE")
-    }
+    env_snapshot: dict[str, str] = {}
     if headless:
         env_snapshot["AUTOSKILLIT_HEADLESS"] = "1"
     if session_type is not None:
@@ -180,10 +177,7 @@ def test_denies_unset_session_type():
     stdin_content = json.dumps(
         {"tool_name": "Bash", "tool_input": {"command": "echo test", "run_in_background": True}}
     )
-    env_without_session_type = {
-        k: v for k, v in os.environ.items() if k != "AUTOSKILLIT_SESSION_TYPE"
-    }
-    env_without_session_type["AUTOSKILLIT_HEADLESS"] = "1"
+    env_without_session_type = {"AUTOSKILLIT_HEADLESS": "1"}
     with (
         patch.dict(os.environ, env_without_session_type, clear=True),
         patch("sys.stdin", io.StringIO(stdin_content)),
@@ -217,53 +211,65 @@ def test_deny_reason_references_adr():
 # ---------------------------------------------------------------------------
 
 
+def _session_worktree(tmp_path: Path) -> Path:
+    """Create the payload cwd that owns this test session's state."""
+    worktree = tmp_path / "worktree"
+    (worktree / ".autoskillit").mkdir(parents=True)
+    return worktree
+
+
 def _write_session_binding(
-    tmp_path,
+    tmp_path: Path,
     *,
     join_required: bool,
     binding_valid: bool = True,
     malformed: bool = False,
-) -> str:
-    """Write the session flag and return its path; bind AUTOSKILLIT_JOIN_FLAG_PATH."""
-    flag_dir = tmp_path / ".autoskillit" / "temp"
-    flag_dir.mkdir(parents=True, exist_ok=True)
-    flag_path = flag_dir / "skill_guard_bind.flag"
+) -> Path:
+    """Write the binding at the authority path for the canonical payload identity."""
+    from autoskillit.hooks._session_binding import (
+        SessionBinding,
+        resolve_binding_path,
+        write_binding,
+    )
+
+    worktree = _session_worktree(tmp_path)
+    binding_path = resolve_binding_path(str(worktree), "bind")
     if malformed:
-        flag_path.write_text("not valid json", encoding="utf-8")
+        binding_path.parent.mkdir(parents=True, exist_ok=True)
+        binding_path.write_text("not valid json", encoding="utf-8")
     else:
-        payload = {
-            "schema_version": 1,
-            "session_id": "bind",
-            "join_required": join_required,
-            "binding_valid": binding_valid,
-            "loaded_skills": [],
-            "activation_source": "manifest",
-            "launch_policy_state": "active",
-        }
-        flag_path.write_text(json.dumps(payload), encoding="utf-8")
-    return str(flag_path)
+        write_binding(
+            binding_path,
+            SessionBinding(
+                schema_version=2,
+                session_id="bind",
+                join_required=join_required,
+                binding_valid=binding_valid,
+                artifact_digest="",
+                loaded_skills=(),
+            ),
+        )
+    return worktree
 
 
-def _run_guard_join_bound(event: dict, *, flag_path: str | None) -> dict:
-    """Run guard with AUTOSKILLIT_JOIN_FLAG_PATH pointed at a binding file."""
+def _join_event(worktree: Path, tool_name: str, tool_input: dict) -> dict:
+    """Build a payload whose cwd and session ID locate its binding."""
+    return {
+        "tool_name": tool_name,
+        "session_id": "bind",
+        "cwd": str(worktree),
+        "tool_input": tool_input,
+    }
+
+
+def _run_guard_join_bound(event: dict) -> dict:
+    """Run the guard with binding authority derived only from the payload."""
     from autoskillit.hooks.guards.background_exec_guard import main
 
     env_snapshot = {
-        k: v
-        for k, v in os.environ.items()
-        if k
-        not in (
-            "AUTOSKILLIT_HEADLESS",
-            "AUTOSKILLIT_SESSION_TYPE",
-            "AUTOSKILLIT_JOIN_FLAG_PATH",
-            "AUTOSKILLIT_JOIN_REQUIRED",
-            "AUTOSKILLIT_AGENT_BACKEND",
-        )
+        "AUTOSKILLIT_SESSION_TYPE": "skill",
+        "AUTOSKILLIT_AGENT_BACKEND": "claude-code",
     }
-    env_snapshot["AUTOSKILLIT_SESSION_TYPE"] = "skill"
-    env_snapshot["AUTOSKILLIT_AGENT_BACKEND"] = "claude-code"
-    if flag_path is not None:
-        env_snapshot["AUTOSKILLIT_JOIN_FLAG_PATH"] = flag_path
     with (
         patch.dict(os.environ, env_snapshot, clear=True),
         patch("sys.stdin", io.StringIO(json.dumps(event))),
@@ -280,14 +286,9 @@ def _run_guard_join_bound(event: dict, *, flag_path: str | None) -> dict:
 
 def test_required_join_denies_named_teammate_agent(tmp_path):
     """REQ-054: required join + name selector → denied before dispatch."""
-    flag_path = _write_session_binding(tmp_path, join_required=True)
+    worktree = _write_session_binding(tmp_path, join_required=True)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "name": "reviewer"},
-        },
-        flag_path=flag_path,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "name": "reviewer"})
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
@@ -297,14 +298,9 @@ def test_required_join_denies_named_teammate_agent(tmp_path):
 
 def test_required_join_denies_team_named_agent(tmp_path):
     """REQ-054: required join + team_name selector → denied before dispatch."""
-    flag_path = _write_session_binding(tmp_path, join_required=True)
+    worktree = _write_session_binding(tmp_path, join_required=True)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "team_name": "team-a"},
-        },
-        flag_path=flag_path,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "team_name": "team-a"})
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
@@ -314,18 +310,17 @@ def test_required_join_denies_team_named_agent(tmp_path):
 
 def test_required_join_denies_named_and_team_combined(tmp_path):
     """REQ-054: required join + name+team_name → both reported in reason."""
-    flag_path = _write_session_binding(tmp_path, join_required=True)
+    worktree = _write_session_binding(tmp_path, join_required=True)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {
+        _join_event(
+            worktree,
+            "Agent",
+            {
                 "prompt": "reviewer",
                 "name": "reviewer",
                 "team_name": "team-a",
             },
-        },
-        flag_path=flag_path,
+        )
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
@@ -335,14 +330,9 @@ def test_required_join_denies_named_and_team_combined(tmp_path):
 
 def test_required_join_denies_run_in_background_agent(tmp_path):
     """REQ-054: required join + run_in_background=true → denied before dispatch."""
-    flag_path = _write_session_binding(tmp_path, join_required=True)
+    worktree = _write_session_binding(tmp_path, join_required=True)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "run_in_background": True},
-        },
-        flag_path=flag_path,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "run_in_background": True})
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
@@ -351,29 +341,15 @@ def test_required_join_denies_run_in_background_agent(tmp_path):
 
 def test_required_join_allows_unnamed_foreground_agent(tmp_path):
     """REQ-054: required join + unnamed foreground Agent → allowed."""
-    flag_path = _write_session_binding(tmp_path, join_required=True)
-    response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer"},
-        },
-        flag_path=flag_path,
-    )
+    worktree = _write_session_binding(tmp_path, join_required=True)
+    response = _run_guard_join_bound(_join_event(worktree, "Agent", {"prompt": "reviewer"}))
     assert response == {}, "Unnamed foreground Agent must be allowed in join-bound session"
 
 
 def test_required_join_denies_schedule_wakeup(tmp_path):
     """REQ-054: ScheduleWakeup is an escape hatch and must be denied join-bound."""
-    flag_path = _write_session_binding(tmp_path, join_required=True)
-    response = _run_guard_join_bound(
-        {
-            "tool_name": "ScheduleWakeup",
-            "session_id": "bind",
-            "tool_input": {"delay": "5m"},
-        },
-        flag_path=flag_path,
-    )
+    worktree = _write_session_binding(tmp_path, join_required=True)
+    response = _run_guard_join_bound(_join_event(worktree, "ScheduleWakeup", {"delay": "5m"}))
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
     assert "ScheduleWakeup" in reason
@@ -381,14 +357,9 @@ def test_required_join_denies_schedule_wakeup(tmp_path):
 
 def test_clean_session_allows_named_teammate_dispatch(tmp_path):
     """REQ-054: clean (join_required=false) session preserves legitimate team calls."""
-    flag_path = _write_session_binding(tmp_path, join_required=False)
+    worktree = _write_session_binding(tmp_path, join_required=False)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "name": "reviewer"},
-        },
-        flag_path=flag_path,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "name": "reviewer"})
     )
     # Clean session → no join-bound denial. The agent-teams activation
     # check (if any) is enforced via the launch builder, not this guard.
@@ -398,29 +369,14 @@ def test_clean_session_allows_named_teammate_dispatch(tmp_path):
     )
 
 
-def test_missing_binding_defaults_to_permissive():
-    """REQ-054: missing binding flag → non-join (permissive) semantics.
-
-    When the binding flag file is absent, the guard treats the session
-    as non-join (no join-bound denial). Without a binding flag and
-    without the ``AUTOSKILLIT_JOIN_REQUIRED`` env mirror, the guard
-    has no join signal to operate on.
-    """
-    # No flag file. The guard falls back to non-join semantics and the
-    # named Agent call passes through (no deny payload emitted).
+def test_absent_binding_is_permissive_only_when_no_skill_was_loaded(tmp_path: Path):
+    """A fresh payload-derived state root has no binding and remains permissive."""
+    worktree = _session_worktree(tmp_path)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "name": "reviewer"},
-        },
-        flag_path=None,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "name": "reviewer"})
     )
-    # Without a binding flag the guard must default to non-join semantics.
     assert "permissionDecision" not in response, (
-        "Without a binding flag the guard must default to non-join semantics; "
-        "the guard only enters join-bound posture when the binding or env "
-        "mirror explicitly signals join_required."
+        "A session that has not loaded a skill must remain non-join and permissive."
     )
 
 
@@ -433,18 +389,10 @@ def test_malformed_binding_does_not_admit_join_required(tmp_path):
     so the hook does not lock the agent out of legitimate work on a
     transient file-system error.
     """
-    flag_path = _write_session_binding(tmp_path, join_required=True, malformed=True)
+    worktree = _write_session_binding(tmp_path, join_required=True, malformed=True)
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "name": "reviewer"},
-        },
-        flag_path=flag_path,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "name": "reviewer"})
     )
-    # Malformed JSON → read_session_binding returns None → join_required
-    # stays False → no join-bound denial. The named Agent call passes
-    # through; we explicitly assert the hook does not emit a deny.
     assert "permissionDecision" not in response, (
         "Malformed binding must default to non-join semantics — no deny payload."
     )
@@ -452,18 +400,13 @@ def test_malformed_binding_does_not_admit_join_required(tmp_path):
 
 def test_required_join_denial_includes_activation_source_and_state(tmp_path):
     """REQ-054: denial reason names selectors; activation source/state from binding."""
-    flag_path = _write_session_binding(
+    worktree = _write_session_binding(
         tmp_path,
         join_required=True,
         binding_valid=True,
     )
     response = _run_guard_join_bound(
-        {
-            "tool_name": "Agent",
-            "session_id": "bind",
-            "tool_input": {"prompt": "reviewer", "name": "reviewer"},
-        },
-        flag_path=flag_path,
+        _join_event(worktree, "Agent", {"prompt": "reviewer", "name": "reviewer"})
     )
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = response["hookSpecificOutput"]["permissionDecisionReason"]
@@ -473,15 +416,8 @@ def test_required_join_denial_includes_activation_source_and_state(tmp_path):
     assert "declare_join_batch" in reason
 
 
-def test_required_join_allows_non_agent_tool_input():
+def test_required_join_allows_non_agent_tool_input(tmp_path: Path):
     """REQ-054: non-Agent tools are not gated by the join-bound deny set."""
-    # No binding file needed — Read is not in the deny set.
-    response = _run_guard_join_bound(
-        {
-            "tool_name": "Read",
-            "session_id": "bind",
-            "tool_input": {"file_path": "/etc/hosts"},
-        },
-        flag_path=None,
-    )
+    worktree = _session_worktree(tmp_path)
+    response = _run_guard_join_bound(_join_event(worktree, "Read", {"file_path": "/etc/hosts"}))
     assert response == {}, "Read is not in the join-bound deny set"

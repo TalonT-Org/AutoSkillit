@@ -8,6 +8,7 @@ startup checks:
 - :mod:`_startup_checks` — one-shot synchronous startup checks
   (``run_startup_drift_check``, ``run_startup_hook_health_check``,
   ``run_startup_install_state_check``, ``run_startup_fix_required_coverage_check``,
+  ``run_startup_join_guard_coverage_check``,
   ``_activate_recipe_kitchen``, ``_retain_context_tracker_authority``,
   ``_finalize_recorder``).
 - :mod:`_session_boots` — per-session-type async auto-gate boots and the
@@ -72,6 +73,7 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_fix_required_coverage_check,
     run_startup_hook_health_check,
     run_startup_install_state_check,
+    run_startup_join_guard_coverage_check,
 )
 from autoskillit.server._state import _get_ctx_or_none  # noqa: F401  (mock.patch reachability)
 from autoskillit.workspace import repair_broken_plugin_cache_hooks  # noqa: F401
@@ -102,5 +104,6 @@ __all__ = [
     "run_startup_fix_required_coverage_check",
     "run_startup_hook_health_check",
     "run_startup_install_state_check",
+    "run_startup_join_guard_coverage_check",
     "sweep_orphaned_tethers_async",
 ]

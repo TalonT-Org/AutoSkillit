@@ -27,6 +27,65 @@ _PROSE_TRIGGER_WINDOW = 60
 _PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")
 
 
+class _EnvVarReadCollector(ast.NodeVisitor):
+    """Collect literal env-var names read by executable env-lookup expressions."""
+
+    def __init__(self) -> None:
+        self.reads: set[str] = set()
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if self._is_os_environ_get_call(node):
+            name = self._first_string_arg(node)
+            if name is not None:
+                self.reads.add(name)
+        self.generic_visit(node)
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        if self._is_os_environ_subscript(node):
+            name = self._subscript_string_value(node)
+            if name is not None:
+                self.reads.add(name)
+        self.generic_visit(node)
+
+    @staticmethod
+    def _is_os_environ_get_call(node: ast.Call) -> bool:
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr in {"get", "getenv"}:
+            value = func.value
+            if isinstance(value, ast.Attribute) and value.attr == "environ":
+                if isinstance(value.value, ast.Name) and value.value.id == "os":
+                    return True
+            if isinstance(value, ast.Name) and value.id == "os":
+                return True
+        return False
+
+    @staticmethod
+    def _is_os_environ_subscript(node: ast.Subscript) -> bool:
+        value = node.value
+        return (
+            isinstance(value, ast.Attribute)
+            and value.attr == "environ"
+            and isinstance(value.value, ast.Name)
+            and value.value.id == "os"
+        )
+
+    @staticmethod
+    def _first_string_arg(node: ast.Call) -> str | None:
+        if not node.args:
+            return None
+        first = node.args[0]
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return first.value
+        return None
+
+    @staticmethod
+    def _subscript_string_value(node: ast.Subscript) -> str | None:
+        sl = node.slice
+        if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+            return sl.value
+        return None
+
+
 def inject_vanishing_subtree_on_descent(
     monkeypatch: pytest.MonkeyPatch,
     subtree: Path,

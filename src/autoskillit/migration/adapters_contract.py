@@ -66,7 +66,9 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
             _ = generate_recipe_card(recipe_path, recipes_dir)
             return MigrationResult(success=True, name=file.name)
         except (OSError, ValueError, YAMLError) as exc:
-            logger.warning("Contract card generation failed", name=file.name, error=str(exc))
+            logger.warning(
+                "Contract card generation failed", name=file.name, error=str(exc), exc_info=True
+            )
             return MigrationResult(success=False, name=file.name, error=str(exc))
 
     def validate(self, path: Path) -> tuple[bool, str]:
@@ -76,5 +78,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
                 return False, "missing skill_hashes field"
             return True, ""
         except _YAML_LOAD_EXC as exc:
-            logger.warning("Contract file validation failed", path=str(path), error=str(exc))
+            logger.warning(
+                "Contract file validation failed", path=str(path), error=str(exc), exc_info=True
+            )
             return False, str(exc)

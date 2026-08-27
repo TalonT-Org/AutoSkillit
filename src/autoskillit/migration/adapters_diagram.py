@@ -26,7 +26,7 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         if not diagrams_dir.is_dir():
             return []
         return [
-            MigrationFile(name=p.stem, path=p, file_type="diagram", current_version=None)
+            MigrationFile(name=p.stem, path=p, file_type=self.file_type, current_version=None)
             for p in sorted(diagrams_dir.glob("*.md"))
         ]
 
@@ -58,7 +58,10 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
     def validate(self, path: Path) -> tuple[bool, str]:
         try:
             content = path.read_text(encoding="utf-8")
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.warning(
+                "Diagram file validation failed", path=str(path), error=str(exc), exc_info=True
+            )
             return False, str(exc)
         if not re.search(r"<!-- autoskillit-recipe-hash: sha256:[0-9a-f]+ -->", content):
             return False, "missing autoskillit-recipe-hash comment"

@@ -128,5 +128,7 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
                 return False, "; ".join(str(e) for e in errors)
             return True, ""
         except (OSError, ValueError, YAMLError) as exc:
-            logger.warning("Recipe file validation failed", path=str(path), error=str(exc))
+            logger.warning(
+                "Recipe file validation failed", path=str(path), error=str(exc), exc_info=True
+            )
             return False, str(exc)

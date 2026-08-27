@@ -7,6 +7,7 @@ import os
 import shutil
 import stat
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -223,7 +224,7 @@ def test_scan_observed_closes_its_scandir_handle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scanner = _FakeScandir([_FakeDirEntry(tmp_path / "entry", _regular_file_status())])
-    monkeypatch.setattr(fs_observation.os, "scandir", lambda _root: scanner)
+    monkeypatch.setattr(fs_observation, "os", SimpleNamespace(scandir=lambda _root: scanner))
 
     assert len(list(scan_observed(tmp_path))) == 1
     assert scanner.closed is True
@@ -239,7 +240,7 @@ def test_scan_observed_releases_its_handle_when_abandoned_mid_iteration(
             _FakeDirEntry(tmp_path / "second", _regular_file_status()),
         ]
     )
-    monkeypatch.setattr(fs_observation.os, "scandir", lambda _root: scanner)
+    monkeypatch.setattr(fs_observation, "os", SimpleNamespace(scandir=lambda _root: scanner))
     observed = scan_observed(tmp_path)
     assert next(observed).name == "first"
 
@@ -254,7 +255,7 @@ def test_scan_observed_releases_its_handle_when_never_iterated(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     scanner = _FakeScandir([])
-    monkeypatch.setattr(fs_observation.os, "scandir", lambda _root: scanner)
+    monkeypatch.setattr(fs_observation, "os", SimpleNamespace(scandir=lambda _root: scanner))
     observed = scan_observed(tmp_path)
 
     del observed

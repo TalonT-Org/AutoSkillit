@@ -84,6 +84,16 @@ def _capable_backend() -> SimpleNamespace:
     return SimpleNamespace(capabilities=SimpleNamespace(fixed_set_join_capable=True))
 
 
+def test_handler_rejects_session_id_path_traversal(tmp_path: Path) -> None:
+    result = declare_module._declare_join_batch_handler(
+        "rectify", ["assignment"], "../escape", tmp_path
+    )
+
+    assert result["success"] is False
+    assert "path separators" in str(result["error"])
+    assert not (tmp_path / "escape.flag").exists()
+
+
 def test_end_to_end_real_projection_real_hook_real_handler(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

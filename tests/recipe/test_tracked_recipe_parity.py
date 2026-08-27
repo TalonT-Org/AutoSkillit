@@ -274,6 +274,21 @@ def test_untracked_invalid_recipe_is_an_error(
     assert str(stray_recipe.resolve()) in analysis.errors[0]
 
 
+def test_untracked_recipe_outside_scan_shape_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_pkg_root(monkeypatch, tmp_path / "fake_pkg")
+    nested_recipe = tmp_path / ".autoskillit" / "recipes" / "scripts" / "t19-deep.yaml"
+    nested_recipe.parent.mkdir(parents=True)
+    nested_recipe.write_text(_INVALID_RECIPE_YAML, encoding="utf-8")
+    _init_git_repo(tmp_path)
+
+    analysis = analyze_untracked_recipes(tmp_path)
+
+    assert not analysis.errors
+    assert not analysis.report_paths
+
+
 def test_tracked_enumeration_reports_no_load_errors_on_this_checkout() -> None:
     assert not tracked_recipe_load_result(_PROJECT_ROOT).errors
 

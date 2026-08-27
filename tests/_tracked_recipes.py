@@ -27,6 +27,7 @@ from typing import NamedTuple
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import LoadResult
 from autoskillit.recipe.io import (
+    RECIPE_SCAN_DIRS,
     collect_recipes_from_candidates,
     is_recipe_scan_path,
     load_recipe,
@@ -148,15 +149,20 @@ class RecipeStrayAnalysis(NamedTuple):
 
 
 def _on_disk_recipe_paths(base: Path) -> set[Path]:
-    if not base.is_dir():
-        return set()
-    return {
-        path.resolve()
-        for path in base.rglob("*")
-        if path.is_file()
-        and path.suffix in (".yaml", ".yml")
-        and is_recipe_scan_path(PurePosixPath(path.relative_to(base).as_posix()))
-    }
+    paths: set[Path] = set()
+    for subdir in RECIPE_SCAN_DIRS:
+        directory = base / subdir
+        if not directory.is_dir():
+            continue
+        for path in directory.iterdir():
+            rel_to_root = PurePosixPath(path.relative_to(base).as_posix())
+            if (
+                path.is_file()
+                and path.suffix in (".yaml", ".yml")
+                and is_recipe_scan_path(rel_to_root)
+            ):
+                paths.add(path.resolve())
+    return paths
 
 
 def analyze_untracked_recipes(project_root: Path) -> RecipeStrayAnalysis:

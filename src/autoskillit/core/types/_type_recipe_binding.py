@@ -27,6 +27,7 @@ __all__ = [
     "FinalizedRecipeSegment",
     "FinalizedRecipeProjection",
     "RECIPE_TERMINAL_TARGETS",
+    "RecipeStepGuard",
     "RecipeBindingProjection",
     "RecipeFlowEdge",
     "RUNTIME_ADMISSION_BY_ROLE",
@@ -479,6 +480,26 @@ class FinalizedRecipeSegment:
 
 
 @dataclass(frozen=True, slots=True)
+class RecipeStepGuard:
+    """A runtime guard attached to one finalized recipe step."""
+
+    step_name: str
+    context_name: str
+    bypass_target: str
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("step_name", self.step_name),
+            ("context_name", self.context_name),
+            ("bypass_target", self.bypass_target),
+        ):
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"RecipeStepGuard.{field_name} must be a non-empty string")
+        if not self.context_name.replace("_", "a").replace("-", "a").isidentifier():
+            raise ValueError("RecipeStepGuard.context_name must be an identifier")
+
+
+@dataclass(frozen=True, slots=True)
 class FinalizedRecipeProjection:
     """Immutable execution projection of one fully finalized recipe."""
 
@@ -489,6 +510,7 @@ class FinalizedRecipeProjection:
     ordered_steps: tuple[FinalizedRecipeStep, ...]
     ingredient_names: frozenset[str]
     delivery_segments: tuple[FinalizedRecipeSegment, ...] = ()
+    ordered_step_guards: tuple[RecipeStepGuard, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.binding_projection, RecipeBindingProjection):
@@ -524,6 +546,20 @@ class FinalizedRecipeProjection:
             raise ValueError(
                 "FinalizedRecipeProjection.ingredient_names must contain non-empty strings"
             )
+
+        ordered_step_guards = tuple(self.ordered_step_guards)
+        if any(not isinstance(guard, RecipeStepGuard) for guard in ordered_step_guards):
+            raise TypeError(
+                "FinalizedRecipeProjection.ordered_step_guards must contain "
+                "RecipeStepGuard entries"
+            )
+        if any(guard.step_name not in ordered_step_names for guard in ordered_step_guards):
+            raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
+        if any(guard.bypass_target not in ordered_step_names for guard in ordered_step_guards):
+            raise ValueError("FinalizedRecipeProjection guard bypasses must name finalized steps")
+        if len({guard.step_name for guard in ordered_step_guards}) != len(ordered_step_guards):
+            raise ValueError("FinalizedRecipeProjection guards must have unique step names")
+        object.__setattr__(self, "ordered_step_guards", ordered_step_guards)
 
         ordered_flow_edges = tuple(self.ordered_flow_edges)
         if any(not isinstance(edge, RecipeFlowEdge) for edge in ordered_flow_edges):

@@ -383,6 +383,7 @@ class TestSourceIsolationContract:
 def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
     from autoskillit.cli.prompts._prompts_campaign import _build_fleet_campaign_prompt
     from autoskillit.fleet._prompts import _build_food_truck_prompt
+    from autoskillit.recipe._api_orchestration import _build_orchestration_rules
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
@@ -441,6 +442,7 @@ def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
                 campaign_id="c1",
             ),
         ),
+        ("_build_orchestration_rules", _build_orchestration_rules, {}),
     ]
 
 
@@ -471,7 +473,7 @@ class TestAntiFabricationSurfaceContract:
         )
 
     def test_prompt_builder_discovery_guard(self):
-        """Auto-discover all _build_*_prompt functions in _prompts*.py and assert coverage."""
+        """Discover prompt/rules builders so instruction surfaces stay registered."""
         import ast
 
         from autoskillit.core import pkg_root
@@ -480,10 +482,12 @@ class TestAntiFabricationSurfaceContract:
         src_pkg = project_root / "src" / "autoskillit"
         if not src_pkg.is_dir():
             src_pkg = project_root
-        prompt_files = sorted(src_pkg.rglob("_prompts*.py"))
+        prompt_files = sorted(
+            [*src_pkg.rglob("_prompts*.py"), src_pkg / "recipe" / "_api_orchestration.py"]
+        )
 
         assert prompt_files, (
-            "No _prompts*.py files discovered — "
+            "No instruction-source files discovered — "
             f"pkg_root()={project_root} may not resolve to the source tree."
         )
 
@@ -497,12 +501,12 @@ class TestAntiFabricationSurfaceContract:
                 if (
                     isinstance(node, ast.FunctionDef)
                     and node.name.startswith("_build_")
-                    and node.name.endswith("_prompt")
+                    and (node.name.endswith("_prompt") or node.name.endswith("_rules"))
                 ):
                     discovered[node.name] = str(fpath)
 
         assert discovered, (
-            f"No _build_*_prompt functions discovered in {len(prompt_files)} _prompts*.py files."
+            f"No _build_*_prompt/_build_*_rules functions discovered in {len(prompt_files)} files."
         )
         registered = {name for name, *_ in _ANTI_FAB_BUILDERS}
         for fname in sorted(discovered):
@@ -516,6 +520,22 @@ class TestAntiFabricationSurfaceContract:
                 f"Registered builder '{rname}' was not discovered in any "
                 f"_prompts*.py file — source may have been renamed or deleted."
             )
+
+    @pytest.mark.parametrize(
+        "name,builder,kwargs",
+        [
+            item
+            for item in _ANTI_FAB_BUILDERS
+            if item[0]
+            in {
+                "_build_orchestrator_prompt",
+                "_build_open_kitchen_prompt",
+                "_build_orchestration_rules",
+            }
+        ],
+    )
+    def test_instruction_surface_mentions_skip_when_true(self, name, builder, kwargs):
+        assert "skip_when_true" in builder(**kwargs), f"{name} omits skip_when_true semantics"
 
 
 class TestSousChefMergePhaseContract:

@@ -109,8 +109,8 @@ RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
     # Full execution chain: pipeline composition pruning
     # (_recipe_composition.py) and lock enforcement (tools_kitchen.py).
     "skip_when_false": "composition",
-    # #4497 — zero runtime skip effect (unlike its sibling skip_when_false).
-    "skip_when_true": "inert-tracked:#4497",
+    # Host-adjudicated at run_skill admission before backend/session dispatch.
+    "skip_when_true": "execution",
     # Server-side RecipeStep fallback — the #2969/#3377 pattern this plan
     # extends to model.
     "stale_threshold": "execution",

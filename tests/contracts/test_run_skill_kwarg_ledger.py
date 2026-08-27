@@ -48,6 +48,7 @@ RUN_SKILL_PARAM_ROLE_LEDGER: dict[str, ToolParamRole] = {
     "skill_command": ToolParamRole.CHILD_INPUT,
     "skill_inputs": ToolParamRole.CHILD_INPUT,
     "stale_threshold": ToolParamRole.EXECUTION_TUNING,
+    "step_guard_value": ToolParamRole.PROTOCOL,
     "step_name": ToolParamRole.PROTOCOL,
     "step_provider": ToolParamRole.EXECUTION_TUNING,
 }

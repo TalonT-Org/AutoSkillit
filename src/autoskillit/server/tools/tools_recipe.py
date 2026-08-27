@@ -16,6 +16,7 @@ from autoskillit.config import (
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
+    STEP_SKIP_SEMANTICS_CLAUSE,
     RecipeDeliveryRequest,
     RecipeLoadError,
     get_logger,
@@ -117,7 +118,8 @@ async def load_recipe(
     ingredients_only: bool = False,
     delivery_request: RecipeDeliveryRequest | None = None,
 ) -> str:
-    """Load a recipe by name and return its raw YAML content.
+    (
+        """Load a recipe by name and return its raw YAML content.
 
     The YAML follows the recipe schema (ingredients, steps with tool/action,
     on_success/on_failure routing, retry blocks). The agent should interpret
@@ -223,6 +225,9 @@ async def load_recipe(
       (mandatory). on_skip is never a runtime result edge.
     - NEVER skip a step for any other reason (PR size, diff triviality, etc.).
     - A running optional step that returns success: false MUST follow on_failure.
+    """
+        + STEP_SKIP_SEMANTICS_CLAUSE
+        + """
 
     To CREATE a new recipe, use the /write-recipe skill.
     This tool is for loading and executing existing recipes.
@@ -248,6 +253,7 @@ async def load_recipe(
 
     Never raises.
     """
+    )
     if (gate := _require_enabled()) is not None:
         return gate
     try:

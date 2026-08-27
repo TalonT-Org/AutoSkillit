@@ -6,6 +6,8 @@ to break the circular import between validator.py and the rule modules.
 
 from __future__ import annotations
 
+import re
+
 from autoskillit.core import (
     RECIPE_TERMINAL_TARGETS,
     FinalizedRecipeSegment,
@@ -66,6 +68,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 _SKILL_HINT = " (Use /autoskillit:write-recipe for schema guidance)"
+_SKIP_WHEN_TRUE_RE = re.compile(r"^context\.[A-Za-z_][A-Za-z0-9_-]*$")
 
 
 def _iter_string_leaves(value: object, path: str) -> list[tuple[str, str]]:
@@ -134,6 +137,21 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
     ingredient_names = set(recipe.ingredients.keys())
 
     for step_name, step in recipe.steps.items():
+        if step.skip_when_true is not None:
+            if not _SKIP_WHEN_TRUE_RE.fullmatch(step.skip_when_true):
+                errors.append(
+                    f"Step '{step_name}': skip_when_true must use 'context.<name>' format."
+                )
+            if step.on_success is None:
+                errors.append(
+                    f"Step '{step_name}' has skip_when_true but is missing required "
+                    "on_success bypass target."
+                )
+            if step.skip_when_false is not None:
+                errors.append(
+                    f"Step '{step_name}' has both skip_when_true and skip_when_false; "
+                    "guards are ambiguous."
+                )
         if step.skip_when_false is not None and step.on_skip is None:
             errors.append(
                 f"Step '{step_name}' has 'skip_when_false' but is missing required 'on_skip'."

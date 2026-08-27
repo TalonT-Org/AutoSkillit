@@ -10,7 +10,11 @@ from autoskillit.cli.prompts._prompts import (
     _backend_supplement,
     _read_full_sous_chef,
 )
-from autoskillit.core import PIPELINE_FORBIDDEN_TOOLS, ROUTING_AUTHORITY_CLAUSE
+from autoskillit.core import (
+    PIPELINE_FORBIDDEN_TOOLS,
+    ROUTING_AUTHORITY_CLAUSE,
+    STEP_SKIP_SEMANTICS_CLAUSE,
+)
 from autoskillit.execution import codex_recipe_delivery_calling_contract
 
 if TYPE_CHECKING:
@@ -113,6 +117,7 @@ def _build_open_kitchen_prompt(
         "- Consequence: skipping PR review steps results in unreviewed code, missing diff\n"
         "  annotations, and no architectural lens analysis — code reaches main without\n"
         "  quality gates.\n\n"
+        f"{STEP_SKIP_SEMANTICS_CLAUSE}\n"
         f"## ROUTING AUTHORITY\n\n{ROUTING_AUTHORITY_CLAUSE}\n" + sous_chef_content
     )
 

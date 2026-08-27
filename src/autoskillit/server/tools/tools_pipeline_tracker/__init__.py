@@ -34,6 +34,7 @@ from autoskillit.server.tools.tools_pipeline_tracker._handlers import (
     _handle_status,
     complete_run_skill_result,
     mark_step_complete,
+    mark_step_skipped,
     record_pipeline_step,
     recover_run_skill_result,
 )
@@ -45,6 +46,7 @@ from autoskillit.server.tools.tools_pipeline_tracker._status import (
 __all__ = [
     "complete_run_skill_result",
     "mark_step_complete",
+    "mark_step_skipped",
     "recover_run_skill_result",
     "record_pipeline_step",
     "_authority_blocks_dependency_check",

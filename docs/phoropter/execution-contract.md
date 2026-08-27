@@ -38,7 +38,9 @@ Determines which lenses to apply, classifies the experiment type, and emits toke
   - `select-vis-lenses` (vis-lens family)
   - `prepare-pr` (arch-lens family)
   - `prepare-research-pr` (exp-lens family)
-- **Pre-filtering:** Dial skills may compute conditional values (e.g., `is_silent_type`) that downstream steps use for `skip_when_true`/`skip_when_false` gating.
+- **Guard inputs:** Dial skills may compute conditional values (e.g., `is_silent_type`).
+  `skip_when_true` values are adjudicated by the host at `run_skill` dispatch;
+  `skip_when_false` remains resolved during server-side recipe composition.
 
 ### Apply — Evaluation and Analysis
 

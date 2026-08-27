@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from autoskillit.core import (
+    ROUTING_AUTHORITY_CLAUSE,
+    STEP_SKIP_SEMANTICS_CLAUSE,
     BackendCapabilities,
     FinalizedRecipeProjection,
     FinalizedRecipeStep,
@@ -16,6 +18,7 @@ from autoskillit.core import (
     RecipeFlowEdge,
     RecipeNotFoundError,
     RecipeSource,
+    RecipeStepGuard,
     SkillLister,
     YAMLError,
     build_parameter_forwarding_rules,
@@ -150,6 +153,7 @@ def _build_orchestration_rules(
     recipe: Recipe | None = None, stop_semantics: str | None = None
 ) -> str:
     parts = [
+        STEP_SKIP_SEMANTICS_CLAUSE,
         "STEP EXECUTION IS NOT DISCRETIONARY:\n"
         "You MUST execute every step the pipeline routes you to. "
         "skip_when_false ingredient references are resolved server-side before the recipe "
@@ -159,7 +163,7 @@ def _build_orchestration_rules(
         "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
         "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
         "Consequence: skipping PR review steps results in unreviewed code, missing "
-        "diff annotations, and no architectural lens analysis."
+        "diff annotations, and no architectural lens analysis.\n\n" + ROUTING_AUTHORITY_CLAUSE,
     ]
     forwarding_rules = build_parameter_forwarding_rules()
     if forwarding_rules:
@@ -664,6 +668,15 @@ def _run_validation_pipeline(
                 ordered_steps=_finalize_recipe_steps(active_recipe, _deferred_guard_state),
                 ingredient_names=frozenset(active_recipe.ingredients),
                 delivery_segments=_delivery_segments,
+                ordered_step_guards=tuple(
+                    RecipeStepGuard(
+                        step_name=step_name,
+                        context_name=step.skip_when_true.removeprefix("context."),
+                        bypass_target=step.on_success,
+                    )
+                    for step_name, step in active_recipe.steps.items()
+                    if step.skip_when_true is not None and step.on_success is not None
+                ),
             )
         val_ctx = make_validation_context(
             active_recipe,

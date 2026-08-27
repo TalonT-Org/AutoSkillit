@@ -875,6 +875,10 @@ every step at full fidelity regardless of session length.
 - When the ingredient evaluates to true, the step is MANDATORY.
 - A running optional step that returns `success: false` MUST follow `on_failure`.
 
+`skip_when_true` is host-adjudicated at `run_skill` dispatch. Pass the resolved context
+value as `step_guard_value`; never skip the step yourself. A `skipped: true` response
+authorizes only its returned `next_step` bypass.
+
 ### 4. Anti-shortcut rule
 
 - Do not generalize from prior step outcomes. A step that returned a non-branching

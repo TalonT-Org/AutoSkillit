@@ -112,6 +112,7 @@ async def run_skill(
     closure_base_sha: str = "",
     closure_diff_sha: str = "",
     closure_target_sha: str = "",
+    step_guard_value: str | None = None,
     skill_inputs: dict[str, str | int | bool] | None = None,
     ctx: Context = CurrentContext(),
 ) -> str:
@@ -223,6 +224,7 @@ async def run_skill(
             closure_base_sha=closure_base_sha,
             closure_diff_sha=closure_diff_sha,
             closure_target_sha=closure_target_sha,
+            step_guard_value=step_guard_value,
             skill_inputs=skill_inputs,
             ctx=ctx,
             tool_ctx=_get_ctx(),

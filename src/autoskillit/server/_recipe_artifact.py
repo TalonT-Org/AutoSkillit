@@ -232,16 +232,15 @@ def build_recipe_flow_generation(
             }
         )
     ]
-    records.extend(
-        _canonical_flow_record(
-            {
-                "index": index,
-                "kind": "step",
-                "name": name,
+    guards_by_step = {guard.step_name: guard for guard in projection.ordered_step_guards}
+    for index, name in enumerate(projection.ordered_step_names):
+        record: dict[str, Any] = {"index": index, "kind": "step", "name": name}
+        if guard := guards_by_step.get(name):
+            record["guard"] = {
+                "bypass": guard.bypass_target,
+                "context": guard.context_name,
             }
-        )
-        for index, name in enumerate(projection.ordered_step_names)
-    )
+        records.append(_canonical_flow_record(record))
     records.extend(
         _canonical_flow_record(
             {
@@ -342,6 +341,9 @@ def prepare_recipe_delivery_generation(
             content_hash=str(source_payload.get("content_hash", "")),
             composite_hash=str(source_payload.get("composite_hash", "")),
             projection=finalized_projection.binding_projection,
+            step_guards={
+                guard.step_name: guard for guard in finalized_projection.ordered_step_guards
+            },
         )
     except (TypeError, ValueError) as exc:
         get_logger(__name__).warning(

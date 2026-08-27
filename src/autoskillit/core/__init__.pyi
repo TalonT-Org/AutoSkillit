@@ -668,6 +668,7 @@ from .types import RETIRED_SKILL_RESOURCE_IDS as RETIRED_SKILL_RESOURCE_IDS
 from .types import RETIREMENT_BACKSTOP_LEDGER as RETIREMENT_BACKSTOP_LEDGER
 from .types import REVIEW_APPROACH_MARKER as REVIEW_APPROACH_MARKER
 from .types import ROUTING_AUTHORITY_CLAUSE as ROUTING_AUTHORITY_CLAUSE
+from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
 from .types import RUN_PYTHON_PATH_LIKE_ARGS as RUN_PYTHON_PATH_LIKE_ARGS
 from .types import RUN_PYTHON_SENTINEL_KEYS as RUN_PYTHON_SENTINEL_KEYS
 from .types import RUN_SKILL_ATTESTATION_PARAMS as RUN_SKILL_ATTESTATION_PARAMS
@@ -918,6 +919,7 @@ from .types import FeatureDef as FeatureDef
 from .types import FeatureLifecycle as FeatureLifecycle
 from .types import FigureSpec as FigureSpec
 from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
+from .types import RecipeStepGuard as RecipeStepGuard
 from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
 from .types import FinalizedRecipeStep as FinalizedRecipeStep
 from .types import FleetErrorCode as FleetErrorCode
@@ -1086,6 +1088,9 @@ from .types import RecipeExecutionFactory as RecipeExecutionFactory
 from .types import RecipeExecutionId as RecipeExecutionId
 from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
+from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
+from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
+from .types import normalize_declared_truth as normalize_declared_truth
 from .types import RecipeExemptionFitnessError as RecipeExemptionFitnessError
 from .types import RecipeFlowEdge as RecipeFlowEdge
 from .types import RecipeFlowGeneration as RecipeFlowGeneration

@@ -464,14 +464,16 @@ def test_pyproject_cyclopts_minimum_version() -> None:
 
 def test_no_yaml_safe_load_in_migration_engine() -> None:
     """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
-    src = (Path(__file__).parent.parent.parent / "src/autoskillit/migration/engine.py").read_text()
+    src = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/migration/adapters_contract.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute) and func.attr == "safe_load":
                 pytest.fail(
-                    f"migration/engine.py line {node.lineno}: "
+                    f"migration/adapters_contract.py line {node.lineno}: "
                     f"direct yaml.safe_load call found; use load_yaml from core.io instead"
                 )
 

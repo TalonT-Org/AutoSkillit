@@ -1,6 +1,16 @@
+"""Migration engine core: dispatch logic, adapter ABCs, shared dataclasses,
+factory, and private helpers used by the skill adapter.
+
+Concrete adapters live in ``adapters_recipe.py``, ``adapters_contract.py``,
+``adapters_diagram.py``, and ``adapters_skill.py``; the high-level service
+wrapper lives in ``service.py``. This module re-exports every public symbol
+and reassigns ``__module__`` so the relocated classes continue to report
+``autoskillit.migration.engine`` as their home (preserving repr / pickle /
+``inspect.getmodule`` identity for downstream consumers).
+"""
+
 from __future__ import annotations
 
-import json
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -8,28 +18,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import regex as re
-
-from autoskillit import __version__
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
-    SKILL_CONTRACT_REMEDIATIONS,
-    SKILL_SEMANTIC_SCHEMA_VERSION,
-    RemediationAction,
-    RetryReason,
     SkillContractError,
-    SkillInvalidityKind,
-    SkillResult,
     atomic_write,
-    dump_yaml_str,
     get_logger,
-    load_yaml,
-    resolve_temp_dir,
 )
-from autoskillit.migration.loader import applicable_migrations
 
 if TYPE_CHECKING:
-    from autoskillit.workspace import SkillInfo
+    pass
 
 logger = get_logger(__name__)
 
@@ -114,12 +111,6 @@ class MigrationResult:
     advisory: str | None = None
 
 
-@dataclass
-class AdvisoryResult:
-    name: str
-    suggestion: str
-
-
 class MigrationAdapter(ABC):
     """Abstract base for file-type-specific migration adapters."""
 
@@ -146,7 +137,7 @@ class HeadlessMigrationAdapter(MigrationAdapter):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]],
+        run_headless: Callable[..., Awaitable[Any]],
         temp_dir: Path,
     ) -> MigrationResult:
         """Apply migration via run_headless; write-back handled by MigrationEngine."""
@@ -190,7 +181,7 @@ class MigrationEngine:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[SkillResult]],
+        run_headless: Callable[..., Awaitable[Any]],
         temp_dir: Path,
     ) -> MigrationResult:
         adapter = self._adapters.get(file.file_type)
@@ -220,6 +211,12 @@ class MigrationEngine:
             atomic_write(file.path, result.migrated_content)
             logger.info("migration.written_back", name=file.name, path=str(file.path))
 
+            # Late import: SkillMigrationAdapter.validate only runs after the
+            # adapter has produced migrated content; importing at module load
+            # time would create a circular dependency between engine.py and
+            # adapters_skill.py.
+            from autoskillit.migration.adapters_skill import SkillMigrationAdapter  # noqa: PLC0415
+
             if isinstance(adapter, SkillMigrationAdapter):
                 is_valid, validation_error = adapter.validate(file.path)
                 if not is_valid:
@@ -234,411 +231,13 @@ class MigrationEngine:
         return result
 
 
-class RecipeMigrationAdapter(HeadlessMigrationAdapter):
-    file_type = "recipe"
-
-    def discover(self, project_dir: Path) -> list[MigrationFile]:
-        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
-
-        recipes_dir = project_dir / ".autoskillit" / "recipes"
-        if not recipes_dir.exists():
-            return []
-        files = []
-        for p in sorted(recipes_dir.glob("*.yaml")):
-            meta = parse_recipe_metadata(p)
-            files.append(
-                MigrationFile(
-                    name=meta.name,
-                    path=p,
-                    file_type=self.file_type,
-                    current_version=meta.version,
-                )
-            )
-        return files
-
-    def needs_migration(self, file: MigrationFile) -> bool:
-        return bool(applicable_migrations(file.current_version, __version__))
-
-    async def migrate(
-        self,
-        file: MigrationFile,
-        *,
-        run_headless: Callable[..., Awaitable[SkillResult]],
-        temp_dir: Path,
-    ) -> MigrationResult:
-        migrations = applicable_migrations(file.current_version, __version__)
-        if not migrations:
-            return MigrationResult(success=True, name=file.name)
-
-        notes_yaml = dump_yaml_str(
-            [
-                {
-                    "from_version": m.from_version,
-                    "to_version": m.to_version,
-                    "description": m.description,
-                    "changes": [
-                        {
-                            "id": c.id,
-                            "description": c.description,
-                            "instruction": c.instruction,
-                            "detect": c.detect,
-                            "example_before": c.example_before,
-                            "example_after": c.example_after,
-                        }
-                        for c in m.changes
-                    ],
-                }
-                for m in migrations
-            ]
-        )
-        target_version = migrations[-1].to_version
-        content = file.path.read_text()
-        skill_command = (
-            f"/autoskillit:migrate-recipes"
-            f" script_path={file.path}"
-            f" script_content={json.dumps(content)}"
-            f" migration_notes={json.dumps(notes_yaml)}"
-            f" target_version={target_version}"
-        )
-
-        raw = await run_headless(
-            skill_command=skill_command,
-            cwd=str(file.path.parent.parent.parent),
-        )
-        if not raw.success:
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error=raw.result or "headless session failed",
-                retries_attempted=MIGRATE_RECIPES_MAX_RETRIES,
-            )
-
-        temp_out = self.get_temp_output_path(file, temp_dir)
-        if not temp_out.exists():
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error="migrate-recipes did not produce output",
-            )
-
-        return MigrationResult(
-            success=True,
-            name=file.name,
-            migrated_content=temp_out.read_text(),
-        )
-
-    def get_temp_output_path(self, file: MigrationFile, temp_dir: Path) -> Path:
-        return temp_dir / "migrations" / f"{file.path.stem}.yaml"
-
-    def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.recipe import load_recipe as _parse_recipe  # noqa: PLC0415
-        from autoskillit.recipe import validate_recipe_structure  # noqa: PLC0415
-
-        try:
-            recipe = _parse_recipe(path)
-            errors = validate_recipe_structure(recipe)
-            if errors:
-                return False, "; ".join(str(e) for e in errors)
-            return True, ""
-        except Exception as exc:
-            logger.warning("Recipe file validation failed", path=str(path), error=str(exc))
-            return False, str(exc)
-
-
-class ContractMigrationAdapter(DeterministicMigrationAdapter):
-    file_type = "contract"
-
-    def discover(self, project_dir: Path) -> list[MigrationFile]:
-        contracts_dir = project_dir / ".autoskillit" / "recipes" / "contracts"
-        if not contracts_dir.exists():
-            return []
-        files = []
-        for p in sorted(contracts_dir.glob("*.yaml")):
-            files.append(
-                MigrationFile(
-                    name=p.stem,
-                    path=p,
-                    file_type=self.file_type,
-                    current_version=None,  # version tracked via staleness, not semver
-                )
-            )
-        return files
-
-    def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_contract_staleness, load_recipe_card  # noqa: PLC0415
-
-        recipes_dir = file.path.parent.parent
-        contract = load_recipe_card(file.name, recipes_dir)
-        if contract is None:
-            return True
-        return bool(check_contract_staleness(contract))
-
-    async def migrate(
-        self,
-        file: MigrationFile,
-        *,
-        temp_dir: Path,
-    ) -> MigrationResult:
-        from autoskillit.recipe import generate_recipe_card  # noqa: PLC0415
-
-        recipes_dir = file.path.parent.parent
-        recipe_path = recipes_dir / f"{file.name}.yaml"
-        if not recipe_path.exists():
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error=f"Source recipe '{file.name}.yaml' not found",
-            )
-        try:
-            _ = generate_recipe_card(recipe_path, recipes_dir)
-            return MigrationResult(success=True, name=file.name)
-        except Exception as exc:
-            logger.warning("Contract card generation failed", name=file.name, error=str(exc))
-            return MigrationResult(success=False, name=file.name, error=str(exc))
-
-    def validate(self, path: Path) -> tuple[bool, str]:
-        try:
-            data = load_yaml(path)
-            if not isinstance(data, dict) or "skill_hashes" not in data:
-                return False, "missing skill_hashes field"
-            return True, ""
-        except Exception as exc:
-            logger.warning("Contract file validation failed", path=str(path), error=str(exc))
-            return False, str(exc)
-
-
-class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
-    """Advisory adapter for skill-crafted recipe flow diagrams.
-
-    Detects stale diagrams but never overwrites them — returns a suggestion
-    to run ``/render-recipe`` instead.
-    """
-
-    file_type = "diagram"
-
-    def discover(self, project_dir: Path) -> list[MigrationFile]:
-        diagrams_dir = project_dir / ".autoskillit" / "recipes" / "diagrams"
-        if not diagrams_dir.is_dir():
-            return []
-        return [
-            MigrationFile(name=p.stem, path=p, file_type="diagram", current_version=None)
-            for p in sorted(diagrams_dir.glob("*.md"))
-        ]
-
-    def needs_migration(self, file: MigrationFile) -> bool:
-        from autoskillit.recipe import check_diagram_staleness  # noqa: PLC0415
-
-        if not file.path.exists():
-            return False
-        recipes_dir = file.path.parent.parent
-        recipe_path = recipes_dir / f"{file.name}.yaml"
-        if not recipe_path.exists():
-            return False
-        return check_diagram_staleness(file.name, recipes_dir, recipe_path)
-
-    def check_staleness(self, file: MigrationFile) -> AdvisoryResult:
-        from autoskillit.recipe import diagram_stale_to_suggestions  # noqa: PLC0415
-
-        suggestions = diagram_stale_to_suggestions(file.name)
-        return AdvisoryResult(
-            name=file.name,
-            suggestion=suggestions[0]["message"] if suggestions else "",
-        )
-
-    def validate(self, path: Path) -> tuple[bool, str]:
-        try:
-            content = path.read_text(encoding="utf-8")
-        except OSError as exc:
-            return False, str(exc)
-        if not re.search(r"<!-- autoskillit-recipe-hash: sha256:[0-9a-f]+ -->", content):
-            return False, "missing autoskillit-recipe-hash comment"
-        return True, ""
-
-
-class SkillMigrationAdapter(DeterministicMigrationAdapter):
-    """Deterministic, frontmatter-only migration for stale project-local skills.
-
-    Handles the SkillInvalidityKind members registered as
-    ``DETERMINISTIC`` in ``SKILL_CONTRACT_REMEDIATIONS``: UNDECLARED_CAPABILITY,
-    SEMANTIC_MISSING_VERSION, SEMANTIC_UNDECLARED_TOKENS, and
-    SEMANTIC_CHILD_CARDINALITY_INVALID. Every other kind is ``ADVISORY`` and
-    left to the operator — see the hint surfaced by doctor/composition-root
-    warnings. Frontmatter is edited in-memory and re-serialized as a whole
-    block; the body is carried through byte-for-byte from the parsed result and
-    never touched.
-    """
-
-    file_type = "skill"
-
-    def discover(self, project_dir: Path) -> list[MigrationFile]:
-        files: list[MigrationFile] = []
-        for search_dir in ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS:
-            search_root = project_dir / search_dir
-            if not search_root.is_dir():
-                continue
-            for entry in sorted(search_root.iterdir(), key=lambda item: item.name):
-                skill_md = entry / "SKILL.md"
-                if entry.is_dir() and not entry.is_symlink() and skill_md.is_file():
-                    files.append(
-                        MigrationFile(
-                            name=entry.name,
-                            path=skill_md,
-                            file_type=self.file_type,
-                            current_version=None,
-                        )
-                    )
-        return files
-
-    def _resolve_candidate(self, file: MigrationFile) -> SkillInfo | None:
-        # The raw-candidate accessor from the resolution-boundary containment
-        # step: resolve_effective() would fall through to a valid bundled
-        # twin (or a valid lower-precedence local copy) and validate that
-        # instead of the stale file this adapter was asked to fix.
-        from autoskillit.workspace import default_skill_resolver  # noqa: PLC0415
-
-        project_dir = _skill_project_dir(file.path)
-        return default_skill_resolver().resolve_local_candidate(file.name, project_dir)
-
-    def needs_migration(self, file: MigrationFile) -> bool:
-        info = self._resolve_candidate(file)
-        if info is None or not info.invalidities:
-            return False
-        return any(
-            SKILL_CONTRACT_REMEDIATIONS[item.kind].action is RemediationAction.DETERMINISTIC
-            for item in info.invalidities
-        )
-
-    async def migrate(self, file: MigrationFile, *, temp_dir: Path) -> MigrationResult:
-        info = self._resolve_candidate(file)
-        if info is None or not info.invalidities:
-            return MigrationResult(success=True, name=file.name)
-
-        applicable_kinds = tuple(
-            dict.fromkeys(
-                item.kind
-                for item in info.invalidities
-                if SKILL_CONTRACT_REMEDIATIONS[item.kind].action is RemediationAction.DETERMINISTIC
-            )
-        )
-        if not applicable_kinds:
-            remaining = sorted({item.kind.value for item in info.invalidities})
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error=f"no deterministic remediation registered for: {remaining}",
-            )
-
-        parsed = info.frontmatter
-        if parsed is None or parsed.data is None:
-            return MigrationResult(
-                success=False, name=file.name, error="frontmatter did not parse"
-            )
-        data = dict(parsed.data)
-        declared_caps_raw = data.get("uses_capabilities", [])
-        if not isinstance(declared_caps_raw, list):
-            return MigrationResult(
-                success=False,
-                name=file.name,
-                error="uses_capabilities must be a list before deterministic migration",
-            )
-        declared_caps = {str(capability) for capability in declared_caps_raw}
-
-        for kind in applicable_kinds:
-            if kind is SkillInvalidityKind.UNDECLARED_CAPABILITY:
-                missing: set[str] = set()
-                for item in info.invalidities:
-                    if item.kind is kind:
-                        if item.capability is None:
-                            return MigrationResult(
-                                success=False,
-                                name=file.name,
-                                error="undeclared capability invalidity has no typed capability",
-                            )
-                        missing.add(item.capability)
-                declared_caps.update(missing)
-                data["uses_capabilities"] = sorted(declared_caps)
-            elif kind is SkillInvalidityKind.SEMANTIC_MISSING_VERSION:
-                data["semantic_version"] = SKILL_SEMANTIC_SCHEMA_VERSION
-            elif kind is SkillInvalidityKind.SEMANTIC_UNDECLARED_TOKENS:
-                # Only the retired-capability half of this kind is repairable
-                # without touching the body: dropping a retired name from
-                # uses_capabilities (a frontmatter field) and declaring its
-                # replacement stops it from being flagged again. A raw
-                # portable token (Agent(, subagent_type=, ...) literally
-                # present in the body cannot be fixed frontmatter-only —
-                # this adapter never rewrites body prose. If no declared
-                # retired capability triggered this kind, the only possible
-                # cause is such a raw body token, so report failure instead
-                # of silently claiming a fix that never happened.
-                from autoskillit.workspace import (  # noqa: PLC0415
-                    RETIRED_SEMANTIC_CAPABILITIES,
-                )
-
-                retired = declared_caps & RETIRED_SEMANTIC_CAPABILITIES.keys()
-                if not retired:
-                    return MigrationResult(
-                        success=False,
-                        name=file.name,
-                        error=(
-                            "raw portable token(s) in skill body cannot be fixed "
-                            "frontmatter-only; rewrite the body to remove the "
-                            "offending token(s), or leave this finding as an "
-                            "operator-visible advisory"
-                        ),
-                    )
-                declared_caps.difference_update(retired)
-                data["uses_capabilities"] = sorted(declared_caps)
-                data.setdefault("semantic_version", SKILL_SEMANTIC_SCHEMA_VERSION)
-                requirements = dict(data.get("semantic_requirements") or {})
-                for capability in retired:
-                    field = RETIRED_SEMANTIC_CAPABILITIES[capability].rsplit(".", 1)[-1]
-                    requirements.setdefault(field, [])
-                data["semantic_requirements"] = requirements
-            elif kind is SkillInvalidityKind.SEMANTIC_CHILD_CARDINALITY_INVALID:
-                migration_error = _normalize_legacy_child_spawn_cardinality(data)
-                if migration_error is not None:
-                    return MigrationResult(
-                        success=False,
-                        name=file.name,
-                        error=migration_error,
-                    )
-            else:
-                raise SkillContractError(
-                    f"SkillMigrationAdapter has no migration for invalidity kind {kind.value!r}"
-                )
-
-        new_frontmatter = dump_yaml_str(data).rstrip("\n")
-        migrated_content = f"---\n{new_frontmatter}\n---\n{parsed.body}"
-        return MigrationResult(success=True, name=file.name, migrated_content=migrated_content)
-
-    def validate(self, path: Path) -> tuple[bool, str]:
-        from autoskillit.workspace import (  # noqa: PLC0415
-            default_skill_resolver,
-            read_skill_frontmatter,
-        )
-
-        parsed = read_skill_frontmatter(path)
-        if not parsed.is_valid:
-            return False, f"frontmatter still invalid: {parsed.error}"
-        info = default_skill_resolver().resolve_local_candidate(
-            path.parent.name,
-            _skill_project_dir(path),
-        )
-        if info is None:
-            return False, "migrated skill candidate could not be resolved"
-        remaining = tuple(
-            item
-            for item in info.invalidities
-            if SKILL_CONTRACT_REMEDIATIONS[item.kind].action is RemediationAction.DETERMINISTIC
-        )
-        if remaining:
-            details = "; ".join(item.detail for item in remaining)
-            return False, f"deterministic skill invalidities remain: {details}"
-        return True, ""
-
-
 def default_migration_engine() -> MigrationEngine:
     """Create a MigrationEngine with all bundled adapters registered."""
+    from autoskillit.migration.adapters_contract import ContractMigrationAdapter
+    from autoskillit.migration.adapters_diagram import DiagramMigrationAdapter
+    from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
+    from autoskillit.migration.adapters_skill import SkillMigrationAdapter
+
     return MigrationEngine(
         [
             RecipeMigrationAdapter(),
@@ -649,161 +248,45 @@ def default_migration_engine() -> MigrationEngine:
     )
 
 
-class DefaultMigrationService:
-    """Concrete MigrationService wrapping MigrationEngine.migrate_file.
+# ---------------------------------------------------------------------------
+# Public-symbol re-exports for relocated classes. The class objects continue
+# to be importable as ``autoskillit.migration.engine.<Name>`` and we reassign
+# ``__module__`` so repr / pickle / inspect.getmodule continue to report
+# ``autoskillit.migration.engine`` as the class's home.
+# ---------------------------------------------------------------------------
+from autoskillit.migration.adapters_contract import ContractMigrationAdapter  # noqa: E402
+from autoskillit.migration.adapters_diagram import (  # noqa: E402
+    AdvisoryResult,
+    DiagramMigrationAdapter,
+)
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter  # noqa: E402
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter  # noqa: E402
+from autoskillit.migration.service import DefaultMigrationService  # noqa: E402
 
-    Pass run_headless at construction time to enable LLM-driven recipe migration.
-    Without a headless runner, migrate() returns an error for recipes that require
-    LLM-assisted migration.
-    """
+for _cls in (
+    RecipeMigrationAdapter,
+    ContractMigrationAdapter,
+    DiagramMigrationAdapter,
+    SkillMigrationAdapter,
+    AdvisoryResult,
+    DefaultMigrationService,
+):
+    _cls.__module__ = __name__
 
-    def __init__(
-        self,
-        engine: MigrationEngine,
-        *,
-        run_headless: Callable[..., Awaitable[SkillResult]] | None = None,
-        temp_dir: Path | None = None,
-    ) -> None:
-        self._engine = engine
-        self._run_headless = run_headless
-        self._temp_dir_override = temp_dir
-
-    async def migrate(self, recipe_path: Path) -> dict[str, Any]:
-        """Apply pending migration notes to the recipe file at recipe_path.
-
-        Checks for applicable migrations, runs the migration engine (LLM-driven
-        if a headless runner is wired in), handles FailureStore recording, and
-        regenerates the contract card when stale.
-
-        Returns a dict with:
-          {"status": "up_to_date", "name": name}  — no migration needed
-          {"status": "migrated", "name": name, "contracts_regenerated": [...]}
-              — version migration applied and/or stale contracts regenerated
-          {"error": str, "name": name}             — migration failed
-        """
-        from autoskillit.migration.loader import applicable_migrations as _applicable
-        from autoskillit.migration.store import FailureStore, default_store_path
-        from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
-
-        meta = parse_recipe_metadata(recipe_path)
-        name = meta.name
-        migrations = _applicable(meta.version, __version__)
-
-        # Derive project_dir: recipe_path → recipes_dir → .autoskillit/ → project_dir
-        recipes_dir = recipe_path.parent
-        project_dir = recipes_dir.parent.parent
-        if self._temp_dir_override is not None:
-            temp_dir = self._temp_dir_override
-        else:
-            temp_dir = resolve_temp_dir(project_dir, None)
-
-        if self._run_headless is not None:
-            run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless
-        else:
-
-            async def run_headless(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
-                return SkillResult(
-                    success=False,
-                    result=(
-                        "LLM-driven migration requires a headless runner. "
-                        "Use the migrate_recipe MCP tool directly."
-                    ),
-                    session_id="",
-                    subtype="no_runner",
-                    is_error=True,
-                    exit_code=1,
-                    needs_retry=False,
-                    retry_reason=RetryReason.NONE,
-                    stderr="",
-                    token_usage=None,
-                )
-
-        did_version_migrate = False
-        if migrations:
-            file = MigrationFile(
-                name=name,
-                path=recipe_path,
-                file_type="recipe",
-                current_version=meta.version,
-            )
-
-            migration_result = await self._engine.migrate_file(
-                file, run_headless=run_headless, temp_dir=temp_dir
-            )
-
-            failure_store = FailureStore(default_store_path(project_dir, temp_dir=temp_dir))
-
-            if migration_result.success:
-                failure_store.clear(name)
-                did_version_migrate = True
-            else:
-                failure_store.record(
-                    name=name,
-                    file_path=recipe_path,
-                    file_type="recipe",
-                    error=migration_result.error or "unknown",
-                    retries_attempted=migration_result.retries_attempted,
-                )
-                return {"error": f"Migration failed: {migration_result.error}", "name": name}
-
-        advisories: list[str] = []
-        contracts_regenerated: list[str] = []
-        contract_adapter = self._engine.get_adapter("contract")
-        if contract_adapter is not None:
-            contract_file = MigrationFile(
-                name=name,
-                path=recipes_dir / "contracts" / f"{name}.yaml",
-                file_type="contract",
-                current_version=None,
-            )
-            if contract_adapter.needs_migration(contract_file):
-                contract_result = await self._engine.migrate_file(
-                    contract_file,
-                    run_headless=run_headless,
-                    temp_dir=temp_dir,
-                )
-                if contract_result.success:
-                    contracts_regenerated.append(name)
-                else:
-                    logger.warning(
-                        "contract.migration_failed",
-                        name=name,
-                        error=contract_result.error,
-                    )
-
-        diagram_adapter = self._engine.get_adapter("diagram")
-        if diagram_adapter is not None:
-            diagram_file = MigrationFile(
-                name=name,
-                path=recipes_dir / "diagrams" / f"{name}.md",
-                file_type="diagram",
-                current_version=None,
-            )
-            if diagram_adapter.needs_migration(diagram_file):
-                diagram_result = await self._engine.migrate_file(
-                    diagram_file,
-                    run_headless=run_headless,
-                    temp_dir=temp_dir,
-                )
-                if diagram_result.advisory:
-                    advisories.append(diagram_result.advisory)
-                elif not diagram_result.success:
-                    logger.warning(
-                        "diagram.migration_failed",
-                        name=name,
-                        error=diagram_result.error,
-                    )
-
-        if did_version_migrate or contracts_regenerated:
-            result_dict: dict[str, object] = {
-                "status": "migrated",
-                "name": name,
-                "contracts_regenerated": contracts_regenerated,
-            }
-            if advisories:
-                result_dict["advisories"] = advisories
-            return result_dict
-        result_dict = {"status": "up_to_date", "name": name}
-        if advisories:
-            result_dict["advisories"] = advisories
-        return result_dict
+__all__ = [
+    "AdvisoryMigrationAdapter",
+    "AdvisoryResult",
+    "ContractMigrationAdapter",
+    "DefaultMigrationService",
+    "DeterministicMigrationAdapter",
+    "DiagramMigrationAdapter",
+    "HeadlessMigrationAdapter",
+    "MIGRATE_RECIPES_MAX_RETRIES",
+    "MigrationAdapter",
+    "MigrationEngine",
+    "MigrationFile",
+    "MigrationResult",
+    "RecipeMigrationAdapter",
+    "SkillMigrationAdapter",
+    "default_migration_engine",
+]

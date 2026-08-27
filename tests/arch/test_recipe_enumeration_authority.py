@@ -207,8 +207,10 @@ class _ModuleIndex:
                 values.extend(generator.ifs)
             return _merge(*(self.resolve(module, value) for value in values))
         if isinstance(expression, ast.DictComp):
-            values = [expression.key, expression.value, expression.generator.iter]
-            values.extend(expression.generator.ifs)
+            values = [expression.key, expression.value]
+            for generator in expression.generators:
+                values.append(generator.iter)
+                values.extend(generator.ifs)
             return _merge(*(self.resolve(module, value) for value in values))
         if isinstance(expression, ast.BinOp):
             resolved = _merge(

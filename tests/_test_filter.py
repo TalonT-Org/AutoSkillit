@@ -1014,10 +1014,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "infra/test_pretty_output_hook_infra.py",
             # file-level: Part C envelope-fit test imports execution.backends.BACKEND_REGISTRY
             "infra/test_pretty_output_recipe.py",
-            # Recipe discovery traverses execution-backed delivery paths.
-            "arch/test_recipe_tracking_parity.py",
-            "arch/test_recipe_enumeration_authority.py",
-            "contracts/test_recipe_name_ledger.py",
             # file-level: the --plugin-dir emitter ratchet enumerates BACKEND_REGISTRY
             # by reflection, so a new command builder must be covered automatically.
             "infra/test_plugin_source_ratchets.py",

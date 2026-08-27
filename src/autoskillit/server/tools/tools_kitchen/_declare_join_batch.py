@@ -72,10 +72,7 @@ def _declare_join_batch_handler(
         )
         return {
             "success": False,
-            "error": (
-                "declare_join_batch session mismatch: "
-                f"requested {session_id!r}, recorded {binding.session_id!r}"
-            ),
+            "error": _session_mismatch_error(session_id, binding.session_id),
         }
     if not binding.binding_valid:
         return {
@@ -179,6 +176,13 @@ def _declare_join_batch_handler(
     return {"success": True, "join_batch_id": batch.get("join_batch_id"), "wave": batch}
 
 
+def _session_mismatch_error(requested_session_id: str, recorded_session_id: str) -> str:
+    return (
+        "declare_join_batch session mismatch: "
+        f"requested {requested_session_id!r}, recorded {recorded_session_id!r}"
+    )
+
+
 def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | None:
     recorded_session_ids: set[str] = set()
     for candidate_path in enumerate_binding_paths(channel_dir):
@@ -201,10 +205,7 @@ def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | 
     )
     if len(recorded_session_ids) == 1:
         recorded_session_id = next(iter(recorded_session_ids))
-        return (
-            "declare_join_batch session mismatch: "
-            f"requested {requested_session_id!r}, recorded {recorded_session_id!r}"
-        )
+        return _session_mismatch_error(requested_session_id, recorded_session_id)
     return (
         "declare_join_batch session mismatch: "
         f"requested {requested_session_id!r}, but multiple recorded bindings are ambiguous"

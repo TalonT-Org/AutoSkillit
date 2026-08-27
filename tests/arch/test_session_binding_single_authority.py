@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_HOOKS_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
+_SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 
 def _constructs_binding_flag_filename(tree: ast.Module) -> bool:
@@ -51,12 +51,12 @@ def test_binding_filename_detector_covers_construction_forms(source: str) -> Non
 def test_no_module_recomputes_the_binding_path() -> None:
     """Only the hook-side authority may build a binding-flag filename."""
     violations: list[str] = []
-    for source_path in _HOOKS_ROOT.rglob("*.py"):
+    for source_path in _SOURCE_ROOT.rglob("*.py"):
         tree = ast.parse(source_path.read_text())
-        if source_path.name == "_session_binding.py":
+        if source_path == _SOURCE_ROOT / "hooks" / "_session_binding.py":
             continue
         if _constructs_binding_flag_filename(tree):
-            violations.append(str(source_path.relative_to(_HOOKS_ROOT.parent)))
+            violations.append(str(source_path.relative_to(_SOURCE_ROOT)))
 
     assert not violations, (
         "Only hooks/_session_binding.py may construct skill_guard_<session_id>.flag: "

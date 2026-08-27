@@ -151,6 +151,18 @@ def test_survives_malformed_stdin(tmp_path: Path) -> None:
     assert exit_code == 0
 
 
+def test_non_string_skill_name_fails_closed_without_crashing(tmp_path: Path) -> None:
+    event = _make_skill_event()
+    event["tool_input"]["skill"] = []
+
+    _, exit_code = _run_hook(stdin_data=event, tmp_dir=tmp_path)
+
+    assert exit_code == 0
+    binding = json.loads((tmp_path / _FLAG_RELPATH).read_text(encoding="utf-8"))
+    assert binding["binding_valid"] is False
+    assert binding["loaded_skills"][0]["skill_name"] == ""
+
+
 def test_reports_existing_binding_read_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -528,6 +540,24 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     assert entry["artifact_incarnation"] == ""
     assert entry["binding_valid"] is True
     assert entry["child_spawn_cardinality"] == {"explicit_slots": 4, "max_inflight": 4}
+
+
+def test_join_authority_renders_exact_values_as_json_strings(tmp_path: Path) -> None:
+    skill_name = "join'\"bearing"
+    session_id = "session'\"quoted"
+    projection_root, hook_path = copy_projected_hook(tmp_path)
+    write_projection_manifest(projection_root, skill_name=skill_name, join_required=True)
+
+    stdout, exit_code = _run_hook(
+        stdin_data=_make_skill_event(session_id=session_id, skill=skill_name),
+        tmp_dir=tmp_path,
+        hook_path=hook_path,
+    )
+
+    assert exit_code == 0
+    additional_context = json.loads(stdout)["additionalContext"]
+    assert f"skill_name={json.dumps(skill_name)}" in additional_context
+    assert f"session_id={json.dumps(session_id)}" in additional_context
 
 
 def test_join_false_skill_load_keeps_join_required_false(tmp_path: Path) -> None:

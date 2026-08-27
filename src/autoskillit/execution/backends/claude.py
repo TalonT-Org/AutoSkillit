@@ -1114,11 +1114,14 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             fragments.append("Issue all independent child calls in one message so they overlap.")
         if plan.join is not None and plan.join.required:
             fragments.append(
-                "Before this wave, call declare_join_batch with the loaded skill "
-                "name and one assignment label per direct child. Then issue every "
-                "member as one ordinary unnamed foreground Agent(subagent_type=...) "
-                "call in a single message. Retain every direct result. Only after "
-                "the ledger reports complete do you synthesize or allow Stop."
+                "Before this wave, call declare_join_batch with the normalized bare skill "
+                "name and exact session_id delivered at runtime by the Skill PostToolUse "
+                "additionalContext, plus one assignment label per direct child. If that "
+                "context is absent, report the missing join authority and stop; do not invent "
+                "an ID or scan binding files. Then issue every member as one ordinary unnamed "
+                "foreground Agent(subagent_type=...) call in a single message. Retain every "
+                "direct result. Only after the ledger reports complete do you synthesize or "
+                "allow Stop."
             )
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""

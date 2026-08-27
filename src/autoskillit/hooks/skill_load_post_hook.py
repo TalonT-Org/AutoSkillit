@@ -31,6 +31,7 @@ from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     SessionBindingError,
     loaded_skill_from_manifest,
     merge_binding,
+    normalize_skill_name,
     read_binding,
     read_manifest,
     resolve_binding_path,
@@ -66,8 +67,12 @@ def main() -> None:
     if data.get("tool_name") != "Skill":
         sys.exit(0)
 
-    tool_input: dict = data.get("tool_input", {}) or {}
-    skill_name: str = tool_input.get("skill", "")
+    tool_input_value = data.get("tool_input", {})
+    tool_input: dict[str, object] = tool_input_value if isinstance(tool_input_value, dict) else {}
+    skill_name_value = tool_input.get("skill", "")
+    skill_name: str = (
+        normalize_skill_name(skill_name_value) if isinstance(skill_name_value, str) else ""
+    )
     session_id: str = data.get("session_id", "")
 
     if not session_id:
@@ -111,8 +116,10 @@ def main() -> None:
         new_entry=new_entry,
         artifact_digest=artifact_digest,
     )
+    binding_written = False
     try:
         write_binding(flag_path, merged)
+        binding_written = True
     except Exception:
         sys.stderr.write(
             f"skill_load_post_hook: failed to write flag {flag_path}:\n{traceback.format_exc()}"
@@ -132,14 +139,24 @@ def main() -> None:
             caller="skill_load_post_hook",
         )
 
+    context_parts: list[str] = []
+    if binding_written and new_entry.binding_valid and new_entry.join_required:
+        context_parts.append(
+            "JOIN DECLARATION AUTHORITY: Call declare_join_batch with the normalized bare "
+            f"skill_name={json.dumps(new_entry.skill_name)} and exact "
+            f"session_id={json.dumps(session_id)} delivered "
+            "by this Skill PostToolUse hook."
+        )
+
     marker = os.environ.get("AUTOSKILLIT_COMPLETION_MARKER", "").strip()
     if marker:
-        reminder = (
+        context_parts.append(
             "COMPLETION REMINDER: After completing your task, your final text output "
             f"MUST end with exactly: {marker}\n"
             "This is mandatory regardless of what the skill's Output section specifies."
         )
-        payload = json.dumps({"additionalContext": reminder})
+    if context_parts:
+        payload = json.dumps({"additionalContext": "\n\n".join(context_parts)})
         sys.stdout.write(payload + "\n")
 
     sys.exit(0)

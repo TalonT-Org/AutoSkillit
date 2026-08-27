@@ -24,10 +24,19 @@ SESSION_BINDING_SCHEMA_VERSION: int = 2
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2
 
 _LEGACY_BINDING_ERROR = "legacy session-binding schema 1 is unresolved"
+_BINDING_CANDIDATE_LIMIT = 20
+_CANONICAL_SKILL_PREFIX = "autoskillit:"
 
 
 class SessionBindingError(Exception):
     """Raised when a binding or projection manifest violates its schema."""
+
+
+def normalize_skill_name(skill_name: str) -> str:
+    """Return the bare name used by projection manifests and join records."""
+    if skill_name.startswith(_CANONICAL_SKILL_PREFIX):
+        return skill_name[len(_CANONICAL_SKILL_PREFIX) :]
+    return skill_name
 
 
 def _json_object(value: str | bytes | bytearray | dict[str, object]) -> dict[str, object]:
@@ -110,7 +119,7 @@ def _loaded_skill_from_mapping(
     if error is not None and not isinstance(error, str):
         raise SessionBindingError("binding_error must be a string or null")
     return LoadedSkillEntry(
-        skill_name=_string_field(value, "skill_name"),
+        skill_name=normalize_skill_name(_string_field(value, "skill_name")),
         ts=_string_field(value, "ts"),
         join_required=bool(value.get("join_required", False)),
         child_spawn_cardinality=_cardinality(value.get("child_spawn_cardinality", {})),
@@ -202,6 +211,15 @@ def resolve_binding_path(payload_cwd: str, session_id: str) -> Path:
     return resolve_channel_dir(state_root) / f"skill_guard_{session_id}.flag"
 
 
+def enumerate_binding_paths(channel_dir: Path) -> tuple[Path, ...]:
+    """Return a bounded, sorted snapshot of binding candidates for diagnostics."""
+    try:
+        candidates = sorted(channel_dir.glob("skill_guard_*.flag"))
+    except OSError:
+        return ()
+    return tuple(candidates[:_BINDING_CANDIDATE_LIMIT])
+
+
 def resolve_projection_manifest_path(hook_file: Path) -> Path | None:
     """Resolve the live projection sidecar from the installed hook location."""
     resolved = hook_file.resolve()
@@ -237,6 +255,7 @@ def loaded_skill_from_manifest(
     skill_name: str,
     ts: str,
 ) -> LoadedSkillEntry:
+    skill_name = normalize_skill_name(skill_name)
     skills = manifest.get("skills")
     raw = skills.get(skill_name) if isinstance(skills, dict) else None
     if not isinstance(raw, dict):
@@ -261,6 +280,7 @@ def unresolved_loaded_skill(
     ts: str,
     error: str,
 ) -> LoadedSkillEntry:
+    skill_name = normalize_skill_name(skill_name)
     return LoadedSkillEntry(
         skill_name=skill_name,
         ts=ts,

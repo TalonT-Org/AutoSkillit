@@ -1,6 +1,12 @@
-"""Default migration service — wraps ``MigrationEngine.migrate_file`` with
+"""Default migration service and the composition root that wires it.
+
+``DefaultMigrationService`` wraps ``MigrationEngine.migrate_file`` with
 recipe+contract+diagram orchestration, ``FailureStore`` recording, and the
 LLM-required fallback when ``run_headless`` is not wired in.
+
+``default_migration_engine`` lives here rather than in ``engine.py`` so the
+engine stays a leaf: the adapters import the ABCs from ``engine``, and only
+this module imports the adapters.
 """
 
 from __future__ import annotations
@@ -11,10 +17,26 @@ from typing import Any, TypedDict, cast
 
 from autoskillit import __version__
 from autoskillit.core import RetryReason, SkillResult, get_logger, resolve_temp_dir
+from autoskillit.migration.adapters_contract import ContractMigrationAdapter
+from autoskillit.migration.adapters_diagram import DiagramMigrationAdapter
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import MigrationEngine, MigrationFile
 from autoskillit.migration.loader import applicable_migrations as _applicable
 
 logger = get_logger(__name__)
+
+
+def default_migration_engine() -> MigrationEngine:
+    """Create a MigrationEngine with all bundled adapters registered."""
+    return MigrationEngine(
+        [
+            RecipeMigrationAdapter(),
+            ContractMigrationAdapter(),
+            DiagramMigrationAdapter(),
+            SkillMigrationAdapter(),
+        ]
+    )
 
 
 class MigrationServiceError(TypedDict):

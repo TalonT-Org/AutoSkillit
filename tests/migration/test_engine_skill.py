@@ -12,7 +12,7 @@ from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
     MigrationFile,
 )
-from autoskillit.migration.factory import default_migration_engine
+from autoskillit.migration.service import default_migration_engine
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 

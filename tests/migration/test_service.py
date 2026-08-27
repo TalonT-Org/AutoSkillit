@@ -11,8 +11,7 @@ from autoskillit.migration.engine import (
     AdvisoryResult,
     MigrationResult,
 )
-from autoskillit.migration.factory import default_migration_engine
-from autoskillit.migration.service import DefaultMigrationService
+from autoskillit.migration.service import DefaultMigrationService, default_migration_engine
 
 from .conftest import make_migration_note, make_skill_result
 

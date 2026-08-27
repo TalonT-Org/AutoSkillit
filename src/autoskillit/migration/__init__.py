@@ -7,9 +7,8 @@ from autoskillit.migration.engine import (
     MigrationEngine,
     MigrationFile,
 )
-from autoskillit.migration.factory import default_migration_engine
 from autoskillit.migration.loader import applicable_migrations, list_migrations
-from autoskillit.migration.service import DefaultMigrationService
+from autoskillit.migration.service import DefaultMigrationService, default_migration_engine
 from autoskillit.migration.store import FailureStore, default_store_path
 
 __all__ = [

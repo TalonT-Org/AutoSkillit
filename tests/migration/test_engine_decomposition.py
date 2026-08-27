@@ -2,7 +2,7 @@
 
 Each test exercises one module-shape invariant: the per-module line ceiling,
 the module each adapter class is defined in, the absence of adapter
-re-exports from engine.py, and the skill adapter's use of the engine helpers.
+re-exports from engine.py, and the skill adapter's private helpers.
 """
 
 from __future__ import annotations
@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import load_yaml
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
     MigrationFile,
     MigrationResult,
 )
-from autoskillit.workspace import read_skill_frontmatter
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
@@ -51,7 +51,6 @@ def test_engine_module_under_line_ceiling() -> None:
         "adapters_contract.py",
         "adapters_diagram.py",
         "adapters_skill.py",
-        "factory.py",
         "service.py",
     ],
 )
@@ -121,18 +120,21 @@ def test_engine_module_does_not_reexport_relocated_classes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# adapters_skill.py can call the engine helpers
+# adapters_skill.py reaches its own private helpers
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
 async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
-    """The child-cardinality branch reaches the engine helpers and normalizes.
+    """The child-cardinality branch reaches both private helpers and normalizes.
 
     The skill below declares a ``child_spawns`` entry with no explicit
     ``count``, which drives ``SkillMigrationAdapter.migrate`` through the
-    ``SEMANTIC_CHILD_CARDINALITY_INVALID`` branch — the only caller of
-    ``_normalize_legacy_child_spawn_cardinality``.
+    ``SEMANTIC_CHILD_CARDINALITY_INVALID`` branch. That path exercises both
+    ``_skill_project_dir`` (via ``_resolve_candidate``) and
+    ``_normalize_legacy_child_spawn_cardinality``, which is its only caller.
+    If either helper goes missing at module load, ``migrate`` raises
+    ``NameError`` here rather than failing silently.
     """
     skill_dir = tmp_path / ".claude" / "skills" / "legacy-child-spawn-cardinality"
     skill_dir.mkdir(parents=True)
@@ -175,10 +177,8 @@ async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
     )
     # Parse the result rather than substring-matching, so YAML quoting or
     # flow-style changes cannot make this assertion pass or fail spuriously.
-    skill_path.write_text(result.migrated_content, encoding="utf-8")
-    parsed = read_skill_frontmatter(skill_path)
-    assert parsed.data is not None, f"migrated frontmatter did not parse: {parsed.error!r}"
-    spawns = parsed.data["semantic_requirements"]["child_spawns"]
+    frontmatter = load_yaml(result.migrated_content.split("---\n", 2)[1])
+    spawns = frontmatter["semantic_requirements"]["child_spawns"]
     assert spawns == [{"role": "worker", "count": 1}], (
         f"implicit cardinality was not normalized to an explicit count: {spawns!r}"
     )

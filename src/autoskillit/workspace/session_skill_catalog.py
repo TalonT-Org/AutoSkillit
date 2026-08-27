@@ -27,6 +27,7 @@ from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     AgentDef,
     EffectiveSkillCatalogAuthority,
+    SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
@@ -48,7 +49,7 @@ from autoskillit.workspace.skills import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend, SkillExecutionRole
+    from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
 

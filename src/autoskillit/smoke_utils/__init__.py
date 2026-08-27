@@ -15,17 +15,6 @@ from autoskillit.smoke_utils._eval import (
     parse_agent_eval_manifests,
     parse_eval_manifests,
 )
-from autoskillit.smoke_utils._experimental_review import (
-    aggregate_combined_review_candidates,
-    build_malformed_review_envelope,
-    deletion_regression_is_eligible,
-    determine_experimental_review_verdict,
-    normalize_local_review_finding,
-    prepare_experimental_review_publication,
-    publish_experimental_review_artifacts,
-    render_review_finding_body,
-    validate_experimental_auditor_outputs,
-)
 from autoskillit.smoke_utils._git import (
     check_bug_report_non_empty,
     check_commits_ahead,
@@ -62,6 +51,17 @@ from autoskillit.smoke_utils._review_design import (
     select_review_dimensions,
 )
 from autoskillit.smoke_utils._telemetry import consolidate_health_reports, patch_pr_token_summary
+from autoskillit.smoke_utils.review import (
+    aggregate_combined_review_candidates,
+    build_malformed_review_envelope,
+    deletion_regression_is_eligible,
+    determine_experimental_review_verdict,
+    normalize_local_review_finding,
+    prepare_experimental_review_publication,
+    publish_experimental_review_artifacts,
+    render_review_finding_body,
+    validate_experimental_auditor_outputs,
+)
 
 __all__ = [
     "EXPERIMENTAL_REVIEW_AUDITOR_REGISTRY",

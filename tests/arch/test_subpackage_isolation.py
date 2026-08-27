@@ -1172,9 +1172,6 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_codex_catalog shared validated catalog projection (#4585)
         "smoke_utils": 11,  # +_review_design split from _review; -_experimental_review.py
         # removed by decomposition into smoke_utils/review/ sub-package (#4855).
-        # Count: 10 sibling modules + __init__.py = 11 .py files at this level.
-        # The new smoke_utils/review/ sub-package (5 files) is enumerated separately
-        # via the dirs_to_check walk and is exempt-free at the 10-file cap.
     }
     violations: list[str] = []
     dirs_to_check: list[Path] = []
@@ -1718,7 +1715,7 @@ def test_isolated_modules_do_not_import_server_or_cli() -> None:
         if not pkg_dir.is_dir():
             continue
         for py_file in sorted(pkg_dir.rglob("*.py")):
-            label = f"{pkg_name}/{py_file.name}"
+            label = f"{pkg_name}/{py_file.relative_to(pkg_dir)}"
             _check_file(py_file, label)
 
     assert not violations, "Root-level isolated modules import server/ or cli/:\n" + "\n".join(
@@ -3031,32 +3028,31 @@ def test_smoke_utils_review_facade_re_exports_contract() -> None:
         f"than smoke_utils.review"
     )
 
-    # Shard-ownership assertions: each public symbol must live in its declared
-    # shard module. Catches a misplacement (e.g., render_review_finding_body
-    # accidentally defined in _validation.py instead of _publication.py).
+    # Shard-ownership assertions: each public symbol must be DEFINED (not merely
+    # imported) in its declared shard module. Catches a misplacement such as
+    # render_review_finding_body accidentally defined in _validation.py
+    # instead of _publication.py — checking identity alone passes when the
+    # function is re-exported from another shard.
     for name, expected_shard in REVIEW_FUNCTION_ANCHORS.items():
         shard_module = importlib.import_module(f"autoskillit.smoke_utils.review.{expected_shard}")
         assert hasattr(shard_module, name), (
             f"{name} must be defined in {expected_shard}.py per REVIEW_FUNCTION_ANCHORS"
         )
-        assert getattr(facade, name) is getattr(shard_module, name), (
+        symbol = getattr(shard_module, name)
+        assert getattr(symbol, "__module__", "") == (
+            f"autoskillit.smoke_utils.review.{expected_shard}"
+        ), (
+            f"{name} should be defined in {expected_shard}.py "
+            f"but is defined in {getattr(symbol, '__module__', 'unknown')}"
+        )
+        assert getattr(facade, name) is symbol, (
             f"{name} is declared in {expected_shard}.py but facade resolves to a different object"
         )
 
 
-def test_smoke_utils_review_shards_under_900_lines() -> None:
-    """REQ-CNST-010-DECOMPOSE-4: every shard in smoke_utils/review/ stays
-    under the 900-line cap so REQ-CNST-010 does not re-fire."""
-    review = SRC_ROOT / "smoke_utils" / "review"
-    oversized = [
-        path.name for path in review.glob("*.py") if len(path.read_text().splitlines()) > 900
-    ]
-    assert not oversized, f"smoke_utils/review/ shards exceed 900 lines: {oversized}"
-
-
 def test_smoke_utils_review_shards_do_not_import_the_facade() -> None:
-    """REQ-CNST-010-DECOMPOSE-4: shards must import from siblings and constants,
-    never from the parent smoke_utils facade (avoids re-entrant facade imports)."""
+    """REQ-CNST-010-DECOMPOSE-4: shards must not import the parent facade (avoids
+    re-entrant facade imports)."""
     import ast
 
     review = SRC_ROOT / "smoke_utils" / "review"
@@ -3064,17 +3060,27 @@ def test_smoke_utils_review_shards_do_not_import_the_facade() -> None:
     for path in review.glob("*.py"):
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "autoskillit.smoke_utils":
-                # Direct facade imports are forbidden; sibling submodule
-                # imports (autoskillit.smoke_utils.review._X) are allowed.
-                # __init__.py IS the facade and is exempt.
-                if path.name != "__init__.py":
+            if isinstance(node, ast.ImportFrom):
+                # Sibling submodule imports (autoskillit.smoke_utils.review._X)
+                # are allowed. Direct parent facade imports are forbidden.
+                if node.module == "autoskillit.smoke_utils":
                     offenders.append(f"{path.name} imports from autoskillit.smoke_utils facade")
+                elif node.module == "autoskillit" and any(
+                    alias.name == "smoke_utils" for alias in node.names
+                ):
+                    offenders.append(
+                        f"{path.name} imports autoskillit.smoke_utils via autoskillit alias"
+                    )
+                elif (node.level or 0) >= 2:
+                    # Relative parent import (`from .. import ...` reaches
+                    # autoskillit.smoke_utils when invoked from review/*).
+                    offenders.append(
+                        f"{path.name} uses relative parent import (level={node.level})"
+                    )
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name == "autoskillit.smoke_utils":
-                        if path.name != "__init__.py":
-                            offenders.append(f"{path.name} imports autoskillit.smoke_utils facade")
+                        offenders.append(f"{path.name} imports autoskillit.smoke_utils facade")
     assert not offenders, "Shards must not import the smoke_utils facade:\n" + "\n".join(
         f"  {o}" for o in offenders
     )
@@ -3083,14 +3089,15 @@ def test_smoke_utils_review_shards_do_not_import_the_facade() -> None:
 def test_smoke_utils_review_shard_sizes_are_balanced() -> None:
     """REQ-CNST-010-DECOMPOSE-4: every shard in smoke_utils/review/ is at most
     750 lines per the issue #4855 acceptance criterion ('every extracted source
-    module is at most 750 lines'), with a 25-line substance floor for shards
-    excluding the facade ``__init__.py`` (the constants shard naturally lands
-    near 37 lines and is not a stub)."""
+    module is at most 750 lines'). The facade ``__init__.py`` and the shared
+    constants shard are exempt from the 25-line substance floor — both are
+    intentionally narrow surfaces (declarative API + shared constants/helpers)."""
     review = SRC_ROOT / "smoke_utils" / "review"
     too_small = [
         path.name
         for path in review.glob("*.py")
-        if path.name != "__init__.py" and len(path.read_text().splitlines()) < 25
+        if path.name not in ("__init__.py", "_constants.py")
+        and len(path.read_text().splitlines()) < 25
     ]
     too_large = [
         path.name for path in review.glob("*.py") if len(path.read_text().splitlines()) > 750

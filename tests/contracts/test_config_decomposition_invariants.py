@@ -84,9 +84,9 @@ def test_fleet_and_process_tether_validate_called_in_from_dynaconf() -> None:
     orig_fleet_validate = FleetConfig.validate
     orig_tether_validate = ProcessTetherConfig.validate
 
-    def _record_fleet(self: FleetConfig) -> None:
+    def _record_fleet(self: FleetConfig, feature_enabled: bool) -> None:
         fleet_calls.append(True)
-        orig_fleet_validate(self)
+        orig_fleet_validate(self, feature_enabled)
 
     def _record_tether(self: ProcessTetherConfig) -> None:
         tether_calls.append(True)

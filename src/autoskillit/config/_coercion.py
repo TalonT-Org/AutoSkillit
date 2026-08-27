@@ -12,10 +12,6 @@ Owns:
     ``logging.level`` uppercase transform).
   - ``_SECTION_PREPROCESSORS`` and ``_SECTION_BUILDERS`` (mapping section name
     to its pre-coercion normalizer or fully-custom builder).
-
-Identity-sensitive: tests monkeypatch ``_YAML_KEY_ALIASES`` / ``_FIELD_OVERRIDES``
-items in place via the facade. The facade re-exports them via
-``from X import Y as Y`` so the same dict object is shared.
 """
 
 from __future__ import annotations

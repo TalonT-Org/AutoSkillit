@@ -221,10 +221,6 @@ from autoskillit.config._validation import (
 from autoskillit.config._writer import (
     write_config_layer as write_config_layer,
 )
-
-# Preserve transitive re-exports from autoskillit.core that the prior
-# monolithic settings.py exposed at module scope. Callers using
-# `from autoskillit.config.settings import <core_symbol>` keep working unchanged.
 from autoskillit.core import (
     FEATURE_REGISTRY as FEATURE_REGISTRY,
 )

@@ -10,10 +10,9 @@ Owns:
   - ``validate_env_layer_keys`` (validates ``AUTOSKILLIT_<SECTION>__<KEY>``
     environment variables; the env-layer analogue of ``validate_layer_keys``).
 
-Module-load order matters: this file calls ``_build_config_schema()`` at
-import time, which reads ``_YAML_KEY_ALIASES`` and ``_FIELD_OVERRIDES`` from
-``_coercion``. The reverse import direction (validation → coercion) is fine
-because ``_coercion`` is a leaf.
+The local import of ``AutomationConfig`` inside ``_build_config_schema``
+defers the import until after ``_automation_config`` and ``_coercion`` have
+both been loaded into ``sys.modules``, keeping the module-load graph acyclic.
 """
 
 from __future__ import annotations

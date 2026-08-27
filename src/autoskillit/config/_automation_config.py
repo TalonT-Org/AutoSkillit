@@ -86,9 +86,6 @@ from autoskillit.core import (
 if TYPE_CHECKING:
     from dynaconf import Dynaconf
 
-# Sentinel object — _build_features_dict uses identity checks to detect
-# whether `experimental_enabled` was explicitly supplied. Owned here because
-# its only consumer lives in this module.
 _UNSET = object()
 
 

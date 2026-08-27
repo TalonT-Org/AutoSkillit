@@ -22,13 +22,8 @@ def write_config_layer(path: Path, data: dict[str, Any]) -> None:
     unrecognized keys, unknown sub-keys, or any _SECRETS_ONLY_KEYS entries.
     This is the canonical write gateway for all config.yaml write sites.
 
-    Parameters
-    ----------
-    path:
-        Destination file path. Must be a non-secrets config.yaml path — never
-        .secrets.yaml (which allows different keys).
-    data:
-        YAML-serializable dict to validate and write.
+    ``path`` must be a non-secrets config.yaml path — never .secrets.yaml,
+    which allows different keys.
     """
     validate_layer_keys(data, path, is_secrets_layer=False)
     path.parent.mkdir(parents=True, exist_ok=True)

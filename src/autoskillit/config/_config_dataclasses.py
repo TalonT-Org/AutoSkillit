@@ -140,11 +140,6 @@ from autoskillit.config._dataclasses_workflow import (
 from autoskillit.config._dataclasses_workflow import (
     ReviewConfig as ReviewConfig,
 )
-
-# Preserve transitive re-exports of autoskillit.core symbols that the prior
-# monolithic _config_dataclasses.py exposed via `from autoskillit.core import (...)`
-# at module scope. Callers using `from autoskillit.config._config_dataclasses
-# import <core_symbol>` keep working unchanged.
 from autoskillit.core import (
     DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER,
 )

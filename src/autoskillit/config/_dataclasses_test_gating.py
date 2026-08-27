@@ -5,10 +5,6 @@ Owns: ``TestCheckConfig``, ``ClassifyFixConfig``, ``ResetWorkspaceConfig``,
 ``_DEFAULT_COMMAND`` tuple and the unique mutable-list sentinel
 ``_COMMAND_UNSET`` that ``TestCheckConfig.__post_init__`` uses to detect whether
 ``command`` was explicitly supplied.
-
-Identity-sensitive: ``_COMMAND_UNSET`` is referenced by name from a lambda body
-inside ``_coercion._FIELD_OVERRIDES``. The facade re-exports it via
-``from X import Y as Y`` so the lambda keeps resolving the same mutable list.
 """
 
 from __future__ import annotations

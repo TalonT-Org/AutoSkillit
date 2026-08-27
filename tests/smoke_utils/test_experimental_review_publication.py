@@ -620,7 +620,7 @@ def test_write_temp_bytes_closes_descriptor_when_fdopen_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    import autoskillit.smoke_utils._experimental_review as experimental_review
+    import autoskillit.smoke_utils.review._publication as publication_module
 
     real_close = os.close
     opened_fd = -1
@@ -635,11 +635,11 @@ def test_write_temp_bytes_closes_descriptor_when_fdopen_fails(
         closed_fds.append(fd)
         real_close(fd)
 
-    monkeypatch.setattr(experimental_review.os, "fdopen", failing_fdopen)
-    monkeypatch.setattr(experimental_review.os, "close", recording_close)
+    monkeypatch.setattr(publication_module.os, "fdopen", failing_fdopen)
+    monkeypatch.setattr(publication_module.os, "close", recording_close)
 
     with pytest.raises(OSError, match="injected fdopen failure"):
-        experimental_review._write_temp_bytes(tmp_path, "artifact.json", b"payload")
+        publication_module._write_temp_bytes(tmp_path, "artifact.json", b"payload")
 
     assert closed_fds == [opened_fd]
     assert not list(tmp_path.iterdir())
@@ -649,7 +649,7 @@ def test_experimental_publication_executes_same_directory_marker_last_renames(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    import autoskillit.smoke_utils._experimental_review as experimental_review
+    import autoskillit.smoke_utils.review._publication as publication_module
 
     publication = _prepared_local_experimental_publication()
     output_dir = tmp_path / "review-output"
@@ -660,7 +660,7 @@ def test_experimental_publication_executes_same_directory_marker_last_renames(
         rename_calls.append((Path(source), Path(destination)))
         real_replace(source, destination)
 
-    monkeypatch.setattr(experimental_review.os, "replace", recording_replace)
+    monkeypatch.setattr(publication_module.os, "replace", recording_replace)
     result = publish_experimental_review_artifacts(
         publication=publication,
         output_dir=str(output_dir),
@@ -694,7 +694,7 @@ def test_experimental_publication_rolls_back_each_write_boundary(
     tmp_path: Path,
     failure_index: int,
 ) -> None:
-    import autoskillit.smoke_utils._experimental_review as experimental_review
+    import autoskillit.smoke_utils.review._publication as publication_module
 
     publication = _prepared_local_experimental_publication()
     output_dir = tmp_path / "review-output"
@@ -706,7 +706,7 @@ def test_experimental_publication_rolls_back_each_write_boundary(
     ]
     for index, path in enumerate(final_paths):
         path.write_text(f"old-{index}")
-    original_write = experimental_review._write_temp_bytes
+    original_write = publication_module._write_temp_bytes
     write_index = 0
 
     def failing_write(directory: Path, final_name: str, content: bytes) -> Path:
@@ -717,7 +717,7 @@ def test_experimental_publication_rolls_back_each_write_boundary(
             raise OSError("injected write failure")
         return original_write(directory, final_name, content)
 
-    monkeypatch.setattr(experimental_review, "_write_temp_bytes", failing_write)
+    monkeypatch.setattr(publication_module, "_write_temp_bytes", failing_write)
     with pytest.raises(RuntimeError, match="publication failed"):
         publish_experimental_review_artifacts(
             publication=publication,
@@ -735,7 +735,7 @@ def test_experimental_publication_rolls_back_each_rename_boundary(
     tmp_path: Path,
     failure_index: int,
 ) -> None:
-    import autoskillit.smoke_utils._experimental_review as experimental_review
+    import autoskillit.smoke_utils.review._publication as publication_module
 
     publication = _prepared_local_experimental_publication()
     output_dir = tmp_path / "review-output"
@@ -761,7 +761,7 @@ def test_experimental_publication_rolls_back_each_rename_boundary(
                 raise OSError("injected rename failure")
         real_replace(source, destination)
 
-    monkeypatch.setattr(experimental_review.os, "replace", failing_replace)
+    monkeypatch.setattr(publication_module.os, "replace", failing_replace)
     with pytest.raises(RuntimeError, match="publication failed"):
         publish_experimental_review_artifacts(
             publication=publication,
@@ -777,7 +777,7 @@ def test_experimental_publication_preserves_publication_and_rollback_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    import autoskillit.smoke_utils._experimental_review as experimental_review
+    import autoskillit.smoke_utils.review._publication as publication_module
 
     publication = _prepared_local_experimental_publication()
     output_dir = tmp_path / "review-output"
@@ -801,7 +801,7 @@ def test_experimental_publication_preserves_publication_and_rollback_failures(
             raise OSError("injected rollback failure")
         real_replace(source, destination)
 
-    monkeypatch.setattr(experimental_review.os, "replace", failing_replace)
+    monkeypatch.setattr(publication_module.os, "replace", failing_replace)
     with pytest.raises(ExceptionGroup) as exc_info:
         publish_experimental_review_artifacts(
             publication=publication,

@@ -440,3 +440,75 @@ class TestRenderCoherence:
         assert mat_calls, "materialize_sanitized_plugin_root must call _render_agent_definitions"
         assert auth_calls, "_stage_projected_plugin_artifact must call _render_agent_definitions"
         assert authority._render_agent_definitions is materialization._render_agent_definitions
+
+
+def test_render_agent_definitions_skips_a_definition_that_vanishes_mid_glob(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.workspace._projected_artifact.materialization import (
+        _render_agent_definitions,
+    )
+
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    vanished = agents_dir / "a-vanished.md"
+    rendered = agents_dir / "z-rendered.md"
+    _write_agent_md(
+        vanished,
+        name="vanished",
+        tools=[f"{DIRECT_PREFIX}submit_exploration_query"],
+    )
+    _write_agent_md(
+        rendered,
+        name="rendered",
+        tools=[f"{DIRECT_PREFIX}submit_exploration_query"],
+    )
+    original_read_bytes = Path.read_bytes
+    did_vanish = False
+
+    def vanish_before_read(path: Path) -> bytes:
+        nonlocal did_vanish
+        if path == vanished and not did_vanish:
+            did_vanish = True
+            vanished.unlink()
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", vanish_before_read)
+
+    _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)
+
+    assert did_vanish
+    assert not vanished.exists()
+    assert f"tools: [{MARKETPLACE_PREFIX}submit_exploration_query]" in rendered.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_render_agent_definitions_propagates_permission_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.workspace._projected_artifact.materialization import (
+        _render_agent_definitions,
+    )
+
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    definition = agents_dir / "permission-denied.md"
+    _write_agent_md(
+        definition,
+        name="permission-denied",
+        tools=[f"{DIRECT_PREFIX}submit_exploration_query"],
+    )
+    original_read_bytes = Path.read_bytes
+
+    def deny_definition_read(path: Path) -> bytes:
+        if path == definition:
+            raise PermissionError("injected definition read failure")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", deny_definition_read)
+
+    with pytest.raises(PermissionError, match="injected definition read failure"):
+        _render_agent_definitions(agents_dir, MARKETPLACE_PREFIX)

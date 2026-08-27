@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -280,6 +281,74 @@ def test_manifest_detects_gated_skills(tmp_path: Path) -> None:
     assert manifest["skills"]["gated"]["gated"] is True
 
 
+def test_build_skills_manifest_skips_a_skill_whose_file_vanishes_mid_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill(skills_dir, "first")
+    vanishing_skill = _make_skill(skills_dir, "second")
+    _make_skill(skills_dir, "third")
+    vanishing_file = vanishing_skill / "SKILL.md"
+    original_read_bytes = Path.read_bytes
+
+    def unlink_before_read(path: Path) -> bytes:
+        if path == vanishing_file:
+            path.unlink()
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", unlink_before_read)
+
+    manifest = build_skills_manifest(skills_dir)
+
+    assert manifest["skill_count"] == 2
+    assert set(manifest["skills"]) == {"first", "third"}
+
+
+def test_build_skills_manifest_skips_a_skill_whose_directory_becomes_a_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _make_skill(skills_dir, "first")
+    replaced_skill = _make_skill(skills_dir, "second")
+    _make_skill(skills_dir, "third")
+    original_iterdir = Path.iterdir
+    skills_dir_observations = 0
+
+    def replace_skill_on_second_observation(path: Path):
+        nonlocal skills_dir_observations
+        if path == skills_dir:
+            skills_dir_observations += 1
+            if skills_dir_observations == 2:
+                shutil.rmtree(replaced_skill)
+                replaced_skill.write_text("not a skill directory", encoding="utf-8")
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", replace_skill_on_second_observation)
+
+    manifest = build_skills_manifest(skills_dir)
+
+    assert manifest["skill_count"] == 2
+    assert set(manifest["skills"]) == {"first", "third"}
+
+
+def test_build_skills_manifest_propagates_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    skills_dir = tmp_path / "skills"
+    unreadable_skill = _make_skill(skills_dir, "unreadable") / "SKILL.md"
+    original_read_bytes = Path.read_bytes
+
+    def reject_read(path: Path) -> bytes:
+        if path == unreadable_skill:
+            raise PermissionError("permission denied")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_read)
+
+    with pytest.raises(PermissionError, match="permission denied"):
+        build_skills_manifest(skills_dir)
+
+
 # --- T-SCAN-1: scan finds step subdirectories ---
 
 
@@ -307,13 +376,10 @@ def test_scan_skill_snapshots_empty_returns_empty_dict(tmp_path: Path) -> None:
     assert result == {}
 
 
-def test_assert_agent_safe_skill_tree_raises_when_subtree_vanishes_mid_walk(
+def test_assert_agent_safe_skill_tree_skips_a_child_directory_that_vanishes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Issue #4770 Registry Trace Finding 1: this is a genuine
-    authority-elevation guard (its own docstring: "Reject snapshots that
-    could restore machine-only authority to an agent"). A subtree deleted
-    mid-walk must raise, not silently omit content from the symlink check."""
+    """A child removed while walking does not invalidate surviving skills."""
     skills_dir = tmp_path / "skills"
     other_skill = _make_skill(skills_dir, "other-skill")
     vanishing_skill = skills_dir / "vanishing-skill"
@@ -321,6 +387,5 @@ def test_assert_agent_safe_skill_tree_raises_when_subtree_vanishes_mid_walk(
     (vanishing_skill / "SKILL.md").write_text("# vanishing\n", encoding="utf-8")
 
     inject_vanishing_subtree_on_descent(monkeypatch, vanishing_skill)
-    with pytest.raises(ValueError):
-        _assert_agent_safe_skill_tree(skills_dir)
+    _assert_agent_safe_skill_tree(skills_dir)
     assert other_skill.exists()

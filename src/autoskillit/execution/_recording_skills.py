@@ -13,9 +13,10 @@ import regex as re
 
 from autoskillit.core import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
+    VANISHED_ERRORS,
     ValidatedAddDir,
     load_yaml,
-    strict_walk,
+    scan_observed,
     write_versioned_json,
 )
 
@@ -27,28 +28,34 @@ _FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", re.DOT
 
 def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
     """Reject snapshots that could restore machine-only authority to an agent."""
-    for entry in strict_walk(skills_dir):
-        if entry.kind == "l":
+    for skill_entry in scan_observed(skills_dir):
+        if skill_entry.is_symlink:
             raise ValueError(
-                "agent-safe skill snapshots must not contain symlinks: "
-                f"{skills_dir / entry.relative_path}"
+                f"agent-safe skill snapshots must not contain symlinks: {skill_entry.path}"
             )
-    for skill_dir in skills_dir.iterdir():
-        if not skill_dir.is_dir():
+        if not skill_entry.is_dir:
             raise ValueError(
-                f"agent-safe skill snapshots must contain only skill directories: {skill_dir}"
+                "agent-safe skill snapshots must contain only skill directories: "
+                f"{skill_entry.path}"
             )
-        children = {child.name for child in skill_dir.iterdir()}
-        if children != {"SKILL.md"} or not (skill_dir / "SKILL.md").is_file():
-            raise ValueError(f"agent-safe skill directory must contain only SKILL.md: {skill_dir}")
-    skill_md_paths = sorted(
-        skills_dir / entry.relative_path
-        for entry in strict_walk(skills_dir)
-        if entry.name == "SKILL.md"
-    )
-    for skill_md in skill_md_paths:
+        try:
+            children = list(scan_observed(skill_entry.path))
+        except VANISHED_ERRORS:
+            continue
+        for child in children:
+            if child.is_symlink:
+                raise ValueError(
+                    f"agent-safe skill snapshots must not contain symlinks: {child.path}"
+                )
+        if len(children) != 1 or children[0].name != "SKILL.md" or children[0].is_dir:
+            raise ValueError(
+                f"agent-safe skill directory must contain only SKILL.md: {skill_entry.path}"
+            )
+        skill_md = children[0].path
         try:
             content = skill_md.read_text(encoding="utf-8")
+        except VANISHED_ERRORS:
+            continue
         except (OSError, UnicodeDecodeError) as exc:
             raise ValueError(f"agent-safe SKILL.md is unreadable: {skill_md}") from exc
         match = _FRONTMATTER_PATTERN.match(content)
@@ -112,18 +119,28 @@ def build_skills_manifest(skills_dir: Path) -> dict[str, Any]:
             "skill_count": 0,
             "skills": {},
         }
-    _assert_agent_safe_skill_tree(skills_dir)
+    try:
+        _assert_agent_safe_skill_tree(skills_dir)
+        entries = scan_observed(skills_dir)
+    except VANISHED_ERRORS:
+        return {
+            "schema_version": 1,
+            "captured_at": datetime.now(tz=UTC).isoformat(),
+            "skill_count": 0,
+            "skills": {},
+        }
     skills: dict[str, Any] = {}
-    for skill_dir in sorted(skills_dir.iterdir()):
-        if not skill_dir.is_dir():
+    for entry in sorted(entries, key=lambda candidate: candidate.name):
+        if not entry.is_dir:
             continue
-        skill_md = skill_dir / "SKILL.md"
-        if not skill_md.exists():
+        skill_md = entry.path / "SKILL.md"
+        try:
+            content = skill_md.read_bytes()
+        except VANISHED_ERRORS:
             continue
-        content = skill_md.read_bytes()
         sha256 = hashlib.sha256(content).hexdigest()
         gated = bool(_GATED_PATTERN.search(content.decode("utf-8", errors="replace")))
-        skills[skill_dir.name] = {
+        skills[entry.name] = {
             "content_sha256": sha256,
             "size_bytes": len(content),
             "gated": gated,

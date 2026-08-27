@@ -1985,8 +1985,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         events.append(("render", payload))
 
     class _LifecycleManager:
-        def cleanup_stale(self) -> None:
-            return None
+        def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
+            return 0
 
         @contextmanager
         def managed_session(

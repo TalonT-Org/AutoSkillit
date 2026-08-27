@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import (
+    VANISHED_ERRORS,
     EffectiveSkillCatalogAuthority,
     ResolvedSkillAuthority,
     SkillContractError,
@@ -26,6 +27,7 @@ from autoskillit.core import (
     destination_location,
     load_agent_definition,
     project_agent_tool_name,
+    scan_observed,
     validate_agent_tool_canonical,
     write_versioned_json,
 )
@@ -234,10 +236,20 @@ def _render_agent_definitions(agents_dir: Path, mcp_tool_prefix: str) -> None:
     """
     if not agents_dir.is_dir():
         return
-    for path in sorted(agents_dir.glob("*.md")):
+    try:
+        entries = sorted(scan_observed(agents_dir), key=lambda entry: entry.name)
+    except VANISHED_ERRORS:
+        return
+    for entry in entries:
+        if not entry.name.endswith(".md") or entry.is_dir:
+            continue
+        path = entry.path
         if path.name in {"AGENTS.md", "CLAUDE.md"}:
             continue
-        content = path.read_bytes().decode("utf-8")
+        try:
+            content = path.read_bytes().decode("utf-8")
+        except VANISHED_ERRORS:
+            continue
         lines = content.splitlines(keepends=True)
         tools_line_idx: int | None = None
         for idx, line in enumerate(lines):

@@ -7,11 +7,12 @@ import secrets
 import shutil
 import time
 from datetime import UTC, datetime
+from fnmatch import fnmatch
 from pathlib import Path
 
 import regex as re
 
-from autoskillit.core import atomic_write, get_logger, run_gh
+from autoskillit.core import VANISHED_ERRORS, atomic_write, get_logger, run_gh, scan_observed
 
 logger = get_logger(__name__)
 
@@ -277,14 +278,24 @@ def batch_create_issues(
             )
     else:
         temp_dir = Path(workspace) / ".autoskillit" / "temp" / "validate-audit"
-    ticket_bodies = sorted(temp_dir.glob("ticket_body_*.md"))
+    if not temp_dir.is_dir():
+        return {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
+    ticket_bodies = sorted(
+        (entry for entry in scan_observed(temp_dir) if fnmatch(entry.name, "ticket_body_*.md")),
+        key=lambda entry: entry.name,
+    )
     if not ticket_bodies:
-        return {"issue_urls": "", "issue_count": "0"}
+        return {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
 
     parsed: list[tuple[str, str, str]] = []
-    for f in ticket_bodies:
-        raw = f.read_text()
-        m = re.match(r"ticket_body_\w+_\d+_(.+)\.md", f.name)
+    skipped: list[str] = []
+    for entry in ticket_bodies:
+        try:
+            raw = entry.path.read_text()
+        except VANISHED_ERRORS:
+            skipped.append(entry.name)
+            continue
+        m = re.match(r"ticket_body_\w+_\d+_(.+)\.md", entry.name)
         ts = m.group(1) if m else ""
         title = _extract_title(raw)
         body = _strip_ticket_body(raw)
@@ -348,4 +359,8 @@ def batch_create_issues(
         if offset + chunk_sz < len(parsed):
             time.sleep(1)
 
-    return {"issue_urls": ",".join(all_urls), "issue_count": str(len(all_urls))}
+    return {
+        "issue_urls": ",".join(all_urls),
+        "issue_count": str(len(all_urls)),
+        "skipped_bodies": ",".join(skipped),
+    }

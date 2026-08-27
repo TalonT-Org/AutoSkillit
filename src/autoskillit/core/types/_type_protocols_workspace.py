@@ -401,7 +401,14 @@ class SessionSkillManager(Protocol):
 
     def validate_session_exists(self, session_id: str) -> bool: ...
 
-    def cleanup_stale(self, max_age_seconds: int = 86400) -> int: ...
+    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
+        """Sweep stale sessions and return the count removed.
+
+        A candidate that vanishes mid-sweep is skipped. Removal and lease-release
+        failures are raised after the sweep completes, singly or as a
+        ``BaseExceptionGroup``; non-vanish scan failures propagate immediately.
+        """
+        ...
 
 
 @runtime_checkable

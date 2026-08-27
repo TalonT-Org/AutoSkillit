@@ -131,6 +131,16 @@ def test_no_projected_artifact_shard_imports_its_own_facade() -> None:
                     f"materialization facade; reach the symbol via a sibling shard "
                     f"or the cross-subsystem skill_projection facade"
                 )
+        for plain_import in _runtime_plain_imports(py_file):
+            for name_alias in plain_import.names:
+                if name_alias.name == (
+                    "autoskillit.workspace._projected_artifact.materialization"
+                ):
+                    violations.append(
+                        f"{shard_module}:{plain_import.lineno} imports its own "
+                        f"materialization facade; reach the symbol via a sibling shard "
+                        f"or the cross-subsystem skill_projection facade"
+                    )
     assert not violations, _import_violation_message(
         violations, "Projected-artifact shards must not import their own facade"
     )
@@ -151,6 +161,14 @@ def test_no_session_skill_shard_imports_its_own_facade() -> None:
                     f"session_skills facade; reach the symbol via a sibling shard "
                     f"or the cross-subsystem skill_projection facade"
                 )
+        for plain_import in _runtime_plain_imports(py_file):
+            for name_alias in plain_import.names:
+                if name_alias.name == "autoskillit.workspace.session_skills":
+                    violations.append(
+                        f"{shard_module}:{plain_import.lineno} imports its own "
+                        f"session_skills facade; reach the symbol via a sibling shard "
+                        f"or the cross-subsystem skill_projection facade"
+                    )
     assert not violations, _import_violation_message(
         violations, "Session-skill shards must not import their own facade"
     )

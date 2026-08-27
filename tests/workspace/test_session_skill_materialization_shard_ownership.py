@@ -58,6 +58,10 @@ import pytest
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
+#: Package root of the installed source tree, derived once so that moving this
+#: file does not silently invalidate every path-based ownership assertion.
+SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+
 
 # Symbols whose authoritative definition lives in the facade module itself
 # rather than in any sharded submodule. These rows are only consulted by
@@ -311,35 +315,41 @@ def test_facade_reexport_is_passthrough(
 
 
 @pytest.mark.parametrize(
-    ("symbol", "expected_qualname"),
+    ("symbol", "facade_module", "canonical_module"),
     [
         (
             "write_skill_unavailability_metadata",
-            "session_skill_catalog.write_skill_unavailability_metadata",
+            "autoskillit.workspace.session_skills",
+            "autoskillit.workspace.session_skill_catalog",
         ),
-        ("write_generated_hooks_json", "_publication.write_generated_hooks_json"),
+        (
+            "write_generated_hooks_json",
+            "autoskillit.workspace._projected_artifact.materialization",
+            "autoskillit.workspace._projected_artifact._publication",
+        ),
     ],
 )
 def test_durable_writer_lookup_strings_remain_on_facades(
     symbol: str,
-    expected_qualname: str,
+    facade_module: str,
+    canonical_module: str,
 ) -> None:
-    """Registered durable-writer qualnames must remain resolvable through the facade paths."""
-    import autoskillit.workspace._projected_artifact.materialization as materialization
-    import autoskillit.workspace.session_skills as session_skills
+    """Registered durable-writer lookups must stay resolvable and identity-equal.
 
-    if symbol == "write_skill_unavailability_metadata":
-        facade_symbol = getattr(session_skills, symbol)
-        canonical = import_module("autoskillit.workspace.session_skill_catalog")
-        canonical_symbol = getattr(canonical, symbol)
-    else:
-        facade_symbol = getattr(materialization, symbol)
-        canonical = import_module("autoskillit.workspace._projected_artifact._publication")
-        canonical_symbol = getattr(canonical, symbol)
+    The registry addresses each writer as ``{facade_module}:{symbol}``, so the
+    facade attribute must resolve to the canonical shard definition itself —
+    not a copy — and must be defined by the canonical shard.
+    """
+    facade_symbol = getattr(import_module(facade_module), symbol)
+    canonical_symbol = getattr(import_module(canonical_module), symbol)
 
     assert facade_symbol is canonical_symbol, (
-        f"registered writer {symbol!r} must remain identity-equal on its facade path "
-        f"({expected_qualname})"
+        f"registered writer {facade_module}:{symbol} must remain identity-equal "
+        f"to {canonical_module}.{symbol}"
+    )
+    assert facade_symbol.__module__ == canonical_module, (
+        f"registered writer {symbol!r} must be defined by {canonical_module}, "
+        f"but is defined by {facade_symbol.__module__}"
     )
 
 
@@ -373,13 +383,7 @@ def test_session_skill_catalog_owns_write_versioned_json_writer() -> None:
     )
 
     src = Path(write_skill_unavailability_metadata.__code__.co_filename).resolve()
-    expected_src = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "autoskillit"
-        / "workspace"
-        / "session_skill_catalog.py"
-    )
+    expected_src = SRC_ROOT / "workspace" / "session_skill_catalog.py"
     assert src == expected_src.resolve(), (
         f"write_skill_unavailability_metadata must be defined in "
         f"session_skill_catalog.py; actual source: {src}"
@@ -387,8 +391,8 @@ def test_session_skill_catalog_owns_write_versioned_json_writer() -> None:
     assert facade_writer is write_skill_unavailability_metadata
 
 
-def test_session_skill_lifecycle_owns_fcntl_flock() -> None:
-    """Lifecycle shard delegates flock acquisition to ArtifactLease.
+def test_session_skill_lifecycle_owns_lease_delegation() -> None:
+    """Lifecycle shard owns lease acquisition and delegates flock to ArtifactLease.
 
     The original ``session_skills.py`` did not call ``fcntl.flock`` directly;
     it routed through ``ArtifactLease.acquire_exclusive``. The lifecycle shard
@@ -397,9 +401,9 @@ def test_session_skill_lifecycle_owns_fcntl_flock() -> None:
     to ``workspace/session_skill_lifecycle.py`` to follow the structural owner
     rename, but neither file performs a direct ``fcntl.flock`` call.
 
-    This test pins that delegation contract: the lifecycle shard must import
-    ``ArtifactLease`` (which is what makes the lock authoritative), and the
-    facade must not acquire the lease directly.
+    This test pins both halves of that contract: the lifecycle shard owns the
+    lease types and delegates to ``ArtifactLease``, and neither the lifecycle
+    shard nor the facade calls ``fcntl.flock`` directly.
     """
     import autoskillit.workspace.session_skill_lifecycle as lifecycle
 
@@ -409,26 +413,22 @@ def test_session_skill_lifecycle_owns_fcntl_flock() -> None:
     assert hasattr(lifecycle, "_SessionLease"), (
         "lifecycle shard must own _SessionLease, the workspace-owned external lease"
     )
+    assert not hasattr(import_module("autoskillit.workspace.session_skills"), "_SessionLease"), (
+        "the session_skills facade must not re-export _SessionLease; "
+        "lease acquisition is reached through the lifecycle shard"
+    )
+    for stem in ("session_skill_lifecycle", "session_skills"):
+        source = (SRC_ROOT / "workspace" / f"{stem}.py").read_text(encoding="utf-8")
+        assert "fcntl.flock" not in source, (
+            f"{stem}.py must not call fcntl.flock directly; "
+            f"acquisition is delegated to ArtifactLease"
+        )
 
 
 def test_publication_owns_sanitized_plugin_manifest_schema_constant() -> None:
     """SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION lives in publication; validation imports it."""
-    publication_path = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "autoskillit"
-        / "workspace"
-        / "_projected_artifact"
-        / "_publication.py"
-    )
-    validation_path = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "autoskillit"
-        / "workspace"
-        / "_projected_artifact"
-        / "_validation.py"
-    )
+    publication_path = SRC_ROOT / "workspace" / "_projected_artifact" / "_publication.py"
+    validation_path = SRC_ROOT / "workspace" / "_projected_artifact" / "_validation.py"
     publication_text = publication_path.read_text()
     validation_text = validation_path.read_text()
     assert "SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION" in publication_text, (
@@ -460,14 +460,7 @@ def test_render_agent_definitions_owner_is_publication_and_identity_shared_with_
         "by authority and the publication shard"
     )
     # Verify the function is defined in _publication.py by checking the source file.
-    publication_path = (
-        Path(__file__).resolve().parents[2]
-        / "src"
-        / "autoskillit"
-        / "workspace"
-        / "_projected_artifact"
-        / "_publication.py"
-    )
+    publication_path = SRC_ROOT / "workspace" / "_projected_artifact" / "_publication.py"
     publication_text = publication_path.read_text()
     assert "def _render_agent_definitions" in publication_text, (
         "_render_agent_definitions must be defined inside _publication.py"

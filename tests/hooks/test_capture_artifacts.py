@@ -1182,7 +1182,11 @@ def test_setup_keyboard_interrupt_emits_failure_before_reraising(
         "from_open_authorities",
         classmethod(with_short_lock_wait),
     )
-    monkeypatch.setattr(capture_admission.time, "sleep", interrupt_sleep)
+    monkeypatch.setattr(
+        capture_admission,
+        "time",
+        SimpleNamespace(sleep=interrupt_sleep),
+    )
     raised: list[BaseException] = []
 
     def invoke() -> None:

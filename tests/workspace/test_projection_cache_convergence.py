@@ -11,6 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import autoskillit.workspace._projected_artifact._artifact_residue as artifact_residue
 import autoskillit.workspace._projection_cache as projection_cache
 from autoskillit.core import (
     ArtifactLeaseContention,
@@ -33,6 +34,10 @@ def _entry_names() -> tuple[tuple[str, projection_cache.ProjectionEntryClass], .
         (
             f".{_STALE_KEY}.autoskillit-projection.json",
             projection_cache.ProjectionEntryClass.IDENTITY_SIDECAR,
+        ),
+        (
+            f".{_STALE_KEY}.autoskillit-projection.json.hook-quarantine-{'0' * 64}",
+            projection_cache.ProjectionEntryClass.HOOK_QUARANTINE_SIDECAR,
         ),
         (".artifact-leases", projection_cache.ProjectionEntryClass.LEASE_DIRECTORY),
         (
@@ -80,6 +85,7 @@ def test_classifier_examples_exhaust_the_entry_class_enum() -> None:
         if entry_class
         in {
             projection_cache.ProjectionEntryClass.IDENTITY_SIDECAR,
+            projection_cache.ProjectionEntryClass.HOOK_QUARANTINE_SIDECAR,
             projection_cache.ProjectionEntryClass.LEASE_DIRECTORY,
             projection_cache.ProjectionEntryClass.PUBLICATION_STAGING_ROOT,
             projection_cache.ProjectionEntryClass.PUBLICATION_STAGING_MANIFEST,
@@ -305,7 +311,7 @@ def test_residue_resume_retries_after_rmtree_failure(
         "acquire_exclusive",
         lambda *_args, **_kwargs: _ClosePreservingWriter(),
     )
-    rmtree = projection_cache.shutil.rmtree
+    rmtree = artifact_residue.shutil.rmtree
     attempts = 0
 
     def fail_once(path: Path) -> None:
@@ -315,7 +321,7 @@ def test_residue_resume_retries_after_rmtree_failure(
             raise OSError("rmtree failed")
         rmtree(path)
 
-    monkeypatch.setattr(projection_cache.shutil, "rmtree", fail_once)
+    monkeypatch.setattr(artifact_residue.shutil, "rmtree", fail_once)
 
     first = projection_cache._reconcile_projection_entry(
         residue,

@@ -83,8 +83,8 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "recovery directory for the same dir_name being committed.",
     ),
     (
-        "workspace/_projection_cache.py",
-        "_teardown_projection_residue",
+        "workspace/_projected_artifact/_artifact_residue.py",
+        "teardown_artifact_residue",
         "manifest.unlink",
     ): (
         1,
@@ -92,8 +92,8 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "sidecar only after the invalid root has been atomically quarantined.",
     ),
     (
-        "workspace/_projection_cache.py",
-        "_teardown_projection_residue",
+        "workspace/_projected_artifact/_artifact_residue.py",
+        "teardown_artifact_residue",
         "shutil.rmtree",
     ): (
         1,
@@ -101,8 +101,8 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "directory after its external manifest has been removed.",
     ),
     (
-        "workspace/_projection_cache.py",
-        "_quarantine_invalid_projection",
+        "workspace/_projected_artifact/_artifact_residue.py",
+        "quarantine_artifact_residue",
         "os.rename",
     ): (
         1,

@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
 from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
@@ -454,6 +455,116 @@ def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
     count = recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path))
 
     assert count == 0
+
+
+@pytest.mark.parametrize(
+    "contents",
+    [
+        pytest.param(b"\xff", id="non-utf8"),
+        pytest.param(b"not-json\n", id="invalid-json"),
+        pytest.param(b'["not", "an object"]\n', id="non-object-json"),
+    ],
+)
+def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    contents: bytes,
+) -> None:
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = 99995
+    trace = _write_old_trace(tmpfs, f"autoskillit_trace_{pid}.jsonl", "{}\n")
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    trace.write_bytes(contents)
+    os.utime(trace, (time.time() - 60,) * 2)
+    flush_calls: list[dict[str, object]] = []
+
+    def record_flush(**kwargs: object) -> None:
+        flush_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "autoskillit.execution._session_log_recovery.flush_session_log", record_flush
+    )
+
+    with capture_logs() as logs:
+        assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
+
+    assert flush_calls == []
+    assert not trace.exists()
+    assert not enrollment.exists()
+    assert [entry["event"] for entry in logs] == [
+        "recover_crashed_sessions_permanently_corrupt_trace"
+    ]
+
+    with capture_logs() as second_logs:
+        assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
+    assert flush_calls == []
+    assert second_logs == []
+
+
+def test_recover_crashed_sessions_keeps_trace_after_transient_flush_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = 99994
+    trace = _write_old_trace(tmpfs, f"autoskillit_trace_{pid}.jsonl", "{}\n")
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    flush_attempts = 0
+
+    def fail_flush(**_kwargs: object) -> None:
+        nonlocal flush_attempts
+        flush_attempts += 1
+        raise RuntimeError("temporary output failure")
+
+    monkeypatch.setattr(
+        "autoskillit.execution._session_log_recovery.flush_session_log", fail_flush
+    )
+
+    with capture_logs() as logs:
+        assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
+
+    assert flush_attempts == 1
+    assert trace.exists()
+    assert enrollment.exists()
+    assert [entry["event"] for entry in logs] == ["recover_crashed_sessions_finalize_failed"]
+
+    with capture_logs() as second_logs:
+        assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
+    assert flush_attempts == 2
+    assert trace.exists()
+    assert enrollment.exists()
+    assert [entry["event"] for entry in second_logs] == [
+        "recover_crashed_sessions_finalize_failed"
+    ]
+
+
+def test_recover_crashed_sessions_flushes_valid_trace_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tmpfs = tmp_path / "shm"
+    tmpfs.mkdir()
+    pid = 99993
+    trace = _write_old_trace(
+        tmpfs,
+        f"autoskillit_trace_{pid}.jsonl",
+        json.dumps({"vm_rss_kb": 500, "captured_at": "2026-03-03T10:00:00+00:00"}) + "\n",
+    )
+    enrollment = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    flush_calls: list[dict[str, object]] = []
+
+    def record_flush(**kwargs: object) -> None:
+        flush_calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "autoskillit.execution._session_log_recovery.flush_session_log", record_flush
+    )
+
+    assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 1
+    assert len(flush_calls) == 1
+    assert not trace.exists()
+    assert not enrollment.exists()
 
 
 # --- Group H: campaign_id / dispatch_id schema tests ---

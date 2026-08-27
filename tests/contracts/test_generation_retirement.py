@@ -226,6 +226,96 @@ def test_selected_generations_are_never_reclaimed(home: Path, source_root: Path)
     assert resolve_current_generation_for_plugin(home, _PLUGIN_REF) == current.managed_path
 
 
+def test_prune_quarantines_a_malformed_unselected_generation_once(
+    home: Path,
+    source_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed stale generation is durably removed rather than rediscovered."""
+    from autoskillit.workspace._projected_artifact import _generation_publication as publication
+
+    stale = _publish(home, source_root, "1.0.0")
+    (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
+    _publish(home, source_root, "2.0.0")
+    stale.manifest_path.write_text("{}", encoding="utf-8")
+
+    events: list[tuple[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        publication.logger,
+        "warning",
+        lambda event, **fields: events.append((event, fields)),
+    )
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
+        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+
+    assert not stale.managed_path.exists()
+    assert not stale.manifest_path.exists()
+    assert events == [
+        (
+            "generation_prune_reconcile",
+            {"path": str(stale.managed_path), "disposition": "reconciled"},
+        )
+    ]
+
+    events.clear()
+    with _InstallLock(managed):
+        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+
+    assert events == []
+
+
+def test_prune_resumes_a_generation_residue_transition(
+    home: Path,
+    source_root: Path,
+) -> None:
+    """A crash after the residue rename completes on the next prune pass."""
+    from autoskillit.workspace._projected_artifact import _generation_publication as publication
+    from autoskillit.workspace._projected_artifact._artifact_residue import residue_staging_path
+
+    stale = _publish(home, source_root, "1.0.0")
+    (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
+    _publish(home, source_root, "2.0.0")
+    staging = residue_staging_path(stale.managed_path)
+    os.rename(stale.managed_path, staging)
+
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
+        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+
+    assert not staging.exists()
+    assert not stale.manifest_path.exists()
+
+
+def test_prune_defers_an_unavailable_unselected_generation(
+    home: Path,
+    source_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem unavailability must retain both a stale root and its manifest."""
+    from autoskillit.core import PluginArtifactUnavailableError
+    from autoskillit.workspace._projected_artifact import _generation_publication as publication
+
+    stale = _publish(home, source_root, "1.0.0")
+    (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
+    _publish(home, source_root, "2.0.0")
+
+    def unavailable(_self: object, _path: Path) -> PluginArtifactIdentity:
+        raise PluginArtifactUnavailableError("generation storage is unavailable")
+
+    monkeypatch.setattr(
+        publication.GenerationArtifactRetirementOwner,
+        "identity_for_path",
+        unavailable,
+    )
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
+        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+
+    assert stale.managed_path.is_dir()
+    assert stale.manifest_path.is_file()
+
+
 def test_every_artifact_kind_has_a_registered_owner(home: Path) -> None:
     """A new storage location without an owner silently repeats the routing bug."""
     from autoskillit.cli.install._plugin_artifact import default_plugin_retirement_coordinator

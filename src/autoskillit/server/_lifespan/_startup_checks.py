@@ -125,11 +125,6 @@ def run_startup_hook_health_check() -> list[str]:
         cache_broken = _lifespan_pkg.validate_plugin_cache_hooks()
         if cache_broken:
             broken.extend(cache_broken)
-            logger.warning(
-                "stale_plugin_cache_hooks_detected",
-                broken=cache_broken,
-                remediation="Run `autoskillit install` from an external terminal",
-            )
     except Exception:
         logger.exception("startup_plugin_cache_hook_validation_failed")
         cache_broken = ["plugin cache hook validation failed"]
@@ -146,6 +141,12 @@ def run_startup_hook_health_check() -> list[str]:
                 elif outcome.status is PluginHookRepairStatus.CONTENDED:
                     logger.warning(
                         "plugin_cache_hooks_repair_contended_at_startup",
+                        incarnation=str(outcome.incarnation_dir),
+                        reason=outcome.detail,
+                    )
+                elif outcome.status is PluginHookRepairStatus.QUARANTINED:
+                    logger.warning(
+                        "plugin_cache_hooks_quarantined_at_startup",
                         incarnation=str(outcome.incarnation_dir),
                         reason=outcome.detail,
                     )
@@ -171,6 +172,12 @@ def run_startup_hook_health_check() -> list[str]:
             elif outcome.status is PluginHookRepairStatus.CONTENDED:
                 logger.warning(
                     "projection_hooks_repair_contended_at_startup",
+                    incarnation=str(outcome.incarnation_dir),
+                    reason=outcome.detail,
+                )
+            elif outcome.status is PluginHookRepairStatus.QUARANTINED:
+                logger.warning(
+                    "projection_hooks_quarantined_at_startup",
                     incarnation=str(outcome.incarnation_dir),
                     reason=outcome.detail,
                 )

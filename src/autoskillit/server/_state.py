@@ -156,7 +156,7 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
             if n > 0:
                 logger.info("Recovered %d crashed session trace(s) from tmpfs", n)
         except Exception:
-            logger.debug("recover_crashed_sessions at startup failed", exc_info=True)
+            logger.warning("recover_crashed_sessions at startup failed", exc_info=True)
 
         try:
             from datetime import datetime, timedelta  # noqa: PLC0415

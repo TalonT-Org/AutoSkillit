@@ -39,6 +39,7 @@ from pathlib import Path
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     ArtifactLease,
+    ArtifactLeaseContention,
     ManagedHome,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
@@ -47,6 +48,7 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     RetiringArtifactRecord,
     RetiringCacheState,
     Severity,
+    atomic_write,
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
@@ -369,9 +371,10 @@ def _enqueue_legacy_installed_plugin_versions(
 ) -> None:
     """Enqueue every version subdirectory of the legacy Claude-cache root.
 
-    Best-effort per candidate: a version directory that fails to validate or
-    is already contended is skipped and retried on the next reconciliation
-    pass rather than aborting the whole sweep.
+    A permanent validation failure records an external rejection marker so the
+    same legacy version is not reported on every install. Unavailable artifacts
+    still abort reconciliation: their condition may be transient and must not
+    be mistaken for a safe terminal decision.
     """
     from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY
 
@@ -408,6 +411,9 @@ def _enqueue_legacy_installed_plugin_versions(
     for candidate in candidates:
         if candidate.name == running_version and running_generation is None:
             continue
+        marker = candidate.parent / (f".{candidate.name}.autoskillit-rejected-legacy")
+        if marker.exists():
+            continue
         try:
             # acquire_shared (not acquire_existing_shared): unlike the generation
             # store's artifacts, a legacy Claude-cache install predating the lease
@@ -415,21 +421,30 @@ def _enqueue_legacy_installed_plugin_versions(
             # lazily materializes one rather than failing every legacy candidate
             # outright (issue #4770 Related Issue 2).
             with ArtifactLease.acquire_shared(installed_plugin_artifact_lease_path(candidate)):
-                identity = read_installed_plugin_artifact_identity(
-                    candidate,
-                    expected_semantic_key=installed_plugin_semantic_key(
-                        _AUTOSKILLIT_PLUGIN_KEY,
-                        candidate.name,
-                    ),
-                    manifest_path=installed_plugin_artifact_manifest_path(candidate),
-                )
-        except (PluginArtifactValidationError, PluginArtifactUnavailableError, OSError) as exc:
-            logger.warning(
-                "reconcile_install_artifacts: legacy version %s unreadable, skipping: %s",
-                candidate,
-                exc,
-            )
+                try:
+                    identity = read_installed_plugin_artifact_identity(
+                        candidate,
+                        expected_semantic_key=installed_plugin_semantic_key(
+                            _AUTOSKILLIT_PLUGIN_KEY,
+                            candidate.name,
+                        ),
+                        manifest_path=installed_plugin_artifact_manifest_path(candidate),
+                    )
+                except PluginArtifactValidationError as exc:
+                    try:
+                        atomic_write(marker, "", strict_durability=True, exclusive=True)
+                    except FileExistsError:
+                        continue
+                    logger.warning(
+                        "reconcile_install_artifacts: rejected invalid legacy version %s: %s",
+                        candidate,
+                        exc,
+                    )
+                    continue
+        except ArtifactLeaseContention:
             continue
+        except (PluginArtifactUnavailableError, OSError):
+            raise
         try:
             if engine.enqueue_retirement(identity, deadline) is None:
                 logger.warning(
@@ -509,13 +524,6 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
                     "add one to _RETIRE_VIA_ENGINE_HANDLERS in this module"
                 )
             handler(artifact, resolved_home)
-            logger.info(
-                "reconcile_install_artifacts: %s enqueued for engine-gated retirement "
-                "(retired in %s, disposition=%s)",
-                artifact,
-                retired.retired_in,
-                disposition,
-            )
         elif disposition == "preserve":
             logger.info(
                 "reconcile_install_artifacts: preserving %s because safe retirement "
@@ -528,11 +536,12 @@ def reconcile_install_artifacts(*, home: ManagedHome | None = None) -> tuple[str
                 f"unknown disposition {disposition!r} for retired artifact {key!r} — "
                 "RETIRED_INSTALL_ARTIFACT_SHAPES and this reconciler must stay in step"
             )
-        logger.info(
-            "reconcile_install_artifacts: processed %s retired in %s (disposition=%s)",
-            artifact,
-            retired.retired_in,
-            disposition,
-        )
-        repaired.append(key)
+        if disposition != "retire_via_engine":
+            logger.info(
+                "reconcile_install_artifacts: processed %s retired in %s (disposition=%s)",
+                artifact,
+                retired.retired_in,
+                disposition,
+            )
+            repaired.append(key)
     return tuple(repaired)

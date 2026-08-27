@@ -11,8 +11,6 @@ one module is what stops those three from drifting apart again.
 from __future__ import annotations
 
 import hashlib
-import os
-import shutil
 import stat
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
@@ -45,6 +43,11 @@ from autoskillit.core import (
     is_canonical_plugin_artifact_incarnation_id,
     is_python_bytecode_path,
     read_versioned_json,
+)
+from autoskillit.workspace._projected_artifact._artifact_residue import (
+    quarantine_artifact_residue,
+    residue_staging_path,
+    teardown_artifact_residue,
 )
 
 logger = get_logger(__name__)
@@ -105,6 +108,10 @@ _PROJECTION_ROOT_RE = re.compile(rf"{_PROJECTION_KEY_PATTERN}\Z")
 _IDENTITY_SIDECAR_RE = re.compile(
     rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.autoskillit-projection\.json\Z"
 )
+_HOOK_QUARANTINE_SIDECAR_RE = re.compile(
+    rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.autoskillit-projection\.json\."
+    r"hook-quarantine-[0-9a-f]{64}\Z"
+)
 _PUBLICATION_STAGING_ROOT_RE = re.compile(rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.plugin-[^.]+\Z")
 _PUBLICATION_STAGING_MANIFEST_RE = re.compile(
     rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.manifest-"
@@ -124,6 +131,7 @@ class ProjectionEntryClass(StrEnum):
     ACTIVE_ROOT = "active_root"
     PROJECTION_ROOT = "projection_root"
     IDENTITY_SIDECAR = "identity_sidecar"
+    HOOK_QUARANTINE_SIDECAR = "hook_quarantine_sidecar"
     LEASE_DIRECTORY = "lease_directory"
     PUBLICATION_STAGING_ROOT = "publication_staging_root"
     PUBLICATION_STAGING_MANIFEST = "publication_staging_manifest"
@@ -162,6 +170,8 @@ def classify_projection_entry(
         return ProjectionEntryClass.PROJECTION_ROOT
     if _IDENTITY_SIDECAR_RE.fullmatch(name):
         return ProjectionEntryClass.IDENTITY_SIDECAR
+    if _HOOK_QUARANTINE_SIDECAR_RE.fullmatch(name):
+        return ProjectionEntryClass.HOOK_QUARANTINE_SIDECAR
     if name == ".artifact-leases":
         return ProjectionEntryClass.LEASE_DIRECTORY
     if _PUBLICATION_STAGING_ROOT_RE.fullmatch(name):
@@ -173,12 +183,6 @@ def classify_projection_entry(
     if _RESIDUE_STAGING_ROOT_RE.fullmatch(name):
         return ProjectionEntryClass.RESIDUE_STAGING_ROOT
     raise ValueError(f"unclassified projection-cache entry: {entry}")
-
-
-def residue_staging_path(entry: Path) -> Path:
-    """Return the deterministic quarantine path for a projection root."""
-    suffix = hashlib.sha256(entry.name.encode()).hexdigest()[:16]
-    return entry.parent / f".{entry.name}.autoskillit-residue-{suffix}"
 
 
 def projected_artifact_manifest_path(managed_path: Path) -> Path:
@@ -658,13 +662,6 @@ def _revalidate_projection_mutation_target(
     return None
 
 
-def _teardown_projection_residue(*, staging: Path, manifest: Path) -> None:
-    """Finish the rename-committed residue transition in crash-safe order."""
-    if manifest.exists() or manifest.is_symlink():
-        manifest.unlink()
-    shutil.rmtree(staging)
-
-
 def _quarantine_invalid_projection(
     entry: Path,
     *,
@@ -689,7 +686,7 @@ def _quarantine_invalid_projection(
         if staging_present:
             if staging.is_symlink() or not staging.is_dir():
                 return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
-            _teardown_projection_residue(staging=staging, manifest=manifest)
+            teardown_artifact_residue(staging=staging, manifest=manifest)
             refusal = _revalidate_projection_mutation_target(
                 entry,
                 root=root,
@@ -706,8 +703,11 @@ def _quarantine_invalid_projection(
         )
         if refusal is not None:
             return refusal
-        os.rename(entry, staging)
-        _teardown_projection_residue(staging=staging, manifest=manifest)
+        quarantine_artifact_residue(
+            managed_path=entry,
+            staging=staging,
+            manifest=manifest,
+        )
     except OSError:
         return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
     return ProjectionReconcileDisposition.RECONCILED
@@ -744,7 +744,7 @@ def _resume_projection_residue(
         return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
     try:
         with _InstallLock(home):
-            _teardown_projection_residue(
+            teardown_artifact_residue(
                 staging=entry,
                 manifest=owner.manifest_path(managed_path),
             )

@@ -384,6 +384,35 @@ class TestPublicationGateIntegration:
 class TestProjectionRepair:
     """T-B2: Startup repair heals a stale projection."""
 
+    def test_malformed_projection_hooks_are_quarantined_by_exact_bytes(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.hook_registry._quarantine import hook_quarantine_marker_path
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            PluginHookRepairStatus,
+            repair_broken_projection_hooks,
+        )
+
+        projections_root, projection, hooks_path, manifest_path, _ = _plant_stale_projection(
+            tmp_path, "deadbeefcafe0123"
+        )
+        malformed = b"{not-json"
+        hooks_path.write_bytes(malformed)
+
+        first = repair_broken_projection_hooks(projections_root)
+
+        assert first[0].status is PluginHookRepairStatus.QUARANTINED
+        assert hook_quarantine_marker_path(manifest_path, malformed).is_file()
+        assert repair_broken_projection_hooks(projections_root) == ()
+
+        changed_malformed = b"[not-json"
+        hooks_path.write_bytes(changed_malformed)
+        retry = repair_broken_projection_hooks(projections_root)
+
+        assert retry[0].status is PluginHookRepairStatus.QUARANTINED
+        assert hook_quarantine_marker_path(manifest_path, changed_malformed).is_file()
+        assert projection.is_dir()
+
     def test_startup_repair_heals_a_stale_projection(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

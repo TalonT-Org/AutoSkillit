@@ -78,15 +78,37 @@ def recover_crashed_sessions(
             continue
         # PID recycled, dead, or zombie — original process is gone, treat as crash
 
-        # All gates passed — read snapshots and emit crashed row
+        # All gates passed — parse snapshots before attempting durable recovery.
+        # Malformed enrolled traces cannot become valid on a later startup, unlike
+        # failures while flushing the already-decoded recovery payload.
         snapshots: list[dict[str, object]] = []
+        corrupt_reason: str | None = None
         try:
-            for line in trace_file.read_text().splitlines():
-                try:
-                    snapshots.append(json.loads(line))
-                except json.JSONDecodeError:
+            for line in trace_file.read_text(encoding="utf-8").splitlines():
+                if not line:
                     continue
+                try:
+                    snapshot = json.loads(line)
+                except json.JSONDecodeError:
+                    corrupt_reason = "invalid JSON"
+                    break
+                if not isinstance(snapshot, dict):
+                    corrupt_reason = "non-object JSON"
+                    break
+                snapshots.append(snapshot)
+        except UnicodeDecodeError:
+            corrupt_reason = "non-UTF-8 content"
         except OSError:
+            continue
+
+        if corrupt_reason is not None:
+            logger.warning(
+                "recover_crashed_sessions_permanently_corrupt_trace",
+                trace_path=str(trace_file),
+                reason=corrupt_reason,
+            )
+            trace_file.unlink(missing_ok=True)
+            enrollment_path.unlink(missing_ok=True)
             continue
 
         # Gate 4: comm-based alien file rejection (issue #806 immunity)
@@ -141,8 +163,10 @@ def recover_crashed_sessions(
                 is_crash_recovery=True,
             )
         except Exception:
-            logger.debug(
-                "recover_crashed_sessions: failed to finalize %s", trace_file, exc_info=True
+            logger.warning(
+                "recover_crashed_sessions_finalize_failed",
+                trace_path=str(trace_file),
+                exc_info=True,
             )
             continue
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import structlog
 
 from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.recording import RecordingSubprocessRunner
@@ -219,6 +220,50 @@ def test_startup_hook_health_check_survives_repair_primitive_raising(monkeypatch
     broken = run_startup_hook_health_check()
 
     assert broken == ["python3 /stale/cache/path/hooks/quota_guard.py"]
+
+
+def test_startup_logs_quarantined_hook_payloads_only_on_first_pass(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A matching quarantine marker makes the next startup quiet."""
+    from autoskillit.server._lifespan import run_startup_hook_health_check
+    from tests._helpers import _flush_structlog_proxy_caches
+
+    cache_hooks = (
+        tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit/1.0.0/hooks/hooks.json"
+    )
+    cache_hooks.parent.mkdir(parents=True)
+    cache_hooks.write_bytes(b"{not-json")
+    projection_hooks = (
+        tmp_path / ".autoskillit/plugin-projections/deadbeefcafe0123/hooks/hooks.json"
+    )
+    projection_hooks.parent.mkdir(parents=True)
+    projection_hooks.write_bytes(b"[not-json")
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.server._lifespan.iter_all_scope_paths",
+        lambda project_root=None: iter(()),
+    )
+
+    _flush_structlog_proxy_caches()
+    try:
+        with structlog.testing.capture_logs() as first_logs:
+            run_startup_hook_health_check()
+        with structlog.testing.capture_logs() as second_logs:
+            run_startup_hook_health_check()
+    finally:
+        _flush_structlog_proxy_caches()
+
+    first_events = {entry.get("event") for entry in first_logs}
+    assert "plugin_cache_hooks_quarantined_at_startup" in first_events
+    assert "projection_hooks_quarantined_at_startup" in first_events
+    assert not {
+        "plugin_cache_hooks_quarantined_at_startup",
+        "projection_hooks_quarantined_at_startup",
+        "plugin_cache_hooks_repair_failed_at_startup",
+        "projection_hooks_repair_failed_at_startup",
+    } & {entry.get("event") for entry in second_logs}
 
 
 def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch) -> None:

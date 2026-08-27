@@ -41,7 +41,7 @@ class TestLoadRecipeExceptionHandling:
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
         with patch(
-            "autoskillit.recipe._api.load_recipe_dict_with_declarations",
+            "autoskillit.recipe._api_orchestration.load_recipe_dict_with_declarations",
             side_effect=YAMLError("bad yaml"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -75,7 +75,8 @@ class TestLoadRecipeExceptionHandling:
         with (
             patch("autoskillit.recipe.find_recipe_by_name", return_value=fake_match),
             patch(
-                "autoskillit.recipe._api._parse_recipe", side_effect=ValueError("bad structure")
+                "autoskillit.recipe._api_orchestration._parse_recipe",
+                side_effect=ValueError("bad structure"),
             ),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -97,7 +98,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe._api.load_recipe_card",
+            "autoskillit.recipe._api_orchestration.load_recipe_card",
             side_effect=FileNotFoundError("missing"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -119,7 +120,7 @@ class TestLoadRecipeExceptionHandling:
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
         with patch(
-            "autoskillit.recipe._api.run_semantic_rules",
+            "autoskillit.recipe._api_orchestration.run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
             result = json.loads(await load_recipe(name="test"))

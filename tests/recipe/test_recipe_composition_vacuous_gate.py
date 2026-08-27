@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.recipe._api_orchestration as orch
 from autoskillit.recipe import _api as recipe_api
 from autoskillit.recipe._recipe_composition import _drop_sub_recipe_step, _merge_sub_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -184,7 +185,7 @@ steps:
         semantic_step_orders.append(tuple(ctx.recipe.steps))  # type: ignore[attr-defined]
         return []
 
-    monkeypatch.setattr(recipe_api, "run_semantic_rules", capture_semantic_order)
+    monkeypatch.setattr(orch, "run_semantic_rules", capture_semantic_order)
 
     result = recipe_api.load_and_validate(
         "post-prune-ordering",

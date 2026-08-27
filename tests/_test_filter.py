@@ -914,6 +914,22 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "contracts/test_package_gateways.py",
         }
     ),
+    "_api_orchestration": frozenset(
+        {
+            "recipe",
+            "server/test_tools_list_recipes.py",
+            "server/test_tools_kitchen_envelope_failure.py",
+            "server/test_tools_kitchen_envelope_hook_drift.py",
+            "server/test_tools_kitchen_envelope_validation.py",
+            "server/test_tools_load_recipe.py",
+            "server/test_mcp_overrides.py",
+            "server/test_service_wrappers.py",
+            "cli/test_cli_prompts.py",
+            "infra/test_pretty_output_recipe.py",
+            "contracts/test_tools_recipe_contracts.py",
+            "contracts/test_package_gateways.py",
+        }
+    ),
     "io": frozenset(
         {
             "recipe",

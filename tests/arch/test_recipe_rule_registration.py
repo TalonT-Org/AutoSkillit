@@ -46,7 +46,7 @@ def test_load_cache_entry_has_rule_registry_hash_guard() -> None:
     import dataclasses
 
     src = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipe"
-    api_src = src / "_api.py"
+    api_src = src / "_api_orchestration.py"
 
     from autoskillit.recipe._api import _LoadCacheEntry
 

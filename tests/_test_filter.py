@@ -1409,6 +1409,7 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
                 "recipe/test_research_campaign.py",
                 "recipe/test_rules_contracts.py",
                 "recipe/test_rules_dataflow_handoff.py",
+                "recipe/test_rules_skill_content.py",
                 "recipe/test_rules_skill_routing.py",
                 "recipe/test_rules_skills.py",
                 "recipe/test_rules_tools.py",

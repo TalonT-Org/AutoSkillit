@@ -1043,7 +1043,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # margins, manifest planning), +_recipe_section_planning.py (page-fitting engine)
         # — #4557 decomposes three modules over the 750-line structural limit
         # +_recipe_raw_repair: cohesive raw-YAML repair responsibility (#4553).
-        "recipe": 43,  # was 33; +9 from CI/graph/dataflow splits
+        "recipe": 44,  # was 33; +9 from CI/graph/dataflow splits; +_binding_input.py split (#4854)
         # +_github_http review boundary and +launch_resolution authority.
         # +otlp_sink run-scoped loopback diagnostics receiver (#4628)
         "execution": 23,  # +session_index strict byte-bounded retained-index reads (#4514)
@@ -1100,6 +1100,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +_type_context_admission_persistence_envelope: #4743 persistence split moved
         # envelope pipeline to a sibling shard (75 + 1 = 76).
         "core/types": 76,
+        "core/runtime": 11,  # +worktree_gate_lease process-tree-lived test exclusion
         "cli": 11,  # issue #4670 Part B final state: 11 top-level files remain
         # (app.py + 10 small shared utilities — _features.py, _hooks.py,
         # _hooks_codex.py, _init_helpers.py, _mcp_names.py, _preview.py,
@@ -1110,7 +1111,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         "cli/doctor": 13,  # +_doctor_skills capability declaration authenticity checks;
         # +_doctor_capture_store read-only capture-store stats check
         # +_doctor_repair isolated opt-in mutation spoke (#4710)
-        "workspace": 17,  # +_installed_artifact exact lease-protected authority (#4409);
+        "workspace": 26,  # +_installed_artifact exact lease-protected authority (#4409);
         # +_install_state (single install-state consistency authority,
         # replacing nine ad-hoc repairs) +_projection_cache (asset inventory, cache-key
         # record, and orphan sweep — split out so staleness cannot drift from projection)
@@ -1139,7 +1140,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # *.py file); -1 for the deleted exploration_context.py file.
         # E22 retired per #4835.
         "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
-        "recipe/rules": 57,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction  # noqa: E501
+        "recipe/rules": 61,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
         "server/tools": 39,  # noqa: E501 # +tools_exploration read-only broker endpoints; +tools_session_logs bounded retained-log reader (#4514); +tools_evidence_reader fail-closed behavioral evidence surface +_evidence_reader deep feedback authority (#4585); +_pipeline_deps.py +_ordering_telemetry.py (open_kitchen
         # auto-init dependency tracker + REVIEW_BEFORE_PLAN ordering telemetry)
         # +_backend_compat.py (shared target-resolution + fail-closed compatibility gate
@@ -1516,14 +1517,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "projection in one IL-1 authority; consistent recovery snapshots and shared "
         "row/byte budgets remain beside replay validation so storage and reducer "
         "publication invariants cannot drift across independently mutable modules.",
-    ),
-    "pipeline/audit_admission_ledger.py": (
-        2300,
-        "REQ-CNST-010-E17: #4419 keeps installation fencing, reservation and attempt "
-        "transitions, trusted head/preflight publication, disposition CAS, and recovery "
-        "inside one crash-safe SQLite authority. Splitting the transactional state machine "
-        "would let independently mutable storage paths drift from its atomic publication "
-        "and fail-closed health invariants.",
     ),
     "hook_registry.py": (
         1200,

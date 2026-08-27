@@ -189,6 +189,16 @@ def test_resume_lock_lives_in_state_module() -> None:
     assert not hasattr(state_types_facade_module, "_resume_lock")
 
 
+def _names_a_state_records_module(dotted: str) -> bool:
+    """True when a dotted module path resolves to state_records itself.
+
+    Anchored on the final segment so a future sibling such as
+    ``state_records_v2`` does not false-match, and leading dots from relative
+    imports are stripped first.
+    """
+    return dotted.lstrip(".").rsplit(".", 1)[-1] == "state_records"
+
+
 def test_state_transitions_does_not_import_state_records() -> None:
     """The documented one-way arrow state_records -> state_transitions is enforced, not just prose.
 
@@ -196,6 +206,13 @@ def test_state_transitions_does_not_import_state_records() -> None:
     state_records. Nothing else in the suite pins that direction:
     test_layer_enforcement.py covers cross-package arrows only, and the
     import-linter contracts do not describe intra-fleet edges.
+
+    Both import forms are checked: ``from ... import`` (ast.ImportFrom) and
+    plain ``import autoskillit.fleet.state_records`` (ast.Import). Checking
+    only the former would let the plain form defeat the whole assertion.
+    TYPE_CHECKING-guarded imports count as violations too — the docstring
+    claims the module imports nothing from state_records, not merely nothing
+    at runtime.
     """
     transitions_source = (
         Path(__file__).resolve().parents[2]
@@ -205,13 +222,15 @@ def test_state_transitions_does_not_import_state_records() -> None:
         / "state_transitions.py"
     )
     tree = ast.parse(transitions_source.read_text(encoding="utf-8"))
-    offenders = [
-        node.module
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module is not None
-        and "state_records" in node.module
-    ]
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module is not None and _names_a_state_records_module(node.module):
+                offenders.append(node.module)
+        elif isinstance(node, ast.Import):
+            offenders.extend(
+                alias.name for alias in node.names if _names_a_state_records_module(alias.name)
+            )
     assert not offenders, (
         f"state_transitions must not import from state_records; found {offenders}"
     )

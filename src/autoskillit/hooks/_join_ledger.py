@@ -39,6 +39,7 @@ else:
 
 LEDGER_FILENAME = "join_ledger.json"
 LOCK_FILENAME = "join_ledger.lock"
+JOIN_LEDGER_SCHEMA_VERSION = 1
 
 #: Terminal outcomes for a claimed direct handle.
 OUTCOME_PENDING = "pending"
@@ -121,7 +122,7 @@ def _read_locked(ledger_path: Path) -> dict[str, Any]:
     try:
         raw = ledger_path.read_text(encoding="utf-8")
     except FileNotFoundError:
-        return {"schema_version": 1, "sessions": {}}
+        return {"schema_version": JOIN_LEDGER_SCHEMA_VERSION, "sessions": {}}
     except OSError:
         raise
     try:
@@ -130,10 +131,15 @@ def _read_locked(ledger_path: Path) -> dict[str, Any]:
         raise _CorruptedLedger(f"join ledger is not valid JSON: {exc}") from exc
     if not isinstance(parsed, dict):
         raise _CorruptedLedger("join ledger top level must be an object")
+    observed_version = parsed.get("schema_version")
+    if observed_version != JOIN_LEDGER_SCHEMA_VERSION:
+        raise _CorruptedLedger(
+            "unsupported join ledger schema_version: "
+            f"{observed_version!r}; expected {JOIN_LEDGER_SCHEMA_VERSION}"
+        )
     sessions = parsed.get("sessions")
     if not isinstance(sessions, dict):
         raise _CorruptedLedger("join ledger sessions must be an object")
-    parsed.setdefault("schema_version", 1)
     return parsed
 
 

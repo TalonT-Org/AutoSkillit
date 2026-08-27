@@ -173,7 +173,7 @@ def _read_hook_config() -> dict:
     by an overlay file key.
     """
     try:
-        base_path = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
+        base_path = _default_state_root().joinpath(*HOOK_DIR_COMPONENTS, HOOK_CONFIG_FILENAME)
         if not base_path.exists():
             return {}
         base = json.loads(base_path.read_text())
@@ -197,7 +197,7 @@ def _resolve_quota_disable_state_dir() -> Path:
     if state_override:
         base = Path(state_override) / "kitchen_state"
     else:
-        base = Path.cwd().joinpath(*HOOK_DIR_COMPONENTS, "kitchen_state")
+        base = _default_state_root().joinpath(*HOOK_DIR_COMPONENTS, "kitchen_state")
     return base / campaign_id if campaign_id else base
 
 
@@ -308,12 +308,11 @@ def is_quota_guard_disabled_for_session(session_id: str) -> bool:
     return read_quota_disable_marker(session_id) is not None
 
 
-def _resolve_int(env_var: str, hook_value: object, default: int) -> int:
+def _resolve_int(env_raw: str | None, hook_value: object, default: int) -> int:
     """Resolve an integer setting: env var > hook config > default.
 
     Non-numeric env var values fall through to the next level.
     """
-    env_raw = os.environ.get(env_var)
     if env_raw is not None:
         try:
             return int(env_raw)
@@ -342,13 +341,13 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
     )
 
     cache_max_age = _resolve_int(
-        ENV_CACHE_MAX_AGE,
+        os.environ.get(ENV_CACHE_MAX_AGE),
         hook_config.get("cache_max_age"),
         DEFAULT_CACHE_MAX_AGE,
     )
 
     buffer_seconds = _resolve_int(
-        ENV_BUFFER_SECONDS,
+        os.environ.get(ENV_BUFFER_SECONDS),
         hook_config.get("buffer_seconds"),
         DEFAULT_BUFFER_SECONDS,
     )
@@ -498,6 +497,32 @@ def write_join_diagnostic(record: dict, *, caller: str = "") -> None:
     except Exception as exc:
         if caller:
             print(f"{caller}: failed to write join diagnostic: {exc}", file=sys.stderr)
+
+
+def write_dispatch_diagnostic(
+    event_kind: str,
+    logical_hook_name: str,
+    reason: str,
+) -> None:
+    """Append one bounded dispatcher-degradation record without masking the hook."""
+    record = {
+        "ts": datetime.now(UTC).isoformat(),
+        "event_kind": str(event_kind)[:64],
+        "logical_hook_name": str(logical_hook_name)[:256],
+        "reason": str(reason)[:512],
+    }
+    log_dir = resolve_quota_log_dir(caller="hook_dispatch")
+    if log_dir is None:
+        return
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        _append_and_trim_jsonl_line(
+            log_dir / "hook_dispatch_diagnostics.jsonl",
+            json.dumps(record, sort_keys=True),
+            max_lines=_MAX_HOOK_LOG_LINES,
+        )
+    except Exception:
+        return
 
 
 def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object] | None:

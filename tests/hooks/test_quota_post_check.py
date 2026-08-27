@@ -369,7 +369,6 @@ def test_qpc_buffer_seconds_from_hook_config(tmp_path, monkeypatch):
     (``n = settings.buffer_seconds``), making the assertion deterministic.
     """
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS", raising=False)
     cache = tmp_path / "quota_cache.json"
     _write_cache(cache, utilization=95.0, resets_at=None)
     hook_cfg_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)

@@ -328,14 +328,15 @@ def read_binding(path: Path) -> SessionBinding | None:
     return SessionBinding.from_json(raw)
 
 
-def write_binding(path: Path, binding: SessionBinding) -> None:
+def atomic_write(path: Path, content: str) -> None:
+    """Persist text through the session channel's existing durable replace sequence."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     handle = None
     try:
         handle = os.fdopen(fd, "w", encoding="utf-8")
         with handle:
-            handle.write(binding.to_json())
+            handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, path)
@@ -350,3 +351,7 @@ def write_binding(path: Path, binding: SessionBinding) -> None:
         except OSError:
             pass
         raise
+
+
+def write_binding(path: Path, binding: SessionBinding) -> None:
+    atomic_write(path, binding.to_json())

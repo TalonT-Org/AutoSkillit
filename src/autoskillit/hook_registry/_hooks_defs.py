@@ -69,6 +69,16 @@ class HookDef:
                 raise ValueError(f"HookDef.{field_name} must be a frozenset of non-empty strings")
 
 
+class HookEnvVarDef(NamedTuple):
+    """Static contract for one environment variable consumed by a hook process."""
+
+    var: str
+    provenance: Literal["autoskillit", "harness", "operator"]
+    producer: str | None
+    entrypoint: str | None
+    justification: str
+
+
 @dataclass(frozen=True, slots=True)
 class LifecycleContractDef:
     """Static ownership contract for a hook-produced persistent resource."""

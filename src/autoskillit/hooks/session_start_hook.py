@@ -16,6 +16,15 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_payload import (  # noqa: E402
+    normalize_payload_cwd,
+    resolve_kitchen_state_dir,
+)
+
 
 def main() -> None:
     if os.environ.get("AUTOSKILLIT_HEADLESS") == "1":
@@ -30,13 +39,7 @@ def main() -> None:
     _best_recipe_name: str | None = None
     _best_opened_at = None
     try:
-        _state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-        if _state_override:
-            _state_dir = Path(_state_override) / "kitchen_state"
-        else:
-            _campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-            _base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
-            _state_dir = _base / _campaign_id if _campaign_id else _base
+        _state_dir = resolve_kitchen_state_dir(normalize_payload_cwd(data.get("cwd")))
         if _state_dir.is_dir():
             _ttl_hours = 24
             for _p in _state_dir.glob("*.json"):

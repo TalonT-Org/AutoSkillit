@@ -259,12 +259,18 @@ def _incomplete_fallback() -> _ResolvedControl:
 
 
 def _resolve_control(environment: Mapping[str, str] | None = None) -> _ResolvedControl:
-    actual_environment = os.environ if environment is None else environment
-    mode = actual_environment.get(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR)
-    launch_id = actual_environment.get(MANAGED_LAUNCH_ID_ENV_VAR)
-    attempt_id = actual_environment.get(MANAGED_ATTEMPT_ID_ENV_VAR)
-    lineage_digest = actual_environment.get(MANAGED_LINEAGE_DIGEST_ENV_VAR)
-    serialized_ref = actual_environment.get(MANAGED_LINEAGE_REF_ENV_VAR)
+    if environment is None:
+        mode = os.environ.get(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR)
+        launch_id = os.environ.get(MANAGED_LAUNCH_ID_ENV_VAR)
+        attempt_id = os.environ.get(MANAGED_ATTEMPT_ID_ENV_VAR)
+        lineage_digest = os.environ.get(MANAGED_LINEAGE_DIGEST_ENV_VAR)
+        serialized_ref = os.environ.get(MANAGED_LINEAGE_REF_ENV_VAR)
+    else:
+        mode = environment.get(NATIVE_SHELL_CAPTURE_MODE_ENV_VAR)
+        launch_id = environment.get(MANAGED_LAUNCH_ID_ENV_VAR)
+        attempt_id = environment.get(MANAGED_ATTEMPT_ID_ENV_VAR)
+        lineage_digest = environment.get(MANAGED_LINEAGE_DIGEST_ENV_VAR)
+        serialized_ref = environment.get(MANAGED_LINEAGE_REF_ENV_VAR)
     values = (mode, launch_id, attempt_id, lineage_digest, serialized_ref)
     identity_values = (launch_id, attempt_id, lineage_digest, serialized_ref)
     if all(value is None for value in values):

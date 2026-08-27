@@ -18,15 +18,14 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
 
-def _get_state_dir() -> Path:
-    """Resolve the kitchen_state directory (mirrors open_kitchen_guard.py)."""
-    state_override = os.environ.get("AUTOSKILLIT_STATE_DIR")
-    if state_override:
-        return Path(state_override) / "kitchen_state"
-    campaign_id = os.environ.get("AUTOSKILLIT_CAMPAIGN_ID", "")
-    base = Path.cwd() / ".autoskillit" / "temp" / "kitchen_state"
-    return base / campaign_id if campaign_id else base
+from _hook_payload import (  # noqa: E402
+    normalize_payload_cwd,
+    resolve_kitchen_state_dir,
+)
 
 
 def _is_successful(tool_response: str) -> bool:
@@ -57,7 +56,7 @@ def main() -> None:
     if not session_id:
         sys.exit(0)
 
-    state_dir = _get_state_dir()
+    state_dir = resolve_kitchen_state_dir(normalize_payload_cwd(data.get("cwd")))
     marker_path = state_dir / f"{session_id}_recipe_confirmed.json"
 
     if marker_path.exists():

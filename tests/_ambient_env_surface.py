@@ -60,6 +60,36 @@ _ENVIRON_ATTR_NAMES = frozenset({"environ", "environb"})
 _ENVIRON_READ_METHODS = frozenset({"get", "pop", "setdefault"})
 _COLLECTION_WRAPPER_FUNCS = frozenset({"frozenset", "set", "tuple", "list"})
 
+# The write scanner deliberately recognizes only the carriers used by the
+# session-launch path.  Treating every dictionary as an environment carrier
+# would make an unrelated mapping assignment look like proof that a hook's
+# input is delivered to a subprocess.
+_ENV_WRITE_CARRIERS = frozenset(
+    {"env", "extras", "extra_env", "env_extras", "cook_env_extras", "return_env"}
+)
+_ENV_BUILD_HANDOFFS = frozenset(
+    {
+        ("prepare_interactive_launch", "extra_env"),
+        ("build_interactive_cmd", "env_extras"),
+        ("build_agent_env", "extras"),
+        ("build_env", "extras"),
+        ("dispatch_food_truck", "env_extras"),
+        ("CmdSpec", "env"),
+    }
+)
+_SUBPROCESS_MODULES = frozenset({"subprocess", "asyncio"})
+_SUBPROCESS_CALLS = frozenset(
+    {
+        "run",
+        "Popen",
+        "call",
+        "check_call",
+        "check_output",
+        "create_subprocess_exec",
+        "create_subprocess_shell",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class EnvRead:
@@ -84,12 +114,34 @@ class ForwardingSite:
 
 
 @dataclass(frozen=True, slots=True)
+class EnvWrite:
+    """A literal environment-key write that reaches an environment boundary.
+
+    ``carrier`` names the intentionally-small set of recognized mapping
+    carriers (or ``os.environ``). ``boundary`` is the explicit subprocess or
+    backend-builder handoff which proves that carrier can deliver the value.
+    """
+
+    var: str
+    file: str
+    line: int
+    carrier: str
+    boundary: str
+
+
+@dataclass(frozen=True, slots=True)
 class ProductionEnvSurface:
     names: frozenset[str]
     prefixes: frozenset[str]
     reads: tuple[EnvRead, ...]
     unresolved: tuple[UnresolvedRead, ...]
     forwarding_sites: tuple[ForwardingSite, ...]
+    unparseable_files: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ProductionEnvWriteSurface:
+    writes: tuple[EnvWrite, ...]
     unparseable_files: tuple[str, ...]
 
 
@@ -522,6 +574,224 @@ def production_env_read_surface(src_root: Path) -> ProductionEnvSurface:
     )
 
 
+def _write_carrier(node: ast.expr) -> str | None:
+    if _is_environ_attr(node):
+        return "os.environ"
+    if isinstance(node, ast.Name) and node.id in _ENV_WRITE_CARRIERS:
+        return node.id
+    return None
+
+
+def _literal_mapping_keys(
+    node: ast.expr, module_scalars: dict[str, str], flat_scalars: dict[str, str]
+) -> frozenset[str]:
+    """Return literal keys inserted by a dictionary expression.
+
+    The scanner follows only literal dictionary/merge syntax.  In particular,
+    it does not infer keys from a name, comprehension, or function result:
+    those shapes would make the write-side contract claim evidence it cannot
+    prove from the AST.
+    """
+    if isinstance(node, ast.Dict):
+        keys: set[str] = set()
+        for key in node.keys:
+            if key is None:
+                continue
+            resolved = _resolve_key_expr(key, module_scalars, flat_scalars)
+            if resolved is not None:
+                keys.add(resolved[0])
+        return frozenset(keys)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _literal_mapping_keys(
+            node.left, module_scalars, flat_scalars
+        ) | _literal_mapping_keys(node.right, module_scalars, flat_scalars)
+    return frozenset()
+
+
+def _call_name(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _subprocess_boundary_name(node: ast.Call) -> str | None:
+    """Return a stable description for direct standard-library process calls."""
+    func = node.func
+    if not isinstance(func, ast.Attribute) or func.attr not in _SUBPROCESS_CALLS:
+        return None
+    if not isinstance(func.value, ast.Name) or func.value.id not in _SUBPROCESS_MODULES:
+        return None
+    return f"{func.value.id}.{func.attr}(env)"
+
+
+def _carrier_from_boundary_value(node: ast.expr) -> str | None:
+    """Recognize a carrier passed directly or wrapped in ``dict(...)``.
+
+    This intentionally does not follow aliases (``child_env = env``): aliases
+    conceal the source carrier and would let a future unrelated mapping
+    satisfy a hook-delivery assertion.
+    """
+    carrier = _write_carrier(node)
+    if carrier is not None:
+        return carrier
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "dict"
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        return _write_carrier(node.args[0])
+    return None
+
+
+def _write_boundaries(tree: ast.Module) -> dict[str, tuple[str, ...]]:
+    """Find explicit process/builder handoffs for the frozen carrier set."""
+    found: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Return):
+            if isinstance(node.value, ast.Name) and node.value.id in _ENV_WRITE_CARRIERS:
+                found.setdefault(node.value.id, set()).add("return(env carrier)")
+            elif isinstance(node.value, ast.Dict):
+                found.setdefault("return_env", set()).add("return(env mapping)")
+            continue
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = _call_name(node.func)
+        direct_boundary = _subprocess_boundary_name(node)
+        for keyword in node.keywords:
+            if keyword.arg is None:
+                continue
+            carrier = _carrier_from_boundary_value(keyword.value)
+            if (
+                carrier is None
+                and call_name is not None
+                and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS
+                and isinstance(keyword.value, ast.Dict)
+            ):
+                carrier = keyword.arg
+            if carrier is None:
+                continue
+            boundary: str | None = None
+            if keyword.arg == "env" and direct_boundary is not None:
+                boundary = direct_boundary
+            elif call_name is not None and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS:
+                boundary = f"{call_name}({keyword.arg})"
+            if boundary is not None:
+                found.setdefault(carrier, set()).add(boundary)
+    return {carrier: tuple(sorted(boundaries)) for carrier, boundaries in found.items()}
+
+
+def _write_candidates(
+    tree: ast.Module,
+    module_scalars: dict[str, str],
+    flat_scalars: dict[str, str],
+) -> tuple[tuple[str, str, int], ...]:
+    """Collect (variable, carrier, line) triples before boundary filtering."""
+    candidates: list[tuple[str, str, int]] = []
+
+    def record_key(key: ast.expr, carrier: str, line: int) -> None:
+        resolved = _resolve_key_expr(key, module_scalars, flat_scalars)
+        if resolved is not None:
+            candidates.append((resolved[0], carrier, line))
+
+    def record_mapping(value: ast.expr, carrier: str, line: int) -> None:
+        for key in _literal_mapping_keys(value, module_scalars, flat_scalars):
+            candidates.append((key, carrier, line))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Subscript):
+                    carrier = _write_carrier(target.value)
+                    if carrier is not None:
+                        record_key(target.slice, carrier, target.lineno)
+                elif isinstance(target, ast.Name) and target.id in _ENV_WRITE_CARRIERS:
+                    record_mapping(node.value, target.id, node.lineno)
+        elif isinstance(node, ast.AnnAssign):
+            if (
+                isinstance(node.target, ast.Subscript)
+                and node.value is not None
+                and (carrier := _write_carrier(node.target.value)) is not None
+            ):
+                record_key(node.target.slice, carrier, node.target.lineno)
+            elif (
+                isinstance(node.target, ast.Name)
+                and node.target.id in _ENV_WRITE_CARRIERS
+                and node.value is not None
+            ):
+                record_mapping(node.value, node.target.id, node.lineno)
+        elif isinstance(node, ast.AugAssign):
+            carrier = _write_carrier(node.target)
+            if carrier is not None and isinstance(node.op, ast.BitOr):
+                record_mapping(node.value, carrier, node.lineno)
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            carrier = _write_carrier(node.func.value)
+            if carrier is not None and node.func.attr == "setdefault":
+                key = _get_call_key_arg(node)
+                if key is not None:
+                    record_key(key, carrier, node.lineno)
+            elif (
+                carrier is not None
+                and node.func.attr == "update"
+                and len(node.args) == 1
+                and not node.keywords
+            ):
+                record_mapping(node.args[0], carrier, node.lineno)
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+            record_mapping(node.value, "return_env", node.lineno)
+        if isinstance(node, ast.Call):
+            call_name = _call_name(node.func)
+            for keyword in node.keywords:
+                if (
+                    keyword.arg is not None
+                    and call_name is not None
+                    and (call_name, keyword.arg) in _ENV_BUILD_HANDOFFS
+                    and isinstance(keyword.value, ast.Dict)
+                ):
+                    record_mapping(keyword.value, keyword.arg, node.lineno)
+    return tuple(candidates)
+
+
+def production_env_write_surface(src_root: Path) -> ProductionEnvWriteSurface:
+    """Inventory literal environment writes with delivery-boundary evidence.
+
+    A syntactic write only enters the returned surface when its exact carrier
+    reaches a recognized subprocess ``env=`` boundary or an explicit backend
+    environment-builder handoff.  This is deliberately narrower than the
+    read scanner: contract evidence must show a route into the hook process,
+    rather than merely an unrelated dictionary mutation.
+    """
+    files = sorted(src_root.rglob("*.py"))
+    trees: dict[Path, ast.Module] = {}
+    unparseable: list[str] = []
+    for path in files:
+        try:
+            trees[path] = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError:
+            unparseable.append(path.relative_to(src_root).as_posix())
+
+    module_scalars: dict[Path, dict[str, str]] = {}
+    flat_scalars: dict[str, str] = {}
+    for path, tree in trees.items():
+        scalars = _collect_scalars(tree)
+        module_scalars[path] = scalars
+        flat_scalars.update(scalars)
+
+    writes: list[EnvWrite] = []
+    for path, tree in trees.items():
+        rel = path.relative_to(src_root).as_posix()
+        boundaries = _write_boundaries(tree)
+        for var, carrier, line in _write_candidates(tree, module_scalars[path], flat_scalars):
+            for boundary in boundaries.get(carrier, ()):
+                writes.append(
+                    EnvWrite(var=var, file=rel, line=line, carrier=carrier, boundary=boundary)
+                )
+    return ProductionEnvWriteSurface(writes=tuple(writes), unparseable_files=tuple(unparseable))
+
+
 @dataclass(frozen=True, slots=True)
 class AmbientEnvDisposition:
     var: str
@@ -534,10 +804,6 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
     "execution/evidence_reader.py:138": (
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
-    ),
-    "hooks/_hook_settings.py:316": (
-        "The `env_var` function parameter of _resolve_int() is supplied dynamically per caller;"
-        "not a module-level literal or resolvable constant."
     ),
     "server/_guards.py:401": (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
@@ -640,7 +906,7 @@ FORWARDING_SITES: dict[str, str] = {
         "PROTECTED_CAPTURE_ENV_VARS; the exclusion happens outside the single expression this"
         "scanner inspects."
     ),
-    "hooks/_dispatch.py:53": (
+    "hooks/_dispatch.py:80": (
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),
@@ -1235,6 +1501,24 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "boundaries."
         ),
     ),
+    "AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE": AmbientEnvDisposition(
+        var="AUTOSKILLIT_QUOTA_GUARD__CACHE_MAX_AGE",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Real AutoSkillit quota-policy override read by production hook code; scrubbed "
+            "as internal state that must not leak across test boundaries."
+        ),
+    ),
+    "AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS": AmbientEnvDisposition(
+        var="AUTOSKILLIT_QUOTA_GUARD__BUFFER_SECONDS",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "Real AutoSkillit quota-policy override read by production hook code; scrubbed "
+            "as internal state that must not leak across test boundaries."
+        ),
+    ),
     "AUTOSKILLIT_QUOTA_GUARD__DISABLED": AmbientEnvDisposition(
         var="AUTOSKILLIT_QUOTA_GUARD__DISABLED",
         disposition="scrub",
@@ -1643,15 +1927,6 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     ),
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT": AmbientEnvDisposition(
         var="CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
-        disposition="scrub",
-        owner="autoskillit",
-        justification=(
-            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
-            "of an unrelated lookup collection; never set as a real OS environment variable."
-        ),
-    ),
-    "CODEX_SCHEMA_VERSION": AmbientEnvDisposition(
-        var="CODEX_SCHEMA_VERSION",
         disposition="scrub",
         owner="autoskillit",
         justification=(

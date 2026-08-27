@@ -22,9 +22,13 @@ _EXPECTED_CALLERS = Counter(
     {
         (_COMPILE, "cli/session/_session_cook.py", "cook"): 1,
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
-        (_COMPILE, "workspace/session_skills.py", "_compile_reachable_profile_skill_catalog"): 1,
-        (_COMPILE, "workspace/session_skills.py", "materialize_profile_skills"): 1,
-        (_COMPILE, "workspace/session_skills.py", "_materialize_session"): 3,
+        (
+            _COMPILE,
+            "workspace/session_skill_catalog.py",
+            "_compile_reachable_profile_skill_catalog",
+        ): 1,
+        (_COMPILE, "workspace/session_skill_materialization.py", "materialize_profile_skills"): 1,
+        (_COMPILE, "workspace/session_skill_materialization.py", "_materialize_session"): 3,
         (
             _COMPILE,
             "server/tools/_serve_helpers.py",
@@ -37,11 +41,11 @@ _EXPECTED_CALLERS = Counter(
         (_ADAPT, "workspace/_projected_artifact/authority.py", "_plan"): 1,
         (
             _ADAPT,
-            "workspace/_projected_artifact/materialization.py",
+            "workspace/_projected_artifact/_documents.py",
             "project_agent_skill_document",
         ): 1,
-        (_ADAPT, "workspace/session_skills.py", "compile_session_skill_catalog"): 1,
-        (_ADAPT, "workspace/session_skills.py", "_materialize_session"): 1,
+        (_ADAPT, "workspace/session_skill_catalog.py", "compile_session_skill_catalog"): 1,
+        (_ADAPT, "workspace/session_skill_materialization.py", "_materialize_session"): 1,
         (_ADAPT, "workspace/skill_projection.py", "build_skill_projection_binding"): 1,
     }
 )
@@ -66,7 +70,7 @@ _COMPILATION_CONSUMERS = frozenset(
 _REFUSAL_EXEMPTIONS: tuple[tuple[str, str, str, str], ...] = (
     (
         _ADAPT,
-        "workspace/_projected_artifact/materialization.py",
+        "workspace/_projected_artifact/_documents.py",
         "project_agent_skill_document",
         (
             "Document rendering receives an already-admitted skill and has no structured "

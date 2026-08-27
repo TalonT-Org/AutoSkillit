@@ -169,13 +169,13 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Rollback removes only a newly-created external manifest while holding the "
         "incarnation's exclusive artifact lease.",
     ),
-    ("workspace/session_skills.py", "_remove_and_verify", "shutil.rmtree"): (
+    ("workspace/session_skill_lifecycle.py", "_remove_and_verify", "shutil.rmtree"): (
         1,
         "Generated session homes are ephemeral lease-owned artifacts, and cleanup "
         "refuses symlinks before recursively removing the exact requested home.",
     ),
     (
-        "workspace/session_skills.py",
+        "workspace/session_skill_materialization.py",
         "_remove_generated_home_skill_entry",
         "path.unlink",
     ): (
@@ -184,7 +184,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "symlink selected by the finalized catalog; the source profile is untouched.",
     ),
     (
-        "workspace/session_skills.py",
+        "workspace/session_skill_materialization.py",
         "_remove_generated_home_skill_entry",
         "shutil.rmtree",
     ): (
@@ -192,7 +192,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Reachability filtering removes only the exact generated-home profile-skill "
         "directory selected by the finalized catalog; the source profile is untouched.",
     ),
-    ("workspace/session_skills.py", "resolve_ephemeral_root", "probe.unlink"): (
+    ("workspace/session_skill_provider.py", "resolve_ephemeral_root", "probe.unlink"): (
         1,
         "The writable-root probe removes only the sentinel file it created in the "
         "candidate ephemeral session-artifact directory.",
@@ -206,7 +206,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Named publication seam called only while the projection authority owns LOCK_EX.",
     ),
     (
-        "workspace/_projected_artifact/materialization.py",
+        "workspace/_projected_artifact/_publication.py",
         "_replace_directory",
         "destination.unlink",
     ): (
@@ -214,7 +214,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Named root-publication seam called only while the projection authority owns LOCK_EX.",
     ),
     (
-        "workspace/_projected_artifact/materialization.py",
+        "workspace/_projected_artifact/_publication.py",
         "_replace_directory",
         "os.replace",
     ): (
@@ -222,7 +222,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Named root-publication seam called only while the projection authority owns LOCK_EX.",
     ),
     (
-        "workspace/_projected_artifact/materialization.py",
+        "workspace/_projected_artifact/_publication.py",
         "_replace_directory",
         "shutil.rmtree",
     ): (
@@ -255,7 +255,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Post-publication cleanup removes the private staging root, never the public root.",
     ),
     (
-        "workspace/_projected_artifact/materialization.py",
+        "workspace/_projected_artifact/_publication.py",
         "materialize_agent_skill_tree",
         "shutil.rmtree",
     ): (
@@ -263,7 +263,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Non-plugin session-tree staging cleanup is outside the managed projection root.",
     ),
     (
-        "workspace/_projected_artifact/materialization.py",
+        "workspace/_projected_artifact/_publication.py",
         "materialize_sanitized_plugin_root",
         "shutil.rmtree",
     ): (
@@ -437,7 +437,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The test gate forwards its exclusive worktree lease to the managed process tree.",
     ),
-    ("workspace/session_skills.py", "managed_session", "(lease_fd,)"): (
+    ("workspace/session_skill_manager.py", "managed_session", "(lease_fd,)"): (
         1,
         "The generated-home helper forwards its independent session-storage lease.",
     ),
@@ -621,10 +621,19 @@ def _scan_plugin_mutation_trees(
         # it out; it references no plugin-lifecycle symbol of its own, so it is named
         # explicitly to keep its staged session-root swaps under the ratchet.
         is_codex_projection_module = rel == "execution/backends/_codex_explorer_projection.py"
+        # These two shards were scanned as part of session_skills.py until the
+        # decomposition split them out; neither references a plugin-lifecycle symbol
+        # of its own, so they are named explicitly to keep their generated-home
+        # entry removal and ephemeral-root probe cleanup under the ratchet.
+        is_session_skill_mutation_module = rel in {
+            "workspace/session_skill_materialization.py",
+            "workspace/session_skill_provider.py",
+        }
         in_plugin_pkg = any(rel.startswith(f"{pkg}/") for pkg in _PLUGIN_LIFECYCLE_PACKAGES)
         if (
             not is_projected_artifact_module
             and not is_codex_projection_module
+            and not is_session_skill_mutation_module
             and not in_plugin_pkg
             and not _is_plugin_lifecycle_tree(tree)
         ):

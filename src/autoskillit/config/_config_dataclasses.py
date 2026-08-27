@@ -1,804 +1,221 @@
-"""Leaf configuration dataclasses for AutomationConfig."""
+"""Facade: re-exports every leaf config dataclass for backwards compatibility.
+
+The implementation now lives in owner-bounded modules
+(``_dataclasses_<concern>.py``). This facade exists so callers using
+``from autoskillit.config._config_dataclasses import <Symbol>`` keep working
+unchanged. ``from X import Y as Y`` re-exports preserve identity, so callers
+that compare dataclass instances by identity (e.g. ``is`` checks on
+``_COMMAND_UNSET``) keep matching across the facade boundary.
+
+Symbol origin:
+  - ``_dataclasses_diagnostics`` → DiagnosticsConfig, LinuxTracingConfig,
+    LoggingConfig, McpResponseConfig, OutputBudgetConfig
+  - ``_dataclasses_execution`` → RunSkillConfig
+  - ``_dataclasses_fleet`` → FleetConfig, ProcessTetherConfig, _MAX_CONCURRENT_DISPATCHES
+  - ``_dataclasses_github`` → GitHubConfig, QuotaGuardConfig, ReportBugConfig, TokenUsageConfig
+  - ``_dataclasses_providers`` → AgentBackendConfig, CoreRunConfig, ProvidersConfig,
+    ProviderProfileDef, RETIRED_PROFILE_KEYS
+  - ``_dataclasses_shared`` → ConfigSchemaError, _METADATA_KEYS, _SECRETS_ONLY_KEYS
+  - ``_dataclasses_surfaces`` → PacksConfig, SkillsConfig, SubsetsConfig,
+    WorkspaceConfig, WorktreeSetupConfig
+  - ``_dataclasses_test_gating`` → ClassifyFixConfig, ImplementGateConfig,
+    ReadDbConfig, ResetWorkspaceConfig, SafetyConfig, TestCheckConfig, _COMMAND_UNSET
+  - ``_dataclasses_workflow`` → BranchingConfig, CIConfig, MigrationConfig,
+    PlanConfig, ReviewConfig
+"""
 
 from __future__ import annotations
 
-import inspect
-import math
-import os
-from dataclasses import dataclass, field
-from typing import ClassVar
+from autoskillit.config._dataclasses_diagnostics import (
+    DiagnosticsConfig as DiagnosticsConfig,
+)
+from autoskillit.config._dataclasses_diagnostics import (
+    LinuxTracingConfig as LinuxTracingConfig,
+)
+from autoskillit.config._dataclasses_diagnostics import (
+    LoggingConfig as LoggingConfig,
+)
+from autoskillit.config._dataclasses_diagnostics import (
+    McpResponseConfig as McpResponseConfig,
+)
+from autoskillit.config._dataclasses_diagnostics import (
+    OutputBudgetConfig as OutputBudgetConfig,
+)
+from autoskillit.config._dataclasses_execution import (
+    RunSkillConfig as RunSkillConfig,
+)
+from autoskillit.config._dataclasses_fleet import (
+    _MAX_CONCURRENT_DISPATCHES as _MAX_CONCURRENT_DISPATCHES,
+)
+from autoskillit.config._dataclasses_fleet import (
+    FleetConfig as FleetConfig,
+)
+from autoskillit.config._dataclasses_fleet import (
+    ProcessTetherConfig as ProcessTetherConfig,
+)
+from autoskillit.config._dataclasses_github import (
+    GitHubConfig as GitHubConfig,
+)
+from autoskillit.config._dataclasses_github import (
+    QuotaGuardConfig as QuotaGuardConfig,
+)
+from autoskillit.config._dataclasses_github import (
+    ReportBugConfig as ReportBugConfig,
+)
+from autoskillit.config._dataclasses_github import (
+    TokenUsageConfig as TokenUsageConfig,
+)
+from autoskillit.config._dataclasses_providers import (
+    RETIRED_PROFILE_KEYS as RETIRED_PROFILE_KEYS,
+)
+from autoskillit.config._dataclasses_providers import (
+    AgentBackendConfig as AgentBackendConfig,
+)
+from autoskillit.config._dataclasses_providers import (
+    CoreRunConfig as CoreRunConfig,
+)
+from autoskillit.config._dataclasses_providers import (
+    ProviderProfileDef as ProviderProfileDef,
+)
+from autoskillit.config._dataclasses_providers import (
+    ProvidersConfig as ProvidersConfig,
+)
+from autoskillit.config._dataclasses_shared import (
+    _METADATA_KEYS as _METADATA_KEYS,
+)
+from autoskillit.config._dataclasses_shared import (
+    _SECRETS_ONLY_KEYS as _SECRETS_ONLY_KEYS,
+)
+from autoskillit.config._dataclasses_shared import (
+    ConfigSchemaError as ConfigSchemaError,
+)
+from autoskillit.config._dataclasses_surfaces import (
+    PacksConfig as PacksConfig,
+)
+from autoskillit.config._dataclasses_surfaces import (
+    SkillsConfig as SkillsConfig,
+)
+from autoskillit.config._dataclasses_surfaces import (
+    SubsetsConfig as SubsetsConfig,
+)
+from autoskillit.config._dataclasses_surfaces import (
+    WorkspaceConfig as WorkspaceConfig,
+)
+from autoskillit.config._dataclasses_surfaces import (
+    WorktreeSetupConfig as WorktreeSetupConfig,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    _COMMAND_UNSET as _COMMAND_UNSET,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    ClassifyFixConfig as ClassifyFixConfig,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    ImplementGateConfig as ImplementGateConfig,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    ReadDbConfig as ReadDbConfig,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    ResetWorkspaceConfig as ResetWorkspaceConfig,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    SafetyConfig as SafetyConfig,
+)
+from autoskillit.config._dataclasses_test_gating import (
+    TestCheckConfig as TestCheckConfig,
+)
+from autoskillit.config._dataclasses_workflow import (
+    BranchingConfig as BranchingConfig,
+)
+from autoskillit.config._dataclasses_workflow import (
+    CIConfig as CIConfig,
+)
+from autoskillit.config._dataclasses_workflow import (
+    MigrationConfig as MigrationConfig,
+)
+from autoskillit.config._dataclasses_workflow import (
+    PlanConfig as PlanConfig,
+)
+from autoskillit.config._dataclasses_workflow import (
+    ReviewConfig as ReviewConfig,
+)
 
+# Preserve transitive re-exports of autoskillit.core symbols that the prior
+# monolithic _config_dataclasses.py exposed via `from autoskillit.core import (...)`
+# at module scope. Callers using `from autoskillit.config._config_dataclasses
+# import <core_symbol>` keep working unchanged.
 from autoskillit.core import (
-    DRY_WALKTHROUGH_VERIFIED_MARKER,
-    KNOWN_BACKEND_NAMES,
-    LABEL_LIFECYCLE_REGISTRY,
-    RECIPE_RESPONSE_DEFAULT_BYTES,
-    RECIPE_RESPONSE_MAX_UTF8_BYTES,
-    RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
-    IssueLabelState,
-    OutputFormat,
-    Utf8ByteLimit,
-    get_logger,
+    DRY_WALKTHROUGH_VERIFIED_MARKER as DRY_WALKTHROUGH_VERIFIED_MARKER,
+)
+from autoskillit.core import (
+    KNOWN_BACKEND_NAMES as KNOWN_BACKEND_NAMES,
+)
+from autoskillit.core import (
+    LABEL_LIFECYCLE_REGISTRY as LABEL_LIFECYCLE_REGISTRY,
+)
+from autoskillit.core import (
+    RECIPE_RESPONSE_DEFAULT_BYTES as RECIPE_RESPONSE_DEFAULT_BYTES,
+)
+from autoskillit.core import (
+    RECIPE_RESPONSE_MAX_UTF8_BYTES as RECIPE_RESPONSE_MAX_UTF8_BYTES,
+)
+from autoskillit.core import (
+    RECIPE_SECTION_RESPONSE_FLOOR_BYTES as RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
+)
+from autoskillit.core import (
+    IssueLabelState as IssueLabelState,
+)
+from autoskillit.core import (
+    OutputFormat as OutputFormat,
+)
+from autoskillit.core import (
+    Utf8ByteLimit as Utf8ByteLimit,
 )
 
-logger = get_logger(__name__)
-
-
-class ConfigSchemaError(ValueError):
-    """Raised when a config YAML layer contains unrecognized or misplaced keys."""
-
-
-_SECRETS_ONLY_KEYS: frozenset[str] = frozenset({"github.token"})
-_METADATA_KEYS: frozenset[str] = frozenset({"version"})
-
-# Retired profile YAML keys. Append-only; entries require a trailing comment
-# naming the retiring version and tracking issue.
-RETIRED_PROFILE_KEYS: frozenset[str] = frozenset(
-    {
-        # Removed in 0.10.1007. No consumer existed: _profile_to_env projects
-        # base_url / timeout_seconds / api_key_env / raw_env only. See #4685.
-        "context_window",
-    }
-)
-
-_DEFAULT_COMMAND: tuple[str, ...] = ("task", "test-check")
-
-# Unique sentinel object — identity check in __post_init__ detects whether
-# `command` was explicitly supplied by the caller or left at its default.
-_COMMAND_UNSET: list[str] = []
-
-
-@dataclass
-class TestCheckConfig:
-    command: list[str] = field(default_factory=lambda: _COMMAND_UNSET)
-    timeout: int = 600
-    filter_mode: str | None = None
-    base_ref: str | None = None
-    commands: list[list[str]] | None = None
-
-    def __post_init__(self) -> None:
-        if self.command is _COMMAND_UNSET:
-            self.command = list(_DEFAULT_COMMAND)
-        elif self.commands is not None:
-            raise ConfigSchemaError(
-                "test_check: 'command' and 'commands' are mutually exclusive; "
-                "omit 'command' when using 'commands'"
-            )
-
-    @property
-    def effective_commands(self) -> list[list[str]]:
-        return self.commands if self.commands is not None else [self.command]
-
-
-@dataclass
-class ClassifyFixConfig:
-    path_prefixes: list[str] = field(default_factory=list)
-
-
-@dataclass
-class ResetWorkspaceConfig:
-    command: list[str] | None = None
-    preserve_dirs: set[str] = field(default_factory=set)
-
-
-@dataclass
-class ImplementGateConfig:
-    marker: str = DRY_WALKTHROUGH_VERIFIED_MARKER
-    skill_names: set[str] = field(
-        default_factory=lambda: {
-            "/implement-worktree",
-            "/implement-worktree-no-merge",
-        }
-    )
-    allowed_plan_dirs: set[str] = field(default_factory=lambda: {"make-plan", "rectify"})
-
-
-@dataclass
-class SafetyConfig:
-    reset_guard_marker: str = ".autoskillit-workspace"
-    require_dry_walkthrough: bool = True
-    test_gate_on_merge: bool = True
-    protected_branches: list[str] = field(default_factory=lambda: ["main", "develop", "stable"])
-
-
-@dataclass
-class ReadDbConfig:
-    timeout: int = 30
-    max_rows: int = 10000
-
-
-@dataclass
-class RunSkillConfig:
-    timeout: int = 7200
-    stale_threshold: int = 1200  # 20 minutes
-    completion_marker: str = "%%ORDER_UP%%"
-    completion_drain_timeout: float = 5.0
-    exit_after_stop_delay_ms: int = 2000
-    natural_exit_grace_seconds: float = 3.0
-    idle_output_timeout: int = 1000
-    max_suppression_seconds: int = 1800
-    stream_idle_timeout_ms: int = 600000
-    mcp_tool_timeout_sec: float = 14364.0
-    completion_child_deferral_ceiling_seconds: float = 120.0
-
-    # Safety margin (ms) above exit_after_stop_delay_ms that
-    # natural_exit_grace_seconds must cover so the drain window can absorb
-    # the CLI self-exit delay without a race.
-    _EXIT_GRACE_BUFFER_MS: ClassVar[int] = 500
-
-    def __post_init__(self) -> None:
-        if self.timeout <= 0:
-            raise ValueError(f"timeout={self.timeout} must be > 0.")
-        if self.stale_threshold < 0:
-            raise ValueError(f"stale_threshold={self.stale_threshold} must be >= 0.")
-        if self.idle_output_timeout < 0:
-            raise ValueError(f"idle_output_timeout={self.idle_output_timeout} must be >= 0.")
-        if self.max_suppression_seconds < 0:
-            raise ValueError(
-                f"max_suppression_seconds={self.max_suppression_seconds} must be >= 0."
-            )
-        mcp_timeout = self.mcp_tool_timeout_sec
-        if (
-            not isinstance(mcp_timeout, (int, float))
-            or isinstance(mcp_timeout, bool)
-            or not math.isfinite(mcp_timeout)
-            or mcp_timeout <= 0
-        ):
-            raise ValueError(
-                f"mcp_tool_timeout_sec={mcp_timeout} must be a finite positive number of seconds."
-            )
-        if self.stream_idle_timeout_ms < 0:
-            raise ValueError(
-                f"stream_idle_timeout_ms={self.stream_idle_timeout_ms} must be >= 0 "
-                "(use 0 to disable injection)."
-            )
-        if self.completion_child_deferral_ceiling_seconds < 0:
-            raise ValueError(
-                f"completion_child_deferral_ceiling_seconds="
-                f"{self.completion_child_deferral_ceiling_seconds} must be >= 0."
-            )
-        required_ms = self.exit_after_stop_delay_ms + self._EXIT_GRACE_BUFFER_MS
-        # Convert seconds → ms for the comparison
-        if self.natural_exit_grace_seconds * 1000 < required_ms:
-            raise ValueError(
-                f"natural_exit_grace_seconds={self.natural_exit_grace_seconds} is too small: "
-                f"{self.natural_exit_grace_seconds * 1000:.0f}ms < "
-                f"{required_ms}ms (exit_after_stop_delay_ms + {self._EXIT_GRACE_BUFFER_MS}). "
-                "Increase natural_exit_grace_seconds so the drain window can absorb the "
-                "CLI self-exit delay."
-            )
-
-    @property
-    def output_format(self) -> OutputFormat:
-        """Derived from feature requirements — not independently configurable."""
-        return OutputFormat.derive(completion_marker=self.completion_marker)
-
-
-@dataclass
-class CoreRunConfig:
-    default_model: str = "sonnet"
-    model_override: str | None = None
-    provider: str = "anthropic"
-    step_overrides: dict[str, str] = field(default_factory=dict)
-    recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.default_model:
-            raise ValueError("CoreRunConfig.default_model must not be empty")
-        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
-        # all children commented out (or otherwise empty) parse to None; treating
-        # them as empty matches user intent and avoids spurious validation errors
-        # during collection when a user-level ~/.autoskillit/config.yaml contains
-        # such a section.
-        self.recipe_overrides = {
-            recipe: (overrides if overrides is not None else {})
-            for recipe, overrides in self.recipe_overrides.items()
-        }
-        for step, model_val in self.step_overrides.items():
-            if not isinstance(model_val, str):
-                raise ValueError(
-                    f"step_overrides[{step!r}] must be a string, got {type(model_val).__name__!r}"
-                )
-        for recipe, overrides in self.recipe_overrides.items():
-            if not isinstance(overrides, dict):
-                raise ValueError(
-                    f"recipe_overrides[{recipe!r}] must be a dict, "
-                    f"got {type(overrides).__name__!r}"
-                )
-            for step, model_val in overrides.items():
-                if not isinstance(model_val, str):
-                    raise ValueError(
-                        f"recipe_overrides[{recipe!r}][{step!r}] must be a string, "
-                        f"got {type(model_val).__name__!r}"
-                    )
-
-
-@dataclass
-class WorktreeSetupConfig:
-    command: list[str] | None = None
-
-
-@dataclass
-class MigrationConfig:
-    suppressed: list[str] = field(default_factory=list)
-
-
-@dataclass
-class TokenUsageConfig:
-    verbosity: str = "summary"  # "summary" | "none"
-
-
-@dataclass
-class QuotaGuardConfig:
-    enabled: bool = True
-    short_window_enabled: bool = True
-    long_window_enabled: bool = True
-    short_window_threshold: float = 85.0
-    long_window_threshold: float = 95.0
-    long_window_patterns: list[str] = field(
-        default_factory=lambda: ["seven_day", "sonnet", "opus"]
-    )
-    buffer_seconds: int = 60
-    cache_max_age: int = 300
-    cache_refresh_interval: int = 240
-    credentials_path: str = "~/.claude/.credentials.json"
-    cache_path: str = "~/.claude/autoskillit_quota_cache.json"
-
-
-@dataclass
-class GitHubConfig:
-    token: str | None = None
-    default_repo: str | None = None
-    review_comment_cap: int = 50
-    in_progress_label: str = "in-progress"
-    staged_label: str = "staged"
-    fail_label: str = "fail"
-    queued_label: str = "queued"
-    allowed_labels: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if (
-            isinstance(self.review_comment_cap, bool)
-            or not isinstance(self.review_comment_cap, int)
-            or self.review_comment_cap <= 0
-        ):
-            raise ValueError("github.review_comment_cap must be a positive integer")
-
-    def check_label_allowed(self, label: str) -> str | None:
-        """Return None if label is permitted, or an error message string if not.
-
-        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
-        Lifecycle labels (QUEUED, IN_PROGRESS, STAGED, FAIL) are always permitted.
-        """
-        if not self.allowed_labels:
-            return None
-        if self.state_for_label(label) is not None:
-            return None
-        if label not in self.allowed_labels:
-            allowed_sorted = sorted(self.allowed_labels)
-            return (
-                f"Label '{label}' is not in the configured allowed labels. "
-                f"Allowed: {allowed_sorted}. "
-                f"Add '{label}' to github.allowed_labels in your config to permit it."
-            )
-        return None
-
-    def label_for_state(self, state: IssueLabelState) -> str:
-        _map: dict[IssueLabelState, str] = {
-            IssueLabelState.QUEUED: self.queued_label,
-            IssueLabelState.IN_PROGRESS: self.in_progress_label,
-            IssueLabelState.STAGED: self.staged_label,
-            IssueLabelState.FAIL: self.fail_label,
-        }
-        if state not in _map:
-            raise ValueError(f"No label configured for state {state!r}")
-        return _map[state]
-
-    def state_for_label(self, label: str) -> IssueLabelState | None:
-        for state in IssueLabelState:
-            if self.label_for_state(state) == label:
-                return state
-        return None
-
-    def labels_for_states(self, states: frozenset[IssueLabelState]) -> list[str]:
-        return [self.label_for_state(s) for s in states]
-
-    def resolve_label_metadata(self, label: str) -> tuple[str, str, list[str]]:
-        """Return (color, description, remove_labels) for a lifecycle label.
-
-        Uses the registry when label maps to a lifecycle state; falls back to
-        IN_PROGRESS defaults for custom labels not in the registry.
-        """
-
-        state = self.state_for_label(label)
-        if state is not None:
-            label_def = LABEL_LIFECYCLE_REGISTRY[state]
-            return (
-                label_def.color,
-                label_def.description,
-                self.labels_for_states(label_def.removes_on_entry),
-            )
-        return (
-            "fbca04",
-            "Issue is actively being processed by a pipeline session",
-            [self.fail_label],
-        )
-
-    def all_lifecycle_labels(self) -> list[str]:
-        return [self.label_for_state(s) for s in IssueLabelState]
-
-    def check_labels_allowed(self, labels: list[str]) -> str | None:
-        """Return None if all labels are permitted, or an error message for the first violation.
-
-        When allowed_labels is empty, all labels are permitted (unrestricted/opt-out mode).
-        """
-        for label in labels:
-            if err := self.check_label_allowed(label):
-                return err
-        return None
-
-
-@dataclass
-class ReportBugConfig:
-    timeout: int = 600
-    model: str | None = None
-    report_dir: str | None = None  # None = resolved temp dir + /bug-reports/
-    github_filing: bool = True
-    github_labels: list[str] = field(default_factory=lambda: ["autoreported", "bug"])
-
-
-@dataclass
-class LoggingConfig:
-    level: str = "INFO"
-    json_output: bool | None = None  # None = auto-detect from stderr.isatty()
-
-
-@dataclass
-class DiagnosticsConfig:
-    pipeline_health: bool = False
-
-
-@dataclass
-class LinuxTracingConfig:
-    enabled: bool = True
-    proc_interval: float = 5.0
-    log_dir: str = ""  # empty = platform default (~/.local/share/autoskillit/logs on Linux)
-    tmpfs_path: str = "/dev/shm"  # RAM-backed tmpfs for crash-resilient streaming
-    max_sessions: int = 2000
-
-    def __post_init__(self) -> None:
-        if self.tmpfs_path != "/dev/shm" or not os.environ.get("PYTEST_CURRENT_TEST"):
-            return
-        # Only raise when called directly from test code — not from library machinery
-        # (e.g. AutomationConfig default_factory, from_dynaconf). We inspect the call
-        # frame two levels up: __post_init__ → __init__ (generated) → actual caller.
-        frame = inspect.currentframe()
-        init_frame = frame.f_back if frame is not None else None
-        caller = init_frame.f_back if init_frame is not None else None
-        if caller is not None and "/tests/" in (caller.f_code.co_filename or ""):
-            raise RuntimeError(
-                "LinuxTracingConfig.tmpfs_path is '/dev/shm' but PYTEST_CURRENT_TEST "
-                "is set — this test would write to the real shared tmpfs and pollute "
-                "production state. Override tmpfs_path with a test-local path, e.g.: "
-                "LinuxTracingConfig(tmpfs_path=str(tmp_path)). "
-                "Use the isolated_tracing_config fixture for new tests."
-            )
-        del frame, init_frame, caller
-
-
-@dataclass
-class McpResponseConfig:
-    alert_threshold_tokens: int = 2000
-
-
-@dataclass
-class OutputBudgetConfig:
-    """Model-context output limits.
-
-    ``*_chars`` values bound human-readable previews. ``response_max_bytes``
-    bounds the compact serialized handler payload; it is neither a tokenizer
-    estimate nor a JSON-RPC envelope limit.
-    """
-
-    inline_max_chars: int = 5000
-    head_chars: int = 2500
-    tail_chars: int = 2500
-    response_max_bytes: Utf8ByteLimit = Utf8ByteLimit(RECIPE_RESPONSE_DEFAULT_BYTES)
-    page_max_bytes: Utf8ByteLimit | None = Utf8ByteLimit(RECIPE_RESPONSE_MAX_UTF8_BYTES)
-    guard_enabled: bool = True
-    shell_max_inline_bytes: int = 12_000
-    capture_capacity: dict[str, int] | None = None
-
-    def __post_init__(self) -> None:
-        if self.response_max_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES:
-            raise ValueError(
-                f"response_max_bytes must be at least {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
-            )
-        if (
-            self.page_max_bytes is not None
-            and self.page_max_bytes < RECIPE_SECTION_RESPONSE_FLOOR_BYTES
-        ):
-            raise ValueError(
-                f"page_max_bytes must be at least {RECIPE_SECTION_RESPONSE_FLOOR_BYTES} bytes"
-            )
-        if (
-            self.page_max_bytes is not None
-            and self.page_max_bytes > RECIPE_RESPONSE_MAX_UTF8_BYTES
-        ):
-            raise ValueError(
-                f"page_max_bytes must not exceed {RECIPE_RESPONSE_MAX_UTF8_BYTES} bytes"
-            )
-        if self.page_max_bytes is not None and self.response_max_bytes > self.page_max_bytes:
-            raise ValueError(
-                f"response_max_bytes ({self.response_max_bytes}) must not exceed "
-                f"page_max_bytes ({self.page_max_bytes})"
-            )
-
-
-@dataclass
-class BranchingConfig:
-    default_base_branch: str = "main"
-    promotion_target: str = "main"  # Canonical upstream default for staged-label comparison.
-
-
-@dataclass
-class CIConfig:
-    workflow: str | None = None
-    event: str | None = None
-
-
-@dataclass
-class ReviewConfig:
-    local_review_rounds: int = 2
-
-    def __post_init__(self) -> None:
-        if self.local_review_rounds < 0:
-            raise ValueError(
-                f"ReviewConfig.local_review_rounds must be >= 0, got {self.local_review_rounds}"
-            )
-
-
-_VALID_ADVERSARIAL_REVIEW_LEVELS: frozenset[str] = frozenset({"auto", "full", "none"})
-
-
-@dataclass
-class PlanConfig:
-    adversarial_review_level: str = "auto"
-
-    def __post_init__(self) -> None:
-        if self.adversarial_review_level not in _VALID_ADVERSARIAL_REVIEW_LEVELS:
-            raise ValueError(
-                f"PlanConfig.adversarial_review_level must be one of "
-                f"{sorted(_VALID_ADVERSARIAL_REVIEW_LEVELS)}, "
-                f"got {self.adversarial_review_level!r}"
-            )
-
-
-@dataclass
-class SkillsConfig:
-    tier1: list[str] = field(default_factory=list)
-    tier2: list[str] = field(default_factory=list)
-    tier3: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        t1, t2, t3 = set(self.tier1), set(self.tier2), set(self.tier3)
-        dupes = (t1 & t2) | (t1 & t3) | (t2 & t3)
-        if dupes:
-            raise ValueError(f"Skills assigned to multiple tiers: {sorted(dupes)}")
-
-
-@dataclass
-class SubsetsConfig:
-    disabled: list[str] = field(default_factory=list)
-    custom_tags: dict[str, list[str]] = field(default_factory=dict)
-
-
-@dataclass
-class PacksConfig:
-    enabled: list[str] = field(default_factory=list)
-
-
-@dataclass
-class WorkspaceConfig:
-    worktree_root: str | None = None  # null = auto-resolve to ../worktrees/
-    runs_root: str | None = None  # null = auto-resolve to ../autoskillit-runs/
-    temp_dir: str | None = None  # null = canonical default (see resolve_temp_dir)
-
-
-_MAX_CONCURRENT_DISPATCHES = 8
-
-
-@dataclass
-class FleetConfig:
-    default_timeout_sec: int = 3600
-    max_concurrent_dispatches: int = 3  # default; ceiling is _MAX_CONCURRENT_DISPATCHES
-    max_total_issues: int = 12
-    enable_deadline_extension: bool = True
-    max_extension_seconds: float = 7200
-    idle_output_timeout: float = 1800
-    acquire_timeout_sec: float = 300.0
-    max_issues_per_food_truck: int = 3
-    inspector_model: str = ""
-
-    def validate(self, feature_enabled: bool) -> None:
-        """Validate only when the feature is active."""
-        if not feature_enabled:
-            return
-        if self.default_timeout_sec <= 0:
-            raise ValueError(
-                f"default_timeout_sec must be positive, got {self.default_timeout_sec}"
-            )
-        if self.max_concurrent_dispatches < 1:
-            raise ValueError(
-                f"max_concurrent_dispatches must be >= 1, got {self.max_concurrent_dispatches}"
-            )
-        if self.max_concurrent_dispatches > _MAX_CONCURRENT_DISPATCHES:
-            raise ValueError(
-                f"max_concurrent_dispatches must be <= {_MAX_CONCURRENT_DISPATCHES},"
-                f" got {self.max_concurrent_dispatches}"
-            )
-        if self.max_total_issues < 1:
-            raise ValueError(f"max_total_issues must be >= 1, got {self.max_total_issues}")
-        if self.max_extension_seconds <= 0:
-            raise ValueError(
-                f"max_extension_seconds must be positive, got {self.max_extension_seconds}"
-            )
-        if self.idle_output_timeout < 0:
-            raise ValueError(
-                f"idle_output_timeout must be non-negative, got {self.idle_output_timeout}"
-            )
-        if self.acquire_timeout_sec <= 0:
-            raise ValueError(
-                f"acquire_timeout_sec must be positive, got {self.acquire_timeout_sec}"
-            )
-        if self.max_issues_per_food_truck < 1:
-            raise ValueError(
-                f"max_issues_per_food_truck must be >= 1, got {self.max_issues_per_food_truck}"
-            )
-        if self.max_issues_per_food_truck > self.max_total_issues:
-            raise ValueError(
-                f"max_issues_per_food_truck must be <= max_total_issues"
-                f" ({self.max_total_issues}), got {self.max_issues_per_food_truck}"
-            )
-
-
-@dataclass
-class ProcessTetherConfig:
-    """Absolute ceilings for the process-tether spawner-death sweep.
-
-    Literal defaults must equal ``execution.process._process_tether``'s
-    ``DEFAULT_TETHER_CEILING_SECONDS``/``INTERACTIVE_TETHER_CEILING_SECONDS``
-    module constants — config cannot import execution (IL-002), so a parity
-    test in ``tests/execution/test_process_tether.py`` ties the two literals
-    together instead of sharing them by import.
-    """
-
-    orphan_ceiling_seconds: float = 86400.0
-    cook_ceiling_seconds: float = 172800.0
-    # Optional, default-off kernel-enforced ceiling via
-    # `systemd-run --user --scope`; defense-in-depth only, never the ceiling
-    # of record — see docs/decisions/0010-systemd-scope-defense-in-depth.md
-    # for the WSL2/linger/probe preconditions and why RuntimeMaxSec is
-    # unreliable.
-    systemd_scope_enabled: bool = False
-
-    def validate(self) -> None:
-        if self.orphan_ceiling_seconds <= 0:
-            raise ValueError(
-                f"orphan_ceiling_seconds must be positive, got {self.orphan_ceiling_seconds}"
-            )
-        if self.cook_ceiling_seconds <= 0:
-            raise ValueError(
-                f"cook_ceiling_seconds must be positive, got {self.cook_ceiling_seconds}"
-            )
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderProfileDef:
-    """Static definition of a named LLM provider profile.
-
-    Used as an element in a provider registry. Immutable after construction.
-    """
-
-    name: str
-    base_url: str | None = None
-    timeout_seconds: int | None = None
-    api_key_env: str | None = None
-    raw_env: dict[str, str] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if self.timeout_seconds is not None and self.timeout_seconds < 0:
-            raise ValueError(f"timeout_seconds must be non-negative, got {self.timeout_seconds}")
-
-
-@dataclass
-class ProvidersConfig:
-    """Configuration for alternative LLM provider routing.
-
-    API keys must live in .secrets.yaml or environment variables and must
-    never be committed to version-controlled config files.
-    """
-
-    default_provider: str | None = None
-    profiles: dict[str, dict[str, str | None]] = field(default_factory=dict)
-    step_overrides: dict[str, str] = field(default_factory=dict)
-    recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
-    model_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
-    provider_retry_limit: int = 2
-
-    def __post_init__(self) -> None:
-        if self.provider_retry_limit < 1:
-            raise ValueError(f"provider_retry_limit must be >= 1, got {self.provider_retry_limit}")
-        for name, profile in self.profiles.items():
-            for k, v in profile.items():
-                if v is not None and not isinstance(v, str):
-                    raise ValueError(
-                        f"profiles[{name!r}][{k!r}] must be a string or null, "
-                        f"got {type(v).__name__!r}"
-                    )
-        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
-        # all children commented out (or otherwise empty) parse to None; treating
-        # them as empty matches user intent and avoids spurious validation errors
-        # during collection when a user-level ~/.autoskillit/config.yaml contains
-        # such a section.
-        self.recipe_overrides = {
-            recipe: (overrides if overrides is not None else {})
-            for recipe, overrides in self.recipe_overrides.items()
-        }
-        for recipe, overrides in self.recipe_overrides.items():
-            if not isinstance(overrides, dict):
-                raise ValueError(
-                    f"recipe_overrides[{recipe!r}] must be a dict, "
-                    f"got {type(overrides).__name__!r}"
-                )
-            for step, provider in overrides.items():
-                if not isinstance(provider, str):
-                    raise ValueError(
-                        f"recipe_overrides[{recipe!r}][{step!r}] must be a string, "
-                        f"got {type(provider).__name__!r}"
-                    )
-        for recipe, overrides in self.model_overrides.items():
-            if not isinstance(overrides, dict):
-                raise ValueError(
-                    f"model_overrides[{recipe!r}] must be a dict, got {type(overrides).__name__!r}"
-                )
-            for step, model_val in overrides.items():
-                if not isinstance(model_val, str):
-                    raise ValueError(
-                        f"model_overrides[{recipe!r}][{step!r}] must be a string, "
-                        f"got {type(model_val).__name__!r}"
-                    )
-        known = set(self.profiles.keys()) | {"anthropic"}
-        for step, profile_name in self.step_overrides.items():
-            if profile_name not in known:
-                logger.warning(
-                    "step_override_references_unknown_profile",
-                    step=step,
-                    profile=profile_name,
-                    known_profiles=sorted(known),
-                )
-        for recipe, step_map in self.recipe_overrides.items():
-            for step, profile_name in step_map.items():
-                if profile_name not in known:
-                    logger.warning(
-                        "recipe_override_references_unknown_profile",
-                        recipe=recipe,
-                        step=step,
-                        profile=profile_name,
-                        known_profiles=sorted(known),
-                    )
-
-    @property
-    def resolved_profiles(self) -> dict[str, ProviderProfileDef]:
-        result: dict[str, ProviderProfileDef] = {}
-        for name, raw_dict in self.profiles.items():
-            copy = {k: v for k, v in raw_dict.items() if v is not None}
-            base_url = copy.pop("base_url", None)
-            timeout_str = copy.pop("timeout_seconds", None)
-            api_key_env = copy.pop("api_key_env", None)
-            # Drop retired keys before raw_env captures the remaining provider fields.
-            for retired_key in RETIRED_PROFILE_KEYS:
-                copy.pop(retired_key, None)
-            result[name] = ProviderProfileDef(
-                name=name,
-                base_url=base_url,
-                timeout_seconds=int(timeout_str)
-                if timeout_str is not None and timeout_str != ""
-                else None,
-                api_key_env=api_key_env,
-                raw_env=copy,
-            )
-        return result
-
-
-@dataclass
-class AgentBackendConfig:
-    backend: str = "claude-code"
-    step_overrides: dict[str, str] = field(default_factory=dict)
-    recipe_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
-    # Repository-scoped toggle: when True, the Claude launcher neutralizes
-    # CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS in both the process env and the
-    # target repository's .claude/settings*.json files before spawn. Defaults
-    # to False — repositories with the option disabled remain byte-for-byte
-    # unchanged. Independent from join.required. Refs #4575.
-    force_inactive_agent_teams: bool = False
-    # When True, open_kitchen (both visibility branches) and _pre_reveal_kitchen
-    # pre-apply the "exploration" tag reveal alongside kitchen/plan-review, for
-    # session types eligible to bind exploration authority. Defaults to False —
-    # the HMAC capability lease remains the authorization boundary regardless;
-    # this only auto-provisions the weaker visibility gate. consumer:
-    # server/tools/tools_kitchen/_open_kitchen.py open_kitchen,
-    # server/_lifespan/_session_boots.py _pre_reveal_kitchen. Refs #4684.
-    auto_provision_exploration: bool = False
-
-    def __post_init__(self) -> None:
-        if not self.backend:
-            raise ValueError("backend must not be empty")
-        elif self.backend not in KNOWN_BACKEND_NAMES:
-            logger.warning(
-                "unknown_backend",
-                backend=self.backend,
-                valid_names=sorted(KNOWN_BACKEND_NAMES),
-            )
-
-        # Validate step_overrides shape: values must be strings.
-        for step_name, override_backend in self.step_overrides.items():
-            if not isinstance(step_name, str):
-                raise ValueError(
-                    f"agent_backend.step_overrides keys must be strings; "
-                    f"got {type(step_name).__name__}"
-                )
-            if not isinstance(override_backend, str):
-                raise ValueError(
-                    f"agent_backend.step_overrides[{step_name!r}] must be a string; "
-                    f"got {type(override_backend).__name__}"
-                )
-            if override_backend not in KNOWN_BACKEND_NAMES:
-                logger.warning(
-                    "step_override_references_unknown_backend",
-                    step=step_name,
-                    backend=override_backend,
-                    valid_names=sorted(KNOWN_BACKEND_NAMES),
-                )
-
-        # Coerce None recipe_overrides entries to empty dicts. YAML sections with
-        # all children commented out (or otherwise empty) parse to None; treating
-        # them as empty matches user intent and avoids spurious validation errors
-        # during collection when a user-level ~/.autoskillit/config.yaml contains
-        # such a section.
-        self.recipe_overrides = {
-            recipe: (overrides if overrides is not None else {})
-            for recipe, overrides in self.recipe_overrides.items()
-        }
-
-        # Validate recipe_overrides shape: outer values are dicts, inner values are strings.
-        for recipe_name, recipe_map in self.recipe_overrides.items():
-            if not isinstance(recipe_name, str):
-                raise ValueError(
-                    f"agent_backend.recipe_overrides keys must be strings; "
-                    f"got {type(recipe_name).__name__}"
-                )
-            if not isinstance(recipe_map, dict):
-                raise ValueError(
-                    f"agent_backend.recipe_overrides[{recipe_name!r}] must be a dict; "
-                    f"got {type(recipe_map).__name__}"
-                )
-            for step_name, override_backend in recipe_map.items():
-                if not isinstance(step_name, str):
-                    raise ValueError(
-                        f"agent_backend.recipe_overrides[{recipe_name!r}] keys must be "
-                        f"strings; got {type(step_name).__name__}"
-                    )
-                if not isinstance(override_backend, str):
-                    raise ValueError(
-                        f"agent_backend.recipe_overrides[{recipe_name!r}][{step_name!r}] "
-                        f"must be a string; got {type(override_backend).__name__}"
-                    )
-                if override_backend not in KNOWN_BACKEND_NAMES:
-                    logger.warning(
-                        "recipe_override_references_unknown_backend",
-                        recipe=recipe_name,
-                        step=step_name,
-                        backend=override_backend,
-                        valid_names=sorted(KNOWN_BACKEND_NAMES),
-                    )
+__all__ = [
+    "AgentBackendConfig",
+    "BranchingConfig",
+    "CIConfig",
+    "ClassifyFixConfig",
+    "ConfigSchemaError",
+    "CoreRunConfig",
+    "DiagnosticsConfig",
+    "FleetConfig",
+    "GitHubConfig",
+    "ImplementGateConfig",
+    "LinuxTracingConfig",
+    "LoggingConfig",
+    "McpResponseConfig",
+    "MigrationConfig",
+    "OutputBudgetConfig",
+    "PacksConfig",
+    "PlanConfig",
+    "ProcessTetherConfig",
+    "ProvidersConfig",
+    "ProviderProfileDef",
+    "QuotaGuardConfig",
+    "ReadDbConfig",
+    "ReportBugConfig",
+    "ResetWorkspaceConfig",
+    "ReviewConfig",
+    "RunSkillConfig",
+    "SafetyConfig",
+    "SkillsConfig",
+    "SubsetsConfig",
+    "TestCheckConfig",
+    "TokenUsageConfig",
+    "WorkspaceConfig",
+    "WorktreeSetupConfig",
+    "RETIRED_PROFILE_KEYS",
+    # Transitive autoskillit.core re-exports preserved at the legacy path:
+    "DRY_WALKTHROUGH_VERIFIED_MARKER",
+    "IssueLabelState",
+    "KNOWN_BACKEND_NAMES",
+    "LABEL_LIFECYCLE_REGISTRY",
+    "OutputFormat",
+    "RECIPE_RESPONSE_DEFAULT_BYTES",
+    "RECIPE_RESPONSE_MAX_UTF8_BYTES",
+    "RECIPE_SECTION_RESPONSE_FLOOR_BYTES",
+    "Utf8ByteLimit",
+]

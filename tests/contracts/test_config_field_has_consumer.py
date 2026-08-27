@@ -4,7 +4,7 @@ Generalizes the ``inert-tracked:#NNNN`` discipline documented in
 tests/AGENTS.md § run_skill Parameter-Role Ledgers (precedent:
 tests/contracts/test_recipe_step_field_ledger.py, which applies it to
 ``RecipeStep`` fields) to config dataclass fields. A field is "live" iff
-either (a) some production module outside config/_config_dataclasses.py
+either (a) some production module outside the config/ tree
 reads ``.<field_name>`` directly, (b) a method defined on the same
 dataclass reads ``self.<field_name>`` and that method itself has an
 external call site (indirect consumption — e.g. ``GitHubConfig.
@@ -27,51 +27,99 @@ different thing (REQ-CONFIG-001: every dataclass field is populated by
 _build_subconfig) — a field can be populated and still have zero readers.
 
 Scope: enforces every ``@dataclass``/``@dataclass(frozen=True, slots=True)``
-directly defined in config/_config_dataclasses.py (reflectively discovered,
-not hand-maintained — mirrors the reflective-discovery pattern in
-tests/execution/test_launch_force_inactive_call_path_reflective.py). One
-pre-existing orphan surfaced by widening from the original
-AgentBackendConfig-only scope (RunSkillConfig.natural_exit_grace_seconds,
-unrelated to #4684's actual root cause) is annotated inert-tracked:#4693 in
-_config_dataclasses.py rather than wired here, to avoid unrelated scope
-creep in this rectify.
+defined in any of the owner-bounded ``config/_dataclasses_<concern>.py``
+modules. Reflectively discovered by iterating those modules' ``__all__``
+(not by walking the ``_config_dataclasses`` facade, which only re-exports
+symbols without retaining their ``__module__`` provenance).
 """
 
 from __future__ import annotations
 
 import ast
 import dataclasses
+import importlib
 import re
 from pathlib import Path
 
 import pytest
 
-from autoskillit.config import _config_dataclasses as _config_dataclasses_module
-
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-_CONFIG_DATACLASSES_FILE = _SRC_ROOT / "config" / "_config_dataclasses.py"
+_CONFIG_DIR = _SRC_ROOT / "config"
 _INERT_TRACKED_RE = re.compile(r"inert-tracked:#[1-9]\d*")
 
-# Every dataclass directly defined in config/_config_dataclasses.py,
-# reflectively discovered — not hand-maintained. A dataclass imported into
-# this module from elsewhere would not satisfy __module__ equality below and
-# is correctly excluded (its fields are that other module's responsibility).
-_ENFORCED_DATACLASSES = tuple(
-    obj
-    for obj in vars(_config_dataclasses_module).values()
-    if isinstance(obj, type)
-    and dataclasses.is_dataclass(obj)
-    and obj.__module__ == _config_dataclasses_module.__name__
+# Every owner-bounded dataclass module produced by the config decomposition
+# (#4859). Each is its own file and defines dataclasses that this contract
+# enforces; the ``_config_dataclasses`` facade re-exports them but does NOT
+# own their definitions, so reflective discovery must walk the leaf modules.
+_DATACLASS_MODULES: tuple[str, ...] = (
+    "autoskillit.config._dataclasses_shared",
+    "autoskillit.config._dataclasses_test_gating",
+    "autoskillit.config._dataclasses_execution",
+    "autoskillit.config._dataclasses_workflow",
+    "autoskillit.config._dataclasses_diagnostics",
+    "autoskillit.config._dataclasses_github",
+    "autoskillit.config._dataclasses_surfaces",
+    "autoskillit.config._dataclasses_fleet",
+    "autoskillit.config._dataclasses_providers",
 )
 
-# Cache of all non-defining-module .py file contents, read once per test run.
+
+def _iter_enforced_dataclasses() -> tuple[type, ...]:
+    """Reflectively discover every enforced dataclass.
+
+    A dataclass imported into this module from elsewhere would not satisfy
+    ``__module__`` equality below and is correctly excluded (its fields are
+    that other module's responsibility).
+    """
+    seen: set[type] = set()
+    for module_path in _DATACLASS_MODULES:
+        try:
+            mod = importlib.import_module(module_path)
+        except ImportError:
+            continue
+        for name in getattr(mod, "__all__", ()) or vars(mod):
+            obj = getattr(mod, name, None)
+            if (
+                isinstance(obj, type)
+                and dataclasses.is_dataclass(obj)
+                and obj.__module__ == module_path
+                and obj not in seen
+            ):
+                seen.add(obj)
+    return tuple(seen)
+
+
+_ENFORCED_DATACLASSES = _iter_enforced_dataclasses()
+
+# Map cls -> defining module file path. Recomputed once per test run.
+_DEFINING_FILES: dict[type, Path] = {
+    cls: _CONFIG_DIR / (cls.__module__.rsplit(".", 1)[-1] + ".py") for cls in _ENFORCED_DATACLASSES
+}
+
+# Cache of all non-config-dataclass .py file contents, read once per test run.
+# We exclude every owner-bounded dataclass module + the facades so the "direct
+# reader" detector only matches true production consumers (the composition root
+# ``_automation_config.py`` is INCLUDED — its ``skill_visibility_spec`` is a
+# production reader of SkillsConfig.tier1/2/3, and ``from_dynaconf`` is a
+# production reader of every section's fields).
 _OTHER_SRC_TEXT: dict[Path, str] = {
     p: p.read_text(encoding="utf-8")
     for p in _SRC_ROOT.rglob("*.py")
-    if p != _CONFIG_DATACLASSES_FILE
+    if p not in _DEFINING_FILES.values()
+    and p != _SRC_ROOT / "config" / "_config_dataclasses.py"
+    and p != _SRC_ROOT / "config" / "settings.py"
 }
+
+
+def _defining_file(cls: type) -> Path:
+    """Return the file that defines ``cls``. Falls back to a stable lookup
+    based on ``cls.__module__`` if the class wasn't pre-registered (e.g.
+    added after this module loaded — keep the lookup dynamic)."""
+    if cls in _DEFINING_FILES:
+        return _DEFINING_FILES[cls]
+    return _CONFIG_DIR / (cls.__module__.rsplit(".", 1)[-1] + ".py")
 
 
 def _dataclass_field_names(cls: type) -> list[str]:
@@ -95,7 +143,7 @@ def _field_source_comment(field_name: str, cls: type) -> str:
     class_node = _class_node(cls)
     if class_node is None:
         return ""
-    lines = _CONFIG_DATACLASSES_FILE.read_text(encoding="utf-8").splitlines()
+    lines = _defining_file(cls).read_text(encoding="utf-8").splitlines()
     field_pattern = re.compile(rf"^\s{{4}}{re.escape(field_name)}\s*:")
     start = class_node.lineno - 1
     end = class_node.end_lineno or len(lines)
@@ -115,13 +163,13 @@ def _field_is_inert_tracked(field_name: str, cls: type) -> bool:
 
 
 def _has_direct_reader(field_name: str) -> bool:
-    """True iff some non-config-dataclass module accesses ``.<field_name>``."""
+    """True iff some non-config module accesses ``.<field_name>``."""
     pattern = re.compile(rf"\.{re.escape(field_name)}\b")
     return any(pattern.search(text) for text in _OTHER_SRC_TEXT.values())
 
 
 def _class_node(cls: type) -> ast.ClassDef | None:
-    source = _CONFIG_DATACLASSES_FILE.read_text(encoding="utf-8")
+    source = _defining_file(cls).read_text(encoding="utf-8")
     tree = ast.parse(source)
     return next(
         (n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == cls.__name__),
@@ -135,7 +183,7 @@ def _has_indirect_method_reader(field_name: str, cls: type) -> bool:
     class_node = _class_node(cls)
     if class_node is None:
         return False
-    source = _CONFIG_DATACLASSES_FILE.read_text(encoding="utf-8")
+    source = _defining_file(cls).read_text(encoding="utf-8")
     self_pattern = re.compile(rf"self\.{re.escape(field_name)}\b")
     for item in class_node.body:
         if not isinstance(item, ast.FunctionDef) or item.name == "__post_init__":

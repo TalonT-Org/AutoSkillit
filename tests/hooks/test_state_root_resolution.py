@@ -64,7 +64,6 @@ def test_resolve_kitchen_state_dir_prefers_explicit_state_dir(
 def test_resolve_kitchen_state_dir_scopes_shared_root_by_campaign(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("AUTOSKILLIT_STATE_DIR", raising=False)
     monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(tmp_path))
     monkeypatch.setenv("AUTOSKILLIT_CAMPAIGN_ID", "campaign-7")
 

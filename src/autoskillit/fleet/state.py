@@ -56,8 +56,6 @@ from autoskillit.fleet.state_transitions import (
     _validate_transition,
 )
 
-# Moved from state_types.py (#4856) — the lock's conceptual owner is the I/O
-# layer in this module, not the type facade.
 _resume_lock = threading.Lock()
 
 __all__ = [

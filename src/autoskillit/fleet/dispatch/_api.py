@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -78,16 +77,6 @@ class DispatchSpawnFailed(RuntimeError):
         super().__init__(message)
         self.error_code = error_code
         self.message = message
-
-
-@dataclass
-class _ExecuteDispatchOutcomes:
-    """Return-tuple mirroring the legacy execute_dispatch's contract:
-
-    Same DispatchResult envelope, same per-dispatch state path semantics.
-    """
-
-    dispatch_result: DispatchResult
 
 
 async def execute_dispatch(

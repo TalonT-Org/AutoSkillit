@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 import autoskillit.workspace.session_skill_lifecycle as session_skill_lifecycle
+import autoskillit.workspace.session_skill_manager as session_skill_manager
 import autoskillit.workspace.session_skill_materialization as session_skill_materialization
-import autoskillit.workspace.session_skills as session_skills
 from tests.workspace._helpers import (
     _BodyFailure,
     _DeletionFailure,
@@ -224,7 +224,7 @@ def test_managed_codex_session_materializes_profiles_under_its_existing_lease(
         classmethod(recording_acquire),
     )
     monkeypatch.setattr(
-        session_skills,
+        session_skill_materialization,
         "_materialize_profile_skill_infos",
         recording_profile_materialization,
     )
@@ -348,7 +348,7 @@ def test_managed_cleanup_preserves_a_lone_deletion_failure(
             mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
         ):
             monkeypatch.setattr(
-                session_skills,
+                session_skill_manager,
                 "_remove_and_verify",
                 fail_delete,
             )
@@ -405,7 +405,7 @@ def test_managed_cleanup_groups_body_deletion_and_release_failures_in_order(
         with _managed(
             mgr, "0123456789abcdef", backend=codex_env.backend, names=frozenset({"make-arch-diag"})
         ):
-            monkeypatch.setattr(session_skill_lifecycle, "_remove_and_verify", fail_delete)
+            monkeypatch.setattr(session_skill_manager, "_remove_and_verify", fail_delete)
             monkeypatch.setattr(
                 session_skill_lifecycle._SessionLease,
                 "release",

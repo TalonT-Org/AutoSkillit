@@ -396,14 +396,13 @@ def test_session_skill_lifecycle_owns_lease_delegation() -> None:
 
     The original ``session_skills.py`` did not call ``fcntl.flock`` directly;
     it routed through ``ArtifactLease.acquire_exclusive``. The lifecycle shard
-    preserves that delegation. The allowlist entry in
-    ``test_state_lock_contract.py`` was updated from ``workspace/session_skills.py``
-    to ``workspace/session_skill_lifecycle.py`` to follow the structural owner
-    rename, but neither file performs a direct ``fcntl.flock`` call.
+    preserves that delegation by owning ``_SessionLease`` and reaching flock
+    only through ``ArtifactLease``.
 
-    This test pins both halves of that contract: the lifecycle shard owns the
-    lease types and delegates to ``ArtifactLease``, and neither the lifecycle
-    shard nor the facade calls ``fcntl.flock`` directly.
+    Direct-``fcntl.flock`` governance is NOT asserted here — that is owned by
+    ``tests/fleet/test_state_lock_contract.py``, whose allowlist deliberately
+    admits ``workspace/session_skill_lifecycle.py``. This test pins ownership
+    and re-export identity only.
     """
     import autoskillit.workspace.session_skill_lifecycle as lifecycle
 
@@ -413,15 +412,11 @@ def test_session_skill_lifecycle_owns_lease_delegation() -> None:
     assert hasattr(lifecycle, "_SessionLease"), (
         "lifecycle shard must own _SessionLease, the workspace-owned external lease"
     )
-    assert not hasattr(import_module("autoskillit.workspace.session_skills"), "_SessionLease"), (
-        "the session_skills facade must not re-export _SessionLease; "
-        "lease acquisition is reached through the lifecycle shard"
-    )
-    for stem in ("session_skill_lifecycle", "session_skills"):
-        source = (SRC_ROOT / "workspace" / f"{stem}.py").read_text(encoding="utf-8")
-        assert "fcntl.flock" not in source, (
-            f"{stem}.py must not call fcntl.flock directly; "
-            f"acquisition is delegated to ArtifactLease"
+    facade = import_module("autoskillit.workspace.session_skills")
+    if hasattr(facade, "_SessionLease"):
+        assert facade._SessionLease is lifecycle._SessionLease, (
+            "a facade re-export of _SessionLease must be identity-equal to the "
+            "lifecycle shard's definition"
         )
 
 

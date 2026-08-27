@@ -1,9 +1,11 @@
 """Identity-preserving facade over the projected-artifact shards.
 
-Re-exports the prior module surface from ``_documents``, ``_publication``,
-and ``_validation``. Every symbol here is ``is``-equal to its canonical
-shard definition, so existing importers and ``monkeypatch.setattr`` call
-sites resolve unchanged.
+Re-exports the retained surface (see ``__all__``) from ``_documents``,
+``_publication``, and ``_validation``. Every name here is ``is``-equal to its
+canonical shard definition, so existing importers and ``monkeypatch.setattr``
+call sites resolve unchanged. Eight pre-refactor module-level names are
+deliberately not re-exported — they have no external importer and stay
+reachable only through their owning shard.
 
 Shard-internal consumers such as ``authority.py`` import directly from the
 canonical owners rather than through this facade.

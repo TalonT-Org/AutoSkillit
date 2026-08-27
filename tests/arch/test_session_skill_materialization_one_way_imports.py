@@ -111,6 +111,29 @@ def _shard_file_path(shard_module: str):
     return SRC_ROOT / rel_path
 
 
+def _own_facade_import_lines(py_file, facade_module: str) -> list[int]:
+    """Line numbers where ``py_file`` reaches ``facade_module``, by any import form.
+
+    Three spellings all bind the facade and must all be caught:
+    ``from <facade> import X``, ``import <facade> [as x]``, and
+    ``from <parent package> import <facade stem> [as x]``.
+    """
+    parent_package, _, facade_stem = facade_module.rpartition(".")
+    lines: list[int] = []
+    for import_from in _runtime_import_froms(py_file):
+        module = import_from.module or ""
+        if module == facade_module:
+            lines.append(import_from.lineno)
+        elif module == parent_package and any(
+            alias.name == facade_stem for alias in import_from.names
+        ):
+            lines.append(import_from.lineno)
+    for plain_import in _runtime_plain_imports(py_file):
+        if any(alias.name == facade_module for alias in plain_import.names):
+            lines.append(plain_import.lineno)
+    return sorted(lines)
+
+
 def test_no_projected_artifact_shard_imports_its_own_facade() -> None:
     """Projected-artifact shards must not import their own ``materialization`` facade.
 
@@ -118,29 +141,18 @@ def test_no_projected_artifact_shard_imports_its_own_facade() -> None:
     use module-scope facade aliases or sibling imports — never the original
     materialization facade module.
     """
+    facade = "autoskillit.workspace._projected_artifact.materialization"
     violations: list[str] = []
     for shard_module in sorted(_PROJECTED_ARTIFACT_SHARDS):
         py_file = _shard_file_path(shard_module)
         if not py_file.exists():
             continue
-        for import_from in _runtime_import_froms(py_file):
-            module = import_from.module or ""
-            if module == "autoskillit.workspace._projected_artifact.materialization":
-                violations.append(
-                    f"{shard_module}:{import_from.lineno} imports its own "
-                    f"materialization facade; reach the symbol via a sibling shard "
-                    f"or the cross-subsystem skill_projection facade"
-                )
-        for plain_import in _runtime_plain_imports(py_file):
-            for name_alias in plain_import.names:
-                if name_alias.name == (
-                    "autoskillit.workspace._projected_artifact.materialization"
-                ):
-                    violations.append(
-                        f"{shard_module}:{plain_import.lineno} imports its own "
-                        f"materialization facade; reach the symbol via a sibling shard "
-                        f"or the cross-subsystem skill_projection facade"
-                    )
+        for lineno in _own_facade_import_lines(py_file, facade):
+            violations.append(
+                f"{shard_module}:{lineno} imports its own "
+                f"materialization facade; reach the symbol via a sibling shard "
+                f"or the cross-subsystem skill_projection facade"
+            )
     assert not violations, _import_violation_message(
         violations, "Projected-artifact shards must not import their own facade"
     )
@@ -148,27 +160,18 @@ def test_no_projected_artifact_shard_imports_its_own_facade() -> None:
 
 def test_no_session_skill_shard_imports_its_own_facade() -> None:
     """Session-skill shards must not import their own ``session_skills`` facade."""
+    facade = "autoskillit.workspace.session_skills"
     violations: list[str] = []
     for shard_module in sorted(_SESSION_SKILL_SHARDS):
         py_file = _shard_file_path(shard_module)
         if not py_file.exists():
             continue
-        for import_from in _runtime_import_froms(py_file):
-            module = import_from.module or ""
-            if module == "autoskillit.workspace.session_skills":
-                violations.append(
-                    f"{shard_module}:{import_from.lineno} imports its own "
-                    f"session_skills facade; reach the symbol via a sibling shard "
-                    f"or the cross-subsystem skill_projection facade"
-                )
-        for plain_import in _runtime_plain_imports(py_file):
-            for name_alias in plain_import.names:
-                if name_alias.name == "autoskillit.workspace.session_skills":
-                    violations.append(
-                        f"{shard_module}:{plain_import.lineno} imports its own "
-                        f"session_skills facade; reach the symbol via a sibling shard "
-                        f"or the cross-subsystem skill_projection facade"
-                    )
+        for lineno in _own_facade_import_lines(py_file, facade):
+            violations.append(
+                f"{shard_module}:{lineno} imports its own "
+                f"session_skills facade; reach the symbol via a sibling shard "
+                f"or the cross-subsystem skill_projection facade"
+            )
     assert not violations, _import_violation_message(
         violations, "Session-skill shards must not import their own facade"
     )

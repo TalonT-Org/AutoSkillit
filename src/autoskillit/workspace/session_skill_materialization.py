@@ -3,9 +3,15 @@
 Single owner of the ordering-sensitive ``_materialize_session`` transaction
 and the profile-projection helpers that share its ordering constraints.
 
-The step order in ``_materialize_session`` is load-bearing: unavailability
-JSON is published before the ungated session tree, and record pruning by
-finalized native roles happens after backend setup, never before.
+The step order in ``_materialize_session`` is load-bearing:
+
+- ``ensure_pre_launch`` runs before ``backend.setup_session_dir``, so a
+  pre-launch failure aborts before any backend session state is created;
+- records are pruned by ``finalized_native_roles`` after backend setup,
+  never before;
+- unavailability JSON is published before the ungated session tree;
+- bundled-record filtering applies only for ``SkillExecutionRole.SESSION`` —
+  other roles keep bundled records in the materialized tree.
 """
 
 from __future__ import annotations

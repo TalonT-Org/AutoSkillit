@@ -39,8 +39,11 @@ stateless lease/removal primitives), `session_skill_materialization.py` (the
 ordering-sensitive `_materialize_session` transaction, profile projection, persistent
 discovery links, layout validation), and `session_skill_manager.py`
 (`DefaultSessionSkillManager`, `_InitializedSession`, and `_materialize_bound_records`).
-Shards import each other directly and must never import the `session_skills.py` facade.
-Each shard is capped at 750 lines
+Shards import each other directly and must never import the `session_skills.py`
+facade at runtime; `TYPE_CHECKING`-guarded imports are exempt, and
+`session_skill_provider.py` and `session_skill_materialization.py` may import the
+cross-subsystem `skill_projection` facade. Each shard *and* both facades are
+capped at 750 lines
 (`tests/arch/test_session_skill_materialization_size_ceilings.py`); split further
 rather than growing past it.
 

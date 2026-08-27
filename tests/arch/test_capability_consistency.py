@@ -9,7 +9,7 @@ import pytest
 from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.hook_registry import HOOKS_DIR
-from autoskillit.workspace.session_skills import DefaultSessionSkillManager
+from autoskillit.workspace.session_skill_materialization import _create_inert_rollout_paths
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -126,7 +126,7 @@ class TestSessionDirSymlinksAreSymlinks:
         assert backend.ensure_pre_launch(session_dir=session_dir) == PreLaunchReadiness((), {})
         backend.setup_session_dir(session_dir)
         if backend.capabilities.session_dir_persistent:
-            DefaultSessionSkillManager._create_inert_rollout_paths(session_dir, backend)
+            _create_inert_rollout_paths(session_dir, backend)
 
         missing: list[str] = []
         violations: list[str] = []

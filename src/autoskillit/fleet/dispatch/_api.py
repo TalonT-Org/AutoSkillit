@@ -36,6 +36,7 @@ from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authori
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
 )
+from autoskillit.fleet.sidecar import sidecar_path
 from autoskillit.fleet._startup_warm import warm_failure_path_imports
 from autoskillit.fleet.dispatch._classification import (
     finalize_state_write,
@@ -410,7 +411,9 @@ async def _run_dispatch(
             caller_session_id=caller_session_id,
             idle_output_timeout=idle_output_timeout,
             lineage_backend_name=ready.lineage_backend_name,
-            dispatch_sidecar_path=str(Path(ready.handle.state_path) / "sidecar.jsonl"),
+            dispatch_sidecar_path=str(
+                sidecar_path(ready.dispatch_id, tool_ctx.project_dir)
+            ),
             issue_urls_raw=spawn_ctx.issue_urls_raw,
             prior_ids=spawn_ctx.prior_ids,
             prior_completion_markers=prior_markers,
@@ -488,7 +491,7 @@ async def _run_dispatch(
             dispatch_sidecar_path=(
                 execution.dispatch_sidecar_path
                 if execution is not None
-                else str(Path(ready.handle.state_path) / "sidecar.jsonl")
+                else str(sidecar_path(ready.dispatch_id, tool_ctx.project_dir))
             ),
             marker_dir=execution.marker_dir if execution is not None else None,
             skill_result=None,

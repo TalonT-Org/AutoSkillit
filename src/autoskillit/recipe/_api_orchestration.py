@@ -2,6 +2,7 @@
 
 import dataclasses
 import hashlib
+import json
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -16,13 +17,14 @@ from autoskillit.core import (
     RecipeSource,
     SkillLister,
     YAMLError,
+    build_parameter_forwarding_rules,
     get_logger,
     pkg_root,
     resolve_temp_dir,
 )
-from autoskillit.recipe import _api, _api_cache
+from autoskillit.recipe import _api_cache
 from autoskillit.recipe._analysis import _extract_routing_edges, make_validation_context
-from autoskillit.recipe._api_cache import _LoadCacheEntry  # noqa: F401
+from autoskillit.recipe._api_cache import _LoadCacheEntry
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe._io_loading import (
     assert_no_raw_placeholders,
@@ -43,7 +45,11 @@ from autoskillit.recipe._recipe_ingredients import (
     format_ingredients_table,
 )
 from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
-from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
+from autoskillit.recipe._rule_helpers import (
+    _is_failure_sentinel_value,
+    extract_sentinel_json_blocks,
+    filter_pruning_false_positives,
+)
 from autoskillit.recipe.contracts import (
     check_contract_staleness,
     load_recipe_card,
@@ -66,7 +72,7 @@ from autoskillit.recipe.io import (
     substitute_scripts_placeholder,
     substitute_temp_placeholder,
 )
-from autoskillit.recipe.schema import Recipe
+from autoskillit.recipe.schema import Recipe, RecipeStep
 from autoskillit.recipe.validator import (
     _finalize_delivery_segments,
     compute_recipe_validity,
@@ -76,19 +82,101 @@ from autoskillit.recipe.validator import (
     validate_recipe_structure,
 )
 
-_canonical_string_map = _api._canonical_string_map
-_t = _api._t
-_build_stop_step_semantics = _api._build_stop_step_semantics
-_build_orchestration_rules = _api._build_orchestration_rules
-
 logger = get_logger(__name__)
+
+
+def _canonical_string_map(mapping: dict[str, str] | None) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted(mapping.items())) if mapping else ()
+
+
+def _t(label: str, t0: float, name: str) -> float:
+    """Log elapsed time for a pipeline stage and return current time.
+
+    Uses structlog at DEBUG level; structlog's processor chain handles level
+    filtering without requiring an explicit isEnabledFor() guard.
+    """
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    logger.debug("load_recipe_stage", recipe=name, stage=label, elapsed_ms=round(elapsed_ms, 1))
+    return time.perf_counter()
+
+
+def _infer_stop_failure(name: str, message: str | None) -> bool:
+    """Determine whether a stop step represents a failure outcome.
+
+    Parses embedded sentinel JSON first; falls back to name-based heuristic.
+    """
+    if message:
+        for block in extract_sentinel_json_blocks(message):
+            try:
+                parsed = json.loads(block)
+                if isinstance(parsed, dict) and "success" in parsed:
+                    return _is_failure_sentinel_value(parsed["success"])
+            except (json.JSONDecodeError, ValueError):
+                logger.debug("sentinel_json_parse_failed", step=name, raw=block)
+                continue
+    return "escalate" in name.lower() or "reject" in name.lower()
+
+
+def _build_stop_step_semantics(recipe: Recipe) -> str:
+    stop_steps = {name: step for name, step in recipe.steps.items() if step.action == "stop"}
+    if not stop_steps:
+        return ""
+    lines = [
+        "ACTION: STOP STEP SEMANTICS:",
+        "- Stop steps are terminal — the pipeline ends when routed to them.",
+        "- Do NOT call any MCP tools after a stop step.",
+        "- Do NOT attempt recovery, error reporting, or off-recipe actions.",
+        "- When routed to a stop step, emit the L3 sentinel block and TERMINATE.",
+    ]
+    for name, step in stop_steps.items():
+        is_failure = _infer_stop_failure(name, step.message)
+        success_val = "false" if is_failure else "true"
+        lines.append(
+            f"- For stop step '{name}': emit the L3 sentinel block with "
+            f"success={success_val} and reason=<step message>. Then TERMINATE."
+        )
+        if step.message:
+            lines.append(f"  Stop step '{name}' message: {step.message!r}")
+    return "\n".join(lines)
+
+
+def _build_orchestration_rules(
+    recipe: Recipe | None = None, stop_semantics: str | None = None
+) -> str:
+    parts = [
+        "STEP EXECUTION IS NOT DISCRETIONARY:\n"
+        "You MUST execute every step the pipeline routes you to. "
+        "skip_when_false ingredient references are resolved server-side before the recipe "
+        'is served. You may see literal "false" values (skip the step) '
+        "or no skip_when_false field at all (step is mandatory). Resolved content "
+        "contains neither skip_when_false nor its configuration-only on_skip continuation. "
+        "NEVER skip a step because the PR is small, the diff is trivial, or you judge "
+        "the step unnecessary. NEVER replace recipe steps with manual tool calls. "
+        "Consequence: skipping PR review steps results in unreviewed code, missing "
+        "diff annotations, and no architectural lens analysis."
+    ]
+    forwarding_rules = build_parameter_forwarding_rules()
+    if forwarding_rules:
+        parts.append(forwarding_rules)
+    if recipe is not None:
+        sem = stop_semantics if stop_semantics is not None else _build_stop_step_semantics(recipe)
+        if sem:
+            parts.append(sem)
+    parts.append(
+        "ACTION: ROUTE STEP SEMANTICS:\n"
+        '- When you reach a step with action: "route", evaluate the step\'s on_result\n'
+        "  conditions against captured context variables. Route to the matching target.\n"
+        "- Do NOT call any MCP tools for this step type — routing evaluation IS the step.\n"
+        "- If no on_result condition matches and on_failure is defined, follow on_failure."
+    )
+    return "\n\n".join(parts)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class _LoadPipelineInputs:
     name: str
     pdir: Path
-    cache_key: tuple
+    cache_key: tuple[Any, ...]
     cacheable: bool
     pkg_version: str
     rule_registry_hash: str
@@ -116,11 +204,12 @@ class _ValidationResult:
     recipes_dir: Path  # distinct from project_recipes_dir
     recipe: Recipe | None
     active_recipe: Recipe | None
+    raw_declared: str  # pre-substitution recipe text (cached to skip re-read)
     raw: str
     errors: list[str]
     suggestions: list[dict[str, Any]]
     skip_resolutions: dict[str, bool | None]
-    pre_prune_steps: dict[str, Any]
+    pre_prune_steps: dict[str, RecipeStep]
     finalized_projection: FinalizedRecipeProjection | None
     valid: bool
 
@@ -287,13 +376,13 @@ def _resolve_recipe_match(
     else:
         recipes_dir = pipeline_inputs.pdir / ".autoskillit" / "recipes"
 
-    assert match is not None
     return (
         _ValidationResult(
             match=match,
             recipes_dir=recipes_dir,
             recipe=None,
             active_recipe=None,
+            raw_declared=raw_declared,
             raw=raw,
             errors=[],
             suggestions=[],
@@ -349,11 +438,17 @@ def _parse_and_compose(
     active_recipe, combined_recipe = _build_active_recipe(
         source_recipe, ingredient_overrides, pdir, temp_dir_relpath
     )
-    assert active_recipe is not None
+    if active_recipe is None:
+        # Contract violation: _build_active_recipe returned None for a dict
+        # payload. Append a structured error so the caller sees it instead of
+        # an uncaught AssertionError.
+        errors.append("_build_active_recipe returned None")
     if combined_recipe is not None:
         combined_errors = validate_recipe_structure(combined_recipe)
         errors.extend(f"[combined] {e}" for e in combined_errors)
-    elif any(step.sub_recipe is not None for step in source_recipe.steps.values()):
+    elif active_recipe is not None and any(
+        step.sub_recipe is not None for step in source_recipe.steps.values()
+    ):
         active_errors = validate_recipe_structure(active_recipe)
         errors.extend(f"[active] {error}" for error in active_errors if error not in errors)
     return recipe, source_recipe, active_recipe, errors
@@ -392,22 +487,25 @@ def _run_validation_pipeline(
     include_finalized_projection = pipeline_inputs.include_finalized_projection
     _effective_temp_dir = pipeline_inputs.effective_temp_dir
     _temp_relpath = pipeline_inputs.temp_dir_relpath
-    raw_declared = match.content if match.content is not None else match.path.read_text()
+    raw_declared = partial.raw_declared
     _recipe_list = (
         pipeline_inputs.recipe_list if pipeline_inputs.normalized_recipe_info is not None else None
     )
 
     try:
-        # Stages: yaml parse + structural validation + sub-recipe composition
-        data, _ = load_recipe_dict_with_declarations(
-            match.path, raw_text=raw_declared, temp_dir_relpath=_temp_relpath
+        # Stages: yaml parse + structural validation + sub-recipe composition.
+        # _parse_and_compose performs the YAML parse and isinstance gate; the
+        # outer pipeline calls it directly to avoid a duplicate parse.
+        recipe, source_recipe, active_recipe, errors = _parse_and_compose(
+            match, raw_declared, _temp_relpath, _pdir, ingredient_overrides
         )
         t0 = _t("yaml_parse", t0, name)
-        if isinstance(data, dict):
-            recipe, source_recipe, active_recipe, errors = _parse_and_compose(
-                match, raw_declared, _temp_relpath, _pdir, ingredient_overrides
-            )
-        assert active_recipe is not None
+        if active_recipe is None:
+            # _parse_and_compose returned no active recipe (e.g. non-dict
+            # payload or compose failure). Raise so the except clause records
+            # a structured suggestion instead of letting AssertionError
+            # propagate uncaught.
+            raise ValueError("Recipe did not produce an active recipe")
         t0 = _t("validate_recipe_structure", t0, name)
 
         if lister is None:
@@ -436,7 +534,10 @@ def _run_validation_pipeline(
         active_recipe, _skip_resolutions = _prune_skipped_steps(
             active_recipe, ingredient_overrides, defer_unresolved
         )
-        assert active_recipe is not None
+        if active_recipe is None:
+            # _prune_skipped_steps returned None — contract violation. Raise
+            # so the except clause records a structured suggestion.
+            raise ValueError("_prune_skipped_steps returned None")
         _source_pre_prune_steps = dict(source_recipe.steps) if source_recipe else {}
         _source_recipe, _source_skip_resolutions = (
             _prune_skipped_steps(source_recipe, ingredient_overrides, defer_unresolved)
@@ -600,6 +701,7 @@ def _run_validation_pipeline(
         recipes_dir=recipes_dir,
         recipe=recipe,
         active_recipe=active_recipe,
+        raw_declared=raw_declared,
         raw=raw,
         errors=errors,
         suggestions=suggestions,

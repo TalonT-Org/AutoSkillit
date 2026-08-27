@@ -1,9 +1,9 @@
 """Fleet dispatch state-machine authority.
 
 Owns the ``DispatchStatus`` enum and the transition table that drives
-``_validate_transition``. Decomposed from ``state_types`` (#4856);
-the dependency arrow now points ``state_records → state_transitions``
-only — this module imports nothing from ``state_records``.
+``_validate_transition``. The dependency arrow points
+``state_records → state_transitions`` only — this module imports nothing
+from ``state_records``.
 """
 
 from __future__ import annotations

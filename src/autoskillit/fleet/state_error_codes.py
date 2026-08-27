@@ -2,7 +2,6 @@
 
 Owns the ``_ERROR_CODE_CATEGORIES`` mapping, ``get_error_category``,
 and the derived ``_INFRASTRUCTURE_FAILURE_REASONS`` frozenset.
-Decomposed from ``state_types`` (#4856).
 """
 
 from autoskillit.core import FaultDomain, FleetErrorCode

@@ -6,7 +6,6 @@ mechanics (``_RETRY_IDENTITY_FIELDS``, ``_clear_dispatch_for_retry``).
 
 Co-locating the retry-clear helper here (with the record it mutates)
 breaks the cross-module cycle: ``state_records → state_transitions`` only.
-Decomposed from ``state_types`` (#4856).
 """
 
 from __future__ import annotations

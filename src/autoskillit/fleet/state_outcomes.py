@@ -1,8 +1,7 @@
 """Fleet dispatch outcome / result authority.
 
 Owns ``GateRecordResult``, ``DispatchRejected``, ``DispatchCompleted``,
-``DispatchOutcome``, and ``DispatchResult``. Decomposed from ``state_types``
-(#4856).
+``DispatchOutcome``, and ``DispatchResult``.
 """
 
 from __future__ import annotations

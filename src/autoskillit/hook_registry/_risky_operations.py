@@ -25,28 +25,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal
 
-# Imported from the stdlib-only leaf ``_hook_constants`` (not from
-# ``autoskillit.hooks``) to avoid a circular import: this module is loaded
-# by ``autoskillit.hook_registry.__init__``, which itself is imported by
-# ``autoskillit.hooks.__init__``; importing back through
-# ``autoskillit.hooks`` would observe a partially-initialized module and
-# raise ImportError. ``_hook_constants`` is stdlib-only (no
-# ``autoskillit.*`` imports) so loading it cannot re-enter the cycle.
-from autoskillit.hooks._hook_constants import (  # noqa: F401
-    RISKY_GH_SUBCOMMANDS,
-    RISKY_GIT_OPERATIONS,
-)
-
 from ._hooks_defs import HookDef, LifecycleContractDef
 
-# The RISKY_* constants are re-exported under their historical names so that
-# every existing consumer (tests, contract checks, third-party scripts) keeps
-# importing from ``autoskillit.hook_registry`` unchanged. The values themselves
-# live in ``autoskillit.hooks._hook_constants`` (Step A1) — the single source
-# of truth shared with the guard scripts.
+# The RISKY_* constants are NOT imported here directly. They are resolved
+# lazily through ``autoskillit.hook_registry.__getattr__`` (PEP 562) which
+# in turn reads them from ``autoskillit.hooks``. Importing them eagerly
+# would observe a partially-initialized ``autoskillit.hooks`` module —
+# this file loads during ``autoskillit.hook_registry.__init__``, which is
+# itself imported by ``autoskillit.hooks.__init__`` before that module's
+# import sequence finishes — and raise ``ImportError``. Deferring the
+# resolution means by the time any consumer asks for the constants, both
+# packages have finished initializing.
 __all__ = [
-    "RISKY_GH_SUBCOMMANDS",
-    "RISKY_GIT_OPERATIONS",
     "hook_applies_to_backend",
     "validate_lifecycle_contracts",
 ]

@@ -164,18 +164,14 @@ FAIL_CLOSED_GUARD_BASENAMES: frozenset[str] = frozenset(
 def _build_hook_registry() -> list[HookDef]:
     """Construct the canonical HOOK_REGISTRY list.
 
-    Called at the bottom of ``hook_registry.__init__`` to populate the
-    initially-empty ``HOOK_REGISTRY`` list. The exempt sets are imported
-    from the stdlib-only leaf ``autoskillit.hooks._hook_constants`` rather
-    than from ``autoskillit.hooks`` itself: importing through
-    ``autoskillit.hooks`` here would observe the partially-initialized
-    ``autoskillit.hooks`` module (the call originates while
-    ``autoskillit.hooks.__init__`` is mid-load — see the import cycle
-    notes in ``autoskillit.hook_registry._risky_operations``) and raise
-    ``ImportError``. ``_hook_constants`` is stdlib-only (no
-    ``autoskillit.*`` imports), so loading it cannot re-enter the cycle.
+    Imported lazily at call time so that importing ``_registry_data`` does
+    not transitively trigger ``autoskillit.hooks.__init__.py`` (the cycle
+    that arises because ``autoskillit.hooks.__init__`` imports
+    ``HOOK_REGISTRY`` from this package). The hook_registry package
+    ``__init__.py`` calls this factory at the end of its import sequence,
+    after every other module-level binding is in place.
     """
-    from autoskillit.hooks._hook_constants import (
+    from autoskillit.hooks import (
         EXEMPT_SESSION_TYPES_BY_GUARD,
         EXEMPT_SKILLS_BY_GUARD,
     )

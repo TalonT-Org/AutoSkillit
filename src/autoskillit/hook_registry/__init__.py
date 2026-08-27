@@ -39,7 +39,7 @@ from ._hooks_defs import (
     HookDef,
     LifecycleContractDef,
 )
-from ._registry_data import (
+from ._registry_data import (  # noqa: F401  (_build_hook_registry consumed by autoskillit.hooks.__init__)
     FAIL_CLOSED_GUARD_BASENAMES,
     HOOK_REGISTRY,
     HOOKS_DIR,
@@ -57,21 +57,24 @@ from ._rendering import (
     render_relocatable_hook_command,
 )
 from ._risky_operations import (
-    RISKY_GH_SUBCOMMANDS,
-    RISKY_GIT_OPERATIONS,
     _contract_session_scopes,
     hook_applies_to_backend,
     validate_lifecycle_contracts,
 )
 
-# Defer HOOK_REGISTRY construction until every other module-level binding
-# is in place. ``_build_hook_registry()`` imports
-# ``autoskillit.hooks._hook_constants`` lazily; the cycle through
-# ``autoskillit.hooks.__init__.py`` is broken by importing it after this
-# package is fully constructed.
-HOOK_REGISTRY.extend(_build_hook_registry())
-# HOOK_REGISTRY_HASH is computed against the now-populated HOOK_REGISTRY.
-# Recompute here because the empty-list value cached at import time is stale.
+# HOOK_REGISTRY is left empty here and populated by the wiring in
+# ``autoskillit.hooks.__init__`` after both packages have finished
+# initializing. The eager ``_build_hook_registry()`` call that used to
+# live at module scope has been removed because it triggered an import
+# cycle through ``autoskillit.hooks.__init__`` (which imports
+# ``HOOK_REGISTRY`` from this package): the lazy ``from autoskillit.hooks
+# import EXEMPT_*`` inside ``_build_hook_registry`` would observe a
+# partially-initialized ``autoskillit.hooks`` module and raise
+# ``ImportError``. Importing ``autoskillit.hooks`` (directly or
+# transitively) before iterating ``HOOK_REGISTRY`` ensures the
+# post-import population has run. HOOK_REGISTRY_HASH is recomputed at the
+# same call site; the value cached at this module level is a placeholder
+# for the empty list and is intentionally overwritten.
 HOOK_REGISTRY_HASH = compute_registry_hash(
     HOOK_REGISTRY,
     RETIRED_SCRIPT_BASENAMES,
@@ -114,3 +117,29 @@ __all__ = [
     "validate_lifecycle_contracts",
     "validate_plugin_cache_hooks",
 ]
+
+
+# RISKY_GH_SUBCOMMANDS / RISKY_GIT_OPERATIONS are NOT eagerly imported
+# from ``autoskillit.hooks`` because that module is still partially
+# initialized during this package's own load (the cycle through
+# ``autoskillit.hooks.__init__``). Resolving them lazily through PEP 562
+# means the import is triggered only when a consumer actually asks for
+# the constants — by which time both packages have finished initializing.
+_LAZY_RISKY_NAMES = frozenset({"RISKY_GH_SUBCOMMANDS", "RISKY_GIT_OPERATIONS"})
+
+
+def __getattr__(name: str):
+    """Resolve the lazy RISKY_* re-exports through ``autoskillit.hooks``."""
+    if name in _LAZY_RISKY_NAMES:
+        from autoskillit.hooks import (  # noqa: PLC0415
+            RISKY_GH_SUBCOMMANDS,
+            RISKY_GIT_OPERATIONS,
+        )
+
+        value = {
+            "RISKY_GH_SUBCOMMANDS": RISKY_GH_SUBCOMMANDS,
+            "RISKY_GIT_OPERATIONS": RISKY_GIT_OPERATIONS,
+        }[name]
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

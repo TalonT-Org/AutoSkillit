@@ -26,6 +26,7 @@ _REQUIRED_INDEX_FIELDS = {
     "codex_log",
     "backend",
     "skill_command",
+    "session_type",
 }
 
 
@@ -57,6 +58,14 @@ class TestSessionIndexEntryCompleteness:
         hints = get_type_hints(SessionIndexEntry)
         assert "caller_session_id" in hints
         assert hints["caller_session_id"] is str
+
+    def test_has_nullable_session_type(self):
+        from typing import get_type_hints
+
+        from autoskillit.core.types._type_results import SessionIndexEntry
+
+        hints = get_type_hints(SessionIndexEntry)
+        assert hints["session_type"] == str | None
 
     def test_canonical_cache_fields(self):
         """SessionIndexEntry must use canonical cache field names, not v1 API names."""

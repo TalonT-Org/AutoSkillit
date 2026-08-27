@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ChildExecutionIdentity, ExecutionIdentity
+from autoskillit.core import ChildExecutionIdentity, ExecutionIdentity, SessionType
 from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
@@ -48,7 +48,7 @@ class _FakeLocator:
         return ()
 
 
-def test_execution_identity_reaches_summary_and_schema_7_index(tmp_path):
+def test_execution_identity_reaches_summary_and_schema_8_index(tmp_path):
     identity = ExecutionIdentity(
         requested_parent_backend="codex",
         effective_parent_backend="codex",
@@ -74,12 +74,19 @@ def test_execution_identity_reaches_summary_and_schema_7_index(tmp_path):
             ),
         ),
     )
-    _flush(tmp_path, execution_identity=identity, proc_snapshots=None)
+    _flush(
+        tmp_path,
+        execution_identity=identity,
+        proc_snapshots=None,
+        session_type=SessionType.SKILL,
+    )
     summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
 
     assert summary["execution_identity"] == identity.to_dict()
-    assert entry["schema_version"] == 7
+    assert summary["session_type"] == "skill"
+    assert entry["schema_version"] == 8
+    assert entry["session_type"] == "skill"
     assert entry["child_executions"] == [identity.children[0].to_dict()]
     assert entry["backend_override_tier"] == "recipe_step"
     assert entry["parent_session_id"] == "parent-id"

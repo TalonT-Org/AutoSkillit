@@ -1535,23 +1535,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
         "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
-    "rules_skill_content.py": (
-        1200,
-        "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "
-        "semantic rules (undefined-bash-placeholder, hardcoded-origin-remote, "
-        "blind-git-add, no-interpreter-mediated-writes, no-autoskillit-import, "
-        "no-posix-char-class, no-grep-bre-alternation, output-section-no-markdown-directive, "
-        "no-gh-issue-comment, transition-boundary-anti-confirmation, "
-        "executable-field-content-validity, reviews-post-requires-input-flag, "
-        "source-attribution-directive, graphql-query-requires-shell-invocation, "
-        "inline-content-in-subagent-prompt) co-located to keep SKILL.md validation "
-        "discovery a single import; splitting into sub-modules per rule would fragment "
-        "the @semantic_rule registration surface and break the test filter cascade."
-        "; inline-content-in-subagent-prompt rule (#4289 manifestation, #3636 architectural): "
-        "extract_blockquote_sections + extract_blockquote_placeholders helpers co-located "
-        "in _skill_placeholder_parser.py and re-used by both rules_skill_content.py "
-        "and the tests/skills/ contract linters (+~60 net lines)",
-    ),
     "pipeline/audit_admission_ledger.py": (
         2300,
         "REQ-CNST-010-E17: #4419 keeps installation fencing, reservation and attempt "

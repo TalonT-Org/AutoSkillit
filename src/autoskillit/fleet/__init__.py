@@ -86,6 +86,7 @@ from .state import (
     write_captured_values,
     write_initial_state,
 )
+from .state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
 from .state_recovery import (
     MAX_CONSECUTIVE_RESUME_ATTEMPTS as MAX_CONSECUTIVE_RESUME_ATTEMPTS,
 )
@@ -121,6 +122,7 @@ from .summary import (
 )
 
 __all__ = [
+    "_INFRASTRUCTURE_FAILURE_REASONS",
     "_write_pid",
     "cleanup_orphaned_labels",
     "discover_campaign_state_files",

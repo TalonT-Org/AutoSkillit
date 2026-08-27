@@ -23,6 +23,7 @@ from autoskillit.core import (
     is_feature_enabled,
 )
 from autoskillit.fleet import (
+    _INFRASTRUCTURE_FAILURE_REASONS,
     DispatchAggregatePhase,
     DispatchCompleted,
     DispatchEffectName,
@@ -38,7 +39,6 @@ from autoskillit.fleet import (
     record_gate_outcome,
     upsert_dispatch_record_by_name,
 )
-from autoskillit.fleet.state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir

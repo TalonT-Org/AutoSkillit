@@ -2,6 +2,8 @@
 name: build-execution-map
 categories:
 - github
+requires_resources:
+- review-approach-criteria
 uses_capabilities: []
 description: Analyze issue dependencies and produce a dispatch execution map for parallel orchestration
 hooks:
@@ -220,30 +222,9 @@ When `--assess-review-approach` is active, perform an additional assessment for 
 after the pairwise parallelism analysis. This assessment determines whether the issue would
 meaningfully benefit from a `review-approach` research pass before implementation.
 
-**First**, read the `review-approach` skill definition at
-`src/autoskillit/skills_extended/review-approach/SKILL.md` to ground your understanding of
-what that skill actually provides — external web research on modern solutions, approaches,
-and trade-offs. Do not rely on a hardcoded heuristic list; use the skill definition as the
-primary reference for what review-approach offers.
-
-**Then**, for each issue, evaluate whether the problem domain would benefit from that research:
-
-Signals that review-approach would benefit:
-- Issue involves integrating an unfamiliar external library or API
-- Issue proposes a design decision with multiple viable architectural approaches
-- Issue references emerging patterns, standards, or technologies the codebase hasn't used
-- Issue body contains open questions about *how* to approach the problem
-- Issue requires understanding trade-offs between competing solutions
-
-Signals that review-approach is NOT needed:
-- Issue is a well-scoped bug fix with a clear root cause
-- Issue is internal refactoring following established codebase patterns
-- Issue adds a feature using patterns already present in the codebase
-- Issue is a documentation update or configuration change
-- Issue body already contains a fully specified implementation approach
-
-These heuristics are illustrative. Use judgment informed by the actual `review-approach`
-SKILL.md to decide each issue.
+Consult the provided **Review-Approach Benefit Criteria** section, then evaluate whether each
+issue's problem domain would benefit from external research on modern solutions, approaches,
+and trade-offs. Treat the provided signals as guidance and apply judgment to the actual issue.
 
 For each issue, produce:
 - `review_approach_recommended`: `true` if the issue would benefit, `false` otherwise

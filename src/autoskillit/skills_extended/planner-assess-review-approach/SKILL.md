@@ -2,6 +2,8 @@
 name: planner-assess-review-approach
 categories:
 - planner
+requires_resources:
+- review-approach-criteria
 uses_capabilities: []
 description: 'Assess each work package for review-approach benefit before implementation. Writes review_approach_assessment.json;
   does NOT invoke review-approach.
@@ -60,7 +62,7 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 - Write, Edit, or use file-modifying Bash commands (sed -i, echo >, tee) on any file outside the planner output directory ($AUTOSKILLIT_ALLOWED_WRITE_PREFIX). Source code files must NEVER be modified.
 
 **ALWAYS:**
-- Read the `review-approach` SKILL.md at `src/autoskillit/skills_extended/review-approach/SKILL.md` before assessing
+- Consult the provided **Review-Approach Benefit Criteria** before assessing
 - Read `$1` to get `task` and `work_packages[]`
 - Read `$2/analysis.json` for codebase technology context
 - Write `$2/review_approach_assessment.json`
@@ -71,9 +73,8 @@ writes `review_approach_assessment.json` to the planner directory. Does NOT invo
 
 ### Step 1: Ground heuristics
 
-Read `src/autoskillit/skills_extended/review-approach/SKILL.md`. Understand what
-`review-approach` does and when it provides value. Do not rely solely on the hardcoded
-signals below — use the SKILL.md as the authoritative source for benefit criteria.
+Consult the provided **Review-Approach Benefit Criteria** section. Use its signals as guidance
+for when review-approach provides value, while applying judgment to the concrete work package.
 
 ### Step 2: Read inputs
 
@@ -92,21 +93,7 @@ validated input. Retain child IDs keyed by batch through the join.
 Do not output any prose between subagent dispatches. Immediately proceed to the next tool call.
 
 Spawn 1–2 subagents via `child delegation under the declared `sonnet` model-class policy` to evaluate WPs in parallel batches. For each WP,
-evaluate against these signals:
-
-**Benefit signals (recommend: true):**
-- Involves integrating an unfamiliar external library or API
-- Proposes a design decision with multiple viable architectural approaches
-- References emerging patterns, standards, or technologies not yet in the codebase
-- Contains open questions about *how* to approach the problem
-- Requires understanding trade-offs between competing solutions
-
-**No-benefit signals (recommend: false):**
-- Well-scoped bug fix with a clear root cause
-- Internal refactoring following established codebase patterns
-- Adds a feature using patterns already present in the codebase
-- Documentation update or configuration change
-- Already contains a fully specified implementation approach in the WP body
+evaluate it against the provided **Review-Approach Benefit Criteria**.
 
 Per WP, produce: `review_approach_recommended` (bool) and `review_approach_reasoning`
 (one sentence).

@@ -126,12 +126,13 @@ def test_execution_map_review_approach_candidates_token() -> None:
     )
 
 
-def test_execution_map_reads_review_approach_skill() -> None:
-    """SKILL.md must instruct reading review-approach/SKILL.md to ground assessment."""
+def test_execution_map_declares_review_approach_criteria_resource() -> None:
+    """Assessment grounding is delivered data, never a source-tree read."""
     text = _skill_md_text()
-    assert "review-approach" in text.lower() and "SKILL.md" in text, (
-        "SKILL.md must reference reading review-approach/SKILL.md for assessment grounding"
-    )
+    assert "requires_resources:" in text
+    assert "review-approach-criteria" in text
+    assert "provided **Review-Approach Benefit Criteria**" in text
+    assert "review-approach/SKILL.md" not in text
 
 
 def test_review_approach_candidates_contract_registered() -> None:

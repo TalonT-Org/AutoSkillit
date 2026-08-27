@@ -1182,7 +1182,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # non-recursive glob because the package directory is not a top-level
         # *.py file); -1 for the deleted exploration_context.py file.
         # E22 retired per #4835.
-        "fleet": 24,  # +_startup_warm.py layer-correct failure-path imports
+        "fleet": 28,  # noqa: E501  # +_startup_warm.py; +5 state_types decomposition; -1 for deleted state_types.py facade
         "recipe/rules": 66,  # +commit_guard_regression_route +rules_model +rules_gitignored_deliverable +rules_issue_scope_threading +rules_inventory_gate_bilateral +rules_verdict_context +rules_contract_recovery +rules_audit_outcome_routing +rules_note_shape_contradiction +rules_skill_content_{shell_safety,github_api_safety,content_structure,skill_contract} (#4852 split)  # noqa: E501
         # +rules_merge_routing +rules_merge_guards +rules_merge_wait
         # +rules_merge_enrollment +rules_merge_push_symmetry (#4857

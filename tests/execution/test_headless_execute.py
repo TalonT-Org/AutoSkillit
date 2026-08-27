@@ -301,8 +301,15 @@ async def test_sink_close_failure_does_not_replace_deferred_cancellation(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("raw_session_type", "expected_session_type"),
+    [("skill", "skill"), ("", None)],
+)
 async def test_managed_session_type_reaches_runner_and_session_index(
-    minimal_ctx, tmp_path: Path
+    minimal_ctx,
+    tmp_path: Path,
+    raw_session_type: str,
+    expected_session_type: str | None,
 ) -> None:
     from autoskillit.execution.headless import run_headless_core
     from tests.execution.conftest import _mock_backend
@@ -331,16 +338,16 @@ async def test_managed_session_type_reaches_runner_and_session_index(
     backend = _mock_backend(pty_required=True, channel_b_capable=True)
     backend.build_skill_session_cmd.return_value = CmdSpec(
         cmd=("claude", "-p", "test"),
-        env={"AUTOSKILLIT_SESSION_TYPE": "skill"},
+        env={"AUTOSKILLIT_SESSION_TYPE": raw_session_type},
     )
     minimal_ctx.backend = backend
 
     await run_headless_core("/test foo", str(tmp_path), minimal_ctx)
 
     _cmd, _cwd, _timeout, kwargs = runner.call_args_list[0]
-    assert kwargs["env"]["AUTOSKILLIT_SESSION_TYPE"] == "skill"
+    assert kwargs["env"]["AUTOSKILLIT_SESSION_TYPE"] == raw_session_type
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
-    assert entry["session_type"] == "skill"
+    assert entry["session_type"] == expected_session_type
 
 
 class TestProcessIdleTimeoutOverride:

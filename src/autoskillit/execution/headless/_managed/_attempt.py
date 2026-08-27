@@ -392,9 +392,7 @@ class _LineageCallbacks:
 
     def capture_session_type(self, spec: CmdSpec) -> None:
         raw_session_type = spec.env.get(SESSION_TYPE_ENV_VAR)
-        self._session_type = (
-            SessionType(raw_session_type) if raw_session_type is not None else None
-        )
+        self._session_type = SessionType(raw_session_type) if raw_session_type else None
 
     def _observe_candidate(self, session_id: str) -> None:
         assert self._observer is not None

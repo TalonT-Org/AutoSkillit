@@ -31,6 +31,22 @@ PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
 PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 
 
+def _collect_line_limit_violations(
+    exemptions: dict[str, tuple[int, str]],
+) -> list[str]:
+    """Return one violation message per src module exceeding its line limit."""
+    violations: list[str] = []
+    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+        line_count = len(py_file.read_text().splitlines())
+        rel = str(py_file.relative_to(SRC_ROOT))
+        limit, _ = exemptions.get(rel, exemptions.get(py_file.name, (1000, "")))
+        if line_count > limit:
+            violations.append(
+                f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (limit {limit})"
+            )
+    return violations
+
+
 def _tool_module_paths(tools_dir: Path, *, flat_pattern: str = "tools_*.py") -> list[Path]:
     """Return flat tool modules and modules from ``tools_*`` packages."""
     files = list(tools_dir.glob(flat_pattern))

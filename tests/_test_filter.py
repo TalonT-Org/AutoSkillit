@@ -757,6 +757,30 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "contracts/test_no_interpreter_writes_in_skills.py",
         }
     ),
+    "rules_skill_content_shell_safety": frozenset(
+        {
+            "recipe",
+            "recipe/rules_skills/test_split_per_family_focused_shell_safety.py",
+        }
+    ),
+    "rules_skill_content_github_api_safety": frozenset(
+        {
+            "recipe",
+            "recipe/rules_skills/test_split_per_family_focused_github_api_safety.py",
+        }
+    ),
+    "rules_skill_content_content_structure": frozenset(
+        {
+            "recipe",
+            "recipe/rules_skills/test_split_per_family_focused_content_structure.py",
+        }
+    ),
+    "rules_skill_content_skill_contract": frozenset(
+        {
+            "recipe",
+            "recipe/rules_skills/test_split_per_family_focused_skill_contract.py",
+        }
+    ),
     "rules_skill_write_path_alignment": frozenset({"recipe"}),
     # --- Internal utility modules (no external src importers) ---
     "_analysis": frozenset({"recipe"}),
@@ -1385,6 +1409,7 @@ _IMPORT_GUARD_TRANSITIVE_OVERRIDES: dict[str, frozenset[str]] = {
                 "recipe/test_research_campaign.py",
                 "recipe/test_rules_contracts.py",
                 "recipe/test_rules_dataflow_handoff.py",
+                "recipe/test_rules_skill_content.py",
                 "recipe/test_rules_skill_routing.py",
                 "recipe/test_rules_skills.py",
                 "recipe/test_rules_tools.py",

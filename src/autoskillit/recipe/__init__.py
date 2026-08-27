@@ -192,6 +192,18 @@ from autoskillit.recipe.rules import rules_recipe as _rules_recipe  # noqa: E402
 from autoskillit.recipe.rules import rules_remediation as _rules_remediation  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_route_gate as _rules_route_gate  # noqa: E402 F401
 from autoskillit.recipe.rules import rules_skill_content as _rules_skill_content  # noqa: E402 F401
+from autoskillit.recipe.rules import (  # noqa: E402
+    rules_skill_content_content_structure as _rules_skill_content_content_structure,  # noqa: F401
+)
+from autoskillit.recipe.rules import (  # noqa: E402
+    rules_skill_content_github_api_safety as _rules_skill_content_github_api_safety,  # noqa: F401
+)
+from autoskillit.recipe.rules import (  # noqa: E402
+    rules_skill_content_shell_safety as _rules_skill_content_shell_safety,  # noqa: F401
+)
+from autoskillit.recipe.rules import (  # noqa: E402
+    rules_skill_content_skill_contract as _rules_skill_content_skill_contract,  # noqa: F401
+)
 from autoskillit.recipe.rules import (  # noqa: E402 F401
     rules_skill_write_path_alignment as _rules_skill_write_path_alignment,
 )

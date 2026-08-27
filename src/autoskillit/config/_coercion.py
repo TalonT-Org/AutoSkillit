@@ -140,9 +140,11 @@ _YAML_KEY_ALIASES: dict[tuple[str, str], str] = {
 # The override is responsible for its own key lookup from section_dict.
 _FIELD_OVERRIDES: dict[tuple[str, str], Callable[[dict[str, Any], dict[str, Any]], Any]] = {
     # YAML key "default" with None-means-unset semantic.
-    # ``defs.get("default_model", FALLBACK)`` is structurally defensive — if the
+    # ``defs.get(...)`` (no explicit fallback) is structurally defensive — if the
     # dataclass field is ever removed without updating this lambda, the .get()
-    # surfaces as an explicit None instead of an opaque KeyError at coercion time.
+    # returns None, which CoreRunConfig.__post_init__ rejects with a clear
+    # "default_model must not be empty" ValueError instead of an opaque
+    # KeyError at coercion time.
     ("model", "default_model"): lambda sec, defs: (
         str(sec["default"]) if sec.get("default") is not None else defs.get("default_model")
     ),

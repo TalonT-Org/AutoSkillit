@@ -22,23 +22,27 @@ def test_retired_key_remap_across_modules(tmp_path: Path) -> None:
 
 
 def test_env_layer_validation_uses_retired_remap() -> None:
-    """validate_env_layer_keys (validation.py) calls remap_retired_keys (retired_keys.py).
+    """remap_retired_keys (retired_keys.py) is the live runtime function the env-layer
+    validator consults via os.environ lookups.
 
-    Behavioral check: invoke remap_retired_keys on a layer containing a retired key,
-    then run validate_env_layer_keys and assert the validator accepts the layer
-    without raising — the remap must have fired before validation, otherwise an
-    unrecognized-key ConfigSchemaError would surface.
+    Behavioral check: pick a real retired (section, key) pair from the live
+    RETIRED_CONFIG_KEYS registry and invoke remap_retired_keys against a layer
+    built from it. The remap must produce a non-empty records list — i.e. the
+    function actually consults the registry and produces a RemappedConfigKey,
+    not just that the name ``remap_retired_keys`` appears somewhere in source.
+    The trailing ``validate_env_layer_keys()`` call is a load-only smoke check
+    that the validator module imports cleanly with the registry in scope; the
+    env-validator itself reads os.environ rather than the layer argument, so
+    the substantive behavioral assertion is on remap_retired_keys.
     """
     from autoskillit.config._retired_keys import RETIRED_CONFIG_KEYS, remap_retired_keys
     from autoskillit.config._validation import validate_env_layer_keys
 
-    # Pick a retired (section, key) pair that has an env-var mapping so the
-    # validation loop actually visits it.
     (retired_section, retired_key), _ = next(iter(RETIRED_CONFIG_KEYS.items()))
     layer = {retired_section: {retired_key: True}}
     _, records = remap_retired_keys(layer, is_secrets_layer=False)
     assert records, "remap_retired_keys must record at least one remap for the retired key"
-    validate_env_layer_keys()  # smoke: no exception when registry is loaded
+    validate_env_layer_keys()  # load-only smoke check
 
 
 def test_schema_built_from_automation_config_fields() -> None:

@@ -48,6 +48,8 @@ from ._storage import (
 
 logger = get_logger(__name__)
 
+__all__ = ["recover_all", "_recover_sqlite_result", "_set_store_failure"]
+
 
 def recover_all(self) -> ContextAdmissionRecoveryResult:
     with self._fence:
@@ -323,6 +325,3 @@ def _set_store_failure(
         reason_code=reason_code,
     )
     self._recovered = True
-
-
-__all__ = ["recover_all", "_recover_sqlite_result", "_set_store_failure"]

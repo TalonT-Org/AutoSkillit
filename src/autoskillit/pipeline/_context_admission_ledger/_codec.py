@@ -16,19 +16,23 @@ from typing import Final, cast, get_args
 from autoskillit.core import (
     AdmissionDecision,
     AdmissionEffect,
+    AdmissionSequence,
+    AggregateRevision,
     ContextAdmissionEvent,
     ContextAdmissionState,
+    ContextAdmissionStorageFailureReason,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
     ContextLineage,
     DurableContextAdmissionPayload,
     UninitializedContextAdmissionState,
+    context_admission_reducer_for_protocol,
     decode_stored_context_admission_envelope,
     encode_stored_context_admission_envelope,
     make_stored_context_admission_envelope,
 )
 
-from ._storage import ContextAdmissionStorageFailureReason, _LedgerOpenError
+from ._storage import _LedgerOpenError
 
 _MAX_STREAM_KEY_BYTES: Final = 16 * 1024
 _MAX_STREAM_KEY_JSON_NESTING: Final = 16
@@ -64,12 +68,6 @@ def _stream_key_bytes(stream_key: ContextAdmissionStreamKey) -> bytes:
 
 
 def _zero_state(protocol_version: int) -> UninitializedContextAdmissionState:
-    from autoskillit.core import (
-        AdmissionSequence,
-        AggregateRevision,
-        context_admission_reducer_for_protocol,
-    )
-
     context_admission_reducer_for_protocol(protocol_version)
     return UninitializedContextAdmissionState(
         protocol_version=protocol_version,

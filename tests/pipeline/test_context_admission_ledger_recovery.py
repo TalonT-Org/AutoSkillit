@@ -20,11 +20,11 @@ from unittest.mock import MagicMock
 import pytest
 
 import autoskillit.pipeline._context_admission_ledger._codec as codec_module
-import autoskillit.pipeline._context_admission_ledger._inspection as _inspection_module
-import autoskillit.pipeline._context_admission_ledger._projection as _projection_module
-import autoskillit.pipeline._context_admission_ledger._shadow as _shadow_module
+import autoskillit.pipeline._context_admission_ledger._inspection as inspection_module
+import autoskillit.pipeline._context_admission_ledger._projection as projection_module
+import autoskillit.pipeline._context_admission_ledger._shadow as shadow_module
 import autoskillit.pipeline._context_admission_ledger._storage as storage_module
-import autoskillit.pipeline._context_admission_ledger._store as _store_module
+import autoskillit.pipeline._context_admission_ledger._store as store_module
 from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
@@ -143,7 +143,7 @@ def test_independent_ledgers_race_first_publication_at_shared_path(
         assert collision_seen.wait(timeout=5)
         time.sleep(0.1)
 
-    monkeypatch.setattr(_store_module.os, "link", racing_link)
+    monkeypatch.setattr(store_module.os, "link", racing_link)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = tuple(executor.map(lambda ledger: ledger.recover_all(), ledgers))
@@ -565,7 +565,7 @@ def test_recovery_uses_registered_stream_replay(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    original_selector = _projection_module.context_admission_reducer_for_protocol
+    original_selector = projection_module.context_admission_reducer_for_protocol
     replay_calls = 0
 
     def select_reducer(protocol_version: int) -> object:
@@ -579,7 +579,7 @@ def test_recovery_uses_registered_stream_replay(
         return replace(reducer, replay_stream=replay_stream)
 
     monkeypatch.setattr(
-        _projection_module,
+        projection_module,
         "context_admission_reducer_for_protocol",
         select_reducer,
     )
@@ -600,10 +600,10 @@ def test_recovery_uses_versioned_shadow_projector(
         DefaultContextAdmissionLedger(authority).apply(key, open_event()).status
         is ContextAdmissionAccountingStatus.RECORDED
     )
-    projector = MagicMock(side_effect=_shadow_module._shadow_record_protocol_v1)
+    projector = MagicMock(side_effect=shadow_module._shadow_record_protocol_v1)
     registry = MappingProxyType({1: projector})
     monkeypatch.setattr(
-        _shadow_module,
+        shadow_module,
         "_CONTEXT_ADMISSION_SHADOW_PROJECTORS",
         registry,
     )
@@ -613,7 +613,7 @@ def test_recovery_uses_versioned_shadow_projector(
     assert recovered.recovered_streams == (key,)
     projector.assert_called_once()
     assert tuple(registry) == (1,)
-    assert registry.keys() == _shadow_module.CONTEXT_ADMISSION_REDUCER_REGISTRY.keys()
+    assert registry.keys() == shadow_module.CONTEXT_ADMISSION_REDUCER_REGISTRY.keys()
     with pytest.raises(TypeError, match="does not support item assignment"):
         registry[2] = projector  # type: ignore[index]
 
@@ -719,7 +719,7 @@ def test_sqlite_recovery_preserves_failure_discovered_during_inspection(
     monkeypatch.setattr(
         ledger,
         "inspect_stream",
-        lambda _key: _inspection_module._empty_inspection(key, failure),
+        lambda _key: inspection_module._empty_inspection(key, failure),
     )
     connection = ledger._connect()
 

@@ -12,8 +12,8 @@ The implementation is decomposed into cohesive shards:
 * :mod:`._sqlite_errors` — busy/recovery code masks, ``_LedgerContended``,
   rollback helper, ``_sqlite_primary_code`` classifier
 * :mod:`._apply` — apply transaction boundary and busy-retry commit
-* :mod:`._recover` — apply-time recovery orchestration (mid-flight rollback
-  + re-recovery + re-apply)
+* :mod:`._recover` — ``recover_all`` and apply-time recovery orchestration
+  (mid-flight rollback + re-recovery + re-apply)
 * :mod:`._inspection` — inspection helpers and the ``inspect_stream`` body
 * :mod:`._storage` — filesystem and bounded SQLite primitives (originally
   ``_context_admission_storage.py``)
@@ -225,38 +225,26 @@ class DefaultContextAdmissionLedger:
 # Methods live in sibling shards; bound onto the class below (Wavefront 1 of #4667).
 
 from ._apply import (  # noqa: E402
-    _commit_with_busy_retry as _commit_with_busy_retry_method,
-)
-from ._apply import (  # noqa: E402
-    _persist_stream_failure as _persist_stream_failure_method,
-)
-from ._apply import (  # noqa: E402
-    _storage_failure_result as _storage_failure_result_method,
-)
-from ._apply import (  # noqa: E402
-    apply as _apply_method,
-)
-from ._apply import (  # noqa: E402
-    commit as _commit_method,
-)
-from ._apply import (  # noqa: E402
-    release as _release_method,
-)
-from ._apply import (  # noqa: E402
-    reserve as _reserve_method,
+    _commit_with_busy_retry,
+    _persist_stream_failure,
+    _storage_failure_result,
+    apply,
+    commit,
+    release,
+    reserve,
 )
 
-setattr(DefaultContextAdmissionLedger, "apply", _apply_method)
-setattr(DefaultContextAdmissionLedger, "reserve", _reserve_method)
-setattr(DefaultContextAdmissionLedger, "commit", _commit_method)
-setattr(DefaultContextAdmissionLedger, "release", _release_method)
+setattr(DefaultContextAdmissionLedger, "apply", apply)
+setattr(DefaultContextAdmissionLedger, "reserve", reserve)
+setattr(DefaultContextAdmissionLedger, "commit", commit)
+setattr(DefaultContextAdmissionLedger, "release", release)
 setattr(
     DefaultContextAdmissionLedger,
     "_commit_with_busy_retry",
-    _commit_with_busy_retry_method,
+    _commit_with_busy_retry,
 )
-setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure_method)
-setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result_method)
+setattr(DefaultContextAdmissionLedger, "_persist_stream_failure", _persist_stream_failure)
+setattr(DefaultContextAdmissionLedger, "_storage_failure_result", _storage_failure_result)
 
 from ._store import (  # noqa: E402
     _configure_connection,
@@ -290,23 +278,21 @@ setattr(
     staticmethod(_validate_metadata),
 )
 
-from ._inspection import _inspect_stream as _inspect_stream_method  # noqa: E402
+from ._inspection import inspect_stream  # noqa: E402
 
-setattr(DefaultContextAdmissionLedger, "inspect_stream", _inspect_stream_method)
+setattr(DefaultContextAdmissionLedger, "inspect_stream", inspect_stream)
 
 from ._recover import (  # noqa: E402
-    _recover_sqlite_result as _recover_sqlite_result_method,
-)
-from ._recover import (  # noqa: E402
+    _recover_sqlite_result,
     _set_store_failure,
+    recover_all,
 )
-from ._recover import recover_all as recover_all_method  # noqa: E402
 
-setattr(DefaultContextAdmissionLedger, "recover_all", recover_all_method)  # noqa: E402
-setattr(DefaultContextAdmissionLedger, "_set_store_failure", _set_store_failure)  # noqa: E402
+setattr(DefaultContextAdmissionLedger, "recover_all", recover_all)
+setattr(DefaultContextAdmissionLedger, "_set_store_failure", _set_store_failure)
 
 setattr(
     DefaultContextAdmissionLedger,
     "_recover_sqlite_result",
-    _recover_sqlite_result_method,
+    _recover_sqlite_result,
 )

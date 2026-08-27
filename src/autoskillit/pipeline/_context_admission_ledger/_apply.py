@@ -36,6 +36,7 @@ from autoskillit.core import (
     ResolveIndeterminateRollbackEvent,
     RollbackAdmissionEvent,
     context_admission_reducer_for_protocol,
+    get_logger,
 )
 
 from ._codec import (
@@ -49,7 +50,6 @@ from ._codec import (
 from ._projection import (
     _MAX_RECOVERY_BYTES,
     _MAX_RECOVERY_ROWS,
-    _LedgerReadBudget,
     _recover_stream_projection,
     _stored_stream_health,
 )
@@ -71,7 +71,9 @@ from ._status import (
     _LedgerFaultPoint,
     _uninitialized_stream_result,
 )
-from ._storage import _LedgerOpenError
+from ._storage import _LedgerOpenError, _LedgerReadBudget
+
+logger = get_logger(__name__)
 
 __all__ = [
     "apply",
@@ -414,9 +416,10 @@ def apply(
                 failure_reason=exc.reason,
                 reason_code=exc.reason_code,
             )
-        except ContextAdmissionValidationError:
+        except ContextAdmissionValidationError as exc:
             if connection is not None:
                 _rollback(connection)
+            logger.warning("context-admission apply rejected by validation: %s", exc)
             return ContextAdmissionAccountingResult(
                 status=ContextAdmissionAccountingStatus.STORAGE_FAIL_CLOSED,
                 stream_key=stream_key,
@@ -441,12 +444,20 @@ def apply(
                 )
             if connection is not None:
                 _rollback(connection)
+            logger.warning(
+                "context-admission apply failed with sqlite error code=%s: %s",
+                primary_code,
+                exc,
+            )
             reason = (
                 ContextAdmissionStorageFailureReason.INTEGRITY
                 if primary_code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_CONSTRAINT}
                 else ContextAdmissionStorageFailureReason.IO
             )
-            self._set_store_failure(reason, "sqlite-publication-failed")
+            self._set_store_failure(
+                reason,
+                f"sqlite-publication-failed:{primary_code}",
+            )
             return self._storage_failure_result(stream_key)
         except BaseException:
             if connection is not None:
@@ -543,9 +554,14 @@ def _persist_stream_failure(
         _rollback(connection)
         if _sqlite_primary_code(exc) in _SQLITE_BUSY_CODES:
             return False
+        logger.warning(
+            "context-admission stream-health persistence failed code=%s: %s",
+            _sqlite_primary_code(exc),
+            exc,
+        )
         self._set_store_failure(
             ContextAdmissionStorageFailureReason.IO,
-            "stream-health-persistence-failed",
+            f"stream-health-persistence-failed:{_sqlite_primary_code(exc)}",
         )
         return False
     self._stream_health[stream_key] = ContextAdmissionStreamHealth(

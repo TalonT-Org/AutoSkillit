@@ -1,9 +1,10 @@
 """Inspection helpers and the inspect_stream body.
 
-Owns the value-constructors :func:`_empty_inspection` and
-:func:`_contended_inspection`, plus the ``inspect_stream`` body refactored
-into a standalone ``_inspect_stream(self, stream_key)`` function that is
-rebound onto :class:`DefaultContextAdmissionLedger` from ``__init__.py``.
+Owns the value-constructors :func:`_empty_inspection`,
+:func:`_contended_inspection`, and :func:`_fail_closed_inspection`, plus
+the ``inspect_stream`` body refactored into a standalone
+``inspect_stream(self, stream_key)`` function that is rebound onto
+:class:`DefaultContextAdmissionLedger` from ``__init__.py``.
 
 Wavefront 1 of #4667.
 """
@@ -21,13 +22,13 @@ from autoskillit.core import (
     ContextAdmissionStreamHealth,
     ContextAdmissionStreamKey,
     ContextAdmissionValidationError,
+    get_logger,
 )
 
 from ._codec import _stream_key_bytes
 from ._projection import (
     _MAX_RECOVERY_BYTES,
     _MAX_RECOVERY_ROWS,
-    _LedgerReadBudget,
     _recover_stream_projection,
     _stored_stream_health,
 )
@@ -37,12 +38,15 @@ from ._sqlite_errors import (
     _rollback,
     _sqlite_primary_code,
 )
-from ._storage import _LedgerOpenError
+from ._storage import _LedgerOpenError, _LedgerReadBudget
+
+logger = get_logger(__name__)
 
 __all__ = [
     "_empty_inspection",
     "_contended_inspection",
-    "_inspect_stream",
+    "_fail_closed_inspection",
+    "inspect_stream",
 ]
 
 
@@ -89,7 +93,7 @@ def _fail_closed_inspection(
     )
 
 
-def _inspect_stream(
+def inspect_stream(
     self,
     stream_key: ContextAdmissionStreamKey,
 ) -> ContextAdmissionInspectionResult:
@@ -247,6 +251,12 @@ def _map_persistent_inspection_failure(
     )
     reason_code = (
         exc.reason_code if isinstance(exc, _LedgerOpenError) else "inspection-decode-failed"
+    )
+    logger.warning(
+        "context-admission inspect_stream persistent failure reason=%s code=%s: %s",
+        reason.value,
+        reason_code,
+        exc,
     )
     if connection is None and isinstance(exc, _LedgerOpenError):
         self._set_store_failure(reason, reason_code)

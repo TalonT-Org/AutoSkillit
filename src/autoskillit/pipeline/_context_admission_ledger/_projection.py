@@ -49,6 +49,13 @@ from ._storage import (
 _MAX_RECOVERY_ROWS: Final = 100_000
 _MAX_RECOVERY_BYTES: Final = 256 * 1024 * 1024
 
+__all__ = [
+    "_MAX_RECOVERY_ROWS",
+    "_MAX_RECOVERY_BYTES",
+    "_stored_stream_health",
+    "_recover_stream_projection",
+]
+
 
 def _stored_stream_health(
     stream_key: ContextAdmissionStreamKey,
@@ -312,11 +319,3 @@ def _recover_stream_projection(
         tuple(replayed_effects),
         tuple(replayed_shadows),
     )
-
-
-__all__ = [
-    "_MAX_RECOVERY_ROWS",
-    "_MAX_RECOVERY_BYTES",
-    "_stored_stream_health",
-    "_recover_stream_projection",
-]

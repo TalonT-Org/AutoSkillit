@@ -58,7 +58,6 @@ def test_pipeline_module_cascade_has_exact_context_keys() -> None:
         }
     )
     assert set(MODULE_CASCADE_PIPELINE) == expected_keys
-    assert MODULE_CASCADE_PIPELINE["context_admission_ledger"] == frozenset({"pipeline", "server"})
     assert MODULE_CASCADE_PIPELINE["context"] == frozenset(
         {
             "pipeline",

@@ -1,12 +1,10 @@
 """Migration engine core: dispatch logic, adapter ABCs, shared dataclasses,
 factory, and private helpers used by the skill adapter.
 
-Concrete adapters live in ``adapters_recipe.py``, ``adapters_contract.py``,
-``adapters_diagram.py``, and ``adapters_skill.py``; the high-level service
-wrapper lives in ``service.py``. This module re-exports every public symbol
-and reassigns ``__module__`` so the relocated classes continue to report
-``autoskillit.migration.engine`` as their home (preserving repr / pickle /
-``inspect.getmodule`` identity for downstream consumers).
+Concrete adapters live in sibling modules (``adapters_recipe``,
+``adapters_contract``, ``adapters_diagram``, ``adapters_skill``); the
+high-level service wrapper lives in ``service.py``. Import the relocated
+classes from their owning modules, not from this one.
 """
 
 from __future__ import annotations
@@ -16,17 +14,15 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from autoskillit.core import (
     ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS,
     SkillContractError,
+    SkillResult,
     atomic_write,
     get_logger,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = get_logger(__name__)
 
@@ -111,6 +107,12 @@ class MigrationResult:
     advisory: str | None = None
 
 
+@dataclass
+class AdvisoryResult:
+    name: str
+    suggestion: str
+
+
 class MigrationAdapter(ABC):
     """Abstract base for file-type-specific migration adapters."""
 
@@ -123,6 +125,14 @@ class MigrationAdapter(ABC):
     @abstractmethod
     def needs_migration(self, file: MigrationFile) -> bool:
         """Return True if this file requires migration."""
+
+    def post_migration_validate(self, path: Path) -> tuple[bool, str] | None:
+        """Run a typed re-validation after the engine writes migrated content.
+
+        Override to opt in to a strict check on the file's contents. Returning
+        ``None`` (the default) tells the engine the adapter has no extra
+        check beyond the structural ``validate`` already exposed.
+        """
 
     @abstractmethod
     def validate(self, path: Path) -> tuple[bool, str]:
@@ -137,7 +147,7 @@ class HeadlessMigrationAdapter(MigrationAdapter):
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[Any]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         """Apply migration via run_headless; write-back handled by MigrationEngine."""
@@ -181,7 +191,7 @@ class MigrationEngine:
         self,
         file: MigrationFile,
         *,
-        run_headless: Callable[..., Awaitable[Any]],
+        run_headless: Callable[..., Awaitable[SkillResult]],
         temp_dir: Path,
     ) -> MigrationResult:
         adapter = self._adapters.get(file.file_type)
@@ -211,14 +221,9 @@ class MigrationEngine:
             atomic_write(file.path, result.migrated_content)
             logger.info("migration.written_back", name=file.name, path=str(file.path))
 
-            # Late import: SkillMigrationAdapter.validate only runs after the
-            # adapter has produced migrated content; importing at module load
-            # time would create a circular dependency between engine.py and
-            # adapters_skill.py.
-            from autoskillit.migration.adapters_skill import SkillMigrationAdapter  # noqa: PLC0415
-
-            if isinstance(adapter, SkillMigrationAdapter):
-                is_valid, validation_error = adapter.validate(file.path)
+            post_check = adapter.post_migration_validate(file.path)
+            if post_check is not None:
+                is_valid, validation_error = post_check
                 if not is_valid:
                     return MigrationResult(
                         success=False,
@@ -248,45 +253,15 @@ def default_migration_engine() -> MigrationEngine:
     )
 
 
-# ---------------------------------------------------------------------------
-# Public-symbol re-exports for relocated classes. The class objects continue
-# to be importable as ``autoskillit.migration.engine.<Name>`` and we reassign
-# ``__module__`` so repr / pickle / inspect.getmodule continue to report
-# ``autoskillit.migration.engine`` as the class's home.
-# ---------------------------------------------------------------------------
-from autoskillit.migration.adapters_contract import ContractMigrationAdapter  # noqa: E402
-from autoskillit.migration.adapters_diagram import (  # noqa: E402
-    AdvisoryResult,
-    DiagramMigrationAdapter,
-)
-from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter  # noqa: E402
-from autoskillit.migration.adapters_skill import SkillMigrationAdapter  # noqa: E402
-from autoskillit.migration.service import DefaultMigrationService  # noqa: E402
-
-for _cls in (
-    RecipeMigrationAdapter,
-    ContractMigrationAdapter,
-    DiagramMigrationAdapter,
-    SkillMigrationAdapter,
-    AdvisoryResult,
-    DefaultMigrationService,
-):
-    _cls.__module__ = __name__
-
 __all__ = [
     "AdvisoryMigrationAdapter",
     "AdvisoryResult",
-    "ContractMigrationAdapter",
-    "DefaultMigrationService",
     "DeterministicMigrationAdapter",
-    "DiagramMigrationAdapter",
     "HeadlessMigrationAdapter",
     "MIGRATE_RECIPES_MAX_RETRIES",
     "MigrationAdapter",
     "MigrationEngine",
     "MigrationFile",
     "MigrationResult",
-    "RecipeMigrationAdapter",
-    "SkillMigrationAdapter",
     "default_migration_engine",
 ]

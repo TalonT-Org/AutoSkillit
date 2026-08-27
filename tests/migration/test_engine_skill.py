@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
     MigrationFile,
-    SkillMigrationAdapter,
     default_migration_engine,
 )
 

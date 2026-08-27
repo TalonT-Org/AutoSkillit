@@ -1,32 +1,23 @@
-"""Diagram migration adapter — advisory staleness detection for skill-crafted diagrams.
-
-The diagram adapter never overwrites files; it surfaces a suggestion to run
-``/render-recipe`` instead. ``AdvisoryResult`` is defined locally here because
-the diagram adapter is the sole producer of this shape.
-"""
+"""Diagram migration adapter — advisory staleness detection for skill-crafted diagrams."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import regex as re
 
-from autoskillit.migration.engine import AdvisoryMigrationAdapter, MigrationFile
+from autoskillit.core import get_logger
+from autoskillit.migration.engine import (
+    AdvisoryMigrationAdapter,
+    AdvisoryResult,
+    MigrationFile,
+)
 
-
-@dataclass
-class AdvisoryResult:
-    name: str
-    suggestion: str
+logger = get_logger(__name__)
 
 
 class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
-    """Advisory adapter for skill-crafted recipe flow diagrams.
-
-    Detects stale diagrams but never overwrites them — returns a suggestion
-    to run ``/render-recipe`` instead.
-    """
+    """Advisory adapter that flags stale recipe flow diagrams without overwriting them."""
 
     file_type = "diagram"
 
@@ -54,6 +45,11 @@ class DiagramMigrationAdapter(AdvisoryMigrationAdapter):
         from autoskillit.recipe import diagram_stale_to_suggestions  # noqa: PLC0415
 
         suggestions = diagram_stale_to_suggestions(file.name)
+        if not suggestions:
+            logger.warning(
+                "diagram.stale_detector_returned_no_suggestions",
+                name=file.name,
+            )
         return AdvisoryResult(
             name=file.name,
             suggestion=suggestions[0]["message"] if suggestions else "",

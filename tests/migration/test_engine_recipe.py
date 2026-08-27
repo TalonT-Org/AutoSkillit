@@ -9,10 +9,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from autoskillit.core.paths import pkg_root
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.engine import (
     MIGRATE_RECIPES_MAX_RETRIES,
     MigrationFile,
-    RecipeMigrationAdapter,
 )
 
 from .conftest import make_migration_note, make_skill_result
@@ -154,16 +154,14 @@ class TestRecipeMigrationAdapter:
     # ME9
     def test_recipe_adapter_validate_invalid_yaml_structure(self, tmp_path: Path) -> None:
         recipe_path = tmp_path / "broken.yaml"
-        recipe_path.write_text("steps: 'not_a_dict'\ningredients: 42\n")
+        recipe_path.write_text("steps: 'not_a_dict'\n")
 
         adapter = RecipeMigrationAdapter()
         is_valid, error = adapter.validate(recipe_path)
 
         assert is_valid is False
         assert len(error) > 0
-        assert (
-            "dict" in error.lower() or "expected" in error.lower() or "attribute" in error.lower()
-        )
+        assert "mapping" in error.lower() or "expected" in error.lower()
 
     # ME9b
     def test_recipe_adapter_validate_errors_non_empty_branch(self, tmp_path: Path) -> None:

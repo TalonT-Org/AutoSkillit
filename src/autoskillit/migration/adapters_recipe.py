@@ -6,6 +6,8 @@ import json
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+import yaml
+
 from autoskillit import __version__
 from autoskillit.core import SkillResult, dump_yaml_str, get_logger
 from autoskillit.migration.engine import (
@@ -20,6 +22,8 @@ logger = get_logger(__name__)
 
 
 class RecipeMigrationAdapter(HeadlessMigrationAdapter):
+    """Headless adapter for LLM-driven recipe version migration."""
+
     file_type = "recipe"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
@@ -125,6 +129,6 @@ class RecipeMigrationAdapter(HeadlessMigrationAdapter):
             if errors:
                 return False, "; ".join(str(e) for e in errors)
             return True, ""
-        except Exception as exc:
+        except (OSError, ValueError, yaml.YAMLError) as exc:
             logger.warning("Recipe file validation failed", path=str(path), error=str(exc))
             return False, str(exc)

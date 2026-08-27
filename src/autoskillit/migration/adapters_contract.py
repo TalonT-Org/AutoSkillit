@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from autoskillit.core import get_logger, load_yaml
 from autoskillit.migration.engine import (
     DeterministicMigrationAdapter,
@@ -13,8 +15,12 @@ from autoskillit.migration.engine import (
 
 logger = get_logger(__name__)
 
+_YAML_LOAD_EXC: tuple[type[BaseException], ...] = (OSError, yaml.YAMLError)
+
 
 class ContractMigrationAdapter(DeterministicMigrationAdapter):
+    """Deterministic adapter for regenerating contract cards from their source recipes."""
+
     file_type = "contract"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
@@ -61,7 +67,7 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
         try:
             _ = generate_recipe_card(recipe_path, recipes_dir)
             return MigrationResult(success=True, name=file.name)
-        except Exception as exc:
+        except (OSError, ValueError, yaml.YAMLError) as exc:
             logger.warning("Contract card generation failed", name=file.name, error=str(exc))
             return MigrationResult(success=False, name=file.name, error=str(exc))
 
@@ -71,6 +77,6 @@ class ContractMigrationAdapter(DeterministicMigrationAdapter):
             if not isinstance(data, dict) or "skill_hashes" not in data:
                 return False, "missing skill_hashes field"
             return True, ""
-        except Exception as exc:
+        except _YAML_LOAD_EXC as exc:
             logger.warning("Contract file validation failed", path=str(path), error=str(exc))
             return False, str(exc)

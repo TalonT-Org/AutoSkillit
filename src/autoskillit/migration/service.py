@@ -7,13 +7,46 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from autoskillit import __version__
 from autoskillit.core import RetryReason, SkillResult, get_logger, resolve_temp_dir
 from autoskillit.migration.engine import MigrationEngine, MigrationFile
+from autoskillit.migration.loader import applicable_migrations as _applicable
 
 logger = get_logger(__name__)
+
+
+class MigrationServiceError(TypedDict):
+    """Returned when migration fails before any work happens."""
+
+    error: str
+    name: str
+
+
+class MigrationServiceUpToDate(TypedDict, total=False):
+    """Returned when no migration was needed but advisories may still apply."""
+
+    status: str  # always "up_to_date"
+    name: str
+    advisories: list[str]
+
+
+class MigrationServiceMigrated(TypedDict, total=False):
+    """Returned when at least one migration or regeneration actually ran."""
+
+    status: str  # always "migrated"
+    name: str
+    contracts_regenerated: list[str]
+    advisories: list[str]
+
+
+# Public alias of the three return shapes; the runtime type is a dict
+# so the ``MigrationService`` Protocol (which mandates ``dict[str, Any]``)
+# continues to accept ``DefaultMigrationService`` as a structural subtype.
+MigrationServiceResult = (
+    MigrationServiceError | MigrationServiceUpToDate | MigrationServiceMigrated
+)
 
 
 class DefaultMigrationService:
@@ -38,17 +71,17 @@ class DefaultMigrationService:
     async def migrate(self, recipe_path: Path) -> dict[str, Any]:
         """Apply pending migration notes to the recipe file at recipe_path.
 
-        Checks for applicable migrations, runs the migration engine (LLM-driven
-        if a headless runner is wired in), handles FailureStore recording, and
-        regenerates the contract card when stale.
+        Returns one of three TypedDict shapes:
 
-        Returns a dict with:
-          {"status": "up_to_date", "name": name}  — no migration needed
-          {"status": "migrated", "name": name, "contracts_regenerated": [...]}
-              — version migration applied and/or stale contracts regenerated
-          {"error": str, "name": name}             — migration failed
+        - ``MigrationServiceError`` — ``{"error": str, "name": str}`` when the
+          migration fails before any work happens.
+        - ``MigrationServiceUpToDate`` — ``{"status": "up_to_date", "name": str,
+          "advisories"?: list[str]}`` when no migration was needed (advisories
+          may still surface).
+        - ``MigrationServiceMigrated`` — ``{"status": "migrated", "name": str,
+          "contracts_regenerated": list[str], "advisories"?: list[str]}`` when
+          at least one migration or regeneration actually ran.
         """
-        from autoskillit.migration.loader import applicable_migrations as _applicable
         from autoskillit.migration.store import FailureStore, default_store_path
         from autoskillit.recipe import parse_recipe_metadata  # noqa: PLC0415
 
@@ -111,7 +144,13 @@ class DefaultMigrationService:
                     error=migration_result.error or "unknown",
                     retries_attempted=migration_result.retries_attempted,
                 )
-                return {"error": f"Migration failed: {migration_result.error}", "name": name}
+                return cast(
+                    dict[str, Any],
+                    MigrationServiceError(
+                        error=f"Migration failed: {migration_result.error}",
+                        name=name,
+                    ),
+                )
 
         advisories: list[str] = []
         contracts_regenerated: list[str] = []
@@ -162,15 +201,15 @@ class DefaultMigrationService:
                     )
 
         if did_version_migrate or contracts_regenerated:
-            result_dict: dict[str, object] = {
+            result: MigrationServiceMigrated = {
                 "status": "migrated",
                 "name": name,
                 "contracts_regenerated": contracts_regenerated,
             }
             if advisories:
-                result_dict["advisories"] = advisories
-            return result_dict
-        result_dict = {"status": "up_to_date", "name": name}
+                result["advisories"] = advisories
+            return cast(dict[str, Any], result)
+        up_to_date: MigrationServiceUpToDate = {"status": "up_to_date", "name": name}
         if advisories:
-            result_dict["advisories"] = advisories
-        return result_dict
+            up_to_date["advisories"] = advisories
+        return cast(dict[str, Any], up_to_date)

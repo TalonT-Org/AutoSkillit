@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from autoskillit.migration.adapters_contract import ContractMigrationAdapter
+from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
-    ContractMigrationAdapter,
     MigrationEngine,
     MigrationFile,
     MigrationResult,
-    RecipeMigrationAdapter,
-    SkillMigrationAdapter,
     default_migration_engine,
 )
 

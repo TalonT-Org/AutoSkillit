@@ -1,15 +1,12 @@
 """Structural tests pinning the engine.py decomposition contract.
 
-These tests fail against the pre-decomposition monolithic engine.py and pass
-once the file is split into focused adapter/service modules.
+Each test exercises a module-shape invariant the split is meant to enforce.
 
 T1 — engine.py is below the 750-line ceiling after the split.
 T2 — each extracted adapter module is below the 750-line ceiling.
 T3 — adapter classes live in their new owning modules.
-T4 — engine core still re-exports every public symbol with preserved
-     __module__ identity for the relocated classes.
-T6 — adapters_skill.py can call the legacy helpers _skill_project_dir and
-     _normalize_legacy_child_spawn_cardinality from engine.py.
+T4 — the engine module no longer re-exports relocated adapter classes.
+T6 — adapters_skill.py can call the legacy helpers from engine.py.
 """
 
 from __future__ import annotations
@@ -19,41 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.migration.adapters_contract import ContractMigrationAdapter
-from autoskillit.migration.adapters_diagram import AdvisoryResult, DiagramMigrationAdapter
-from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
 from autoskillit.migration.engine import (
-    MIGRATE_RECIPES_MAX_RETRIES,
-    AdvisoryMigrationAdapter,
-    DefaultMigrationService,
-    DeterministicMigrationAdapter,
-    HeadlessMigrationAdapter,
-    MigrationAdapter,
-    MigrationEngine,
     MigrationFile,
     MigrationResult,
-)
-from autoskillit.migration.engine import (
-    AdvisoryResult as AdvisoryResultFromEngine,
-)
-from autoskillit.migration.engine import (
-    ContractMigrationAdapter as ContractMigrationAdapterFromEngine,
-)
-from autoskillit.migration.engine import (
-    DefaultMigrationService as DefaultMigrationServiceFromEngine,
-)
-from autoskillit.migration.engine import (
-    DiagramMigrationAdapter as DiagramMigrationAdapterFromEngine,
-)
-from autoskillit.migration.engine import (
-    RecipeMigrationAdapter as RecipeMigrationAdapterFromEngine,
-)
-from autoskillit.migration.engine import (
-    SkillMigrationAdapter as SkillMigrationAdapterFromEngine,
-)
-from autoskillit.migration.service import (
-    DefaultMigrationService as DefaultMigrationServiceFromService,
 )
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
@@ -125,44 +91,36 @@ def test_adapter_classes_reside_in_new_modules(class_name: str, expected_module:
 
 
 # ---------------------------------------------------------------------------
-# T4 — engine core still re-exports every public symbol with preserved
-#       __module__ identity for the relocated classes.
+# T4 — the engine module no longer re-exports relocated adapter classes
 # ---------------------------------------------------------------------------
 
 
-def test_engine_module_reexports_public_symbols() -> None:
-    # Every name must resolve to the same object regardless of import path.
-    assert RecipeMigrationAdapter is RecipeMigrationAdapterFromEngine
-    assert ContractMigrationAdapter is ContractMigrationAdapterFromEngine
-    assert DiagramMigrationAdapter is DiagramMigrationAdapterFromEngine
-    assert SkillMigrationAdapter is SkillMigrationAdapterFromEngine
-    assert AdvisoryResult is AdvisoryResultFromEngine
-    assert DefaultMigrationService is DefaultMigrationServiceFromService
-    assert DefaultMigrationService is DefaultMigrationServiceFromEngine
+def test_engine_module_does_not_reexport_relocated_classes() -> None:
+    """The decomposition removed the backward-compat re-export shim.
 
-    # Relocated classes report autoskillit.migration.engine as __module__.
-    for cls in (
-        RecipeMigrationAdapter,
-        ContractMigrationAdapter,
-        DiagramMigrationAdapter,
-        SkillMigrationAdapter,
-        AdvisoryResult,
-        DefaultMigrationService,
-    ):
-        assert cls.__module__ == "autoskillit.migration.engine", (
-            f"{cls.__name__}.__module__ == {cls.__module__!r}, "
-            "expected autoskillit.migration.engine"
-        )
-
-    # Symbols that physically live in engine.py naturally report it.
-    assert MigrationAdapter.__module__ == "autoskillit.migration.engine"
-    assert HeadlessMigrationAdapter.__module__ == "autoskillit.migration.engine"
-    assert DeterministicMigrationAdapter.__module__ == "autoskillit.migration.engine"
-    assert AdvisoryMigrationAdapter.__module__ == "autoskillit.migration.engine"
-    assert MigrationEngine.__module__ == "autoskillit.migration.engine"
-    assert MigrationFile.__module__ == "autoskillit.migration.engine"
-    assert MigrationResult.__module__ == "autoskillit.migration.engine"
-    assert MIGRATE_RECIPES_MAX_RETRIES == 3
+    Relocated classes must resolve from their owning modules, not from
+    ``autoskillit.migration.engine``. The engine keeps only the types it
+    physically defines.
+    """
+    engine_src = (_MIGRATION_DIR / "engine.py").read_text(encoding="utf-8")
+    tree = ast.parse(engine_src)
+    top_level_names = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+    relocated = {
+        "RecipeMigrationAdapter",
+        "ContractMigrationAdapter",
+        "DiagramMigrationAdapter",
+        "SkillMigrationAdapter",
+        "DefaultMigrationService",
+    }
+    leaked = relocated & top_level_names
+    assert not leaked, (
+        f"engine.py still defines relocated symbols: {sorted(leaked)}. "
+        "Import them from their owning modules instead."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -173,10 +131,12 @@ def test_engine_module_reexports_public_symbols() -> None:
 @pytest.mark.anyio
 async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
     """adapters_skill.py must import _skill_project_dir and
-    _normalize_legacy_child_spawn_cardinality from engine.py. The helpers
-    are exercised by the SEMANTIC_CHILD_CARDINALITY_INVALID migration path;
-    if either import fails at module load, SkillMigrationAdapter.migrate
-    raises NameError when triggered with that invalidity kind.
+    _normalize_legacy_child_spawn_cardinality from engine.py.
+
+    The helpers are exercised by the SEMANTIC_CHILD_CARDINALITY_INVALID
+    migration path; if either import fails at module load,
+    SkillMigrationAdapter.migrate raises NameError when triggered with that
+    invalidity kind. The legacy child_spawns setup here forces that branch.
     """
     skill_dir = tmp_path / ".claude" / "skills" / "legacy-child-spawn-cardinality"
     skill_dir.mkdir(parents=True)
@@ -212,8 +172,13 @@ async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
     result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
 
     assert isinstance(result, MigrationResult)
-    # Either success (legacy cardinality was migrated) or a controlled failure
-    # from the helper returning an error string — both prove the helper
-    # was reachable. What would NOT be acceptable is a NameError before
-    # MigrationResult is constructed.
+    # Reaching this branch (legacy cardinality detected) is the proof that
+    # _normalize_legacy_child_spawn_cardinality was actually invoked.
     assert result.name == "legacy-child-spawn-cardinality"
+    # The legacy cardinality setup is valid input for the normalizer, so
+    # this branch must end with success — if the helper returned an error
+    # string, the adapter would surface that as success=False.
+    assert result.success is True, (
+        f"_normalize_legacy_child_spawn_cardinality was reachable but did not "
+        f"normalize the legacy setup: {result.error!r}"
+    )

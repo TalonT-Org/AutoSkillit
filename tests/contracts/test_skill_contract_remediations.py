@@ -23,7 +23,8 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceRef,
 )
-from autoskillit.migration.engine import MigrationFile, SkillMigrationAdapter
+from autoskillit.migration.adapters_skill import SkillMigrationAdapter
+from autoskillit.migration.engine import MigrationFile
 from autoskillit.workspace import (
     render_skill_invalidities,
     validate_skill_capability_authenticity,

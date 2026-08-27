@@ -1,11 +1,4 @@
-"""Skill migration adapter — deterministic frontmatter-only migration for stale skills.
-
-Handles the ``DETERMINISTIC`` entries in ``SKILL_CONTRACT_REMEDIATIONS``:
-UNDECLARED_CAPABILITY, SEMANTIC_MISSING_VERSION, SEMANTIC_UNDECLARED_TOKENS,
-and SEMANTIC_CHILD_CARDINALITY_INVALID. Every other kind is ``ADVISORY`` and
-left to the operator. Frontmatter is edited in-memory and re-serialized as a
-whole block; the body is carried through byte-for-byte and never touched.
-"""
+"""Skill migration adapter — deterministic frontmatter-only migration for stale skills."""
 
 from __future__ import annotations
 
@@ -34,6 +27,8 @@ if TYPE_CHECKING:
 
 
 class SkillMigrationAdapter(DeterministicMigrationAdapter):
+    """Deterministic adapter for repairing skill frontmatter in stale skills."""
+
     file_type = "skill"
 
     def discover(self, project_dir: Path) -> list[MigrationFile]:
@@ -201,3 +196,7 @@ class SkillMigrationAdapter(DeterministicMigrationAdapter):
             details = "; ".join(item.detail for item in remaining)
             return False, f"deterministic skill invalidities remain: {details}"
         return True, ""
+
+    def post_migration_validate(self, path: Path) -> tuple[bool, str] | None:
+        """Run the typed skill re-validation after the engine writes content back."""
+        return self.validate(path)

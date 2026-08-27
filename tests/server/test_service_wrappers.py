@@ -223,7 +223,7 @@ class TestDefaultMigrationService:
         monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: None)
 
         def _raise(*a, **kw):
-            raise Exception("disk error")
+            raise OSError("disk error")
 
         monkeypatch.setattr("autoskillit.recipe.generate_recipe_card", _raise)
 

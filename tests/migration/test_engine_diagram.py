@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from autoskillit.migration.adapters_diagram import DiagramMigrationAdapter
 from autoskillit.migration.engine import (
     AdvisoryResult,
     DeterministicMigrationAdapter,
-    DiagramMigrationAdapter,
     MigrationEngine,
     MigrationFile,
     default_migration_engine,

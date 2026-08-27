@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    CaptureEntrySpec,
     FleetErrorCode,
     get_logger,
     release_tracker_lease,
@@ -272,7 +273,6 @@ except ImportError:
 
 
 async def _run_dispatch(
-    *,
     tool_ctx: ToolContext,
     recipe: str,
     task: str,
@@ -282,25 +282,26 @@ async def _run_dispatch(
     prompt_builder: Callable[..., str],
     quota_checker: Callable[..., Any],
     quota_refresher: Callable[..., Any],
-    cache_invalidator: Callable[[str], None] | None,
-    capture: dict[str, Any] | None,
-    resume_session_id: str | None,
-    resume_checkpoint: SessionCheckpoint | None,
-    idle_output_timeout: int | None,
-    caller_session_id: str,
-    prior_dispatch_id: str | None,
-    resume_message: str | None,
-    caller_instructions: str | None,
-    dispatch_backend: CodingAgentBackend | None,
-    effective_backend_map: dict[str, str] | None,
-    provenance: DispatchProvenanceTracker,
-    native_shell_capture_mode: NativeShellCaptureMode | None,
+    cache_invalidator: Callable[[str], None] | None = None,
+    capture: dict[str, CaptureEntrySpec] | None = None,
+    resume_session_id: str | None = None,
+    resume_checkpoint: SessionCheckpoint | None = None,
+    idle_output_timeout: int | None = None,
+    caller_session_id: str = "",
+    prior_dispatch_id: str | None = None,
+    resume_message: str | None = None,
+    caller_instructions: str | None = None,
+    dispatch_backend: CodingAgentBackend | None = None,
+    effective_backend_map: dict[str, str] | None = None,
+    provenance: DispatchProvenanceTracker | None = None,
+    native_shell_capture_mode: NativeShellCaptureMode | None = None,
 ) -> DispatchResult:
     """Inner dispatch body — composed of phase shards.
 
     For a high-level overview of which lines each phase owns, see the file
     docstring. The transaction-ordering contract is enumerated in issue #4851.
     """
+    provenance = provenance or DispatchProvenanceTracker()
     # --- Phase A: pre-launch gating ---
     gating_result = await run_pre_launch_gating(
         tool_ctx=tool_ctx,

@@ -143,9 +143,7 @@ def test_acquire_flock_wrapper_preserves_signature() -> None:
 
     sig = inspect.signature(CaptureLifecycleStore._acquire_flock)
     params = list(sig.parameters.keys())
-    assert params == ["self", "fd", "blocking"]
-    # ``blocking`` is keyword-only — confirm it carries the keyword-only kind.
-    assert sig.parameters["blocking"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params == ["self", "fd"]
 
 
 def test_admission_reason_wrapper_preserves_signature() -> None:

@@ -19,6 +19,7 @@ treated as "no active wave" — that would let children run unobserved.
 from __future__ import annotations
 
 import contextlib
+import errno
 import fcntl
 import json
 import os
@@ -40,6 +41,8 @@ else:
 LEDGER_FILENAME = "join_ledger.json"
 LOCK_FILENAME = "join_ledger.lock"
 JOIN_LEDGER_SCHEMA_VERSION = 1
+_LOCK_ACQUIRE_TIMEOUT_SECONDS = 2.0
+_LOCK_RETRY_INTERVAL_SECONDS = 0.01
 
 #: Terminal outcomes for a claimed direct handle.
 OUTCOME_PENDING = "pending"
@@ -97,6 +100,24 @@ def resolve_flag_dir(project_root: Path) -> Path:
     return _resolve_channel_dir(project_root)
 
 
+def _acquire_lock(fd: int) -> None:
+    """Acquire an exclusive lock without waiting indefinitely."""
+    deadline = time.monotonic() + _LOCK_ACQUIRE_TIMEOUT_SECONDS
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise OSError(
+                    errno.EWOULDBLOCK,
+                    "timed out acquiring the join-ledger lock",
+                ) from None
+            time.sleep(min(_LOCK_RETRY_INTERVAL_SECONDS, remaining))
+        else:
+            return
+
+
 @contextlib.contextmanager
 def _flock(lock_path: Path) -> Generator[int, None, None]:
     """Acquire an exclusive ``fcntl.flock`` on ``lock_path`` for this process.
@@ -107,15 +128,20 @@ def _flock(lock_path: Path) -> Generator[int, None, None]:
     """
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o644)
+    locked = False
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        _acquire_lock(fd)
+        locked = True
         yield fd
     finally:
         try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        os.close(fd)
+            if locked:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+        finally:
+            os.close(fd)
 
 
 def _read_locked(ledger_path: Path) -> dict[str, Any]:

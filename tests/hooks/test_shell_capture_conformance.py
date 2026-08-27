@@ -34,6 +34,7 @@ from autoskillit.core import (
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
 from autoskillit.hooks._capture_artifacts import open_capture_lifecycle
 from autoskillit.hooks._capture_contract import (
     CAPTURE_REQUEST_PROTOCOL_VERSION,
@@ -143,7 +144,11 @@ def _assert_published_capture_v2(project: Path, output: bytes, expected: bytes) 
     assert b"complete=true" not in output
     assert b".log" not in output
     chunks: list[bytes] = []
-    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
         with lifecycle.open_verified_capture(parsed.reference) as reader:
             offset = 0
             while offset < parsed.total_bytes:
@@ -426,7 +431,11 @@ def test_runner_keeps_project_and_execution_authorities_distinct(
     if expect_capture:
         assert len(project_artifacts) == 1
         capture_id = project_artifacts[0].stem.removeprefix("shell_")
-        with open_capture_lifecycle(str(project), create=False) as lifecycle:
+        with open_capture_lifecycle(
+            str(project),
+            create=False,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        ) as lifecycle:
             record = lifecycle.get_record(capture_id)
         assert record is not None
         assert record.state is CaptureState.FINALIZED
@@ -582,7 +591,11 @@ def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(
 
             with pytest.raises(subprocess.TimeoutExpired):
                 process.wait(timeout=0.2)
-            with open_capture_lifecycle(str(tmp_path), create=False) as lifecycle:
+            with open_capture_lifecycle(
+                str(tmp_path),
+                create=False,
+                lock_wait=HOT_PATH_LOCK_WAIT,
+            ) as lifecycle:
                 pending = lifecycle.get_record(capture_id)
             assert pending is not None
             assert pending.state is CaptureState.PUBLISHED_WRITING
@@ -600,7 +613,11 @@ def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(
             artifacts = _artifact_files(tmp_path)
             assert len(artifacts) == 1
             assert artifacts[0].read_bytes() == expected
-            with open_capture_lifecycle(str(tmp_path), create=False) as lifecycle:
+            with open_capture_lifecycle(
+                str(tmp_path),
+                create=False,
+                lock_wait=HOT_PATH_LOCK_WAIT,
+            ) as lifecycle:
                 finalized = lifecycle.get_record(capture_id)
             assert finalized is not None and finalized.manifest is not None
             assert finalized.state is CaptureState.FINALIZED
@@ -647,7 +664,11 @@ def test_detached_child_with_closed_pipe_does_not_delay_finalization(
             assert process.returncode == 0
             assert stdout == b"early\n"
             assert stderr == b""
-            with open_capture_lifecycle(str(tmp_path), create=False) as lifecycle:
+            with open_capture_lifecycle(
+                str(tmp_path),
+                create=False,
+                lock_wait=HOT_PATH_LOCK_WAIT,
+            ) as lifecycle:
                 finalized = lifecycle.get_record(capture_id)
             assert finalized is not None and finalized.manifest is not None
             assert finalized.state is CaptureState.FINALIZED

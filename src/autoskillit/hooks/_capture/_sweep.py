@@ -98,7 +98,7 @@ def select_due_keys(
     max_records: int,
     terminal_states: Collection[object],
 ) -> tuple[list[DueKey], bool, bool]:
-    with store._locked(blocking=False):
+    with store._locked():
         records, compaction_epoch, _size = store._load_locked()
         due, complete, inspected, rebuild_key = bounded_due_keys(
             records.values(),
@@ -148,7 +148,7 @@ def advance_cursor(
 ) -> None:
     if store._sweep_cursor_writes >= budget.max_cursor_writes:
         raise SweepBudgetExceeded(CleanupBlocker.CURSOR_WRITE_BUDGET)
-    with store._locked(blocking=False):
+    with store._locked():
         _records, compaction_epoch, _size = store._load_locked()
         _sweep_cursor.write_cursor(
             store._root_fd,
@@ -579,7 +579,7 @@ def _transition_if_current(
     expected: CaptureLifecycleRecord,
     transform: Callable[[CaptureLifecycleRecord], CaptureLifecycleRecord],
 ) -> CaptureLifecycleRecord | None:
-    with store._locked(blocking=False):
+    with store._locked():
         records, compaction_epoch, size = store._load_locked()
         current = records.get(expected.capture_id)
         if not same_record(expected, current):
@@ -604,7 +604,7 @@ def sweep_one(
     expected: CaptureLifecycleRecord | None = None
     lease: ObservedArtifact | None = None
     try:
-        with store._locked(blocking=False):
+        with store._locked():
             records, compaction_epoch, size = store._load_locked()
             record = records.get(capture_id)
             now = store._wall_clock()
@@ -644,7 +644,7 @@ def sweep_one(
         ):
             raise Tampered
         lease = store._acquire_cleanup_lease(expected)
-        with store._locked(blocking=False):
+        with store._locked():
             records, compaction_epoch, size = store._load_locked()
             record = records.get(capture_id)
             now = store._wall_clock()
@@ -692,7 +692,7 @@ def sweep_one(
             preleased=lease,
             lease_checked=True,
         )
-        with store._locked(blocking=False):
+        with store._locked():
             records, compaction_epoch, size = store._load_locked()
             current = records.get(capture_id)
             if not same_record(deleting, current):
@@ -771,7 +771,7 @@ def adopt_orphan(
     claimed in between. Capacity-exhausted candidates are silently skipped
     (see ``CaptureLifecycleStore._admit_new_record``), not errored.
     """
-    with store._locked(blocking=False):
+    with store._locked():
         records, compaction_epoch, size = store._load_locked()
         tracked = {
             record.public_name
@@ -821,7 +821,7 @@ def scan_and_adopt_orphans(
     if budget is None or budget.max_directory_entries_scanned <= 0:
         return OrphanAdoptionOutcome(0, 0, True, 0)
     now = store._wall_clock()
-    with store._locked(blocking=False):
+    with store._locked():
         records, _compaction_epoch, _size = store._load_locked()
         tracked = frozenset(
             record.public_name

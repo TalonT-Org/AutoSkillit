@@ -29,7 +29,7 @@ from autoskillit.hooks._capture import _reconcile as capture_reconcile
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor
 from autoskillit.hooks._capture._orphan_scan import ADOPTION_AGE_SECONDS
 from autoskillit.hooks._capture._reconcile import CaptureStoreStats, capture_store_stats
-from autoskillit.hooks._capture._types import CleanupBlocker
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT, CleanupBlocker
 from autoskillit.hooks._capture_lifecycle import LOCK_NAME, CaptureLifecycleStore
 from tests.conftest import production_interpreter_env
 
@@ -50,7 +50,12 @@ def _seed_store_with_backlog_and_orphans(project: Path) -> Path:
     root = open_capture_root(anchor, create=True)
     try:
         past_clock = lambda: time.time() - 4000.0  # noqa: E731
-        store = CaptureLifecycleStore.from_open_authorities(anchor, root, wall_clock=past_clock)
+        store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=past_clock,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
         for index in range(5):
             store.reserve_capture(f"{index + 1:016x}")
 
@@ -266,15 +271,19 @@ def test_capture_store_reclaim_retries_capacity_refusal(
 
 def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) -> None:
     """A diagnostic stats read must never hang: capture_store_stats() opens
-    with RUNNER_TAIL_BUDGET as its open_budget, so a contended store-open
-    lock is bounded the same way a real sweep would be — the doctor check
+    with a lock wait derived from RUNNER_TAIL_BUDGET, so a contended
+    store-open lock is bounded the same way a real sweep would be — the doctor check
     and the CLI's default (no --reclaim) path both depend on this to stay
     responsive under contention rather than blocking indefinitely."""
     project = tmp_path / "project"
     project.mkdir()
     anchor = open_project_anchor(str(project))
     root = open_capture_root(anchor, create=True)
-    store = CaptureLifecycleStore.from_open_authorities(anchor, root)
+    store = CaptureLifecycleStore.from_open_authorities(
+        anchor,
+        root,
+        lock_wait=HOT_PATH_LOCK_WAIT,
+    )
     store.reserve_capture("1" * 16)
     root.close()
     anchor.close()

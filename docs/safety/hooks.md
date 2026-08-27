@@ -219,13 +219,15 @@ one classifier, `classify_cleanup_outcome(progress, blocker, errors)`
 |---|---|---|
 | `healthy` | no blocker (`NONE`), or the store doesn't exist yet (`STORE_ABSENT`) | none |
 | `deferred` | a bounded work budget (records/attempts/transitions/cursor-writes/replay-bytes/duration) was exhausted, but this pass still made progress | none — a bounded backlog is not, by itself, attention-grade |
-| `stalled` | externally blocked (lock contention, an in-flight migration, filesystem authority/permission/IO/ledger failure), or a budget blocker with *zero* progress this pass | one neutral line naming the blocker |
+| `stalled` | an external-family `CleanupBlocker`, or a budget blocker with *zero* progress this pass | one neutral line naming the blocker |
 | `failed` | `errors > 0` | one failure-worded line — the only severity whose rendered text may contain "failed" |
 
-`errors` always wins regardless of blocker or progress. An externally-blocked
-store (e.g. a held carrier lease blocking migration) stays `stalled` on every
-pass, independent of progress, so it never goes silent the way a merely
-budget-bounded backlog does. Every non-`healthy`, non-`deferred` message is
+`errors` always wins regardless of blocker or progress. The classifier owns
+the external-family membership, keeping this published severity rule aligned
+when `CleanupBlocker` grows. An externally blocked store (e.g. a held carrier
+lease blocking migration) stays `stalled` on every pass, independent of
+progress, so it never goes silent the way a merely budget-bounded backlog
+does. Every non-`healthy`, non-`deferred` message is
 rendered through `hooks/_policy_event.py`'s `PolicyEvent` +
 `render_provenance_prefix` — no hook constructs its own `[AutoSkillit ...]`
 literal (`tests/arch/test_hook_message_provenance.py`).
@@ -301,16 +303,17 @@ Codex hook generation includes the scan-enabled `SESSION_START_BUDGET` path:
 A single non-blocking `flock()` attempt used to abort a sweep immediately on
 any contention, including the 256-attempt `SESSION_START_BUDGET` pass —
 `session_scope="any"` means every concurrent session contends the same lock
-at startup. `CaptureLifecycleStore._locked(blocking=False)` now retries on
+at startup. `CaptureLifecycleStore._locked()` now retries on
 `EAGAIN`/`EWOULDBLOCK` with jittered, doubling backoff (5–20ms base, capped,
 jitter from the stdlib `random` module's OS-entropy-seeded per-process
 state, never a wall-clock-derived source) bounded by the sweep's own
 `max_duration_seconds` — no new configuration knob. `RUNNER_TAIL_BUDGET`
 (50ms) naturally permits one or two retries; `SESSION_START_BUDGET` (1.0s)
 rides out startup stampedes. `LOCK_CONTENDED` is only ever returned once the
-entire budget has elapsed without acquisition; every other blocking caller
-(every non-sweep transition — `reserve_capture`, `commit_verified_snapshot`,
-`get_record`, ...) is unaffected and keeps today's kernel-blocking wait.
+entire budget has elapsed without acquisition. There is no blocking-acquisition
+parameter or alternate unbounded lock path: every lifecycle caller, including
+ordinary transitions, uses non-blocking `flock()` acquisition bounded by its
+applicable deadline.
 
 Store-open lock acquisition is bounded the same way. Opening a store runs
 `_normalize_interrupted_deliveries` — its own `_locked()` calls — before a
@@ -329,8 +332,9 @@ the whole reconciliation operation, not merely the sweep body; a
 same `LOCK_CONTENDED` outcome the sweep body reports.
 `capture_store_stats()` opens with `RUNNER_TAIL_BUDGET` as its own
 `open_budget` for the same reason — a diagnostic read must never hang.
-Every other caller (`create_artifact`, direct construction in tests, ...)
-passes nothing and keeps today's blocking-until-acquired open unchanged.
+Callers without an explicit sweep budget use the lifecycle lock-wait policy;
+they still acquire with `LOCK_NB` and fail on its deadline rather than asking
+the kernel to block indefinitely.
 
 #### Stats and reclamation CLI
 

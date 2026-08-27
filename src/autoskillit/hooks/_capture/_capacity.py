@@ -113,6 +113,8 @@ _REASON_DETAILS = {
     CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: "compacted lifecycle capacity reached",
     CaptureCapacityReason.HARD_LEDGER_CAPACITY: "hard lifecycle ledger capacity reached",
 }
+if set(_REASON_DETAILS) != set(CaptureCapacityReason):
+    raise AssertionError("_REASON_DETAILS must cover exactly the CaptureCapacityReason members")
 
 _FAILURE_REASONS = {
     CaptureCapacityReason.ACTIVE_CAPACITY: CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,

@@ -73,8 +73,8 @@ MAX_ACTIVE_RECORDS = 4096
 # ``_acquire_flock``. The original comment block is reproduced verbatim
 # from the deleted file.
 #
-# Jittered exponential backoff for non-blocking lock retry during an active
-# sweep: base delay uniformly chosen in [5ms, 20ms], doubling each retry, capped.
+# Jittered exponential backoff for non-blocking lifecycle-lock retry: base
+# delay uniformly chosen in [5ms, 20ms], doubling each retry, capped.
 # `random` (not `secrets`) is the deliberate choice — its per-process state is
 # already seeded from os.urandom at interpreter start, giving OS-entropy jitter
 # without the per-call cost of a CSPRNG, and never a wall-clock-derived source.
@@ -86,36 +86,25 @@ _LOCK_RETRY_CAP_SECONDS = 0.25
 def _acquire_flock(
     store: Any,
     fd: int,
-    *,
-    blocking: bool,
 ) -> None:
-    """Acquire ``fd``'s advisory lock, retrying non-blocking contention.
-
-    Blocking callers (the overwhelming majority — every non-sweep
-    transition) get a single kernel-blocking ``flock()`` call.
-    Non-blocking callers exist only inside an active sweep
-    (``store._sweep_budget`` is set for their whole duration): on
-    ``EAGAIN``/``EWOULDBLOCK`` they retry with jittered, doubling backoff
-    until the *sweep's own* ``max_duration_seconds`` budget — not a new
-    knob — is exhausted, then raise ``LockContended``. A non-blocking call
-    outside a sweep (should not happen given the current call graph) falls
-    back to single-attempt behavior rather than retrying forever.
-    """
-    operation = fcntl.LOCK_EX
-    if not blocking:
-        operation |= fcntl.LOCK_NB
+    """Acquire ``fd``'s advisory lock within its composed live deadline."""
+    operation = fcntl.LOCK_EX | fcntl.LOCK_NB
+    deadline = store._monotonic() + store._lock_wait.max_wait_seconds
+    if store._sweep_budget is not None:
+        started = store._sweep_started_monotonic
+        if started is None:
+            raise RuntimeError("active sweep has no start time")
+        deadline = min(
+            deadline,
+            started + store._sweep_budget.max_duration_seconds,
+        )
     try:
         fcntl.flock(fd, operation)
         return
     except OSError as exc:
-        if blocking or exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+        if exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
             raise
         contended = exc
-    budget = store._sweep_budget
-    started = store._sweep_started_monotonic
-    if budget is None or started is None:
-        raise LockContended from contended
-    deadline = started + budget.max_duration_seconds
     delay = random.uniform(_LOCK_RETRY_MIN_SECONDS, _LOCK_RETRY_MAX_SECONDS)
     while True:
         remaining = deadline - store._monotonic()

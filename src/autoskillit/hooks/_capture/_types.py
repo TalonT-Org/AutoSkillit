@@ -24,9 +24,12 @@ __all__ = [
     "LedgerIncarnation",
     "LedgerSnapshot",
     "LegacyCleanupOnly",
+    "LockWaitSpec",
     "SweepAttempt",
     "SweepBudgetSpec",
+    "HOT_PATH_LOCK_WAIT",
     "classify_cleanup_outcome",
+    "lock_wait_for_budget",
 ]
 
 
@@ -115,6 +118,31 @@ class SweepBudgetSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class LockWaitSpec:
+    """Bound the wait for one lifecycle-lock acquisition."""
+
+    max_wait_seconds: float
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.max_wait_seconds, (int, float))
+            or isinstance(self.max_wait_seconds, bool)
+            or not math.isfinite(self.max_wait_seconds)
+            or self.max_wait_seconds <= 0
+        ):
+            raise ValueError("lock wait must be positive and finite")
+
+
+# Existing hook lock contention bounds use a two-second ceiling on hot paths.
+HOT_PATH_LOCK_WAIT = LockWaitSpec(max_wait_seconds=2.0)
+
+
+def lock_wait_for_budget(budget: SweepBudgetSpec) -> LockWaitSpec:
+    """Derive the per-acquisition policy for a sweep context."""
+    return LockWaitSpec(max_wait_seconds=budget.max_duration_seconds)
+
+
+@dataclass(frozen=True, slots=True)
 class CaptureCapacitySpec:
     max_operational_records: int = 4096
     max_retained_records: int = 4096
@@ -179,6 +207,9 @@ class CleanupBlocker(StrEnum):
     FILESYSTEM_IO = "filesystem_io"
     LEDGER_INTEGRITY = "ledger_integrity"
     MIGRATION_BLOCKED = "migration_blocked"
+    CAPACITY_EXHAUSTED = "capacity_exhausted"
+    RECOVERY_CONTENDED = "recovery_contended"
+    UNKNOWN_SETUP = "unknown_setup"
     RECORD_BUDGET = "record_budget"
     REPLAY_BYTE_BUDGET = "replay_byte_budget"
     ATTEMPT_BUDGET = "attempt_budget"
@@ -214,6 +245,9 @@ BLOCKER_FAMILY: dict[CleanupBlocker, str] = {
     CleanupBlocker.FILESYSTEM_IO: "external",
     CleanupBlocker.LEDGER_INTEGRITY: "external",
     CleanupBlocker.MIGRATION_BLOCKED: "external",
+    CleanupBlocker.CAPACITY_EXHAUSTED: "external",
+    CleanupBlocker.RECOVERY_CONTENDED: "external",
+    CleanupBlocker.UNKNOWN_SETUP: "external",
 }
 
 

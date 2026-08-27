@@ -28,6 +28,7 @@ from autoskillit.hooks._capture._snapshot import (
     verify_capture_snapshot,
 )
 from autoskillit.hooks._capture._types import (
+    HOT_PATH_LOCK_WAIT,
     CaptureCleanupOutcome,
     CleanupBlocker,
     CleanupProgress,
@@ -161,6 +162,7 @@ def _seed_due_capture(project: Path) -> Path:
         root,
         wall_clock=lambda: old,
         monotonic=lambda: old,
+        lock_wait=HOT_PATH_LOCK_WAIT,
     )
     artifact = create_capture_artifact(root, _CAPTURE_ID, lifecycle)
     os.write(artifact.fd, b"due")

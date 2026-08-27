@@ -17,6 +17,7 @@ from autoskillit.core import SkillSemanticAdaptationResult, SkillSemanticPlan
 from autoskillit.core.types._type_enums import CodexEventType
 from autoskillit.execution.process._process_jsonl import _marker_is_standalone
 from autoskillit.hooks._capture._snapshot import CaptureFinalManifest
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
 from autoskillit.hooks._capture_artifacts import (
     CaptureSetupError,
     open_capture_lifecycle,
@@ -61,7 +62,11 @@ def assert_shell_capture_marker_authority(
 
     chunks: list[bytes] = []
     try:
-        with open_capture_lifecycle(str(physical_project), create=False) as lifecycle:
+        with open_capture_lifecycle(
+            str(physical_project),
+            create=False,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        ) as lifecycle:
             with lifecycle.open_verified_capture(fields.reference) as reader:
                 manifest = cast(CaptureFinalManifest, reader.manifest)
                 offset = 0

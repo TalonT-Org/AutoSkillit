@@ -37,6 +37,7 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
 from autoskillit.hooks._capture_artifacts import (
     create_capture_artifact,
     open_capture_root,
@@ -296,7 +297,11 @@ def seed_capture_backlog(project_root: Path, *, count: int) -> None:
         raise
     try:
         store = CaptureLifecycleStore.from_open_authorities(
-            anchor, root, wall_clock=wall_clock, monotonic=time.monotonic
+            anchor,
+            root,
+            wall_clock=wall_clock,
+            monotonic=time.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
         )
         for index in range(count):
             capture_id = f"{index + 1:016x}"

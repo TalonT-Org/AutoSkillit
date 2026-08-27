@@ -84,6 +84,7 @@ CleanupProgress = _capture_types.CleanupProgress
 DueKey = _capture_types.DueKey
 SweepAttempt = _capture_types.SweepAttempt
 SweepBudgetSpec = _capture_types.SweepBudgetSpec
+LockWaitSpec = _capture_types.LockWaitSpec
 _ObservedArtifact = _capture_types.ObservedArtifact
 _CarrierLeaseLive = _capture_types.CarrierLeaseLive
 CaptureAuthorityError = _capture_snapshot.CaptureAuthorityError
@@ -194,6 +195,7 @@ class CaptureLifecycleStore:
         root_identity: tuple[int, int],
         wall_clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
+        lock_wait: LockWaitSpec,
         capacity: _capture_types.CaptureCapacitySpec | None = None,
         _factory_token: object | None = None,
     ) -> None:
@@ -205,6 +207,7 @@ class CaptureLifecycleStore:
         self._wall_clock = wall_clock
         self._monotonic = monotonic
         self._ledger_view = _capture_ledger_view.LedgerView()
+        self._lock_wait = lock_wait
         self._capacity = capacity if capacity is not None else _capture_types.CaptureCapacitySpec()
         self._sweep_budget: SweepBudgetSpec | None = None
         self._sweep_started_monotonic: float | None = None
@@ -220,26 +223,12 @@ class CaptureLifecycleStore:
         *,
         wall_clock: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.monotonic,
-        open_budget: SweepBudgetSpec | None = None,
+        lock_wait: LockWaitSpec,
         capacity: _capture_types.CaptureCapacitySpec | None = None,
     ) -> CaptureLifecycleStore:
-        """Open a store and normalize interrupted deliveries.
-
-        ``open_budget``, when supplied, bounds the lock acquisitions inside
-        ``_normalize_interrupted_deliveries`` — otherwise a genuinely
-        contended lock blocks this call indefinitely regardless of any
-        budget a caller intends to apply to a later ``.sweep()`` call, since
-        that lock acquisition happens before ``.sweep()`` is ever reached.
-        The field is deliberately left set (not reset here) so a caller that
-        never calls ``.sweep()`` at all (e.g. a stats-only read) can keep
-        drawing on the same budget window for its own lock acquisitions;
-        ``open_capture_lifecycle`` resets it when its ``with`` block exits.
-        Every other caller (``create_artifact``, direct construction in
-        tests, ...) passes nothing and blocks until the lock is acquired.
-
-        ``capacity``, when supplied, overrides the default capacity spec.
-        ``None`` preserves the production default (``CaptureCapacitySpec()``).
-        """
+        """Open a store with a required lifecycle-lock wait policy."""
+        if type(lock_wait) is not LockWaitSpec:
+            raise CaptureLifecycleError("invalid lifecycle lock wait specification")
         if capacity is not None and type(capacity) is not _capture_types.CaptureCapacitySpec:
             raise CaptureLifecycleError("invalid capture capacity specification")
         anchor_identity = getattr(anchor, "identity")
@@ -250,12 +239,10 @@ class CaptureLifecycleStore:
             root_identity=(root_identity.device, root_identity.inode),
             wall_clock=wall_clock,
             monotonic=monotonic,
+            lock_wait=lock_wait,
             capacity=capacity,
             _factory_token=_STORE_FACTORY_TOKEN,
         )
-        if open_budget is not None:
-            store._sweep_budget = open_budget
-            store._sweep_started_monotonic = store._monotonic()
         store._normalize_interrupted_deliveries()
         return store
 
@@ -270,20 +257,20 @@ class CaptureLifecycleStore:
     def capture_finalization_window(self) -> tuple[float, float]:
         return (now := self._wall_clock()), now + _RETENTION_SECONDS
 
-    def _acquire_flock(self, fd: int, *, blocking: bool) -> None:
+    def _acquire_flock(self, fd: int) -> None:
         """Thin wrapper — delegates to ``_admission._acquire_flock``.
 
-        The lock-retry loop, budget check, and ``LockContended`` raise now
-        live in ``_admission.py`` so the lock-retry primitive is
+        The lock-retry loop, composed-deadline check, and ``LockContended``
+        raise now live in ``_admission.py`` so the lock-retry primitive is
         physically separate from the transition/capacity accounting it
         shares with the rest of the store. The wrapper preserves the
         public ``self``-binding so monkeypatching this name on the class
         continues to dispatch the same way.
         """
-        return _admission._acquire_flock(self, fd, blocking=blocking)
+        return _admission._acquire_flock(self, fd)
 
     @contextmanager
-    def _locked(self, *, blocking: bool = True) -> Iterator[None]:
+    def _locked(self) -> Iterator[None]:
         _capture_sweep.validate_store_root(self, CaptureLifecycleError)
         try:
             fd = os.open(LOCK_NAME, _CONTROL_FLAGS, 0o600, dir_fd=self._root_fd)
@@ -294,7 +281,7 @@ class CaptureLifecycleStore:
                 fd, LOCK_NAME, _UNTRUSTED_WRITE_BITS, CaptureLifecycleError
             )
             try:
-                self._acquire_flock(fd, blocking=blocking)
+                self._acquire_flock(fd)
             except OSError as exc:
                 raise CaptureLifecycleError.from_os_error(
                     "cannot acquire lifecycle lock", exc

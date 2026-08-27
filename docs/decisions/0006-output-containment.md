@@ -158,10 +158,11 @@ hook can be retired in favor of that mechanism.
 - **Lock contention:** a single non-blocking `flock()` attempt aborted a sweep
   immediately on any contention, including the 256-attempt `SESSION_START_BUDGET`
   pass, even though `session_scope="any"` makes every concurrent session contend
-  the same lock at startup. Non-blocking lock acquisition now retries with
-  jittered, doubling backoff bounded by the sweep's own `max_duration_seconds`
-  budget — no new configuration knob — so a contended lock recovers within the
-  same invocation instead of zeroing it.
+  the same lock at startup. Every lifecycle-lock acquisition now uses
+  non-blocking acquisition with a deadline: sweep callers compose that deadline
+  with `max_duration_seconds`, while ordinary callers use the lifecycle
+  lock-wait policy. There is no blocking-acquisition form, so contention either
+  recovers within the invocation or fails as bounded `LOCK_CONTENDED` work.
 
 ## Enforcement
 
@@ -173,7 +174,10 @@ arch rule is the registry's own import-time totality assertion — a
 `CaptureFailureReason` member with no declared disposition raises
 `AssertionError` at import, so the module cannot load until every reason is
 classified — backed by `tests/hooks/test_capture_failure_disposition.py`'s
-`TestDispositionRegistryTotality`. `DS-012` in
+`TestDispositionRegistryTotality`. `tests/arch/test_hook_flock_nonblocking.py`
+also inventories every executable hook `fcntl.flock()` acquisition and fails
+closed unless it statically includes `LOCK_NB` (with `LOCK_UN` releases
+exempt). `DS-012` in
 `audit-defense-standards/SKILL.md` is the periodic audit-time check that no
 bookkeeping failure discards or misreports a verified primary result outside
 of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`

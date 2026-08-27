@@ -197,6 +197,21 @@ _RETENTION_SUCCESSORS = {
     CaptureRetentionPhase.DELETED: {CaptureRetentionPhase.DELETED},
 }
 
+if set(_STATE_SUCCESSORS) != set(CaptureState):
+    raise AssertionError("_STATE_SUCCESSORS must cover exactly the CaptureState members")
+if set(_REFERENCE_SUCCESSORS) != set(CaptureReferenceStatus):
+    raise AssertionError(
+        "_REFERENCE_SUCCESSORS must cover exactly the CaptureReferenceStatus members"
+    )
+if set(_DELIVERY_SUCCESSORS) != set(CaptureDeliveryStatus):
+    raise AssertionError(
+        "_DELIVERY_SUCCESSORS must cover exactly the CaptureDeliveryStatus members"
+    )
+if set(_RETENTION_SUCCESSORS) != set(CaptureRetentionPhase):
+    raise AssertionError(
+        "_RETENTION_SUCCESSORS must cover exactly the CaptureRetentionPhase members"
+    )
+
 
 def is_state_successor(previous: CaptureState, candidate: CaptureState) -> bool:
     return (

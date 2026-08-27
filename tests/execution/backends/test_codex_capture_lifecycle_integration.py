@@ -30,6 +30,7 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureArtifact,
@@ -87,6 +88,7 @@ def _seed_due_capture(project: Path) -> Path:
         root,
         wall_clock=lambda: old,
         monotonic=lambda: old,
+        lock_wait=HOT_PATH_LOCK_WAIT,
     )
     artifact = create_capture_artifact(root, _CAPTURE_ID, lifecycle)
     os.write(artifact.fd, b"due")
@@ -201,6 +203,7 @@ def _seed_saturated_store(
         root,
         wall_clock=lambda: old,
         monotonic=lambda: old,
+        lock_wait=HOT_PATH_LOCK_WAIT,
     )
     first_due, first_artifact = _commit_due_capture(
         project, anchor, root, lifecycle, f"{0:016x}", old
@@ -431,6 +434,7 @@ def test_saturated_installed_store_recovers_across_both_cleanup_owners(
                 validation_store = CaptureLifecycleStore.from_open_authorities(
                     validation_anchor,
                     validation_root,
+                    lock_wait=HOT_PATH_LOCK_WAIT,
                 )
                 for artifact in live:
                     assert project.joinpath(
@@ -598,6 +602,7 @@ def test_snapshotted_runner_tail_reclaims_after_producer_release(
         root,
         wall_clock=clock,
         monotonic=clock,
+        lock_wait=HOT_PATH_LOCK_WAIT,
     )
     try:
         clock.value = (

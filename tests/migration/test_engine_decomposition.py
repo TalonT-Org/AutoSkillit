@@ -1,12 +1,8 @@
-"""Structural tests pinning the engine.py decomposition contract.
+"""Structural tests pinning the migration package's module-shape contract.
 
-Each test exercises a module-shape invariant the split is meant to enforce.
-
-T1 — engine.py is below the 750-line ceiling after the split.
-T2 — each extracted adapter module is below the 750-line ceiling.
-T3 — adapter classes live in their new owning modules.
-T4 — the engine module no longer re-exports relocated adapter classes.
-T6 — adapters_skill.py can call the legacy helpers from engine.py.
+Each test exercises one module-shape invariant: the per-module line ceiling,
+the module each adapter class is defined in, the absence of adapter
+re-exports from engine.py, and the skill adapter's use of the engine helpers.
 """
 
 from __future__ import annotations
@@ -30,7 +26,7 @@ _LINE_CEILING = 750
 
 
 # ---------------------------------------------------------------------------
-# T1 — engine.py is below the 750-line ceiling after the split
+# engine.py is below the line ceiling
 # ---------------------------------------------------------------------------
 
 
@@ -43,7 +39,7 @@ def test_engine_module_under_line_ceiling() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T2 — each extracted adapter module is below the 750-line ceiling
+# each adapter module is below the line ceiling
 # ---------------------------------------------------------------------------
 
 
@@ -67,7 +63,7 @@ def test_extracted_modules_under_line_ceiling(filename: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T3 — adapter classes live in their new owning modules
+# adapter classes live in their owning modules
 # ---------------------------------------------------------------------------
 
 
@@ -91,16 +87,15 @@ def test_adapter_classes_reside_in_new_modules(class_name: str, expected_module:
 
 
 # ---------------------------------------------------------------------------
-# T4 — the engine module no longer re-exports relocated adapter classes
+# engine.py does not re-export adapter classes
 # ---------------------------------------------------------------------------
 
 
 def test_engine_module_does_not_reexport_relocated_classes() -> None:
-    """The decomposition removed the backward-compat re-export shim.
+    """Adapter classes must resolve from their owning modules.
 
-    Relocated classes must resolve from their owning modules, not from
-    ``autoskillit.migration.engine``. The engine keeps only the types it
-    physically defines.
+    ``autoskillit.migration.engine`` keeps only the types it physically
+    defines.
     """
     engine_src = (_MIGRATION_DIR / "engine.py").read_text(encoding="utf-8")
     tree = ast.parse(engine_src)
@@ -124,19 +119,18 @@ def test_engine_module_does_not_reexport_relocated_classes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T6 — adapters_skill.py can call the legacy helpers from engine.py
+# adapters_skill.py can call the engine helpers
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
 async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
-    """adapters_skill.py must import _skill_project_dir and
-    _normalize_legacy_child_spawn_cardinality from engine.py.
+    """The child-cardinality branch reaches the engine helpers and normalizes.
 
-    The helpers are exercised by the SEMANTIC_CHILD_CARDINALITY_INVALID
-    migration path; if either import fails at module load,
-    SkillMigrationAdapter.migrate raises NameError when triggered with that
-    invalidity kind. The legacy child_spawns setup here forces that branch.
+    The skill below declares a ``child_spawns`` entry with no explicit
+    ``count``, which drives ``SkillMigrationAdapter.migrate`` through the
+    ``SEMANTIC_CHILD_CARDINALITY_INVALID`` branch — the only caller of
+    ``_normalize_legacy_child_spawn_cardinality``.
     """
     skill_dir = tmp_path / ".claude" / "skills" / "legacy-child-spawn-cardinality"
     skill_dir.mkdir(parents=True)
@@ -165,20 +159,17 @@ async def test_adapters_skill_can_call_legacy_helpers(tmp_path: Path) -> None:
         current_version=None,
     )
 
-    # If adapters_skill.py fails to import either helper from engine.py,
-    # the SEMANTIC_CHILD_CARDINALITY_INVALID branch raises NameError at
-    # runtime when it calls _normalize_legacy_child_spawn_cardinality(data).
     adapter = SkillMigrationAdapter()
     result = await adapter.migrate(file, temp_dir=tmp_path / "temp")
 
     assert isinstance(result, MigrationResult)
-    # Reaching this branch (legacy cardinality detected) is the proof that
-    # _normalize_legacy_child_spawn_cardinality was actually invoked.
     assert result.name == "legacy-child-spawn-cardinality"
-    # The legacy cardinality setup is valid input for the normalizer, so
-    # this branch must end with success — if the helper returned an error
-    # string, the adapter would surface that as success=False.
-    assert result.success is True, (
-        f"_normalize_legacy_child_spawn_cardinality was reachable but did not "
-        f"normalize the legacy setup: {result.error!r}"
+    assert result.success is True, f"migration failed: {result.error!r}"
+    # An early return on the "nothing to migrate" path leaves migrated_content
+    # as None, so this pins that the normalizer actually ran and rewrote the
+    # implicit cardinality into an explicit ``count: 1``.
+    assert result.migrated_content is not None, (
+        "migrate() returned success without producing content — the "
+        "child-cardinality branch was never reached"
     )
+    assert "count: 1" in result.migrated_content

@@ -1,18 +1,17 @@
-"""Tests for the DefaultMigrationService (post-decomposition).
-
-The service was extracted from engine.py into its own module. These tests
-exercise the recipe+contract+diagram orchestration logic.
-"""
+"""Tests for DefaultMigrationService recipe+contract+diagram orchestration."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.migration.engine import MigrationResult, default_migration_engine
+from autoskillit.migration.engine import (
+    AdvisoryResult,
+    MigrationResult,
+    default_migration_engine,
+)
 from autoskillit.migration.service import DefaultMigrationService
 
 from .conftest import make_migration_note, make_skill_result
@@ -208,7 +207,7 @@ class TestDefaultMigrationServiceBehaviour:
         monkeypatch.setattr(
             diagram_adapter,
             "check_staleness",
-            lambda f: _StubAdvisoryResult(name=f.name, suggestion="re-render with /render-recipe"),
+            lambda f: AdvisoryResult(name=f.name, suggestion="re-render with /render-recipe"),
         )
 
         service = DefaultMigrationService(engine)
@@ -243,7 +242,7 @@ class TestDefaultMigrationServiceBehaviour:
         monkeypatch.setattr(
             diagram_adapter,
             "check_staleness",
-            lambda f: _StubAdvisoryResult(name=f.name, suggestion="re-render with /render-recipe"),
+            lambda f: AdvisoryResult(name=f.name, suggestion="re-render with /render-recipe"),
         )
 
         service = DefaultMigrationService(engine)
@@ -253,9 +252,3 @@ class TestDefaultMigrationServiceBehaviour:
         assert result["name"] == "myrecipe"
         assert result["contracts_regenerated"] == ["myrecipe"]
         assert result["advisories"] == ["re-render with /render-recipe"]
-
-
-@dataclass
-class _StubAdvisoryResult:
-    name: str
-    suggestion: str

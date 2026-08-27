@@ -168,7 +168,18 @@ class AutomationConfig:
         _raw_exp = raw.pop("experimental_enabled", _UNSET)
         if _raw_exp is _UNSET:
             _raw_exp = raw.pop("EXPERIMENTAL_ENABLED", _UNSET)
-        experimental_enabled: bool = is_dev_install() if _raw_exp is _UNSET else bool(_raw_exp)
+        if _raw_exp is _UNSET:
+            experimental_enabled: bool = is_dev_install()
+        else:
+            # Strict validation mirrors the per-feature bool check below — a
+            # user writing `experimental_enabled: "false"` (a truthy string)
+            # must NOT silently become True via `bool()` coercion.
+            if not isinstance(_raw_exp, bool):
+                raise ConfigSchemaError(
+                    f"features.experimental_enabled must be a bool, "
+                    f"got {type(_raw_exp).__name__!r}: {_raw_exp!r}"
+                )
+            experimental_enabled = _raw_exp
         result: dict[str, bool] = {}
         for name, value in raw.items():
             if not isinstance(name, str):

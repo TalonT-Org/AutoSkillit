@@ -36,7 +36,6 @@ from autoskillit.fleet._checkpoint_bridge import retain_dispatch_tracker_authori
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
 )
-from autoskillit.fleet.sidecar import sidecar_path
 from autoskillit.fleet._startup_warm import warm_failure_path_imports
 from autoskillit.fleet.dispatch._classification import (
     finalize_state_write,
@@ -51,6 +50,7 @@ from autoskillit.fleet.dispatch._execution import ExecutionResult as _ExecResult
 from autoskillit.fleet.dispatch._execution import SpawnContext, run_execution
 from autoskillit.fleet.dispatch._lineage import run_lineage_preparation
 from autoskillit.fleet.dispatch._validation import run_pre_launch_gating
+from autoskillit.fleet.sidecar import sidecar_path
 from autoskillit.fleet.state_types import (
     DispatchAggregatePhase,
     DispatchCompleted,
@@ -411,9 +411,7 @@ async def _run_dispatch(
             caller_session_id=caller_session_id,
             idle_output_timeout=idle_output_timeout,
             lineage_backend_name=ready.lineage_backend_name,
-            dispatch_sidecar_path=str(
-                sidecar_path(ready.dispatch_id, tool_ctx.project_dir)
-            ),
+            dispatch_sidecar_path=str(sidecar_path(ready.dispatch_id, tool_ctx.project_dir)),
             issue_urls_raw=spawn_ctx.issue_urls_raw,
             prior_ids=spawn_ctx.prior_ids,
             prior_completion_markers=prior_markers,

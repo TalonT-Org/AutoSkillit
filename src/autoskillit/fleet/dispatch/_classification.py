@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
     from autoskillit.pipeline.context import ToolContext
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -149,7 +149,7 @@ async def run_outcome_classification(
 
         if resume_line_offset and skill_result.session_id and resume_session_id:
             if skill_result.session_id != resume_session_id:
-                _logger.warning(
+                logger.warning(
                     "resume_line_offset_invalidated",
                     resume_session_id=resume_session_id,
                     actual_session_id=skill_result.session_id,
@@ -209,7 +209,7 @@ async def run_outcome_classification(
                 terminal_state,
             )
         except Exception:
-            _logger.warning(
+            logger.warning(
                 "failed to record managed lineage terminal state",
                 dispatch_name=effective_name,
                 terminal_state=terminal_state.value,
@@ -231,7 +231,7 @@ async def run_outcome_classification(
 
                         _branch_name = _json.loads(_pr_info.stdout).get("headRefName", "")
                 except Exception:
-                    _logger.debug("branch_name_extraction_failed", exc_info=True)
+                    logger.debug("branch_name_extraction_failed", exc_info=True)
                 break
 
     _labels_cleaned = False
@@ -270,7 +270,7 @@ async def run_outcome_classification(
         and skill_result.session_id
         and resume_session_id != skill_result.session_id
     ):
-        _logger.warning(
+        logger.warning(
             "session_id_continuity_mismatch",
             resume_session_id=resume_session_id,
             returned_session_id=skill_result.session_id,

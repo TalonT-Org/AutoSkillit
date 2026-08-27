@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from autoskillit.fleet.state_recovery import ResumePreflight
     from autoskillit.pipeline.context import ToolContext
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -178,7 +178,7 @@ async def run_execution(
         current_record.managed_lineage_ref = managed_lineage_ref
         upsert_dispatch_record_by_name(state_path, current_record)
     except Exception:
-        _logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
+        logger.warning("managed_food_truck_lineage_state_write_failed", exc_info=True)
         return ExecutionResult(
             skill_result=None,
             started_at=started_at,
@@ -208,7 +208,7 @@ async def run_execution(
             else None
         )
         if _primary_jsonl is None or not _primary_jsonl.exists():
-            _logger.warning(
+            logger.warning(
                 "resume_jsonl_missing",
                 resume_session_id=resume_session_id,
                 expected_path=str(_primary_jsonl) if _primary_jsonl else "none",
@@ -221,7 +221,7 @@ async def run_execution(
                     else None
                 )
                 if _fallback_jsonl is not None and _fallback_jsonl.exists():
-                    _logger.info(
+                    logger.info(
                         "resume_session_fallback",
                         original_session_id=resume_session_id,
                         fallback_session_id=_fallback_session_id,

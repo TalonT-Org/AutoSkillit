@@ -30,7 +30,7 @@ from autoskillit.fleet.state_types import (
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 # Recipe kinds the dispatch engine accepts. `RecipeKind` itself is a superset
 # (e.g. `sub-recipe`, `dispatcher`); only `standard` and `food-truck` are
@@ -124,7 +124,7 @@ async def run_pre_launch_gating(
             per_dispatch_state_path=None,
         )
     except Exception as exc:
-        _logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
+        logger.warning("load_and_validate failed for '%s'", recipe, exc_info=True)
         return DispatchResult(
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_RECIPE_INVALID,
@@ -158,7 +158,7 @@ async def run_pre_launch_gating(
     try:
         full_recipe = tool_ctx.recipes.load(recipe_obj.path)
     except Exception as exc:
-        _logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
+        logger.warning("load_recipe failed for '%s'", recipe, exc_info=True)
         return DispatchResult(
             DispatchRejected(
                 error_code=FleetErrorCode.FLEET_RECIPE_NOT_FOUND,

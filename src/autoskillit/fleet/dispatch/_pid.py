@@ -19,7 +19,7 @@ from pathlib import Path
 from autoskillit.core import get_logger
 from autoskillit.fleet.state_types import DispatchEffectName, DispatchProvenanceTracker
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def _write_pid(
@@ -97,7 +97,7 @@ def _write_pid(
                             identities={"pid": pid},
                         )
             except Exception:
-                _logger.warning(
+                logger.warning(
                     "_write_pid: kill_process_tree failed for pid=%d",
                     pid,
                     exc_info=True,

@@ -17,8 +17,8 @@ from autoskillit.core import (
     ManagedHeadlessSessionTerminalState,
     get_logger,
 )
+from autoskillit.fleet import state as _fleet_state
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
-from autoskillit.fleet.state import append_dispatch_record
 from autoskillit.fleet.state_types import (
     DispatchCompleted,
     DispatchProvenanceTracker,
@@ -30,7 +30,7 @@ from autoskillit.fleet.state_types import (
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 def complete_failure_with_state(
@@ -73,14 +73,17 @@ def complete_failure_with_state(
                 ManagedHeadlessSessionTerminalState.FAILED,
             )
         except Exception:
-            _logger.warning(
+            logger.warning(
                 "complete_failure_with_state: managed lineage close failed",
                 exc_info=True,
             )
     if state_path is None or effective_name is None:
         return DispatchResult(completed, per_dispatch_state_path=None)
     try:
-        append_dispatch_record(
+        # Access via module attribute (not ``from … import …``) so that
+        # ``monkeypatch.setattr("autoskillit.fleet.state.append_dispatch_record", ...)``
+        # patches observed by tests reach this call site.
+        _fleet_state.append_dispatch_record(
             state_path,
             DispatchRecord(
                 name=effective_name,
@@ -94,7 +97,7 @@ def complete_failure_with_state(
             ),
         )
     except Exception:
-        _logger.warning(
+        logger.warning(
             "complete_failure_with_state: per-dispatch state write failed",
             exc_info=True,
         )

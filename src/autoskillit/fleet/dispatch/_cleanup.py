@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from autoskillit.core import SkillResult
     from autoskillit.pipeline.context import ToolContext
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 async def handle_cancellation(
@@ -63,7 +63,7 @@ async def handle_cancellation(
                 ManagedHeadlessSessionTerminalState.CANCELLED,
             )
     except Exception:
-        _logger.warning(
+        logger.warning(
             "failed to record managed lineage cancellation",
             dispatch_name=effective_name,
             exc_info=True,
@@ -101,7 +101,7 @@ async def handle_cancellation(
                 evidence="local process-tree cleanup raised",
                 identities={"pid": spawn_ctx.dispatched_pid[0]},
             )
-            _logger.warning(
+            logger.warning(
                 "failed to capture local process cleanup evidence",
                 dispatch_name=effective_name,
                 exc_info=True,
@@ -125,7 +125,7 @@ async def handle_cancellation(
                 )
         except Exception:
             provenance.record_state_cleanup(confirmed=False)
-            _logger.warning(
+            logger.warning(
                 "failed to record interrupted state on cancel",
                 dispatch_name=effective_name,
                 exc_info=True,
@@ -150,7 +150,7 @@ async def handle_generic_exception(
             ManagedHeadlessSessionTerminalState.FAILED,
         )
     except Exception:
-        _logger.warning(
+        logger.warning(
             "failed to record managed lineage failure",
             exc_info=True,
         )

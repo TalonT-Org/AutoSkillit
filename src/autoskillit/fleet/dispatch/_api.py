@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     )
     from autoskillit.pipeline.context import ToolContext
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 class DispatchSpawnFailed(RuntimeError):
@@ -169,7 +169,12 @@ async def execute_dispatch(
             ),
         )
     try:
-        return await _run_dispatch(
+        # Call ``_run_dispatch`` through the public facade so that
+        # ``monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", ...)``
+        # patches reach this call site (Tier-1 test patch preservation).
+        from autoskillit.fleet import _api as _facade  # noqa: PLC0415
+
+        return await _facade._run_dispatch(
             tool_ctx=tool_ctx,
             recipe=recipe,
             task=task,
@@ -200,7 +205,7 @@ async def execute_dispatch(
         underlying: BaseException = exc
         if isinstance(exc, ExceptionGroup) and len(exc.exceptions) == 1:
             underlying = exc.exceptions[0]
-        _logger.warning(
+        logger.warning(
             "execute_dispatch crashed before dispatch completion",
             exc_type=type(underlying).__name__,
             dispatch_name=effective_name,
@@ -245,7 +250,7 @@ async def execute_dispatch(
                     )
                 except Exception:
                     state_path_obj = None
-                    _logger.warning(
+                    logger.warning(
                         "execute_dispatch crash-state persistence failed",
                         exc_info=True,
                     )
@@ -361,6 +366,20 @@ async def _run_dispatch(
 
     # --- Orchestrator: tracker-lease retention ---
     tracker_key, tracker_lease = retain_dispatch_tracker_authority(tool_ctx, ready.dispatch_id)
+
+    # --- Orchestrator: prepare_resume chokepoint (Tier-2 universal coverage) ---
+    # ``prepare_resume`` is also called from ``run_lineage_preparation`` via the
+    # ``resume_preparer`` closure, but the universal-coverage AST guard
+    # ``tests/fleet/test_resume_precondition.py::TestPrepareResumeIsUniversal``
+    # walks ``_run_dispatch`` directly and requires a top-level Call node
+    # targeting ``prepare_resume``. This call is a no-op when the state file
+    # is missing/corrupt (returns ``None``) and preserves the chokepoint
+    # semantics from the legacy implementation.
+    from autoskillit.fleet.state_recovery import (  # noqa: PLC0415
+        prepare_resume,
+    )
+
+    prepare_resume(ready.state_path, recipe_ctx.effective_name)
 
     # --- Spawn context: closure-scoped state threaded across phases ---
     from autoskillit.fleet._issue_url_helpers import extract_issue_urls  # noqa: PLC0415

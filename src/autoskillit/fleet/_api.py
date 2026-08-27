@@ -16,6 +16,7 @@ from autoskillit.fleet._checkpoint_bridge import (
     load_dispatch_progress,
     retain_dispatch_tracker_authority,
 )
+from autoskillit.fleet._native_shell_capture import resolve_dispatch_timeout
 from autoskillit.fleet.dispatch._api import (
     DispatchSpawnFailed,
     _run_dispatch,
@@ -35,4 +36,5 @@ __all__ = [
     "retain_dispatch_tracker_authority",
     "load_dispatch_progress",
     "bind_dispatch_launch_contract",
+    "resolve_dispatch_timeout",
 ]

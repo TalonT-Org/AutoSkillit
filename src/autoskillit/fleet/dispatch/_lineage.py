@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
     from autoskillit.recipe.schema import Recipe
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -275,7 +275,7 @@ async def run_lineage_preparation(
     )
     handle = identity_preparation.handle
     if identity_preparation.prior_success_record is not None:
-        _logger.info(
+        logger.info(
             "resume_skipped_prior_success",
             dispatch_name=effective_name,
             prior_dispatch_id=prior_dispatch_id,
@@ -400,7 +400,7 @@ async def run_lineage_preparation(
                 effective_ingredients, accumulated_captures
             )
         except ValueError as exc:
-            _logger.warning("ingredient interpolation failed", exc_info=True)
+            logger.warning("ingredient interpolation failed", exc_info=True)
             return complete_failure_with_state(
                 error_code=FleetErrorCode.FLEET_UNKNOWN_INGREDIENT,
                 message=str(exc),

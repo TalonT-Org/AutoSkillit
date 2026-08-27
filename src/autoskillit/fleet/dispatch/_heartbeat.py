@@ -14,7 +14,7 @@ from pathlib import Path
 
 from autoskillit.core import atomic_write, get_logger
 
-_logger = get_logger(__name__)
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
@@ -34,7 +34,7 @@ async def _dispatch_heartbeat(
         hb_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(hb_path, "{}")
     except OSError:
-        _logger.warning("dispatch_heartbeat_write_failed", heartbeat=str(hb_path), exc_info=True)
+        logger.warning("dispatch_heartbeat_write_failed", heartbeat=str(hb_path), exc_info=True)
         yield None
         return
 
@@ -44,7 +44,7 @@ async def _dispatch_heartbeat(
             try:
                 hb_path.touch()
             except OSError:
-                _logger.warning(
+                logger.warning(
                     "dispatch_heartbeat_touch_failed",
                     heartbeat=str(hb_path),
                     exc_info=True,
@@ -62,10 +62,10 @@ async def _dispatch_heartbeat(
             except asyncio.CancelledError:
                 pass
             except Exception:
-                _logger.warning("dispatch_heartbeat_task_failed", exc_info=True)
+                logger.warning("dispatch_heartbeat_task_failed", exc_info=True)
         try:
             hb_path.unlink(missing_ok=True)
         except OSError:
-            _logger.warning(
+            logger.warning(
                 "dispatch_heartbeat_unlink_failed", heartbeat=str(hb_path), exc_info=True
             )

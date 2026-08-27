@@ -49,8 +49,18 @@ class TestDefaultMigrationServiceBehaviour:
             "autoskillit.migration.adapters_recipe.applicable_migrations",
             lambda *a, **kw: [],
         )
+        # Skip the contract + diagram regeneration paths so the service returns
+        # the up_to_date branch — without this, the contract adapter treats a
+        # missing contract card as stale and the service reports "migrated".
+        engine = default_migration_engine()
+        monkeypatch.setattr(
+            engine.get_adapter("contract"), "needs_migration", lambda *a, **kw: False
+        )
+        monkeypatch.setattr(
+            engine.get_adapter("diagram"), "needs_migration", lambda *a, **kw: False
+        )
 
-        service = DefaultMigrationService(default_migration_engine())
+        service = DefaultMigrationService(engine)
         result = await service.migrate(recipe_path)
 
         assert result["status"] == "up_to_date"

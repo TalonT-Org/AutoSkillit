@@ -65,10 +65,10 @@ class DefaultMigrationService:
             temp_dir = resolve_temp_dir(project_dir, None)
 
         if self._run_headless is not None:
-            run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless  # type: ignore[assignment,no-redef]
+            run_headless: Callable[..., Awaitable[SkillResult]] = self._run_headless
         else:
 
-            async def run_headless(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[no-redef,misc]
+            async def run_headless(*args: Any, **kwargs: Any) -> SkillResult:  # type: ignore[misc]
                 return SkillResult(
                     success=False,
                     result=(

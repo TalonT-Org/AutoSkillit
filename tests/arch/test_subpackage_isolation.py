@@ -1535,7 +1535,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "and the create/validate/yield/delete ownership proof. #4715 adds the admitted-role "
         "provisioning and finalized-reachability loop at the same ordering boundary.",
     ),
-"rules_skill_content.py": (
+    "rules_skill_content.py": (
         1200,
         "REQ-CNST-010-E11: SKILL.md content validation rules registry — accumulating "
         "semantic rules (undefined-bash-placeholder, hardcoded-origin-remote, "

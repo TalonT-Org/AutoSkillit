@@ -1,8 +1,8 @@
 """Phase A — recipe validation & ingredient assembly for fleet dispatch (#4851).
 
-Extracted from `fleet/_api.py:453-582`. Owns the pre-launch gating that turns
-the caller-supplied `(recipe, task, ingredients)` into the resolved recipe,
-backend, ingredient map, and identity handles the launch pipeline consumes.
+Owns the pre-launch gating that turns the caller-supplied
+`(recipe, task, ingredients)` into the resolved recipe, backend, ingredient
+map, and identity handles the launch pipeline consumes.
 
 On success returns a ``RecipeContext`` consumed by Phase B (``_lineage.py``).
 On any rejection (recipe missing, validation failure, invalid kind) returns a
@@ -74,9 +74,8 @@ async def run_pre_launch_gating(
 ) -> RecipeContext | DispatchResult:
     """Validate the recipe, assemble ingredients, and resolve the backend.
 
-    Mirrors `_run_dispatch` lines 453-582 in `fleet/_api.py`. Phase A does NOT
-    acquire the fleet lock, mint a dispatch ID, or write any per-dispatch
-    state — those concerns live in Phase B (`_lineage.py`).
+    Phase A does NOT acquire the fleet lock, mint a dispatch ID, or write any
+    per-dispatch state — those concerns live in Phase B (`_lineage.py`).
 
     Provenance is REQUIRED: the orchestrator creates the tracker before
     invoking Phase A, so this function does not synthesize a fallback.

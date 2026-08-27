@@ -111,6 +111,7 @@ async def run_execution(
     prior_session_chain: list[str],
     effective_backend: CodingAgentBackend | None,
     caller_session_id: str,
+    caller_backend_name: str,
     idle_output_timeout: int | None,
     lineage_backend_name: str,
     dispatch_sidecar_path: str,
@@ -118,11 +119,10 @@ async def run_execution(
     prior_ids: list[str],
     prior_completion_markers: list[str | None] | None,
     dispatch_backend: CodingAgentBackend | None,
-    completion_marker: str = "",
-    sentinel_contract: Any = None,
-    caller_backend_name: str = "",
-    dispatches_dir: Path | None = None,
-    resolved_timeout: float = 0.0,
+    completion_marker: str,
+    sentinel_contract: Any,
+    dispatches_dir: Path,
+    resolved_timeout: float,
 ) -> ExecutionResult:
     """Phase C: lines 905-1207 of the legacy ``_run_dispatch``.
 
@@ -138,12 +138,11 @@ async def run_execution(
     spawn_ctx.issue_urls_raw = issue_urls_raw
     spawn_ctx.prior_ids = list(prior_ids)
 
-    # 944: derive the session locator for JSONL resolution.
+    # Derive the session locator for JSONL resolution.
     _locator = effective_backend.session_locator() if effective_backend is not None else None
 
-    # 1110-1117: marker_dir resolution — moved up so the early-return
-    # ExecutionResult constructors can populate marker_dir even when the
-    # function exits before reaching the original resolution site.
+    # Resolve marker_dir before the early-return paths so any
+    # ExecutionResult carrying a spawn failure can still report its path.
     marker_dir: Path | None = None
     if _locator is not None:
         try:
@@ -151,7 +150,7 @@ async def run_execution(
         except OSError:
             pass
 
-    # 917-942: state-record upsert before spawn.
+    # State-record upsert before spawn.
     from autoskillit.fleet.state import (  # noqa: PLC0415
         DispatchRecord,
         read_state,
@@ -201,7 +200,7 @@ async def run_execution(
             ),
         )
 
-    # 946-994: resume JSONL resolution + EFFECTIVE_RESUME_BINDING provenance.
+    # Resume JSONL resolution + EFFECTIVE_RESUME_BINDING provenance.
     if resume_session_id:
         _primary_jsonl = (
             _locator.session_log_path(str(tool_ctx.project_dir), resume_session_id)
@@ -290,8 +289,8 @@ async def run_execution(
     # execution_marker is needed by the spawn-context blocks further below.
     from autoskillit.core import execution_marker  # noqa: PLC0415
 
-    # 1040-1108: closures captured by tool_ctx.executor.dispatch_food_truck.
-    # They mutate spawn_ctx in place.
+    # Closures captured by tool_ctx.executor.dispatch_food_truck. They mutate
+    # spawn_ctx in place.
     def _on_spawn(pid: int, ticks: int) -> None:
         from autoskillit.core import read_boot_id
 
@@ -366,7 +365,7 @@ async def run_execution(
 
         bind_dispatch_launch_contract(state_path, effective_name, launch_contract)
 
-    # 1119-1202: dispatch the inner work.
+    # Dispatch the inner work.
     provenance.start(
         DispatchEffectName.PROCESS_SPAWN,
         identities={"dispatch_id": dispatch_id},

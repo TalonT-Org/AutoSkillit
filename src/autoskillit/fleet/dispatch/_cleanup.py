@@ -46,7 +46,6 @@ async def handle_cancellation(
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
     provenance: DispatchProvenanceTracker,
     marker_dir: Path | None,
-    skill_result: SkillResult | None,
     state_path: Path,
 ) -> NoReturn:
     """Phase D handler for asyncio.CancelledError.
@@ -113,9 +112,6 @@ async def handle_cancellation(
             captured_session_id = (
                 spawn_ctx.dispatched_session_id[0] if spawn_ctx.dispatched_session_id else ""
             )
-            if not captured_session_id:
-                if skill_result is not None:
-                    captured_session_id = getattr(skill_result, "session_id", "") or ""
 
             with anyio.CancelScope(shield=True):
                 provenance.record_state_cleanup(confirmed=True)
@@ -142,10 +138,10 @@ async def handle_generic_exception(
     tool_ctx: ToolContext,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
 ) -> NoReturn:
-    """Lines 1292-1305: generic ``except Exception`` handler.
+    """Generic ``except Exception`` handler — UNSHIELDED lineage close to FAILED.
 
-    UNSHIELDED lineage close to FAILED — matches the original where this
-    branch never shielded the lineage state mutation. Re-raises.
+    Matches the original where this branch never shielded the lineage state
+    mutation. Re-raises the active exception.
     """
     try:
         set_lineage_terminal_state(
@@ -169,13 +165,11 @@ async def run_finally_label_cleanup(
     tool_ctx: ToolContext,
     provenance: DispatchProvenanceTracker,
 ) -> bool:
-    """Lines 1306-1332: finally-block label cleanup, shielded.
+    """Finally-block label cleanup — SHIELDED from cancellation.
 
-    Returns ``labels_cleaned: bool`` — the orchestrator calls this only when
-    ``execution.dispatch_completed_normally == False``. The original guards on
-    ``if not _dispatch_completed_normally:``; we replicate that gating at the
-    call site rather than inside this helper so the cleanup contract is
-    explicit.
+    Returns ``labels_cleaned: bool``. The orchestrator calls this only when
+    the dispatch did NOT complete normally, mirroring the original guard on
+    ``if not _dispatch_completed_normally:``.
     """
     from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels  # noqa: PLC0415
 

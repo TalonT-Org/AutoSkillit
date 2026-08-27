@@ -1,8 +1,8 @@
 """Phase B — dispatch identity, lineage preparation & launch tuple assembly (#4851).
 
-Extracted from `fleet/_api.py:583-904`. Owns the per-dispatch state handle
-creation, the resume/prior-success short-circuit, the captured-ingredient
-interpolation, the launch tuple preparation, and the call into
+Owns the per-dispatch state handle creation, the resume/prior-success
+short-circuit, the captured-ingredient interpolation, the launch tuple
+preparation, and the call into
 ``prepare_food_truck_lineage``.
 
 Returns a ``LineagePreparationResult`` consumed by Phase C. Either a
@@ -77,6 +77,13 @@ class ReadyLineage:
     prior_dispatched_session_id: str | None
     lineage_backend_name: str
     launch_tuple: tuple[str, Any, Any, Path]
+    # Resolved timeout (in seconds, float) from resolve_dispatch_timeout — Phase C
+    # must forward this to the executor; falling back to 0.0 makes the dispatch
+    # immediately stale.
+    resolved_timeout: float
+    # Authority for the heartbeats-and-marker parent directory. Computed once in
+    # Phase B so Phase C can open ``_dispatch_heartbeat`` against the same root.
+    dispatches_dir: Path
 
 
 @dataclass
@@ -99,10 +106,8 @@ def create_fresh_handle(
 ) -> DispatchStateHandle:
     """Build a brand-new per-dispatch state handle with the caller record seeded in.
 
-    Extracted from the `_create_fresh_handle` closure inside `_run_dispatch`
-    (lines 616-630 of the original `fleet/_api.py`). Became a free function so
-    Phase B no longer needs to thread all six closure-captured variables as
-    closure cells — the orchestrator passes them in as keyword arguments.
+    Phase B no longer threads closure-captured variables as closure cells —
+    the orchestrator passes them in as keyword arguments.
     """
     return DispatchStateHandle.create_fresh(
         dispatches_dir,
@@ -136,10 +141,8 @@ def prepare_launch(
 ) -> tuple[str, Any, Any, Path]:
     """Build the (prompt, plugin_authority, capability_preparation, authoritative_cwd) tuple.
 
-    Extracted from the `_prepare_launch` closure inside `_run_dispatch`
-    (lines 821-853 of the original `fleet/_api.py`). Became a free function so
-    Phase B no longer needs to thread all eight closure-captured variables as
-    closure cells — the orchestrator passes them in as keyword arguments.
+    Phase B no longer threads closure-captured variables as closure cells —
+    the orchestrator passes them in as keyword arguments.
 
     Note: ``l3_timeout_sec`` is passed through ``int(...)`` to mirror the
     original ``int(resolved_timeout)`` coercion. The original closure always
@@ -200,27 +203,25 @@ async def run_lineage_preparation(
     resume_message: str | None,
     caller_instructions: str | None,
     prior_dispatch_id: str | None,
-    idle_output_timeout: int | None,
     caller_session_id: str,
-    dispatch_backend: CodingAgentBackend | None,
-    effective_backend_map: dict[str, str] | None,
     provenance: DispatchProvenanceTracker,
     native_shell_capture_mode: NativeShellCaptureMode | None,
     timeout_sec: int | None,
 ) -> LineagePreparationResult | DispatchResult:
     """Mint the per-dispatch state handle, prepare the managed lineage, build the launch tuple.
 
-    Mirrors `_run_dispatch` lines 583-904 in `fleet/_api.py`. All closure-scoped
-    variables from the legacy `_create_fresh_handle` and `_prepare_launch`
-    closures are now explicit keyword arguments to the free functions
-    ``create_fresh_handle`` and ``prepare_launch`` defined in this module.
+    All closure-scoped variables from the legacy ``_create_fresh_handle`` and
+    ``_prepare_launch`` closures are now explicit keyword arguments to the
+    free functions ``create_fresh_handle`` and ``prepare_launch`` defined in
+    this module.
 
     ``managed_lineage_ref`` is threaded via the local variable: every call to
-    ``complete_failure_with_state`` from this Phase passes ``managed_lineage_ref=None``
-    because the assignment at the end of the function has not fired yet — the
-    original closure's free-variable lookup always read the latest value, but
-    the only caller that would have observed a non-None ``managed_lineage_ref``
-    was the catch-block at line 881 which fires BEFORE the assignment at line 897.
+    ``complete_failure_with_state`` from this Phase passes
+    ``managed_lineage_ref=None`` because the assignment at the end of the
+    function has not fired yet — the original closure's free-variable lookup
+    always read the latest value, but the only caller that would have
+    observed a non-None ``managed_lineage_ref`` was the catch-block that
+    fires BEFORE the post-try assignment.
     """
     effective_name = dispatch_name or effective_name
     dispatches_dir = tool_ctx.temp_dir / "dispatches"
@@ -540,5 +541,7 @@ async def run_lineage_preparation(
                 food_truck_capability_preparation,
                 _lineage_anchor,
             ),
+            resolved_timeout=resolved_timeout,
+            dispatches_dir=dispatches_dir,
         ),
     )

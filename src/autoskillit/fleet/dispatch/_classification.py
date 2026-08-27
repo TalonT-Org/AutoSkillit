@@ -17,6 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+# Resolve the test-patch surface through the public facade so that
+# ``monkeypatch.setattr('autoskillit.fleet._api.parse_l3_result_block', fake)``
+# and ``..._extract_captures`` actually intercept the engine. Routing through
+# the facade attribute at call time keeps the public patch surface stable
+# across shard refactors. The facade is partial during module import, but
+# fully populated by the time these functions execute.
+import autoskillit.fleet._api as _facade  # noqa: PLC0415
 from autoskillit.core import (
     CaptureEntrySpec,
     ManagedHeadlessSessionTerminalState,
@@ -24,7 +31,6 @@ from autoskillit.core import (
     SkillResult,
     get_logger,
 )
-from autoskillit.fleet._capture import _extract_captures
 from autoskillit.fleet._checkpoint_bridge import load_dispatch_progress
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
 from autoskillit.fleet._outcome import (
@@ -34,7 +40,6 @@ from autoskillit.fleet._outcome import (
 )
 from autoskillit.fleet.dispatch._cleanup import _post_dispatch_cleanup
 from autoskillit.fleet.dispatch._execution import SpawnContext
-from autoskillit.fleet.result_parser import parse_l3_result_block
 from autoskillit.fleet.state import (
     DispatchRecord,
     DispatchStatus,
@@ -63,22 +68,14 @@ class ClassificationResult:
     final_status: DispatchStatus
     reason: str | None
     sidecar_file: Path
-    sidecar_entries: list
     tracker_authority_error: str | None
     branch_name: str
     labels_cleaned: bool
-    dispatched_issue_count: int
-    resumed_session_id: str | None  # for session_id_continuity_mismatch
     project_log_dir: str
-    jsonl_path: Path | None
-    resume_line_offset: int
-    additional_jsonl_paths: list[Path]
     extended_chain: list[str]
-    sidecar_exists: bool
     dispatched_session_id: str | None  # for finalize to override skill_result.session_id
     skill_result: SkillResult  # for finalize_state_write
     result_success: bool
-    parsed_outcome: str | None = None
 
 
 async def run_outcome_classification(
@@ -88,22 +85,13 @@ async def run_outcome_classification(
     tool_ctx: ToolContext,
     tracker_lease: Any,
     dispatch_id: str,
-    state_path: Path,
     effective_name: str,
     managed_lineage_ref: Any,
     provenance: DispatchProvenanceTracker,
-    capture: dict[str, CaptureEntrySpec] | None,
-    full_recipe: Any,
-    lineage_backend_name: str,
-    caller_session_id: str,
-    caller_backend_name: str,
     prior_session_chain: list[str],
     prior_dispatched_session_id: str | None,
     resume_session_id: str | None,
-    idle_output_timeout: int | None,
     dispatch_checkpoint: SessionCheckpoint | None,
-    ended_at: float,
-    started_at: float,
     marker_dir: Path | None,
     effective_backend: CodingAgentBackend | None,
     recipe: str,
@@ -167,7 +155,7 @@ async def run_outcome_classification(
                     actual_session_id=skill_result.session_id,
                 )
                 resume_line_offset = 0
-        parsed_result = parse_l3_result_block(
+        parsed_result = _facade.parse_l3_result_block(
             stdout=skill_result.result or "",
             expected_dispatch_id=dispatch_id,
             assistant_messages_path=jsonl_path,
@@ -311,18 +299,11 @@ async def run_outcome_classification(
         final_status=final_status,
         reason=reason or "",  # type: ignore[arg-type]
         sidecar_file=sidecar_file,
-        sidecar_entries=sidecar_entries,
         tracker_authority_error=tracker_authority_error,
         branch_name=_branch_name,
         labels_cleaned=_labels_cleaned,
-        dispatched_issue_count=dispatched_issue_count,
-        resumed_session_id=resume_session_id,
         project_log_dir=project_log_dir,
-        jsonl_path=None,
-        resume_line_offset=resume_line_offset,
-        additional_jsonl_paths=additional_jsonl_paths,
         extended_chain=extended_chain,
-        sidecar_exists=sidecar_file.exists(),
         dispatched_session_id=(
             spawn_ctx.dispatched_session_id[0]
             if spawn_ctx.dispatched_session_id
@@ -411,7 +392,7 @@ async def finalize_state_write(
         and parsed_result.payload
         and parsed_result.source != "sidecar"
     ):
-        extracted = _extract_captures(capture, parsed_result.payload)
+        extracted = _facade._extract_captures(capture, parsed_result.payload)
 
     # Persist state + captures + provenance confirmation.
     provenance.start(
@@ -431,7 +412,7 @@ async def finalize_state_write(
     record.effect_provenance = provenance.snapshot().to_dict()
     upsert_dispatch_record_by_name(state_path, record)
 
-    # 1575: post-dispatch cleanup (quota cache invalidation + background refresh).
+    # Post-dispatch cleanup (quota cache invalidation + background refresh).
     _post_dispatch_cleanup(tool_ctx, skill_result, cache_invalidator, quota_refresher)
 
     # Build and return the DispatchResult envelope.

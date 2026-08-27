@@ -68,11 +68,6 @@ if TYPE_CHECKING:
     )
     from autoskillit.pipeline.context import ToolContext
 
-try:
-    from exceptiongroup import ExceptionGroup  # type: ignore[attr-defined]
-except ImportError:
-    ExceptionGroup = BaseExceptionGroup  # type: ignore[assignment,misc]
-
 _logger = get_logger(__name__)
 
 
@@ -345,10 +340,7 @@ async def _run_dispatch(
         resume_message=resume_message,
         caller_instructions=caller_instructions,
         prior_dispatch_id=prior_dispatch_id,
-        idle_output_timeout=idle_output_timeout,
         caller_session_id=caller_session_id,
-        dispatch_backend=dispatch_backend,
-        effective_backend_map=effective_backend_map,
         provenance=provenance,
         native_shell_capture_mode=native_shell_capture_mode,
         timeout_sec=timeout_sec,
@@ -359,7 +351,13 @@ async def _run_dispatch(
         return lineage_result.prior_success_dispatch_result  # type: ignore[return-value]
 
     ready = lineage_result.ready
-    assert ready is not None  # narrowed by outcome check above
+    if ready is None:
+        # Defensive: outcome == "prior_success_short_circuit" already returned above;
+        # any other outcome should produce a non-None ``ready``.
+        raise RuntimeError(
+            f"LineagePreparationResult.outcome={lineage_result.outcome!r} "
+            "produced a None ready record"
+        )
 
     # --- Orchestrator: tracker-lease retention ---
     tracker_key, tracker_lease = retain_dispatch_tracker_authority(tool_ctx, ready.dispatch_id)
@@ -379,9 +377,10 @@ async def _run_dispatch(
     # ``execution`` is bound to ``None`` before the try block so the finally
     # clause can inspect its flag without an unbound-variable error in the
     # rare cancel-before-execution case.
-    execution: _ExecResult | None = None
+    execution_result: _ExecResult | None = None
+    dispatch_completed_normally = False
     try:
-        execution = await run_execution(
+        execution_result = await run_execution(
             tool_ctx=tool_ctx,
             spawn_ctx=spawn_ctx,
             dispatch_id=ready.dispatch_id,
@@ -402,6 +401,7 @@ async def _run_dispatch(
             prior_session_chain=ready.prior_session_chain,
             effective_backend=recipe_ctx.effective_backend,
             caller_session_id=caller_session_id,
+            caller_backend_name=recipe_ctx.caller_backend_name,
             idle_output_timeout=idle_output_timeout,
             lineage_backend_name=ready.lineage_backend_name,
             dispatch_sidecar_path=str(sidecar_path(ready.dispatch_id, tool_ctx.project_dir)),
@@ -409,14 +409,25 @@ async def _run_dispatch(
             prior_ids=spawn_ctx.prior_ids,
             prior_completion_markers=prior_markers,
             dispatch_backend=dispatch_backend,
+            completion_marker=ready.identity.completion_marker,
+            sentinel_contract=ready.identity.sentinel_contract,
+            dispatches_dir=ready.dispatches_dir,
+            resolved_timeout=ready.resolved_timeout,
         )
-        assert execution is not None  # narrowed by the await above
-        if execution.spawn_failure_dispatch_result is not None:
-            return execution.spawn_failure_dispatch_result
+        if execution_result is None:
+            raise RuntimeError("run_execution returned None — Phase B/C contract violation")
+        if execution_result.spawn_failure_dispatch_result is not None:
+            return execution_result.spawn_failure_dispatch_result
 
-        skill_result = execution.skill_result
-        ended_at = execution.ended_at
-        assert skill_result is not None
+        skill_result = execution_result.skill_result
+        ended_at = execution_result.ended_at
+        if skill_result is None:
+            raise RuntimeError(
+                "run_execution returned skill_result=None without a "
+                "spawn_failure_dispatch_result — Phase B/C contract violation"
+            )
+        if execution_result.dispatch_completed_normally:
+            dispatch_completed_normally = True
 
         # --- Phase E: outcome classification + state finalization ---
         classification = await run_outcome_classification(
@@ -425,26 +436,17 @@ async def _run_dispatch(
             tool_ctx=tool_ctx,
             tracker_lease=tracker_lease,
             dispatch_id=ready.dispatch_id,
-            state_path=ready.state_path,
             effective_name=recipe_ctx.effective_name,
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
-            capture=capture,
-            full_recipe=recipe_ctx.full_recipe,
-            lineage_backend_name=ready.lineage_backend_name,
-            caller_session_id=caller_session_id,
-            caller_backend_name=recipe_ctx.caller_backend_name,
             recipe=recipe,
             prior_session_chain=ready.prior_session_chain,
             prior_dispatched_session_id=ready.prior_dispatched_session_id,
             resume_session_id=ready.resume_session_id,
-            idle_output_timeout=idle_output_timeout,
             dispatch_checkpoint=ready.resume_checkpoint,
-            ended_at=ended_at or time.time(),
-            started_at=execution.started_at,
-            marker_dir=execution.marker_dir,
+            marker_dir=execution_result.marker_dir,
             effective_backend=recipe_ctx.effective_backend,
-            dispatch_sidecar_path=execution.dispatch_sidecar_path,
+            dispatch_sidecar_path=execution_result.dispatch_sidecar_path,
         )
         result = await finalize_state_write(
             classification=classification,
@@ -460,7 +462,7 @@ async def _run_dispatch(
             provenance=provenance,
             capture=capture,
             dispatch_checkpoint=ready.resume_checkpoint,
-            started_at=execution.started_at,
+            started_at=execution_result.started_at,
             ended_at=ended_at or time.time(),
             cache_invalidator=cache_invalidator,
             quota_refresher=quota_refresher,
@@ -474,8 +476,7 @@ async def _run_dispatch(
             effective_name=recipe_ctx.effective_name,
             managed_lineage_ref=ready.managed_lineage_ref,
             provenance=provenance,
-            marker_dir=execution.marker_dir if execution is not None else None,
-            skill_result=None,
+            marker_dir=execution_result.marker_dir if execution_result is not None else None,
             state_path=ready.state_path,
         )
         raise
@@ -491,7 +492,7 @@ async def _run_dispatch(
         #    the source's nesting where the inner finally: runs before the outer
         #    tracker-lease release.
         # 2. Tracker-lease release SECOND — always under the leases lock.
-        if execution is not None and not execution.dispatch_completed_normally:
+        if not dispatch_completed_normally:
             await run_finally_label_cleanup(
                 spawn_ctx=spawn_ctx,
                 dispatch_id=ready.dispatch_id,

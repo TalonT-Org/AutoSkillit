@@ -1,11 +1,10 @@
 """AST guard: the dispatch engine must use resolve_dispatch_timeout for all timeout surfaces.
 
-After the #4851 decomposition, ``_run_dispatch`` lives in
-``src/autoskillit/fleet/dispatch/_api.py`` and the ``resolve_dispatch_timeout``
-call site lives inside the Phase B lineage shard
-(``src/autoskillit/fleet/dispatch/_lineage.py``). The substring-match for
-``resolve_dispatch_timeout`` is applied to both files to prevent
-hardcoded-fallback regressions regardless of which phase adds a new
+After the #4851 decomposition, ``resolve_dispatch_timeout`` is computed in
+Phase B (``src/autoskillit/fleet/dispatch/_lineage.py``) and the resolved
+value flows into Phase C (``src/autoskillit/fleet/dispatch/_execution.py``)
+where it is consumed by ``run_execution``. Both files are inspected to
+prevent hardcoded-fallback regressions regardless of which phase adds a new
 timeout surface in the future.
 """
 
@@ -18,12 +17,14 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_API_PATH = Path(__file__).parents[2] / "src" / "autoskillit" / "fleet" / "dispatch" / "_api.py"
 _LINEAGE_PATH = (
     Path(__file__).parents[2] / "src" / "autoskillit" / "fleet" / "dispatch" / "_lineage.py"
 )
-_RUN_DISPATCH = "_run_dispatch"
+_EXECUTION_PATH = (
+    Path(__file__).parents[2] / "src" / "autoskillit" / "fleet" / "dispatch" / "_execution.py"
+)
 _LINEAGE_PREP = "run_lineage_preparation"
+_EXECUTION = "run_execution"
 _RESOLVE_SYMBOL = "resolve_dispatch_timeout"
 
 
@@ -61,17 +62,23 @@ def test_run_dispatch_uses_resolve_dispatch_timeout() -> None:
     """The dispatch engine must use resolve_dispatch_timeout for all timeout surfaces.
 
     The decomposition split the legacy ``_run_dispatch`` into per-phase shards.
-    ``resolve_dispatch_timeout`` now lives in Phase B (``_lineage.py``); both
-    must continue to use the resolved timeout value (no hardcoded fallbacks).
+    ``resolve_dispatch_timeout`` is computed in Phase B (``_lineage.py``) and
+    the resolved value flows into Phase C (``_execution.py``). All three
+    locations must continue to use the resolved timeout value (no hardcoded
+    fallbacks).
     """
-    func_source = _load_function_source(_API_PATH, _RUN_DISPATCH)
     lineage_source = _load_function_source(_LINEAGE_PATH, _LINEAGE_PREP)
+    execution_source = _load_function_source(_EXECUTION_PATH, _EXECUTION)
 
-    combined = func_source + "\n" + lineage_source
+    # Phase B must compute the value; Phase C must consume it (either by
+    # referencing the symbol or by accepting the resolved value as a parameter
+    # that ``run_execution`` then forwards into ``timeout=`` / deadline).
+    combined = lineage_source + "\n" + execution_source
     assert _RESOLVE_SYMBOL in combined, (
-        f"Neither '{_RUN_DISPATCH}' nor '{_LINEAGE_PREP}' calls '{_RESOLVE_SYMBOL}'. "
-        "All timeout surfaces (prompt build, process kill, session deadline) must "
-        "use a single resolved value from resolve_dispatch_timeout."
+        f"'{_LINEAGE_PREP}' must call '{_RESOLVE_SYMBOL}' and "
+        f"'{_EXECUTION}' must consume the resolved value via its 'resolved_timeout' "
+        "parameter. All timeout surfaces (prompt build, process kill, session "
+        "deadline) must use a single resolved value from resolve_dispatch_timeout."
     )
 
     assert "or 1800" not in combined, (

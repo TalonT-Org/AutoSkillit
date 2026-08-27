@@ -322,6 +322,28 @@ def test_wrong_session_id_is_reported_as_such(
     }
 
 
+def test_malformed_requested_binding_is_not_reported_as_wrong_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_root = tmp_path / "state-root"
+    state_root.mkdir()
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    requested_path = resolve_binding_path(str(state_root), "requested")
+    requested_path.parent.mkdir(parents=True)
+    requested_path.write_text("{}", encoding="utf-8")
+    _write_session_binding(state_root, "recorded", _binding("recorded"))
+
+    result = declare_module._declare_join_batch_handler(
+        "rectify", ["assignment"], "requested", tmp_path
+    )
+
+    assert result == {
+        "success": False,
+        "error": "declare_join_batch requires a valid session binding",
+    }
+
+
 def test_ledger_and_binding_share_the_state_root_aware_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

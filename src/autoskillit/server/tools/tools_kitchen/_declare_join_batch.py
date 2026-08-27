@@ -46,18 +46,21 @@ def _declare_join_batch_handler(
     binding_path = resolve_binding_path(str(project_root), session_id)
     channel_dir = binding_path.parent
     channel_dir.mkdir(parents=True, exist_ok=True)
+    binding_invalid = False
     try:
         binding = read_binding(binding_path)
     except SessionBindingError:
         binding = None
+        binding_invalid = True
 
     # Fail-closed validation: a valid, join-bearing session binding, a loaded
     # skill entry, and the backend's fixed-set-join capability must all line
     # up before we open a wave.
     if binding is None:
-        wrong_session_error = _wrong_session_error(channel_dir, session_id)
-        if wrong_session_error is not None:
-            return {"success": False, "error": wrong_session_error}
+        if not binding_invalid:
+            wrong_session_error = _wrong_session_error(channel_dir, session_id)
+            if wrong_session_error is not None:
+                return {"success": False, "error": wrong_session_error}
         return {
             "success": False,
             "error": "declare_join_batch requires a valid session binding",

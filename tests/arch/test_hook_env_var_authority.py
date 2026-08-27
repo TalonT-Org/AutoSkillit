@@ -20,87 +20,13 @@ from pathlib import Path
 
 import pytest
 
+from tests._helpers import _EnvVarReadCollector
 from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _PROVIDER_PROFILE_VAR = "AUTOSKILLIT_PROVIDER_PROFILE"
 _AGENT_BACKEND_VAR = "AUTOSKILLIT_AGENT_BACKEND"
-
-
-class _EnvVarReadCollector(ast.NodeVisitor):
-    """Collect literal env-var names read by executable env-lookup expressions.
-
-    Tracks the three executable read patterns:
-
-    - ``os.environ.get("NAME", default)``
-    - ``os.getenv("NAME", default)``
-    - ``os.environ["NAME"]``
-
-    Reads nested inside docstrings, type annotations, or other non-runtime
-    contexts are still recorded because they are syntactically the same
-    expression. The collector walks all call/subscript nodes regardless
-    of where they appear; if a file contains the literal anywhere (even
-    in a comment-like string), the guard fires so reviewers cannot mask
-    the read with a comment or docstring.
-    """
-
-    def __init__(self) -> None:
-        self.reads: set[str] = set()
-
-    def visit_Call(self, node: ast.Call) -> None:
-        if self._is_os_environ_get_call(node):
-            name = self._first_string_arg(node)
-            if name is not None:
-                self.reads.add(name)
-        self.generic_visit(node)
-
-    def visit_Subscript(self, node: ast.Subscript) -> None:
-        if self._is_os_environ_subscript(node):
-            name = self._subscript_string_value(node)
-            if name is not None:
-                self.reads.add(name)
-        self.generic_visit(node)
-
-    @staticmethod
-    def _is_os_environ_get_call(node: ast.Call) -> bool:
-        func = node.func
-        # os.environ.get("NAME", ...) or os.getenv("NAME", ...)
-        if isinstance(func, ast.Attribute) and func.attr in {"get", "getenv"}:
-            value = func.value
-            if isinstance(value, ast.Attribute) and value.attr == "environ":
-                if isinstance(value.value, ast.Name) and value.value.id == "os":
-                    return True
-            if isinstance(value, ast.Name) and value.id == "os":
-                return True
-        return False
-
-    @staticmethod
-    def _is_os_environ_subscript(node: ast.Subscript) -> bool:
-        value = node.value
-        # os.environ["NAME"]
-        return (
-            isinstance(value, ast.Attribute)
-            and value.attr == "environ"
-            and isinstance(value.value, ast.Name)
-            and value.value.id == "os"
-        )
-
-    @staticmethod
-    def _first_string_arg(node: ast.Call) -> str | None:
-        if not node.args:
-            return None
-        first = node.args[0]
-        if isinstance(first, ast.Constant) and isinstance(first.value, str):
-            return first.value
-        return None
-
-    @staticmethod
-    def _subscript_string_value(node: ast.Subscript) -> str | None:
-        sl = node.slice
-        if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
-            return sl.value
-        return None
 
 
 def _collect_reads(py_file: Path) -> set[str]:

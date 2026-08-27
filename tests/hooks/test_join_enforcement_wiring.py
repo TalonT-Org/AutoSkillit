@@ -21,7 +21,7 @@ from autoskillit.hooks._join_ledger import (
     settle_assignment,
 )
 from autoskillit.hooks._session_binding import read_binding, resolve_binding_path
-from tests.arch.test_hook_env_var_authority import _EnvVarReadCollector
+from tests._helpers import _EnvVarReadCollector
 from tests.conftest import production_interpreter_env
 from tests.hooks._session_binding_helpers import copy_projected_hook, write_projection_manifest
 

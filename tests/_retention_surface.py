@@ -791,53 +791,53 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "without risking launch availability."
     ),
     # -- workspace._projection_cache::_reconcile_projection_entry --
-    f"{_PRE}::L593": _retries_after_input_changes(
+    f"{_PRE}::L592": _retries_after_input_changes(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
     ),
-    f"{_PRE}::L596": _retries_after_input_changes(
+    f"{_PRE}::L595": _retries_after_input_changes(
         "The caller-selected active projection is intentionally excluded from stale "
         "reconciliation."
     ),
-    f"{_PRE}::L598": _self_limiting(
+    f"{_PRE}::L597": _self_limiting(
         "A deterministic residue staging entry delegates to its original-key locked "
         "resume transition."
     ),
-    f"{_PRE}::L606": _retries_after_input_changes(
+    f"{_PRE}::L605": _retries_after_input_changes(
         "A recognized non-projection namespace belongs to another lifecycle owner and "
         "remains untouched."
     ),
-    f"{_PRE}::L608": _retries_after_input_changes(
+    f"{_PRE}::L607": _retries_after_input_changes(
         "A projection outside the exact scanned root fails the direct-child ownership guard."
     ),
-    f"{_PRE}::L616": RetentionDecision(
+    f"{_PRE}::L615": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PRE}::L618": _retries_after_input_changes(
+    f"{_PRE}::L617": _retries_after_input_changes(
         "Lease acquisition failed operationally, so reconciliation defers without "
         "claiming deletion authority."
     ),
-    f"{_PRE}::L624": _self_limiting(
+    f"{_PRE}::L623": _self_limiting(
         "A permanently invalid projection delegates to the terminal quarantine transition "
         "under the held lease and lock."
     ),
-    f"{_PRE}::L631": _retries_after_input_changes(
+    f"{_PRE}::L630": _retries_after_input_changes(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PRE}::L634": _retries_after_input_changes(
+    f"{_PRE}::L633": _retries_after_input_changes(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),
-    f"{_PRE}::L636": _self_limiting(
+    f"{_PRE}::L635": _self_limiting(
         "A new exact retirement record was durably created; this reports successful disposition."
     ),
-    f"{_PRE}::L637": _self_limiting(
+    f"{_PRE}::L636": _self_limiting(
         "The exact retirement record already exists, so no duplicate durable mutation is needed."
     ),
-    f"{_PRE}::L639": _retries_after_input_changes(
+    f"{_PRE}::L638": _retries_after_input_changes(
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),

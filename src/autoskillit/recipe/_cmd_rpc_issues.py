@@ -280,8 +280,12 @@ def batch_create_issues(
         temp_dir = Path(workspace) / ".autoskillit" / "temp" / "validate-audit"
     if not temp_dir.is_dir():
         return {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
+    try:
+        entries = scan_observed(temp_dir)
+    except VANISHED_ERRORS:
+        return {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
     ticket_bodies = sorted(
-        (entry for entry in scan_observed(temp_dir) if fnmatch(entry.name, "ticket_body_*.md")),
+        (entry for entry in entries if fnmatch(entry.name, "ticket_body_*.md")),
         key=lambda entry: entry.name,
     )
     if not ticket_bodies:

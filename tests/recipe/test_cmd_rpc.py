@@ -518,6 +518,26 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
     assert result["issue_count"] == "3"
 
 
+@pytest.mark.parametrize("error_type", (FileNotFoundError, NotADirectoryError))
+def test_batch_create_issues_returns_empty_when_audit_root_vanishes(
+    tmp_path: Path, error_type: type[OSError]
+) -> None:
+    audit_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    audit_dir.mkdir(parents=True)
+
+    with (
+        patch(
+            "autoskillit.recipe._cmd_rpc_issues.scan_observed",
+            side_effect=error_type("injected"),
+        ),
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
+    ):
+        result = batch_create_issues(workspace=str(tmp_path))
+
+    assert result == {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
+    mock_run_gh.assert_not_called()
+
+
 def test_batch_create_issues_skips_body_that_vanishes_before_read(tmp_path, monkeypatch):
     va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
     va_dir.mkdir(parents=True)

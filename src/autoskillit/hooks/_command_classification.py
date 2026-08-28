@@ -25,7 +25,7 @@ PROTECTED_SOURCE_PATH_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 DECLARABLE_SOURCE_PATH_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
-    re.compile(pattern.pattern) for pattern in PROTECTED_SOURCE_PATH_PATTERNS
+    PROTECTED_SOURCE_PATH_PATTERNS
 )
 
 _INTERPRETER_RE = re.compile(

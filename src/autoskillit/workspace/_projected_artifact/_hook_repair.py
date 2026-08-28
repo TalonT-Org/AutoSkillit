@@ -13,8 +13,8 @@ from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
     ArtifactLease,
     ArtifactLeaseContention,
+    PluginArtifactValidationError,
     atomic_write,
-    get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
     installed_plugin_semantic_key,
@@ -25,6 +25,8 @@ from autoskillit.core import (
 from autoskillit.hook_registry import (
     PLUGIN_ROOT_TOKEN,
     find_broken_hook_scripts,
+    is_hook_payload_quarantined,
+    quarantine_hook_payload,
     render_relocatable_hook_command,
 )
 from autoskillit.workspace._installed_artifact import (
@@ -45,8 +47,6 @@ __all__ = [
     "repair_broken_projection_hooks",
     "validate_staged_plugin_hooks",
 ]
-
-logger = get_logger(__name__)
 
 
 class ProjectedArtifactHooksInvalid(Exception):
@@ -123,6 +123,7 @@ class PluginHookRepairStatus(StrEnum):
     """Closed outcomes for an incarnation considered by hook repair."""
 
     REPAIRED = "repaired"
+    QUARANTINED = "quarantined"
     CONTENDED = "contended"
     FAILED = "failed"
 
@@ -178,6 +179,18 @@ def _relocate_existing_hooks(payload: Any) -> dict[str, Any]:
     return payload
 
 
+def _relocate_raw_hooks(raw_hooks: bytes) -> dict[str, Any]:
+    """Parse and validate raw hooks bytes before a repair transaction mutates them."""
+    try:
+        payload = json.loads(raw_hooks)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProjectedArtifactHooksInvalid(f"hooks.json is not valid JSON: {exc}") from exc
+    try:
+        return _relocate_existing_hooks(payload)
+    except ValueError as exc:
+        raise ProjectedArtifactHooksInvalid(f"hooks.json cannot be relocated: {exc}") from exc
+
+
 def _rollback_repair(
     *,
     hooks_json_path: Path,
@@ -189,24 +202,14 @@ def _rollback_repair(
     failures: list[str] = []
     try:
         atomic_write(hooks_json_path, original_hooks, strict_durability=True)
-    except Exception as exc:
-        logger.warning(
-            "plugin_cache_hooks_rollback_hooks_failed",
-            path=str(hooks_json_path),
-            exc_info=True,
-        )
+    except (OSError, RuntimeError) as exc:
         failures.append(f"hooks rollback failed: {exc}")
     try:
         if original_manifest is None:
             manifest_path.unlink(missing_ok=True)
         else:
             atomic_write(manifest_path, original_manifest, strict_durability=True)
-    except Exception as exc:
-        logger.warning(
-            "plugin_cache_hooks_rollback_manifest_failed",
-            path=str(manifest_path),
-            exc_info=True,
-        )
+    except (OSError, RuntimeError) as exc:
         failures.append(f"manifest rollback failed: {exc}")
     return tuple(failures)
 
@@ -235,27 +238,62 @@ def repair_broken_plugin_cache_hooks(
     ):
         version = version_dir.name
         hooks_json_path = version_dir / "hooks" / "hooks.json"
+        manifest_path = installed_plugin_artifact_manifest_path(version_dir)
         try:
             if not hooks_json_path.is_file():
                 continue
-            broken = find_broken_hook_scripts(hooks_json_path, expansion_root=version_dir)
-            if not broken:
+            raw_hooks = hooks_json_path.read_bytes()
+            if is_hook_payload_quarantined(manifest_path, raw_hooks):
+                continue
+            try:
+                _relocate_raw_hooks(raw_hooks)
+            except ProjectedArtifactHooksInvalid:
+                repair_needed = True
+            else:
+                repair_needed = bool(
+                    find_broken_hook_scripts(hooks_json_path, expansion_root=version_dir)
+                )
+            if not repair_needed:
                 continue
             lease_path = installed_plugin_artifact_lease_path(version_dir)
             with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
-                original_hooks = hooks_json_path.read_text(encoding="utf-8")
+                raw_hooks = hooks_json_path.read_bytes()
+                if is_hook_payload_quarantined(manifest_path, raw_hooks):
+                    continue
+                try:
+                    fresh = _relocate_raw_hooks(raw_hooks)
+                except ProjectedArtifactHooksInvalid as exc:
+                    quarantine_hook_payload(manifest_path, raw_hooks)
+                    outcomes.append(
+                        PluginHookRepairOutcome(
+                            incarnation_dir=version_dir,
+                            status=PluginHookRepairStatus.QUARANTINED,
+                            detail=str(exc),
+                        )
+                    )
+                    continue
                 if not find_broken_hook_scripts(hooks_json_path, expansion_root=version_dir):
                     continue
                 semantic_key = installed_plugin_semantic_key(_AUTOSKILLIT_PLUGIN_KEY, version)
-                read_installed_plugin_artifact_identity(
-                    version_dir,
-                    expected_semantic_key=semantic_key,
-                )
-                manifest_path = installed_plugin_artifact_manifest_path(version_dir)
+                try:
+                    read_installed_plugin_artifact_identity(
+                        version_dir,
+                        expected_semantic_key=semantic_key,
+                    )
+                except PluginArtifactValidationError as exc:
+                    quarantine_hook_payload(manifest_path, raw_hooks)
+                    outcomes.append(
+                        PluginHookRepairOutcome(
+                            incarnation_dir=version_dir,
+                            status=PluginHookRepairStatus.QUARANTINED,
+                            detail=str(exc),
+                        )
+                    )
+                    continue
+                original_hooks = raw_hooks.decode("utf-8")
                 original_manifest = (
                     manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None
                 )
-                fresh = _relocate_existing_hooks(json.loads(original_hooks))
                 try:
                     atomic_write(
                         hooks_json_path,
@@ -294,9 +332,8 @@ def repair_broken_plugin_cache_hooks(
                     detail="lease contended",
                 )
             )
-            logger.warning("plugin_cache_hooks_repair_skipped_contended", version=version)
             continue
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, UnicodeDecodeError) as exc:
             outcomes.append(
                 PluginHookRepairOutcome(
                     incarnation_dir=version_dir,
@@ -304,7 +341,6 @@ def repair_broken_plugin_cache_hooks(
                     detail=str(exc),
                 )
             )
-            logger.warning("plugin_cache_hooks_repair_failed", version=version, exc_info=True)
             continue
         outcomes.append(
             PluginHookRepairOutcome(
@@ -312,7 +348,6 @@ def repair_broken_plugin_cache_hooks(
                 status=PluginHookRepairStatus.REPAIRED,
             )
         )
-        logger.info("plugin_cache_hooks_repaired", version=version)
     return tuple(outcomes)
 
 
@@ -335,18 +370,43 @@ def repair_broken_projection_hooks(
         if p.is_dir() and not p.is_symlink() and not p.name.startswith(".")
     ):
         hooks_json_path = projection_dir / "hooks" / "hooks.json"
+        manifest_path = projected_artifact_manifest_path(projection_dir)
         try:
             if not hooks_json_path.is_file():
                 continue
-            broken = find_broken_hook_scripts(hooks_json_path, expansion_root=projection_dir)
-            if not broken:
+            raw_hooks = hooks_json_path.read_bytes()
+            if is_hook_payload_quarantined(manifest_path, raw_hooks):
+                continue
+            try:
+                _relocate_raw_hooks(raw_hooks)
+            except ProjectedArtifactHooksInvalid:
+                repair_needed = True
+            else:
+                repair_needed = bool(
+                    find_broken_hook_scripts(hooks_json_path, expansion_root=projection_dir)
+                )
+            if not repair_needed:
                 continue
             lease_path = projected_artifact_lease_path(projection_dir)
             with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
-                original_hooks = hooks_json_path.read_text(encoding="utf-8")
+                raw_hooks = hooks_json_path.read_bytes()
+                if is_hook_payload_quarantined(manifest_path, raw_hooks):
+                    continue
+                try:
+                    fresh = _relocate_raw_hooks(raw_hooks)
+                except ProjectedArtifactHooksInvalid as exc:
+                    quarantine_hook_payload(manifest_path, raw_hooks)
+                    outcomes.append(
+                        PluginHookRepairOutcome(
+                            incarnation_dir=projection_dir,
+                            status=PluginHookRepairStatus.QUARANTINED,
+                            detail=str(exc),
+                        )
+                    )
+                    continue
                 if not find_broken_hook_scripts(hooks_json_path, expansion_root=projection_dir):
                     continue
-                manifest_path = projected_artifact_manifest_path(projection_dir)
+                original_hooks = raw_hooks.decode("utf-8")
                 original_manifest = (
                     manifest_path.read_text(encoding="utf-8") if manifest_path.is_file() else None
                 )
@@ -360,7 +420,6 @@ def repair_broken_projection_hooks(
                         raise RuntimeError(
                             "projection manifest schema is missing, corrupt, or unsupported"
                         )
-                fresh = _relocate_existing_hooks(json.loads(original_hooks))
                 try:
                     atomic_write(
                         hooks_json_path,
@@ -403,23 +462,14 @@ def repair_broken_projection_hooks(
                     detail="lease contended",
                 )
             )
-            logger.warning(
-                "projection_hooks_repair_skipped_contended",
-                projection=projection_dir.name,
-            )
             continue
-        except Exception as exc:
+        except (OSError, RuntimeError, ValueError, UnicodeDecodeError) as exc:
             outcomes.append(
                 PluginHookRepairOutcome(
                     incarnation_dir=projection_dir,
                     status=PluginHookRepairStatus.FAILED,
                     detail=str(exc),
                 )
-            )
-            logger.warning(
-                "projection_hooks_repair_failed",
-                projection=projection_dir.name,
-                exc_info=True,
             )
             continue
         outcomes.append(
@@ -428,5 +478,4 @@ def repair_broken_projection_hooks(
                 status=PluginHookRepairStatus.REPAIRED,
             )
         )
-        logger.info("projection_hooks_repaired", projection=projection_dir.name)
     return tuple(outcomes)

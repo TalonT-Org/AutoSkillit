@@ -40,6 +40,10 @@ from autoskillit.core import (
     read_retiring_cache,
     resolve_current_generation_for_plugin,
 )
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -224,6 +228,97 @@ def test_selected_generations_are_never_reclaimed(home: Path, source_root: Path)
     )
     assert current.managed_path.is_dir()
     assert resolve_current_generation_for_plugin(home, _PLUGIN_REF) == current.managed_path
+
+
+def test_prune_quarantines_a_malformed_unselected_generation_once(
+    home: Path,
+    source_root: Path,
+) -> None:
+    """A malformed stale generation is durably removed rather than rediscovered."""
+    from autoskillit.workspace._projected_artifact import _generation_publication as publication
+
+    stale = _publish(home, source_root, "1.0.0")
+    (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
+    _publish(home, source_root, "2.0.0")
+    stale.manifest_path.write_text("{}", encoding="utf-8")
+
+    managed = managed_home_for(home)
+    target = (
+        "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+        "prune_stale_generations",
+    )
+    run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+    def run() -> object:
+        with _InstallLock(managed):
+            return publication.prune_stale_generations(managed, _PLUGIN_REF)
+
+    def observe() -> object:
+        return (stale.managed_path.exists(), stale.manifest_path.exists())
+
+    first, second, first_logs, second_logs = assert_second_pass_is_quiet(
+        lambda: run_adapter(run),
+        observe=lambda: observe_adapter(observe),
+    )
+
+    assert (first, second) == (0, 0)
+    assert not stale.managed_path.exists()
+    assert not stale.manifest_path.exists()
+    assert [
+        (entry.get("event"), entry.get("path"), entry.get("disposition")) for entry in first_logs
+    ] == [("generation_prune_reconcile", str(stale.managed_path), "reconciled")]
+    assert second_logs == []
+
+
+def test_prune_resumes_a_generation_residue_transition(
+    home: Path,
+    source_root: Path,
+) -> None:
+    """A crash after the residue rename completes on the next prune pass."""
+    from autoskillit.workspace._projected_artifact import _generation_publication as publication
+    from autoskillit.workspace._projected_artifact._artifact_residue import residue_staging_path
+
+    stale = _publish(home, source_root, "1.0.0")
+    (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
+    _publish(home, source_root, "2.0.0")
+    staging = residue_staging_path(stale.managed_path)
+    os.rename(stale.managed_path, staging)
+
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
+        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+
+    assert not staging.exists()
+    assert not stale.manifest_path.exists()
+
+
+def test_prune_defers_an_unavailable_unselected_generation(
+    home: Path,
+    source_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Filesystem unavailability must retain both a stale root and its manifest."""
+    from autoskillit.core import PluginArtifactUnavailableError
+    from autoskillit.workspace._projected_artifact import _generation_publication as publication
+
+    stale = _publish(home, source_root, "1.0.0")
+    (source_root / "hooks" / "_dispatch.py").write_text("# v2\n", encoding="utf-8")
+    _publish(home, source_root, "2.0.0")
+
+    def unavailable(_self: object, _path: Path) -> PluginArtifactIdentity:
+        raise PluginArtifactUnavailableError("generation storage is unavailable")
+
+    monkeypatch.setattr(
+        publication.GenerationArtifactRetirementOwner,
+        "identity_for_path",
+        unavailable,
+    )
+    managed = managed_home_for(home)
+    with _InstallLock(managed):
+        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+
+    assert stale.managed_path.is_dir()
+    assert stale.manifest_path.is_file()
 
 
 def test_every_artifact_kind_has_a_registered_owner(home: Path) -> None:

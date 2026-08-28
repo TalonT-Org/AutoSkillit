@@ -10,6 +10,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -503,7 +507,7 @@ def test_repair_refuses_to_bless_unrelated_tampering(tmp_path: Path) -> None:
 
     outcomes = repair_broken_plugin_cache_hooks(cache_dir)
 
-    assert outcomes[0].status.value == "failed"
+    assert outcomes[0].status.value == "quarantined"
     assert "content digest mismatch" in (outcomes[0].detail or "")
     assert hooks_path.read_text() == original_hooks
 
@@ -525,9 +529,58 @@ def test_repair_rejects_unsafe_logical_hook_names(tmp_path: Path) -> None:
 
     outcomes = repair_broken_plugin_cache_hooks(cache_dir)
 
-    assert outcomes[0].status.value == "failed"
+    assert outcomes[0].status.value == "quarantined"
     assert "invalid logical hook name" in (outcomes[0].detail or "")
     assert hooks_path.read_text() == original_hooks
+
+
+def test_malformed_cache_hooks_are_quarantined_by_exact_bytes(tmp_path: Path) -> None:
+    from autoskillit.core import installed_plugin_artifact_manifest_path
+    from autoskillit.hook_registry import validate_plugin_cache_hooks
+    from autoskillit.hook_registry._quarantine import hook_quarantine_marker_path
+    from autoskillit.workspace._projected_artifact._hook_repair import (
+        PluginHookRepairStatus,
+        repair_broken_plugin_cache_hooks,
+    )
+
+    cache_dir = tmp_path / ".claude/plugins/cache/autoskillit-local/autoskillit"
+    version_dir = _publish_cache_incarnation(cache_dir, "1.0.0", broken=True)
+    hooks_path = version_dir / "hooks/hooks.json"
+    malformed = b"{not-json"
+    hooks_path.write_bytes(malformed)
+    manifest_path = installed_plugin_artifact_manifest_path(version_dir)
+
+    assert validate_plugin_cache_hooks(cache_dir) == [f"{hooks_path} is not valid JSON"]
+    target = (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "repair_broken_plugin_cache_hooks",
+    )
+    run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+    def run() -> object:
+        return repair_broken_plugin_cache_hooks(cache_dir)
+
+    def observe() -> object:
+        marker = hook_quarantine_marker_path(manifest_path, malformed)
+        return (hooks_path.read_bytes(), marker.exists())
+
+    first, second, _first_logs, second_logs = assert_second_pass_is_quiet(
+        lambda: run_adapter(run),
+        observe=lambda: observe_adapter(observe),
+    )
+
+    assert first[0].status is PluginHookRepairStatus.QUARANTINED
+    assert hook_quarantine_marker_path(manifest_path, malformed).is_file()
+    assert validate_plugin_cache_hooks(cache_dir) == []
+    assert second == ()
+    assert second_logs == []
+
+    changed_malformed = b"[not-json"
+    hooks_path.write_bytes(changed_malformed)
+    retry = repair_broken_plugin_cache_hooks(cache_dir)
+
+    assert retry[0].status is PluginHookRepairStatus.QUARANTINED
+    assert hook_quarantine_marker_path(manifest_path, changed_malformed).is_file()
 
 
 def test_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:

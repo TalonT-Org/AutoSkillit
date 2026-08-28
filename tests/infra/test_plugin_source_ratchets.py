@@ -82,6 +82,33 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The exclusive session-index transaction removes only an abandoned summary-less "
         "recovery directory for the same dir_name being committed.",
     ),
+    (
+        "workspace/_projected_artifact/_artifact_residue.py",
+        "teardown_artifact_residue",
+        "manifest.unlink",
+    ): (
+        1,
+        "The original-key lease and install lock authorize removing the external identity "
+        "sidecar only after the invalid root has been atomically quarantined.",
+    ),
+    (
+        "workspace/_projected_artifact/_artifact_residue.py",
+        "teardown_artifact_residue",
+        "shutil.rmtree",
+    ): (
+        2,
+        "The original-key lease and install lock guard deletion of a non-regular manifest "
+        "directory and the deterministic residue after its external identity is removed.",
+    ),
+    (
+        "workspace/_projected_artifact/_artifact_residue.py",
+        "quarantine_artifact_residue",
+        "os.rename",
+    ): (
+        1,
+        "A revalidated invalid direct child is atomically renamed while its original-key "
+        "exclusive lease and the managed-home install lock are held.",
+    ),
     ("core/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
         1,
         "Exclusive per-tracker lease, tracker lock, strict registry lock, and fresh "

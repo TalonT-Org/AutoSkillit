@@ -528,12 +528,20 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
                 )
                 == 0
             )
-            logger.warning.assert_called_once()
-            assert logger.warning.call_args.args == ("projected_plugin_prune_validation_failed",)
-            assert logger.warning.call_args.kwargs["projection_path"] == str(
-                orphan.identity.managed_path
+            assert not orphan.identity.managed_path.exists()
+            assert not orphan.identity.manifest_path.exists()
+            assert not projection_cache.residue_staging_path(orphan.identity.managed_path).exists()
+
+            logger.reset_mock()
+            assert (
+                prune_stale_projections(
+                    tmp_path / ".autoskillit" / "plugin-projections",
+                    home=managed_home(),
+                    active_key=active.identity.semantic_key,
+                )
+                == 0
             )
-            assert logger.warning.call_args.kwargs["error"]
+            logger.warning.assert_not_called()
         finally:
             orphan.close()
             active.close()

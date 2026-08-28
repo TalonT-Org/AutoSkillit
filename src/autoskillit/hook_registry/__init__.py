@@ -9,7 +9,7 @@ Submodules:
   _rendering         — generate_hooks_json + relocatable command rendering
   _discovery         — Claude settings path resolution
   _drift             — drift detection + broken-script detection
-  _cache             — plugin-cache hook validation
+  _quarantine        — hook-payload quarantine markers and plugin-cache validation
 
 Public API re-exported below for backwards compatibility. The previous
 flat-module form (src/autoskillit/hook_registry.py) was removed when the
@@ -19,7 +19,6 @@ from `autoskillit.hook_registry` unchanged.
 
 from __future__ import annotations
 
-from ._cache import validate_plugin_cache_hooks
 from ._discovery import _claude_settings_path, iter_all_scope_paths
 from ._drift import (
     HookDriftResult,
@@ -41,6 +40,11 @@ from ._hooks_defs import (
     HookDef,
     HookEnvVarDef,
     LifecycleContractDef,
+)
+from ._quarantine import (
+    is_hook_payload_quarantined,
+    quarantine_hook_payload,
+    validate_plugin_cache_hooks,
 )
 from ._registry_data import (  # noqa: F401  (_build_hook_registry consumed by autoskillit.hooks.__init__)
     FAIL_CLOSED_GUARD_BASENAMES,
@@ -116,7 +120,9 @@ __all__ = [
     "find_broken_hook_scripts",
     "generate_hooks_json",
     "hook_applies_to_backend",
+    "is_hook_payload_quarantined",
     "iter_all_scope_paths",
+    "quarantine_hook_payload",
     "render_hooks_json_text",
     "render_relocatable_hook_command",
     "validate_lifecycle_contracts",

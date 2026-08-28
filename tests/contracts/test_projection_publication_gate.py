@@ -15,6 +15,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -383,6 +387,52 @@ class TestPublicationGateIntegration:
 
 class TestProjectionRepair:
     """T-B2: Startup repair heals a stale projection."""
+
+    def test_malformed_projection_hooks_are_quarantined_by_exact_bytes(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.hook_registry._quarantine import hook_quarantine_marker_path
+        from autoskillit.workspace._projected_artifact._hook_repair import (
+            PluginHookRepairStatus,
+            repair_broken_projection_hooks,
+        )
+
+        projections_root, projection, hooks_path, manifest_path, _ = _plant_stale_projection(
+            tmp_path, "deadbeefcafe0123"
+        )
+        malformed = b"{not-json"
+        hooks_path.write_bytes(malformed)
+
+        target = (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "repair_broken_projection_hooks",
+        )
+        run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+        def run() -> object:
+            return repair_broken_projection_hooks(projections_root)
+
+        def observe() -> object:
+            marker = hook_quarantine_marker_path(manifest_path, malformed)
+            return (hooks_path.read_bytes(), marker.exists())
+
+        first, second, _first_logs, second_logs = assert_second_pass_is_quiet(
+            lambda: run_adapter(run),
+            observe=lambda: observe_adapter(observe),
+        )
+
+        assert first[0].status is PluginHookRepairStatus.QUARANTINED
+        assert hook_quarantine_marker_path(manifest_path, malformed).is_file()
+        assert second == ()
+        assert second_logs == []
+
+        changed_malformed = b"[not-json"
+        hooks_path.write_bytes(changed_malformed)
+        retry = repair_broken_projection_hooks(projections_root)
+
+        assert retry[0].status is PluginHookRepairStatus.QUARANTINED
+        assert hook_quarantine_marker_path(manifest_path, changed_malformed).is_file()
+        assert projection.is_dir()
 
     def test_startup_repair_heals_a_stale_projection(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

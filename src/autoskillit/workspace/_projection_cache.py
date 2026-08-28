@@ -15,8 +15,12 @@ import stat
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
+from typing import assert_never
+
+import regex as re
 
 from autoskillit.core import (
     ArtifactLease,
@@ -40,14 +44,22 @@ from autoskillit.core import (
     is_python_bytecode_path,
     read_versioned_json,
 )
+from autoskillit.workspace._projected_artifact._artifact_residue import (
+    quarantine_artifact_residue,
+    residue_staging_path,
+    teardown_artifact_residue,
+)
 
 logger = get_logger(__name__)
 
 __all__ = [
     "PROJECTION_CACHE_KEY_EXCLUSIONS",
     "PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION",
+    "ProjectionEntryClass",
     "ProjectionCacheKey",
+    "ProjectionReconcileDisposition",
     "ProjectedPluginRetirementOwner",
+    "classify_projection_entry",
     "is_projected_asset",
     "iter_public_plugin_asset_files",
     "per_file_asset_digest",
@@ -57,6 +69,7 @@ __all__ = [
     "prune_stale_projections",
     "public_plugin_asset_digest",
     "read_projected_plugin_identity",
+    "residue_staging_path",
 ]
 
 #: Reserved grace window for lease-aware retirement.
@@ -89,6 +102,86 @@ _PUBLIC_PLUGIN_ASSET_NAMES = frozenset(
         "settings.json",
     }
 )
+
+_PROJECTION_KEY_PATTERN = r"[0-9a-f]{24}"
+_PROJECTION_ROOT_RE = re.compile(rf"{_PROJECTION_KEY_PATTERN}\Z")
+_IDENTITY_SIDECAR_RE = re.compile(
+    rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.autoskillit-projection\.json\Z"
+)
+_HOOK_QUARANTINE_SIDECAR_RE = re.compile(
+    rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.autoskillit-projection\.json\."
+    r"hook-quarantine-[0-9a-f]{64}\Z"
+)
+_PUBLICATION_STAGING_ROOT_RE = re.compile(rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.plugin-[^.]+\Z")
+_PUBLICATION_STAGING_MANIFEST_RE = re.compile(
+    rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.manifest-"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json\Z"
+)
+_RETIREMENT_STAGING_ROOT_RE = re.compile(
+    rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.autoskillit-retiring-[0-9a-f]{{16}}\Z"
+)
+_RESIDUE_STAGING_ROOT_RE = re.compile(
+    rf"\.(?P<key>{_PROJECTION_KEY_PATTERN})\.autoskillit-residue-[0-9a-f]{{16}}\Z"
+)
+
+
+class ProjectionEntryClass(StrEnum):
+    """Known direct-child shapes in the projected-plugin cache."""
+
+    ACTIVE_ROOT = "active_root"
+    PROJECTION_ROOT = "projection_root"
+    IDENTITY_SIDECAR = "identity_sidecar"
+    HOOK_QUARANTINE_SIDECAR = "hook_quarantine_sidecar"
+    LEASE_DIRECTORY = "lease_directory"
+    PUBLICATION_STAGING_ROOT = "publication_staging_root"
+    PUBLICATION_STAGING_MANIFEST = "publication_staging_manifest"
+    RETIREMENT_STAGING_ROOT = "retirement_staging_root"
+    RESIDUE_STAGING_ROOT = "residue_staging_root"
+
+
+class ProjectionReconcileDisposition(StrEnum):
+    """Closed outcomes for reconciling one projection-cache entry."""
+
+    SKIPPED_ACTIVE = "skipped_active"
+    QUEUED_FOR_RETIREMENT = "queued_for_retirement"
+    ALREADY_QUEUED = "already_queued"
+    RECONCILED = "reconciled"
+    RESUMED = "resumed"
+    DEFERRED_UNCLASSIFIED = "deferred_unclassified"
+    DEFERRED_UNMANAGED = "deferred_unmanaged"
+    DEFERRED_CONTENDED = "deferred_contended"
+    DEFERRED_IO_ERROR = "deferred_io_error"
+    DEFERRED_UNAVAILABLE = "deferred_unavailable"
+    DEFERRED_QUEUE_UNREADABLE = "deferred_queue_unreadable"
+    ALREADY_ABSENT = "already_absent"
+
+
+def classify_projection_entry(
+    entry: Path,
+    *,
+    active_key: str,
+) -> ProjectionEntryClass:
+    """Classify one direct child of the projections root or reject its shape."""
+    name = entry.name
+    if _PROJECTION_ROOT_RE.fullmatch(name):
+        if name == active_key:
+            return ProjectionEntryClass.ACTIVE_ROOT
+        return ProjectionEntryClass.PROJECTION_ROOT
+    if _IDENTITY_SIDECAR_RE.fullmatch(name):
+        return ProjectionEntryClass.IDENTITY_SIDECAR
+    if _HOOK_QUARANTINE_SIDECAR_RE.fullmatch(name):
+        return ProjectionEntryClass.HOOK_QUARANTINE_SIDECAR
+    if name == ".artifact-leases":
+        return ProjectionEntryClass.LEASE_DIRECTORY
+    if _PUBLICATION_STAGING_ROOT_RE.fullmatch(name):
+        return ProjectionEntryClass.PUBLICATION_STAGING_ROOT
+    if _PUBLICATION_STAGING_MANIFEST_RE.fullmatch(name):
+        return ProjectionEntryClass.PUBLICATION_STAGING_MANIFEST
+    if _RETIREMENT_STAGING_ROOT_RE.fullmatch(name):
+        return ProjectionEntryClass.RETIREMENT_STAGING_ROOT
+    if _RESIDUE_STAGING_ROOT_RE.fullmatch(name):
+        return ProjectionEntryClass.RESIDUE_STAGING_ROOT
+    raise ValueError(f"unclassified projection-cache entry: {entry}")
 
 
 def projected_artifact_manifest_path(managed_path: Path) -> Path:
@@ -165,6 +258,7 @@ def read_projected_plugin_identity(
             selected_manifest,
             PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
             raise_io_errors=True,
+            logger=logger,
         )
     except OSError as exc:
         raise PluginArtifactUnavailableError(
@@ -482,63 +576,275 @@ class ProjectedPluginRetirementOwner:
         return self._retirement.try_reclaim(record, now)
 
 
+def _reconcile_projection_entry(
+    entry: Path,
+    *,
+    root: Path,
+    home: ManagedHome,
+    owner: ProjectedPluginRetirementOwner,
+    active_key: str,
+    not_before: datetime,
+) -> ProjectionReconcileDisposition:
+    """Return exactly one durable or deferred outcome for a cache entry."""
+    try:
+        entry_class = classify_projection_entry(entry, active_key=active_key)
+    except ValueError:
+        return ProjectionReconcileDisposition.DEFERRED_UNCLASSIFIED
+
+    if entry_class is ProjectionEntryClass.ACTIVE_ROOT:
+        return ProjectionReconcileDisposition.SKIPPED_ACTIVE
+    if entry_class is ProjectionEntryClass.RESIDUE_STAGING_ROOT:
+        return _resume_projection_residue(
+            entry,
+            root=root,
+            home=home,
+            owner=owner,
+            active_key=active_key,
+        )
+    if entry_class is not ProjectionEntryClass.PROJECTION_ROOT:
+        return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    if entry.parent != root:
+        return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+
+    try:
+        writer = ArtifactLease.acquire_exclusive(
+            owner.lease_path(entry),
+            blocking=False,
+        )
+    except ArtifactLeaseContention:
+        return ProjectionReconcileDisposition.DEFERRED_CONTENDED
+    except (OSError, RuntimeError):
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    try:
+        with _InstallLock(home):
+            try:
+                identity = owner.identity_for_path(entry)
+            except PluginArtifactValidationError:
+                return _quarantine_invalid_projection(
+                    entry,
+                    root=root,
+                    owner=owner,
+                    active_key=active_key,
+                )
+            except PluginArtifactUnavailableError:
+                return ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE
+            appended = owner.enqueue_retirement(identity, not_before)
+            if appended is None:
+                return ProjectionReconcileDisposition.DEFERRED_QUEUE_UNREADABLE
+            if appended.created:
+                return ProjectionReconcileDisposition.QUEUED_FOR_RETIREMENT
+            return ProjectionReconcileDisposition.ALREADY_QUEUED
+    except (OSError, RuntimeError):
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    finally:
+        writer.close_preserving()
+
+
+def _revalidate_projection_mutation_target(
+    entry: Path,
+    *,
+    root: Path,
+    active_key: str,
+    owner: ProjectedPluginRetirementOwner,
+) -> ProjectionReconcileDisposition | None:
+    """Recheck write authority and shape immediately before a residue rename."""
+    try:
+        if not owner._contains(entry) or entry.parent != root or entry.name == active_key:
+            return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+        exists = entry.exists() or entry.is_symlink()
+        if not exists:
+            return ProjectionReconcileDisposition.ALREADY_ABSENT
+        if entry.is_symlink() or not entry.is_dir():
+            return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    except OSError:
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    return None
+
+
+def _quarantine_invalid_projection(
+    entry: Path,
+    *,
+    root: Path,
+    owner: ProjectedPluginRetirementOwner,
+    active_key: str,
+) -> ProjectionReconcileDisposition:
+    """Atomically quarantine and remove one permanently invalid projection."""
+    refusal = _revalidate_projection_mutation_target(
+        entry,
+        root=root,
+        active_key=active_key,
+        owner=owner,
+    )
+    if refusal is not None:
+        return refusal
+
+    staging = residue_staging_path(entry)
+    manifest = owner.manifest_path(entry)
+    try:
+        staging_present = staging.exists() or staging.is_symlink()
+        if staging_present:
+            if staging.is_symlink() or not staging.is_dir():
+                return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+            teardown_artifact_residue(staging=staging, manifest=manifest)
+            refusal = _revalidate_projection_mutation_target(
+                entry,
+                root=root,
+                active_key=active_key,
+                owner=owner,
+            )
+            if refusal is not None:
+                return refusal
+        refusal = _revalidate_projection_mutation_target(
+            entry,
+            root=root,
+            active_key=active_key,
+            owner=owner,
+        )
+        if refusal is not None:
+            return refusal
+        quarantine_artifact_residue(
+            managed_path=entry,
+            staging=staging,
+            manifest=manifest,
+        )
+    except OSError:
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    return ProjectionReconcileDisposition.RECONCILED
+
+
+def _resume_projection_residue(
+    entry: Path,
+    *,
+    root: Path,
+    home: ManagedHome,
+    owner: ProjectedPluginRetirementOwner,
+    active_key: str,
+) -> ProjectionReconcileDisposition:
+    """Resume teardown for a deterministic residue staging directory."""
+    match = _RESIDUE_STAGING_ROOT_RE.fullmatch(entry.name)
+    if match is None:
+        return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    managed_path = root / match.group("key")
+    if entry != residue_staging_path(managed_path) or managed_path.name == active_key:
+        return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    try:
+        present = entry.exists() or entry.is_symlink()
+        if not present:
+            return ProjectionReconcileDisposition.ALREADY_ABSENT
+        if entry.is_symlink() or not entry.is_dir() or not owner._contains(entry):
+            return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+        writer = ArtifactLease.acquire_exclusive(
+            owner.lease_path(managed_path),
+            blocking=False,
+        )
+    except ArtifactLeaseContention:
+        return ProjectionReconcileDisposition.DEFERRED_CONTENDED
+    except (OSError, RuntimeError):
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    try:
+        with _InstallLock(home):
+            teardown_artifact_residue(
+                staging=entry,
+                manifest=owner.manifest_path(managed_path),
+            )
+    except (OSError, RuntimeError):
+        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+    finally:
+        writer.close_preserving()
+    return ProjectionReconcileDisposition.RESUMED
+
+
+def _log_projection_reconcile(
+    entry: Path,
+    *,
+    active_key: str,
+    disposition: ProjectionReconcileDisposition,
+) -> None:
+    try:
+        entry_class = classify_projection_entry(entry, active_key=active_key).value
+    except ValueError:
+        entry_class = "unclassified"
+    event = "projected_plugin_reconcile"
+    fields = {
+        "path": str(entry),
+        "entry_class": entry_class,
+        "disposition": disposition.value,
+    }
+    if disposition in {
+        ProjectionReconcileDisposition.DEFERRED_UNCLASSIFIED,
+        ProjectionReconcileDisposition.DEFERRED_IO_ERROR,
+        ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE,
+        ProjectionReconcileDisposition.DEFERRED_QUEUE_UNREADABLE,
+    }:
+        logger.warning(event, **fields)
+    else:
+        logger.debug(event, **fields)
+
+
 def prune_stale_projections(
     projections_root: Path,
     *,
     home: ManagedHome,
     active_key: str,
 ) -> int:
-    """Queue exact stale incarnations without mutating reader-held artifacts."""
+    """Reconcile every cache entry and count newly queued stale identities."""
     root = Path(projections_root).expanduser().resolve(strict=False)
     owner = ProjectedPluginRetirementOwner(root, home=home, active_key=active_key)
-    with _InstallLock(home):
-        if not root.is_dir():
+    try:
+        if not home.contains(owner.managed_root):
+            logger.warning(
+                "projected_plugin_reconcile",
+                path=str(root),
+                entry_class="projection_root",
+                disposition=ProjectionReconcileDisposition.DEFERRED_IO_ERROR.value,
+            )
             return 0
-        candidates = tuple(
-            path
-            for path in sorted(root.iterdir(), key=lambda item: item.name)
-            if path.name != active_key
-            and not path.name.startswith(".")
-            and path.is_dir()
-            and not path.is_symlink()
+        with _InstallLock(home):
+            if not root.is_dir():
+                return 0
+            entries = tuple(sorted(root.iterdir(), key=lambda item: item.name))
+    except (OSError, RuntimeError):
+        logger.warning(
+            "projected_plugin_reconcile",
+            path=str(root),
+            entry_class="projection_root",
+            disposition=ProjectionReconcileDisposition.DEFERRED_IO_ERROR.value,
         )
+        return 0
 
     created = 0
     not_before = datetime.now(UTC) + timedelta(hours=_PROJECTION_GRACE_HOURS)
-    for candidate in candidates:
-        try:
-            writer = ArtifactLease.acquire_exclusive(
-                owner.lease_path(candidate),
-                blocking=False,
-            )
-        except ArtifactLeaseContention:
-            continue
-        try:
-            with _InstallLock(home):
-                try:
-                    identity = owner.identity_for_path(candidate)
-                except PluginArtifactValidationError as exc:
-                    logger.warning(
-                        "projected_plugin_prune_validation_failed",
-                        projection_path=str(candidate),
-                        error=str(exc),
-                    )
-                    continue
-                except PluginArtifactUnavailableError as exc:
-                    logger.warning(
-                        "projected_plugin_prune_identity_unavailable",
-                        projection_path=str(candidate),
-                        error=str(exc),
-                    )
-                    continue
-                appended = owner.enqueue_retirement(identity, not_before)
-                if appended is None:
-                    logger.warning(
-                        "projected_plugin_prune_queue_unreadable",
-                        projection_path=str(candidate),
-                    )
-                    continue
-                created += int(appended.created)
-        finally:
-            writer.close_preserving()
+    for entry in entries:
+        disposition = _reconcile_projection_entry(
+            entry,
+            root=root,
+            home=home,
+            owner=owner,
+            active_key=active_key,
+            not_before=not_before,
+        )
+        _log_projection_reconcile(
+            entry,
+            active_key=active_key,
+            disposition=disposition,
+        )
+        match disposition:
+            case ProjectionReconcileDisposition.QUEUED_FOR_RETIREMENT:
+                created += 1
+            case (
+                ProjectionReconcileDisposition.SKIPPED_ACTIVE
+                | ProjectionReconcileDisposition.ALREADY_QUEUED
+                | ProjectionReconcileDisposition.RECONCILED
+                | ProjectionReconcileDisposition.RESUMED
+                | ProjectionReconcileDisposition.DEFERRED_UNCLASSIFIED
+                | ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+                | ProjectionReconcileDisposition.DEFERRED_CONTENDED
+                | ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+                | ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE
+                | ProjectionReconcileDisposition.DEFERRED_QUEUE_UNREADABLE
+                | ProjectionReconcileDisposition.ALREADY_ABSENT
+            ):
+                pass
+            case _ as unreachable:
+                assert_never(unreachable)
     return created

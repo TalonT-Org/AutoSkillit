@@ -15,6 +15,7 @@ import os
 import shutil
 import tempfile
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 
 from autoskillit.core import (
@@ -25,6 +26,7 @@ from autoskillit.core import (
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactRetirementEngine,
+    PluginArtifactUnavailableError,
     PluginArtifactValidationError,
     RetirementOutcome,
     RetiringAppendResult,
@@ -39,6 +41,7 @@ from autoskillit.core import (
     get_logger,
     installed_plugin_artifact_lease_path,
     installed_plugin_artifact_manifest_path,
+    is_canonical_plugin_artifact_incarnation_id,
     log_plugin_artifact_lifecycle,
     managed_home_for,
     new_plugin_artifact_incarnation_id,
@@ -48,6 +51,11 @@ from autoskillit.core import (
 )
 from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
+)
+from autoskillit.workspace._projected_artifact._artifact_residue import (
+    quarantine_artifact_residue,
+    residue_staging_path,
+    teardown_artifact_residue,
 )
 
 logger = get_logger(__name__)
@@ -510,17 +518,278 @@ class GenerationArtifactRetirementOwner:
         )
 
 
+class _GenerationPruneDisposition(StrEnum):
+    """Closed outcomes for one generation-prune candidate."""
+
+    SKIPPED_SELECTED = "skipped_selected"
+    QUEUED_FOR_RETIREMENT = "queued_for_retirement"
+    ALREADY_QUEUED = "already_queued"
+    RECONCILED = "reconciled"
+    RESUMED = "resumed"
+    DEFERRED_UNMANAGED = "deferred_unmanaged"
+    DEFERRED_CONTENDED = "deferred_contended"
+    DEFERRED_IO_ERROR = "deferred_io_error"
+    DEFERRED_UNAVAILABLE = "deferred_unavailable"
+    DEFERRED_QUEUE_UNREADABLE = "deferred_queue_unreadable"
+    ALREADY_ABSENT = "already_absent"
+
+
+def _generation_residue_managed_path(entry: Path) -> Path | None:
+    """Recover the original generation path for one deterministic residue entry."""
+    prefix, separator, suffix = entry.name.partition(".autoskillit-residue-")
+    if not separator or not suffix or not prefix.startswith("."):
+        return None
+    incarnation_id = prefix[1:]
+    if not is_canonical_plugin_artifact_incarnation_id(incarnation_id):
+        return None
+    managed_path = entry.parent / incarnation_id
+    if entry != residue_staging_path(managed_path):
+        return None
+    return managed_path
+
+
+def _revalidate_generation_mutation_target(
+    candidate: Path,
+    *,
+    store_root: Path,
+    version_dir: Path,
+    home: ManagedHome,
+    plugin_ref: str,
+) -> _GenerationPruneDisposition | None:
+    """Recheck a generation immediately before moving it to residue."""
+    try:
+        if (
+            candidate.parent != version_dir
+            or version_dir.parent != store_root
+            or store_root.is_symlink()
+            or version_dir.is_symlink()
+            or not version_dir.is_dir()
+            or not is_canonical_plugin_artifact_incarnation_id(candidate.name)
+        ):
+            return _GenerationPruneDisposition.DEFERRED_UNMANAGED
+        present = candidate.exists() or candidate.is_symlink()
+        if not present:
+            return _GenerationPruneDisposition.ALREADY_ABSENT
+        if candidate.is_symlink() or not candidate.is_dir():
+            return _GenerationPruneDisposition.DEFERRED_UNMANAGED
+        if _is_selected_generation(home, plugin_ref, candidate):
+            return _GenerationPruneDisposition.SKIPPED_SELECTED
+    except OSError:
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    return None
+
+
+def _quarantine_invalid_generation(
+    candidate: Path,
+    *,
+    store_root: Path,
+    version_dir: Path,
+    home: ManagedHome,
+    plugin_ref: str,
+    owner: GenerationArtifactRetirementOwner,
+) -> _GenerationPruneDisposition:
+    """Durably dispose of a revalidated malformed, unselected generation."""
+    refusal = _revalidate_generation_mutation_target(
+        candidate,
+        store_root=store_root,
+        version_dir=version_dir,
+        home=home,
+        plugin_ref=plugin_ref,
+    )
+    if refusal is not None:
+        return refusal
+
+    staging = residue_staging_path(candidate)
+    manifest = owner.manifest_path(candidate)
+    try:
+        staging_present = staging.exists() or staging.is_symlink()
+        if staging_present:
+            if staging.is_symlink() or not staging.is_dir():
+                return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+            teardown_artifact_residue(staging=staging, manifest=manifest)
+            refusal = _revalidate_generation_mutation_target(
+                candidate,
+                store_root=store_root,
+                version_dir=version_dir,
+                home=home,
+                plugin_ref=plugin_ref,
+            )
+            if refusal is not None:
+                return refusal
+        quarantine_artifact_residue(
+            managed_path=candidate,
+            staging=staging,
+            manifest=manifest,
+        )
+    except (OSError, RuntimeError):
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    return _GenerationPruneDisposition.RECONCILED
+
+
+def _resume_generation_residue(
+    entry: Path,
+    *,
+    managed_path: Path,
+    store_root: Path,
+    version_dir: Path,
+    home: ManagedHome,
+    plugin_ref: str,
+    owner: GenerationArtifactRetirementOwner,
+) -> _GenerationPruneDisposition:
+    """Resume a rename-committed generation residue transition."""
+    try:
+        if (
+            entry.parent != version_dir
+            or version_dir.parent != store_root
+            or store_root.is_symlink()
+            or version_dir.is_symlink()
+            or not version_dir.is_dir()
+            or managed_path.exists()
+            or managed_path.is_symlink()
+        ):
+            return _GenerationPruneDisposition.DEFERRED_UNMANAGED
+        present = entry.exists() or entry.is_symlink()
+        if not present:
+            return _GenerationPruneDisposition.ALREADY_ABSENT
+        if entry.is_symlink() or not entry.is_dir():
+            return _GenerationPruneDisposition.DEFERRED_UNMANAGED
+        writer = ArtifactLease.acquire_exclusive(
+            owner.lease_path(managed_path),
+            blocking=False,
+        )
+    except ArtifactLeaseContention:
+        return _GenerationPruneDisposition.DEFERRED_CONTENDED
+    except (OSError, RuntimeError):
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    try:
+        if (
+            managed_path.exists()
+            or managed_path.is_symlink()
+            or entry.is_symlink()
+            or not entry.is_dir()
+            or _is_selected_generation(home, plugin_ref, managed_path)
+        ):
+            return _GenerationPruneDisposition.DEFERRED_UNMANAGED
+        teardown_artifact_residue(
+            staging=entry,
+            manifest=owner.manifest_path(managed_path),
+        )
+    except (OSError, RuntimeError):
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    finally:
+        writer.close_preserving()
+    return _GenerationPruneDisposition.RESUMED
+
+
+def _reconcile_generation_candidate(
+    candidate: Path,
+    *,
+    store_root: Path,
+    version_dir: Path,
+    home: ManagedHome,
+    plugin_ref: str,
+    owner: GenerationArtifactRetirementOwner,
+    not_before: datetime,
+) -> _GenerationPruneDisposition:
+    """Return exactly one durable or deferred result for a generation candidate."""
+    residue_managed_path = _generation_residue_managed_path(candidate)
+    if residue_managed_path is not None:
+        return _resume_generation_residue(
+            candidate,
+            managed_path=residue_managed_path,
+            store_root=store_root,
+            version_dir=version_dir,
+            home=home,
+            plugin_ref=plugin_ref,
+            owner=owner,
+        )
+
+    refusal = _revalidate_generation_mutation_target(
+        candidate,
+        store_root=store_root,
+        version_dir=version_dir,
+        home=home,
+        plugin_ref=plugin_ref,
+    )
+    if refusal is not None:
+        return refusal
+    try:
+        writer = ArtifactLease.acquire_exclusive(
+            owner.lease_path(candidate),
+            blocking=False,
+        )
+    except ArtifactLeaseContention:
+        return _GenerationPruneDisposition.DEFERRED_CONTENDED
+    except (OSError, RuntimeError):
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    try:
+        refusal = _revalidate_generation_mutation_target(
+            candidate,
+            store_root=store_root,
+            version_dir=version_dir,
+            home=home,
+            plugin_ref=plugin_ref,
+        )
+        if refusal is not None:
+            return refusal
+        try:
+            identity = owner.identity_for_path(candidate)
+        except PluginArtifactValidationError:
+            return _quarantine_invalid_generation(
+                candidate,
+                store_root=store_root,
+                version_dir=version_dir,
+                home=home,
+                plugin_ref=plugin_ref,
+                owner=owner,
+            )
+        except PluginArtifactUnavailableError:
+            return _GenerationPruneDisposition.DEFERRED_UNAVAILABLE
+        except (OSError, RuntimeError):
+            return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+        enqueued = owner.enqueue_retirement(identity, not_before)
+        if enqueued is None:
+            return _GenerationPruneDisposition.DEFERRED_QUEUE_UNREADABLE
+        if enqueued.created:
+            return _GenerationPruneDisposition.QUEUED_FOR_RETIREMENT
+        return _GenerationPruneDisposition.ALREADY_QUEUED
+    except (OSError, RuntimeError):
+        return _GenerationPruneDisposition.DEFERRED_IO_ERROR
+    finally:
+        writer.close_preserving()
+
+
+def _log_generation_prune_reconcile(
+    candidate: Path,
+    *,
+    disposition: _GenerationPruneDisposition,
+) -> None:
+    """Emit the sole lifecycle event for one generation-prune attempt."""
+    fields = {"path": str(candidate), "disposition": disposition.value}
+    if disposition in {
+        _GenerationPruneDisposition.RECONCILED,
+        _GenerationPruneDisposition.DEFERRED_IO_ERROR,
+        _GenerationPruneDisposition.DEFERRED_UNAVAILABLE,
+        _GenerationPruneDisposition.DEFERRED_QUEUE_UNREADABLE,
+    }:
+        logger.warning("generation_prune_reconcile", **fields)
+    else:
+        logger.debug("generation_prune_reconcile", **fields)
+
+
 def prune_stale_generations(
     home: ManagedHome,
     plugin_ref: str,
     *,
     artifact_kind: PluginArtifactKind = PluginArtifactKind.PLUGIN_GENERATION,
 ) -> int:
-    """Queue every superseded generation across all versions for retirement.
+    """Queue valid superseded generations and reconcile invalid residue.
 
-    Enqueue-only: nothing is deleted here. Actual removal flows through
+    Valid generations remain enqueue-only: their removal flows through
     ``try_reclaim``, which re-checks the lease and exact identity under its own
-    grace window.
+    grace window. A malformed generation is instead quarantined and removed
+    under the caller's install lock after an exclusive lease and a final
+    selection/containment revalidation.
 
     Must be called under ``_InstallLock`` by the caller, like
     ``publish_generation`` itself — the lock is a non-reentrant ``flock``, so
@@ -537,51 +806,38 @@ def prune_stale_generations(
     owner = GenerationArtifactRetirementOwner(
         store_root, home=home, plugin_ref=plugin_ref, artifact_kind=artifact_kind
     )
-    candidates: list[Path] = []
+    candidates: list[tuple[Path, Path]] = []
     for version_dir in sorted(store_root.iterdir(), key=lambda item: item.name):
         if version_dir.name.startswith(".") or version_dir.is_symlink():
             continue
         if not version_dir.is_dir():
             continue
         for incarnation in sorted(version_dir.iterdir(), key=lambda item: item.name):
-            if incarnation.name.startswith(".") or incarnation.is_symlink():
+            if incarnation.name.startswith("."):
+                if _generation_residue_managed_path(incarnation) is not None:
+                    candidates.append((incarnation, version_dir))
+                continue
+            if incarnation.is_symlink():
                 continue
             if not incarnation.is_dir():
                 continue
             if _is_selected_generation(home, plugin_ref, incarnation):
                 continue
-            candidates.append(incarnation)
+            candidates.append((incarnation, version_dir))
 
     created = 0
     not_before = datetime.now(UTC) + _GENERATION_GRACE
-    for candidate in candidates:
-        try:
-            writer = ArtifactLease.acquire_exclusive(
-                owner.lease_path(candidate),
-                blocking=False,
-            )
-        except ArtifactLeaseContention:
-            continue
-        except (OSError, RuntimeError) as exc:
-            logger.warning(
-                "generation_prune_lease_failed: %s: %s",
-                candidate,
-                exc,
-            )
-            continue
-        try:
-            try:
-                identity = owner.identity_for_path(candidate)
-            except (PluginArtifactValidationError, OSError) as exc:
-                logger.warning(
-                    "generation_prune_validation_failed: %s: %s",
-                    candidate,
-                    exc,
-                )
-                continue
-            enqueued = owner.enqueue_retirement(identity, not_before)
-            if enqueued is not None:
-                created += int(enqueued.created)
-        finally:
-            writer.close_preserving()
+    for candidate, version_dir in candidates:
+        disposition = _reconcile_generation_candidate(
+            candidate,
+            store_root=store_root,
+            version_dir=version_dir,
+            home=home,
+            plugin_ref=plugin_ref,
+            owner=owner,
+            not_before=not_before,
+        )
+        _log_generation_prune_reconcile(candidate, disposition=disposition)
+        if disposition is _GenerationPruneDisposition.QUEUED_FOR_RETIREMENT:
+            created += 1
     return created

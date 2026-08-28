@@ -13,12 +13,17 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import structlog
 
 from autoskillit.core import (
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     PluginArtifactIdentity,
     Severity,
     managed_home_for,
+)
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -728,10 +733,105 @@ class TestRetiredArtifactShapeRegistry:
             fail_enqueue,
         )
 
-        assert reconcile_install_artifacts() == (
-            ".claude/plugins/cache/autoskillit-local/autoskillit",
-        )
+        assert reconcile_install_artifacts() == ()
         assert legacy_version.is_dir()
+
+    def test_invalid_legacy_version_is_marked_once_then_skipped_quietly(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import read_retiring_cache
+        from autoskillit.workspace import _install_state, reconcile_install_artifacts
+
+        legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
+        legacy_version.mkdir(parents=True)
+        (legacy_version / "content.txt").write_text("legacy", encoding="utf-8")
+        marker = legacy_version.parent / ".1.2.3.autoskillit-rejected-legacy"
+
+        real_identity_read = _install_state.read_installed_plugin_artifact_identity
+        identity_reads = 0
+
+        def count_identity_reads(*args: object, **kwargs: object) -> object:
+            nonlocal identity_reads
+            identity_reads += 1
+            return real_identity_read(*args, **kwargs)
+
+        monkeypatch.setattr(
+            _install_state,
+            "read_installed_plugin_artifact_identity",
+            count_identity_reads,
+        )
+        target = (
+            "src/autoskillit/workspace/_install_state.py",
+            "_enqueue_legacy_installed_plugin_versions",
+        )
+        run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+        def observe() -> object:
+            return (
+                marker.read_bytes() if marker.is_file() else None,
+                read_retiring_cache().records,
+            )
+
+        first, second, _first_logs, second_logs = assert_second_pass_is_quiet(
+            lambda: run_adapter(reconcile_install_artifacts),
+            observe=lambda: observe_adapter(observe),
+        )
+
+        assert (first, second) == ((), ())
+        assert identity_reads == 1
+        assert marker.is_file()
+        assert second_logs == []
+        assert read_retiring_cache().records == ()
+
+    def test_unavailable_legacy_version_propagates_without_rejection_marker(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import PluginArtifactUnavailableError
+        from autoskillit.workspace import _install_state, reconcile_install_artifacts
+
+        legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
+        legacy_version.mkdir(parents=True)
+        content = legacy_version / "content.txt"
+        content.write_text("legacy", encoding="utf-8")
+        marker = legacy_version.parent / ".1.2.3.autoskillit-rejected-legacy"
+
+        def unavailable(*_args: object, **_kwargs: object) -> None:
+            raise PluginArtifactUnavailableError("identity unavailable")
+
+        monkeypatch.setattr(_install_state, "read_installed_plugin_artifact_identity", unavailable)
+
+        with pytest.raises(PluginArtifactUnavailableError, match="identity unavailable"):
+            reconcile_install_artifacts()
+
+        assert content.read_text(encoding="utf-8") == "legacy"
+        assert not marker.exists()
+
+    def test_contended_legacy_version_retries_without_rejection_marker(
+        self,
+        home: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from autoskillit.core import ArtifactLeaseContention
+        from autoskillit.workspace import _install_state, reconcile_install_artifacts
+
+        legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
+        legacy_version.mkdir(parents=True)
+        marker = legacy_version.parent / ".1.2.3.autoskillit-rejected-legacy"
+
+        def contend(path: Path) -> None:
+            raise ArtifactLeaseContention(path)
+
+        monkeypatch.setattr(_install_state.ArtifactLease, "acquire_shared", contend)
+
+        with structlog.testing.capture_logs() as logs:
+            assert reconcile_install_artifacts() == ()
+
+        assert logs == []
+        assert not marker.exists()
 
     def test_running_legacy_version_waits_for_generation_publication(self, home: Path) -> None:
         from autoskillit import __version__

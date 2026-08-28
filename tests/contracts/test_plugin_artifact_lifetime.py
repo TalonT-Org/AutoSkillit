@@ -20,6 +20,7 @@ from autoskillit.core import (
     RetirementOutcome,
     is_canonical_plugin_artifact_incarnation_id,
     managed_home,
+    managed_home_for,
     new_plugin_artifact_incarnation_id,
     read_retiring_cache,
 )
@@ -584,14 +585,14 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
         pass
 
 
-def test_projection_prune_preserves_validation_skip_when_writer_close_fails(
+def test_projection_prune_allows_terminal_reconciliation_when_writer_close_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     from autoskillit.workspace._projection_cache import projected_artifact_lease_path
 
     projections_root = tmp_path / "projections"
-    stale = projections_root / "invalid-stale-projection"
+    stale = projections_root / ("a" * 24)
     stale.mkdir(parents=True)
     real_close = ArtifactLease.close
     close_calls = 0
@@ -607,12 +608,13 @@ def test_projection_prune_preserves_validation_skip_when_writer_close_fails(
     assert (
         prune_stale_projections(
             projections_root,
-            home=managed_home(),
+            home=managed_home_for(tmp_path),
             active_key="active",
         )
         == 0
     )
     assert close_calls == 1
+    assert not stale.exists()
     monkeypatch.setattr(ArtifactLease, "close", real_close)
     with ArtifactLease.acquire_exclusive(
         projected_artifact_lease_path(stale),

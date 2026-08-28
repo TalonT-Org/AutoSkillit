@@ -2,9 +2,9 @@
 
 Pure given inputs; reads staleness probes and registry hashes from ``_api_cache``.
 
-Routing rule: ``pkg_root`` is in the hub's 13-name monkeypatch block
-(``tests/recipe/test_api_split.py::_ALL_MONKEYPATCH_TARGETS``), so it
-routes through ``_orch.pkg_root()``. All other collaborators are imported
+Routing rule: ``pkg_root`` and ``logger`` are in the hub's 13-name
+monkeypatch block (``tests/recipe/test_api_split.py::_ALL_MONKEYPATCH_TARGETS``),
+so they route through ``_orch.{name}``. All other collaborators are imported
 directly from their source modules — direct imports are function-local and
 resolve at call time, so patch the source module, not ``_orch``, for those.
 """

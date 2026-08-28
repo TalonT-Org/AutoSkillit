@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 from tests.arch._helpers import SRC_ROOT
+from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -483,9 +484,7 @@ def test_collector_registry_preserves_13_entries_in_order() -> None:
 
 def test_e30_exemption_is_retired() -> None:
     """REQ-CNST-010-E30 is retired without replacement after #4836 lands."""
-    import tests.arch.test_subpackage_isolation as self_module
-
-    exemptions = self_module._LINE_LIMIT_EXEMPTIONS
+    exemptions = _LINE_LIMIT_EXEMPTIONS
     assert "exploration/snapshot.py" not in exemptions, (
         "E30 must be removed from _LINE_LIMIT_EXEMPTIONS; "
         "snapshot.py no longer exists as a module after decomposition"

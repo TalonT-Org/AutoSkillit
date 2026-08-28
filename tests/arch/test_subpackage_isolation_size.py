@@ -157,9 +157,7 @@ def test_session_skills_e13_e14_exemption_is_retired() -> None:
     ``RETIRED_*`` or ``SKILL_CONTRACT_REMEDIATIONS`` entry is registered —
     ordinary Python module decomposition is outside those retirement surfaces.
     """
-    import tests.arch.test_subpackage_isolation as self_module
-
-    exemptions = self_module._LINE_LIMIT_EXEMPTIONS
+    exemptions = _LINE_LIMIT_EXEMPTIONS
     assert "workspace/session_skills.py" not in exemptions, (
         "E13/E14 retirement for workspace/session_skills.py was not applied; "
         "the decomposition replaces this module with a facade under the 1000-line limit"

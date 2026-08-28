@@ -61,12 +61,12 @@ def _module_has_arch_small_markers(path: Path) -> bool:
     found_arch = False
     found_small = False
     for marker in assignment.value.elts:
-        if not isinstance(marker, ast.Call) or not isinstance(marker.func, ast.Attribute):
-            continue
-        if marker.func.attr == "small":
+        if isinstance(marker, ast.Attribute) and marker.attr == "small":
             found_small = True
-        if (
-            marker.func.attr == "layer"
+        elif (
+            isinstance(marker, ast.Call)
+            and isinstance(marker.func, ast.Attribute)
+            and marker.func.attr == "layer"
             and len(marker.args) == 1
             and isinstance(marker.args[0], ast.Constant)
             and marker.args[0].value == "arch"

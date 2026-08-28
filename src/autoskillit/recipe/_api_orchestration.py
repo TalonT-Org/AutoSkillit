@@ -41,9 +41,7 @@ from autoskillit.recipe._recipe_composition import (
     _prune_skipped_steps,
     _resolve_hidden_inputs_in_content,
     _sweep_unreachable_steps,
-    _validate_effective_graph_closure,
-    _validate_effective_routing_edges,
-    _validate_no_dangling_routes,
+    _validate_post_sweep_effective_graph,
     _validate_route_consistency,
 )
 from autoskillit.recipe._recipe_ingredients import (
@@ -617,23 +615,13 @@ def _run_validation_pipeline(
             if step_name in active_recipe.steps
         }
         _effective_flow_edges = _effective_routing_edges(active_recipe, _deferred_guard_state)
-        _dangling_errors = _validate_no_dangling_routes(active_recipe)
-        if _dangling_errors:
-            errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
-            raw = ""
-        _effective_route_errors = [
-            error
-            for error in _validate_effective_routing_edges(active_recipe, _effective_flow_edges)
-            if error not in _pre_sweep_route_errors
-        ]
-        if _effective_route_errors:
-            errors.extend(
-                f"[post-prune] effective route: {error}" for error in _effective_route_errors
-            )
-            raw = ""
-        _closure_errors = _validate_effective_graph_closure(active_recipe, _effective_flow_edges)
-        if _closure_errors:
-            errors.extend(f"[post-prune] effective closure: {error}" for error in _closure_errors)
+        _post_sweep_errors = _validate_post_sweep_effective_graph(
+            active_recipe,
+            _effective_flow_edges,
+            pre_sweep_route_errors=_pre_sweep_route_errors,
+        )
+        if _post_sweep_errors:
+            errors.extend(f"[post-prune] {error}" for error in _post_sweep_errors)
             raw = ""
         _effective_analysis_edges = _analysis_edges_from_effective_routes(
             active_recipe, _effective_flow_edges
@@ -656,11 +644,7 @@ def _run_validation_pipeline(
         if project_sub_dir.is_dir():
             known_sub_recipes |= frozenset(p.stem for p in project_sub_dir.glob("*.yaml"))
         _post_prune_bindings = bind_recipe(active_recipe, ingredient_values=ingredient_overrides)
-        if (
-            include_finalized_projection
-            and not _pre_sweep_route_errors
-            and not _effective_route_errors
-        ):
+        if include_finalized_projection and not _pre_sweep_route_errors and not _post_sweep_errors:
             _ordered_step_names = tuple(active_recipe.steps)
             _delivery_segments, _delivery_segment_errors = _finalize_delivery_segments(
                 active_recipe, _effective_flow_edges

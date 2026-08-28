@@ -172,6 +172,25 @@ def _validate_effective_graph_closure(
     ]
 
 
+def _validate_post_sweep_effective_graph(
+    recipe: Recipe,
+    edges: tuple[RecipeFlowEdge, ...],
+    *,
+    pre_sweep_route_errors: list[str],
+) -> list[str]:
+    """Validate every post-sweep route and retained-step closure invariant."""
+    errors = [f"dangling route: {error}" for error in _validate_no_dangling_routes(recipe)]
+    errors.extend(
+        f"effective route: {error}"
+        for error in _validate_effective_routing_edges(recipe, edges)
+        if error not in pre_sweep_route_errors
+    )
+    errors.extend(
+        f"effective closure: {error}" for error in _validate_effective_graph_closure(recipe, edges)
+    )
+    return errors
+
+
 def _sweep_unreachable_steps(
     recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
 ) -> tuple[Recipe, tuple[str, ...]]:

@@ -1441,6 +1441,7 @@ steps:
     action: confirm
     message: Continue.
     on_success: removed_stop
+    on_failure: kept_stop
   removed_stop:
     action: stop
     message: Emit the L3 sentinel block with success=false and reason=Removed.

@@ -26,6 +26,9 @@ __all__ = [
     "GitMetadataWriteSpec",
     "JoinSpec",
     "LogicalRoleSpec",
+    "ManagedJoinAttestation",
+    "MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION",
+    "SemanticAdaptationContext",
     "SiblingSkillSpec",
     "SkillSemanticAdaptationResult",
     "SkillModelClassDef",
@@ -59,6 +62,7 @@ SKILL_MODEL_CLASS_REGISTRY: Mapping[str, SkillModelClassDef] = MappingProxyType(
 SKILL_REASONING_EFFORTS: frozenset[str] = frozenset({"medium", "high"})
 
 SKILL_SEMANTIC_SCHEMA_VERSION = 1
+MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION = 1
 
 
 class SkillSemanticOperation(StrEnum):
@@ -77,6 +81,11 @@ class SkillSemanticOperation(StrEnum):
 def _require_nonempty(value: str, field_name: str) -> None:
     if not value.strip():
         raise SkillContractError(f"{field_name} must be non-empty")
+
+
+def _require_sha256(value: str, field_name: str) -> None:
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise SkillContractError(f"{field_name} must be a lowercase SHA-256 digest")
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +130,119 @@ class JoinSpec:
     """Whether every declared child must be joined before synthesis."""
 
     required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedJoinAttestation:
+    """Server-produced evidence for one managed fixed-join launch route."""
+
+    schema_version: int
+    backend: str
+    launch_context: str
+    parent_session_id: str
+    activation_epoch: int
+    direct_tool_mode: bool
+    resolved_model: str
+    fixed_batch_tool_registry_digest: str
+    hook_registry_digest: str
+    skill_load_applies: bool
+    guards_apply: bool
+    provenance: str
+
+    def __post_init__(self) -> None:
+        if self.schema_version != MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION:
+            raise SkillContractError(
+                f"unsupported managed-join attestation schema version {self.schema_version!r}"
+            )
+        for field_name, value in (
+            ("managed-join backend", self.backend),
+            ("managed-join launch context", self.launch_context),
+            ("managed-join parent session", self.parent_session_id),
+            ("managed-join resolved model", self.resolved_model),
+            ("managed-join provenance", self.provenance),
+        ):
+            _require_nonempty(value, field_name)
+        if type(self.activation_epoch) is not int or self.activation_epoch < 0:
+            raise SkillContractError(
+                "managed-join activation epoch must be a non-negative integer"
+            )
+        _require_sha256(
+            self.fixed_batch_tool_registry_digest,
+            "managed-join fixed-batch tool registry digest",
+        )
+        _require_sha256(self.hook_registry_digest, "managed-join hook registry digest")
+
+    @property
+    def canonical_payload(self) -> Mapping[str, object]:
+        return MappingProxyType(
+            {
+                "schema_version": self.schema_version,
+                "backend": self.backend,
+                "launch_context": self.launch_context,
+                "parent_session_id": self.parent_session_id,
+                "activation_epoch": self.activation_epoch,
+                "direct_tool_mode": self.direct_tool_mode,
+                "resolved_model": self.resolved_model,
+                "fixed_batch_tool_registry_digest": self.fixed_batch_tool_registry_digest,
+                "hook_registry_digest": self.hook_registry_digest,
+                "skill_load_applies": self.skill_load_applies,
+                "guards_apply": self.guards_apply,
+                "provenance": self.provenance,
+            }
+        )
+
+    @property
+    def digest(self) -> str:
+        return sha256(
+            json.dumps(
+                dict(self.canonical_payload),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+    def admits_backend(self, backend: str) -> bool:
+        return (
+            self.backend == backend
+            and self.direct_tool_mode
+            and self.skill_load_applies
+            and self.guards_apply
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticAdaptationContext:
+    """Immutable server evidence supplied to backend semantic adaptation."""
+
+    managed_join_attestation: ManagedJoinAttestation | None = None
+
+    @property
+    def canonical_payload(self) -> Mapping[str, object]:
+        return MappingProxyType(
+            {
+                "managed_join_attestation": (
+                    dict(self.managed_join_attestation.canonical_payload)
+                    if self.managed_join_attestation is not None
+                    else None
+                )
+            }
+        )
+
+    @property
+    def digest(self) -> str:
+        return sha256(
+            json.dumps(
+                dict(self.canonical_payload),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+    def admits_managed_join_for(self, backend: str) -> bool:
+        return (
+            self.managed_join_attestation is not None
+            and self.managed_join_attestation.admits_backend(backend)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,9 +426,17 @@ class SkillSemanticPlan:
 def required_join_is_unsupported(
     plan: SkillSemanticPlan,
     capabilities: BackendCapabilities,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> bool:
     """Return whether a required fixed-set join exceeds backend capabilities."""
-    return plan.join is not None and plan.join.required and not capabilities.fixed_set_join_capable
+    return (
+        plan.join is not None
+        and plan.join.required
+        and not capabilities.fixed_set_join_capable
+        and not (
+            adaptation_context is not None and adaptation_context.admits_managed_join_for("codex")
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +449,7 @@ class SkillSemanticAdaptationResult:
     model_effort_policy: Mapping[str, tuple[str, str | None]] = field(default_factory=dict)
     unsupported_operation: SkillSemanticOperation | None = None
     diagnostic: str | None = None
+    adaptation_context_digest: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -343,6 +474,8 @@ class SkillSemanticAdaptationResult:
             raise SkillContractError("unsupported semantic adaptation cannot carry instructions")
         if any(not fragment.strip() for fragment in self.instruction_fragments):
             raise SkillContractError("semantic adaptation instructions must be non-empty")
+        if self.adaptation_context_digest:
+            _require_sha256(self.adaptation_context_digest, "semantic adaptation context digest")
         for field_name, mapping in (
             ("logical role mapping", self.logical_role_mapping),
             ("sibling skill targets", self.sibling_skill_targets),
@@ -374,6 +507,7 @@ class SkillSemanticAdaptationResult:
                     else None
                 ),
                 "diagnostic": self.diagnostic,
+                "adaptation_context_digest": self.adaptation_context_digest,
             }
         )
 

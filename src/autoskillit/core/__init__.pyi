@@ -572,6 +572,9 @@ from .types import MANAGED_ATTEMPT_ID_ENV_VAR as MANAGED_ATTEMPT_ID_ENV_VAR
 from .types import (
     MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION as MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,  # noqa: E501
 )
+from .types import (
+    MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION as MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+)
 from .types import MANAGED_LAUNCH_ID_ENV_VAR as MANAGED_LAUNCH_ID_ENV_VAR
 from .types import MANAGED_LINEAGE_DIGEST_ENV_VAR as MANAGED_LINEAGE_DIGEST_ENV_VAR
 from .types import MANAGED_LINEAGE_REF_ENV_VAR as MANAGED_LINEAGE_REF_ENV_VAR
@@ -997,6 +1000,8 @@ from .types import (
     ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
 )
 from .types import ManagedHome as ManagedHome
+from .types import ManagedJoinAttestation as ManagedJoinAttestation
+from .types import ManagedJoinAttestationAuthority as ManagedJoinAttestationAuthority
 from .types import ManagedSessionHome as ManagedSessionHome
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
@@ -1148,6 +1153,7 @@ from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import RuntimeAdmission as RuntimeAdmission
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
+from .types import SemanticAdaptationContext as SemanticAdaptationContext
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import SerializedChars as SerializedChars
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot

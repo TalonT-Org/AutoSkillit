@@ -507,6 +507,7 @@ def test_codex_required_join_refused_at_admission() -> None:
         "model_effort_policy": {},
         "unsupported_operation": "required_join",
         "diagnostic": _CODEX_JOIN_REFUSAL_DIAGNOSTIC,
+        "adaptation_context_digest": "",
     }
 
 

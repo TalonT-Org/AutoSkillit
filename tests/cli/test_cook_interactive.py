@@ -281,8 +281,12 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
         def binary_name(self) -> str:
             return "codex"
 
-        def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
-            return self._command_backend.adapt_skill_semantics(plan)
+        def adapt_skill_semantics(
+            self,
+            plan: SkillSemanticPlan,
+            adaptation_context=None,
+        ) -> SkillSemanticAdaptationResult:
+            return self._command_backend.adapt_skill_semantics(plan, adaptation_context)
 
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)

@@ -58,6 +58,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PreLaunchReadiness,
     ResumeSpec,
+    SemanticAdaptationContext,
     SessionCheckpoint,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
@@ -1132,9 +1133,13 @@ class CodexBackend(BackendCmdBuilderBase):
     def validate_skill_content(self, content: str) -> list[str]:
         return []
 
-    def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
+    def adapt_skill_semantics(
+        self,
+        plan: SkillSemanticPlan,
+        adaptation_context: SemanticAdaptationContext | None = None,
+    ) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Codex collaboration instructions."""
-        if required_join_is_unsupported(plan, self.capabilities):
+        if required_join_is_unsupported(plan, self.capabilities, adaptation_context):
             return SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
                 diagnostic=(
@@ -1144,6 +1149,10 @@ class CodexBackend(BackendCmdBuilderBase):
                 ),
             )
         role_mapping = _codex_logical_role_mapping(plan)
+        managed_join = bool(plan.join and plan.join.required) and (
+            adaptation_context is not None
+            and adaptation_context.admits_managed_join_for(self.name)
+        )
         sibling_targets = {sibling.name: f"${sibling.name}" for sibling in plan.sibling_skills}
         model_policy: dict[str, tuple[str, str | None]] = {}
         fragments = [
@@ -1157,7 +1166,7 @@ class CodexBackend(BackendCmdBuilderBase):
                 policy.model_class,
                 policy.reasoning_effort,
             )
-        for spawn in plan.child_spawns:
+        for spawn in () if managed_join else plan.child_spawns:
             native_role = role_mapping[spawn.role]
             model_id, effort = model_policy.get(native_role, ("", None))
             policy_text = ""
@@ -1179,7 +1188,12 @@ class CodexBackend(BackendCmdBuilderBase):
                     f"with agent_type={native_role!r}, fork_turns='none'{policy_text}; "
                     "retain every returned child terminal result before parent synthesis."
                 )
-        if plan.concurrency is not None and plan.concurrency.required:
+        if managed_join:
+            fragments.append(
+                "Use the server-owned managed fixed-batch route to declare, launch, and "
+                "join the complete assignment set before parent synthesis."
+            )
+        elif plan.concurrency is not None and plan.concurrency.required:
             fragments.append("Spawn all independent children before awaiting any result.")
         if plan.evidence is not None and plan.evidence.required:
             boundary = "independent " if plan.evidence.independent else ""
@@ -1194,6 +1208,9 @@ class CodexBackend(BackendCmdBuilderBase):
             logical_role_mapping=role_mapping,
             sibling_skill_targets=sibling_targets,
             model_effort_policy=model_policy,
+            adaptation_context_digest=(
+                adaptation_context.digest if adaptation_context and managed_join else ""
+            ),
         )
         result.validate_for(plan, backend=self.name)
         return result

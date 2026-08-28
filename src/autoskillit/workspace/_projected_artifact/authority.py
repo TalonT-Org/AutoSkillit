@@ -31,6 +31,7 @@ from autoskillit.core import (
     PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
+    SemanticAdaptationContext,
     SkillAuthority,
     SkillExecutionRole,
     SkillProjectionRefusal,
@@ -345,6 +346,7 @@ class ProjectedPluginArtifactAuthority:
     catalog: EffectiveSkillCatalogAuthority | None = None
     namespace_sources: Mapping[str, SkillSource] | None = None
     cwd: Path | None = None
+    adaptation_context: SemanticAdaptationContext | None = None
 
     def __post_init__(self) -> None:
         if type(self.projection_version) is not int or self.projection_version < 1:
@@ -425,7 +427,7 @@ class ProjectedPluginArtifactAuthority:
             plan = skill.semantic_plan
             if plan is None:
                 continue
-            adaptation = backend.adapt_skill_semantics(plan)
+            adaptation = backend.adapt_skill_semantics(plan, self.adaptation_context)
             unsupported_operation = adaptation.validate_refusal_for(
                 plan,
                 backend=backend.name,
@@ -514,6 +516,7 @@ class ProjectedPluginArtifactAuthority:
             backend=backend,
             destination=destination,
             default_base_branch=_default_base_branch(self.base_branch),
+            adaptation_context=self.adaptation_context,
             projection_version=self.projection_version,
         )
         return _ProjectedArtifactPlan(
@@ -743,6 +746,7 @@ def project_direct_install_authority(
     catalog: EffectiveSkillCatalogAuthority | None = None,
     namespace_sources: Mapping[str, SkillSource] | None = None,
     cwd: Path | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> ProjectedPluginArtifactAuthority:
     return ProjectedPluginArtifactAuthority(
         direct_install=direct_install,
@@ -752,6 +756,7 @@ def project_direct_install_authority(
         catalog=catalog,
         namespace_sources=namespace_sources,
         cwd=cwd,
+        adaptation_context=adaptation_context,
     )
 
 
@@ -763,6 +768,7 @@ def project_default_plugin_authority(
     catalog: EffectiveSkillCatalogAuthority | None = None,
     namespace_sources: Mapping[str, SkillSource] | None = None,
     cwd: Path | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> ProjectedPluginArtifactAuthority:
     return project_direct_install_authority(
         DirectInstall(plugin_dir=pkg_root()),
@@ -772,4 +778,5 @@ def project_default_plugin_authority(
         catalog=catalog,
         namespace_sources=namespace_sources,
         cwd=cwd,
+        adaptation_context=adaptation_context,
     )

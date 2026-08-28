@@ -35,7 +35,11 @@ from ._type_plugin_source import PluginLaunchBinding
 from ._type_results import PreLaunchReadiness, ValidatedAddDir
 from ._type_resume import NoResume, ResumeSpec
 from ._type_skill_contract import ExplorationVectorDef
-from ._type_skill_semantics import SkillSemanticAdaptationResult, SkillSemanticPlan
+from ._type_skill_semantics import (
+    SemanticAdaptationContext,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
+)
 
 __all__ = [
     "StreamParser",
@@ -318,7 +322,11 @@ class CodingAgentBackend(Protocol):
 
     def validate_skill_content(self, content: str) -> list[str]: ...
 
-    def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult: ...
+    def adapt_skill_semantics(
+        self,
+        plan: SkillSemanticPlan,
+        adaptation_context: SemanticAdaptationContext | None = None,
+    ) -> SkillSemanticAdaptationResult: ...
 
     def version(self) -> str: ...
 

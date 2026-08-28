@@ -46,6 +46,7 @@ from autoskillit.core.types import (
     RecipeNotFoundError,
     RecipeRepository,
     ResolvedLaunchContract,
+    SemanticAdaptationContext,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillProjectionPreparation,
     SkillResult,
@@ -62,6 +63,7 @@ from autoskillit.core.types import (
 
 def adapt_test_skill_semantics(
     plan: SkillSemanticPlan,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> SkillSemanticAdaptationResult:
     """Return a deterministic protocol-complete adaptation for backend test doubles."""
     logical_roles = {role.name: role.name for role in plan.logical_roles}

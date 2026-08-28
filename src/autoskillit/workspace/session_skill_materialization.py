@@ -119,6 +119,7 @@ def _materialize_profile_skill_infos(
         resolved_exploration_profile=projection_context.resolved_exploration_profile,
         active_exploration_applicabilities=projection_context.active_exploration_applicabilities,
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
+        adaptation_context=projection_context.adaptation_context,
         explorer_provisioning_eligible=projection_context.explorer_provisioning_eligible,
         projection_version=projection_context.projection_version,
     )
@@ -143,6 +144,7 @@ def materialize_profile_skills(
     admission_compilation = compile_session_skill_catalog(
         _profile_skill_catalog(infos),
         backend,
+        adaptation_context=projection_context.adaptation_context,
     )
     compilation = admission_compilation
     if finalized_native_roles is not None:
@@ -213,7 +215,11 @@ def _materialize_session(
         effective_catalog = compilation.catalog
         records = tuple(effective_catalog.skills)
     elif backend is not None and effective_catalog is not None:
-        compilation = compile_session_skill_catalog(effective_catalog, backend)
+        compilation = compile_session_skill_catalog(
+            effective_catalog,
+            backend,
+            adaptation_context=projection_context.adaptation_context,
+        )
         effective_catalog = compilation.catalog
         records = tuple(effective_catalog.skills)
     elif backend is not None and projection_context.invocation is not None:
@@ -223,7 +229,7 @@ def _materialize_session(
             if plan is None:
                 admitted_records.append(record)
                 continue
-            adaptation = backend.adapt_skill_semantics(plan)
+            adaptation = backend.adapt_skill_semantics(plan, projection_context.adaptation_context)
             unsupported_operation = adaptation.validate_refusal_for(
                 plan,
                 backend=backend.name,
@@ -256,6 +262,7 @@ def _materialize_session(
         profile_admission_compilation = compile_session_skill_catalog(
             _profile_skill_catalog(profile_skill_infos),
             backend,
+            adaptation_context=projection_context.adaptation_context,
         )
 
     if backend is not None and backend.capabilities.mcp_config_capable:
@@ -313,6 +320,7 @@ def _materialize_session(
             effective_catalog,
             backend,
             finalized_native_roles=finalized_native_roles,
+            adaptation_context=projection_context.adaptation_context,
         )
         reachability_pruning = tuple(
             unavailable

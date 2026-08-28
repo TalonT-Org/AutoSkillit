@@ -871,35 +871,35 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_COOK_RESERVED_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:653": (
+    "execution/backends/claude.py:654": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
-    "execution/backends/claude.py:870": (
+    "execution/backends/claude.py:871": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/claude.py:982": (
+    "execution/backends/claude.py:983": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:414": (
+    "execution/backends/codex.py:415": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:554": (
+    "execution/backends/codex.py:555": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:690": (
+    "execution/backends/codex.py:691": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:810": (
+    "execution/backends/codex.py:811": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:877": (
+    "execution/backends/codex.py:878": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

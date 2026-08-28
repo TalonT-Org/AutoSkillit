@@ -154,7 +154,7 @@ def test_projected_plugin_propagates_malformed_adapter_result(
     monkeypatch.setattr(
         ClaudeCodeBackend,
         "adapt_skill_semantics",
-        lambda self, plan: result,
+        lambda self, plan, adaptation_context=None: result,
     )
 
     authority = project_default_plugin_authority(
@@ -186,7 +186,7 @@ def test_projected_plugin_plan_retains_mixed_refusal_details(
     )
     diagnostic = "fixed-set join is unavailable in the projected backend"
 
-    def adapt(_backend, plan):
+    def adapt(_backend, plan, adaptation_context=None):
         if plan is plans["refused"]:
             return SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
@@ -233,7 +233,7 @@ def test_projected_plugin_reuses_supported_adaptation_during_staging(
         instruction_fragments=("Use the first admitted adaptation.",),
     )
 
-    def adapt(_backend, _plan):
+    def adapt(_backend, _plan, adaptation_context=None):
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -297,7 +297,7 @@ def test_all_refused_projection_preserves_previous_publication_and_names_details
         "beta": SkillSemanticOperation.CHILD_SPAWN,
     }
 
-    def adapt(_backend, plan):
+    def adapt(_backend, plan, adaptation_context=None):
         name = next(name for name, expected in plans.items() if plan is expected)
         if not refusing:
             return adapt_test_skill_semantics(plan)

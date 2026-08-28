@@ -231,8 +231,18 @@ def test_load_and_validate_campaign_enumerates_and_collects_once(
     from autoskillit.recipe._api import load_and_validate
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
-    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
-    campaigns_dir.mkdir(parents=True)
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    child_recipe = {
+        "description": "Campaign child",
+        "autoskillit_version": "0.2.0",
+        "kitchen_rules": ["Complete the task."],
+        "steps": {"stop": {"action": "stop", "message": "done"}},
+    }
+    _write_yaml(recipes_dir / "first-child.yaml", {"name": "first-child", **child_recipe})
+    _write_yaml(recipes_dir / "second-child.yaml", {"name": "second-child", **child_recipe})
+    campaigns_dir = recipes_dir / "campaigns"
+    campaigns_dir.mkdir()
     _write_yaml(
         campaigns_dir / "multi-dispatch.yaml",
         _campaign_data(
@@ -240,16 +250,16 @@ def test_load_and_validate_campaign_enumerates_and_collects_once(
             dispatches=[
                 {
                     "name": "first",
-                    "recipe": "implementation",
+                    "recipe": "first-child",
                     "task": "First task",
-                    "ingredients": {"task": "First task"},
+                    "ingredients": {},
                     "depends_on": [],
                 },
                 {
                     "name": "second",
-                    "recipe": "implementation",
+                    "recipe": "second-child",
                     "task": "Second task",
-                    "ingredients": {"task": "Second task"},
+                    "ingredients": {},
                     "depends_on": ["first"],
                 },
             ],

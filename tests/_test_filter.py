@@ -1185,6 +1185,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "cli/test_cli_prompts.py",
             "cli/test_l3_orchestrator_prompt.py",
             "cli/test_cook_order_picker.py",
+            "cli/test_fleet_campaign_preview.py",
             "cli/test_fleet_list.py",
             "cli/test_preview.py",
             "cli/test_validate_registries.py",

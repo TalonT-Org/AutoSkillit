@@ -149,7 +149,6 @@ class ProjectionReconcileDisposition(StrEnum):
     RESUMED = "resumed"
     DEFERRED_UNCLASSIFIED = "deferred_unclassified"
     DEFERRED_UNMANAGED = "deferred_unmanaged"
-    DEFERRED_INVALID_IDENTITY = "deferred_invalid_identity"
     DEFERRED_CONTENDED = "deferred_contended"
     DEFERRED_IO_ERROR = "deferred_io_error"
     DEFERRED_UNAVAILABLE = "deferred_unavailable"
@@ -773,7 +772,6 @@ def _log_projection_reconcile(
     }
     if disposition in {
         ProjectionReconcileDisposition.DEFERRED_UNCLASSIFIED,
-        ProjectionReconcileDisposition.DEFERRED_INVALID_IDENTITY,
         ProjectionReconcileDisposition.DEFERRED_IO_ERROR,
         ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE,
         ProjectionReconcileDisposition.DEFERRED_QUEUE_UNREADABLE,
@@ -840,7 +838,6 @@ def prune_stale_projections(
                 | ProjectionReconcileDisposition.RESUMED
                 | ProjectionReconcileDisposition.DEFERRED_UNCLASSIFIED
                 | ProjectionReconcileDisposition.DEFERRED_UNMANAGED
-                | ProjectionReconcileDisposition.DEFERRED_INVALID_IDENTITY
                 | ProjectionReconcileDisposition.DEFERRED_CONTENDED
                 | ProjectionReconcileDisposition.DEFERRED_IO_ERROR
                 | ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE

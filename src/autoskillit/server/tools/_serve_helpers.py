@@ -19,6 +19,7 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     RecipeLoadError,
     RecipeNotFoundError,
+    SemanticAdaptationContext,
     SkillExecutionRole,
     get_logger,
 )
@@ -95,6 +96,7 @@ def _project_orchestrator_sous_chef(
     cwd: Path,
     no_backend_event: str,
     unavailable_event: str,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str:
     """Compile and project admitted orchestrator guidance for server callers."""
     effective_backend = backend or getattr(tool_ctx, "backend", None)
@@ -113,7 +115,11 @@ def _project_orchestrator_sous_chef(
         recipe_packs=tool_ctx.active_recipe_packs,
         recipe_features=tool_ctx.active_recipe_features,
     )
-    skill_compilation = compile_session_skill_catalog(raw_catalog, effective_backend)
+    skill_compilation = compile_session_skill_catalog(
+        raw_catalog,
+        effective_backend,
+        adaptation_context=adaptation_context,
+    )
     for refusal in skill_compilation.unavailable:
         logger.info(
             unavailable_event,
@@ -138,6 +144,7 @@ def _project_orchestrator_sous_chef(
             backend=effective_backend,
             conventions=effective_backend.conventions,
             gating=False,
+            adaptation_context=adaptation_context,
         ),
     ).content
 
@@ -146,6 +153,7 @@ def project_orchestrator_guidance(
     tool_ctx: Any,
     *,
     backend: CodingAgentBackend | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str:
     """Project the sous-chef document for an anonymous kitchen open."""
     content = _project_orchestrator_sous_chef(
@@ -154,6 +162,7 @@ def project_orchestrator_guidance(
         cwd=tool_ctx.project_dir,
         no_backend_event="orchestrator_guidance_no_backend",
         unavailable_event="orchestrator_guidance_skill_unavailable",
+        adaptation_context=adaptation_context,
     )
     return "\n\n" + content if content else ""
 

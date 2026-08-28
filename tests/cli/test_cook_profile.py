@@ -41,6 +41,7 @@ from autoskillit.workspace.skills import _skill_info_from_frontmatter
 from tests.contracts._skill_admission_ledger import (
     COOK_SESSION_COMBINATION,
     SKILL_ADMISSION_LEDGER,
+    _production_managed_codex_context,
 )
 from tests.fakes import adapt_test_skill_semantics
 
@@ -562,10 +563,18 @@ def test_finalized_profile_spec_is_shared_by_validator_context_and_child(
 def test_cook_compiles_catalog_with_real_codex_admission(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    managed_context = _production_managed_codex_context()
+
+    def managed_adapter(
+        plan: SkillSemanticPlan,
+        _adaptation_context: object | None = None,
+    ) -> SkillSemanticAdaptationResult:
+        return CodexBackend().adapt_skill_semantics(plan, managed_context)
+
     captured, _generated_home, _logger = _run_finalized_profile_cook(
         monkeypatch,
         tmp_path,
-        skill_adapter=CodexBackend().adapt_skill_semantics,
+        skill_adapter=managed_adapter,
     )
     compilation = captured["compilation"]
     assert isinstance(compilation, CompiledSessionSkillCatalog)

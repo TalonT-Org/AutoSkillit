@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import os
+from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 import pytest
 
-from autoskillit.core.types import RecipeSource
+import autoskillit.recipe.io as recipe_io
+from autoskillit.core.types import LoadReport, RecipeSource
 from autoskillit.recipe.io import (
     builtin_recipes_dir,
     is_recipe_scan_path,
@@ -14,10 +19,23 @@ from autoskillit.recipe.io import (
     load_recipe,
 )
 from autoskillit.recipe.schema import RecipeKind
+from tests.recipe._testing import (
+    count_discovery_calls,
+    isolate_recipe_discovery_cache,
+)
+from tests.recipe._testing import (
+    write_project_recipe as _write_project_recipe,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+@pytest.fixture(autouse=True)
+def _clear_recipe_discovery_caches() -> Iterator[None]:
+    """Keep process-wide discovery caches isolated between these tests."""
+    yield from isolate_recipe_discovery_cache()
 
 
 class TestListRecipes:
@@ -654,6 +672,225 @@ def test_eval_scan_dir_discoverable(tmp_path: Path) -> None:
     r = next((x for x in result.items if x.name == "test-eval"), None)
     assert r is not None
     assert r.source == RecipeSource.PROJECT
+
+
+def test_list_recipes_reuses_warm_discovery_and_returns_independent_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = count_discovery_calls(monkeypatch)
+
+    cold = recipe_io.list_recipes(tmp_path)
+    warm = recipe_io.list_recipes(tmp_path)
+
+    assert calls == {"enumerate": 2, "collect": 1}
+    assert cold.items == warm.items
+    assert cold.errors == warm.errors
+    assert cold is not warm
+    assert cold.items is not warm.items
+    assert cold.errors is not warm.errors
+    expected_items = list(warm.items)
+    expected_errors = list(warm.errors)
+    cold.items.clear()
+    cold.errors.append(LoadReport(path=tmp_path, error="caller mutation"))
+    after_mutation = recipe_io.list_recipes(tmp_path)
+    assert after_mutation.items == expected_items
+    assert after_mutation.errors == expected_errors
+    assert calls == {"enumerate": 2, "collect": 1}
+
+
+def test_list_recipes_detects_add_remove_and_same_size_restored_mtime_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    initial = "name: alpha\ndescription: test\nsteps: {}\n"
+    recipe_path = _write_project_recipe(tmp_path, "alpha")
+    recipe_path.write_text(initial, encoding="utf-8")
+
+    calls = count_discovery_calls(monkeypatch)
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
+    assert calls == {"enumerate": 2, "collect": 1}
+
+    _write_project_recipe(tmp_path, "bravo")
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha", "bravo"]
+    assert calls == {"enumerate": 3, "collect": 2}
+
+    (recipe_path.parent / "bravo.yaml").unlink()
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
+    assert calls == {"enumerate": 4, "collect": 3}
+
+    original_stat = recipe_path.stat()
+    modified = initial.replace("alpha", "omega")
+    assert len(modified) == len(initial)
+    recipe_path.write_text(modified, encoding="utf-8")
+    os.utime(recipe_path, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["omega"]
+    assert calls == {"enumerate": 4, "collect": 4}
+
+
+def test_list_recipes_invalidates_warm_cache_on_campaigns_subdir_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A write under campaigns/ must invalidate a cache warmed from the root scan dir.
+
+    Replaces the repository-level guard that was deleted when per-instance
+    caching moved into the central discovery caches. Every entry of
+    RECIPE_SCAN_DIRS contributes to the directory signature, so a non-root scan
+    dir must invalidate exactly like the root one does.
+    """
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    _write_project_recipe(tmp_path, "alpha")
+
+    calls = count_discovery_calls(monkeypatch)
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
+    assert calls == {"enumerate": 2, "collect": 1}
+
+    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+    campaigns_dir.mkdir()
+    (campaigns_dir / "my-campaign.yaml").write_text(
+        "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n",
+        encoding="utf-8",
+    )
+
+    assert {recipe.name for recipe in recipe_io.list_recipes(tmp_path).items} == {
+        "alpha",
+        "my-campaign",
+    }
+    assert calls == {"enumerate": 3, "collect": 2}
+
+    (campaigns_dir / "my-campaign.yaml").unlink()
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
+    assert calls == {"enumerate": 4, "collect": 3}
+
+
+def test_list_recipes_detects_json_sidecar_lifecycle_and_parse_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    recipe_path = _write_project_recipe(tmp_path, "from-yaml")
+    json_path = recipe_path.with_suffix(".json")
+    os.utime(recipe_path, ns=(1_000_000_000, 1_000_000_000))
+
+    calls = count_discovery_calls(monkeypatch)
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["from-yaml"]
+    assert calls == {"enumerate": 2, "collect": 1}
+
+    json_path.write_text(
+        json.dumps({"name": "from-json", "description": "test", "steps": {}}),
+        encoding="utf-8",
+    )
+    os.utime(json_path, ns=(2_000_000_000, 2_000_000_000))
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["from-json"]
+    assert calls == {"enumerate": 3, "collect": 2}
+
+    json_path.write_text(
+        json.dumps({"name": "changed-json", "description": "test", "steps": {}}),
+        encoding="utf-8",
+    )
+    os.utime(json_path, ns=(3_000_000_000, 3_000_000_000))
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["changed-json"]
+    assert calls == {"enumerate": 3, "collect": 3}
+
+    json_path.unlink()
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["from-yaml"]
+    assert calls == {"enumerate": 4, "collect": 4}
+
+    json_path.write_text(
+        json.dumps({"name": "invalid-json-recipe", "steps": "not-a-mapping"}),
+        encoding="utf-8",
+    )
+    os.utime(json_path, ns=(4_000_000_000, 4_000_000_000))
+    result = recipe_io.list_recipes(tmp_path)
+    assert result.items == []
+    assert len(result.errors) == 1
+    assert result.errors[0].path == recipe_path
+    assert calls == {"enumerate": 5, "collect": 5}
+
+
+def test_list_recipes_discards_one_replacement_during_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    recipe_path = _write_project_recipe(tmp_path, "before-race")
+    collect_candidates = recipe_io.collect_recipes_from_candidates
+    collection_calls = 0
+
+    def replace_during_first_collection(*args: Any, **kwargs: Any) -> Any:
+        nonlocal collection_calls
+        collection_calls += 1
+        result = collect_candidates(*args, **kwargs)
+        if collection_calls == 1:
+            replacement = recipe_path.with_suffix(".replacement")
+            replacement.write_text(
+                "name: after-race\ndescription: test\nsteps: {}\n", encoding="utf-8"
+            )
+            replacement.replace(recipe_path)
+        return result
+
+    monkeypatch.setattr(
+        recipe_io, "collect_recipes_from_candidates", replace_during_first_collection
+    )
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["after-race"]
+    assert collection_calls == 2
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["after-race"]
+    assert collection_calls == 2
+
+
+def test_list_recipes_separates_projects_and_preserves_symlink_spelling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    first_project = tmp_path / "first-project"
+    second_project = tmp_path / "second-project"
+    first_path = _write_project_recipe(first_project, "first")
+    second_path = _write_project_recipe(second_project, "secon")
+    assert first_path.stat().st_size == second_path.stat().st_size
+    shared_mtime = 2_000_000_000
+    os.utime(first_path, ns=(shared_mtime, shared_mtime))
+    os.utime(second_path, ns=(shared_mtime, shared_mtime))
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(first_project).items] == ["first"]
+    assert [recipe.name for recipe in recipe_io.list_recipes(second_project).items] == ["secon"]
+
+    alias = tmp_path / "first-project-alias"
+    alias.symlink_to(first_project, target_is_directory=True)
+    assert alias.samefile(first_project)
+    linked = recipe_io.list_recipes(alias)
+    assert [recipe.name for recipe in linked.items] == ["first"]
+    assert linked.items[0].path == alias / ".autoskillit" / "recipes" / "first.yaml"
+
+
+def test_list_recipes_filters_do_not_alias_cached_unfiltered_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    _write_project_recipe(tmp_path, "standard")
+    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+    campaigns_dir.mkdir()
+    (campaigns_dir / "campaign.yaml").write_text(
+        "name: campaign\ndescription: test\nkind: campaign\nsteps: {}\n", encoding="utf-8"
+    )
+    (campaigns_dir / "dispatch.yaml").write_text(
+        "name: dispatch\ndescription: test\ndispatch_only: true\nsteps: {}\n", encoding="utf-8"
+    )
+
+    without_campaigns = recipe_io.list_recipes(
+        tmp_path, exclude_kinds=frozenset({RecipeKind.CAMPAIGN})
+    )
+    without_dispatch_only = recipe_io.list_recipes(tmp_path, exclude_dispatch_only=True)
+    without_campaigns.items.clear()
+
+    assert [recipe.name for recipe in without_dispatch_only.items] == ["campaign", "standard"]
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == [
+        "campaign",
+        "dispatch",
+        "standard",
+    ]
 
 
 def test_eval_fixture_inventory() -> None:

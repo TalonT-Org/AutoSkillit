@@ -6,6 +6,7 @@ import json
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
+from stat import S_ISDIR
 from typing import Any, Protocol
 
 from autoskillit.core import (
@@ -234,7 +235,15 @@ def _collect_recipes_from_candidates(
                 json_path = path.with_suffix(".json")
                 try:
                     json_stat = json_path.stat()
-                except OSError:
+                except FileNotFoundError:
+                    json_stat = None
+                except OSError as exc:
+                    logger.warning(
+                        "Recipe JSON sidecar unreadable — parsing from YAML",
+                        path=str(json_path),
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
                     json_stat = None
                 # Performance-only metadata cache; Git enumeration still runs on every call.
                 recipe, raw = _parse_recipe_candidate(
@@ -306,3 +315,314 @@ def _collect_recipes_from_candidates(
     collect_tier(RecipeSource.PROJECT, project_base, project_files)
     collect_tier(RecipeSource.BUILTIN, builtin_base, builtin_files)
     return LoadResult(items=items, errors=errors)
+
+
+_DirectorySignature = tuple[tuple[str, bool, int | None, int | None], ...]
+_RecipeInputSignature = tuple[
+    tuple[Path, int, int, int, bool, int | None, int | None, int | None], ...
+]
+_CachedRecipeCollection = tuple[tuple[RecipeInfo, ...], tuple[LoadReport, ...]]
+
+
+class _CandidateEnumerator(Protocol):
+    """Enumeration seam for :func:`_discover_recipe_collection`.
+
+    Instances become part of an ``lru_cache`` key, so an implementation must be
+    hashable with a hash stable for the process lifetime. Ordinary functions,
+    bound methods, and ``functools.partial`` objects all satisfy this; a class
+    setting ``__hash__ = None`` does not. The declaration below documents that
+    contract rather than enforcing it — every object inherits a ``__hash__``,
+    so no structural check can reject an unhashable caller.
+    """
+
+    def __hash__(self) -> int: ...
+
+    def __call__(self, source_root: Path, /) -> tuple[Path, ...]: ...
+
+
+class _CandidateCollector(Protocol):
+    """Collection seam for :func:`_discover_recipe_collection`.
+
+    Tests substitute this to observe or perturb collection. Instances become
+    part of an ``lru_cache`` key and carry the same hashability contract as
+    :class:`_CandidateEnumerator`.
+    """
+
+    def __hash__(self) -> int: ...
+
+    def __call__(
+        self,
+        project_base: Path,
+        project_paths: Iterable[Path],
+        builtin_base: Path,
+        builtin_paths: Iterable[Path],
+        /,
+    ) -> LoadResult[RecipeInfo]: ...
+
+
+def _recipe_directory_signature(
+    source_root: Path,
+    scan_dirs: tuple[str, ...],
+) -> _DirectorySignature:
+    signature: list[tuple[str, bool, int | None, int | None]] = []
+    for subdir in scan_dirs:
+        directory = source_root / subdir
+        try:
+            directory_stat = directory.stat()
+        except FileNotFoundError:
+            # An absent campaigns/ or eval/ dir is the norm, not a fault.
+            signature.append((subdir, False, None, None))
+            continue
+        except OSError as err:
+            logger.warning(
+                "Recipe scan directory unreadable — treated as absent",
+                path=str(directory),
+                error_type=type(err).__name__,
+                error=str(err),
+            )
+            signature.append((subdir, False, None, None))
+            continue
+        if not S_ISDIR(directory_stat.st_mode):
+            signature.append((subdir, False, None, None))
+            continue
+        signature.append((subdir, True, directory_stat.st_mtime_ns, directory_stat.st_ctime_ns))
+    return tuple(signature)
+
+
+def _enumerate_candidates_in_scan_dirs(
+    source_root: Path,
+    scan_dirs: tuple[str, ...],
+) -> tuple[Path, ...]:
+    """Return ordered recipe candidates relative to one resolved source root."""
+    candidates: list[tuple[tuple[int, str], Path]] = []
+    for scan_rank, subdir in enumerate(scan_dirs):
+        directory = source_root / subdir
+        try:
+            for path in directory.iterdir():
+                if path.suffix not in (".yaml", ".yml") or not path.is_file():
+                    continue
+                candidates.append(((scan_rank, path.name), path.relative_to(source_root)))
+        except FileNotFoundError:
+            # An absent campaigns/ or eval/ dir is the norm, not a fault.
+            continue
+        except OSError as err:
+            logger.warning(
+                "Recipe scan directory not enumerable — skipped",
+                path=str(directory),
+                error_type=type(err).__name__,
+                error=str(err),
+            )
+            continue
+    return tuple(relative_path for _, relative_path in sorted(candidates))
+
+
+@lru_cache(maxsize=256)
+def _cached_recipe_candidates(
+    source_identity: Path,
+    _directory_signature: _DirectorySignature,
+    enumerate_candidates: _CandidateEnumerator,
+) -> tuple[Path, ...]:
+    return enumerate_candidates(source_identity)
+
+
+def _recipe_input_signature(
+    lexical_base: Path,
+    relative_candidates: tuple[Path, ...],
+) -> _RecipeInputSignature | None:
+    """Return the per-candidate stat signature, or ``None`` when it cannot be taken.
+
+    ``None`` means "the inputs are not stable enough to key a cache on" — the
+    caller falls back to an uncached collection pass. A vanished candidate is a
+    benign enumerate/stat race and logs at debug; any other fault logs at
+    warning, so a permission or I/O problem that silently disables the cache is
+    greppable instead of invisible.
+    """
+    signature: list[tuple[Path, int, int, int, bool, int | None, int | None, int | None]] = []
+    for relative_path in relative_candidates:
+        yaml_path = lexical_base / relative_path
+        try:
+            yaml_stat = yaml_path.stat()
+        except FileNotFoundError:
+            logger.debug(
+                "Recipe candidate vanished between enumeration and stat",
+                path=str(yaml_path),
+            )
+            return None
+        except OSError as err:
+            logger.warning(
+                "Recipe candidate stat failed — bypassing the discovery cache",
+                path=str(yaml_path),
+                error_type=type(err).__name__,
+                error=str(err),
+            )
+            return None
+        json_path = yaml_path.with_suffix(".json")
+        try:
+            json_stat = json_path.stat()
+        except FileNotFoundError:
+            json_stat = None
+        except OSError as err:
+            logger.warning(
+                "Recipe JSON sidecar unreadable — treated as absent",
+                path=str(json_path),
+                error_type=type(err).__name__,
+                error=str(err),
+            )
+            json_stat = None
+        # ctime is updated whenever inode metadata changes, even when mtime is
+        # preserved — that is what makes same-size, restored-mtime edits detectable.
+        signature.append(
+            (
+                relative_path,
+                yaml_stat.st_mtime_ns,
+                yaml_stat.st_ctime_ns,
+                yaml_stat.st_size,
+                json_stat is not None,
+                json_stat.st_mtime_ns if json_stat is not None else None,
+                json_stat.st_ctime_ns if json_stat is not None else None,
+                json_stat.st_size if json_stat is not None else None,
+            )
+        )
+    return tuple(signature)
+
+
+def _collect_relative_recipe_candidates(
+    project_base: Path,
+    project_candidates: tuple[Path, ...],
+    builtin_base: Path,
+    builtin_candidates: tuple[Path, ...],
+    collect_candidates: _CandidateCollector,
+) -> _CachedRecipeCollection:
+    result = collect_candidates(
+        project_base,
+        tuple(project_base / relative_path for relative_path in project_candidates),
+        builtin_base,
+        tuple(builtin_base / relative_path for relative_path in builtin_candidates),
+    )
+    return tuple(result.items), tuple(result.errors)
+
+
+@lru_cache(maxsize=256)
+def _cached_recipe_collection(
+    _project_identity: Path,
+    project_base: Path,
+    project_directory_signature: _DirectorySignature,
+    project_input_signature: _RecipeInputSignature,
+    _builtin_identity: Path,
+    builtin_base: Path,
+    builtin_directory_signature: _DirectorySignature,
+    builtin_input_signature: _RecipeInputSignature,
+    collect_candidates: _CandidateCollector,
+) -> _CachedRecipeCollection:
+    del project_directory_signature, builtin_directory_signature
+    return _collect_relative_recipe_candidates(
+        project_base,
+        tuple(entry[0] for entry in project_input_signature),
+        builtin_base,
+        tuple(entry[0] for entry in builtin_input_signature),
+        collect_candidates,
+    )
+
+
+def clear_recipe_discovery_caches() -> None:
+    """Clear every cache layer that participates in one discovery pass.
+
+    The three caches form a single invalidation unit: the candidate cache keys
+    on directory signatures, the collection cache keys on the per-file input
+    signatures derived from those candidates, and the parser cache memoizes the
+    documents the collection stage produced. Clearing a subset would leave a
+    later stage serving results derived from inputs an earlier stage no longer
+    believes in, so this module — which owns all three — exposes the seam.
+    """
+    _cached_recipe_candidates.cache_clear()
+    _cached_recipe_collection.cache_clear()
+    _parse_recipe_candidate.cache_clear()
+
+
+def _discover_recipe_collection(
+    project_base: Path,
+    builtin_base: Path,
+    scan_dirs: tuple[str, ...],
+    *,
+    enumerate_candidates: _CandidateEnumerator,
+    collect_candidates: _CandidateCollector,
+) -> _CachedRecipeCollection:
+    project_identity = project_base.resolve()
+    builtin_identity = builtin_base.resolve()
+
+    attempt = 0
+    while True:
+        project_directory_signature = _recipe_directory_signature(project_identity, scan_dirs)
+        builtin_directory_signature = _recipe_directory_signature(builtin_identity, scan_dirs)
+        project_candidates = _cached_recipe_candidates(
+            project_identity,
+            project_directory_signature,
+            enumerate_candidates,
+        )
+        builtin_candidates = _cached_recipe_candidates(
+            builtin_identity,
+            builtin_directory_signature,
+            enumerate_candidates,
+        )
+        project_input_signature = _recipe_input_signature(project_base, project_candidates)
+        builtin_input_signature = _recipe_input_signature(builtin_base, builtin_candidates)
+
+        if project_input_signature is None or builtin_input_signature is None:
+            logger.debug(
+                "Recipe input signature unavailable — clearing discovery caches",
+                attempt=attempt,
+                unstable_tiers=[
+                    tier
+                    for tier, signature in (
+                        ("project", project_input_signature),
+                        ("builtin", builtin_input_signature),
+                    )
+                    if signature is None
+                ],
+            )
+            _cached_recipe_candidates.cache_clear()
+            _cached_recipe_collection.cache_clear()
+            if attempt == 0:
+                attempt += 1
+                continue
+            return _collect_relative_recipe_candidates(
+                project_base,
+                project_candidates,
+                builtin_base,
+                builtin_candidates,
+                collect_candidates,
+            )
+
+        result = _cached_recipe_collection(
+            project_identity,
+            project_base,
+            project_directory_signature,
+            project_input_signature,
+            builtin_identity,
+            builtin_base,
+            builtin_directory_signature,
+            builtin_input_signature,
+            collect_candidates,
+        )
+        stable = (
+            project_directory_signature == _recipe_directory_signature(project_identity, scan_dirs)
+            and builtin_directory_signature
+            == _recipe_directory_signature(builtin_identity, scan_dirs)
+            and project_input_signature
+            == _recipe_input_signature(project_base, project_candidates)
+            and builtin_input_signature
+            == _recipe_input_signature(builtin_base, builtin_candidates)
+        )
+        if stable:
+            return result
+        _cached_recipe_candidates.cache_clear()
+        _cached_recipe_collection.cache_clear()
+        if attempt == 1:
+            logger.warning(
+                "Recipe discovery did not reach a stable snapshot — "
+                "returning the last observed result",
+                project_base=str(project_base),
+                builtin_base=str(builtin_base),
+            )
+            return result
+        attempt += 1

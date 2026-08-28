@@ -29,6 +29,9 @@ from autoskillit.recipe._io_loading import (
 )
 from autoskillit.recipe._io_loading import (
     _collect_recipes_from_candidates,
+    _discover_recipe_collection,
+    _enumerate_candidates_in_scan_dirs,
+    clear_recipe_discovery_caches,
     load_recipe_dict_with_declarations,
 )
 from autoskillit.recipe._io_loading import (
@@ -118,6 +121,19 @@ def _registry_position(r: RecipeInfo) -> int:
     return 0
 
 
+def _enumerate_recipe_candidates_uncached(source_root: Path) -> tuple[Path, ...]:
+    return _enumerate_candidates_in_scan_dirs(source_root, RECIPE_SCAN_DIRS)
+
+
+def _clear_recipe_discovery_caches() -> None:
+    """Re-export of the discovery cache-clear seam owned by ``_io_loading``.
+
+    Kept as a module-level name so callers and tests that reach for
+    ``recipe.io`` do not have to bind to the private sibling module.
+    """
+    clear_recipe_discovery_caches()
+
+
 def list_recipes(
     project_dir: Path,
     exclude_kinds: frozenset[RecipeKind] = frozenset(),
@@ -127,30 +143,19 @@ def list_recipes(
     """Find available recipes from project and built-in sources."""
     project_base = project_dir / ".autoskillit" / "recipes"
     builtin_base = pkg_root() / "recipes"
-
-    def live_recipe_files(base: Path) -> Iterator[Path]:
-        for subdir in RECIPE_SCAN_DIRS:
-            directory = base / subdir
-            if not directory.is_dir():
-                continue
-            for path in directory.iterdir():
-                if path.suffix in (".yaml", ".yml") and path.is_file():
-                    yield path
-
-    result = collect_recipes_from_candidates(
+    items, errors = _discover_recipe_collection(
         project_base,
-        live_recipe_files(project_base),
         builtin_base,
-        live_recipe_files(builtin_base),
+        RECIPE_SCAN_DIRS,
+        enumerate_candidates=_enumerate_recipe_candidates_uncached,
+        collect_candidates=collect_recipes_from_candidates,
     )
-    filtered = (
-        [r for r in result.items if r.kind not in exclude_kinds] if exclude_kinds else result.items
-    )
+    filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else list(items)
     if exclude_dispatch_only:
         filtered = [r for r in filtered if not r.dispatch_only]
     return LoadResult(
         items=sorted(filtered, key=lambda r: (group_rank(r), _registry_position(r), r.name)),
-        errors=result.errors,
+        errors=list(errors),
     )
 
 

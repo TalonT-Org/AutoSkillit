@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 import autoskillit.recipe._api as _api
 from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
-from autoskillit.recipe.io import RECIPE_SCAN_DIRS, builtin_recipes_dir, list_recipes, load_recipe
+from autoskillit.recipe.io import list_recipes, load_recipe
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
@@ -23,49 +23,23 @@ from autoskillit.recipe.staleness_cache import (
 )
 
 
-def _dir_mtime(path: Path) -> float:
-    """Return directory mtime as float, or 0.0 if the path does not exist."""
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
-
-
 class DefaultRecipeRepository:
-    """Concrete RecipeRepository backed by list_recipes with in-memory mtime cache."""
+    """Stateless ``RecipeRepository`` delegate over centralized recipe discovery.
 
-    def __init__(self) -> None:
-        self._cached_list: LoadResult[RecipeInfo] | None = None
-        self._cached_project_dir: Path | None = None
-        self._cached_project_mtime: float = 0.0
-        self._cached_builtin_mtime: float = 0.0
+    The repository holds no cache state of its own. ``list()``, ``find()``, and
+    ``load_and_validate()`` all route through :func:`list_recipes`, whose results
+    are memoized process-wide by the discovery caches in ``_io_loading``. Those
+    caches key on directory and per-file stat signatures, so an on-disk recipe
+    change invalidates them automatically; a forced refresh requires
+    ``recipe.io._clear_recipe_discovery_caches()``.
+
+    Consequences of being stateless: recreating the repository does **not**
+    refresh anything, and two instances pointing at different project roots are
+    not isolated caches — they share one keyed-by-project-root cache.
+    """
 
     def _get_list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
-
-        project_base = project_dir / ".autoskillit" / "recipes"
-        builtin_base = builtin_recipes_dir()
-
-        pm = max(
-            (_dir_mtime(project_base / s) for s in RECIPE_SCAN_DIRS),
-            default=0.0,
-        )
-        bm = max(
-            (_dir_mtime(builtin_base / s) for s in RECIPE_SCAN_DIRS),
-            default=0.0,
-        )
-        if (
-            self._cached_list is not None
-            and self._cached_project_dir == project_dir
-            and self._cached_project_mtime == pm
-            and self._cached_builtin_mtime == bm
-        ):
-            return self._cached_list
-        result = list_recipes(project_dir)
-        self._cached_list = result
-        self._cached_project_dir = project_dir
-        self._cached_project_mtime = pm
-        self._cached_builtin_mtime = bm
-        return result
+        return list_recipes(project_dir)
 
     def find(self, name: str, project_dir: Path) -> RecipeInfo | None:
         result = self._get_list(project_dir)

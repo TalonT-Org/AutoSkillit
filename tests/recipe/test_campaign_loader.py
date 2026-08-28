@@ -4,6 +4,7 @@ find_campaign_by_name, load_campaign_recipes_in_packs, and validate_recipe campa
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -21,8 +22,15 @@ from autoskillit.recipe.io import (
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 from autoskillit.recipe.validator import validate_recipe_structure
+from tests.recipe._testing import count_discovery_calls, isolate_recipe_discovery_cache
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+@pytest.fixture(autouse=True)
+def _clear_recipe_discovery_caches() -> Iterator[None]:
+    """Campaign discovery must not inherit a prior test's process cache."""
+    yield from isolate_recipe_discovery_cache()
 
 
 def _write_yaml(path: Path, data: dict) -> Path:
@@ -210,6 +218,57 @@ def test_load_campaign_recipes_in_packs_includes_allowed_recipes(tmp_path: Path)
     )
     assert len(results) == 1
     assert results[0].name == "special-campaign"
+
+
+def test_load_and_validate_campaign_enumerates_and_collects_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Semantic dispatch-target lookups share one central discovery result."""
+    import autoskillit.recipe._api_cache as cache_mod
+    from autoskillit.recipe._api import load_and_validate
+
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    child_recipe = {
+        "description": "Campaign child",
+        "autoskillit_version": "0.2.0",
+        "kitchen_rules": ["Complete the task."],
+        "steps": {"stop": {"action": "stop", "message": "done"}},
+    }
+    _write_yaml(recipes_dir / "first-child.yaml", {"name": "first-child", **child_recipe})
+    _write_yaml(recipes_dir / "second-child.yaml", {"name": "second-child", **child_recipe})
+    campaigns_dir = recipes_dir / "campaigns"
+    campaigns_dir.mkdir()
+    _write_yaml(
+        campaigns_dir / "multi-dispatch.yaml",
+        _campaign_data(
+            name="multi-dispatch",
+            dispatches=[
+                {
+                    "name": "first",
+                    "recipe": "first-child",
+                    "task": "First task",
+                    "ingredients": {},
+                    "depends_on": [],
+                },
+                {
+                    "name": "second",
+                    "recipe": "second-child",
+                    "task": "Second task",
+                    "ingredients": {},
+                    "depends_on": ["first"],
+                },
+            ],
+        ),
+    )
+
+    calls = count_discovery_calls(monkeypatch)
+
+    result = load_and_validate("multi-dispatch", project_dir=tmp_path)
+
+    assert result["valid"], result["errors"]
+    assert calls == {"enumerate": 2, "collect": 1}
 
 
 # ---------------------------------------------------------------------------

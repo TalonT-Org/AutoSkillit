@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.planner.validation as validation_module
 from autoskillit.planner.schema import PHASE_RESULT_FILE_RE, WP_RESULT_FILE_RE
 from autoskillit.planner.validation import (
     DiscoveryResult,
@@ -28,6 +29,17 @@ from tests.planner.conftest import (
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
+
+
+def _unlink_second_accepted_result(monkeypatch) -> None:
+    original_discover = validation_module.discover_tier_files
+
+    def discover_then_unlink(*args, **kwargs):
+        discovery = original_discover(*args, **kwargs)
+        discovery.accepted[1].unlink()
+        return discovery
+
+    monkeypatch.setattr(validation_module, "discover_tier_files", discover_then_unlink)
 
 
 def test_discover_tier_files_returns_accepted_and_rejected(tmp_path: Path) -> None:
@@ -136,6 +148,45 @@ def test_load_assignment_results_returns_non_canonical_in_rejected(tmp_path: Pat
     assert "P1-A1" in results
     assert len(rejected) == 1
     assert rejected[0].name == "P1-A2b_result.json"
+
+
+def test_load_phase_results_skips_a_vanished_result(tmp_path: Path, monkeypatch) -> None:
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    write_json(phases_dir / "P1_result.json", make_phase_result(1))
+    write_json(phases_dir / "P2_result.json", make_phase_result(2))
+    _unlink_second_accepted_result(monkeypatch)
+
+    results, _ = _load_phase_results(tmp_path)
+
+    assert list(results) == ["P1"]
+    assert results["P1"]["name"] == make_phase_result(1)["name"]
+
+
+def test_load_assignment_results_skips_a_vanished_result(tmp_path: Path, monkeypatch) -> None:
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    write_json(assignments_dir / "P1-A1_result.json", make_assignment_result(1, 1))
+    write_json(assignments_dir / "P1-A2_result.json", make_assignment_result(1, 2))
+    _unlink_second_accepted_result(monkeypatch)
+
+    results, _ = _load_assignment_results(tmp_path)
+
+    assert list(results) == ["P1-A1"]
+    assert results["P1-A1"]["name"] == make_assignment_result(1, 1)["name"]
+
+
+def test_load_wp_results_skips_a_vanished_result(tmp_path: Path, monkeypatch) -> None:
+    work_packages_dir = tmp_path / "work_packages"
+    work_packages_dir.mkdir()
+    write_json(work_packages_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(work_packages_dir / "P1-A1-WP2_result.json", make_wp_result("P1-A1-WP2"))
+    _unlink_second_accepted_result(monkeypatch)
+
+    results, _ = _load_wp_results(tmp_path)
+
+    assert list(results) == ["P1-A1-WP1"]
+    assert results["P1-A1-WP1"]["name"] == make_wp_result("P1-A1-WP1")["name"]
 
 
 def test_validate_plan_emits_warning_for_non_canonical_wp_file(tmp_path: Path) -> None:

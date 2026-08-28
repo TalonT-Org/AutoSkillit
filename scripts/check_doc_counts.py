@@ -129,7 +129,11 @@ def scan_docs() -> list[str]:
 
     for doc_file in sorted(doc_files):
         rel = doc_file.relative_to(PROJECT_ROOT)
-        for lineno, line in enumerate(doc_file.read_text(encoding="utf-8").splitlines(), 1):
+        try:
+            lines = doc_file.read_text(encoding="utf-8").splitlines()
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        for lineno, line in enumerate(lines, 1):
             # Skip self-correcting references
             if SELF_CORRECTING.search(line):
                 continue

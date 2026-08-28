@@ -9,7 +9,9 @@ from pathlib import Path
 import pytest
 
 from autoskillit.cli._workspace import _format_age, run_workspace_clean
+from autoskillit.core import VANISHED_ERRORS
 from autoskillit.workspace import CleanupResult
+from tests._helpers import delete_once_then_delegate
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -285,6 +287,95 @@ class TestRunWorkspaceCleanWorktrees:
         assert orphan in removed_paths
 
     @pytest.mark.anyio
+    async def test_workspace_clean_prints_the_correct_age_per_worktree(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        base = tmp_path
+        worktrees_root = base / "worktrees"
+        worktrees_root.mkdir()
+        now = 100_000.0
+        worktrees = {
+            "impl-recent-minutes": (now - 60, "1m ago"),
+            "impl-recent-hours": (now - 3660, "1h 1m ago"),
+            "impl-stale-days": (now - 86400, "1d ago"),
+        }
+        paths: list[Path] = []
+        for name, (mtime, _) in worktrees.items():
+            path = worktrees_root / name
+            path.mkdir()
+            os.utime(path, (mtime, mtime))
+            paths.append(path)
+
+        async def fake_list(proj, prefix, runner):
+            return paths
+
+        async def fake_remove(path, main_repo, runner):
+            return CleanupResult(deleted=[str(path)])
+
+        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
+        monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
+        monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: now)
+        monkeypatch.setattr(
+            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+        )
+
+        await run_workspace_clean(dir=str(base), force=True, project_root=base)
+
+        out = capsys.readouterr().out
+        for name, (_, age) in worktrees.items():
+            assert f"  {name}  ({age})" in out
+
+    @pytest.mark.parametrize("vanished_error", VANISHED_ERRORS)
+    @pytest.mark.anyio
+    async def test_workspace_clean_handles_a_worktrees_root_replaced_by_a_file(
+        self, tmp_path, capsys, monkeypatch, vanished_error
+    ):
+        base = tmp_path
+        worktrees_root = base / "worktrees"
+        worktrees_root.mkdir()
+
+        async def fake_list(proj, prefix, runner):
+            worktrees_root.rmdir()
+            if vanished_error is NotADirectoryError:
+                worktrees_root.write_text("not a directory", encoding="utf-8")
+            return []
+
+        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
+        monkeypatch.setattr(
+            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+        )
+
+        await run_workspace_clean(dir=str(base), force=True, project_root=base)
+
+        assert f"Nothing to clean in {worktrees_root}" in capsys.readouterr().out
+
+    @pytest.mark.anyio
+    async def test_workspace_clean_ignores_filesystem_only_symlink_entries(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        base = tmp_path
+        worktrees_root = base / "worktrees"
+        worktrees_root.mkdir()
+        target = base / "target"
+        target.mkdir()
+        linked_worktree = worktrees_root / "linked-worktree"
+        linked_worktree.symlink_to(target, target_is_directory=True)
+
+        async def fake_list(proj, prefix, runner):
+            return []
+
+        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
+        monkeypatch.setattr(
+            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+        )
+
+        await run_workspace_clean(dir=str(base), force=True, project_root=base)
+
+        out = capsys.readouterr().out
+        assert linked_worktree.name not in out
+        assert f"Nothing to clean in {worktrees_root}" in out
+
+    @pytest.mark.anyio
     async def test_sidecar_removed_alongside_worktree(self, tmp_path, monkeypatch):
         """When a worktree is removed, its sidecar is also removed."""
         import time
@@ -354,21 +445,75 @@ class TestRunWorkspaceCleanWorktrees:
         real_safe_mtime = workspace_module.safe_mtime
         stat_attempted = False
 
-        def unlink_then_delegate(p):
+        def is_vanishing_worktree(p):
             nonlocal stat_attempted
             stat_attempted = True
-            if p == vanishing_wt and vanishing_wt.exists():
-                shutil.rmtree(vanishing_wt)
-            return real_safe_mtime(p)
+            return p == vanishing_wt
 
         monkeypatch.setattr(workspace_module, "list_git_worktrees", fake_list)
         monkeypatch.setattr(workspace_module, "remove_git_worktree", fake_remove)
-        monkeypatch.setattr(workspace_module, "safe_mtime", unlink_then_delegate)
+        monkeypatch.setattr(
+            workspace_module,
+            "safe_mtime",
+            delete_once_then_delegate(
+                real_safe_mtime,
+                delete=lambda: shutil.rmtree(vanishing_wt),
+                when=is_vanishing_worktree,
+            ),
+        )
         monkeypatch.setattr(workspace_module, "load_config", lambda p=None: _make_workspace_cfg())
 
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
 
         assert stat_attempted
+
+    @pytest.mark.parametrize(
+        ("age", "is_stale"),
+        ((60, False), (20_000, True)),
+        ids=("recent", "stale"),
+    )
+    @pytest.mark.anyio
+    async def test_workspace_clean_survives_a_worktree_vanishing_before_its_age_read(
+        self, tmp_path, monkeypatch, age, is_stale
+    ):
+        import shutil
+
+        import autoskillit.cli._workspace as workspace_module
+
+        base = tmp_path
+        worktrees_root = base / "worktrees"
+        worktrees_root.mkdir()
+        worktree = worktrees_root / "impl-vanishing-20260101-120000"
+        worktree.mkdir()
+        now = 100_000.0
+        os.utime(worktree, (now - age, now - age))
+        removed_paths: list[Path] = []
+
+        async def fake_list(proj, prefix, runner):
+            return [worktree]
+
+        async def fake_remove(path, main_repo, runner):
+            removed_paths.append(path)
+            return CleanupResult(deleted=[str(path)])
+
+        real_safe_mtime = workspace_module.safe_mtime
+
+        def observe_then_remove(path: Path) -> float | None:
+            mtime = real_safe_mtime(path)
+            if path == worktree and worktree.exists():
+                shutil.rmtree(worktree)
+            return mtime
+
+        monkeypatch.setattr(workspace_module, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(workspace_module, "remove_git_worktree", fake_remove)
+        monkeypatch.setattr(workspace_module, "safe_mtime", observe_then_remove)
+        monkeypatch.setattr(workspace_module, "time.time", lambda: now)
+        monkeypatch.setattr(workspace_module, "load_config", lambda p=None: _make_workspace_cfg())
+
+        await run_workspace_clean(dir=str(base), force=True, project_root=base)
+
+        assert not worktree.exists()
+        assert removed_paths == ([worktree] if is_stale else [])
 
     @pytest.mark.anyio
     async def test_workspace_clean_calls_load_config(self, tmp_path, monkeypatch):

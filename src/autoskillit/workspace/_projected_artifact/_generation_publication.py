@@ -20,6 +20,7 @@ from pathlib import Path
 
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    VANISHED_ERRORS,
     ArtifactLease,
     ArtifactLeaseContention,
     LegacyRetiringEvidence,
@@ -49,6 +50,7 @@ from autoskillit.core import (
     read_installed_plugin_artifact_identity,
     resolve_current_generation,
     resolve_current_generation_for_plugin,
+    scan_observed,
 )
 from autoskillit.workspace._installed_artifact import (
     write_installed_plugin_artifact_manifest_locked,
@@ -811,23 +813,33 @@ def prune_stale_generations(
         store_root, home=home, plugin_ref=plugin_ref, artifact_kind=artifact_kind
     )
     candidates: list[tuple[Path, Path]] = []
-    for version_dir in sorted(store_root.iterdir(), key=lambda item: item.name):
-        if version_dir.name.startswith(".") or version_dir.is_symlink():
-            continue
-        if not version_dir.is_dir():
-            continue
-        for incarnation in sorted(version_dir.iterdir(), key=lambda item: item.name):
-            if incarnation.name.startswith("."):
-                if _generation_residue_managed_path(incarnation) is not None:
-                    candidates.append((incarnation, version_dir))
+    try:
+        version_entries = sorted(scan_observed(store_root), key=lambda entry: entry.name)
+        for version_entry in version_entries:
+            if (
+                version_entry.name.startswith(".")
+                or version_entry.is_symlink
+                or not version_entry.is_dir
+            ):
                 continue
-            if incarnation.is_symlink():
-                continue
-            if not incarnation.is_dir():
-                continue
-            if _is_selected_generation(home, plugin_ref, incarnation):
-                continue
-            candidates.append((incarnation, version_dir))
+            version_dir = version_entry.path
+            incarnation_entries = sorted(scan_observed(version_dir), key=lambda entry: entry.name)
+            for incarnation_entry in incarnation_entries:
+                incarnation = incarnation_entry.path
+                if incarnation.name.startswith("."):
+                    if _generation_residue_managed_path(incarnation) is not None:
+                        candidates.append((incarnation, version_dir))
+                    continue
+                if incarnation_entry.is_symlink or not incarnation_entry.is_dir:
+                    continue
+                if _is_selected_generation(home, plugin_ref, incarnation):
+                    continue
+                candidates.append((incarnation, version_dir))
+    except VANISHED_ERRORS:
+        return 0
+    except OSError as exc:
+        logger.warning("generation_prune_enumeration_failed: %s: %s", store_root, exc)
+        return 0
 
     created = 0
     not_before = datetime.now(UTC) + _GENERATION_GRACE

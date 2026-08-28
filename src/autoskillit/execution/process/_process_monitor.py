@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, NamedTuple
 import anyio
 import psutil
 
-from autoskillit.core import ChannelBStatus, get_logger
+from autoskillit.core import VANISHED_ERRORS, ChannelBStatus, get_logger, scan_observed
 from autoskillit.execution.process._process_jsonl import (
     EventCursor,
     _jsonl_contains_marker,
@@ -239,46 +239,50 @@ async def _session_log_monitor(
             return SessionMonitorResult(ChannelBStatus.STALE, "")
         await anyio.sleep(_phase1_poll)
         try:
+            session_entry = None
             candidates = [
-                f
-                for f in session_log_dir.iterdir()
-                if f.suffix == ".jsonl" and f.stat().st_ctime > spawn_time
+                entry
+                for entry in scan_observed(session_log_dir)
+                if entry.path.suffix == ".jsonl" and entry.status.st_ctime > spawn_time
             ]
             if expected_session_id and resume_cursor is not None:
                 expected_file = session_log_dir / f"{expected_session_id}.jsonl"
-                if expected_file.is_file() and expected_file not in candidates:
-                    candidates.append(expected_file)
-            if candidates:
+                if expected_file.is_file():
+                    session_file = expected_file
+            if session_file is None and candidates:
+                session_entry = None
                 if expected_session_id:
                     # Identity-based selection: match filename stem to session ID
-                    for f in candidates:
-                        if f.stem == expected_session_id:
-                            session_file = f
+                    for entry in candidates:
+                        if entry.path.stem == expected_session_id:
+                            session_entry = entry
                             break
-                    if session_file is None:
+                    if session_entry is None:
                         logger.warning(
                             "session_id_match_not_found",
                             expected_session_id=expected_session_id,
                             candidate_count=len(candidates),
-                            candidate_stems=[f.stem for f in candidates],
+                            candidate_stems=[entry.path.stem for entry in candidates],
                         )
-                        session_file = max(candidates, key=lambda f: f.stat().st_ctime)
+                        session_entry = max(candidates, key=lambda entry: entry.status.st_ctime)
                 else:
-                    session_file = max(candidates, key=lambda f: f.stat().st_ctime)
-                _chosen_ctime = session_file.stat().st_ctime
+                    session_entry = max(candidates, key=lambda entry: entry.status.st_ctime)
+                session_file = session_entry.path
+            if session_file is not None:
+                chosen_ctime = session_entry.status.st_ctime if session_entry is not None else None
                 logger.debug(
                     "session_log_phase1_discovered",
                     candidate_count=len(candidates),
                     chosen_file=str(session_file),
-                    ctime=_chosen_ctime,
+                    ctime=chosen_ctime,
                     spawn_time=spawn_time,
-                    ctime_delta=_chosen_ctime - spawn_time,
+                    ctime_delta=chosen_ctime - spawn_time if chosen_ctime is not None else None,
                     selection_method="session_id"
                     if expected_session_id and session_file.stem == expected_session_id
                     else "recency",
                 )
             os_error_count = 0
-        except FileNotFoundError:
+        except VANISHED_ERRORS:
             # Directory missing is structural — it won't self-heal during a
             # poll loop.  Return immediately so downstream gates can
             # distinguish "could not monitor" from "monitored but timed out".

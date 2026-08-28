@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit import cli
+from tests._helpers import delete_once_then_delegate
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -261,11 +262,15 @@ class TestGroupMFranchiseDoctorChecks:
 
         real_safe_mtime = _doctor_fleet_mod.safe_mtime
 
-        def _delete_then_read(path: Path) -> float | None:
-            path.unlink()  # simulate a concurrent sweep racing the check
-            return real_safe_mtime(path)
-
-        monkeypatch.setattr(_doctor_fleet_mod, "safe_mtime", _delete_then_read)
+        monkeypatch.setattr(
+            _doctor_fleet_mod,
+            "safe_mtime",
+            delete_once_then_delegate(
+                real_safe_mtime,
+                delete=state_file.unlink,
+                when=lambda path: path == state_file,
+            ),
+        )
 
         result = _check_stale_fleet_state(project_dir=tmp_path)
 

@@ -8,8 +8,9 @@ from typing import Any
 
 import pytest
 
+from autoskillit.core import VANISHED_ERRORS
 from autoskillit.planner.compiler import compile_plan
-from autoskillit.planner.consolidation import consolidate_wps
+from autoskillit.planner.consolidation import _load_manifests, consolidate_wps
 from autoskillit.planner.validation import validate_plan
 from tests.planner.conftest import (
     make_assignment_result,
@@ -35,6 +36,30 @@ def _make_manifest(consolidation_dir: Path, phase_id: str, groups: list[dict[str
         consolidation_dir / f"{phase_id}_consolidation.json",
         {"phase_id": phase_id, "groups": groups},
     )
+
+
+@pytest.mark.parametrize("vanished_error", VANISHED_ERRORS)
+def test_load_manifests_skips_manifest_that_vanishes_before_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    vanished_error: type[OSError],
+) -> None:
+    manifest_path = tmp_path / "P1_consolidation.json"
+    write_json(manifest_path, {"phase_id": "P1", "groups": []})
+    original_read_text = Path.read_text
+    read_attempted = False
+
+    def raise_vanished_error(path: Path, *args: Any, **kwargs: Any) -> str:
+        nonlocal read_attempted
+        if path == manifest_path:
+            read_attempted = True
+            raise vanished_error
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", raise_vanished_error)
+
+    assert _load_manifests(tmp_path) == []
+    assert read_attempted
 
 
 def test_passthrough_unchanged_when_no_manifests(tmp_path: Path) -> None:

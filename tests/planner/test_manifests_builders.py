@@ -7,12 +7,24 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.planner.manifests as manifests_module
 from tests.planner.conftest import (
     make_assignment_result,
     make_phase_result,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
+
+
+def _unlink_second_accepted_result(monkeypatch) -> None:
+    original_discover = manifests_module.discover_tier_files
+
+    def discover_then_unlink(*args, **kwargs):
+        discovery = original_discover(*args, **kwargs)
+        discovery.accepted[1].unlink()
+        return discovery
+
+    monkeypatch.setattr(manifests_module, "discover_tier_files", discover_then_unlink)
 
 
 def test_build_phase_assignment_manifest_creates_one_item_per_phase(tmp_path):
@@ -89,6 +101,24 @@ def test_build_phase_assignment_manifest_items_start_pending(tmp_path):
         assert item["status"] == "pending", f"item {item['id']} status was {item['status']!r}"
 
 
+def test_build_phase_assignment_manifest_skips_a_vanished_result(tmp_path, monkeypatch):
+    from autoskillit.planner import build_phase_assignment_manifest
+
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    output_dir = tmp_path / "assignments"
+    output_dir.mkdir()
+    (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
+    (phases_dir / "P2_result.json").write_text(json.dumps(make_phase_result(2)))
+    _unlink_second_accepted_result(monkeypatch)
+
+    result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert result["total_count"] == "1"
+    assert [item["id"] for item in manifest["items"]] == ["P1"]
+
+
 # ---------------------------------------------------------------------------
 # build_phase_wp_manifest tests (T1–T7)
 # ---------------------------------------------------------------------------
@@ -148,6 +178,28 @@ def test_build_phase_wp_manifest_groups_by_phase(tmp_path):
     assert len(manifest["items"]) == 2
     item_ids = [i["id"] for i in manifest["items"]]
     assert item_ids == ["P1", "P2"]
+
+
+def test_build_phase_wp_manifest_skips_a_vanished_result(tmp_path, monkeypatch):
+    from autoskillit.planner import build_phase_wp_manifest
+
+    assignments_dir = tmp_path / "assignments"
+    assignments_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (assignments_dir / "P1-A1_result.json").write_text(
+        json.dumps(make_assignment_result(1, 1, proposed_work_packages=[]))
+    )
+    (assignments_dir / "P2-A1_result.json").write_text(
+        json.dumps(make_assignment_result(2, 1, proposed_work_packages=[]))
+    )
+    _unlink_second_accepted_result(monkeypatch)
+
+    result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert result["total_count"] == "1"
+    assert [item["id"] for item in manifest["items"]] == ["P1"]
 
 
 def test_build_phase_wp_manifest_metadata_carries_wp_details(tmp_path):

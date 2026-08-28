@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import VANISHED_ERRORS
 from tests.arch._deferred_debt import (
     TrackedDeferral,
     assert_entries_still_apply,
@@ -1106,11 +1107,13 @@ _OSERROR_FAMILY = {
     "ConnectionResetError",
     "TimeoutError",
 }
+_VANISHED_ERROR_NAMES = {error.__name__ for error in VANISHED_ERRORS}
 # The shared filesystem-observation funnel deliberately covers stat-family
 # metadata only. Content reads require explicit local exception handling.
 _FS_OBSERVATION_FUNNEL = {"observe_path_mode", "safe_mtime"}
 _ENUMERATION_READ_STAT_KIND = "enumeration-read-or-stat"
 _ENUMERATION_SORT_KEY_KIND = "sorted-key-lambda"
+_SCRIPTS_ROOT = SRC_ROOT.parents[1] / "scripts"
 
 # Deferred-debt registry: each entry pairs a real, tracked violation with a
 # staleness-enforced shape (see tests/arch/_deferred_debt.py) rather than a bare
@@ -1142,6 +1145,13 @@ def _is_enumeration_call(node: ast.expr, aliases: dict[str, tuple[str, str | Non
     return _dotted_name(node.func, aliases) in _ENUMERATION_DOTTED_CALLS
 
 
+def _root_name(node: ast.expr) -> str | None:
+    """Return an attribute/subscript expression's root name, if it has one."""
+    while isinstance(node, (ast.Attribute, ast.Subscript)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
 def _enumeration_source(
     iterable: ast.expr,
     aliases: dict[str, tuple[str, str | None]],
@@ -1150,11 +1160,8 @@ def _enumeration_source(
     """Return whether `iterable` is (or wraps via subscript/starred/comprehension/
     sorted/min/max) an enumeration call, or a tainted name already established
     elsewhere in the function."""
-    if isinstance(iterable, (ast.Starred, ast.Subscript)):
-        inner = iterable.value
-        if _is_enumeration_call(inner, aliases):
-            return True
-        return isinstance(inner, ast.Name) and inner.id in tainted
+    if isinstance(iterable, (ast.Starred, ast.Attribute, ast.Subscript)):
+        return _enumeration_source(iterable.value, aliases, tainted)
     if isinstance(iterable, ast.Name):
         return iterable.id in tainted
     if _is_enumeration_call(iterable, aliases):
@@ -1163,10 +1170,14 @@ def _enumeration_source(
         dotted = _dotted_name(iterable.func, aliases)
         if (
             dotted is not None
-            and dotted.rsplit(".", 1)[-1] in {"sorted", "min", "max"}
+            and dotted.rsplit(".", 1)[-1] in {"list", "sorted", "min", "max"}
             and iterable.args
         ):
             return _enumeration_source(iterable.args[0], aliases, tainted)
+    if isinstance(iterable, ast.BinOp):
+        return _enumeration_source(iterable.left, aliases, tainted) or _enumeration_source(
+            iterable.right, aliases, tainted
+        )
     if isinstance(iterable, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
         return any(_is_enumeration_call(gen.iter, aliases) for gen in iterable.generators)
     if isinstance(iterable, (ast.List, ast.Tuple, ast.Set)):
@@ -1182,7 +1193,8 @@ def _target_names(target: ast.expr) -> list[str]:
         for elt in target.elts:
             names.extend(_target_names(elt))
         return names
-    return []
+    root = _root_name(target)
+    return [root] if root is not None else []
 
 
 def _mentions_tainted_name(node: ast.AST, tainted: set[str]) -> bool:
@@ -1194,12 +1206,18 @@ def _guarded_call_subject(
 ) -> str | None:
     """Return the tainted-shaped subject name `node` stats/reads, if any."""
     if isinstance(node.func, ast.Attribute) and node.func.attr in _GUARDED_STAT_ATTRS:
-        return node.func.value.id if isinstance(node.func.value, ast.Name) else None
+        return _root_name(node.func.value)
     if isinstance(node.func, ast.Name) and node.func.id == "open" and node.args:
-        return node.args[0].id if isinstance(node.args[0], ast.Name) else None
+        return _root_name(node.args[0])
     dotted = _dotted_name(node.func, aliases)
-    if dotted in _GUARDED_STAT_DOTTED_CALLS and node.args and isinstance(node.args[0], ast.Name):
-        return node.args[0].id
+    if dotted in _GUARDED_STAT_DOTTED_CALLS and node.args:
+        return _root_name(node.args[0])
+    return None
+
+
+def _enumeration_sink_subject(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Attribute) and node.func.attr in {"iterdir", "scandir"}:
+        return _root_name(node.func.value)
     return None
 
 
@@ -1237,6 +1255,38 @@ def _handler_covers_oserror(handler: ast.ExceptHandler) -> bool:
     if isinstance(kind, ast.Tuple):
         return any(isinstance(elt, ast.Name) and elt.id in covers for elt in kind.elts)
     return isinstance(kind, ast.Name) and kind.id in covers
+
+
+def _handler_matches_vanished_error(handler: ast.ExceptHandler, error_name: str) -> bool:
+    """Whether this handler is the first one that would catch ``error_name``."""
+    kind = handler.type
+    if kind is None:
+        return True
+    names = {error_name, "VANISHED_ERRORS", "OSError", *_BROAD_EXCEPTION_COVERAGE}
+    if isinstance(kind, ast.Tuple):
+        return any(isinstance(entry, ast.Name) and entry.id in names for entry in kind.elts)
+    return isinstance(kind, ast.Name) and kind.id in names
+
+
+def _handler_recovers(handler: ast.ExceptHandler) -> bool:
+    """A handler ending in an unconditional raise cannot recover the loop."""
+    return not handler.body or not isinstance(handler.body[-1], ast.Raise)
+
+
+def _try_recovers_vanish(try_node: ast.Try) -> bool:
+    """Every runtime vanished error must select a normally-completing handler."""
+    for error_name in _VANISHED_ERROR_NAMES:
+        matching = next(
+            (
+                handler
+                for handler in try_node.handlers
+                if _handler_matches_vanished_error(handler, error_name)
+            ),
+            None,
+        )
+        if matching is None or not _handler_recovers(matching):
+            return False
+    return True
 
 
 def _handler_discards_exception(handler: ast.ExceptHandler) -> bool:
@@ -1280,17 +1330,112 @@ def _comprehension_local_taint(
     return frozenset(local)
 
 
+def _enumeration_producing_functions(
+    tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
+) -> frozenset[str]:
+    """Summarize same-module functions whose every return comes from enumeration.
+
+    This is deliberately one hop only: return values can seed a caller's local
+    taint, but argument taint is not propagated into another function.
+    """
+
+    def statement_returns(stmts: list[ast.stmt]) -> list[ast.Return]:
+        returns: list[ast.Return] = []
+        for stmt in stmts:
+            if isinstance(stmt, ast.Return):
+                returns.append(stmt)
+            elif isinstance(stmt, (ast.If, ast.For, ast.While)):
+                children = [stmt.body, stmt.orelse]
+                for child_stmts in children:
+                    returns.extend(statement_returns(child_stmts))
+            elif isinstance(stmt, ast.With):
+                returns.extend(statement_returns(stmt.body))
+            elif isinstance(stmt, ast.Try):
+                returns.extend(statement_returns(stmt.body))
+                for handler in stmt.handlers:
+                    returns.extend(statement_returns(handler.body))
+                returns.extend(statement_returns(stmt.orelse))
+                returns.extend(statement_returns(stmt.finalbody))
+        return returns
+
+    def produces(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+        tainted: set[str] = set()
+
+        def derived(expr: ast.expr | None) -> bool:
+            if expr is None:
+                return False
+            if _enumeration_source(expr, aliases, tainted):
+                return True
+            if isinstance(expr, ast.Call):
+                return (
+                    isinstance(expr.func, ast.Name)
+                    and expr.func.id == "DiscoveryResult"
+                    and any(derived(arg) for arg in expr.args)
+                )
+            return _mentions_tainted_name(expr, tainted)
+
+        def visit(stmts: list[ast.stmt]) -> None:
+            for stmt in stmts:
+                if isinstance(stmt, ast.For):
+                    if derived(stmt.iter):
+                        tainted.update(_target_names(stmt.target))
+                    visit(stmt.body)
+                    visit(stmt.orelse)
+                elif isinstance(stmt, ast.Assign):
+                    if derived(stmt.value):
+                        for target in stmt.targets:
+                            tainted.update(_target_names(target))
+                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                    call = stmt.value
+                    if (
+                        isinstance(call.func, ast.Attribute)
+                        and call.func.attr == "append"
+                        and call.args
+                        and derived(call.args[0])
+                    ):
+                        receiver = _root_name(call.func.value)
+                        if receiver is not None:
+                            tainted.add(receiver)
+                elif isinstance(stmt, ast.If):
+                    visit(stmt.body)
+                    visit(stmt.orelse)
+                elif isinstance(stmt, ast.Try):
+                    visit(stmt.body)
+                    for handler in stmt.handlers:
+                        visit(handler.body)
+                    visit(stmt.orelse)
+                    visit(stmt.finalbody)
+
+        visit(function.body)
+        returns = statement_returns(function.body)
+        return bool(returns) and all(derived(return_node.value) for return_node in returns)
+
+    return frozenset(
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and produces(node)
+    )
+
+
 def _find_enumeration_stat_violations(
     tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
 ) -> list[tuple[int, str, str, str]]:
     """Scan every function in `tree` for an unguarded stat/read on an
-    enumeration-derived path. Each function gets its own taint set — this is
-    intentionally intra-function only; nested defs are analyzed separately
-    when the outer walk reaches them."""
+    enumeration-derived path. Each function gets its own taint set; a single
+    same-module return-value summary can seed that set, but argument taint is
+    intentionally not propagated. Nested defs are analyzed separately."""
     violations: list[tuple[int, str, str, str]] = []
+    enumeration_producers = _enumeration_producing_functions(tree, aliases)
 
     def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         tainted: set[str] = set()
+
+        def enumeration_source(expr: ast.expr) -> bool:
+            return _enumeration_source(expr, aliases, tainted) or (
+                isinstance(expr, ast.Call)
+                and isinstance(expr.func, ast.Name)
+                and expr.func.id in enumeration_producers
+            )
 
         def check_expr(
             expr: ast.expr | None, guarded: bool, local_tainted: frozenset[str] = frozenset()
@@ -1316,11 +1461,27 @@ def _find_enumeration_stat_violations(
                             )
                         )
                     continue
+                enumeration_subject = _enumeration_sink_subject(node)
+                if (
+                    enumeration_subject is not None
+                    and (enumeration_subject in tainted or enumeration_subject in local_tainted)
+                    and not guarded
+                ):
+                    violations.append(
+                        (
+                            node.lineno,
+                            func_node.name,
+                            _ENUMERATION_READ_STAT_KIND,
+                            f"unguarded {node.func.attr} on enumeration-derived "
+                            f"name {enumeration_subject!r}",
+                        )
+                    )
+                    continue
                 if (
                     isinstance(node.func, ast.Name)
                     and node.func.id in {"sorted", "min", "max"}
                     and node.args
-                    and _enumeration_source(node.args[0], aliases, tainted)
+                    and enumeration_source(node.args[0])
                 ):
                     for kw in node.keywords:
                         if kw.arg != "key" or not isinstance(kw.value, ast.Lambda):
@@ -1347,7 +1508,7 @@ def _find_enumeration_stat_violations(
         def visit_stmts(stmts: list[ast.stmt], guarded: bool) -> None:
             for stmt in stmts:
                 if isinstance(stmt, ast.For):
-                    if _enumeration_source(stmt.iter, aliases, tainted):
+                    if enumeration_source(stmt.iter):
                         tainted.update(_target_names(stmt.target))
                     check_expr(
                         stmt.iter, guarded, _comprehension_local_taint(stmt.iter, aliases, tainted)
@@ -1360,15 +1521,30 @@ def _find_enumeration_stat_violations(
                         guarded,
                         _comprehension_local_taint(stmt.value, aliases, tainted),
                     )
-                    if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-                        if _mentions_tainted_name(stmt.value, tainted) or _enumeration_source(
-                            stmt.value, aliases, tainted
-                        ):
-                            tainted.add(stmt.targets[0].id)
+                    if _mentions_tainted_name(stmt.value, tainted) or enumeration_source(
+                        stmt.value
+                    ):
+                        for target in stmt.targets:
+                            tainted.update(_target_names(target))
+                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+                    call = stmt.value
+                    if (
+                        isinstance(call.func, ast.Attribute)
+                        and call.func.attr == "append"
+                        and call.args
+                        and (
+                            _mentions_tainted_name(call.args[0], tainted)
+                            or enumeration_source(call.args[0])
+                        )
+                    ):
+                        receiver = _root_name(call.func.value)
+                        if receiver is not None:
+                            tainted.add(receiver)
+                    check_expr(call, guarded, _comprehension_local_taint(call, aliases, tainted))
                 elif isinstance(stmt, ast.Try):
-                    body_guarded = guarded or any(
-                        _handler_covers_oserror(h) for h in stmt.handlers
-                    )
+                    # Enumeration reads use the narrower runtime-derived predicate;
+                    # _handler_covers_oserror remains for the broad-swallow rule.
+                    body_guarded = guarded or _try_recovers_vanish(stmt)
                     visit_stmts(stmt.body, body_guarded)
                     for handler in stmt.handlers:
                         visit_stmts(handler.body, guarded)
@@ -1646,6 +1822,137 @@ def _find_broad_swallow_violations(
             [],
             id="guarded_by_broad_exception_handler_is_not_flagged",
         ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except FileNotFoundError:\n"
+            "            continue\n",
+            [4],
+            id="single_vanished_error_handler_does_not_cover_runtime_set",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except FileNotFoundError:\n"
+            "            raise\n"
+            "        except OSError:\n"
+            "            continue\n",
+            [4],
+            id="first_matching_specific_handler_must_recover",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except OSError as exc:\n"
+            "            raise RuntimeError('gone') from exc\n",
+            [4],
+            id="transformed_reraise_does_not_recover",
+        ),
+        pytest.param(
+            "def f(d, retry):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except OSError:\n"
+            "            if retry:\n"
+            "                raise\n"
+            "            continue\n",
+            [],
+            id="branch_local_reraise_can_still_recover",
+        ),
+        pytest.param(
+            "def f(self, d):\n    self.entries = list(d.iterdir())\n    self.entries[0].stat()\n",
+            [3],
+            id="attribute_and_subscript_taint_reaches_stat",
+        ),
+        pytest.param(
+            "def f(left, right):\n"
+            "    entries = left.glob('*') | right.glob('*')\n"
+            "    for entry in entries:\n"
+            "        entry.stat()\n",
+            [4],
+            id="binop_taint_reaches_stat",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    accepted = []\n"
+            "    for entry in d.iterdir():\n"
+            "        accepted.append(entry)\n"
+            "    accepted[0].stat()\n",
+            [5],
+            id="append_receiver_taint_reaches_stat",
+        ),
+        pytest.param(
+            "def f(d):\n    entries = d.iterdir()\n    entries.iterdir()\n",
+            [3],
+            id="tainted_enumeration_receiver_is_a_sink",
+        ),
+        pytest.param(
+            "def f(path):\n    path.iterdir()\n",
+            [],
+            id="untainted_enumeration_receiver_is_clean",
+        ),
+        pytest.param(
+            "class DiscoveryResult:\n"
+            "    pass\n"
+            "def discover(d):\n"
+            "    accepted = []\n"
+            "    for entry in d.iterdir():\n"
+            "        accepted.append(entry)\n"
+            "    return DiscoveryResult(accepted, [])\n"
+            "def consume(d):\n"
+            "    discovery = discover(d)\n"
+            "    return discovery.accepted[0].stat()\n",
+            [10],
+            id="same_module_return_summary_taints_wrapper_fields",
+        ),
+        pytest.param(
+            "def discover(d):\n"
+            "    for entry in d.iterdir():\n"
+            "        pass\n"
+            "def consume(d):\n"
+            "    discovery = discover(d)\n"
+            "    discovery.stat()\n",
+            [],
+            id="no_return_function_is_not_an_enumeration_producer",
+        ),
+        pytest.param(
+            "def first(d):\n"
+            "    return list(d.iterdir())\n"
+            "def second(d):\n"
+            "    return first(d)\n"
+            "def consume(d):\n"
+            "    entries = second(d)\n"
+            "    entries[0].stat()\n",
+            [],
+            id="return_summary_stops_after_one_hop",
+        ),
+        pytest.param(
+            "def choose(d, include):\n"
+            "    if include:\n"
+            "        return list(d.iterdir())\n"
+            "    return []\n"
+            "def consume(d):\n"
+            "    entries = choose(d, False)\n"
+            "    entries[0].stat()\n",
+            [],
+            id="return_summary_requires_every_return_to_be_enumeration_derived",
+        ),
+        pytest.param(
+            "def consume(entries):\n"
+            "    for entry in entries:\n"
+            "        entry.stat()\n"
+            "def caller(d):\n"
+            "    return consume(d.iterdir())\n",
+            [],
+            id="argument_taint_is_intentionally_out_of_scope",
+        ),
     ],
 )
 def test_enumeration_stat_detection_rule(source: str, expected_lines: list[int]) -> None:
@@ -1669,6 +1976,7 @@ def test_second_violation_in_allowlisted_file_is_reported() -> None:
                 issue=1234,
                 rationale="The covered synthetic violation remains intentionally deferred.",
                 added_date=date.today(),
+                regression_test="tests/arch/test_ast_rules.py::test_second_violation_in_allowlisted_file_is_reported",
             )
         },
     )
@@ -1686,6 +1994,7 @@ def test_allowlisted_violation_is_not_reported_unexpected() -> None:
                 issue=1234,
                 rationale="The covered synthetic violation remains intentionally deferred.",
                 added_date=date.today(),
+                regression_test="tests/arch/test_ast_rules.py::test_allowlisted_violation_is_not_reported_unexpected",
             )
         },
     )
@@ -1816,12 +2125,16 @@ def _partition_enumeration_violations(
     return found - allowlisted, allowlisted - found
 
 
+def _enumeration_scan_files() -> list[Path]:
+    return sorted((*SRC_ROOT.rglob("*.py"), *_SCRIPTS_ROOT.rglob("*.py")))
+
+
 def _enumeration_stat_live_findings() -> tuple[
     set[tuple[Path, str, str]], dict[tuple[Path, str, str], list[str]]
 ]:
     found: set[tuple[Path, str, str]] = set()
     details: dict[tuple[Path, str, str], list[str]] = {}
-    for py_file in sorted(SRC_ROOT.rglob("*.py")):
+    for py_file in _enumeration_scan_files():
         try:
             tree = ast.parse(py_file.read_text())
         except SyntaxError:
@@ -1834,6 +2147,176 @@ def _enumeration_stat_live_findings() -> tuple[
                 f"{py_file.relative_to(SRC_ROOT.parent.parent)}:{lineno} in {function}: {detail}"
             )
     return found, details
+
+
+def test_guard_scans_scripts_directory() -> None:
+    assert _SCRIPTS_ROOT / "pytest_tmp_lifecycle.py" in _enumeration_scan_files()
+
+
+def _module_scope_import_bindings(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    bindings: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            bindings.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            bindings.update(alias.asname or alias.name for alias in node.names)
+    return bindings
+
+
+def _function_patches_attribute(path: Path, function_name: str, attribute: str) -> bool:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    function = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == function_name
+        ),
+        None,
+    )
+    if function is None:
+        return False
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "setattr"
+        and len(node.args) >= 2
+        and isinstance(node.args[1], ast.Constant)
+        and node.args[1].value == attribute
+        for node in ast.walk(function)
+    )
+
+
+def _function_calls_named(path: Path, function_name: str, call_name: str) -> bool:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    function = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == function_name
+        ),
+        None,
+    )
+    return function is not None and any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == call_name
+        for node in ast.walk(function)
+    )
+
+
+def test_observation_funnel_is_bound_at_module_scope() -> None:
+    required_bindings = {
+        SRC_ROOT / "cli" / "doctor" / "_doctor_fleet.py": {"safe_mtime"},
+        SRC_ROOT / "cli" / "_workspace.py": {"safe_mtime", "scan_observed"},
+        SRC_ROOT / "core" / "runtime" / "kitchen_state.py": {"safe_mtime"},
+        SRC_ROOT / "execution" / "process" / "_process_monitor.py": {"scan_observed"},
+    }
+    for path, expected in required_bindings.items():
+        assert expected <= _module_scope_import_bindings(path), path
+
+    facade = SRC_ROOT / "exploration" / "snapshot" / "__init__.py"
+    capture = SRC_ROOT / "exploration" / "snapshot" / "_capture.py"
+    assert "observe_path_mode" in _module_scope_import_bindings(facade)
+    capture_tree = ast.parse(capture.read_text(), filename=str(capture))
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "observe_path_mode"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "_snapshot_facade"
+        for node in ast.walk(capture_tree)
+    )
+
+    race_tests = (
+        (
+            Path("tests/cli/test_doctor_fleet_checks.py"),
+            "test_check_stale_fleet_state_survives_concurrent_deletion",
+            "safe_mtime",
+        ),
+        (
+            Path("tests/cli/test_workspace.py"),
+            "test_worktree_deleted_between_listing_and_mtime_check_is_skipped",
+            "safe_mtime",
+        ),
+        (
+            Path("tests/core/test_kitchen_state.py"),
+            "test_find_caller_session_id_survives_a_marker_swept_during_the_scan",
+            "safe_mtime",
+        ),
+        (
+            Path("tests/exploration/test_snapshot.py"),
+            "test_snapshot_survives_a_real_entry_deleted_during_the_worktree_walk",
+            "observe_path_mode",
+        ),
+    )
+    for relative_path, function_name, attribute in race_tests:
+        assert _function_patches_attribute(
+            SRC_ROOT.parents[1] / relative_path, function_name, attribute
+        ), f"{relative_path}::{function_name} must patch {attribute}"
+
+
+_VANISHED_ERROR_GENERATIVE_TESTS = {
+    Path("tests/core/test_fs_observation.py"): {
+        "test_safe_mtime_normalizes_every_vanished_error",
+        "test_observe_path_mode_normalizes_every_vanished_error",
+    },
+    Path("tests/workspace/test_session_skills_stale_path.py"): {
+        "test_cleanup_stale_continues_when_the_post_lease_observation_finds_the_candidate_gone",
+    },
+    Path("tests/recipe/test_cmd_rpc.py"): {
+        "test_batch_create_issues_returns_empty_when_audit_root_vanishes",
+    },
+    Path("tests/cli/test_workspace.py"): {
+        "test_workspace_clean_handles_a_worktrees_root_replaced_by_a_file",
+    },
+}
+
+
+def test_vanished_error_coverage_is_generative() -> None:
+    repo_root = SRC_ROOT.parents[1]
+    for relative_path, function_names in _VANISHED_ERROR_GENERATIVE_TESTS.items():
+        tree = ast.parse((repo_root / relative_path).read_text(), filename=str(relative_path))
+        functions = {
+            node.name: node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        for function_name in function_names:
+            function = functions[function_name]
+            assert any(
+                isinstance(node, ast.Name) and node.id == "VANISHED_ERRORS"
+                for decorator in function.decorator_list
+                for node in ast.walk(decorator)
+            ), f"{relative_path}::{function_name} must parametrize directly from VANISHED_ERRORS"
+
+
+def test_no_hand_rolled_delete_then_delegate_closures() -> None:
+    migrated_tests = (
+        (
+            Path("tests/cli/test_doctor_fleet_checks.py"),
+            "test_check_stale_fleet_state_survives_concurrent_deletion",
+        ),
+        (
+            Path("tests/cli/test_workspace.py"),
+            "test_worktree_deleted_between_listing_and_mtime_check_is_skipped",
+        ),
+        (
+            Path("tests/core/test_kitchen_state.py"),
+            "test_find_caller_session_id_survives_a_marker_swept_during_the_scan",
+        ),
+        (
+            Path("tests/exploration/test_snapshot.py"),
+            "test_snapshot_survives_a_real_entry_deleted_during_the_worktree_walk",
+        ),
+    )
+    repo_root = SRC_ROOT.parents[1]
+    for relative_path, function_name in migrated_tests:
+        assert _function_calls_named(
+            repo_root / relative_path, function_name, "delete_once_then_delegate"
+        ), f"{relative_path}::{function_name} must use delete_once_then_delegate"
 
 
 def _enumeration_violation_remediation(detail: str) -> str:

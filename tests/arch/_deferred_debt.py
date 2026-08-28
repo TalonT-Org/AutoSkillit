@@ -20,6 +20,7 @@ class TrackedDeferral:
     issue: int
     rationale: str
     added_date: date
+    regression_test: str
 
 
 def assert_entries_still_apply(
@@ -81,4 +82,21 @@ def assert_rationale_present(
     assert not vague, (
         f"{registry_name} entries with a missing or too-short rationale "
         f"(must be >= {min_length} chars describing the concrete risk being deferred): {vague}"
+    )
+
+
+def assert_deferrals_have_regression_tests(
+    registry: dict[Any, TrackedDeferral],
+    *,
+    registry_name: str,
+    collected_node_ids: Collection[str],
+) -> None:
+    """Require each deferral to name the regression evidence that keeps it honest."""
+    unresolved = {
+        str(key): entry.regression_test
+        for key, entry in registry.items()
+        if not entry.regression_test or entry.regression_test not in collected_node_ids
+    }
+    assert not unresolved, (
+        f"{registry_name} entries with an empty or unresolvable regression_test: {unresolved}"
     )

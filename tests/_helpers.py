@@ -8,7 +8,9 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 import pytest
 
@@ -25,6 +27,26 @@ from autoskillit.core import (
 _RUN_SKILL_WINDOW = 400
 _PROSE_TRIGGER_WINDOW = 60
 _PROSE_TRIGGER_WORDS = ("parameter", "pass", "forward")
+T = TypeVar("T")
+
+
+def delete_once_then_delegate(
+    delegate: Callable[[Path], T],
+    *,
+    delete: Callable[[], None],
+    when: Callable[[Path], bool],
+) -> Callable[[Path], T]:
+    """Delete once on the first matching path, then delegate every call."""
+    deleted = False
+
+    def wrapper(path: Path) -> T:
+        nonlocal deleted
+        if not deleted and when(path):
+            deleted = True
+            delete()
+        return delegate(path)
+
+    return wrapper
 
 
 class _EnvVarReadCollector(ast.NodeVisitor):

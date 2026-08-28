@@ -113,8 +113,6 @@ Five phoropter types are defined in the IL-0 core types layer (`src/autoskillit/
 |------|--------|--------|--------|---------|
 | `PhoropterPrescription` | `_type_phoropter.py` | Implemented | `selected_lenses: str`, `lens_context_paths: str`, `failure_mode: str = "continue"` | Dial phase output — records which lenses were selected and their context paths. |
 | `ReadingToken` | `_type_phoropter.py` | Implemented | `output_prefix: str`, `path_value: str` | Structured capture of a single lens reading (path to output file with its prefix). `READING_TOKEN_PATTERN` regex: `r"^(?P<prefix>\w+) = (?P<path>/.+)$"`. |
-| `CrossDomainPrescription` | `_type_phoropter.py` | Implemented | `family_names: tuple[str, ...]`, `merged_lenses: str = ""`, `merge_strategy: str = "union"` | Multi-family lens selection when families share a recipe context. |
-| `CrossDomainAssessment` | `_type_phoropter.py` | Implemented | `family_names: tuple[str, ...]`, `synthesis_strategy: SynthesisStrategy = SynthesisStrategy.NULL`, `combined_output: str = ""` | Multi-family synthesis assessment combining outputs across family boundaries. |
 | `SynthesisStrategy` | `_type_enums.py` | Implemented | `NULL`, `PRIORITY_HIERARCHY`, `ELECTRE_III`, `DEX`, `CUSTOM` | Enum of recognized synthesis algorithms (see §6 catalog). |
 
 All types are frozen dataclasses with `slots=True` (except `SynthesisStrategy` which is a `StrEnum`). All are exported from `src/autoskillit/core/types/` via the `__init__.py` re-export hub.

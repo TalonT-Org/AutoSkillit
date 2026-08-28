@@ -4,14 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ._type_enums import SynthesisStrategy
-
 __all__ = [
     "PhoropterPrescription",
     "ReadingToken",
     "READING_TOKEN_PATTERN",
-    "CrossDomainPrescription",
-    "CrossDomainAssessment",
 ]
 
 
@@ -29,17 +25,3 @@ class ReadingToken:
 
 
 READING_TOKEN_PATTERN: str = r"^(?P<prefix>\w+) = (?P<path>/.+)$"
-
-
-@dataclass(frozen=True, slots=True)
-class CrossDomainPrescription:
-    family_names: tuple[str, ...]
-    merged_lenses: str = ""
-    merge_strategy: str = "union"
-
-
-@dataclass(frozen=True, slots=True)
-class CrossDomainAssessment:
-    family_names: tuple[str, ...]
-    synthesis_strategy: SynthesisStrategy = SynthesisStrategy.NULL
-    combined_output: str = ""

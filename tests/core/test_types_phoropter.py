@@ -7,8 +7,6 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from autoskillit.core import (
-    CrossDomainAssessment,
-    CrossDomainPrescription,
     PhoropterPrescription,
     SynthesisStrategy,
 )
@@ -41,26 +39,6 @@ class TestSynthesisStrategy:
         assert SynthesisStrategy.NULL == "null"
 
 
-class TestCrossdomainStubs:
-    def test_cross_domain_prescription_instantiable(self) -> None:
-        obj = CrossDomainPrescription(family_names=("a", "b"))
-        assert obj.family_names == ("a", "b")
-
-    def test_cross_domain_assessment_instantiable(self) -> None:
-        obj = CrossDomainAssessment(family_names=("a",))
-        assert obj.family_names == ("a",)
-
-    def test_cross_domain_prescription_frozen(self) -> None:
-        obj = CrossDomainPrescription(family_names=("a",))
-        with pytest.raises(FrozenInstanceError):
-            obj.family_names = ("x",)  # type: ignore[misc]
-
-    def test_cross_domain_assessment_frozen(self) -> None:
-        obj = CrossDomainAssessment(family_names=("a",))
-        with pytest.raises(FrozenInstanceError):
-            obj.family_names = ("x",)  # type: ignore[misc]
-
-
 def test_all_guard() -> None:
     # SynthesisStrategy is intentionally absent: defined in _type_enums, not _type_phoropter.
     # It reaches autoskillit.core via a separate re-export path
@@ -71,8 +49,6 @@ def test_all_guard() -> None:
         "PhoropterPrescription",
         "ReadingToken",
         "READING_TOKEN_PATTERN",
-        "CrossDomainPrescription",
-        "CrossDomainAssessment",
     }
 
 
@@ -83,8 +59,6 @@ def test_importable_from_gateway() -> None:
         "PhoropterPrescription",
         "ReadingToken",
         "READING_TOKEN_PATTERN",
-        "CrossDomainPrescription",
-        "CrossDomainAssessment",
         "SynthesisStrategy",
     ):
         assert hasattr(core, name), f"{name} not importable from autoskillit.core"

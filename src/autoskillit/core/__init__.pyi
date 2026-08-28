@@ -882,8 +882,6 @@ from .types import CookSessionHandle as CookSessionHandle
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
 from .types import CoverageState as CoverageState
-from .types import CrossDomainAssessment as CrossDomainAssessment
-from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported

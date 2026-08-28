@@ -182,10 +182,8 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_exceptions.py adds RecipeLoadError hierarchy (ProcessStaleError,
             RecipeNotFoundError) for exception-based error propagation from
             load_and_validate, bringing the count to 23.
-            _type_phoropter.py adds frozen phoropter family types
-            (PhoropterPrescription, ReadingToken, CrossDomainPrescription,
-            CrossDomainAssessment) for the phoropter
-            registry system, bringing the core/types count to 29.
+            _type_phoropter.py adds frozen PhoropterPrescription and ReadingToken
+            types for the phoropter registry system, bringing the core/types count to 29.
             _type_invariant_registry.py adds InvariantDef frozen dataclass and
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.

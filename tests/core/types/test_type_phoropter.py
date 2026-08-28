@@ -6,11 +6,8 @@ import re
 
 import pytest
 
-from autoskillit.core.types._type_enums import SynthesisStrategy
 from autoskillit.core.types._type_phoropter import (
     READING_TOKEN_PATTERN,
-    CrossDomainAssessment,
-    CrossDomainPrescription,
     PhoropterPrescription,
     ReadingToken,
 )
@@ -26,8 +23,6 @@ def test_all_exports_complete() -> None:
         "PhoropterPrescription",
         "ReadingToken",
         "READING_TOKEN_PATTERN",
-        "CrossDomainPrescription",
-        "CrossDomainAssessment",
     }
 
 
@@ -61,35 +56,9 @@ class TestReadingTokenPattern:
         assert m is None
 
 
-class TestCrossDomainPrescription:
-    def test_frozen(self) -> None:
-        obj = CrossDomainPrescription(family_names=("a", "b"))
-        with pytest.raises(AttributeError):
-            obj.family_names = ("x",)  # type: ignore[misc]
-
-    def test_defaults(self) -> None:
-        obj = CrossDomainPrescription(family_names=("a",))
-        assert obj.merged_lenses == ""
-        assert obj.merge_strategy == "union"
-
-
-class TestCrossDomainAssessment:
-    def test_frozen(self) -> None:
-        obj = CrossDomainAssessment(family_names=("a",))
-        with pytest.raises(AttributeError):
-            obj.family_names = ("x",)  # type: ignore[misc]
-
-    def test_defaults(self) -> None:
-        obj = CrossDomainAssessment(family_names=("a",))
-        assert obj.synthesis_strategy is SynthesisStrategy.NULL
-        assert obj.combined_output == ""
-
-
 def test_all_dataclasses_have_slots() -> None:
     for cls in (
         PhoropterPrescription,
         ReadingToken,
-        CrossDomainPrescription,
-        CrossDomainAssessment,
     ):
         assert "__slots__" in vars(cls), f"{cls.__name__} missing __slots__"

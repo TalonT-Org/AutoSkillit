@@ -625,8 +625,6 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
 
     from autoskillit.core.types import (
         READING_TOKEN_PATTERN,
-        CrossDomainAssessment,
-        CrossDomainPrescription,
         PhoropterPrescription,
         ReadingToken,
         SynthesisStrategy,
@@ -636,18 +634,14 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
     assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
-    assert dataclasses.is_dataclass(CrossDomainPrescription)
-    assert dataclasses.is_dataclass(CrossDomainAssessment)
 
 
 def test_phoropter_symbols_importable_from_core_gateway() -> None:
-    """All seven phoropter-related symbols must resolve via autoskillit.core (lazy stub)."""
+    """All phoropter-related symbols must resolve via autoskillit.core (lazy stub)."""
     import dataclasses
 
     from autoskillit.core import (
         READING_TOKEN_PATTERN,
-        CrossDomainAssessment,
-        CrossDomainPrescription,
         PhoropterPrescription,
         ReadingToken,
         SynthesisStrategy,
@@ -657,8 +651,6 @@ def test_phoropter_symbols_importable_from_core_gateway() -> None:
     assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
-    assert dataclasses.is_dataclass(CrossDomainPrescription)
-    assert dataclasses.is_dataclass(CrossDomainAssessment)
 
 
 def test_phoropter_all_in_types_all() -> None:

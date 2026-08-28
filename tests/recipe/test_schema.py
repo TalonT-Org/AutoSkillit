@@ -697,6 +697,38 @@ def test_recipe_ingredient_type_can_be_explicitly_none() -> None:
     assert ing.type is None
 
 
+def test_recipe_ingredient_type_rejects_unknown_value() -> None:
+    """RecipeIngredient must raise ValueError for unknown type values."""
+    import pytest
+
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    with pytest.raises(ValueError, match="RecipeIngredient.type must be one of"):
+        RecipeIngredient(description="d", type="foobar")
+
+
+@pytest.mark.parametrize(
+    "allowed_type",
+    [
+        "string",
+        "integer",
+        "boolean",
+        "path",
+        "optional_string",
+        "list",
+        "dict",
+        "absolute_path",
+        "worktree_relative_path",
+    ],
+)
+def test_recipe_ingredient_type_accepts_each_allowed_value(allowed_type: str) -> None:
+    """Every value in ALLOWED_INGREDIENT_TYPES must be accepted by RecipeIngredient."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type=allowed_type)
+    assert ing.type == allowed_type
+
+
 # ---------------------------------------------------------------------------
 # dispatch_only field tests
 # ---------------------------------------------------------------------------

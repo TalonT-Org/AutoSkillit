@@ -6,10 +6,7 @@ import json
 from typing import Any
 
 from autoskillit import __version__
-from autoskillit.config import (
-    SERVER_AUTHORITATIVE_INGREDIENTS,
-    iter_display_categories,
-)
+from autoskillit.config import iter_display_categories
 from autoskillit.core import (
     ProcessStaleError,
     RecipeLoadError,
@@ -27,7 +24,6 @@ from autoskillit.server._recipe_delivery import (
 # cross-submodule helpers must be resolved via attribute access on the
 # package at call time rather than imported by name into this submodule.
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
-from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
 from autoskillit.server.tools._serve_helpers import (
     _admit_recipe_name,
@@ -35,6 +31,10 @@ from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
     pop_finalized_recipe_projection,
     render_served_response,
+)
+from autoskillit.server.tools._type_coercion import (
+    OverrideCoercionError,
+    coerce_override_value,
 )
 
 logger = get_logger(__name__)
@@ -145,20 +145,27 @@ def _check_override_keys(
     overrides: dict[str, str] | None,
     declared: frozenset[str],
     session_keys: set[str],
-    config_layer: dict[str, str],
+    config_layer: dict[str, str],  # noqa: ARG001 — retained for signature compatibility
 ) -> list[str]:
     if not overrides:
         return []
-    user_keys = set(overrides.keys()) - session_keys - SERVER_AUTHORITATIVE_INGREDIENTS
+    # After the authority gate (added in tools_kitchen/_open_kitchen.py and
+    # tools_recipe.py), caller-supplied overrides containing
+    # SERVER_AUTHORITATIVE_INGREDIENTS keys are rejected at function entry and
+    # never reach this helper. The previous `- SERVER_AUTHORITATIVE_INGREDIENTS`
+    # subtraction and build_authority_clobber_warnings extension were therefore
+    # unreachable — both removed under the "no backward compatibility hacks /
+    # remove dead code entirely" rule. build_authority_clobber_warnings itself
+    # is retained as a unit-test target in
+    # tests/server/test_tools_kitchen_envelope_validation.py.
+    user_keys = set(overrides.keys()) - session_keys
     unknown = user_keys - declared
-    warnings: list[str] = []
     if unknown:
-        warnings.append(
+        return [
             f"Unknown override keys ignored: {sorted(unknown)}. "
             f"Valid ingredient keys: {sorted(declared)}"
-        )
-    warnings.extend(build_authority_clobber_warnings(overrides, config_layer))
-    return warnings
+        ]
+    return []
 
 
 def _render_ingredients_only_response(
@@ -168,8 +175,39 @@ def _render_ingredients_only_response(
     overrides: dict[str, str] | None,
     session_keys: set[str],
     config_layer: dict[str, str],
+    recipe_obj: Any = None,
 ) -> str:
-    """Build the canonical ingredients-only inspection response."""
+    """Build the canonical ingredients-only inspection response.
+
+    When ``recipe_obj`` is supplied, also runs the Tier-2 type gate inline —
+    validating caller-supplied override values against the recipe's declared
+    ingredient types before any rendering. This single choke point covers all
+    ``ingredients_only=True`` paths in ``open_kitchen`` and ``load_recipe``.
+    """
+    # Tier 2 — Type gate: validate caller override values against declared types.
+    # Runs after recipe load (recipe_obj is in scope), before any side effect.
+    if overrides and recipe_obj is not None:
+        for key, value in overrides.items():
+            ing = recipe_obj.ingredients.get(key)
+            if ing is None:
+                continue  # unknown-key check handled by _check_override_keys
+            try:
+                coerce_override_value(value, ing.type)
+            except OverrideCoercionError as e:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": (f"Override for {key!r} failed type validation: {e}"),
+                        "stage": "ingredient_type_validation",
+                        "retriable": False,
+                        "user_visible_message": (
+                            f"Override for ingredient {key!r} cannot be coerced "
+                            f"to declared type {ing.type!r}: {e}. Adjust the "
+                            f"override value to match the declared type."
+                        ),
+                    }
+                )
+
     inspection = strip_ingredients_only_keys(
         build_open_kitchen_recipe_payload(result, version=__version__)
     )

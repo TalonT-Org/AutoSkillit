@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from autoskillit.core import FinalizedRecipeStep, RecipeFlowEdge
-from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
+from tests.server._helpers import _make_finalized_projection
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -406,76 +405,70 @@ class TestLockIngredientsUnknownKeyValidation:
 
 class TestAuthorityFeedbackConsistency:
     """Cross-tool consistency: every SERVER_AUTHORITATIVE_INGREDIENTS key must
-    produce feedback on BOTH open_kitchen and lock_ingredients surfaces."""
+    produce rejection feedback on BOTH open_kitchen and lock_ingredients
+    surfaces. Both surfaces reject caller-supplied overrides with the same
+    structured envelope shape."""
 
     @pytest.mark.anyio
     async def test_every_authority_key_emits_feedback_on_both_surfaces(
         self, tmp_path, monkeypatch
     ):
-        # --- open_kitchen: authority clobber warning must appear ---
+        # --- open_kitchen: structured rejection envelope must mention each key ---
         from unittest.mock import MagicMock
 
         from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
-        from tests.server._helpers import _PATCHED_DEFAULTS
         from tests.server.conftest import _make_mock_ctx
 
-        mock_ctx = _make_mock_ctx()
-        mock_ctx.enable_components = AsyncMock()
-        mock_ctx.recipes = MagicMock()
-        recipe_result = _with_finalized_projection(
-            {
-                "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-                "valid": True,
-                "suggestions": [],
-                "diagram": None,
-                "ingredients_table": "--- TABLE ---",
-                "post_prune_step_names": ["do"],
-            },
-            projection=_make_finalized_projection(steps=(FinalizedRecipeStep(name="do"),)),
-        )
-        mock_ctx.recipes.load_and_validate.side_effect = lambda *_args, **_kwargs: dict(
-            recipe_result
-        )
-        mock_recipe_info = MagicMock()
-        mock_recipe_info.path = Path("/fake/recipe.yaml")
-        mock_ctx.recipes.find.return_value = mock_recipe_info
-        mock_recipe_obj = MagicMock()
-        mock_recipe_obj.steps = {"do": MagicMock()}
-        mock_recipe_obj.ingredients = {k: MagicMock() for k in SERVER_AUTHORITATIVE_INGREDIENTS}
-        mock_ctx.recipes.load.return_value = mock_recipe_obj
-        mock_ctx.config.migration.suppressed = []
-        mock_ctx.kitchen_id = "test-kitchen"
-        mock_ctx.config.linux_tracing.log_dir = ""
+        # Each iteration uses a fresh mock_ctx because _bind_open_kitchen_transition
+        # marks the context REQUEST_BOUND on the first iteration. Sharing the
+        # context across iterations short-circuits subsequent calls and hides the
+        # gate's rejection envelope behind transition state.
+        for key in sorted(SERVER_AUTHORITATIVE_INGREDIENTS):
+            mock_ctx = _make_mock_ctx()
+            mock_ctx.enable_components = AsyncMock()
+            mock_ctx.recipes = MagicMock()
+            mock_ctx.config.migration.suppressed = []
+            mock_ctx.kitchen_id = "test-kitchen"
+            mock_ctx.config.linux_tracing.log_dir = ""
 
-        with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-            with patch("autoskillit.server.logger"):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-                ):
-                    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
-                            return_value="test-kitchen",
-                        ):
+            with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+                with patch("autoskillit.server.logger"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                        new=AsyncMock(),
+                    ):
+                        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                             with patch(
-                                "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
-                                return_value=_PATCHED_DEFAULTS,
+                                "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                                return_value="test-kitchen",
                             ):
-                                from autoskillit.server.tools.tools_kitchen import open_kitchen
+                                with patch(
+                                    "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                                    return_value={
+                                        "base_branch": "develop",
+                                        "pipeline_health": "false",
+                                        "is_fleet_dispatch": "false",
+                                        "dispatch_id": "",
+                                    },
+                                ):
+                                    from autoskillit.server.tools.tools_kitchen import (
+                                        open_kitchen,
+                                    )
 
-                                for key in sorted(SERVER_AUTHORITATIVE_INGREDIENTS):
                                     result_str = await open_kitchen(
                                         name="demo",
                                         overrides={key: "clobber_value"},
                                         ctx=mock_ctx,
                                     )
                                     parsed = json.loads(result_str)
-                                    warnings = parsed.get("warnings") or []
-                                    matching = [w for w in warnings if key in w]
-                                    assert matching, (
-                                        f"open_kitchen must emit a warning mentioning {key!r} "
-                                        f"when overridden; got warnings={warnings}; "
-                                        f"response={parsed}"
+                                    assert parsed["success"] is False, (
+                                        f"open_kitchen must reject {key!r}; got {parsed}"
+                                    )
+                                    assert parsed["stage"] == "ingredient_authority_validation"
+                                    assert parsed["retriable"] is False
+                                    assert key in parsed["error"], (
+                                        f"open_kitchen rejection error must mention {key!r}; "
+                                        f"got {parsed['error']!r}"
                                     )
 
         # --- lock_ingredients: structured rejection must mention each key ---

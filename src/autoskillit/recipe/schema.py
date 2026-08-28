@@ -12,6 +12,7 @@ from typing import Any, Final
 import regex as re
 
 from autoskillit.core import (
+    ALLOWED_INGREDIENT_TYPES,
     FEATURE_REGISTRY,
     RECIPE_PACK_TAGS,
     CaptureEntrySpec,
@@ -52,6 +53,11 @@ class RecipeIngredient:
         if self.authority is not None and self.authority != "config":
             raise ValueError(
                 f"RecipeIngredient.authority must be None or 'config', got {self.authority!r}"
+            )
+        if self.type is not None and self.type not in ALLOWED_INGREDIENT_TYPES:
+            raise ValueError(
+                f"RecipeIngredient.type must be one of {sorted(ALLOWED_INGREDIENT_TYPES)} "
+                f"or None, got {self.type!r}"
             )
 
 

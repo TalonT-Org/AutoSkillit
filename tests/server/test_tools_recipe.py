@@ -12,8 +12,6 @@ from autoskillit.server.tools.tools_recipe import validate_recipe
 from tests.server._helpers import (
     _PATCHED_DEFAULTS,
     _configure_admitted_recipe,
-    _make_finalized_projection,
-    _with_finalized_projection,
 )
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -573,72 +571,15 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(
 
 
 @pytest.mark.anyio
-async def test_load_recipe_config_authority_overrides_caller(tool_ctx_kitchen_open, tmp_path):
-    """load_recipe: _config_layer overrides caller-supplied overrides for
-    config-authoritative keys."""
+async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_open, tmp_path):
+    """load_recipe rejects caller-supplied overrides for server-authoritative keys
+    with a structured envelope — mirrors open_kitchen's authority gate."""
     from unittest.mock import MagicMock, patch
 
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
-    tool_ctx_kitchen_open.recipes.load_and_validate.return_value = {
-        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-        "valid": True,
-        "suggestions": [],
-        "diagram": None,
-        "ingredients_table": (
-            "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
-        ),
-    }
     _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
-    tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
-
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
-        return_value=tool_ctx_kitchen_open,
-    ):
-        with patch(
-            "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
-            return_value={
-                "base_branch": "develop",
-                "is_fleet_dispatch": "false",
-                "dispatch_id": "",
-            },
-        ):
-            await load_recipe(
-                name="demo",
-                overrides={"base_branch": "main"},
-            )
-
-    call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
-    overrides = call_kwargs["ingredient_overrides"]
-    assert overrides["base_branch"] == "develop"
-
-
-@pytest.mark.anyio
-async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_open, tmp_path):
-    """load_recipe integration: config-authority keys override caller values end-to-end."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    from autoskillit.server.tools.tools_recipe import load_recipe
-
-    _load_result = _with_finalized_projection(
-        {
-            "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-            "valid": True,
-            "suggestions": [],
-            "diagram": None,
-            "ingredients_table": (
-                "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
-            ),
-            "success": True,
-        },
-        projection=_make_finalized_projection(),
-    )
-    tool_ctx_kitchen_open.recipes = MagicMock()
-    tool_ctx_kitchen_open.recipes.load_and_validate.return_value = _load_result
-    _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
-    tool_ctx_kitchen_open.recipes.apply_triage_gate = AsyncMock(return_value=_load_result)
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
     with patch(
@@ -658,8 +599,48 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
                 overrides={"base_branch": "main"},
             )
 
-    result = json.loads(result_str)
-    call_kwargs = tool_ctx_kitchen_open.recipes.load_and_validate.call_args.kwargs
-    overrides_passed = call_kwargs["ingredient_overrides"]
-    assert overrides_passed["base_branch"] == "develop"
-    assert result.get("success") is True
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "ingredient_authority_validation"
+    assert parsed["retriable"] is False
+    assert "base_branch" in parsed["error"]
+    # Authority gate runs at function entry, before recipe load is attempted.
+    tool_ctx_kitchen_open.recipes.load.assert_not_called()
+    tool_ctx_kitchen_open.recipes.load_and_validate.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_open, tmp_path):
+    """load_recipe integration: server-authoritative overrides are rejected at
+    function entry — no recipe load, no projection, no session snapshot mutation."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    tool_ctx_kitchen_open.recipes = MagicMock()
+    _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
+    tool_ctx_kitchen_open.recipes.apply_triage_gate = AsyncMock()
+    tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
+
+    with patch(
+        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        return_value=tool_ctx_kitchen_open,
+    ):
+        with patch(
+            "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+            return_value={
+                "base_branch": "develop",
+                "is_fleet_dispatch": "false",
+                "dispatch_id": "",
+            },
+        ):
+            result_str = await load_recipe(
+                name="demo",
+                overrides={"base_branch": "main"},
+            )
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "ingredient_authority_validation"
+    assert "base_branch" in parsed["error"]
+    tool_ctx_kitchen_open.recipes.load.assert_not_called()

@@ -160,6 +160,7 @@ def submit_from_launch_environment(
             ),
         )
         return CapabilityResolutionStatus.INVALID, None
+    # A terminal cleanup or replacement may have occurred while collecting.
     if (
         reopen_launch_environment(
             store,

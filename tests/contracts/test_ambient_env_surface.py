@@ -37,6 +37,7 @@ pytestmark = [pytest.mark.small]
 
 @pytest.fixture
 def cleared_ambient_env_scan_caches() -> Iterator[None]:
+    """Clear both ambient-environment scan caches around each requesting test."""
     ambient_env_surface._cached_production_env_read_surface.cache_clear()
     _cached_ambient_env_marker_names.cache_clear()
     try:

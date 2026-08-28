@@ -59,6 +59,8 @@ class TestToolRegistration:
             "run_cmd",
             "run_python",
             "run_skill",
+            "run_fixed_batch",
+            "read_fixed_batch_result",
             "test_check",
             "reset_test_dir",
             "classify_fix",

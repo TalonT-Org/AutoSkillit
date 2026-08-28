@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -23,6 +23,7 @@ from autoskillit.core import (
     WriteBehaviorSpec,
     get_logger,
     read_versioned_json,
+    write_canonical_versioned_json,
     write_versioned_json,
 )
 from autoskillit.hooks import (
@@ -33,6 +34,7 @@ from autoskillit.hooks import (
     OUTCOME_LAUNCH_FAILED,
     OUTCOME_REAPED,
     JoinLedgerError,
+    active_batch,
     admit_assignment,
     aggregate_batch,
     cancel_batch,
@@ -62,12 +64,16 @@ _TERMINAL_OUTCOMES = frozenset(
     }
 )
 _RECOVERY_SCHEMA_VERSION = 1
+_RESULT_SCHEMA_VERSION = 1
+_RESULT_REFERENCE_PREFIX = "fixed-batch-result-"
+
+
+def _canonical(payload: object) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _digest(payload: object) -> str:
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(_canonical(payload).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +118,7 @@ class ManagedLeafLaunchResult:
     backend_session_id: str = ""
     result_reference: str | None = None
     result_digest: str | None = None
+    result_payload: object | None = None
     cleanup_outcome: str | None = None
 
     def __post_init__(self) -> None:
@@ -165,6 +172,111 @@ class ManagedFixedBatchResult:
     batch_id: str
     wave_outcome: str
     replayed: bool
+    result_reference: str | None = None
+    result_digest: str | None = None
+
+
+def _result_reference(batch_id: str, assignment_id: str) -> str:
+    component = assignment_id or "aggregate"
+    return f"{_RESULT_REFERENCE_PREFIX}{batch_id}-{component}"
+
+
+def _write_fixed_batch_result(path: Path, payload: dict[str, object]) -> None:
+    """Atomically register one immutable, relocatable result record."""
+    write_canonical_versioned_json(
+        path,
+        payload,
+        _RESULT_SCHEMA_VERSION,
+        exclusive=True,
+    )
+
+
+class ManagedFixedBatchResultStore:
+    """Persist opaque fixed-batch result bytes with scope-bound reads."""
+
+    def __init__(self, state_root: Path) -> None:
+        self._result_dir = state_root / "results"
+
+    def publish(
+        self,
+        *,
+        launch: ManagedLaunchBinding,
+        batch_id: str,
+        assignment_id: str,
+        payload: object,
+    ) -> tuple[str, str]:
+        reference = _result_reference(batch_id, assignment_id)
+        digest = _digest(payload)
+        path = self._path(reference)
+        record = {
+            "result_reference": reference,
+            "result_digest": digest,
+            "request_session_id": launch.request_session_id,
+            "managed_parent_id": launch.managed_parent_id,
+            "source_artifact_digest": getattr(
+                launch.selected_source, "source_artifact_digest", ""
+            ),
+            "source_artifact_incarnation_id": getattr(
+                launch.selected_source, "source_artifact_incarnation_id", ""
+            ),
+            "batch_id": batch_id,
+            "assignment_id": assignment_id,
+            "payload": payload,
+        }
+        self._result_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            _write_fixed_batch_result(path, record)
+        except FileExistsError:
+            existing = self._load(reference)
+            if existing is None or _canonical(existing) != _canonical(
+                {**record, "schema_version": _RESULT_SCHEMA_VERSION}
+            ):
+                raise SkillContractError("managed fixed-batch result reference conflicts")
+        return reference, digest
+
+    def read(
+        self,
+        *,
+        reference: str,
+        launch: ManagedLaunchBinding,
+        batch_id: str,
+        assignment_id: str,
+    ) -> object:
+        record = self._load(reference)
+        if record is None:
+            raise SkillContractError("managed fixed-batch result is unavailable")
+        expected = {
+            "result_reference": reference,
+            "request_session_id": launch.request_session_id,
+            "managed_parent_id": launch.managed_parent_id,
+            "source_artifact_digest": getattr(
+                launch.selected_source, "source_artifact_digest", ""
+            ),
+            "source_artifact_incarnation_id": getattr(
+                launch.selected_source, "source_artifact_incarnation_id", ""
+            ),
+            "batch_id": batch_id,
+            "assignment_id": assignment_id,
+        }
+        if any(record.get(key) != value for key, value in expected.items()):
+            raise SkillContractError("managed fixed-batch result authorization failed")
+        payload = record.get("payload")
+        if _digest(payload) != record.get("result_digest"):
+            raise SkillContractError("managed fixed-batch result digest is invalid")
+        return payload
+
+    def _load(self, reference: str) -> dict[str, object] | None:
+        if not reference.startswith(_RESULT_REFERENCE_PREFIX):
+            return None
+        record = read_versioned_json(
+            self._path(reference),
+            _RESULT_SCHEMA_VERSION,
+            raise_io_errors=True,
+        )
+        return record if isinstance(record, dict) else None
+
+    def _path(self, reference: str) -> Path:
+        return self._result_dir / f"{hashlib.sha256(reference.encode()).hexdigest()}.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +311,7 @@ class ManagedFixedBatchService:
         self._background = background
         self._temp_state_root = state_root
         self._state_path = state_root / "recovery.json"
+        self._result_store = ManagedFixedBatchResultStore(state_root)
         self._recovery_verifier = recovery_verifier
         self._cancel_timeout = cancel_timeout
         self._recovery_ready = False
@@ -303,7 +416,12 @@ class ManagedFixedBatchService:
         )
         batch_id = str(batch["join_batch_id"])
         if batch.get("wave_outcome") != "pending":
-            return ManagedFixedBatchResult(batch_id, str(batch["wave_outcome"]), replayed=True)
+            return self._published_batch_result(
+                binding,
+                batch_id,
+                str(batch["wave_outcome"]),
+                replayed=True,
+            )
         async with self._lock:
             task = self._tasks.get(batch_id)
             if task is None:
@@ -324,7 +442,28 @@ class ManagedFixedBatchService:
             if task.done():
                 async with self._lock:
                     self._tasks.pop(batch_id, None)
-        return ManagedFixedBatchResult(result.batch_id, result.wave_outcome, replayed)
+        return self._published_batch_result(
+            binding,
+            result.batch_id,
+            result.wave_outcome,
+            replayed=replayed,
+        )
+
+    def read_result(
+        self,
+        *,
+        reference: str,
+        launch: ManagedLaunchBinding,
+        batch_id: str,
+        assignment_id: str = "",
+    ) -> object:
+        """Load one result only after its immutable managed scope is revalidated."""
+        return self._result_store.read(
+            reference=reference,
+            launch=launch,
+            batch_id=batch_id,
+            assignment_id=assignment_id,
+        )
 
     async def close(self) -> None:
         """Cancel, bounded-join, and preserve any unresolved durable debt."""
@@ -500,6 +639,14 @@ class ManagedFixedBatchService:
                 self._capacity.release(permit)
 
     def _settle(self, binding, batch_id, assignment_id, attempt_id, run_id, result) -> None:
+        if result.result_payload is not None:
+            reference, digest = self._result_store.publish(
+                launch=binding.launch,
+                batch_id=batch_id,
+                assignment_id=assignment_id,
+                payload=result.result_payload,
+            )
+            result = replace(result, result_reference=reference, result_digest=digest)
         settle_assignment(
             binding.flag_dir,
             session_id=binding.launch.request_session_id,
@@ -522,6 +669,59 @@ class ManagedFixedBatchService:
             result_reference=result.result_reference,
             result_digest=result.result_digest,
             cleanup_outcome=result.cleanup_outcome,
+        )
+
+    def _published_batch_result(
+        self,
+        binding: ManagedFixedBatchLaunchBinding,
+        batch_id: str,
+        wave_outcome: str,
+        *,
+        replayed: bool,
+    ) -> ManagedFixedBatchResult:
+        batch = active_batch(
+            binding.flag_dir,
+            session_id=binding.launch.request_session_id,
+            top_level_parent=binding.launch.managed_parent_id,
+        )
+        if not isinstance(batch, Mapping) or batch.get("join_batch_id") != batch_id:
+            raise SkillContractError("managed fixed-batch ledger snapshot is unavailable")
+        assignments = batch.get("assignments")
+        if not isinstance(assignments, list):
+            raise SkillContractError("managed fixed-batch ledger assignments are malformed")
+        aggregate = {
+            "batch_id": batch_id,
+            "wave_outcome": wave_outcome,
+            "assignments": [
+                {
+                    key: assignment.get(key)
+                    for key in (
+                        "assignment_id",
+                        "ordinal",
+                        "role",
+                        "label",
+                        "runtime_key",
+                        "outcome",
+                        "result_reference",
+                        "result_digest",
+                    )
+                }
+                for assignment in assignments
+                if isinstance(assignment, Mapping)
+            ],
+        }
+        reference, digest = self._result_store.publish(
+            launch=binding.launch,
+            batch_id=batch_id,
+            assignment_id="",
+            payload=aggregate,
+        )
+        return ManagedFixedBatchResult(
+            batch_id=batch_id,
+            wave_outcome=wave_outcome,
+            replayed=replayed,
+            result_reference=reference,
+            result_digest=digest,
         )
 
     async def _cancel_and_join(self, batch_id, binding, batch) -> None:
@@ -588,8 +788,10 @@ __all__ = [
     "ManagedFixedBatchLaunchBinding",
     "ManagedFixedBatchLaunchResolver",
     "ManagedFixedBatchResult",
+    "ManagedFixedBatchResultStore",
     "ManagedFixedBatchService",
     "ManagedLaunchBinding",
     "ManagedLaunchResolver",
     "ManagedLeafLaunchResult",
+    "_write_fixed_batch_result",
 ]

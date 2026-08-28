@@ -2,7 +2,7 @@
 
 Layer 2 — Pre-middleware: internal registry has non-None annotations on every tool.
 Layer 3 — Post-middleware: wire output preserves annotations (readOnlyHint survives).
-Layer 4 — Every tool is True except the effectful open_kitchen transition.
+Layer 4 — Every tool is True except the kitchen and fixed-batch transitions.
 
 Layers 1a/1b (AST) live in tests/arch/test_tool_annotation_completeness.py.
 """
@@ -72,7 +72,7 @@ class TestPostMiddlewareAnnotations:
 
     @pytest.mark.anyio
     async def test_all_tools_match_readonly_hint_contract(self, kitchen_enabled):
-        """Layer 4 — open_kitchen and declare_join_batch are effectful; all
+        """Layer 4 — kitchen and fixed-batch transitions are effectful; all
         other tools stay read-only (REQ-ARCH-ANNOTATION-E1)."""
         from fastmcp.client import Client
 
@@ -85,7 +85,11 @@ class TestPostMiddlewareAnnotations:
         for tool in tools:
             if tool.annotations is None:
                 continue
-            expected = tool.name not in {"open_kitchen", "declare_join_batch"}
+            expected = tool.name not in {
+                "open_kitchen",
+                "declare_join_batch",
+                "run_fixed_batch",
+            }
             if tool.annotations.readOnlyHint is not expected:
                 violations.append(
                     f"  {tool.name!r}: readOnlyHint={tool.annotations.readOnlyHint!r} "

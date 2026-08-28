@@ -1061,6 +1061,14 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "server/tools/tools_kitchen/_declare_join_batch.py",
             "autoskillit.hooks._session_binding",
         ),
+        (
+            "server/tools/tools_execution/_fixed_batch_handlers.py",
+            "autoskillit.hooks._hook_settings",
+        ),
+        (
+            "server/tools/tools_execution/_fixed_batch_handlers.py",
+            "autoskillit.hooks._session_binding",
+        ),
     }
 )
 

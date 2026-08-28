@@ -87,6 +87,13 @@ class ManagedJoinAttestationAuthority(Protocol):
         parent_session_id: str,
     ) -> SemanticAdaptationContext | None: ...
 
+    def find_verified_context(
+        self,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None: ...
+
 
 @runtime_checkable
 class PluginArtifactAuthority(Protocol):

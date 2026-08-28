@@ -1256,6 +1256,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "server",
             "cli",
+            "server/test_fixed_batch_results.py",
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
             "fleet/test_dispatch_backend_override.py",
@@ -1299,6 +1300,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_declare_join_batch.py",
             "server/test_declare_join_batch_handler.py",
             "server/test_managed_fixed_batch.py",
+            "server/test_fixed_batch_results.py",
             "server/test_managed_leaf.py",
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook

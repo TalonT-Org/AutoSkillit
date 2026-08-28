@@ -482,6 +482,18 @@ _TOOL_DEFS = (
         required=("skill_name", "assignments", "session_id"),
         wire_types={"assignments": ToolWireType.ARRAY},
     ),
+    _tool(
+        "run_fixed_batch",
+        ("skill_name", "assignments", "idempotency_key"),
+        required=("skill_name", "assignments", "idempotency_key"),
+        wire_types={"assignments": ToolWireType.ARRAY},
+    ),
+    _tool(
+        "read_fixed_batch_result",
+        ("skill_name", "batch_id", "result_reference", "assignment_id", "offset", "page_size"),
+        required=("skill_name", "batch_id", "result_reference"),
+        wire_types={"offset": ToolWireType.INTEGER, "page_size": ToolWireType.INTEGER},
+    ),
     _tool("reload_session"),
     _tool("record_pipeline_step", ("pipeline_id", "op", "dependencies", "step_name")),
     _tool("get_pr_reviews", ("pr_number", "cwd", "repo"), required=("pr_number", "cwd")),

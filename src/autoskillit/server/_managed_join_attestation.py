@@ -99,3 +99,22 @@ class DefaultManagedJoinAttestationAuthority:
             ):
                 return None
             return issued
+
+    def find_verified_context(
+        self,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None:
+        """Return the sole server-issued context for one live managed parent."""
+        with self._lock:
+            matches = [
+                context
+                for context in self._issued.values()
+                if context.managed_join_attestation is not None
+                and context.managed_join_attestation.backend == backend
+                and context.managed_join_attestation.parent_session_id == parent_session_id
+            ]
+        if len(matches) != 1:
+            return None
+        return self.verify(matches[0], backend=backend, parent_session_id=parent_session_id)

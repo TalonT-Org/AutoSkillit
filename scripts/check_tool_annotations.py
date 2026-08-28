@@ -12,10 +12,13 @@ import sys
 from pathlib import Path
 
 TOOLS_DIR = Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "server" / "tools"
-# REQ-ARCH-ANNOTATION-E1: open_kitchen and declare_join_batch are the only
-# effectful tools; the former opens the kitchen session and the latter opens
-# a join batch ledger entry. Every other tool must remain readOnlyHint=True.
-READ_ONLY_EXCEPTIONS = {"open_kitchen": False, "declare_join_batch": False}
+# REQ-ARCH-ANNOTATION-E1: these tools own process-local kitchen or durable
+# batch transitions. Every other tool must remain readOnlyHint=True.
+READ_ONLY_EXCEPTIONS = {
+    "open_kitchen": False,
+    "declare_join_batch": False,
+    "run_fixed_batch": False,
+}
 
 
 def _collect_tool_paths() -> list[Path]:

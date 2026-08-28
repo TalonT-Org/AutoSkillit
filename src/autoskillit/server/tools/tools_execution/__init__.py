@@ -92,6 +92,10 @@ from ._audit_response import (  # noqa: F401
     _materialization_outcome_status,
     _reject_missing_semantic_result,
 )
+from ._fixed_batch_handlers import (  # noqa: F401
+    read_fixed_batch_result,
+    run_fixed_batch,
+)
 from ._gates import (  # noqa: F401
     DEPENDENCY_DENY_PREFIX,
     INGREDIENT_LOCK_DENY_PREFIX,
@@ -177,9 +181,11 @@ __all__ = [
     "prepare_recipe_segment_delivery",
     "progress_heartbeat",
     "read_overlay",
+    "read_fixed_batch_result",
     "read_registry",
     "resolve_closure_write_dirs",
     "run_cmd",
+    "run_fixed_batch",
     "run_python",
     "run_skill",
     "shape_execution_response",

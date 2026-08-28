@@ -534,8 +534,7 @@ _R = "scripts/pytest_tmp_lifecycle.py::_reap"
 _S = "scripts/pytest_tmp_lifecycle.py::_safe_candidates"
 _D = "src/autoskillit/fleet/_dispatch_reaper.py::reap_stale_dispatches"
 _CS = (
-    "src/autoskillit/workspace/session_skill_manager.py::"
-    "DefaultSessionSkillManager.cleanup_stale"
+    "src/autoskillit/workspace/session_skill_manager.py::DefaultSessionSkillManager.cleanup_stale"
 )
 _WGW = "src/autoskillit/workspace/worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/worktree.py::remove_worktree_sidecar"

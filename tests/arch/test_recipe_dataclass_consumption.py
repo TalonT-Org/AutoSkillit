@@ -401,3 +401,21 @@ def test_pre_phase_one_skip_when_true_without_a_load_is_rejected() -> None:
     }
     with pytest.raises(AssertionError, match="no attribute load"):
         _assert_registry_is_truthful(historic, attribute_loads=frozenset())
+
+
+def test_execution_field_without_behavioral_anchor_is_rejected() -> None:
+    """Regression guard: the third assertion (behavioral test anchor) must fire when an
+    execution-classified field points at a non-existent anchor test.
+
+    The two sibling negative tests cover consumer-site and attribute-load gaps. Without
+    this third negative case, a regression that silently drops the
+    missing_behavioral block (lines 343-354) would not be caught by any existing
+    negative test in this file.
+    """
+    unanchored = {
+        (RecipeStep, "skip_when_true"): DeclaredFieldDef(
+            "execution", (_EXECUTION_SITE,), "tests/does_not_exist.py::test_anchor"
+        )
+    }
+    with pytest.raises(AssertionError, match="behavioral test anchors"):
+        _assert_registry_is_truthful(unanchored, attribute_loads=frozenset({"skip_when_true"}))

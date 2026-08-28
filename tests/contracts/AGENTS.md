@@ -14,8 +14,9 @@ plugin-projection contract tests.
 
 `test_config_field_has_consumer.py` generalizes the `inert-tracked:#NNNN`
 discipline documented at `tests/AGENTS.md` § run_skill Parameter-Role Ledgers
-(precedent: `test_recipe_step_field_ledger.py`, applied there to `RecipeStep`
-fields) to every `@dataclass` directly defined in `config/_config_dataclasses.py`.
+(precedent: `test_recipe_dataclass_field_ledger.py`, applied there to
+`Recipe` / `RecipeIngredient` / `RecipeStep` fields) to every `@dataclass`
+directly defined in `config/_config_dataclasses.py`.
 An advertised-but-unread config field is the most dangerous config shape — it
 makes reviewers believe a gate exists when none does. `#4684`'s original bug
 was exactly this: `AgentBackendConfig.force_inactive_agent_teams` was

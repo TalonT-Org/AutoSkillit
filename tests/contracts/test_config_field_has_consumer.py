@@ -2,8 +2,9 @@
 
 Generalizes the ``inert-tracked:#NNNN`` discipline documented in
 tests/AGENTS.md § run_skill Parameter-Role Ledgers (precedent:
-tests/contracts/test_recipe_step_field_ledger.py, which applies it to
-``RecipeStep`` fields) to config dataclass fields. A field is "live" iff
+tests/contracts/test_recipe_dataclass_field_ledger.py, which applies it to
+``Recipe`` / ``RecipeIngredient`` / ``RecipeStep`` fields) to config dataclass
+fields. A field is "live" iff
 either (a) some production module outside the config/ tree
 reads ``.<field_name>`` directly, (b) a method defined on the same
 dataclass reads ``self.<field_name>`` and that method itself has an

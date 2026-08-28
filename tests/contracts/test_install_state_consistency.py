@@ -21,6 +21,10 @@ from autoskillit.core import (
     Severity,
     managed_home_for,
 )
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -745,24 +749,40 @@ class TestRetiredArtifactShapeRegistry:
         (legacy_version / "content.txt").write_text("legacy", encoding="utf-8")
         marker = legacy_version.parent / ".1.2.3.autoskillit-rejected-legacy"
 
-        reconcile_install_artifacts()
+        real_identity_read = _install_state.read_installed_plugin_artifact_identity
+        identity_reads = 0
 
-        assert marker.is_file()
-        assert read_retiring_cache().records == ()
-
-        def unexpected_identity_read(*_args: object, **_kwargs: object) -> None:
-            raise AssertionError("a rejected legacy version must be skipped before validation")
+        def count_identity_reads(*args: object, **kwargs: object) -> object:
+            nonlocal identity_reads
+            identity_reads += 1
+            return real_identity_read(*args, **kwargs)
 
         monkeypatch.setattr(
             _install_state,
             "read_installed_plugin_artifact_identity",
-            unexpected_identity_read,
+            count_identity_reads,
+        )
+        target = (
+            "src/autoskillit/workspace/_install_state.py",
+            "_enqueue_legacy_installed_plugin_versions",
+        )
+        run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+        def observe() -> object:
+            return (
+                marker.read_bytes() if marker.is_file() else None,
+                read_retiring_cache().records,
+            )
+
+        first, second, _first_logs, second_logs = assert_second_pass_is_quiet(
+            lambda: run_adapter(reconcile_install_artifacts),
+            observe=lambda: observe_adapter(observe),
         )
 
-        with structlog.testing.capture_logs() as logs:
-            assert reconcile_install_artifacts() == ()
-
-        assert logs == []
+        assert (first, second) == ((), ())
+        assert identity_reads == 1
+        assert marker.is_file()
+        assert second_logs == []
         assert read_retiring_cache().records == ()
 
     def test_unavailable_legacy_version_propagates_without_rejection_marker(

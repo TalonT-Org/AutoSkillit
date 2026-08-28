@@ -10,6 +10,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 from tests.cli._self_invoke_helpers import assert_valid_maintenance_install_argv
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -547,12 +551,29 @@ def test_malformed_cache_hooks_are_quarantined_by_exact_bytes(tmp_path: Path) ->
     manifest_path = installed_plugin_artifact_manifest_path(version_dir)
 
     assert validate_plugin_cache_hooks(cache_dir) == [f"{hooks_path} is not valid JSON"]
-    first = repair_broken_plugin_cache_hooks(cache_dir)
+    target = (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "repair_broken_plugin_cache_hooks",
+    )
+    run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+    def run() -> object:
+        return repair_broken_plugin_cache_hooks(cache_dir)
+
+    def observe() -> object:
+        marker = hook_quarantine_marker_path(manifest_path, malformed)
+        return (hooks_path.read_bytes(), marker.exists())
+
+    first, second, _first_logs, second_logs = assert_second_pass_is_quiet(
+        lambda: run_adapter(run),
+        observe=lambda: observe_adapter(observe),
+    )
 
     assert first[0].status is PluginHookRepairStatus.QUARANTINED
     assert hook_quarantine_marker_path(manifest_path, malformed).is_file()
     assert validate_plugin_cache_hooks(cache_dir) == []
-    assert repair_broken_plugin_cache_hooks(cache_dir) == ()
+    assert second == ()
+    assert second_logs == []
 
     changed_malformed = b"[not-json"
     hooks_path.write_bytes(changed_malformed)

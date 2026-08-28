@@ -18,7 +18,10 @@ def residue_staging_path(managed_path: Path) -> Path:
 def teardown_artifact_residue(*, staging: Path, manifest: Path) -> None:
     """Finish a rename-committed residue transition in crash-safe order."""
     if manifest.exists() or manifest.is_symlink():
-        manifest.unlink()
+        if manifest.is_dir() and not manifest.is_symlink():
+            shutil.rmtree(manifest)
+        else:
+            manifest.unlink()
     shutil.rmtree(staging)
 
 

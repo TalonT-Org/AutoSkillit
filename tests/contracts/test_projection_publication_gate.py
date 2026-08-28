@@ -15,6 +15,10 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -399,11 +403,28 @@ class TestProjectionRepair:
         malformed = b"{not-json"
         hooks_path.write_bytes(malformed)
 
-        first = repair_broken_projection_hooks(projections_root)
+        target = (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "repair_broken_projection_hooks",
+        )
+        run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
+
+        def run() -> object:
+            return repair_broken_projection_hooks(projections_root)
+
+        def observe() -> object:
+            marker = hook_quarantine_marker_path(manifest_path, malformed)
+            return (hooks_path.read_bytes(), marker.exists())
+
+        first, second, _first_logs, second_logs = assert_second_pass_is_quiet(
+            lambda: run_adapter(run),
+            observe=lambda: observe_adapter(observe),
+        )
 
         assert first[0].status is PluginHookRepairStatus.QUARANTINED
         assert hook_quarantine_marker_path(manifest_path, malformed).is_file()
-        assert repair_broken_projection_hooks(projections_root) == ()
+        assert second == ()
+        assert second_logs == []
 
         changed_malformed = b"[not-json"
         hooks_path.write_bytes(changed_malformed)

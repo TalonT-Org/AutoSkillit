@@ -21,6 +21,10 @@ from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_log import flush_session_log
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -486,9 +490,27 @@ def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_onc
         "autoskillit.execution._session_log_recovery.flush_session_log", record_flush
     )
 
-    with capture_logs() as logs:
-        assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
+    target = (
+        "src/autoskillit/execution/_session_log_recovery.py",
+        "recover_crashed_sessions",
+    )
+    run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
 
+    def run() -> object:
+        return recover_crashed_sessions(
+            tmpfs_path=str(tmpfs),
+            log_dir=str(tmp_path / "logs"),
+        )
+
+    def observe() -> object:
+        return (trace.exists(), enrollment.exists(), tuple(flush_calls))
+
+    first, second, logs, second_logs = assert_second_pass_is_quiet(
+        lambda: run_adapter(run),
+        observe=lambda: observe_adapter(observe),
+    )
+
+    assert (first, second) == (0, 0)
     assert flush_calls == []
     assert not trace.exists()
     assert not enrollment.exists()
@@ -496,9 +518,6 @@ def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_onc
         "recover_crashed_sessions_permanently_corrupt_trace"
     ]
 
-    with capture_logs() as second_logs:
-        assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
-    assert flush_calls == []
     assert second_logs == []
 
 

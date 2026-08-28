@@ -24,10 +24,14 @@ a `continue` that follows a reclaim action rather than preceding one.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import partial
 from pathlib import Path
 from typing import TypeAlias
+
+from structlog.testing import capture_logs
 
 from autoskillit.core.runtime import Revocability
 
@@ -125,6 +129,8 @@ def _resolves_with_contention(justification: str) -> SafetyDecision:
 
 
 ReclaimerTarget: TypeAlias = tuple[str, str]
+ConvergenceOperation: TypeAlias = Callable[[], object]
+ConvergenceAdapter: TypeAlias = Callable[[ConvergenceOperation], object]
 
 
 #: Target reclaimer functions the scanner walks: ``(repo-relative path, qualified name)``.
@@ -175,6 +181,191 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/execution/_session_log_recovery.py", "recover_crashed_sessions"),
     }
 )
+
+
+def _invoke_convergence_operation(
+    target: ReclaimerTarget,
+    operation: ConvergenceOperation,
+) -> object:
+    """Invoke the fixture-local run closure for one exact registered target."""
+    if target not in RECLAIMER_TARGETS:
+        raise AssertionError(f"unregistered convergence target: {target}")
+    return operation()
+
+
+def _observe_convergence_operation(
+    target: ReclaimerTarget,
+    operation: ConvergenceOperation,
+) -> object:
+    """Invoke the fixture-local state observer for one exact registered target."""
+    if target not in RECLAIMER_TARGETS:
+        raise AssertionError(f"unregistered convergence target: {target}")
+    return operation()
+
+
+def _convergence_adapters(
+    target: ReclaimerTarget,
+) -> tuple[ConvergenceAdapter, ConvergenceAdapter]:
+    """Bind xdist-safe fixture closures to one qualified reclaimer identity."""
+    return (
+        partial(_invoke_convergence_operation, target),
+        partial(_observe_convergence_operation, target),
+    )
+
+
+# Explicit rather than derived from RECLAIMER_TARGETS: adding or removing a target must update
+# both registries, so the equality guard below has teeth. The adapters accept fixture-local
+# no-argument closures, keeping temporary files and monkeypatch state out of module globals.
+RECLAIMER_CONVERGENCE_CASES: Mapping[
+    ReclaimerTarget,
+    tuple[ConvergenceAdapter, ConvergenceAdapter],
+] = {
+    ("scripts/pytest_tmp_lifecycle.py", "_reap"): _convergence_adapters(
+        ("scripts/pytest_tmp_lifecycle.py", "_reap")
+    ),
+    ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates"): _convergence_adapters(
+        ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates")
+    ),
+    (
+        "src/autoskillit/fleet/_dispatch_reaper.py",
+        "reap_stale_dispatches",
+    ): _convergence_adapters(
+        ("src/autoskillit/fleet/_dispatch_reaper.py", "reap_stale_dispatches")
+    ),
+    (
+        "src/autoskillit/workspace/session_skills.py",
+        "DefaultSessionSkillManager.cleanup_stale",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/session_skills.py",
+            "DefaultSessionSkillManager.cleanup_stale",
+        )
+    ),
+    ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates"): _convergence_adapters(
+        ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates")
+    ),
+    ("src/autoskillit/workspace/worktree.py", "remove_git_worktree"): _convergence_adapters(
+        ("src/autoskillit/workspace/worktree.py", "remove_git_worktree")
+    ),
+    ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar"): _convergence_adapters(
+        ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar")
+    ),
+    (
+        "src/autoskillit/execution/_session_retention.py",
+        "apply_session_retention",
+    ): _convergence_adapters(
+        ("src/autoskillit/execution/_session_retention.py", "apply_session_retention")
+    ),
+    ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"): _convergence_adapters(
+        ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one")
+    ),
+    (
+        "src/autoskillit/workspace/_projection_cache.py",
+        "prune_stale_projections",
+    ): _convergence_adapters(
+        ("src/autoskillit/workspace/_projection_cache.py", "prune_stale_projections")
+    ),
+    (
+        "src/autoskillit/workspace/_projection_cache.py",
+        "_reconcile_projection_entry",
+    ): _convergence_adapters(
+        ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry")
+    ),
+    (
+        "src/autoskillit/core/_plugin_artifact_retirement.py",
+        "PluginArtifactRetirementEngine.try_reclaim",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/core/_plugin_artifact_retirement.py",
+            "PluginArtifactRetirementEngine.try_reclaim",
+        )
+    ),
+    (
+        "src/autoskillit/cli/install/_plugin_artifact.py",
+        "InstalledPluginArtifactRetirementOwner.try_reclaim",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/cli/install/_plugin_artifact.py",
+            "InstalledPluginArtifactRetirementOwner.try_reclaim",
+        )
+    ),
+    (
+        "src/autoskillit/cli/install/_plugin_artifact.py",
+        "DefaultPluginRetirementCoordinator.sweep_due",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/cli/install/_plugin_artifact.py",
+            "DefaultPluginRetirementCoordinator.sweep_due",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+        "prune_stale_generations",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+            "prune_stale_generations",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_install_state.py",
+        "_enqueue_legacy_installed_plugin_versions",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_install_state.py",
+            "_enqueue_legacy_installed_plugin_versions",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "repair_broken_plugin_cache_hooks",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "repair_broken_plugin_cache_hooks",
+        )
+    ),
+    (
+        "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+        "repair_broken_projection_hooks",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
+            "repair_broken_projection_hooks",
+        )
+    ),
+    (
+        "src/autoskillit/execution/_session_log_recovery.py",
+        "recover_crashed_sessions",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/execution/_session_log_recovery.py",
+            "recover_crashed_sessions",
+        )
+    ),
+}
+
+
+def assert_second_pass_is_quiet(
+    run: ConvergenceOperation,
+    *,
+    observe: ConvergenceOperation,
+) -> tuple[object, object, list[dict[str, object]], list[dict[str, object]]]:
+    """Run one reclaimer twice and prove pass two emits no work or warning/error."""
+    with capture_logs() as first_logs:
+        first_result = run()
+    after_first = observe()
+    with capture_logs() as second_logs:
+        second_result = run()
+    after_second = observe()
+
+    noisy_second_pass = [
+        entry for entry in second_logs if entry.get("log_level") in {"warning", "error"}
+    ]
+    assert noisy_second_pass == []
+    assert after_second == after_first
+    return first_result, second_result, first_logs, second_logs
+
 
 #: Discovery may identify a lifecycle-shaped function that intentionally is not a retention
 #: reclaimer. Every such exclusion needs a durable written reason in this audit surface.
@@ -589,14 +780,14 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._projection_cache::prune_stale_projections --
-    f"{_PP}::L796": _retries_after_input_changes(
+    f"{_PP}::L802": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
     ),
-    f"{_PP}::L799": _self_limiting(
+    f"{_PP}::L805": _self_limiting(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L808": _retries_after_input_changes(
+    f"{_PP}::L814": _retries_after_input_changes(
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),

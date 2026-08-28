@@ -40,6 +40,10 @@ from autoskillit.core import (
     read_retiring_cache,
     resolve_current_generation_for_plugin,
 )
+from tests._retention_surface import (
+    RECLAIMER_CONVERGENCE_CASES,
+    assert_second_pass_is_quiet,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -229,7 +233,6 @@ def test_selected_generations_are_never_reclaimed(home: Path, source_root: Path)
 def test_prune_quarantines_a_malformed_unselected_generation_once(
     home: Path,
     source_root: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A malformed stale generation is durably removed rather than rediscovered."""
     from autoskillit.workspace._projected_artifact import _generation_publication as publication
@@ -239,30 +242,32 @@ def test_prune_quarantines_a_malformed_unselected_generation_once(
     _publish(home, source_root, "2.0.0")
     stale.manifest_path.write_text("{}", encoding="utf-8")
 
-    events: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        publication.logger,
-        "warning",
-        lambda event, **fields: events.append((event, fields)),
-    )
     managed = managed_home_for(home)
-    with _InstallLock(managed):
-        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
+    target = (
+        "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+        "prune_stale_generations",
+    )
+    run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
 
+    def run() -> object:
+        with _InstallLock(managed):
+            return publication.prune_stale_generations(managed, _PLUGIN_REF)
+
+    def observe() -> object:
+        return (stale.managed_path.exists(), stale.manifest_path.exists())
+
+    first, second, first_logs, second_logs = assert_second_pass_is_quiet(
+        lambda: run_adapter(run),
+        observe=lambda: observe_adapter(observe),
+    )
+
+    assert (first, second) == (0, 0)
     assert not stale.managed_path.exists()
     assert not stale.manifest_path.exists()
-    assert events == [
-        (
-            "generation_prune_reconcile",
-            {"path": str(stale.managed_path), "disposition": "reconciled"},
-        )
-    ]
-
-    events.clear()
-    with _InstallLock(managed):
-        assert publication.prune_stale_generations(managed, _PLUGIN_REF) == 0
-
-    assert events == []
+    assert [
+        (entry.get("event"), entry.get("path"), entry.get("disposition")) for entry in first_logs
+    ] == [("generation_prune_reconcile", str(stale.managed_path), "reconciled")]
+    assert second_logs == []
 
 
 def test_prune_resumes_a_generation_residue_transition(

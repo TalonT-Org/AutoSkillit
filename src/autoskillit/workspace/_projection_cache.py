@@ -793,6 +793,12 @@ def prune_stale_projections(
     owner = ProjectedPluginRetirementOwner(root, home=home, active_key=active_key)
     try:
         if not home.contains(owner.managed_root):
+            logger.warning(
+                "projected_plugin_reconcile",
+                path=str(root),
+                entry_class="projection_root",
+                disposition=ProjectionReconcileDisposition.DEFERRED_IO_ERROR.value,
+            )
             return 0
         with _InstallLock(home):
             if not root.is_dir():

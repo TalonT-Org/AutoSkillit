@@ -96,9 +96,9 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "teardown_artifact_residue",
         "shutil.rmtree",
     ): (
-        1,
-        "The original-key lease and install lock guard deletion of the deterministic residue "
-        "directory after its external manifest has been removed.",
+        2,
+        "The original-key lease and install lock guard deletion of a non-regular manifest "
+        "directory and the deterministic residue after its external identity is removed.",
     ),
     (
         "workspace/_projected_artifact/_artifact_residue.py",

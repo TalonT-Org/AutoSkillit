@@ -20,6 +20,7 @@ import pytest
 
 from tests._retention_surface import (
     ACKNOWLEDGED_NON_RECLAIMERS,
+    RECLAIMER_CONVERGENCE_CASES,
     RECLAIMER_TARGETS,
     REPO_ROOT,
     ReclaimerTarget,
@@ -27,6 +28,7 @@ from tests._retention_surface import (
     RetentionDecision,
     SafetyDecision,
     _validate_safety_decisions,
+    assert_second_pass_is_quiet,
 )
 from tests._retention_surface import AUDITED_RETENTION_DECISIONS as _REAL_REGISTRY
 
@@ -273,6 +275,26 @@ def test_every_retention_branch_is_audited() -> None:
 def test_registered_reclaimer_targets_resolve_once() -> None:
     """Qualified target names cannot silently drift to a same-named method."""
     assert find_missing_registered_functions(RECLAIMER_TARGETS) == []
+
+
+def test_reclaimer_convergence_cases_match_targets() -> None:
+    """Every qualified reclaimer has one explicit run/observe adapter pair."""
+    assert set(RECLAIMER_CONVERGENCE_CASES) == set(RECLAIMER_TARGETS)
+    assert all(
+        callable(run) and callable(observe)
+        for run, observe in RECLAIMER_CONVERGENCE_CASES.values()
+    )
+
+
+def test_second_pass_quiet_helper_rejects_recurring_work() -> None:
+    """Canary: unchanged-input mutation on pass two fails the shared convergence proof."""
+    state: list[int] = []
+
+    def run() -> None:
+        state.append(len(state))
+
+    with pytest.raises(AssertionError):
+        assert_second_pass_is_quiet(run, observe=lambda: tuple(state))
 
 
 def test_discovered_reclaimers_are_registered_or_acknowledged() -> None:

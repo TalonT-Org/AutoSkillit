@@ -103,28 +103,6 @@ def inject_vanishing_subtree_on_descent(
     monkeypatch.setattr(io_module.os, "open", vanish_before_descent)
 
 
-def inject_vanishing_path_call(
-    monkeypatch: pytest.MonkeyPatch,
-    target: Path,
-    *,
-    method: str,
-) -> None:
-    """Remove *target* immediately before its selected Path operation delegates."""
-    if method not in {"iterdir", "read_bytes", "stat"}:
-        raise ValueError(f"unsupported Path method: {method}")
-    original = getattr(Path, method)
-
-    def vanish_before_call(path: Path, *args: object, **kwargs: object) -> object:
-        if path == target:
-            if target.is_dir() and not target.is_symlink():
-                shutil.rmtree(target)
-            else:
-                target.unlink()
-        return original(path, *args, **kwargs)
-
-    monkeypatch.setattr(Path, method, vanish_before_call)
-
-
 def execution_tuning_param_names() -> tuple[str, ...]:
     """Return run_skill parameters whose role is execution tuning."""
     tool_def = get_tool_def("run_skill")

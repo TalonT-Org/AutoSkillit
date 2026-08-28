@@ -485,14 +485,6 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     ): _SEPARATE_LIFECYCLE_REASON,
     (
         "src/autoskillit/execution/_recording_skills.py",
-        "_assert_agent_safe_skill_tree",
-    ): _SEPARATE_LIFECYCLE_REASON,
-    (
-        "src/autoskillit/execution/_recording_skills.py",
-        "build_skills_manifest",
-    ): _SEPARATE_LIFECYCLE_REASON,
-    (
-        "src/autoskillit/execution/_recording_skills.py",
         "snapshot_skill_dir",
     ): _SEPARATE_LIFECYCLE_REASON,
     (

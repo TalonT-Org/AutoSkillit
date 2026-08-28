@@ -8,6 +8,7 @@ from autoskillit.core import (
     FinalizedRecipeProjection,
     FinalizedRecipeStep,
     RecipeBindingProjection,
+    RecipeFlowEdge,
     RecipeStepGuard,
 )
 from autoskillit.recipe._analysis import build_recipe_graph
@@ -23,7 +24,7 @@ def _projection(*, guards: tuple[RecipeStepGuard, ...] = ()) -> FinalizedRecipeP
         binding_projection=RecipeBindingProjection({}),
         ordered_step_names=("apply", "synthesize"),
         entrypoint="apply",
-        ordered_flow_edges=(),
+        ordered_flow_edges=(RecipeFlowEdge("apply", "success", "synthesize", None, None),),
         ordered_steps=tuple(FinalizedRecipeStep(name=name) for name in ("apply", "synthesize")),
         ingredient_names=frozenset(),
         ordered_step_guards=guards,

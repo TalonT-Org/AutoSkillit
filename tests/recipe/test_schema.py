@@ -485,6 +485,45 @@ def test_recipe_has_continue_on_failure_field_defaulting_to_false() -> None:
     assert r.continue_on_failure is False
 
 
+def test_recipe_has_blocks_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    field_names = {f.name for f in dataclasses.fields(Recipe)}
+    assert "blocks" in field_names, (
+        "Recipe.blocks is in DEFERRED_RECIPE_FIELDS; removing it without updating the "
+        "deferral registry would silently drop a tracked tracking issue (#4893)."
+    )
+    r = Recipe(name="x", description="y")
+    assert r.blocks == ()
+
+
+def test_recipe_step_declared_with_args_subset_validation() -> None:
+    from autoskillit.recipe.schema import RecipeStep
+
+    # Auto-coerce when caller passes None
+    step = RecipeStep(action="stop", with_args={"k": "v"})
+    assert step.declared_with_args == {"k": "v"}
+
+    # Proper subset succeeds
+    step = RecipeStep(
+        action="stop",
+        with_args={"k": "v", "extra": 1},
+        declared_with_args={"k": "v"},
+    )
+    assert step.declared_with_args == {"k": "v"}
+
+    # Keys not a subset of with_args raises ValueError
+    with pytest.raises(
+        ValueError,
+        match="declared with mapping cannot contain keys absent from the effective mapping",
+    ):
+        RecipeStep(
+            action="stop",
+            with_args={"different": 1},
+            declared_with_args={"k": "v"},
+        )
+
+
 def test_existing_recipe_construction_unchanged() -> None:
     """All pre-existing Recipe construction patterns still work."""
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep

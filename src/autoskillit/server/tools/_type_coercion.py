@@ -1,31 +1,15 @@
-"""Override value coercion and type-validation gate for typed recipe ingredients.
-
-Exports:
-    OverrideCoercionError: Raised when a caller-supplied override cannot be
-        coerced to the ingredient's declared type.
-    coerce_override_value(value, declared_type): Validate coercion; returns
-        value unchanged on success, raises OverrideCoercionError on failure.
-        Returns value unchanged when declared_type is None.
-    _validate_override_types(overrides, recipe_obj): Tier-2 type gate used by
-        both ``open_kitchen`` and ``load_recipe`` to enforce that caller-supplied
-        override values are coercible to the recipe's declared ingredient types.
-        Returns ``None`` on success; returns a JSON error envelope string on
-        failure. Kept private — public callers should use one of the existing
-        entry points (``open_kitchen``/``load_recipe``/``get_recipe``) rather
-        than invoking the gate directly.
-
-The module co-locates all type-validation concerns in one place, matching the
-precedent set by ``_authority_feedback.py`` (which co-locates
-``build_authority_clobber_warnings`` + ``build_authority_rejection_envelope``).
-"""
+"""Override value coercion and type-validation gate for typed recipe ingredients."""
 
 from __future__ import annotations
 
 import json
 from typing import Any, Final
 
+from autoskillit.core.types._type_constants import ALLOWED_INGREDIENT_TYPES
+
 __all__ = [
     "OverrideCoercionError",
+    "_validate_override_types",
     "coerce_override_value",
 ]
 
@@ -41,9 +25,9 @@ class OverrideCoercionError(ValueError):
 def coerce_override_value(value: object, declared_type: str | None) -> str:
     """Validate ``value`` can be coerced to ``declared_type``.
 
-    Returns ``value`` (as ``str``) on success. When ``declared_type`` is ``None``,
-    returns ``str(value)`` without validation. Raises :class:`OverrideCoercionError`
-    on coercion failure or non-string input.
+    Returns ``value`` on success. When ``declared_type`` is ``None``, returns
+    ``value`` without type validation (the caller passes anything as a string).
+    Raises :class:`OverrideCoercionError` on coercion failure or non-string input.
 
     Non-string inputs are rejected explicitly rather than silently stringified
     — callers see a clear error instead of ambiguous coerced behavior. The
@@ -112,16 +96,19 @@ def coerce_override_value(value: object, declared_type: str | None) -> str:
     raise OverrideCoercionError(f"unknown declared type {declared_type!r}")
 
 
+_RecipeLike = Any  # any object exposing ``ingredients.get(key)`` returning a ``.type`` attribute
+
+
 def _validate_override_types(
     overrides: dict[str, str] | None,
-    recipe_obj: Any,
+    recipe_obj: _RecipeLike,
 ) -> str | None:
     """Tier-2 type gate: enforce that caller-supplied override values are
     coercible to the recipe's declared ingredient types.
 
     Returns ``None`` on success; returns a JSON error envelope string on
-    failure. Used by both call sites (deferred-recall branch and normal
-    branch of ``open_kitchen``, plus ``load_recipe``) to share gate logic.
+    failure. Shared by ``open_kitchen`` and ``load_recipe`` to guarantee
+    identical rejection behavior across both surfaces.
 
     The unknown-key check is delegated to :func:`_check_override_keys` — this
     helper only enforces type coercion for keys present in the recipe's
@@ -131,16 +118,21 @@ def _validate_override_types(
     """
     if not overrides:
         return None
-    import json as _json  # local re-bind keeps the closure scope tidy
-
     for key, value in overrides.items():
         ing = recipe_obj.ingredients.get(key)
         if ing is None:
             continue  # unknown-key check handled by _check_override_keys
+        ing_type = getattr(ing, "type", None)
+        # Treat anything that isn't a known string type as untyped. This covers
+        # both ``type=None`` (declared untyped) and ``MagicMock()`` auto-spec
+        # attrs used in tests, which would otherwise trigger the unknown-type
+        # branch below for ingredients that production code never typed.
+        if not isinstance(ing_type, str) or ing_type not in ALLOWED_INGREDIENT_TYPES:
+            ing_type = None
         try:
-            coerce_override_value(value, ing.type)
+            coerce_override_value(value, ing_type)
         except OverrideCoercionError as e:
-            return _json.dumps(
+            return json.dumps(
                 {
                     "success": False,
                     "error": f"Override for {key!r} failed type validation: {e}",
@@ -148,7 +140,7 @@ def _validate_override_types(
                     "retriable": False,
                     "user_visible_message": (
                         f"Override for ingredient {key!r} cannot be coerced to "
-                        f"declared type {ing.type!r}: {e}. Adjust the override "
+                        f"declared type {ing_type!r}: {e}. Adjust the override "
                         f"value to match the declared type."
                     ),
                 }

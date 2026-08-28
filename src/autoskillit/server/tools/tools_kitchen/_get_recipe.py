@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from autoskillit import __version__
 from autoskillit.config import iter_display_categories
@@ -33,8 +32,8 @@ from autoskillit.server.tools._serve_helpers import (
     render_served_response,
 )
 from autoskillit.server.tools._type_coercion import (
-    OverrideCoercionError,
-    coerce_override_value,
+    _RecipeLike,
+    _validate_override_types,
 )
 
 logger = get_logger(__name__)
@@ -145,19 +144,9 @@ def _check_override_keys(
     overrides: dict[str, str] | None,
     declared: frozenset[str],
     session_keys: set[str],
-    config_layer: dict[str, str],  # noqa: ARG001 — retained for signature compatibility
 ) -> list[str]:
     if not overrides:
         return []
-    # After the authority gate (added in tools_kitchen/_open_kitchen.py and
-    # tools_recipe.py), caller-supplied overrides containing
-    # SERVER_AUTHORITATIVE_INGREDIENTS keys are rejected at function entry and
-    # never reach this helper. The previous `- SERVER_AUTHORITATIVE_INGREDIENTS`
-    # subtraction and build_authority_clobber_warnings extension were therefore
-    # unreachable — both removed under the "no backward compatibility hacks /
-    # remove dead code entirely" rule. build_authority_clobber_warnings itself
-    # is retained as a unit-test target in
-    # tests/server/test_tools_kitchen_envelope_validation.py.
     user_keys = set(overrides.keys()) - session_keys
     unknown = user_keys - declared
     if unknown:
@@ -169,57 +158,30 @@ def _check_override_keys(
 
 
 def _render_ingredients_only_response(
-    result: dict[str, Any],
+    result: dict[str, object],
     *,
-    declared_ingredients: frozenset[str] | None,
+    declared_ingredients: frozenset[str],
     overrides: dict[str, str] | None,
     session_keys: set[str],
-    config_layer: dict[str, str],
-    recipe_obj: Any = None,
+    recipe_obj: _RecipeLike,
 ) -> str:
     """Build the canonical ingredients-only inspection response.
 
-    When ``recipe_obj`` is supplied, also runs the Tier-2 type gate inline —
-    validating caller-supplied override values against the recipe's declared
-    ingredient types before any rendering. This single choke point covers all
-    ``ingredients_only=True`` paths in ``open_kitchen`` and ``load_recipe``.
+    Runs the Tier-2 type gate before any rendering so caller-supplied override
+    values that fail coercion are rejected with a structured envelope. This is
+    the single choke point covering every ``ingredients_only=True`` path in
+    ``open_kitchen`` and ``load_recipe``.
     """
-    # Tier 2 — Type gate: validate caller override values against declared types.
-    # Runs after recipe load (recipe_obj is in scope), before any side effect.
-    if overrides and recipe_obj is not None:
-        for key, value in overrides.items():
-            ing = recipe_obj.ingredients.get(key)
-            if ing is None:
-                continue  # unknown-key check handled by _check_override_keys
-            try:
-                coerce_override_value(value, ing.type)
-            except OverrideCoercionError as e:
-                return json.dumps(
-                    {
-                        "success": False,
-                        "error": (f"Override for {key!r} failed type validation: {e}"),
-                        "stage": "ingredient_type_validation",
-                        "retriable": False,
-                        "user_visible_message": (
-                            f"Override for ingredient {key!r} cannot be coerced "
-                            f"to declared type {ing.type!r}: {e}. Adjust the "
-                            f"override value to match the declared type."
-                        ),
-                    }
-                )
+    type_gate_err = _validate_override_types(overrides, recipe_obj)
+    if type_gate_err is not None:
+        return type_gate_err
 
     inspection = strip_ingredients_only_keys(
         build_open_kitchen_recipe_payload(result, version=__version__)
     )
-    if declared_ingredients is not None:
-        warnings = _check_override_keys(
-            overrides,
-            declared_ingredients,
-            session_keys,
-            config_layer,
-        )
-        if warnings:
-            inspection["warnings"] = warnings
+    warnings = _check_override_keys(overrides, declared_ingredients, session_keys)
+    if warnings:
+        inspection["warnings"] = warnings
     from autoskillit.server._state import _get_ctx_or_none  # circular-break
 
     tool_ctx = _get_ctx_or_none()

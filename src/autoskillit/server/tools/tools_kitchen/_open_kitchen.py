@@ -597,6 +597,22 @@ async def open_kitchen(
                             )
                         }
                     )
+            # Tier 2 — Type gate (deferred-recall): validate caller-supplied
+            # override values against declared ingredient types BEFORE
+            # serve_recipe runs. Failure here aborts the call before any side
+            # effect (recipe serving, projection caching, tool_ctx mutation).
+            # If the recipe object failed to load, the call cannot satisfy
+            # caller-supplied overrides safely — fail closed.
+            if overrides:
+                if _raw_recipe is None:
+                    return _kitchen_failure_envelope(
+                        RuntimeError("Cannot validate override types: recipe failed to load"),
+                        stage="ingredient_type_validation",
+                    )
+                _type_gate_err = _validate_override_types(overrides, _raw_recipe)
+                if _type_gate_err is not None:
+                    return _type_gate_err
+
             if _is_deferred_recall:
                 try:
                     _transition_start(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
@@ -635,23 +651,14 @@ async def open_kitchen(
                     return _render_ingredients_only_response(
                         result,
                         declared_ingredients=(
-                            frozenset(_raw_recipe.ingredients) if _raw_recipe is not None else None
+                            frozenset(_raw_recipe.ingredients)
+                            if _raw_recipe is not None
+                            else frozenset()
                         ),
                         overrides=overrides,
                         session_keys=set(_session_overrides),
-                        config_layer=_config_layer,
                         recipe_obj=_raw_recipe,
                     )
-                # Tier 2 — Type gate (deferred-recall, ingredients_only=False):
-                # validate caller-supplied override values against declared
-                # ingredient types before mutating tool_ctx. Runs after
-                # serve_recipe completes (result valid known) but before any
-                # tool_ctx.* side effect below.
-                if _raw_recipe is not None:
-                    _type_gate_err = _validate_override_types(overrides, _raw_recipe)
-                    if _type_gate_err is not None:
-                        _clear_active_recipe_projection(tool_ctx)
-                        return _type_gate_err
                 tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
                 tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
                 tool_ctx.recipe_content_hash = result.get("content_hash", "")
@@ -711,7 +718,6 @@ async def open_kitchen(
                     overrides,
                     _deferred_finalized_projection.ingredient_names,
                     set(_session_overrides.keys()),
-                    _config_layer,
                 )
                 if _override_warnings:
                     result["warnings"] = _override_warnings
@@ -785,23 +791,14 @@ async def open_kitchen(
                 return _render_ingredients_only_response(
                     result,
                     declared_ingredients=(
-                        frozenset(_raw_recipe.ingredients) if _raw_recipe is not None else None
+                        frozenset(_raw_recipe.ingredients)
+                        if _raw_recipe is not None
+                        else frozenset()
                     ),
                     overrides=overrides,
                     session_keys=set(_session_overrides),
-                    config_layer=_config_layer,
                     recipe_obj=_raw_recipe,
                 )
-
-            # Tier 2 — Type gate (normal branch, ingredients_only=False):
-            # validate caller-supplied override values against declared
-            # ingredient types before mutating tool_ctx. Runs after
-            # serve_recipe completes but before any tool_ctx.* side effect.
-            if _raw_recipe is not None:
-                _type_gate_err = _validate_override_types(overrides, _raw_recipe)
-                if _type_gate_err is not None:
-                    _clear_active_recipe_projection(tool_ctx)
-                    return _type_gate_err
 
             tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
             tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
@@ -897,7 +894,6 @@ async def open_kitchen(
                 overrides,
                 _normal_finalized_projection.ingredient_names,
                 set(_session_overrides.keys()),
-                _config_layer,
             )
             if _override_warnings:
                 result["warnings"] = _override_warnings

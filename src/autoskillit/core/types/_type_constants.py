@@ -342,13 +342,8 @@ CALLER_SOVEREIGN_INGREDIENTS: frozenset[str] = frozenset(
     }
 )
 
-# Canonical set of values allowed for RecipeIngredient.type. Centralizes the
-# type vocabulary next to CONFIG_AUTHORITY_KEYS / CALLER_SOVEREIGN_INGREDIENTS
-# so the governance surface stays co-located. Extension rationale: bundled
-# research recipes (research-implement.yaml, research-review.yaml) already use
-# `absolute_path` and `worktree_relative_path`; rules_campaign_flow.py:235
-# checks the latter via getattr(ing, "type", None), so dropping either would
-# break the research pipeline.
+# Canonical set of values allowed for RecipeIngredient.type. Co-located with
+# CALLER_SOVEREIGN_INGREDIENTS so the governance surface stays together.
 ALLOWED_INGREDIENT_TYPES: frozenset[str] = frozenset(
     {
         "string",

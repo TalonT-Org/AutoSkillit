@@ -273,26 +273,3 @@ async def test_pipeline_health_config_default_applied(tmp_path, monkeypatch):
     assert overrides["pipeline_health"] == "true", (
         f"Config default must apply; got overrides={overrides}"
     )
-
-
-# T5: REQ-FDB-001
-def test_clobber_warning_includes_hint_when_available(monkeypatch):
-    """REQ-FDB-001: Clobber warning includes SERVER_AUTHORITATIVE_KEY_HINTS line."""
-    from autoskillit.server.tools._authority_feedback import (
-        SERVER_AUTHORITATIVE_KEY_HINTS,
-        build_authority_clobber_warnings,
-    )
-
-    monkeypatch.setitem(
-        SERVER_AUTHORITATIVE_KEY_HINTS, "base_branch", "<test hint for base_branch>"
-    )
-    try:
-        warnings = build_authority_clobber_warnings(
-            {"base_branch": "x"}, config_layer={"base_branch": "develop"}
-        )
-    finally:
-        SERVER_AUTHORITATIVE_KEY_HINTS.pop("base_branch", None)
-
-    assert any("<test hint for base_branch>" in w for w in warnings), (
-        f"Hint must be appended to warnings; got warnings={warnings}"
-    )

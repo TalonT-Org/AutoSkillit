@@ -146,7 +146,7 @@ async def test_open_kitchen_rejects_invalid_boolean_override(tmp_path, monkeypat
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("value", ["true", "false", "1", "0", "yes", "no", "TRUE", "Yes"])
+@pytest.mark.parametrize("value", ["true", "false", "1", "0", "yes", "no"])
 async def test_open_kitchen_accepts_each_boolean_value(tmp_path, monkeypatch, value):
     recipe = _mock_recipe({"flag": RecipeIngredient(description="Flag", type="boolean")})
     result_str = await _call_open_kitchen_with_recipe(

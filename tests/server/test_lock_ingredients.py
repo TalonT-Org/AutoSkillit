@@ -407,7 +407,24 @@ class TestAuthorityFeedbackConsistency:
     """Cross-tool consistency: every SERVER_AUTHORITATIVE_INGREDIENTS key must
     produce rejection feedback on BOTH open_kitchen and lock_ingredients
     surfaces. Both surfaces reject caller-supplied overrides with the same
-    structured envelope shape."""
+    structured envelope shape.
+
+    Deviation from plan REQ-024:
+        The original plan specified a ``MagicMock(spec=['type'], type=None)``
+        fixture on ``mock_recipe_obj.ingredients`` to prevent
+        ``MagicMock().type`` from triggering the unknown-type branch in
+        ``coerce_override_value``. The implementation made that fixture
+        unreachable: the Tier-1 authority gate fires at the top of
+        ``open_kitchen`` (see ``_open_kitchen.py``) BEFORE
+        ``tool_ctx.recipes.load(...)`` is ever called, so a caller-supplied
+        SERVER_AUTHORITATIVE_INGREDIENTS override returns the rejection
+        envelope without ever entering ``_validate_override_types`` or
+        ``coerce_override_value``. The fixture would be dead code, so this
+        test was restructured to use a fresh ``mock_ctx`` per iteration
+        (necessary because ``_bind_open_kitchen_transition`` marks the
+        context REQUEST_BOUND on the first iteration; sharing the context
+        across iterations short-circuits subsequent calls).
+    """
 
     @pytest.mark.anyio
     async def test_every_authority_key_emits_feedback_on_both_surfaces(

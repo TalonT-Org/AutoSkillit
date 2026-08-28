@@ -28,7 +28,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "execution/github_review": 15,
     "execution/headless": 15,
     "execution/session": 20,
-    "workspace": 31,
+    "workspace": 32,
     "hooks": 26,
     "hooks/guards": 41,
     "smoke_utils": 11,

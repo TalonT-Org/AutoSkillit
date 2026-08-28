@@ -322,12 +322,14 @@ class TestVerifyInstallState:
         acquire_existing_shared = ArtifactLease.acquire_existing_shared
         advanced = False
 
-        def advance_then_acquire(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+        def advance_then_acquire(
+            _cls: type[ArtifactLease], lock_path: Path, *, timeout: float
+        ) -> ArtifactLease:
             nonlocal advanced
             if not advanced:
                 advanced = True
                 _publish_generation(home, __version__)
-            return acquire_existing_shared(lock_path)
+            return acquire_existing_shared(lock_path, timeout=timeout)
 
         monkeypatch.setattr(
             ArtifactLease,
@@ -895,9 +897,11 @@ class TestRetiredArtifactShapeRegistry:
         acquire_shared = ArtifactLease.acquire_shared
         acquired_paths: list[Path] = []
 
-        def recording_acquire_shared(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+        def recording_acquire_shared(
+            _cls: type[ArtifactLease], lock_path: Path, *, timeout: float
+        ) -> ArtifactLease:
             acquired_paths.append(lock_path)
-            return acquire_shared(lock_path)
+            return acquire_shared(lock_path, timeout=timeout)
 
         monkeypatch.setattr(ArtifactLease, "acquire_shared", classmethod(recording_acquire_shared))
 

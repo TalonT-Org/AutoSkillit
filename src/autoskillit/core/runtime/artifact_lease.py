@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import errno
+import math
 import os
+import random
 import stat
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,18 +20,68 @@ from ..types import (
     PluginLaunchBinding,
     PluginLoadMode,
 )
-from ._flock import _validate_flock_timeout, acquire_flock_with_timeout, fcntl
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - exercised through the platform guard
+    fcntl = None  # type: ignore[assignment]
 
 __all__ = [
     "ARTIFACT_LEASE_TIMEOUT_SECONDS",
     "ArtifactLease",
     "ArtifactLeaseContention",
+    "acquire_flock_with_timeout",
     "plugin_launch_binding_scope",
 ]
 
 _ARTIFACT_LEASE_CONSTRUCTION_TOKEN = object()
 ARTIFACT_LEASE_TIMEOUT_SECONDS = 2.0
+_CONTENTION_ERRNOS = frozenset({errno.EACCES, errno.EAGAIN})
+_RETRY_MIN_SECONDS = 0.01
+_RETRY_MAX_SECONDS = 0.05
 logger = get_logger(__name__)
+
+
+def _validate_flock_timeout(timeout: float) -> float:
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(timeout)
+        or timeout < 0
+    ):
+        raise ValueError("timeout must be a finite non-negative number")
+    return float(timeout)
+
+
+def acquire_flock_with_timeout(
+    fd: int,
+    *,
+    operation: int,
+    timeout: float,
+    path: Path,
+) -> None:
+    """Acquire an advisory lock without blocking beyond a monotonic deadline."""
+    if fcntl is None:
+        raise RuntimeError("POSIX flock is unavailable on this platform")
+
+    validated_timeout = _validate_flock_timeout(timeout)
+    deadline = time.monotonic() + validated_timeout
+    nonblocking_operation = operation | fcntl.LOCK_NB
+    while True:
+        try:
+            fcntl.flock(fd, nonblocking_operation)
+            return
+        except OSError as exc:
+            if exc.errno not in _CONTENTION_ERRNOS:
+                raise
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    errno.ETIMEDOUT,
+                    "Timed out acquiring flock",
+                    str(Path(path)),
+                ) from exc
+            time.sleep(min(remaining, random.uniform(_RETRY_MIN_SECONDS, _RETRY_MAX_SECONDS)))
 
 
 def _close_preserving_primary(fd: int, primary: BaseException) -> None:

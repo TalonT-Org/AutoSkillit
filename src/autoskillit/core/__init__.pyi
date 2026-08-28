@@ -298,7 +298,7 @@ from .pipeline_tracker import release_tracker_lease as release_tracker_lease
 from .pipeline_tracker import retain_tracker_lease as retain_tracker_lease
 from .pipeline_tracker import tracker_lease_path as tracker_lease_path
 from .pipeline_tracker import try_retire_tracker as try_retire_tracker
-from .runtime._flock import acquire_flock_with_timeout as acquire_flock_with_timeout
+from .runtime.artifact_lease import acquire_flock_with_timeout as acquire_flock_with_timeout
 from .runtime._linux_proc import is_pid_alive as is_pid_alive
 from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive

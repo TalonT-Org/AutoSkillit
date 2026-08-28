@@ -18,9 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
-from ._flock import acquire_flock_with_timeout
 from ._linux_proc import read_boot_id, read_starttime_ticks
-from .artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS
+from .artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, acquire_flock_with_timeout
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 runtime is stdlib-only
 

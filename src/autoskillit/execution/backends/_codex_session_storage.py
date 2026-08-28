@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
 import shutil
-import socket
 import stat
 import time
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -32,7 +30,6 @@ from autoskillit.core import (
     NoResume,
     ResumeSpec,
     SessionSummary,
-    acquire_flock_with_timeout,
     default_log_dir,
     get_logger,
     is_pid_alive,
@@ -62,6 +59,7 @@ from autoskillit.execution.backends._codex_parse import (
     _safe_relative_value,
     _thread_id,
 )
+from autoskillit.execution.backends._codex_session_lease import _FileLease
 from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS, kill_process_tree
 
 _VIEW_ID_RE = re.compile(r"^[0-9a-f]{16}-[1-9][0-9]*$")
@@ -70,7 +68,6 @@ _THREAD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
 _INDEX_READ_LIMIT = 4 * 1024 * 1024
 _MANIFEST_READ_LIMIT = 256 * 1024
 _MANIFEST_NAME = "manifest.json"
-_LOCK_OWNER_DIAGNOSTIC_LIMIT = 4096
 _LOCKS_SUBDIR = ".locks"
 _INDEX_NAME = "codex-session-index.json"
 _RECONCILIATION_AUDIT_SCHEMA_VERSION = 1
@@ -105,70 +102,6 @@ def codex_session_index_path(log_dir: Path | None = None) -> Path:
     """Return the one production path for the derived Codex cook index."""
     root = default_log_dir() if log_dir is None else Path(log_dir)
     return root.expanduser().resolve(strict=False) / _INDEX_NAME
-
-
-@dataclass(slots=True)
-class _FileLease:
-    path: Path
-    fd: int = field(init=False)
-
-    @classmethod
-    def acquire(cls, lock_path: Path, *, timeout: float) -> _FileLease:
-        if lock_path.suffix != ".lock":
-            raise ValueError(f"Lock path must use the .lock suffix: {lock_path}")
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        _require_real_directory(lock_path.parent, label="lock directory")
-        if _lexists(lock_path) and lock_path.is_symlink():
-            raise RuntimeError(f"Refusing symlink lock file: {lock_path}")
-        instance = cls(path=lock_path)
-        instance.fd = os.open(
-            lock_path,
-            os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-        )
-        try:
-            if not stat.S_ISREG(os.fstat(instance.fd).st_mode):
-                raise RuntimeError(f"Lock path is not a regular file: {lock_path}")
-            try:
-                acquire_flock_with_timeout(
-                    instance.fd,
-                    operation=fcntl.LOCK_EX,
-                    timeout=timeout,
-                    path=lock_path,
-                )
-            except TimeoutError as exc:
-                try:
-                    owner_payload = os.pread(instance.fd, _LOCK_OWNER_DIAGNOSTIC_LIMIT, 0)
-                except OSError as read_exc:
-                    diagnostics = f"unavailable ({type(read_exc).__name__}: {read_exc})"
-                else:
-                    diagnostics = owner_payload.decode("utf-8", errors="replace") or "unavailable"
-                raise TimeoutError(
-                    "timed out acquiring Codex session lease "
-                    f"for {lock_path} after {timeout:.3f}s; owner={diagnostics}"
-                ) from exc
-            owner = {
-                "pid": os.getpid(),
-                "host": socket.gethostname(),
-                "acquired_ns": time.time_ns(),
-            }
-            os.ftruncate(instance.fd, 0)
-            os.write(instance.fd, json.dumps(owner, sort_keys=True).encode())
-            os.fsync(instance.fd)
-        except BaseException:
-            fd, instance.fd = instance.fd, -1
-            os.close(fd)
-            raise
-        return instance
-
-    def release(self) -> None:
-        if self.fd < 0:
-            return
-        fd, self.fd = self.fd, -1
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        finally:
-            os.close(fd)
 
 
 @dataclass(slots=True)

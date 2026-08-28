@@ -366,12 +366,14 @@ def test_launch_binding_validates_generation_selected_during_lease_retry(
     acquire_existing_shared = ArtifactLease.acquire_existing_shared
     refreshed: list[PluginArtifactIdentity] = []
 
-    def advance_then_acquire(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+    def advance_then_acquire(
+        _cls: type[ArtifactLease], lock_path: Path, *, timeout: float
+    ) -> ArtifactLease:
         if not refreshed:
             (source_root / "content.txt").write_text("second", encoding="utf-8")
             refreshed.append(publish())
             raise OSError("injected reclaim race")
-        return acquire_existing_shared(lock_path)
+        return acquire_existing_shared(lock_path, timeout=timeout)
 
     monkeypatch.setattr(
         ArtifactLease,

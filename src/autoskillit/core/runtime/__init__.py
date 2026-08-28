@@ -6,7 +6,6 @@ and _linux_proc so callers can use ``from autoskillit.core.runtime import X``.
 
 from __future__ import annotations
 
-from ._flock import acquire_flock_with_timeout
 from ._linux_proc import (
     is_pid_alive,
     is_pid_zombie,
@@ -38,6 +37,7 @@ from .artifact_lease import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,
     ArtifactLeaseContention,
+    acquire_flock_with_timeout,
 )
 from .executable_binding import (
     executable_binding_matches_current_file,

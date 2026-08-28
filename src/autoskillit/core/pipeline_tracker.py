@@ -24,8 +24,11 @@ from ._active_kitchens import (
     read_active_kitchens_registry,
 )
 from .io import atomic_write
-from .runtime._flock import acquire_flock_with_timeout
-from .runtime.artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, ArtifactLease
+from .runtime.artifact_lease import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ArtifactLease,
+    acquire_flock_with_timeout,
+)
 
 TrackerOwnerKind = Literal["kitchen", "dispatch", "manual"]
 TrackerData = dict[str, Any]

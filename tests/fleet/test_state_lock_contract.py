@@ -47,11 +47,11 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "cli/session/pty/_exec.py",
         "cli/session/pty/_observer.py",
         "execution/backends/_codex_config_lock.py",
-        "execution/backends/_codex_session_storage.py",
+        "execution/backends/_codex_session_lease.py",
         "execution/session/_session_state.py",
         "workspace/clone_registry.py",
         "workspace/session_skill_lifecycle.py",
-        "fleet/state.py",
+        "fleet/_state_lock.py",
         "planner/merge.py",
         "server/tools/_overlay_state.py",  # session overlay transaction lock
         "server/tools/tools_pipeline_tracker/_handlers.py",  # mark_step_complete: flock sidecar
@@ -112,6 +112,7 @@ class TestCampaignStateMutatorBoundedLocking:
         """A cross-process lock failure cannot leak either lock ownership resource."""
         import builtins
 
+        import autoskillit.fleet._state_lock as state_lock
         import autoskillit.fleet.state as fleet_state
 
         class TrackingLock:
@@ -139,7 +140,7 @@ class TestCampaignStateMutatorBoundedLocking:
             raise TimeoutError("contended")
 
         monkeypatch.setattr(fleet_state, "_resume_lock", lock)
-        monkeypatch.setattr(fleet_state, "acquire_flock_with_timeout", timeout_flock)
+        monkeypatch.setattr(state_lock, "acquire_flock_with_timeout", timeout_flock)
 
         with (
             patch.object(builtins, "open", side_effect=tracking_open),
@@ -155,6 +156,7 @@ class TestCampaignStateMutatorBoundedLocking:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The state mutator delegates the nonblocking retry policy to core."""
+        import autoskillit.fleet._state_lock as state_lock
         import autoskillit.fleet.state as fleet_state
 
         state_path = tmp_path / "state.json"
@@ -164,7 +166,7 @@ class TestCampaignStateMutatorBoundedLocking:
         def track_flock(fd: int, *, operation: int, timeout: float, path: Path) -> None:
             calls.append((fd, operation, timeout, path))
 
-        monkeypatch.setattr(fleet_state, "acquire_flock_with_timeout", track_flock)
+        monkeypatch.setattr(state_lock, "acquire_flock_with_timeout", track_flock)
 
         with CampaignStateMutator(state_path):
             pass
@@ -360,7 +362,7 @@ class TestAllMutationsAcquireLock:
             sp.write_text(json.dumps(raw))
 
         with patch(
-            "autoskillit.fleet.state.acquire_flock_with_timeout",
+            "autoskillit.fleet._state_lock.acquire_flock_with_timeout",
             side_effect=tracking_acquire_flock,
         ):
             if fn_name == "mark_dispatch_running":
@@ -511,7 +513,7 @@ class TestFlockTargetPathVerification:
         with (
             patch.object(builtins, "open", side_effect=tracking_open),
             patch(
-                "autoskillit.fleet.state.acquire_flock_with_timeout",
+                "autoskillit.fleet._state_lock.acquire_flock_with_timeout",
                 side_effect=tracking_acquire_flock,
             ),
         ):

@@ -22,8 +22,7 @@ from typing import IO
 from .io import _AtomicWriteDurabilityError, atomic_write, write_versioned_json
 from .logging import get_logger
 from .paths import destination_location
-from .runtime._flock import acquire_flock_with_timeout
-from .runtime.artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS
+from .runtime.artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, acquire_flock_with_timeout
 from .types import (
     LegacyRetiringEvidence,
     ManagedHome,

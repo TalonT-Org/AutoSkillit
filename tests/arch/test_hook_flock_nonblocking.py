@@ -78,7 +78,7 @@ _EXPECTED_ACQUISITIONS = (
         "try_retire_tracker",
         "ArtifactLease.acquire_exclusive",
     ),
-    ("core/runtime/_flock.py", "acquire_flock_with_timeout", "flock"),
+    ("core/runtime/artifact_lease.py", "acquire_flock_with_timeout", "flock"),
     (
         "core/runtime/artifact_lease.py",
         "_acquire",
@@ -92,7 +92,7 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/backends/_codex_config_lock.py", "acquire", "flock"),
     (
-        "execution/backends/_codex_session_storage.py",
+        "execution/backends/_codex_session_lease.py",
         "acquire",
         "acquire_flock_with_timeout",
     ),
@@ -108,7 +108,7 @@ _EXPECTED_ACQUISITIONS = (
         "flush_session_log",
         "ArtifactLease.acquire_exclusive",
     ),
-    ("fleet/state.py", "acquire", "acquire_flock_with_timeout"),
+    ("fleet/_state_lock.py", "acquire", "acquire_flock_with_timeout"),
     ("hooks/_capture/_resolver.py", "_acquire_shared_lease", "flock"),
     ("hooks/_capture/_resolver.py", "acquire_writer_lease", "flock"),
     ("hooks/_capture_lifecycle/_admission.py", "_acquire_flock", "flock"),

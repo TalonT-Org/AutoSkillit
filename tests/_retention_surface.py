@@ -931,19 +931,19 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "that reclamation succeeded."
     ),
     # -- cli.install._plugin_artifact::sweep_due --
-    f"{_CT}::L528": _retries_after_input_changes(
+    f"{_CT}::L533": _retries_after_input_changes(
         "The retiring cache is not in a safe exact-v2 state, corrupt or future-versioned; "
         "an infrastructure guard, not a liveness decision."
     ),
-    f"{_CT}::L536": _retries_after_input_changes(
+    f"{_CT}::L541": _retries_after_input_changes(
         "No registered owner claims this legacy evidence's artifact kind; a routing guard, "
         "not liveness evidence."
     ),
-    f"{_CT}::L541": _retries_after_input_changes(
+    f"{_CT}::L546": _retries_after_input_changes(
         "Reading due retiring records failed under an unsafe cache state; an infrastructure "
         "failure, not evidence about any record's liveness."
     ),
-    f"{_CT}::L546": _retries_after_input_changes(
+    f"{_CT}::L551": _retries_after_input_changes(
         "No registered owner claims this record's artifact kind; a routing guard, not "
         "liveness evidence."
     ),

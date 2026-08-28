@@ -78,7 +78,7 @@ def test_flock_helper_retries_with_nonblocking_bounded_jitter(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    from autoskillit.core.runtime import _flock
+    from autoskillit.core.runtime import artifact_lease as _flock
 
     calls: list[int] = []
     delays: list[float] = []
@@ -108,7 +108,7 @@ def test_flock_helper_timeout_identifies_the_contended_path(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    from autoskillit.core.runtime import _flock
+    from autoskillit.core.runtime import artifact_lease as _flock
 
     lock_path = tmp_path / "projection.lock"
     monkeypatch.setattr(

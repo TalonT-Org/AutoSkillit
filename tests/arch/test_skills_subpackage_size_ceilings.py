@@ -2,7 +2,8 @@
 
 Every new shard plus both retained facades must stay under the 750-line
 warning zone. The 1000-line hard ceiling is enforced globally by
-``test_no_src_module_exceeds_line_limit``, so this guard only needs the
+``tests/arch/test_subpackage_isolation_size.py::test_no_src_module_exceeds_line_limit``,
+so this guard only needs the
 warning-zone check focused on the decomposed package.
 """
 

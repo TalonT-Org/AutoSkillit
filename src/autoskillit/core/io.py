@@ -850,7 +850,8 @@ def mapping_entry_byte_ranges_from_yaml(
 
     Centralizes the yaml import: this module is the only place in the
     package that imports ``yaml`` directly (REQs in
-    ``tests/arch/test_subpackage_isolation.py`` and
+    ``tests/arch/test_subpackage_isolation_module_boundaries.py::
+    test_only_yaml_imports_yaml_directly`` and
     ``tests/core/test_io.py::test_only_yaml_imports_yaml_directly``).
     """
     out: dict[str, tuple[int, int]] = {}

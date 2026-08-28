@@ -34,7 +34,7 @@ def _production_texts() -> dict[Path, str]:
         root / "src/autoskillit/cli/prompts/_prompts_kitchen.py",
         root / "src/autoskillit/recipe/_api_orchestration.py",
         root / "src/autoskillit/server/tools/tools_recipe.py",
-        root / "skills/sous-chef/SKILL.md",
+        root / "src/autoskillit/skills/sous-chef/SKILL.md",
     ]
     return {path: path.read_text(encoding="utf-8") for path in paths if path.is_file()}
 

@@ -817,14 +817,18 @@ class TestRetiredArtifactShapeRegistry:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from autoskillit.core import ArtifactLeaseContention
+        from autoskillit.core import (
+            ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            ArtifactLeaseContention,
+        )
         from autoskillit.workspace import _install_state, reconcile_install_artifacts
 
         legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
         legacy_version.mkdir(parents=True)
         marker = legacy_version.parent / ".1.2.3.autoskillit-rejected-legacy"
 
-        def contend(path: Path) -> None:
+        def contend(path: Path, *, timeout: float) -> None:
+            assert timeout == ARTIFACT_LEASE_TIMEOUT_SECONDS
             raise ArtifactLeaseContention(path)
 
         monkeypatch.setattr(_install_state.ArtifactLease, "acquire_shared", contend)

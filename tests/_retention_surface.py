@@ -948,47 +948,47 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "liveness evidence."
     ),
     # -- workspace._projected_artifact._generation_publication::prune_stale_generations --
-    f"{_GP}::L805": _self_limiting(
+    f"{_GP}::L809": _self_limiting(
         "The generation store does not exist, so this invocation has no candidates to prune."
     ),
-    f"{_GP}::L812": _self_limiting(
+    f"{_GP}::L816": _self_limiting(
         "A hidden version directory belongs to staging or bookkeeping, not generation retirement."
     ),
-    f"{_GP}::L814": _self_limiting(
+    f"{_GP}::L818": _self_limiting(
         "A non-directory version entry cannot contain a generation incarnation this "
         "reclaimer owns."
     ),
-    f"{_GP}::L819": _self_limiting(
+    f"{_GP}::L823": _self_limiting(
         "An unmanaged hidden entry is outside the deterministic generation-residue "
         "lifecycle namespace."
     ),
-    f"{_GP}::L821": _self_limiting(
+    f"{_GP}::L825": _self_limiting(
         "A symlink generation entry is excluded before any retirement mutation for "
         "containment safety."
     ),
-    f"{_GP}::L823": _self_limiting(
+    f"{_GP}::L827": _self_limiting(
         "A non-directory incarnation cannot be a managed generation retirement candidate."
     ),
-    f"{_GP}::L825": _self_limiting(
+    f"{_GP}::L829": _self_limiting(
         "The selected generation remains active and is not a stale candidate for this pass."
     ),
     # -- workspace._install_state::_enqueue_legacy_installed_plugin_versions --
-    f"{_IL}::L413": _self_limiting(
+    f"{_IL}::L417": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),
-    f"{_IL}::L416": _self_limiting(
+    f"{_IL}::L420": _self_limiting(
         "A durable rejected-legacy marker already records this invalid candidate's terminal "
         "disposition."
     ),
-    f"{_IL}::L437": _self_limiting(
+    f"{_IL}::L444": _self_limiting(
         "Another reconciler created the same durable rejection marker, completing this "
         "candidate's disposition."
     ),
-    f"{_IL}::L443": _self_limiting(
+    f"{_IL}::L450": _self_limiting(
         "Writing the rejected-legacy marker durably records this invalid candidate for quiet "
         "later passes."
     ),
-    f"{_IL}::L445": _resolves_with_contention(
+    f"{_IL}::L452": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --

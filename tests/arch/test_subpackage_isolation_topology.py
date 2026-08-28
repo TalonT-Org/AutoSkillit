@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
@@ -11,13 +9,13 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 def test_sync_manifest_module_deleted():
     """REQ-SYNC-002: sync_manifest.py does not exist."""
-    sync_path = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "sync_manifest.py"
+    sync_path = SRC_ROOT / "sync_manifest.py"
     assert not sync_path.exists()
 
 
 def test_no_sync_manifest_imports_in_production_code():
     """REQ-SYNC-001: No production module imports from autoskillit.sync_manifest."""
-    src_dir = Path(__file__).parent.parent.parent / "src"
+    src_dir = SRC_ROOT.parent
     for py_file in src_dir.rglob("*.py"):
         content = py_file.read_text()
         for line in content.splitlines():
@@ -50,7 +48,7 @@ def test_pyproject_cyclopts_minimum_version() -> None:
     """
     import re
 
-    toml_path = Path(__file__).parent.parent.parent / "pyproject.toml"
+    toml_path = SRC_ROOT.parents[1] / "pyproject.toml"
     content = toml_path.read_text()
     match = re.search(r'"cyclopts>=([\d.]+)"', content)
     assert match is not None, "cyclopts dependency not found in pyproject.toml"
@@ -65,7 +63,7 @@ def test_pytest_asyncio_version_bound() -> None:
     """P11-2: pytest-asyncio lower bound must match the published 0.x stable series."""
     import tomllib
 
-    pyproject = Path(__file__).parent.parent.parent / "pyproject.toml"
+    pyproject = SRC_ROOT.parents[1] / "pyproject.toml"
     data = tomllib.loads(pyproject.read_text())
     deps = data["project"]["optional-dependencies"]["dev"]
     asyncio_dep = next(d for d in deps if d.startswith("pytest-asyncio"))
@@ -249,7 +247,7 @@ def test_doctor_moved_to_cli_package() -> None:
 
 def test_test_suite_has_domain_subdirectories():
     """All 12 domain-aligned test subdirectories exist after groupE reorganization."""
-    tests_root = Path(__file__).parent.parent
+    tests_root = SRC_ROOT.parents[1] / "tests"
     expected = [
         "core",
         "config",
@@ -278,7 +276,7 @@ def test_test_suite_oversized_files_split():
         pushed the file to 1003 lines; splitting would scatter a single declared-
         vs-actual invariant across multiple files. Exempt at 1100 lines.
     """
-    tests_root = Path(__file__).parent.parent
+    tests_root = SRC_ROOT.parents[1] / "tests"
     over = [
         f"{f.name} ({len(f.read_text().splitlines())} lines)"
         for f in tests_root.glob("test_*.py")
@@ -289,7 +287,7 @@ def test_test_suite_oversized_files_split():
 
 
 def test_smoke_utils_suite_is_split() -> None:
-    tests_root = Path(__file__).parent.parent
+    tests_root = SRC_ROOT.parents[1] / "tests"
     smoke_utils_root = tests_root / "smoke_utils"
     shards = sorted(smoke_utils_root.glob("test_*.py"))
     old_monolith = tests_root / f"test_{smoke_utils_root.name}.py"
@@ -305,7 +303,7 @@ def test_data_directories_are_not_python_packages() -> None:
     """REQ-ARCH-005: data-only directories under src/autoskillit/ must not
     contain __init__.py — that turns them into phantom Python packages
     distinct from the real IL-2 module of similar name."""
-    src = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+    src = SRC_ROOT
     data_dirs = {"migrations", "recipes", "skills", "skills_extended", "agents"}
     offenders: list[str] = []
     for name in data_dirs:

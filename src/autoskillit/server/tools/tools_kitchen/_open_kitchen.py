@@ -33,6 +33,7 @@ from autoskillit.core import (
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RECIPE_SERVING,
     KitchenOpenPhase,
+    ToolContext,
     advance_kitchen_phase,
     exploration_auto_provision_eligible,
     transition_abort,
@@ -95,7 +96,7 @@ logger = get_logger(__name__)
 
 
 def _cache_finalized_recipe_projection(
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
     projection: FinalizedRecipeProjection,
 ) -> None:
     """Install the finalized execution graph as the active runtime authority."""
@@ -104,7 +105,7 @@ def _cache_finalized_recipe_projection(
     tool_ctx.active_recipe_ingredients = projection.ingredient_names
 
 
-def _clear_active_recipe_projection(tool_ctx: Any) -> None:
+def _clear_active_recipe_projection(tool_ctx: ToolContext) -> None:
     """Prevent a failed serve from retaining prior execution-graph authority."""
     tool_ctx.active_recipe_projection = None
     tool_ctx.active_recipe_steps = {}

@@ -233,7 +233,7 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/fleet/_dispatch_reaper.py", "reap_stale_dispatches")
     ),
     (
-        "src/autoskillit/workspace/session_skill_manager.py",
+        "src/autoskillit/workspace/session_skill_lifecycle.py",
         "DefaultSessionSkillManager.cleanup_stale",
     ): _convergence_adapters(
         (
@@ -443,11 +443,11 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     ): _DELEGATED_MUTATION_REASON,
     ("src/autoskillit/workspace/clone.py", "remove_clone"): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/session_skill_manager.py",
+        "src/autoskillit/workspace/session_skill_lifecycle.py",
         "_remove_and_verify",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/session_skill_manager.py",
+        "src/autoskillit/workspace/session_skill_materialization.py",
         "_remove_generated_home_skill_entry",
     ): _DELEGATED_MUTATION_REASON,
     # Commands and composition boundaries.
@@ -504,7 +504,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "build_protected_campaign_ids",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/hook_registry/_cache.py",
+        "src/autoskillit/hook_registry/_quarantine.py",
         "validate_plugin_cache_hooks",
     ): _SEPARATE_LIFECYCLE_REASON,
     (

@@ -235,7 +235,15 @@ def _collect_recipes_from_candidates(
                 json_path = path.with_suffix(".json")
                 try:
                     json_stat = json_path.stat()
-                except OSError:
+                except FileNotFoundError:
+                    json_stat = None
+                except OSError as exc:
+                    logger.warning(
+                        "Recipe JSON sidecar unreadable — parsing from YAML",
+                        path=str(json_path),
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
                     json_stat = None
                 # Performance-only metadata cache; Git enumeration still runs on every call.
                 recipe, raw = _parse_recipe_candidate(
@@ -317,7 +325,15 @@ _CachedRecipeCollection = tuple[tuple[RecipeInfo, ...], tuple[LoadReport, ...]]
 
 
 class _CandidateEnumerator(Protocol):
-    """Enumeration seam passed as an ``lru_cache`` key — must be hashable."""
+    """Enumeration seam for :func:`_discover_recipe_collection`.
+
+    Instances become part of an ``lru_cache`` key, so an implementation must be
+    hashable with a hash stable for the process lifetime. Ordinary functions,
+    bound methods, and ``functools.partial`` objects all satisfy this; a class
+    setting ``__hash__ = None`` does not. The declaration below documents that
+    contract rather than enforcing it — every object inherits a ``__hash__``,
+    so no structural check can reject an unhashable caller.
+    """
 
     def __hash__(self) -> int: ...
 
@@ -325,7 +341,12 @@ class _CandidateEnumerator(Protocol):
 
 
 class _CandidateCollector(Protocol):
-    """Collection seam passed as an ``lru_cache`` key — must be hashable."""
+    """Collection seam for :func:`_discover_recipe_collection`.
+
+    Tests substitute this to observe or perturb collection. Instances become
+    part of an ``lru_cache`` key and carry the same hashability contract as
+    :class:`_CandidateEnumerator`.
+    """
 
     def __hash__(self) -> int: ...
 
@@ -348,9 +369,13 @@ def _recipe_directory_signature(
         directory = source_root / subdir
         try:
             directory_stat = directory.stat()
+        except FileNotFoundError:
+            # An absent campaigns/ or eval/ dir is the norm, not a fault.
+            signature.append((subdir, False, None, None))
+            continue
         except OSError as err:
-            logger.debug(
-                "Recipe scan directory unavailable",
+            logger.warning(
+                "Recipe scan directory unreadable — treated as absent",
                 path=str(directory),
                 error_type=type(err).__name__,
                 error=str(err),
@@ -364,7 +389,7 @@ def _recipe_directory_signature(
     return tuple(signature)
 
 
-def _enumerate_recipe_candidates(
+def _enumerate_candidates_in_scan_dirs(
     source_root: Path,
     scan_dirs: tuple[str, ...],
 ) -> tuple[Path, ...]:
@@ -377,9 +402,12 @@ def _enumerate_recipe_candidates(
                 if path.suffix not in (".yaml", ".yml") or not path.is_file():
                     continue
                 candidates.append(((scan_rank, path.name), path.relative_to(source_root)))
+        except FileNotFoundError:
+            # An absent campaigns/ or eval/ dir is the norm, not a fault.
+            continue
         except OSError as err:
-            logger.debug(
-                "Recipe scan directory not enumerable",
+            logger.warning(
+                "Recipe scan directory not enumerable — skipped",
                 path=str(directory),
                 error_type=type(err).__name__,
                 error=str(err),
@@ -404,18 +432,25 @@ def _recipe_input_signature(
     """Return the per-candidate stat signature, or ``None`` when it cannot be taken.
 
     ``None`` means "the inputs are not stable enough to key a cache on" — the
-    caller falls back to an uncached collection pass. Every ``OSError`` is
-    logged so a transient I/O or permission fault is greppable rather than
-    silently indistinguishable from a vanished file.
+    caller falls back to an uncached collection pass. A vanished candidate is a
+    benign enumerate/stat race and logs at debug; any other fault logs at
+    warning, so a permission or I/O problem that silently disables the cache is
+    greppable instead of invisible.
     """
     signature: list[tuple[Path, int, int, int, bool, int | None, int | None, int | None]] = []
     for relative_path in relative_candidates:
         yaml_path = lexical_base / relative_path
         try:
             yaml_stat = yaml_path.stat()
-        except OSError as err:
+        except FileNotFoundError:
             logger.debug(
-                "Recipe candidate stat failed — falling back to uncached discovery",
+                "Recipe candidate vanished between enumeration and stat",
+                path=str(yaml_path),
+            )
+            return None
+        except OSError as err:
+            logger.warning(
+                "Recipe candidate stat failed — bypassing the discovery cache",
                 path=str(yaml_path),
                 error_type=type(err).__name__,
                 error=str(err),
@@ -427,8 +462,8 @@ def _recipe_input_signature(
         except FileNotFoundError:
             json_stat = None
         except OSError as err:
-            logger.debug(
-                "Recipe JSON sidecar stat failed — treated as absent",
+            logger.warning(
+                "Recipe JSON sidecar unreadable — treated as absent",
                 path=str(json_path),
                 error_type=type(err).__name__,
                 error=str(err),
@@ -515,8 +550,8 @@ def _discover_recipe_collection(
     project_identity = project_base.resolve()
     builtin_identity = builtin_base.resolve()
 
-    last_result: _CachedRecipeCollection | None = None
-    for attempt in range(2):
+    attempt = 0
+    while True:
         project_directory_signature = _recipe_directory_signature(project_identity, scan_dirs)
         builtin_directory_signature = _recipe_directory_signature(builtin_identity, scan_dirs)
         project_candidates = _cached_recipe_candidates(
@@ -536,11 +571,19 @@ def _discover_recipe_collection(
             logger.debug(
                 "Recipe input signature unavailable — clearing discovery caches",
                 attempt=attempt,
-                unstable_tier=("project" if project_input_signature is None else "builtin"),
+                unstable_tiers=[
+                    tier
+                    for tier, signature in (
+                        ("project", project_input_signature),
+                        ("builtin", builtin_input_signature),
+                    )
+                    if signature is None
+                ],
             )
             _cached_recipe_candidates.cache_clear()
             _cached_recipe_collection.cache_clear()
             if attempt == 0:
+                attempt += 1
                 continue
             return _collect_relative_recipe_candidates(
                 project_base,
@@ -550,7 +593,7 @@ def _discover_recipe_collection(
                 collect_candidates,
             )
 
-        last_result = _cached_recipe_collection(
+        result = _cached_recipe_collection(
             project_identity,
             project_base,
             project_directory_signature,
@@ -571,13 +614,15 @@ def _discover_recipe_collection(
             == _recipe_input_signature(builtin_base, builtin_candidates)
         )
         if stable:
-            return last_result
+            return result
         _cached_recipe_candidates.cache_clear()
         _cached_recipe_collection.cache_clear()
-
-    logger.warning(
-        "Recipe discovery did not reach a stable snapshot — returning last observed result",
-        project_base=str(project_base),
-        builtin_base=str(builtin_base),
-    )
-    return last_result if last_result is not None else ((), ())
+        if attempt == 1:
+            logger.warning(
+                "Recipe discovery did not reach a stable snapshot — "
+                "returning the last observed result",
+                project_base=str(project_base),
+                builtin_base=str(builtin_base),
+            )
+            return result
+        attempt += 1

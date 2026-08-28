@@ -30,7 +30,7 @@ from autoskillit.recipe._io_loading import (
 from autoskillit.recipe._io_loading import (
     _collect_recipes_from_candidates,
     _discover_recipe_collection,
-    _enumerate_recipe_candidates,
+    _enumerate_candidates_in_scan_dirs,
     clear_recipe_discovery_caches,
     load_recipe_dict_with_declarations,
 )
@@ -122,7 +122,7 @@ def _registry_position(r: RecipeInfo) -> int:
 
 
 def _enumerate_recipe_candidates_uncached(source_root: Path) -> tuple[Path, ...]:
-    return _enumerate_recipe_candidates(source_root, RECIPE_SCAN_DIRS)
+    return _enumerate_candidates_in_scan_dirs(source_root, RECIPE_SCAN_DIRS)
 
 
 def _clear_recipe_discovery_caches() -> None:

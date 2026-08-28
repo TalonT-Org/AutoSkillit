@@ -31,7 +31,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 RecipeDataclass = type[Recipe] | type[RecipeIngredient] | type[RecipeStep]
 FieldKey = tuple[RecipeDataclass, str]
-_Classification = Literal["execution", "composition", "validation-only", "documentation"]
+_Classification = Literal["execution", "composition", "validation-only"]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

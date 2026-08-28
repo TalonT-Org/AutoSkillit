@@ -18,9 +18,7 @@ from tests.arch.test_recipe_dataclass_consumption import (
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_KNOWN_CLASSIFICATIONS = frozenset(
-    {"execution", "composition", "validation-only", "documentation"}
-)
+_KNOWN_CLASSIFICATIONS = frozenset({"execution", "composition", "validation-only"})
 
 
 def _key_name(key: tuple[type[object], str]) -> tuple[str, str]:

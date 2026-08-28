@@ -55,11 +55,11 @@ _LIVE_ENUMERATION_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
             "tests/recipe/test_bundled_recipes_dispatch_ready.py",
             "_RECIPES_WITH_CONTRACTS",
         ),
-        # Contract cards are generated artifacts, rather than the recipe test matrix.
+        # Contract freshness intentionally reads the generated contract-card stems.
         ("tests/arch/test_recipe_contract_freshness.py", "_CONTRACT_STEMS"),
-        # This module deliberately compares the live loader with Git's tracked inventory.
+        # This parity assertion compares live validated names with Git-tracked names.
         ("tests/arch/test_recipe_tracking_parity.py", "all_validated_recipe_names"),
-        # This module deliberately compares the live loader with Git's tracked inventory.
+        # This parity assertion compares live discovery paths with Git-tracked paths.
         ("tests/arch/test_recipe_tracking_parity.py", "list_recipes"),
     }
 )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import stat
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,7 +48,11 @@ def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
                 raise ValueError(
                     f"agent-safe skill snapshots must not contain symlinks: {child.path}"
                 )
-        if len(children) != 1 or children[0].name != "SKILL.md" or children[0].is_dir:
+        if (
+            len(children) != 1
+            or children[0].name != "SKILL.md"
+            or not stat.S_ISREG(children[0].mode)
+        ):
             raise ValueError(
                 f"agent-safe skill directory must contain only SKILL.md: {skill_entry.path}"
             )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -266,6 +267,18 @@ def test_build_skills_manifest_structure(tmp_path: Path) -> None:
     assert "implement" in manifest["skills"]
     assert "content_sha256" in manifest["skills"]["investigate"]
     assert "size_bytes" in manifest["skills"]["investigate"]
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires FIFO support")
+def test_agent_safe_skill_tree_rejects_special_skill_file(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = _make_skill(skills_dir, "unsafe")
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.unlink()
+    os.mkfifo(skill_file)
+
+    with pytest.raises(ValueError, match="must contain only SKILL.md"):
+        _assert_agent_safe_skill_tree(skills_dir)
 
 
 # --- T-MANIFEST-2: manifest detects gated skills ---

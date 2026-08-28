@@ -2,6 +2,7 @@
 
 Decomposition acceptance criterion from #4860 / PR #4877 carried forward.
 """
+
 from pathlib import Path
 
 import pytest

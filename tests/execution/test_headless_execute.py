@@ -332,6 +332,37 @@ async def test_sink_close_failure_does_not_replace_deferred_cancellation(
     assert os.environ == parent_environment
 
 
+async def test_drain_model_evidence_falls_back_to_captured_session_id() -> None:
+    """Empty terminal session id must fall back to captured native id in evidence lookup."""
+    from autoskillit.core import ModelIdentity
+    from autoskillit.execution.headless._headless_model_evidence import _drain_model_evidence
+
+    lookups: list[str] = []
+
+    class _StubSink:
+        def close(self) -> None:
+            return None
+
+        def model_evidence_for(self, session_id: str):
+            lookups.append(session_id)
+            return "captured-model-id", ()
+
+    captured_session = "native-only-session-42"
+    evidence_session_id, _, _ = _drain_model_evidence(
+        _StubSink(),
+        terminal_session_id="",
+        captured_session_id=captured_session,
+        model_identity=ModelIdentity(
+            configured_model="opus",
+            effective_model="",
+            profile_name="",
+        ),
+    )
+
+    assert evidence_session_id == captured_session
+    assert lookups == [captured_session]
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     ("raw_session_type", "expected_session_type"),

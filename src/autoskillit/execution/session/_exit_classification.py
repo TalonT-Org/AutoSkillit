@@ -33,6 +33,12 @@ _CODEX_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"insufficient_quota", re.IGNORECASE),
     re.compile(r"model_not_found", re.IGNORECASE),
 )
+_CODEX_ERROR_CODE_API_STATUS: dict[str, int] = {
+    "rate_limit_exceeded": 429,
+    "server_error": 500,
+    "insufficient_quota": 429,
+    "model_not_found": 404,
+}
 
 _KNOWN_API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     _API_ERROR_PATTERNS + _CODEX_API_ERROR_PATTERNS

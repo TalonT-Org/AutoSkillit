@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
@@ -17,10 +17,7 @@ from autoskillit.core import (
     CliSubtype,
     RetryReason,
     SessionOutcome,
-    get_logger,
 )
-
-logger = get_logger(__name__)
 
 _ABS_PATH_RE: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+-]+))')
 
@@ -44,14 +41,6 @@ FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
 _HANDLED_RECORD_TYPES: frozenset[str] = frozenset(
     {"assistant", "rate_limit_event", "result", "system", "user"}
 )
-
-
-def _provider_field(obj: Mapping[str, Any], *names: str) -> Any:
-    """Return the first retained provider field across its observed spellings."""
-    for name in names:
-        if name in obj:
-            return obj[name]
-    return None
 
 
 class ContentState(StrEnum):
@@ -331,262 +320,8 @@ _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
 )
 
 
-@dataclass
-class _ParseAccumulator:
-    """Mutable accumulator for parse_session_result's NDJSON scan."""
-
-    result_obj: dict[str, Any] | None = None
-    tool_uses: list[dict[str, Any]] = field(default_factory=list)
-    assistant_messages: list[str] = field(default_factory=list)
-    jsonl_context_exhausted: bool = False
-    stop_reasons: list[str] = field(default_factory=list)
-    seen_block_types: set[str] = field(default_factory=set)
-    has_thinking_only_turn: bool = False
-    api_retry_count: int = 0
-    api_retry_last_error: str = ""
-    api_retry_last_status: int | None = None
-    api_retry_exhausted: bool = False
-    api_error_status: int | None = None
-    rate_limit_status: str = ""
-    rate_limit_type: str = ""
-    rate_limit_resets_at_epoch: int | None = None
-    terminal_reason: str = ""
-    provider_error_code: str = ""
-    api_error_message_seen: bool = False
-    denied_tool_use_ids: set[str] = field(default_factory=set)
-
-
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
-    """Parse Claude Code NDJSON stdout into a typed result.
+    """Parse Claude Code NDJSON stdout into a typed result."""
+    from ._session_parser import parse_session_result as _parse_session_result
 
-    Scans all NDJSON records into a _ParseAccumulator then constructs a single
-    ClaudeSessionResult — no early returns, ensuring tool_uses and token_usage
-    are preserved on all paths including fallback/unparseable.
-    """
-    if not stdout.strip():
-        return ClaudeSessionResult(
-            subtype=CliSubtype.EMPTY_OUTPUT,
-            is_error=True,
-            result="",
-            session_id="",
-            errors=[],
-        )
-
-    acc = _ParseAccumulator()
-    marker = CONTEXT_EXHAUSTION_MARKER
-
-    for line in stdout.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            if not isinstance(obj, dict):
-                continue
-            record_type = obj.get("type")
-            if record_type is None:
-                raw_error = _provider_field(obj, "error")
-                if isinstance(raw_error, str):
-                    acc.provider_error_code = raw_error
-                continue
-            if record_type not in _HANDLED_RECORD_TYPES:
-                continue
-
-            if record_type == "system" and obj.get("subtype") == "api_retry":
-                acc.api_retry_count += 1
-                acc.api_retry_last_error = str(_provider_field(obj, "error") or "")
-                raw_status = obj.get("error_status")
-                acc.api_retry_last_status = raw_status if isinstance(raw_status, int) else None
-                attempt = obj.get("attempt", 0)
-                max_retries = obj.get("max_retries", 0)
-                if (
-                    isinstance(attempt, int)
-                    and isinstance(max_retries, int)
-                    and attempt >= max_retries
-                    and max_retries > 0
-                ):
-                    acc.api_retry_exhausted = True
-                continue
-
-            if record_type == "rate_limit_event":
-                info = _provider_field(obj, "rate_limit_info") or obj
-                if isinstance(info, Mapping):
-                    raw_limit_status = _provider_field(info, "status")
-                    if isinstance(raw_limit_status, str):
-                        acc.rate_limit_status = raw_limit_status
-                        if raw_limit_status == "rejected":
-                            acc.api_retry_exhausted = True
-                    raw_limit_type = _provider_field(info, "rateLimitType", "rate_limit_type")
-                    if isinstance(raw_limit_type, str):
-                        acc.rate_limit_type = raw_limit_type
-                    raw_resets_at = _provider_field(info, "resetsAt", "resets_at")
-                    if isinstance(raw_resets_at, int):
-                        acc.rate_limit_resets_at_epoch = raw_resets_at
-                continue
-
-            if record_type == "result":
-                acc.result_obj = obj
-                raw_status = _provider_field(obj, "api_error_status")
-                if isinstance(raw_status, int):
-                    acc.api_error_status = raw_status
-                raw_terminal_reason = _provider_field(obj, "terminal_reason", "terminalReason")
-                if isinstance(raw_terminal_reason, str):
-                    acc.terminal_reason = raw_terminal_reason
-            elif record_type == "assistant" and not obj.get("subagent_type"):
-                raw_api_error_message_seen = _provider_field(
-                    obj, "is_api_error_message", "isApiErrorMessage"
-                )
-                if isinstance(raw_api_error_message_seen, bool):
-                    acc.api_error_message_seen = raw_api_error_message_seen
-                msg = obj.get("message")
-                if isinstance(msg, dict):
-                    content = msg.get("content", "")
-                    if isinstance(content, list):
-                        text_parts: list[str] = []
-                        turn_has_thinking = False
-                        turn_has_tool_use = False
-                        for block in content:
-                            if not isinstance(block, dict):
-                                continue
-                            block_type = ClaudeContentBlockType.from_api(block.get("type", ""))
-                            match block_type:
-                                case ClaudeContentBlockType.TEXT:
-                                    text_parts.append(block.get("text", ""))
-                                case ClaudeContentBlockType.TOOL_USE:
-                                    turn_has_tool_use = True
-                                    name = block.get("name", "")
-                                    entry: dict[str, str | list[str]] = {
-                                        "name": name,
-                                        "id": block.get("id", ""),
-                                    }
-                                    if name in {"Write", "Edit"} and isinstance(
-                                        block.get("input"), dict
-                                    ):
-                                        fp = block["input"].get("file_path", "")
-                                        if fp:
-                                            entry["file_path"] = fp
-                                    elif name == "Bash" and isinstance(block.get("input"), dict):
-                                        command = block["input"].get("command", "")
-                                        if isinstance(command, str):
-                                            paths = [
-                                                m.group(1)
-                                                for m in _ABS_PATH_RE.finditer(command)
-                                                if len(m.group(1)) >= 5
-                                            ]
-                                            if paths:
-                                                entry["bash_paths"] = paths
-                                    acc.tool_uses.append(entry)
-                                case (
-                                    ClaudeContentBlockType.THINKING
-                                    | ClaudeContentBlockType.REDACTED_THINKING
-                                ):
-                                    turn_has_thinking = True
-                                case (
-                                    ClaudeContentBlockType.TOOL_RESULT
-                                    | ClaudeContentBlockType.IMAGE
-                                ):
-                                    pass  # Not expected in assistant content; skip gracefully
-                                case ClaudeContentBlockType.UNKNOWN:
-                                    raw_type = block.get("type", "")
-                                    logger.debug("unknown_content_block_type", block_type=raw_type)
-                                    acc.seen_block_types.add(raw_type)
-                                case _ as unreachable:
-                                    assert_never(unreachable)
-                        text = "\n".join(text_parts).strip()
-                        if turn_has_thinking and not text_parts and not turn_has_tool_use:
-                            acc.has_thinking_only_turn = True
-                    else:
-                        text = str(content).strip()
-                    if text:
-                        acc.assistant_messages.append(text)
-                    _stop = msg.get("stop_reason", "")
-                    if _stop:
-                        acc.stop_reasons.append(str(_stop))
-                elif "message" not in obj:
-                    if obj.get("output_tokens", -1) == 0:
-                        flat_content = obj.get("content", [])
-                        if isinstance(flat_content, list) and any(
-                            isinstance(block, dict)
-                            and block.get("type") == "text"
-                            and marker in block.get("text", "").lower()
-                            for block in flat_content
-                        ):
-                            acc.jsonl_context_exhausted = True
-            elif record_type == "user" and not obj.get("subagent_type"):
-                content = obj.get("message", {}).get("content", [])
-                if isinstance(content, list):
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                            and block.get("is_error") is True
-                        ):
-                            tid = block.get("tool_use_id", "")
-                            if tid:
-                                acc.denied_tool_use_ids.add(tid)
-        except json.JSONDecodeError:
-            continue
-
-    if acc.result_obj is None:
-        try:
-            fallback = json.loads(stdout)
-            if isinstance(fallback, dict) and fallback.get("type") == "result":
-                acc.result_obj = fallback
-                raw_status = _provider_field(fallback, "api_error_status")
-                if isinstance(raw_status, int):
-                    acc.api_error_status = raw_status
-                raw_terminal_reason = _provider_field(
-                    fallback, "terminal_reason", "terminalReason"
-                )
-                if isinstance(raw_terminal_reason, str):
-                    acc.terminal_reason = raw_terminal_reason
-        except json.JSONDecodeError:
-            pass
-
-    token_usage = extract_token_usage(stdout)
-
-    if acc.result_obj is not None:
-        extra_keys = frozenset(acc.result_obj.keys()) - _KNOWN_RESULT_KEYS
-        if extra_keys:
-            logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
-        subtype = CliSubtype.from_cli(acc.result_obj.get("subtype") or "unknown")
-        is_error: bool = acc.result_obj.get("is_error", False)
-        result_text: str = acc.result_obj.get("result") or ""
-        session_id: str = acc.result_obj.get("session_id") or ""
-        errors: list[str] = acc.result_obj.get("errors") or []
-    else:
-        if acc.jsonl_context_exhausted:
-            subtype = CliSubtype.CONTEXT_EXHAUSTION
-        else:
-            subtype = CliSubtype.UNPARSEABLE
-        is_error = True
-        result_text = stdout
-        session_id = ""
-        errors = []
-
-    return ClaudeSessionResult(
-        subtype=subtype,
-        is_error=is_error,
-        result=result_text,
-        session_id=session_id,
-        errors=errors,
-        token_usage=token_usage,
-        assistant_messages=acc.assistant_messages,
-        tool_uses=acc.tool_uses,
-        jsonl_context_exhausted=acc.jsonl_context_exhausted,
-        stop_reasons=acc.stop_reasons,
-        has_thinking_only_turn=acc.has_thinking_only_turn,
-        seen_block_types=frozenset(acc.seen_block_types),
-        api_retry_count=acc.api_retry_count,
-        api_retry_last_error=acc.api_retry_last_error,
-        api_retry_last_status=acc.api_retry_last_status,
-        api_retry_exhausted=acc.api_retry_exhausted,
-        api_error_status=acc.api_error_status,
-        rate_limit_status=acc.rate_limit_status,
-        rate_limit_type=acc.rate_limit_type,
-        rate_limit_resets_at_epoch=acc.rate_limit_resets_at_epoch,
-        terminal_reason=acc.terminal_reason,
-        provider_error_code=acc.provider_error_code,
-        api_error_message_seen=acc.api_error_message_seen,
-        denied_tool_use_ids=frozenset(acc.denied_tool_use_ids),
-    )
+    return _parse_session_result(stdout)

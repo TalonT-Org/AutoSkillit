@@ -111,6 +111,13 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     api_retry_last_error: str
     api_retry_last_status: int
     api_retry_exhausted: bool
+    api_error_status: int | None
+    api_terminal_reason: str
+    api_error_code: str
+    api_error_message_seen: bool
+    rate_limit_status: str
+    rate_limit_type: str
+    rate_limit_resets_at_epoch: int | None
     pre_contamination_retry_reason: RetryReason
     pre_contamination_subtype: str
     ndjson_unknown_event_count: int

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ..closure_hashing import HASH_RE as _HASH_RE
+from ._type_api_failure import ApiFailureOutcome, RateLimitWindow
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle_authority import AuditVerdict
 from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
@@ -417,26 +418,6 @@ class ApiRetryOutcome:
     last_error: str = ""
     last_status: int | None = None
     exhausted: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class RateLimitWindow:
-    """Observed provider rate-limit window evidence."""
-
-    status: str = ""
-    limit_type: str = ""
-    resets_at_epoch: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class ApiFailureOutcome:
-    """Structured provider-failure evidence retained from a session."""
-
-    status: int | None = None
-    terminal_reason: str = ""
-    error_code: str = ""
-    api_error_message_seen: bool = False
-    rate_limit: RateLimitWindow = field(default_factory=RateLimitWindow)
 
 
 @dataclass(frozen=True, slots=True)

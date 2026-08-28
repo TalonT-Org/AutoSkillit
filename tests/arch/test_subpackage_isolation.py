@@ -1426,13 +1426,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),
-    "skills.py": (
-        1350,
-        "REQ-CNST-010-E14: skill resolution + sidecar parsing — exploration.yaml sidecar "
-        "loader and parser are tightly coupled to _skill_info_from_frontmatter and the "
-        "marker binder; extracting them would create an artificial module boundary while "
-        "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
-    ),
     "server/_recipe_delivery.py": (
         750,
         "REQ-CNST-010-E12: #4557 decomposes recipe delivery into _recipe_delivery.py "
@@ -1504,30 +1497,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "both SkillResult construction seams; _build_skill_result remains here as the "
         "headless orchestration authority. The 827-line residual is dominated by that "
         "single 741-line function, which owns the success-gate adjacency rule.",
-    ),
-    "workspace/skill_capabilities.py": (
-        1120,
-        "REQ-SEM-SCHEMA-001: versioned semantic declarations, closed-operation parsing, "
-        "retired-key rejection, and precise per-skill diagnostics remain co-located at "
-        "the sole skill-frontmatter validation boundary; #4507 parses runtime child "
-        "cardinality at that same boundary and classifies its dedicated typed invalidity "
-        "before the general semantic-plan failure path.",
-    ),
-    "workspace/skills.py": (
-        1550,
-        "REQ-SEM-SCHEMA-002: semantic-plan threading and invalid-override fallback remain "
-        "inside the existing precedence resolver so a rejected project-local declaration "
-        "cannot poison unrelated skills or bypass the valid bundled fallback; typed "
-        "invalidity and exclusion records remain adjacent to the resolver transitions "
-        "whose rejected candidates they describe; "
-        "REQ-CNST-010-E20: exploration-vector frontmatter parsing, canonical marker "
-        "binding, and exact migrated-body replacement stay beside the SKILL.md parser so "
-        "discovery and projection share one fail-closed content authority. Bumped to 1350 "
-        "by the exploration-vector sidecar migration: exploration.yaml loading and the "
-        "slim-schema sidecar parser stay beside the marker binder and frontmatter parser "
-        "they feed so the sidecar digest, migrated/retained vector shapes, and marker "
-        "contract remain one fail-closed parsing authority. Bumped to 1550 by typed "
-        "skill-invalidity threading and the completed explorer sidecar migration.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1500,

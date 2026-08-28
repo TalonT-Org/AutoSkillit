@@ -109,3 +109,4 @@ async def test_composed_recipe_installs_child_step_and_ingredient(
         )
     )
     assert lock_result["success"] is True, lock_result
+    assert lock_result["locked"] == {"child_only": "child-value"}

@@ -134,29 +134,41 @@ DECLARED_RECIPE_FIELDS: dict[FieldKey, DeclaredFieldDef] = (
     | _field_defs(
         Recipe,
         (
-            "blocks",
             "categories",
             "composite_hash",
             "content_hash",
-            "continue_on_failure",
-            "delivery_segments",
             "description",
             "dispatch_only",
-            "dispatches",
             "experimental",
             "ingredients",
             "kitchen_rules",
-            "kind",
             "name",
-            "recipe_version",
             "requires_features",
             "requires_packs",
-            "steps",
             "summary",
-            "version",
         ),
-        "validation-only",
+        "execution",
         _RECIPE_SITE,
+        _BEHAVIORAL_ANCHOR,
+    )
+    | _field_defs(
+        Recipe,
+        (
+            "continue_on_failure",
+            "delivery_segments",
+            "dispatches",
+            "kind",
+            "steps",
+        ),
+        "composition",
+        _COMPOSITION_SITE,
+        _COMPOSITION_ANCHOR,
+    )
+    | _field_defs(
+        Recipe,
+        ("blocks", "recipe_version", "version"),
+        "validation-only",
+        _VALIDATION_SITE,
     )
 )
 

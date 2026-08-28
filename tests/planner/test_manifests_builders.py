@@ -11,20 +11,10 @@ import autoskillit.planner.manifests as manifests_module
 from tests.planner.conftest import (
     make_assignment_result,
     make_phase_result,
+    unlink_second_accepted_result,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
-
-
-def _unlink_second_accepted_result(monkeypatch) -> None:
-    original_discover = manifests_module.discover_tier_files
-
-    def discover_then_unlink(*args, **kwargs):
-        discovery = original_discover(*args, **kwargs)
-        discovery.accepted[1].unlink()
-        return discovery
-
-    monkeypatch.setattr(manifests_module, "discover_tier_files", discover_then_unlink)
 
 
 def test_build_phase_assignment_manifest_creates_one_item_per_phase(tmp_path):
@@ -110,7 +100,7 @@ def test_build_phase_assignment_manifest_skips_a_vanished_result(tmp_path, monke
     output_dir.mkdir()
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
     (phases_dir / "P2_result.json").write_text(json.dumps(make_phase_result(2)))
-    _unlink_second_accepted_result(monkeypatch)
+    unlink_second_accepted_result(monkeypatch, manifests_module)
 
     result = build_phase_assignment_manifest(str(phases_dir), str(output_dir))
 
@@ -193,7 +183,7 @@ def test_build_phase_wp_manifest_skips_a_vanished_result(tmp_path, monkeypatch):
     (assignments_dir / "P2-A1_result.json").write_text(
         json.dumps(make_assignment_result(2, 1, proposed_work_packages=[]))
     )
-    _unlink_second_accepted_result(monkeypatch)
+    unlink_second_accepted_result(monkeypatch, manifests_module)
 
     result = build_phase_wp_manifest(str(assignments_dir), str(output_dir))
 

@@ -25,21 +25,11 @@ from tests.planner.conftest import (
     make_minimal_output_dir,
     make_phase_result,
     make_wp_result,
+    unlink_second_accepted_result,
     write_json,
 )
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
-
-
-def _unlink_second_accepted_result(monkeypatch) -> None:
-    original_discover = validation_module.discover_tier_files
-
-    def discover_then_unlink(*args, **kwargs):
-        discovery = original_discover(*args, **kwargs)
-        discovery.accepted[1].unlink()
-        return discovery
-
-    monkeypatch.setattr(validation_module, "discover_tier_files", discover_then_unlink)
 
 
 def test_discover_tier_files_returns_accepted_and_rejected(tmp_path: Path) -> None:
@@ -155,7 +145,7 @@ def test_load_phase_results_skips_a_vanished_result(tmp_path: Path, monkeypatch)
     phases_dir.mkdir()
     write_json(phases_dir / "P1_result.json", make_phase_result(1))
     write_json(phases_dir / "P2_result.json", make_phase_result(2))
-    _unlink_second_accepted_result(monkeypatch)
+    unlink_second_accepted_result(monkeypatch, validation_module)
 
     results, _ = _load_phase_results(tmp_path)
 
@@ -168,7 +158,7 @@ def test_load_assignment_results_skips_a_vanished_result(tmp_path: Path, monkeyp
     assignments_dir.mkdir()
     write_json(assignments_dir / "P1-A1_result.json", make_assignment_result(1, 1))
     write_json(assignments_dir / "P1-A2_result.json", make_assignment_result(1, 2))
-    _unlink_second_accepted_result(monkeypatch)
+    unlink_second_accepted_result(monkeypatch, validation_module)
 
     results, _ = _load_assignment_results(tmp_path)
 
@@ -181,7 +171,7 @@ def test_load_wp_results_skips_a_vanished_result(tmp_path: Path, monkeypatch) ->
     work_packages_dir.mkdir()
     write_json(work_packages_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
     write_json(work_packages_dir / "P1-A1-WP2_result.json", make_wp_result("P1-A1-WP2"))
-    _unlink_second_accepted_result(monkeypatch)
+    unlink_second_accepted_result(monkeypatch, validation_module)
 
     results, _ = _load_wp_results(tmp_path)
 

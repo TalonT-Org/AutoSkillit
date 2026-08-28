@@ -8,7 +8,11 @@ import pytest
 
 import autoskillit.planner.merge as merge_module
 from autoskillit.planner.merge import build_plan_snapshot
-from tests.planner.conftest import make_phase_result, write_task_file
+from tests.planner.conftest import (
+    make_phase_result,
+    unlink_second_accepted_result,
+    write_task_file,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -119,14 +123,7 @@ def test_build_plan_snapshot_skips_a_vanished_phase_result(tmp_path, monkeypatch
     (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
     (phases_dir / "P2_result.json").write_text(json.dumps(make_phase_result(2)))
     out = tmp_path / "snapshot.json"
-    original_discover = merge_module.discover_tier_files
-
-    def discover_then_unlink(*args, **kwargs):
-        discovery = original_discover(*args, **kwargs)
-        discovery.accepted[1].unlink()
-        return discovery
-
-    monkeypatch.setattr(merge_module, "discover_tier_files", discover_then_unlink)
+    unlink_second_accepted_result(monkeypatch, merge_module)
 
     result = build_plan_snapshot(str(phases_dir), str(out))
 

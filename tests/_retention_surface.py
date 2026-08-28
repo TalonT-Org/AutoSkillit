@@ -779,14 +779,14 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._projection_cache::prune_stale_projections --
-    f"{_PP}::L802": _retries_after_input_changes(
+    f"{_PP}::L801": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
     ),
-    f"{_PP}::L805": _self_limiting(
+    f"{_PP}::L804": _self_limiting(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L814": _retries_after_input_changes(
+    f"{_PP}::L813": _retries_after_input_changes(
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),

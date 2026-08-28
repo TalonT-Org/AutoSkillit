@@ -35,6 +35,7 @@ from autoskillit.recipe._recipe_composition import (
     _analysis_edges_from_effective_routes,
     _assert_content_integrity,
     _build_active_recipe,
+    _DeferredGuardState,
     _derive_rate_limit_routes,
     _effective_routing_edges,
     _effective_routing_target_errors,
@@ -179,7 +180,7 @@ def _build_orchestration_rules(
 
 def _finalize_recipe_steps(
     recipe: Recipe,
-    deferred_guard_state: dict[str, tuple[str, str | None]],
+    deferred_guard_state: dict[str, _DeferredGuardState],
 ) -> tuple[FinalizedRecipeStep, ...]:
     """Freeze the execution-relevant fields of the active recipe steps."""
     return tuple(
@@ -194,7 +195,7 @@ def _finalize_recipe_steps(
             idle_output_timeout=step.idle_output_timeout,
             action=step.action,
             skip_when_false=(
-                deferred_guard_state[name][0]
+                deferred_guard_state[name].guard_reference
                 if name in deferred_guard_state
                 else step.skip_when_false
             ),
@@ -241,7 +242,7 @@ class _ValidationResult:
     suggestions: list[dict[str, Any]]
     skip_resolutions: dict[str, bool | None]
     pre_prune_steps: dict[str, RecipeStep]
-    deferred_guard_state: dict[str, tuple[str, str | None]]
+    deferred_guard_state: dict[str, _DeferredGuardState]
     unreachable_step_names: tuple[str, ...]
     effective_flow_edges: tuple[RecipeFlowEdge, ...]
     finalized_projection: FinalizedRecipeProjection | None
@@ -508,7 +509,7 @@ def _run_validation_pipeline(
     source_recipe: Recipe | None = None
     active_recipe: Recipe | None = None
     _skip_resolutions: dict[str, bool | None] = {}
-    _deferred_guard_state: dict[str, tuple[str, str | None]] = {}
+    _deferred_guard_state: dict[str, _DeferredGuardState] = {}
     _unreachable_step_names: tuple[str, ...] = ()
     _effective_flow_edges: tuple[RecipeFlowEdge, ...] = ()
     _pre_prune_steps: dict[str, RecipeStep] = {}

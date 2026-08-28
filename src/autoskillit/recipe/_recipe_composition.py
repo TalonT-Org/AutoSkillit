@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import regex as re
 
@@ -28,6 +28,11 @@ from autoskillit.recipe.schema import (
     StepResultCondition,
     StepResultRoute,
 )  # noqa: F401
+
+
+class _DeferredGuardState(NamedTuple):
+    guard_reference: str
+    skip_target: str | None
 
 
 def _collect_all_route_targets(step: RecipeStep) -> set[str]:
@@ -83,7 +88,7 @@ def _derive_rate_limit_routes(recipe: Recipe) -> Recipe:
 
 def _effective_routing_edges(
     recipe: Recipe,
-    deferred_guard_state: dict[str, tuple[str, str | None]] | None = None,
+    deferred_guard_state: dict[str, _DeferredGuardState] | None = None,
 ) -> tuple[RecipeFlowEdge, ...]:
     """Return the executable routes for the finalized recipe graph.
 
@@ -113,13 +118,13 @@ def _effective_routing_edges(
                 )
             )
         guard_state = deferred.get(step_name)
-        if guard_state is not None and guard_state[1] is not None:
+        if guard_state is not None and guard_state.skip_target is not None:
             edges.append(
                 RecipeFlowEdge(
                     source=step_name,
                     edge_type="skip",
-                    target=guard_state[1],
-                    condition=guard_state[0],
+                    target=guard_state.skip_target,
+                    condition=guard_state.guard_reference,
                     result_field=None,
                 )
             )
@@ -589,7 +594,7 @@ def _prune_skipped_steps(
     recipe: Any,
     ingredient_overrides: dict[str, str] | None = None,
     defer_unresolved: bool = False,
-) -> tuple[Any, dict[str, bool | None], dict[str, tuple[str, str | None]]]:
+) -> tuple[Any, dict[str, bool | None], dict[str, _DeferredGuardState]]:
     """Evaluate skip_when_false guards and prune steps Python-side.
 
     Iterates all steps with a skip_when_false field. For each:
@@ -629,7 +634,7 @@ def _prune_skipped_steps(
 
     redirects = _resolve_skip_redirects(recipe.steps, resolutions)
     steps: dict[str, RecipeStep] = {}
-    deferred_guard_state: dict[str, tuple[str, str | None]] = {}
+    deferred_guard_state: dict[str, _DeferredGuardState] = {}
     for name, step in recipe.steps.items():
         resolution = resolutions.get(name, True)
         if resolution is False:
@@ -637,9 +642,9 @@ def _prune_skipped_steps(
         if name in resolutions:
             if resolution is None and step.skip_when_false is not None:
                 target = step.on_skip
-                deferred_guard_state[name] = (
-                    step.skip_when_false,
-                    redirects.get(target, target) if target is not None else None,
+                deferred_guard_state[name] = _DeferredGuardState(
+                    guard_reference=step.skip_when_false,
+                    skip_target=redirects.get(target, target) if target is not None else None,
                 )
             step = dataclasses.replace(
                 step,

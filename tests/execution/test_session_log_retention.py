@@ -467,6 +467,7 @@ def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
         pytest.param(b"\xff", id="non-utf8"),
         pytest.param(b"not-json\n", id="invalid-json"),
         pytest.param(b'["not", "an object"]\n', id="non-object-json"),
+        pytest.param(b"[" * 2000 + b"]" * 2000 + b"\n", id="excessive-json-depth"),
     ],
 )
 def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_once(

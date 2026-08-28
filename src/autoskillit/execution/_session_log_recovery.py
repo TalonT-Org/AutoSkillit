@@ -89,7 +89,7 @@ def recover_crashed_sessions(
                     continue
                 try:
                     snapshot = json.loads(line)
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, RecursionError):
                     corrupt_reason = "invalid JSON"
                     break
                 if not isinstance(snapshot, dict):

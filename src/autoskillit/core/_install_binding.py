@@ -71,7 +71,7 @@ def _acquire_self_lease(root: Path, version: str) -> None:
             installed_plugin_artifact_lease_path,
         )
         from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY
-        from .runtime.artifact_lease import ArtifactLease
+        from .runtime.artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, ArtifactLease
 
         canonical_root = root.resolve()
         for incarnation_dir in canonical_root.parents:
@@ -83,7 +83,8 @@ def _acquire_self_lease(root: Path, version: str) -> None:
                 ):
                     continue
                 _SELF_LEASE_HANDLE = ArtifactLease.acquire_existing_shared(
-                    installed_plugin_artifact_lease_path(incarnation_dir)
+                    installed_plugin_artifact_lease_path(incarnation_dir),
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
                 )
                 return
     except Exception:

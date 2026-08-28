@@ -453,7 +453,7 @@ class LocalOtlpSink:
             self._increment("dropped_io")
             return
         try:
-            with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+            with ArtifactLease.acquire_exclusive(lock_path, timeout=0.0):
                 try:
                     with active_path.open("rb") as active_file:
                         active_bytes = active_file.read(_MAX_GENERATION_BYTES + 1)

@@ -16,11 +16,13 @@ from typing import NamedTuple
 import regex as re
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     CODEX_MODEL_ALIASES,
     CODEX_MODEL_ALIASES_LAST_VERIFIED,
     MIN_FREE_BYTES_THRESHOLD,
     PYTEST_GENERATION_NAME_RE,
     ArtifactLease,
+    ArtifactLeaseContention,
     CodingAgentBackend,
     Severity,
     SpaceProbe,
@@ -499,7 +501,10 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
     try:
         if lock_path.is_file():
             try:
-                with ArtifactLease.acquire_existing_shared(lock_path):
+                with ArtifactLease.acquire_existing_shared(
+                    lock_path,
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                ):
                     summaries, rows, malformed = _read_session_index_projection(log_root)
             except FileNotFoundError:
                 summaries, rows, malformed = _read_session_index_projection(log_root)
@@ -507,11 +512,14 @@ def _check_session_index_projection(*, log_dir: str = "") -> DoctorResult:
             summaries, rows, malformed = _read_session_index_projection(log_root)
             if lock_path.is_file():
                 try:
-                    with ArtifactLease.acquire_existing_shared(lock_path):
+                    with ArtifactLease.acquire_existing_shared(
+                        lock_path,
+                        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                    ):
                         summaries, rows, malformed = _read_session_index_projection(log_root)
                 except FileNotFoundError:
                     pass
-    except OSError as exc:
+    except (ArtifactLeaseContention, OSError) as exc:
         return DoctorResult(
             Severity.WARNING,
             check_name,

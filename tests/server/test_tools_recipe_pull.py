@@ -933,6 +933,20 @@ def test_kitchen_retirement_evicts_after_generation_lock_exits(
     assert evicted == ["lock-kitchen"]
 
 
+def test_generation_lock_translates_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fail_lock(*args: object, **kwargs: object) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(recipe_artifact, "acquire_flock_with_timeout", fail_lock)
+
+    with pytest.raises(recipe_artifact.RecipeArtifactError, match="Timed out acquiring"):
+        with recipe_artifact._generation_lock(tmp_path, exclusive=True):
+            pass
+
+
 def test_kitchen_retirement_eviction_is_success_only_and_nonthrowing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

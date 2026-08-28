@@ -25,6 +25,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
     YAMLError,
+    acquire_flock_with_timeout,
     atomic_write,
     build_recipe_execution_credential,
     fast_dumps,
@@ -42,6 +43,9 @@ from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
+
+
+_RECIPE_ARTIFACT_LOCK_TIMEOUT_SECONDS = 2.0
 
 
 class RecipeArtifactError(RuntimeError):
@@ -480,8 +484,19 @@ def _retired_namespace_marker(temp_dir: Path, *, kitchen_id: str) -> Path:
 def _generation_lock(temp_dir: Path, *, exclusive: bool) -> Iterator[None]:
     root = _artifact_root(temp_dir)
     root.mkdir(parents=True, exist_ok=True)
-    with (root / ".generation.lock").open("a+b") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+    lock_path = root / ".generation.lock"
+    with lock_path.open("a+b") as lock_file:
+        try:
+            acquire_flock_with_timeout(
+                lock_file.fileno(),
+                operation=fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,
+                timeout=_RECIPE_ARTIFACT_LOCK_TIMEOUT_SECONDS,
+                path=lock_path,
+            )
+        except TimeoutError as exc:
+            raise RecipeArtifactError(
+                f"Timed out acquiring recipe artifact generation lock: {lock_path}"
+            ) from exc
         try:
             yield
         finally:

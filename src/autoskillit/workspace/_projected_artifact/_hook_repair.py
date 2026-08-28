@@ -256,7 +256,7 @@ def repair_broken_plugin_cache_hooks(
             if not repair_needed:
                 continue
             lease_path = installed_plugin_artifact_lease_path(version_dir)
-            with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
+            with ArtifactLease.acquire_exclusive(lease_path, timeout=0.0):
                 raw_hooks = hooks_json_path.read_bytes()
                 if is_hook_payload_quarantined(manifest_path, raw_hooks):
                     continue
@@ -388,7 +388,7 @@ def repair_broken_projection_hooks(
             if not repair_needed:
                 continue
             lease_path = projected_artifact_lease_path(projection_dir)
-            with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
+            with ArtifactLease.acquire_exclusive(lease_path, timeout=0.0):
                 raw_hooks = hooks_json_path.read_bytes()
                 if is_hook_payload_quarantined(manifest_path, raw_hooks):
                     continue

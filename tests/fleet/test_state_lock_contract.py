@@ -10,14 +10,17 @@ from __future__ import annotations
 import ast
 import fcntl
 import io
+import os
+import signal
 import threading
 from pathlib import Path
-from typing import IO, Any
+from typing import IO
 from unittest.mock import patch
 
 import pytest
 
 from autoskillit.fleet import (
+    CampaignStateMutator,
     DispatchRecord,
     DispatchStatus,
     append_dispatch_record,
@@ -33,7 +36,7 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 
-pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.feature("fleet")]
 
 _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
     {
@@ -72,6 +75,159 @@ _MUTATION_FUNCTIONS: dict[str, object] = {
     "update_orchestrator_session_id": update_orchestrator_session_id,
     "upsert_dispatch_record_by_name": upsert_dispatch_record_by_name,
 }
+
+
+class TestCampaignStateMutatorBoundedLocking:
+    def test_thread_lock_timeout_does_not_open_sidecar(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The in-process lock has a bounded wait before any file resource opens."""
+        import autoskillit.fleet.state as fleet_state
+
+        class RejectingLock:
+            def __init__(self) -> None:
+                self.timeouts: list[float] = []
+
+            def acquire(self, *, timeout: float) -> bool:
+                self.timeouts.append(timeout)
+                return False
+
+            def release(self) -> None:
+                pytest.fail("a lock that was not acquired must not be released")
+
+        lock = RejectingLock()
+        state_path = tmp_path / "state.json"
+        monkeypatch.setattr(fleet_state, "_resume_lock", lock)
+
+        with pytest.raises(TimeoutError, match="in-process fleet state lock"):
+            with CampaignStateMutator(state_path):
+                pass
+
+        assert lock.timeouts == [fleet_state._FLEET_STATE_LOCK_TIMEOUT_SECONDS]
+        assert not state_path.with_suffix(".lock").exists()
+
+    def test_flock_timeout_closes_sidecar_and_releases_thread_lock(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cross-process lock failure cannot leak either lock ownership resource."""
+        import builtins
+
+        import autoskillit.fleet.state as fleet_state
+
+        class TrackingLock:
+            def __init__(self) -> None:
+                self.released = False
+
+            def acquire(self, *, timeout: float) -> bool:
+                return True
+
+            def release(self) -> None:
+                self.released = True
+
+        handles: list[IO[bytes]] = []
+        original_open = builtins.open
+
+        def tracking_open(*args: object, **kwargs: object) -> IO[bytes]:
+            handle = original_open(*args, **kwargs)  # type: ignore[arg-type]
+            handles.append(handle)
+            return handle
+
+        lock = TrackingLock()
+        mutator = CampaignStateMutator(tmp_path / "state.json")
+
+        def timeout_flock(*_args: object, **_kwargs: object) -> None:
+            raise TimeoutError("contended")
+
+        monkeypatch.setattr(fleet_state, "_resume_lock", lock)
+        monkeypatch.setattr(fleet_state, "acquire_flock_with_timeout", timeout_flock)
+
+        with (
+            patch.object(builtins, "open", side_effect=tracking_open),
+            pytest.raises(TimeoutError, match="contended"),
+        ):
+            mutator.__enter__()
+
+        assert handles and handles[0].closed
+        assert lock.released
+        assert mutator._ownership is None
+
+    def test_flock_acquisition_uses_exclusive_timed_operation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The state mutator delegates the nonblocking retry policy to core."""
+        import autoskillit.fleet.state as fleet_state
+
+        state_path = tmp_path / "state.json"
+        write_initial_state(state_path, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
+        calls: list[tuple[int, int, float, Path]] = []
+
+        def track_flock(fd: int, *, operation: int, timeout: float, path: Path) -> None:
+            calls.append((fd, operation, timeout, path))
+
+        monkeypatch.setattr(fleet_state, "acquire_flock_with_timeout", track_flock)
+
+        with CampaignStateMutator(state_path):
+            pass
+
+        assert len(calls) == 1
+        _, operation, timeout, lock_path = calls[0]
+        assert operation == fcntl.LOCK_EX
+        assert timeout == fleet_state._FLEET_STATE_LOCK_TIMEOUT_SECONDS
+        assert lock_path == state_path.with_suffix(".lock")
+
+    def test_pending_sigint_after_sidecar_open_releases_all_locks(self, tmp_path: Path) -> None:
+        """A SIGINT pending during setup is delivered only after cleanup ownership exists."""
+        state_path = tmp_path / "state.json"
+        lock_path = state_path.with_suffix(".lock")
+        read_fd, write_fd = os.pipe()
+        child_pid = os.fork()
+        if child_pid == 0:
+            os.close(read_fd)
+            result = b"sigint-not-delivered"
+            try:
+                import autoskillit.fleet.state as fleet_state
+
+                original_pthread_sigmask = fleet_state.signal.pthread_sigmask
+                sent_sigint = False
+
+                def inject_pending_sigint(
+                    how: int, signals: set[signal.Signals]
+                ) -> set[signal.Signals]:
+                    nonlocal sent_sigint
+                    previous_mask = original_pthread_sigmask(how, signals)
+                    if how == signal.SIG_BLOCK and signal.SIGINT in signals and not sent_sigint:
+                        sent_sigint = True
+                        os.kill(os.getpid(), signal.SIGINT)
+                    return previous_mask
+
+                fleet_state.signal.pthread_sigmask = inject_pending_sigint
+                with CampaignStateMutator(state_path):
+                    pass
+            except KeyboardInterrupt:
+                lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+                try:
+                    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    result = b"cleanup-complete"
+                except BlockingIOError:
+                    result = b"lock-leaked"
+                finally:
+                    os.close(lock_fd)
+            except BaseException:
+                result = b"unexpected-exception"
+            os.write(write_fd, result)
+            os.close(write_fd)
+            os._exit(0)
+
+        os.close(write_fd)
+        try:
+            _, status = os.waitpid(child_pid, 0)
+            result = os.read(read_fd, 64)
+        finally:
+            os.close(read_fd)
+
+        assert os.WIFEXITED(status)
+        assert os.WEXITSTATUS(status) == 0
+        assert result == b"cleanup-complete"
 
 
 # -------------------------------------------------------------------
@@ -181,16 +337,18 @@ class TestAllMutationsAcquireLock:
         "fn_name,fn", list(_MUTATION_FUNCTIONS.items()), ids=list(_MUTATION_FUNCTIONS.keys())
     )
     def test_state_mutation_acquires_flock(self, tmp_path: Path, fn_name: str, fn: object) -> None:
-        """Each state mutation function must call fcntl.flock before mutating state."""
+        """Each state mutation function must take the exclusive sidecar lock."""
+        from autoskillit.core import acquire_flock_with_timeout
+
         sp = tmp_path / "state.json"
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
 
         flock_calls: list[tuple[int, int]] = []
-        original_flock = fcntl.flock
+        original_acquire_flock = acquire_flock_with_timeout
 
-        def tracking_flock(fd: int, op: int) -> None:
-            flock_calls.append((fd, op))
-            return original_flock(fd, op)
+        def tracking_acquire_flock(fd: int, *, operation: int, timeout: float, path: Path) -> None:
+            flock_calls.append((fd, operation))
+            return original_acquire_flock(fd, operation=operation, timeout=timeout, path=path)
 
         # Some transitions require specific pre-states
         if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
@@ -201,7 +359,10 @@ class TestAllMutationsAcquireLock:
             raw["dispatches"][0]["status"] = "running"
             sp.write_text(json.dumps(raw))
 
-        with patch("autoskillit.fleet.state.fcntl.flock", side_effect=tracking_flock):
+        with patch(
+            "autoskillit.fleet.state.acquire_flock_with_timeout",
+            side_effect=tracking_acquire_flock,
+        ):
             if fn_name == "mark_dispatch_running":
                 fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
             elif fn_name == "mark_dispatch_interrupted":
@@ -225,7 +386,7 @@ class TestAllMutationsAcquireLock:
             elif fn_name == "upsert_dispatch_record_by_name":
                 fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
 
-        assert flock_calls, f"{fn_name} did not call fcntl.flock"
+        assert flock_calls, f"{fn_name} did not acquire the flock sidecar"
         assert any(op == fcntl.LOCK_EX for _, op in flock_calls), (
             f"{fn_name} called flock but not with LOCK_EX"
         )
@@ -331,13 +492,14 @@ class TestFlockTargetPathVerification:
                     pass
             return result
 
-        flock_calls: list[tuple[int, int]] = []
-        original_flock = fcntl.flock
+        from autoskillit.core import acquire_flock_with_timeout
 
-        def tracking_flock(fd: int | IO[Any], op: int) -> None:
-            actual_fd = fd.fileno() if hasattr(fd, "fileno") else fd  # type: ignore[union-attr]
-            flock_calls.append((actual_fd, op))  # type: ignore[arg-type]
-            return original_flock(fd, op)
+        flock_calls: list[tuple[int, int]] = []
+        original_acquire_flock = acquire_flock_with_timeout
+
+        def tracking_acquire_flock(fd: int, *, operation: int, timeout: float, path: Path) -> None:
+            flock_calls.append((fd, operation))
+            return original_acquire_flock(fd, operation=operation, timeout=timeout, path=path)
 
         if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
             import json
@@ -348,7 +510,10 @@ class TestFlockTargetPathVerification:
 
         with (
             patch.object(builtins, "open", side_effect=tracking_open),
-            patch("autoskillit.fleet.state.fcntl.flock", side_effect=tracking_flock),
+            patch(
+                "autoskillit.fleet.state.acquire_flock_with_timeout",
+                side_effect=tracking_acquire_flock,
+            ),
         ):
             if fn_name == "mark_dispatch_running":
                 fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
@@ -374,9 +539,8 @@ class TestFlockTargetPathVerification:
             elif fn_name == "upsert_dispatch_record_by_name":
                 fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
 
-        for fd, op in flock_calls:
-            if op == fcntl.LOCK_UN:
-                continue
+        assert flock_calls, f"{fn_name} did not acquire the flock sidecar"
+        for fd, _ in flock_calls:
             path = fd_to_path.get(fd, "<untracked>")
             assert path.endswith(".lock"), (
                 f"{fn_name}: flock fd={fd} resolves to {path!r}"

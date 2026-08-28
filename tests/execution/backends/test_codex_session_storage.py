@@ -106,7 +106,7 @@ def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:
     invalid_path = tmp_path / "lease"
 
     with pytest.raises(ValueError, match=r"\.lock suffix"):
-        storage._FileLease.acquire(invalid_path)
+        storage._FileLease.acquire(invalid_path, timeout=0.0)
 
     assert not invalid_path.exists()
 
@@ -116,7 +116,7 @@ def test_file_lease_rejects_non_regular_lock_inode(tmp_path: Path) -> None:
     os.mkfifo(lock_path)
 
     with pytest.raises(RuntimeError, match="not a regular file"):
-        storage._FileLease.acquire(lock_path)
+        storage._FileLease.acquire(lock_path, timeout=0.0)
 
 
 def test_file_lease_closes_descriptor_when_owner_diagnostic_write_fails(
@@ -131,10 +131,37 @@ def test_file_lease_closes_descriptor_when_owner_diagnostic_write_fails(
     with monkeypatch.context() as scoped:
         scoped.setattr(storage.os, "ftruncate", fail_ftruncate)
         with pytest.raises(OSError, match="diagnostic write failed"):
-            storage._FileLease.acquire(lock_path)
+            storage._FileLease.acquire(lock_path, timeout=0.0)
 
-    lease = storage._FileLease.acquire(lock_path, nonblocking=True)
+    lease = storage._FileLease.acquire(lock_path, timeout=0.0)
     lease.release()
+
+
+def test_file_lease_fail_fast_timeout_includes_lock_diagnostics(tmp_path: Path) -> None:
+    lock_path = tmp_path / "lease.lock"
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    holder = context.Process(target=_hold_flock, args=(str(lock_path), ready, release))
+    holder.start()
+    try:
+        assert ready.wait(5)
+
+        with pytest.raises(TimeoutError) as captured:
+            storage._FileLease.acquire(lock_path, timeout=0.0)
+
+        message = str(captured.value)
+        assert str(lock_path) in message
+        assert "after 0.000s" in message
+        assert "owner=unavailable" in message
+    finally:
+        release.set()
+        holder.join(5)
+        if holder.is_alive():
+            holder.terminate()
+            holder.join(5)
+
+    assert holder.exitcode == 0
 
 
 def test_fresh_attempt_exposes_empty_view_and_no_child_abort_restores_inert_links(
@@ -685,11 +712,11 @@ def test_recovery_scans_and_rebuilds_index_inside_lifecycle_lock(
             cls: type[storage._FileLease],
             path: Path,
             *,
-            nonblocking: bool = False,
+            timeout: float,
         ) -> storage._FileLease:
             if path.name == "lifecycle.lock":
                 lifecycle_requested.set()
-            return original_acquire(cls, path, nonblocking=nonblocking)
+            return original_acquire(cls, path, timeout=timeout)
 
         monkeypatch.setattr(storage._FileLease, "acquire", classmethod(notifying_acquire))
 
@@ -736,11 +763,11 @@ def test_view_lease_is_acquired_before_view_creation(
         cls: type[storage._FileLease],
         path: Path,
         *,
-        nonblocking: bool = False,
+        timeout: float,
     ) -> storage._FileLease:
         if path.name.startswith("view-"):
             observed.append(not (store.views_root / "0123456789abcdef-1").exists())
-        return original_acquire(cls, path, nonblocking=nonblocking)
+        return original_acquire(cls, path, timeout=timeout)
 
     monkeypatch.setattr(
         storage._FileLease,

@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import errno
 import os
 import stat
-import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from ..logging import get_logger
 from ..types import (
@@ -19,19 +16,17 @@ from ..types import (
     PluginLaunchBinding,
     PluginLoadMode,
 )
-
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - exercised through the platform guard
-    fcntl = None  # type: ignore[assignment]
+from ._flock import _validate_flock_timeout, acquire_flock_with_timeout, fcntl
 
 __all__ = [
+    "ARTIFACT_LEASE_TIMEOUT_SECONDS",
     "ArtifactLease",
     "ArtifactLeaseContention",
     "plugin_launch_binding_scope",
 ]
 
 _ARTIFACT_LEASE_CONSTRUCTION_TOKEN = object()
+ARTIFACT_LEASE_TIMEOUT_SECONDS = 2.0
 logger = get_logger(__name__)
 
 
@@ -47,8 +42,8 @@ def _close_preserving_primary(fd: int, primary: BaseException) -> None:
         )
 
 
-class ArtifactLeaseContention(RuntimeError):
-    """Raised when a nonblocking artifact lease cannot be acquired."""
+class ArtifactLeaseContention(TimeoutError):
+    """Raised when a bounded artifact lease acquisition times out."""
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
@@ -62,8 +57,6 @@ class ArtifactLease:
     path: Path
     fd: int | None
     shared: bool
-
-    _CONTENTION_ERRNOS: ClassVar[frozenset[int]] = frozenset({errno.EACCES, errno.EAGAIN})
 
     def __init__(
         self,
@@ -84,56 +77,39 @@ class ArtifactLease:
         self.shared = shared
 
     @classmethod
-    def acquire_shared(cls, lock_path: Path) -> ArtifactLease:
-        """Acquire a blocking reader lease backed by a stable regular file."""
-        return cls._acquire(Path(lock_path), shared=True, blocking=True, create=True)
+    def acquire_shared(cls, lock_path: Path, *, timeout: float) -> ArtifactLease:
+        """Acquire a bounded reader lease backed by a stable regular file."""
+        return cls._acquire(
+            Path(lock_path),
+            shared=True,
+            create=True,
+            timeout=_validate_flock_timeout(timeout),
+        )
 
     @classmethod
-    def acquire_existing_shared(cls, lock_path: Path) -> ArtifactLease:
-        """Acquire a blocking reader lease without creating or modifying its sidecar."""
-        return cls._acquire(Path(lock_path), shared=True, blocking=True, create=False)
+    def acquire_existing_shared(cls, lock_path: Path, *, timeout: float) -> ArtifactLease:
+        """Acquire a bounded reader lease without modifying its sidecar."""
+        return cls._acquire(
+            Path(lock_path),
+            shared=True,
+            create=False,
+            timeout=_validate_flock_timeout(timeout),
+        )
 
     @classmethod
     def acquire_exclusive(
         cls,
         lock_path: Path,
         *,
-        blocking: bool = False,
-        timeout: float | None = None,
+        timeout: float,
     ) -> ArtifactLease:
-        """Acquire a writer lease, nonblocking unless explicitly requested.
-
-        `timeout` (only meaningful when `blocking` is False, its default) polls
-        nonblocking attempts with a short backoff until the deadline, then raises
-        `ArtifactLeaseContention` -- for a caller on a hot path that must degrade to a
-        fallback rather than either fail on the very first contention or block
-        indefinitely. #4511 traced a store-wide capacity exhaustion to exactly an
-        un-timeboxed `fcntl.flock` on a hot path under concurrent load; this is the
-        seam that prevents S3-1's shared asset store from reproducing it.
-        """
-        if timeout is not None and not blocking:
-            return cls._acquire_with_timeout(Path(lock_path), shared=False, timeout=timeout)
+        """Acquire a bounded writer lease backed by a stable regular file."""
         return cls._acquire(
             Path(lock_path),
             shared=False,
-            blocking=blocking,
             create=True,
+            timeout=_validate_flock_timeout(timeout),
         )
-
-    @classmethod
-    def _acquire_with_timeout(
-        cls, lock_path: Path, *, shared: bool, timeout: float
-    ) -> ArtifactLease:
-        deadline = time.monotonic() + timeout
-        poll_interval = 0.05
-        while True:
-            try:
-                return cls._acquire(lock_path, shared=shared, blocking=False, create=True)
-            except ArtifactLeaseContention:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise
-                time.sleep(min(poll_interval, remaining))
 
     @classmethod
     def _acquire(
@@ -141,8 +117,8 @@ class ArtifactLease:
         lock_path: Path,
         *,
         shared: bool,
-        blocking: bool,
         create: bool,
+        timeout: float,
     ) -> ArtifactLease:
         if fcntl is None:
             raise RuntimeError("Artifact leases require a POSIX flock implementation")
@@ -179,14 +155,15 @@ class ArtifactLease:
                 os.fchmod(fd, 0o600)
 
             operation = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-            if not blocking:
-                operation |= fcntl.LOCK_NB
             try:
-                fcntl.flock(fd, operation)
-            except OSError as exc:
-                if not blocking and exc.errno in cls._CONTENTION_ERRNOS:
-                    raise ArtifactLeaseContention(lock_path) from exc
-                raise
+                acquire_flock_with_timeout(
+                    fd,
+                    operation=operation,
+                    timeout=timeout,
+                    path=lock_path,
+                )
+            except TimeoutError as exc:
+                raise ArtifactLeaseContention(lock_path) from exc
         except BaseException as primary:
             if fd is not None:
                 _close_preserving_primary(fd, primary)

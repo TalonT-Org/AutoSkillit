@@ -13,12 +13,20 @@ from pathlib import Path
 from typing import Any, get_args, get_origin, get_type_hints
 
 from autoskillit.config import CoreRunConfig, FleetConfig, RunSkillConfig
-from autoskillit.core import OVERLAY_MAPPING_DOMAINS, atomic_write
+from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    OVERLAY_MAPPING_DOMAINS,
+    acquire_flock_with_timeout,
+    atomic_write,
+)
 from autoskillit.server._misc import _hook_config_overlay_path
 
 
 class OverlayStateError(ValueError):
     """The persisted session overlay is malformed or invalid."""
+
+
+_OVERLAY_LOCK_TIMEOUT_SECONDS = ARTIFACT_LEASE_TIMEOUT_SECONDS
 
 
 def _matches_annotation(value: object, annotation: object) -> bool:
@@ -101,7 +109,17 @@ def locked_overlay(project_dir: Path) -> Iterator[tuple[Path, dict[str, Any]]]:
     lock_path = overlay_path.with_suffix(".lock")
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+b") as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            acquire_flock_with_timeout(
+                handle.fileno(),
+                operation=fcntl.LOCK_EX,
+                timeout=_OVERLAY_LOCK_TIMEOUT_SECONDS,
+                path=lock_path,
+            )
+        except TimeoutError as exc:
+            raise OverlayStateError(
+                f"Unable to acquire session overlay lock: {lock_path}"
+            ) from exc
         try:
             yield overlay_path, _read_overlay_unlocked(overlay_path)
         finally:

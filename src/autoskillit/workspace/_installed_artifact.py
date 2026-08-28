@@ -14,8 +14,10 @@ from enum import StrEnum
 from pathlib import Path
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
+    ArtifactLeaseContention,
     PluginArtifactIdentity,
     PluginArtifactKind,
     PluginArtifactUnavailableError,
@@ -312,8 +314,14 @@ def _validate_supplied_lease(
             )
         assert spec.lease_mode is InstallStateLeaseMode.SHARED
         try:
-            return ArtifactLease.acquire_existing_shared(spec.lease_path), None
-        except (OSError, RuntimeError, ValueError) as exc:
+            return (
+                ArtifactLease.acquire_existing_shared(
+                    spec.lease_path,
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                ),
+                None,
+            )
+        except (ArtifactLeaseContention, OSError, RuntimeError, ValueError) as exc:
             return None, _finding(
                 "installed_plugin_lease_unavailable",
                 "the installed plugin's existing shared lease sidecar cannot be "

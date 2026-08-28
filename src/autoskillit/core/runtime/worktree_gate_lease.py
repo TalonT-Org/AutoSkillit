@@ -70,7 +70,7 @@ class WorktreeGateLease:
         lock_path = lease_root / f"{digest}.lock"
         diagnostic_path = lease_root / f"{digest}.json"
         try:
-            lease = ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+            lease = ArtifactLease.acquire_exclusive(lock_path, timeout=0.0)
         except ArtifactLeaseContention as exc:
             raise WorktreeGateContention(canonical, diagnostic_path) from exc
 

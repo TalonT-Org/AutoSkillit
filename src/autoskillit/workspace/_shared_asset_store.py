@@ -131,7 +131,10 @@ def _populate_store_entry(source: Path, store_entry: Path, *, store_root: Path) 
     """
     lease_path = store_root / f".{store_entry.name}.lock"
     try:
-        lease = ArtifactLease.acquire_exclusive(lease_path, timeout=_STORE_LEASE_TIMEOUT_SECONDS)
+        lease = ArtifactLease.acquire_exclusive(
+            lease_path,
+            timeout=_STORE_LEASE_TIMEOUT_SECONDS,
+        )
     except ArtifactLeaseContention:
         return
     except OSError as exc:

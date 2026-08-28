@@ -517,10 +517,10 @@ def test_persistence_failures_drop_records_without_stopping_http_server(
     from autoskillit.core import ArtifactLeaseContention
 
     if failure == "lease":
-        observed_blocking: list[bool] = []
+        observed_timeouts: list[float] = []
 
-        def contend(_path: Path, *, blocking: bool) -> None:
-            observed_blocking.append(blocking)
+        def contend(_path: Path, *, timeout: float) -> None:
+            observed_timeouts.append(timeout)
             raise ArtifactLeaseContention("test lease contention")
 
         monkeypatch.setattr(otlp_sink.ArtifactLease, "acquire_exclusive", contend)
@@ -543,8 +543,8 @@ def test_persistence_failures_drop_records_without_stopping_http_server(
     assert (status, response) == (200, {})
     assert local_sink._counters[counter] >= 1
     if failure == "lease":
-        assert observed_blocking
-        assert set(observed_blocking) == {False}
+        assert observed_timeouts
+        assert set(observed_timeouts) == {0.0}
 
 
 def test_writer_loop_contains_unexpected_persistence_failure(monkeypatch) -> None:

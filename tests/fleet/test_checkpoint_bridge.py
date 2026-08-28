@@ -176,7 +176,7 @@ class TestLoadDispatchProgress:
         tool_ctx.project_dir = tmp_path
         dispatch_id = "dispatch-missing"
         target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=False)
-        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target), timeout=2.0)
         try:
             result = load_dispatch_progress(
                 tool_ctx=tool_ctx,
@@ -208,7 +208,7 @@ class TestLoadDispatchProgress:
         target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
         target.path.parent.mkdir(parents=True)
         target.path.write_text(tracker_content, encoding="utf-8")
-        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target), timeout=2.0)
         try:
             _path, entries, checkpoint, authority_error = load_dispatch_progress(
                 tool_ctx=tool_ctx,
@@ -237,7 +237,7 @@ class TestLoadDispatchProgress:
             tmp_path,
         )
         target = TrackerAuthorityTarget.for_project(tmp_path, dispatch_id, expected=True)
-        lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+        lease = ArtifactLease.acquire_shared(tracker_lease_path(target), timeout=2.0)
         try:
             _path, entries, checkpoint, authority_error = load_dispatch_progress(
                 tool_ctx=tool_ctx,

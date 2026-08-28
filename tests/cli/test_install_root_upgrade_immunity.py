@@ -312,7 +312,8 @@ def test_live_process_survives_concurrent_upgrade(tmp_path: Path, fake_git_sourc
         # must still succeed post-boundary -- see the module docstring for
         # why this runs here rather than inside the child.
         lease = ArtifactLease.acquire_existing_shared(
-            installed_plugin_artifact_lease_path(identity_v1.managed_path)
+            installed_plugin_artifact_lease_path(identity_v1.managed_path),
+            timeout=2.0,
         )
         lease.close()
 
@@ -373,7 +374,7 @@ def test_in_flight_pipeline_step_survives_concurrent_upgrade(
     # The in-flight step's own launch binding, held for the step's entire
     # duration -- acquired before the child even starts, released only after
     # it reports completion.
-    step_lease = ArtifactLease.acquire_existing_shared(lease_path)
+    step_lease = ArtifactLease.acquire_existing_shared(lease_path, timeout=2.0)
     try:
         child = subprocess.Popen(
             [str(inner_exe), "block", str(marker), str(release), str(checkpoint)],
@@ -403,7 +404,7 @@ def test_in_flight_pipeline_step_survives_concurrent_upgrade(
             # from under it": the same lease its launch binding holds is
             # what the retirement engine's try_reclaim() checks.
             with pytest.raises(ArtifactLeaseContention):
-                ArtifactLease.acquire_exclusive(lease_path, blocking=False)
+                ArtifactLease.acquire_exclusive(lease_path, timeout=0.0)
 
             # Two concurrent upgrades across the same in-flight step,
             # mirroring the issue's own observation that version bumps
@@ -440,7 +441,7 @@ def test_in_flight_pipeline_step_survives_concurrent_upgrade(
     # Only after the step's own launch binding is released does reclaiming
     # v1's generation become possible -- proving the earlier refusal was
     # scoped to the lease's lifetime, not a permanent or accidental block.
-    reclaim_lease = ArtifactLease.acquire_exclusive(lease_path, blocking=False)
+    reclaim_lease = ArtifactLease.acquire_exclusive(lease_path, timeout=0.0)
     reclaim_lease.close()
 
 

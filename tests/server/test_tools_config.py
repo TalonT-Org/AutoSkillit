@@ -373,6 +373,22 @@ def test_locked_overlay_excludes_concurrent_nonblocking_caller(tmp_path) -> None
     assert acquired is False
 
 
+def test_locked_overlay_translates_lock_timeout(tmp_path, monkeypatch) -> None:
+    from autoskillit.server.tools import _overlay_state
+
+    def fail_lock(*args, **kwargs) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr(_overlay_state, "acquire_flock_with_timeout", fail_lock)
+
+    with pytest.raises(
+        _overlay_state.OverlayStateError,
+        match="Unable to acquire session overlay lock",
+    ):
+        with _overlay_state.locked_overlay(tmp_path):
+            pass
+
+
 def test_concurrent_configuration_calls_keep_disk_and_live_state(
     tmp_path,
     monkeypatch,

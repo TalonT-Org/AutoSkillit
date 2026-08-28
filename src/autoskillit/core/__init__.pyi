@@ -298,6 +298,7 @@ from .pipeline_tracker import release_tracker_lease as release_tracker_lease
 from .pipeline_tracker import retain_tracker_lease as retain_tracker_lease
 from .pipeline_tracker import tracker_lease_path as tracker_lease_path
 from .pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .runtime._flock import acquire_flock_with_timeout as acquire_flock_with_timeout
 from .runtime._linux_proc import is_pid_alive as is_pid_alive
 from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
@@ -322,6 +323,9 @@ from .runtime._reclamation import snapshot_referenced as snapshot_referenced
 from .runtime._reclamation import trim_jsonl_lines as trim_jsonl_lines
 from .runtime._reclamation import user_generation_root as user_generation_root
 from .runtime._reclamation import veto_paths as veto_paths
+from .runtime.artifact_lease import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS as ARTIFACT_LEASE_TIMEOUT_SECONDS,
+)
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope

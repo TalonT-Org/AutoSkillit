@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import IO, Any, Literal
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     CAMPAIGN_ID_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
+    acquire_flock_with_timeout,
     atomic_write,
     get_logger,
     resolve_temp_dir,
@@ -29,6 +31,7 @@ logger = get_logger(__name__)
 
 CloneStatus = Literal["success", "error", "unconfirmed"]
 _DEFAULT_REGISTRY_NAME = "clone-cleanup-registry.json"
+_CLONE_REGISTRY_LOCK_TIMEOUT_SECONDS = ARTIFACT_LEASE_TIMEOUT_SECONDS
 
 
 def _resolve_registry_path(registry_path: str, temp_dir: Path | None = None) -> Path:
@@ -65,7 +68,12 @@ class CloneRegistry:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         fh = open(self._lock_path, "w")
         try:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+            acquire_flock_with_timeout(
+                fh.fileno(),
+                operation=fcntl.LOCK_EX,
+                timeout=_CLONE_REGISTRY_LOCK_TIMEOUT_SECONDS,
+                path=self._lock_path,
+            )
         except BaseException:
             fh.close()
             raise

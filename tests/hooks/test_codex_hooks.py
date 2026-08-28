@@ -43,7 +43,7 @@ def test_codex_hooks_require_an_exact_installed_artifact(
     dispatcher.write_text("# exact dispatcher")
     with ArtifactLease.acquire_exclusive(
         installed_plugin_artifact_lease_path(root),
-        blocking=True,
+        timeout=2.0,
     ):
         write_installed_plugin_artifact_manifest_locked(
             root,

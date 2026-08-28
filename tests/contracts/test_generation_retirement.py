@@ -485,7 +485,7 @@ def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
 
     old = _publish_install_root(home, "1.0.0")
     held_lease = ArtifactLease.acquire_existing_shared(
-        installed_plugin_artifact_lease_path(old.managed_path)
+        installed_plugin_artifact_lease_path(old.managed_path), timeout=2.0
     )
     try:
         _publish_install_root(home, "1.0.1")
@@ -567,7 +567,7 @@ def test_same_version_republication_does_not_reclaim_a_live_generation(
 
     first = _publish_install_root(home, "1.0.0")
     held_lease = ArtifactLease.acquire_existing_shared(
-        installed_plugin_artifact_lease_path(first.managed_path)
+        installed_plugin_artifact_lease_path(first.managed_path), timeout=2.0
     )
     try:
         second = _publish_install_root(home, "1.0.0")

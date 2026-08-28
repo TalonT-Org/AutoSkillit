@@ -37,6 +37,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from autoskillit.core import (  # IL-005: core only — never cli.InstalledPluginsFile
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     RETIRED_INSTALL_ARTIFACT_SHAPES,
     ArtifactLease,
     ArtifactLeaseContention,
@@ -150,7 +151,10 @@ def _generation_store_findings() -> list[InstallStateFinding]:
             )
         ]
     try:
-        with ArtifactLease.acquire_existing_shared(installed_plugin_artifact_lease_path(current)):
+        with ArtifactLease.acquire_existing_shared(
+            installed_plugin_artifact_lease_path(current),
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        ):
             read_installed_plugin_artifact_identity(
                 current,
                 expected_semantic_key=installed_plugin_semantic_key(
@@ -159,7 +163,7 @@ def _generation_store_findings() -> list[InstallStateFinding]:
                 ),
                 manifest_path=installed_plugin_artifact_manifest_path(current),
             )
-    except (PluginArtifactUnavailableError, OSError) as exc:
+    except (ArtifactLeaseContention, PluginArtifactUnavailableError, OSError) as exc:
         return [
             InstallStateFinding(
                 Severity.ERROR,
@@ -420,7 +424,10 @@ def _enqueue_legacy_installed_plugin_versions(
             # mechanism may never have had a lock sidecar created for it — this
             # lazily materializes one rather than failing every legacy candidate
             # outright (issue #4770 Related Issue 2).
-            with ArtifactLease.acquire_shared(installed_plugin_artifact_lease_path(candidate)):
+            with ArtifactLease.acquire_shared(
+                installed_plugin_artifact_lease_path(candidate),
+                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            ):
                 try:
                     identity = read_installed_plugin_artifact_identity(
                         candidate,

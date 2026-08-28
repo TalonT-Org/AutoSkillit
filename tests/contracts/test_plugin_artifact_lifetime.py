@@ -466,7 +466,7 @@ def test_binding_owns_exact_v2_incarnation_and_stable_sidecar(
         assert lease_path.is_file()
         assert first.identity.managed_path not in lease_path.parents
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(lease_path, blocking=False)
+            ArtifactLease.acquire_exclusive(lease_path, timeout=0.0)
     finally:
         first.close()
         second.close()
@@ -580,7 +580,7 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
     monkeypatch.setattr(ArtifactLease, "close", real_close)
     with ArtifactLease.acquire_exclusive(
         projected_artifact_lease_path(identity.managed_path),
-        blocking=False,
+        timeout=0.0,
     ):
         pass
 
@@ -618,7 +618,7 @@ def test_projection_prune_allows_terminal_reconciliation_when_writer_close_fails
     monkeypatch.setattr(ArtifactLease, "close", real_close)
     with ArtifactLease.acquire_exclusive(
         projected_artifact_lease_path(stale),
-        blocking=False,
+        timeout=0.0,
     ):
         pass
 
@@ -736,10 +736,12 @@ def test_writer_to_reader_handoff_revalidates_exact_incarnation(
     original_acquire = ArtifactLease.acquire_shared
     acquisitions = 0
 
-    def acquire_shared(cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+    def acquire_shared(
+        cls: type[ArtifactLease], lock_path: Path, *, timeout: float
+    ) -> ArtifactLease:
         nonlocal acquisitions
         del cls
-        lease = original_acquire(lock_path)
+        lease = original_acquire(lock_path, timeout=timeout)
         acquisitions += 1
         if acquisitions == 2:
             projections = lock_path.parent.parent
@@ -759,7 +761,7 @@ def test_writer_to_reader_handoff_revalidates_exact_incarnation(
         )
 
     plan = authority._plan(ClaudeCodeBackend())
-    with ArtifactLease.acquire_exclusive(plan.lease_path, blocking=False):
+    with ArtifactLease.acquire_exclusive(plan.lease_path, timeout=0.0):
         pass
 
 

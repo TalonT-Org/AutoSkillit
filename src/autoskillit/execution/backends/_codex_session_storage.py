@@ -20,6 +20,7 @@ from typing import Any
 import regex as re
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     CODEX_ACTIVE_VIEWS_SUBDIR,
     CODEX_ARCHIVED_SESSIONS_SUBDIR,
     CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR,
@@ -31,6 +32,7 @@ from autoskillit.core import (
     NoResume,
     ResumeSpec,
     SessionSummary,
+    acquire_flock_with_timeout,
     default_log_dir,
     get_logger,
     is_pid_alive,
@@ -68,6 +70,7 @@ _THREAD_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
 _INDEX_READ_LIMIT = 4 * 1024 * 1024
 _MANIFEST_READ_LIMIT = 256 * 1024
 _MANIFEST_NAME = "manifest.json"
+_LOCK_OWNER_DIAGNOSTIC_LIMIT = 4096
 _LOCKS_SUBDIR = ".locks"
 _INDEX_NAME = "codex-session-index.json"
 _RECONCILIATION_AUDIT_SCHEMA_VERSION = 1
@@ -110,7 +113,7 @@ class _FileLease:
     fd: int = field(init=False)
 
     @classmethod
-    def acquire(cls, lock_path: Path, *, nonblocking: bool = False) -> _FileLease:
+    def acquire(cls, lock_path: Path, *, timeout: float) -> _FileLease:
         if lock_path.suffix != ".lock":
             raise ValueError(f"Lock path must use the .lock suffix: {lock_path}")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,11 +126,27 @@ class _FileLease:
             os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
             0o600,
         )
-        operation = fcntl.LOCK_EX | (fcntl.LOCK_NB if nonblocking else 0)
         try:
             if not stat.S_ISREG(os.fstat(instance.fd).st_mode):
                 raise RuntimeError(f"Lock path is not a regular file: {lock_path}")
-            fcntl.flock(instance.fd, operation)
+            try:
+                acquire_flock_with_timeout(
+                    instance.fd,
+                    operation=fcntl.LOCK_EX,
+                    timeout=timeout,
+                    path=lock_path,
+                )
+            except TimeoutError as exc:
+                try:
+                    owner_payload = os.pread(instance.fd, _LOCK_OWNER_DIAGNOSTIC_LIMIT, 0)
+                except OSError as read_exc:
+                    diagnostics = f"unavailable ({type(read_exc).__name__}: {read_exc})"
+                else:
+                    diagnostics = owner_payload.decode("utf-8", errors="replace") or "unavailable"
+                raise TimeoutError(
+                    "timed out acquiring Codex session lease "
+                    f"for {lock_path} after {timeout:.3f}s; owner={diagnostics}"
+                ) from exc
             owner = {
                 "pid": os.getpid(),
                 "host": socket.gethostname(),
@@ -367,7 +386,10 @@ class CodexSessionStore:
             raise ValueError("Codex project directory must be canonical")
         inert_targets = self._validate_inert_home(session_home)
         view_path = self.views_root / view_id
-        view_lease = _FileLease.acquire(self.locks_root / f"view-{view_id}.lock")
+        view_lease = _FileLease.acquire(
+            self.locks_root / f"view-{view_id}.lock",
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
         manifest: dict[str, Any] = {
             "schema_version": 1,
             "launch_id": launch_id,
@@ -399,7 +421,7 @@ class CodexSessionStore:
                 thread_id = current_resume_spec.session_id
                 thread_lease = _FileLease.acquire(
                     self._thread_lock_path(thread_id),
-                    nonblocking=True,
+                    timeout=0.0,
                 )
                 located = self._locate_with_store(thread_id)
                 if located is None:
@@ -487,7 +509,10 @@ class CodexSessionStore:
         _atomic_json(lease.view_path / _MANIFEST_NAME, lease.manifest)
 
     def _abort_pre_spawn(self, lease: CodexInteractiveSessionLease) -> None:
-        lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+        lifecycle = _FileLease.acquire(
+            self.locks_root / "lifecycle.lock",
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
         try:
             self._restore_inert(lease)
             lease.manifest["state"] = "failed"
@@ -511,7 +536,10 @@ class CodexSessionStore:
             lease.manifest["state"] = "failed"
             self._write_manifest(lease)
             raise RuntimeError("Codex attempt lacks durable child-reaped proof")
-        lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+        lifecycle = _FileLease.acquire(
+            self.locks_root / "lifecycle.lock",
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
         try:
             lease.manifest["state"] = "finalizing"
             self._write_manifest(lease)
@@ -769,7 +797,10 @@ class CodexSessionStore:
         return [dict(row) for row in payload if isinstance(row, Mapping)]
 
     def _merge_index(self, incoming: Sequence[dict[str, Any]]) -> None:
-        lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+        lifecycle = _FileLease.acquire(
+            self.locks_root / "lifecycle.lock",
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
         try:
             self._merge_index_unlocked(incoming)
         finally:
@@ -1213,7 +1244,7 @@ class CodexSessionStore:
         tombstone_path = self.reconciliation_tombstones_root / view_id
         view_lock = _FileLease.acquire(
             self.locks_root / f"view-{view_id}.lock",
-            nonblocking=True,
+            timeout=0.0,
         )
         thread_locks: list[_FileLease] = []
         lifecycle: _FileLease | None = None
@@ -1232,7 +1263,10 @@ class CodexSessionStore:
                 audit = self._read_reconciliation_audit(audit_path, view_id=view_id)
                 if audit["reason"] != normalized_reason:
                     raise RuntimeError(f"Reconciliation reason conflicts for {view_id}")
-                lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+                lifecycle = _FileLease.acquire(
+                    self.locks_root / "lifecycle.lock",
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                )
                 if _lexists(view_path) or not _lexists(tombstone_path):
                     raise RuntimeError(f"Reconciliation tombstone changed for {view_id}")
                 delete_tombstone = True
@@ -1248,9 +1282,12 @@ class CodexSessionStore:
                 initial_thread_ids = self._reconciliation_thread_ids(initial_manifest)
                 for thread_id in sorted(initial_thread_ids):
                     thread_locks.append(
-                        _FileLease.acquire(self._thread_lock_path(thread_id), nonblocking=True)
+                        _FileLease.acquire(self._thread_lock_path(thread_id), timeout=0.0)
                     )
-                lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+                lifecycle = _FileLease.acquire(
+                    self.locks_root / "lifecycle.lock",
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                )
                 if _lexists(tombstone_path):
                     raise RuntimeError(f"Reconciliation tombstone appeared for {view_id}")
                 final_raw, final_manifest = self._read_reconciliation_candidate(view_path)
@@ -1311,8 +1348,8 @@ class CodexSessionStore:
                 continue
             lock_path = self.locks_root / f"view-{view_path.name}.lock"
             try:
-                view_lock = _FileLease.acquire(lock_path, nonblocking=True)
-            except BlockingIOError:
+                view_lock = _FileLease.acquire(lock_path, timeout=0.0)
+            except TimeoutError:
                 continue
             try:
                 try:
@@ -1345,14 +1382,17 @@ class CodexSessionStore:
                         thread_locks.append(
                             _FileLease.acquire(
                                 self._thread_lock_path(thread_id),
-                                nonblocking=True,
+                                timeout=0.0,
                             )
                         )
-                except BlockingIOError:
+                except TimeoutError:
                     for thread_lock in reversed(thread_locks):
                         thread_lock.release()
                     continue
-                lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+                lifecycle = _FileLease.acquire(
+                    self.locks_root / "lifecycle.lock",
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                )
                 try:
                     if state == "complete":
                         self._validate_completed_view(view_path)
@@ -1468,7 +1508,10 @@ class CodexSessionStore:
                         thread_lock.release()
             finally:
                 view_lock.release()
-        lifecycle = _FileLease.acquire(self.locks_root / "lifecycle.lock")
+        lifecycle = _FileLease.acquire(
+            self.locks_root / "lifecycle.lock",
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
         try:
             self._rebuild_index_unlocked()
         except BaseException as exc:

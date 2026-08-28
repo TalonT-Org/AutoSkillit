@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,
+    ArtifactLeaseContention,
     ModelIdentity,
     SessionType,
     atomic_write,
@@ -274,7 +276,22 @@ def flush_session_log(
         except OSError:
             logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
 
-    with ArtifactLease.acquire_exclusive(session_index_lock_path(log_root), blocking=True):
+    lock_path = session_index_lock_path(log_root)
+    try:
+        session_index_lease = ArtifactLease.acquire_exclusive(
+            lock_path,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
+    except ArtifactLeaseContention:
+        logger.warning(
+            "session_log_flush_lock_contention",
+            session_id=session_id,
+            lock_path=str(lock_path),
+            exc_info=True,
+        )
+        return
+
+    with session_index_lease:
         sessions_dir = log_root / "sessions"
         session_dir = sessions_dir / dir_name
         sessions_dir.mkdir(parents=True, exist_ok=True)

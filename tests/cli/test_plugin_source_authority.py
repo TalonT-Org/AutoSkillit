@@ -385,7 +385,7 @@ class TestInstalledPluginArtifactAuthority:
             )
         with ArtifactLease.acquire_exclusive(
             installed_plugin_artifact_lease_path(root),
-            blocking=False,
+            timeout=0.0,
         ):
             pass
 

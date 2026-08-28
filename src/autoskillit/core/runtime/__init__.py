@@ -6,6 +6,7 @@ and _linux_proc so callers can use ``from autoskillit.core.runtime import X``.
 
 from __future__ import annotations
 
+from ._flock import acquire_flock_with_timeout
 from ._linux_proc import (
     is_pid_alive,
     is_pid_zombie,
@@ -33,7 +34,11 @@ from ._reclamation import (
     user_generation_root,
     veto_paths,
 )
-from .artifact_lease import ArtifactLease, ArtifactLeaseContention
+from .artifact_lease import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ArtifactLease,
+    ArtifactLeaseContention,
+)
 from .executable_binding import (
     executable_binding_matches_current_file,
     resolve_executable_launch_binding,
@@ -82,8 +87,10 @@ from .session_registry import (
 from .worktree_gate_lease import WorktreeGateContention, WorktreeGateLease
 
 __all__ = [
+    "ARTIFACT_LEASE_TIMEOUT_SECONDS",
     "ArtifactLease",
     "ArtifactLeaseContention",
+    "acquire_flock_with_timeout",
     "WorktreeGateContention",
     "WorktreeGateLease",
     "PYTEST_GENERATION_NAME_RE",

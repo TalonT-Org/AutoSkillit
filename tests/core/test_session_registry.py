@@ -63,7 +63,7 @@ def test_registry_mutations_acquire_exclusive_lock(
     else:
         assert bind_session_owner(tmp_path, "abc", os.getpid())
 
-    assert lock_operations == [fcntl.LOCK_EX]
+    assert lock_operations == [fcntl.LOCK_EX | fcntl.LOCK_NB]
 
 
 def test_read_returns_empty_on_missing_file(tmp_path: Path) -> None:

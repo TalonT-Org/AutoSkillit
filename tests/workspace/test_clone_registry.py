@@ -86,6 +86,30 @@ class TestReadRegistry:
         assert result == []
 
 
+def test_register_clone_propagates_lock_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_lock(*args: object, **kwargs: object) -> None:
+        raise TimeoutError
+
+    registry = tmp_path / "registry.json"
+    monkeypatch.setattr(
+        "autoskillit.workspace.clone_registry.acquire_flock_with_timeout",
+        fail_lock,
+    )
+
+    with pytest.raises(TimeoutError):
+        register_clone(
+            "/tmp/clone-a",
+            "success",
+            "test-owner",
+            registry_path=str(registry),
+        )
+
+    assert not registry.exists()
+
+
 class TestCleanupCandidates:
     """cleanup_candidates contract tests."""
 

@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     _AUTOSKILLIT_PLUGIN_KEY,
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,
+    ArtifactLeaseContention,
     InfrastructureFaultError,
     LegacyRetiringEvidence,
     ManagedHome,
@@ -145,7 +147,7 @@ def publish_installed_plugin_artifact(
             )
         with ArtifactLease.acquire_exclusive(
             installed_plugin_artifact_lease_path(managed_path),
-            blocking=True,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
         ):
             return _publish_installed_plugin_artifact_locked(
                 managed_path,
@@ -313,13 +315,16 @@ class InstalledPluginArtifactAuthority:
     ) -> tuple[Path, ArtifactLease]:
         """Acquire a shared lease on a generation, re-resolving on reclaim race."""
         lease_path = installed_plugin_artifact_lease_path(managed_root)
-        last_error: OSError | None = None
+        last_error: OSError | ArtifactLeaseContention | None = None
         attempts = 0
         for attempt in range(max_retries):
             attempts = attempt + 1
             try:
-                return managed_root, ArtifactLease.acquire_existing_shared(lease_path)
-            except OSError as exc:
+                return managed_root, ArtifactLease.acquire_existing_shared(
+                    lease_path,
+                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                )
+            except (ArtifactLeaseContention, OSError) as exc:
                 last_error = exc
                 refreshed = resolve_current_generation(
                     self._home.root,

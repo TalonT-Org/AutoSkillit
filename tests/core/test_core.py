@@ -64,8 +64,10 @@ def test_runtime_package_exports_lease_types():
     import autoskillit.core.runtime as runtime
 
     expected = {
+        "ARTIFACT_LEASE_TIMEOUT_SECONDS",
         "ArtifactLease",
         "ArtifactLeaseContention",
+        "acquire_flock_with_timeout",
         "WorktreeGateLease",
         "WorktreeGateContention",
     }

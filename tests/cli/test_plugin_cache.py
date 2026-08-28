@@ -15,6 +15,7 @@ import pytest
 import structlog
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,
     PluginArtifactIdentity,
     PluginArtifactKind,
@@ -131,7 +132,8 @@ def test_installed_reclaim_defers_until_final_reader_closes(
         if record.record_id == append_result.record_id
     )
     reader = ArtifactLease.acquire_shared(
-        installed_plugin_artifact_lease_path(identity.managed_path)
+        installed_plugin_artifact_lease_path(identity.managed_path),
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
     )
     try:
         assert (

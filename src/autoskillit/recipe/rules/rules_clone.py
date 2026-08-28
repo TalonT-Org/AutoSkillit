@@ -20,6 +20,7 @@ from __future__ import annotations
 import regex as re
 
 from autoskillit.core import (
+    RECIPE_TERMINAL_TARGETS,
     SKILL_COMMAND_PREFIX,
     SKILL_TOOLS,
     CaptureEntrySpec,
@@ -31,7 +32,6 @@ from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._analysis_bfs import bfs_reachable
 from autoskillit.recipe._skill_helpers import MULTIPART_SKILL_NAMES
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
-from autoskillit.recipe.schema import _TERMINAL_TARGETS
 
 logger = get_logger(__name__)
 
@@ -265,7 +265,7 @@ def _check_clone_terminal_requires_registration(ctx: ValidationContext) -> list[
         if (
             step.on_exhausted
             and step.on_exhausted in all_step_names
-            and step.on_exhausted not in _TERMINAL_TARGETS
+            and step.on_exhausted not in RECIPE_TERMINAL_TARGETS
         ):
             targets.add(step.on_exhausted)
         graph[sn] = targets

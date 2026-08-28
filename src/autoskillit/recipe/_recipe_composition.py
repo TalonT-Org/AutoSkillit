@@ -22,7 +22,6 @@ from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe.io import _parse_recipe, find_sub_recipe_by_name
 from autoskillit.recipe.io import load_recipe as _load_recipe_from_path
 from autoskillit.recipe.schema import (
-    _TERMINAL_TARGETS,
     Recipe,
     RecipeStep,
     StepResultCondition,
@@ -254,7 +253,7 @@ def _validate_no_dangling_routes(recipe: Recipe) -> list[str]:
     errors: list[str] = []
     for step_name, step in recipe.steps.items():
         for target in _collect_all_route_targets(step):
-            if target not in known and target not in _TERMINAL_TARGETS:
+            if target not in known and target not in RECIPE_TERMINAL_TARGETS:
                 errors.append(f"Step '{step_name}' routes to unknown step '{target}'")
     return errors
 
@@ -392,7 +391,7 @@ def _drop_sub_recipe_step(recipe: Recipe, step_name: str) -> Recipe:
         or continuation == step_name
         or (
             continuation not in recipe.steps
-            and (continuation not in _TERMINAL_TARGETS or is_entry)
+            and (continuation not in RECIPE_TERMINAL_TARGETS or is_entry)
         )
     ):
         raise ValueError(

@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import networkx as nx
 
-from autoskillit.core import get_logger
-from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeStep
+from autoskillit.core import RECIPE_TERMINAL_TARGETS, get_logger
+from autoskillit.recipe.schema import Recipe, RecipeStep
 
 logger = get_logger(__name__)
 
@@ -113,7 +113,7 @@ def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
                 edges.append((src, name_to_id[edge.target]))
                 edge_types.append(edge.edge_type)
                 edge_conditions.append(edge.condition or "")
-            elif edge.target in _TERMINAL_TARGETS:
+            elif edge.target in RECIPE_TERMINAL_TARGETS:
                 # Known sentinel — valid target, no graph edge needed.
                 pass
             else:

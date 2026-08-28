@@ -7,7 +7,7 @@ import pathlib
 
 import pytest
 
-from autoskillit.core import Severity
+from autoskillit.core import RECIPE_TERMINAL_TARGETS, Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import (
     Recipe,
@@ -65,16 +65,13 @@ def test_missing_recommended_input_passes_when_input_provided():
     )
 
 
-def test_rules_inputs_terminal_targets_match_schema():
-    """rules_inputs.py unreachable-step rule uses the same sentinel set as schema."""
-    from autoskillit.recipe.schema import _TERMINAL_TARGETS  # noqa: PLC0415
-
-    # Verify schema has the expected sentinels (belt-and-suspenders check).
-    assert "done" in _TERMINAL_TARGETS
-    assert "escalate" in _TERMINAL_TARGETS
+def test_rules_inputs_terminal_targets_match_canonical_constant():
+    """rules_inputs.py does not hardcode the canonical routing sentinels."""
+    assert "done" in RECIPE_TERMINAL_TARGETS
+    assert "escalate" in RECIPE_TERMINAL_TARGETS
 
     # Structural check: rules_inputs.py must NOT hardcode sentinel strings via
-    # .discard("done") or .discard("escalate"). It must use _TERMINAL_TARGETS instead.
+    # .discard("done") or .discard("escalate").
     src_path = (
         pathlib.Path(__file__).parent.parent.parent
         / "src/autoskillit/recipe/rules/rules_inputs.py"
@@ -93,7 +90,7 @@ def test_rules_inputs_terminal_targets_match_schema():
     ]
     assert hardcoded_discards == [], (
         f"rules_inputs.py hardcodes {len(hardcoded_discards)} sentinel string(s) via "
-        ".discard(). Use _TERMINAL_TARGETS from schema instead."
+        ".discard(). Use RECIPE_TERMINAL_TARGETS from core instead."
     )
 
 

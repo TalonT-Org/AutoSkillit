@@ -356,12 +356,12 @@ def test_recipe_ingredient_default_strips_for_comparison() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_terminal_targets_defined_in_schema():
-    """Schema is the authoritative home for routing sentinel constants."""
-    from autoskillit.recipe.schema import _TERMINAL_TARGETS
+def test_terminal_targets_defined_in_core():
+    """Core is the authoritative home for routing sentinel constants."""
+    from autoskillit.core import RECIPE_TERMINAL_TARGETS
 
-    assert "escalate" in _TERMINAL_TARGETS
-    assert "done" in _TERMINAL_TARGETS
+    assert "escalate" in RECIPE_TERMINAL_TARGETS
+    assert "done" in RECIPE_TERMINAL_TARGETS
 
 
 def test_recipe_dataclass_has_requires_packs_field():

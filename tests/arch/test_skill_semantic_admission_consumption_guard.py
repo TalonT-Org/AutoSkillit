@@ -27,6 +27,11 @@ _EXPECTED_CALLERS = Counter(
             "workspace/session_skill_catalog.py",
             "_compile_reachable_profile_skill_catalog",
         ): 1,
+        (
+            _ADAPT,
+            "server/tools/tools_execution/_fixed_batch_handlers.py",
+            "_resolve_launch_binding",
+        ): 1,
         (_COMPILE, "workspace/session_skill_materialization.py", "materialize_profile_skills"): 1,
         (_COMPILE, "workspace/session_skill_materialization.py", "_materialize_session"): 3,
         (

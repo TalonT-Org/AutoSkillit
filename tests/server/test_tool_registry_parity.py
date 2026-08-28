@@ -363,6 +363,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
             "load_recipe",
             "read_db",
             "read_authorized_artifact",
+            "read_fixed_batch_result",
             "get_authorized_artifact_page",
             "inspect_session_logs",
             "validate_recipe",
@@ -375,6 +376,7 @@ def test_every_tool_has_an_explicit_initialization_operation() -> None:
         ToolInitializationOperation.EXECUTION: {
             "delegate_evidence_reader",
             "run_cmd",
+            "run_fixed_batch",
             "run_python",
             "run_skill",
             "test_check",

@@ -62,6 +62,17 @@ class ManagedFixedBatchSupervisor(Protocol):
 
     async def reconcile_startup(self) -> bool: ...
 
+    async def run(self, binding: Any) -> Any: ...
+
+    def read_result(
+        self,
+        *,
+        reference: str,
+        launch: Any,
+        batch_id: str,
+        assignment_id: str = "",
+    ) -> Any: ...
+
     async def close(self) -> None: ...
 
 

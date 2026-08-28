@@ -126,10 +126,10 @@ def _effective_routing_edges(
     return tuple(edges)
 
 
-def _validate_effective_routing_edges(
+def _effective_routing_target_errors(
     recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
 ) -> list[str]:
-    """Return errors for targets outside the active effective graph."""
+    """Return errors for targets outside one effective graph membership set."""
     step_names = frozenset(recipe.steps)
     return [
         f"Step '{edge.source}' routes to unknown step '{edge.target}'"
@@ -138,21 +138,54 @@ def _validate_effective_routing_edges(
     ]
 
 
-def _sweep_unreachable_steps(
+def _validate_effective_routing_edges(
     recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
-) -> tuple[Recipe, tuple[str, ...]]:
-    """Remove active steps unreachable from the finalized entrypoint."""
-    if not recipe.steps:
-        return recipe, ()
+) -> list[str]:
+    """Validate effective targets after unreachable-step sweeping."""
+    return _effective_routing_target_errors(recipe, edges)
 
+
+def _effective_step_graph(
+    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
+) -> dict[str, set[str]]:
+    """Build terminal-excluding adjacency from the canonical effective edges."""
     step_names = frozenset(recipe.steps)
     graph: dict[str, set[str]] = {name: set() for name in recipe.steps}
     for edge in edges:
         if edge.target in step_names:
             graph[edge.source].add(edge.target)
+    return graph
+
+
+def _validate_effective_graph_closure(
+    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
+) -> list[str]:
+    """Return structured errors for finalized steps unreachable from the entrypoint."""
+    if not recipe.steps:
+        return []
+    entrypoint = next(iter(recipe.steps))
+    reachable = {entrypoint} | bfs_reachable(_effective_step_graph(recipe, edges), entrypoint)
+    return [
+        f"Step '{name}' is unreachable from effective entrypoint '{entrypoint}'"
+        for name in recipe.steps
+        if name not in reachable
+    ]
+
+
+def _sweep_unreachable_steps(
+    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
+) -> tuple[Recipe, tuple[str, ...]]:
+    """Remove active steps unreachable from the finalized entrypoint.
+
+    A single BFS pass is sufficient: deleting nodes outside the reachable set cannot
+    make a node inside that set unreachable. This is sound only when ``edges`` provides
+    complete executable adjacency, including derived rate-limit and deferred-skip routes.
+    """
+    if not recipe.steps:
+        return recipe, ()
 
     entrypoint = next(iter(recipe.steps))
-    reachable = {entrypoint} | bfs_reachable(graph, entrypoint)
+    reachable = {entrypoint} | bfs_reachable(_effective_step_graph(recipe, edges), entrypoint)
 
     unreachable = tuple(name for name in recipe.steps if name not in reachable)
     if not unreachable:

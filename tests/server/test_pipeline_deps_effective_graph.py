@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from shutil import copyfile
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -33,6 +36,65 @@ async def _open_remediation(tool_ctx_kitchen_open, overrides: dict[str, str] | N
     )
     assert result["success"] is True, result
     assert tool_ctx_kitchen_open.active_recipe_projection is not None
+
+
+def test_deferred_guard_preserves_skip_only_route_in_finalized_projection(
+    tool_ctx,
+    tmp_path: Path,
+) -> None:
+    """A deferred guard retains the target reachable only through ``on_skip``."""
+    fixture = Path(__file__).parents[1] / "recipe" / "fixtures" / "deferred_skip_only.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    copyfile(fixture, recipes_dir / fixture.name)
+
+    result = tool_ctx.recipes.load_and_validate(
+        "deferred-skip-only",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+        defer_unresolved=True,
+        include_finalized_projection=True,
+    )
+
+    assert result["valid"], result["errors"]
+    projection = result["_finalized_projection"]
+    assert isinstance(projection, FinalizedRecipeProjection)
+    assert (
+        RecipeFlowEdge(
+            source="guarded",
+            edge_type="skip",
+            target="Y",
+            condition="inputs.enabled",
+            result_field=None,
+        )
+        in projection.ordered_flow_edges
+    )
+    assert "Y" in projection.ordered_step_names
+
+
+def test_deferred_guard_reports_missing_skip_target_before_sweeping(
+    tool_ctx,
+    tmp_path: Path,
+) -> None:
+    """Deferred skip routes are validated before sweeping can hide an invalid target."""
+    fixture = Path(__file__).parents[1] / "recipe" / "fixtures" / "deferred_skip_only.yaml"
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "deferred-skip-missing.yaml").write_text(
+        fixture.read_text()
+        .replace("name: deferred-skip-only", "name: deferred-skip-missing")
+        .replace("on_skip: Y", "on_skip: missing_target")
+    )
+
+    result = tool_ctx.recipes.load_and_validate(
+        "deferred-skip-missing",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+        defer_unresolved=True,
+    )
+
+    assert not result["valid"]
+    assert any("missing_target" in error for error in result["errors"])
 
 
 @pytest.mark.anyio

@@ -231,11 +231,18 @@ def make_validation_context(
     Constructs the step graph and data-flow report once so that semantic
     rules can share the pre-built objects without redundant computation.
     """
-    raw_edges = (
-        effective_routing_edges
-        if effective_routing_edges is not None
-        else _build_raw_step_edges(recipe)
-    )
+    if effective_routing_edges is None:
+        raw_edges = _build_raw_step_edges(recipe)
+    else:
+        step_names = frozenset(recipe.steps)
+        raw_edges = {
+            source: tuple(
+                edge
+                for edge in effective_routing_edges.get(source, ())
+                if edge.target in step_names
+            )
+            for source in recipe.steps
+        }
     step_graph = {source: {edge.target for edge in edges} for source, edges in raw_edges.items()}
     must_defined_context, predecessor_edges = _must_definition_facts(recipe, raw_edges)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)

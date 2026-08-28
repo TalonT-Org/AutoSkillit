@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 import autoskillit.recipe._api as _api
 from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
-from autoskillit.recipe.io import RECIPE_SCAN_DIRS, builtin_recipes_dir, list_recipes, load_recipe
+from autoskillit.recipe.io import list_recipes, load_recipe
 from autoskillit.recipe.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
@@ -23,49 +23,11 @@ from autoskillit.recipe.staleness_cache import (
 )
 
 
-def _dir_mtime(path: Path) -> float:
-    """Return directory mtime as float, or 0.0 if the path does not exist."""
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
-
-
 class DefaultRecipeRepository:
-    """Concrete RecipeRepository backed by list_recipes with in-memory mtime cache."""
-
-    def __init__(self) -> None:
-        self._cached_list: LoadResult[RecipeInfo] | None = None
-        self._cached_project_dir: Path | None = None
-        self._cached_project_mtime: float = 0.0
-        self._cached_builtin_mtime: float = 0.0
+    """Concrete RecipeRepository backed by centralized recipe discovery."""
 
     def _get_list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
-
-        project_base = project_dir / ".autoskillit" / "recipes"
-        builtin_base = builtin_recipes_dir()
-
-        pm = max(
-            (_dir_mtime(project_base / s) for s in RECIPE_SCAN_DIRS),
-            default=0.0,
-        )
-        bm = max(
-            (_dir_mtime(builtin_base / s) for s in RECIPE_SCAN_DIRS),
-            default=0.0,
-        )
-        if (
-            self._cached_list is not None
-            and self._cached_project_dir == project_dir
-            and self._cached_project_mtime == pm
-            and self._cached_builtin_mtime == bm
-        ):
-            return self._cached_list
-        result = list_recipes(project_dir)
-        self._cached_list = result
-        self._cached_project_dir = project_dir
-        self._cached_project_mtime = pm
-        self._cached_builtin_mtime = bm
-        return result
+        return list_recipes(project_dir)
 
     def find(self, name: str, project_dir: Path) -> RecipeInfo | None:
         result = self._get_list(project_dir)

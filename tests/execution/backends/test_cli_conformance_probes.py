@@ -23,6 +23,7 @@ import threading
 import time
 import tomllib
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -131,7 +132,10 @@ from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     ManagedLaunchBinding,
     ManagedLeafLaunchResult,
 )
-from autoskillit.server.tools.tools_execution._managed_leaf import ManagedLeafAssignmentInput
+from autoskillit.server.tools.tools_execution._managed_leaf import (
+    ManagedLeafAssignmentInput,
+    ManagedLeafPreparedLaunch,
+)
 from autoskillit.workspace import AgentSkillDocument, DefaultSkillResolver
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
@@ -1836,18 +1840,30 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
         assert await service.reconcile_startup()
         observed: list[tuple[str, str]] = []
 
+        @asynccontextmanager
         async def controlled_leaf(projection, _permit):
             assignment = projection.binding.assignment
             backend_session_id = f"stock-codex-{assignment.assignment_id}"
-            observed.append((assignment.generated_home_id, backend_session_id))
             outcome = {
                 "dynamic-failure": OUTCOME_FAILED,
                 "dynamic-cancelled": OUTCOME_CANCELLED,
             }.get(assignment.label, OUTCOME_COMPLETED)
-            return ManagedLeafLaunchResult(
-                outcome=outcome,
-                backend_session_id=backend_session_id,
-                result_payload={"label": assignment.label, "outcome": outcome},
+
+            async def execute() -> ManagedLeafLaunchResult:
+                observed.append((assignment.generated_home_id, backend_session_id))
+                return ManagedLeafLaunchResult(
+                    outcome=outcome,
+                    backend_session_id=backend_session_id,
+                    result_payload={"label": assignment.label, "outcome": outcome},
+                )
+
+            async def finalize(_result: ManagedLeafLaunchResult) -> None:
+                return None
+
+            yield ManagedLeafPreparedLaunch(
+                ledger_attempt_evidence=projection.ledger_attempt_evidence,
+                execute=execute,
+                finalize=finalize,
             )
 
         static_binding = _managed_fixed_batch_smoke_binding(
@@ -1996,10 +2012,21 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
             started = asyncio.Event()
             release = asyncio.Event()
 
-            async def blocked_leaf(_projection, _permit):
-                started.set()
-                await release.wait()
-                return ManagedLeafLaunchResult(result_payload={"label": "blocked"})
+            @asynccontextmanager
+            async def blocked_leaf(projection, _permit):
+                async def execute() -> ManagedLeafLaunchResult:
+                    started.set()
+                    await release.wait()
+                    return ManagedLeafLaunchResult(result_payload={"label": "blocked"})
+
+                async def finalize(_result: ManagedLeafLaunchResult) -> None:
+                    return None
+
+                yield ManagedLeafPreparedLaunch(
+                    ledger_attempt_evidence=projection.ledger_attempt_evidence,
+                    execute=execute,
+                    finalize=finalize,
+                )
 
             pending_binding = _managed_fixed_batch_smoke_binding(
                 channel=tmp_path / "pending-channel",

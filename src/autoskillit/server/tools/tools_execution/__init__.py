@@ -85,6 +85,10 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
     _release_context_tracker,  # noqa: F401 — re-exported for facade completeness
     _select_tracker_authority,  # noqa: F401 — re-exported for facade completeness
 )
+from autoskillit.workspace import (  # noqa: F401
+    create_git_worktree,
+    remove_git_worktree,
+)
 
 from ._audit_response import (  # noqa: F401
     _audit_response,
@@ -173,6 +177,7 @@ __all__ = [
     "_run_subprocess_captured",
     "_select_tracker_authority",
     "scoped_child_resource_owner",
+    "create_git_worktree",
     "execution_marker",
     "find_caller_session_id",
     "get_tool_def",
@@ -181,6 +186,7 @@ __all__ = [
     "prepare_recipe_segment_delivery",
     "progress_heartbeat",
     "read_overlay",
+    "remove_git_worktree",
     "read_fixed_batch_result",
     "read_registry",
     "resolve_closure_write_dirs",

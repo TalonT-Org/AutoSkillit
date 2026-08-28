@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import pytest
 
 from autoskillit.core import (
@@ -20,10 +22,28 @@ from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     ManagedLaunchBinding,
     ManagedLeafLaunchResult,
 )
-from autoskillit.server.tools.tools_execution._managed_leaf import ManagedLeafAssignmentInput
+from autoskillit.server.tools.tools_execution._managed_leaf import (
+    ManagedLeafAssignmentInput,
+    ManagedLeafPreparedLaunch,
+)
 from autoskillit.workspace import AgentSkillDocument
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
+
+
+@asynccontextmanager
+async def _prepared_leaf(projection, result: ManagedLeafLaunchResult):
+    async def execute() -> ManagedLeafLaunchResult:
+        return result
+
+    async def finalize(_result: ManagedLeafLaunchResult) -> None:
+        return None
+
+    yield ManagedLeafPreparedLaunch(
+        ledger_attempt_evidence=projection.ledger_attempt_evidence,
+        execute=execute,
+        finalize=finalize,
+    )
 
 
 def _binding(tmp_path, launch_leaf):
@@ -87,10 +107,10 @@ async def test_supervisor_opens_once_replays_and_releases_each_owned_permit(tmp_
     )
     seen_permits: list[str] = []
 
-    async def launch_leaf(projection, permit):
+    def launch_leaf(projection, permit):
         seen_permits.append(permit.permit_id)
         assert projection.resume_session_id == ""
-        return ManagedLeafLaunchResult()
+        return _prepared_leaf(projection, ManagedLeafLaunchResult())
 
     binding = _binding(tmp_path, launch_leaf)
     assert await service.reconcile_startup()
@@ -115,9 +135,64 @@ async def test_unresolved_recovery_debt_keeps_managed_route_closed(tmp_path) -> 
         state_root=tmp_path / "state",
     )
 
-    async def launch_leaf(_projection, _permit):
-        return ManagedLeafLaunchResult()
+    def launch_leaf(projection, _permit):
+        return _prepared_leaf(projection, ManagedLeafLaunchResult())
 
     binding = _binding(tmp_path, launch_leaf)
     with pytest.raises(Exception, match="recovery"):
         await service.run(binding)
+
+
+@pytest.mark.anyio
+async def test_owner_cleanup_precedes_settlement_and_permit_release(tmp_path) -> None:
+    events: list[str] = []
+
+    class RecordingCapacity(DefaultManagedWorkerCapacity):
+        def release(self, permit) -> None:
+            events.append("permit-release")
+            super().release(permit)
+
+    capacity = RecordingCapacity(max_concurrent=1)
+    service = ManagedFixedBatchService(
+        capacity=capacity,
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+
+    @asynccontextmanager
+    async def launch_leaf(projection, _permit):
+        assert (tmp_path / "state" / "recovery.json").is_file()
+        events.append("owner-enter")
+
+        async def execute() -> ManagedLeafLaunchResult:
+            events.append("execute")
+            return ManagedLeafLaunchResult()
+
+        async def finalize(_result: ManagedLeafLaunchResult) -> None:
+            events.append("finalize")
+
+        try:
+            yield ManagedLeafPreparedLaunch(
+                ledger_attempt_evidence=projection.ledger_attempt_evidence,
+                execute=execute,
+                finalize=finalize,
+            )
+        finally:
+            events.append("owner-cleanup")
+
+    assert await service.reconcile_startup()
+    result = await service.run(_binding(tmp_path, launch_leaf))
+
+    assert result.wave_outcome == "complete"
+    assert events == [
+        "owner-enter",
+        "execute",
+        "finalize",
+        "owner-cleanup",
+        "permit-release",
+        "owner-enter",
+        "execute",
+        "finalize",
+        "owner-cleanup",
+        "permit-release",
+    ]

@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import json
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import AbstractAsyncContextManager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -45,6 +46,7 @@ from autoskillit.hooks import (
 )
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
+    ManagedLeafPreparedLaunch,
     ManagedLeafProjection,
     bind_managed_leaf,
     plan_managed_leaf_identities,
@@ -129,7 +131,8 @@ class ManagedLeafLaunchResult:
 
 
 ManagedLeafLauncher = Callable[
-    [ManagedLeafProjection, ManagedWorkerPermit], Awaitable[ManagedLeafLaunchResult]
+    [ManagedLeafProjection, ManagedWorkerPermit],
+    AbstractAsyncContextManager[ManagedLeafPreparedLaunch[ManagedLeafLaunchResult]],
 ]
 
 
@@ -532,6 +535,7 @@ class ManagedFixedBatchService:
         permit: ManagedWorkerPermit | None = None
         admitted = False
         running = False
+        prepared: ManagedLeafPreparedLaunch[ManagedLeafLaunchResult] | None = None
         owner = (batch_id, ledger_assignment_id, identity.first_run_id)
         try:
             permit = await self._capacity.acquire(owner)
@@ -560,24 +564,30 @@ class ManagedFixedBatchService:
             )
             self._debt[permit.permit_id] = debt
             self._write_debt()
-            admit_assignment(
-                binding.flag_dir,
-                batch_id=batch_id,
-                assignment_id=ledger_assignment_id,
-                attempt_id=attempt_id,
-                run_id=identity.first_run_id,
-                evidence={**projection.ledger_attempt_evidence, "permit_id": permit.permit_id},
-            )
-            admitted = True
-            mark_assignment_running(
-                binding.flag_dir,
-                batch_id=batch_id,
-                assignment_id=ledger_assignment_id,
-                attempt_id=attempt_id,
-                run_id=identity.first_run_id,
-            )
-            running = True
-            result = await binding.launch_leaf(projection, permit)
+            async with binding.launch_leaf(projection, permit) as prepared:
+                admit_assignment(
+                    binding.flag_dir,
+                    batch_id=batch_id,
+                    assignment_id=ledger_assignment_id,
+                    attempt_id=attempt_id,
+                    run_id=identity.first_run_id,
+                    evidence={
+                        **prepared.ledger_attempt_evidence,
+                        "permit_id": permit.permit_id,
+                    },
+                )
+                admitted = True
+                mark_assignment_running(
+                    binding.flag_dir,
+                    batch_id=batch_id,
+                    assignment_id=ledger_assignment_id,
+                    attempt_id=attempt_id,
+                    run_id=identity.first_run_id,
+                )
+                running = True
+                result = await prepared.execute()
+                await prepared.finalize(result)
+            # Resource cleanup has completed before result settlement and permit release.
             self._settle(
                 binding,
                 batch_id,
@@ -731,7 +741,11 @@ class ManagedFixedBatchService:
             task.cancel()
             try:
                 await asyncio.wait_for(asyncio.shield(task), timeout=self._cancel_timeout)
-            except (TimeoutError, asyncio.CancelledError):
+            except TimeoutError:
+                # A live owner still holds durable recovery debt; do not terminalize
+                # the batch before its shielded owner cleanup and settlement finish.
+                return
+            except asyncio.CancelledError:
                 pass
         cancel_batch(
             binding.flag_dir,

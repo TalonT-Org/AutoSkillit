@@ -81,6 +81,19 @@ class _PreparedChildLaunch(Generic[_PreparedValue]):
     value: _PreparedValue
 
 
+@dataclass(slots=True)
+class ManagedLeafPreparedLaunch(Generic[_PreparedValue]):
+    """A prepared fixed-batch leaf whose resource owner remains entered.
+
+    ``execute`` deliberately delegates physical process ownership to the
+    executor.  The fixed-batch supervisor owns only its ledger and permit.
+    """
+
+    ledger_attempt_evidence: Mapping[str, str]
+    execute: Callable[[], Awaitable[_PreparedValue]]
+    finalize: Callable[[_PreparedValue], Awaitable[None]]
+
+
 def _canonical(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -554,6 +567,7 @@ __all__ = [
     "ManagedLeafBinding",
     "ManagedLeafIdentityPlan",
     "ManagedLeafProjection",
+    "ManagedLeafPreparedLaunch",
     "ManagedLeafWorkspacePlan",
     "bind_managed_leaf",
     "classify_managed_leaf_workspace",

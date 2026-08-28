@@ -705,7 +705,18 @@ def test_replaying_runner_restore_delegates_correctly(tmp_path):
     snap_dir = tmp_path / "snapshot"
     skill_md = snap_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
     skill_md.parent.mkdir(parents=True)
-    skill_md.write_text("# investigate\n", encoding="utf-8")
+    projected_content = (
+        "# investigate\n\n"
+        "## Provided resource: Fixture catalog\n\n"
+        "Snapshot fixture.\n\n"
+        "| Constraint | Test |\n"
+        "|---|---|\n"
+        "| Preserve bytes | test_recording.py |\n"
+        '<!-- autoskillit:skill-resource id="fixture-catalog" '
+        'digest="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" '
+        'rows="1" -->'
+    )
+    skill_md.write_text(projected_content, encoding="utf-8")
 
     runner = ReplayingSubprocessRunner({}, {}, skill_snapshots={"investigate": snap_dir})
 
@@ -714,7 +725,8 @@ def test_replaying_runner_restore_delegates_correctly(tmp_path):
 
     assert result is not None
     session_dir = ephemeral_root / "headless-xyz"
-    assert (session_dir / ".claude" / "skills" / "investigate" / "SKILL.md").exists()
+    restored = session_dir / ".claude" / "skills" / "investigate" / "SKILL.md"
+    assert restored.read_text(encoding="utf-8") == projected_content
 
 
 def test_replaying_runner_restore_missing_step_returns_none(tmp_path):

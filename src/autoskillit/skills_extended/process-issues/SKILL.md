@@ -259,8 +259,8 @@ Processing X issues:
    These values correspond to the GitHub labels applied by `triage-issues`:
    `recipe:implementation` (new features/enhancements) and `recipe:remediation` (bugs).
 
-   The `run_name` encodes recipe origin for the `open-pr` skill, which derives
-   the PR title prefix from it by convention (see `open-pr` SKILL.md).
+   The `run_name` encodes the PR title convention: values beginning with `feature` map to
+   `[FEATURE]`, values beginning with `fix` map to `[FIX]`, and every other value adds no prefix.
 
 5. **Detect review approach marker:**
    Read `review_approach_recommended` from the `claim_issue` result returned in step 3b-3.

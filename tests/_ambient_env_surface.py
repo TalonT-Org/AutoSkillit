@@ -819,7 +819,7 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
     ),
-    "server/_guards.py:401": (
+    "server/_guards.py:398": (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),

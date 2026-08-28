@@ -66,6 +66,12 @@ src/autoskillit/skills/*/SKILL.md:
   - contracts/
   - workspace/
 
+src/autoskillit/skill_resources/*.md:
+  - arch/
+  - contracts/
+  - skills/
+  - workspace/
+
 src/autoskillit/skills_extended/*/SKILL.md:
   - skills/
   - contracts/

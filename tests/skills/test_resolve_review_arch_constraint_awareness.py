@@ -1,7 +1,4 @@
-"""Structural guard: resolve-review SKILL.md must contain an architectural
-constraint catalog that intent validation subagents can consult before
-classifying ACCEPT.
-"""
+"""Structural guard for resolve-review's architectural constraint awareness."""
 
 import re
 from pathlib import Path
@@ -39,6 +36,13 @@ SKILL_PATH = (
     / "skills_extended"
     / "resolve-review"
     / "SKILL.md"
+)
+RESOURCE_PATH = (
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "skill_resources"
+    / "arch-constraint-catalog.md"
 )
 
 ARCH_DIR = Path(__file__).parent.parent / "arch"
@@ -97,6 +101,13 @@ def skill_text():
     if not SKILL_PATH.exists():
         pytest.fail(f"SKILL.md not found at {SKILL_PATH}")
     return SKILL_PATH.read_text()
+
+
+@pytest.fixture(scope="module")
+def resource_text():
+    if not RESOURCE_PATH.exists():
+        pytest.fail(f"Architectural constraint catalog not found at {RESOURCE_PATH}")
+    return RESOURCE_PATH.read_text()
 
 
 # --- Discovery utility self-test ---
@@ -221,9 +232,9 @@ def test_never_block_prohibits_ignoring_arch_constraints(skill_text):
 # --- Bidirectional staleness guard ---
 
 
-def test_catalog_forward_references_valid(skill_text):
+def test_catalog_forward_references_valid(resource_text):
     """Every test file cited in the catalog must actually exist in tests/."""
-    catalog_section = _extract_catalog_section(skill_text)
+    catalog_section = _extract_catalog_section(resource_text)
     all_test_files = {f.name for f in Path(__file__).parent.parent.rglob("test_*.py")}
     referenced_files = set(re.findall(r"`(test_\w+\.py)`", catalog_section))
     for ref in referenced_files:
@@ -232,17 +243,17 @@ def test_catalog_forward_references_valid(skill_text):
         )
 
 
-def test_catalog_reverse_coverage(skill_text):
+def test_catalog_reverse_coverage(resource_text):
     """Every discoverable constraint test (minus exclusions) must be
     referenced in the Architectural Constraint Catalog."""
     all_constraints = discover_constraint_tests()
     catalogable = {name for name in all_constraints if name not in _CATALOG_EXCLUSIONS}
-    catalog_section = _extract_catalog_section(skill_text)
+    catalog_section = _extract_catalog_section(resource_text)
     missing = {name for name in catalogable if name not in catalog_section}
     assert missing == set(), (
         f"Constraint tests not in catalog: {sorted(missing)}. "
-        "Add them to the Architectural Constraint Catalog in "
-        "resolve-review/SKILL.md or add to _CATALOG_EXCLUSIONS with a reason."
+        "Add them to the Architectural Constraint Catalog resource or add to "
+        "_CATALOG_EXCLUSIONS with a reason."
     )
 
 

@@ -31,6 +31,7 @@ from autoskillit.core import (
     validate_skill_capability_roles,
 )
 from autoskillit.workspace.skill_format import read_skill_frontmatter
+from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills_records import (
     SkillInfo,
     SkillInvalidity,
@@ -112,6 +113,30 @@ def _skill_info_from_frontmatter(
         activate_deps_raw = []
     activate_deps = tuple(str(dep) for dep in activate_deps_raw)
 
+    required_resources_raw = data.get("requires_resources", [])
+    if not isinstance(required_resources_raw, list):
+        invalidities.append(
+            SkillInvalidity(
+                SkillInvalidityKind.FIELD_SHAPE,
+                "requires_resources must be a list",
+            )
+        )
+        required_resources_raw = []
+    required_resources = tuple(str(resource_id) for resource_id in required_resources_raw)
+    resource_digests: dict[str, str] = {}
+    for resource_id in required_resources:
+        try:
+            resource = load_skill_resource(resource_id)
+        except SkillContractError as exc:
+            invalidities.append(
+                SkillInvalidity(
+                    SkillInvalidityKind.RESOURCE_CONTRACT_INVALID,
+                    str(exc),
+                )
+            )
+        else:
+            resource_digests[resource_id] = resource.digest
+
     exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     exploration_sidecar_digest = ""
     if "exploration_vectors" in data:
@@ -183,6 +208,8 @@ def _skill_info_from_frontmatter(
         semantic_plan=semantic_plan,
         execution_role=execution_role,
         activate_deps=activate_deps,
+        required_resources=required_resources,
+        resource_digests=resource_digests,
         exploration_vectors=exploration_vectors,
         exploration_sidecar_digest=exploration_sidecar_digest,
         canonical_content=parsed.content,

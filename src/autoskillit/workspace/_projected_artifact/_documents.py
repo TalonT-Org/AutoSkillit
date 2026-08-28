@@ -45,6 +45,7 @@ from autoskillit.core import (
     normalize_parent_sandbox_mode,
     temp_dir_display_str,
 )
+from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills import (
     render_skill_invalidities,
     replace_exploration_vector_bodies,
@@ -466,6 +467,23 @@ def project_agent_skill_document(
                                 + "\n\n"
                                 + content[splice_point:]
                             )
+
+    for resource_id in skill_info.required_resources:
+        resource = load_skill_resource(resource_id)
+        expected_digest = skill_info.resource_digests.get(resource_id)
+        if expected_digest != resource.digest:
+            raise SkillContractError(
+                f"skill {skill_info.name!r} resource {resource_id!r} digest is not "
+                "bound to the projected contract"
+            )
+        rows = "" if resource.table_row_count is None else str(resource.table_row_count)
+        content += (
+            f"\n\n## Provided resource: {resource.title}\n\n"
+            f"{resource.summary}\n\n"
+            f"{resource.body}"
+            f'\n<!-- autoskillit:skill-resource id="{resource.id}" '
+            f'digest="{resource.digest}" rows="{rows}" -->'
+        )
 
     projected_digest = hashlib.sha256(content.encode()).hexdigest()
     canonical_digest = (

@@ -181,6 +181,7 @@ _CORPUS_FIXTURES = (
     "missing_semantic_version.md",
     "legacy_spawner.md",
     "legacy_child_spawn_cardinality.md",
+    "resource_contract_invalid.md",
 )
 # Filename -> the `name:` value declared in that fixture's own frontmatter.
 _CORPUS_SKILL_NAMES = {
@@ -188,18 +189,20 @@ _CORPUS_SKILL_NAMES = {
     "missing_semantic_version.md": "research-helper",
     "legacy_spawner.md": "legacy-spawner",
     "legacy_child_spawn_cardinality.md": "legacy-child-spawn-cardinality",
+    "resource_contract_invalid.md": "resource-contract-invalid",
 }
 
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("fixture_name", _CORPUS_FIXTURES)
-async def test_corpus_is_valid_or_deterministically_migratable(
+async def test_corpus_is_valid_advisory_or_deterministically_migratable(
     fixture_name: str, tmp_path: Path
 ) -> None:
-    """Each fixture either validates cleanly today, or SkillMigrationAdapter
-    transforms it so revalidation passes. Any future contract tightening
-    that strands the corpus fails CI unless a remediation is registered
-    and implemented."""
+    """Each fixture validates, has actionable advisory guidance, or migrates cleanly.
+
+    Any future contract tightening that strands the corpus fails CI unless a
+    remediation is registered and implemented.
+    """
     source = _CORPUS_DIR / fixture_name
     assert source.is_file(), f"missing corpus fixture: {source}"
     skill_name = _CORPUS_SKILL_NAMES[fixture_name]
@@ -224,6 +227,14 @@ async def test_corpus_is_valid_or_deterministically_migratable(
     info = _current_info()
     if not info.invalidities:
         return  # validates cleanly today — nothing more to prove
+    actions = {
+        SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].action for invalidity in info.invalidities
+    }
+    if actions == {RemediationAction.ADVISORY}:
+        assert all(
+            SKILL_CONTRACT_REMEDIATIONS[invalidity.kind].hint for invalidity in info.invalidities
+        )
+        return
 
     file = MigrationFile(name=skill_name, path=skill_path, file_type="skill", current_version=None)
     adapter = SkillMigrationAdapter()

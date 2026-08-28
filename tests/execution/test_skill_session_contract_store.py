@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 def test_exploration_vector_contract_versions_invalidate_stale_artifacts() -> None:
     from autoskillit.core import SKILL_SESSION_CONTRACT_SCHEMA_VERSION
 
-    assert SKILL_PROJECTION_VERSION == 7
+    assert SKILL_PROJECTION_VERSION == 8
     assert SKILL_SESSION_CONTRACT_SCHEMA_VERSION == 5
 
 
@@ -467,7 +467,10 @@ def test_stale_projection_version_rejected_before_enum_construction(tmp_path: Pa
     manifest["contract_digest"] = _digest_json(contract_data)
     store._write_manifest(entry, manifest)  # noqa: SLF001
 
-    with pytest.raises(ValueError, match="unsupported projection_version 5; expected 7"):
+    with pytest.raises(
+        ValueError,
+        match=f"unsupported projection_version 5; expected {SKILL_PROJECTION_VERSION}",
+    ):
         store.finalize(correlation_key, "stale-projection")
 
 

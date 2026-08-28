@@ -477,7 +477,13 @@ class ProjectedPluginArtifactAuthority:
                     f"{backend.name!r}: {source_root}; refusals: {details}"
                 )
         skill_identity = "\n".join(
-            f"{info.name}:{info.canonical_digest}:{info.exploration_sidecar_digest}"
+            (
+                f"{info.name}:{info.canonical_digest}:{info.exploration_sidecar_digest}:"
+                + ",".join(
+                    f"{resource_id}={digest}"
+                    for resource_id, digest in sorted(info.resource_digests.items())
+                )
+            )
             for info in sorted(catalog.skills, key=lambda skill: skill.name)
         )
         adaptation_identity = "\n".join(

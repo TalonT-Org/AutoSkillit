@@ -74,6 +74,8 @@ class SkillInfo:
     semantic_plan: SkillSemanticPlan | None = None
     execution_role: SkillExecutionRole | None = SkillExecutionRole.SESSION
     activate_deps: tuple[str, ...] = ()
+    required_resources: tuple[str, ...] = ()
+    resource_digests: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     exploration_vectors: tuple[ExplorationVectorDef, ...] = ()
     exploration_sidecar_digest: str = ""
     canonical_content: str = ""
@@ -171,6 +173,8 @@ class SkillCatalogEntry:
     semantic_plan: SkillSemanticPlan | None
     execution_role: SkillExecutionRole
     activate_deps: tuple[str, ...]
+    required_resources: tuple[str, ...]
+    resource_digests: Mapping[str, str]
     exploration_vectors: tuple[ExplorationVectorDef, ...]
     exploration_sidecar_digest: str
     canonical_content: str
@@ -201,6 +205,8 @@ class SkillCatalogEntry:
             semantic_plan=skill.semantic_plan,
             execution_role=skill.execution_role,
             activate_deps=skill.activate_deps,
+            required_resources=skill.required_resources,
+            resource_digests=skill.resource_digests,
             exploration_vectors=skill.exploration_vectors,
             exploration_sidecar_digest=skill.exploration_sidecar_digest,
             canonical_content=skill.canonical_content,

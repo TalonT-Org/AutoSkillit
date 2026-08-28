@@ -13,24 +13,18 @@ import json
 import os
 import re
 import sys
-from importlib import import_module
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
-command_has_blocked_protected_path_read = import_module(
-    "_command_classification"
-).command_has_blocked_protected_path_read
-parse_hook_command = import_module("_hook_payload").parse_hook_command
+from _command_classification import (  # noqa: E402
+    PROTECTED_SOURCE_PATH_PATTERNS,
+    command_has_blocked_protected_path_read,
+)
+from _hook_payload import parse_hook_command  # noqa: E402
 
 RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
-
-_CMD_PATH_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml"),
-    re.compile(r"src/autoskillit/skills(?:_extended)?/.*/SKILL\.md"),
-    re.compile(r"src/autoskillit/agents/.*\.md"),
-]
 
 _CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"^autoskillit\.recipe\.(?!_cmd_rpc)")
 
@@ -52,7 +46,7 @@ def main() -> None:
 
     if tool == "run_cmd" or tool_name == "Bash":
         cmd: str = parse_hook_command(data).command or ""
-        if command_has_blocked_protected_path_read(cmd, _CMD_PATH_PATTERNS):
+        if command_has_blocked_protected_path_read(cmd, PROTECTED_SOURCE_PATH_PATTERNS):
             _deny(
                 f"run_cmd/Bash {RECIPE_READ_DENY_TRIGGER}. "
                 "Use load_recipe to recall step definitions or the Skill tool "

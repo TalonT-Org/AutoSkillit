@@ -23,7 +23,10 @@ from autoskillit.core import (
     parse_plan_paths,
     session_type,
 )
-from autoskillit.hooks import command_has_blocked_protected_path_read
+from autoskillit.hooks import (
+    PROTECTED_SOURCE_PATH_PATTERNS,
+    command_has_blocked_protected_path_read,
+)
 from autoskillit.pipeline import gate_error_result, headless_error_result
 
 if TYPE_CHECKING:
@@ -37,12 +40,6 @@ logger = get_logger(__name__)
 
 
 RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
-
-_RECIPE_READ_CMD_PATTERNS: list[re.Pattern[str]] = [
-    re.compile(r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml"),
-    re.compile(r"src/autoskillit/skills(?:_extended)?/.*/SKILL\.md"),
-    re.compile(r"src/autoskillit/agents/.*\.md"),
-]
 
 _RECIPE_READ_CALLABLE_PATTERN: re.Pattern[str] = re.compile(r"autoskillit\.recipe\.(?!_cmd_rpc)")
 
@@ -204,7 +201,7 @@ def _check_recipe_read_prohibition(
     if os.environ.get("AUTOSKILLIT_HEADLESS") != "1":
         return None
     if cmd is not None:
-        if command_has_blocked_protected_path_read(cmd, _RECIPE_READ_CMD_PATTERNS):
+        if command_has_blocked_protected_path_read(cmd, PROTECTED_SOURCE_PATH_PATTERNS):
             return gate_error_result(
                 f"run_cmd {RECIPE_READ_DENY_TRIGGER}. "
                 "Use load_recipe to recall step definitions or the Skill tool "

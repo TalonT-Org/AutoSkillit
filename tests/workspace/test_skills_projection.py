@@ -559,6 +559,7 @@ def test_projection_strips_all_machine_authority_and_preserves_private_deps(
             "activate_deps",
             "execution_role",
             "exploration_vectors",
+            "requires_resources",
             "semantic_requirements",
             "semantic_version",
             "uses_capabilities",

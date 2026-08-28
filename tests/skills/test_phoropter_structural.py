@@ -40,11 +40,11 @@ FAMILY_ARG_INTERFACE: dict[str, str] = {
 # vis-lens has a dedicated lens-selection dial skill; arch-lens and exp-lens
 # emit the same output tokens via PR-preparation skills and have no
 # lens-selection dial skill.
-_DIAL_SKILLS: dict[str, str] = {
+DIAL_SKILLS: dict[str, str] = {
     "vis-lens": "select-vis-lenses",
 }
 
-_DIAL_SKILL_PAIRS: list[tuple[str, str]] = sorted(_DIAL_SKILLS.items())
+DIAL_SKILL_PAIRS: list[tuple[str, str]] = sorted(DIAL_SKILLS.items())
 
 RESEARCH_RECIPE = load_recipe(builtin_recipes_dir() / "research.yaml")
 RESEARCH_DESIGN_RECIPE = load_recipe(builtin_recipes_dir() / "research-design.yaml")
@@ -129,12 +129,8 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
             f"{family}-{slug} (2-arg) must document experiment_plan_path"
         )
 
-    if family == "vis-lens":
-        is_composite = "yaml:spec-index" in text
-        if is_composite:
-            assert "yaml:spec-index" in text
-        else:
-            assert "yaml:figure-spec" in text, f"{family}-{slug} must contain yaml:figure-spec"
+    if family == "vis-lens" and "yaml:spec-index" not in text:
+        assert "yaml:figure-spec" in text, f"{family}-{slug} must contain yaml:figure-spec"
 
     if (family, slug) == ("vis-lens", "methodology-norms"):
         assert "tradition_slug" in text, f"{family}-{slug} must document tradition_slug"
@@ -228,14 +224,14 @@ def test_lens_metadata_special_assertions_from_body(family: str, slug: str) -> N
     )
 
 
-@pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)
+@pytest.mark.parametrize("family,dial_skill", DIAL_SKILL_PAIRS)
 def test_dial_skill_skill_md_exists(family: str, dial_skill: str) -> None:
     assert (SKILLS_DIR / dial_skill / "SKILL.md").exists(), (
         f"{family} dial skill {dial_skill}/SKILL.md is missing"
     )
 
 
-@pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)
+@pytest.mark.parametrize("family,dial_skill", DIAL_SKILL_PAIRS)
 def test_dial_skill_emits_output_tokens(family: str, dial_skill: str) -> None:
     text = (SKILLS_DIR / dial_skill / "SKILL.md").read_text()
     assert "selected_lenses" in text, f"{family} dial skill {dial_skill} must emit selected_lenses"
@@ -247,8 +243,6 @@ def test_dial_skill_emits_output_tokens(family: str, dial_skill: str) -> None:
 def test_prefixed_step_naming_convention() -> None:
     recipes = [RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE]
     for family_name, prefix in _FAMILY_PREFIX.items():
-        if family_name not in _RECIPE_FAMILIES:
-            continue
         if not prefix:
             continue
         expected = [f"{prefix}_dial", f"{prefix}_apply", f"{prefix}_synthesize"]
@@ -262,8 +256,6 @@ def test_canonical_step_naming_convention() -> None:
     recipes = [RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE]
     canonical_names = ["dial", "apply", "synthesize"]
     for family_name, prefix in _FAMILY_PREFIX.items():
-        if family_name not in _RECIPE_FAMILIES:
-            continue
         if prefix is not None:
             continue
         assert any(

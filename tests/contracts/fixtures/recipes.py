@@ -33,6 +33,7 @@ BUNDLED_RECIPE_PATHS = tracked_recipe_paths(
     source=RecipeSource.BUILTIN,
     scan_dirs=(".",),
 )
+assert BUNDLED_RECIPE_PATHS
 CONTRACT_RECIPE_PATHS = tuple(sorted((builtin_recipes_dir() / "contracts").glob("*.yaml")))
 ALL_DELIVERY_SURFACES = tuple(RECIPE_DELIVERY_SURFACE_REGISTRY)
 

@@ -36,6 +36,7 @@ _ALL_BUNDLED_RECIPE_PATHS = sorted(
         scan_dirs=(".",),
     )
 )
+assert _ALL_BUNDLED_RECIPE_PATHS
 
 
 @pytest.mark.parametrize("recipe_yaml", _ALL_BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)

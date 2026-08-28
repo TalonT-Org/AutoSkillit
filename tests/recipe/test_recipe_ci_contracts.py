@@ -52,6 +52,7 @@ RECIPE_FILES = sorted(
         scan_dirs=(".",),
     )
 )
+assert RECIPE_FILES
 
 
 @pytest.fixture(params=RECIPE_FILES, ids=lambda p: p.stem)

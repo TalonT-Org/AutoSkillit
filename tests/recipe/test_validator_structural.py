@@ -471,7 +471,9 @@ class TestValidateRecipe:
 
 
 def _project_local_recipes() -> list[Path]:
-    return list(tracked_recipe_paths(_PROJECT_ROOT, source=RecipeSource.PROJECT))
+    paths = list(tracked_recipe_paths(_PROJECT_ROOT, source=RecipeSource.PROJECT))
+    assert paths
+    return paths
 
 
 @pytest.mark.parametrize("recipe_yaml", _project_local_recipes(), ids=lambda p: p.stem)

@@ -24,13 +24,15 @@ def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]
 
 
 def _all_bundled_recipes():
-    return list(
+    paths = list(
         tracked_recipe_paths(
             _PROJECT_ROOT,
             source=RecipeSource.BUILTIN,
             scan_dirs=(".",),
         )
     )
+    assert paths
+    return paths
 
 
 @pytest.mark.parametrize("recipe_path", _all_bundled_recipes(), ids=lambda p: p.stem)

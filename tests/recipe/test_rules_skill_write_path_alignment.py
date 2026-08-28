@@ -193,13 +193,15 @@ def test_rule_fires_on_synthetic_pre_fix_divergence(tmp_path: Path) -> None:
 
 
 def _bundled_recipe_paths() -> list[Path]:
-    return sorted(
+    paths = sorted(
         tracked_recipe_paths(
             _PROJECT_ROOT,
             source=RecipeSource.BUILTIN,
             scan_dirs=(".",),
         )
     )
+    assert paths
+    return paths
 
 
 @pytest.mark.parametrize(

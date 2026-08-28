@@ -486,8 +486,15 @@ def test_recipe_has_continue_on_failure_field_defaulting_to_false() -> None:
 
 
 def test_recipe_has_blocks_field_defaulting_to_empty() -> None:
+    import dataclasses
+
     from autoskillit.recipe.schema import Recipe
 
+    field_names = {f.name for f in dataclasses.fields(Recipe)}
+    assert "blocks" in field_names, (
+        "Recipe.blocks is in DEFERRED_RECIPE_FIELDS; removing it without updating the "
+        "deferral registry would silently drop a tracked tracking issue (#4893)."
+    )
     r = Recipe(name="x", description="y")
     assert r.blocks == ()
 

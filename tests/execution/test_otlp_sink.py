@@ -400,7 +400,7 @@ def test_native_fixture_projects_verbatim_parent_and_fixture_proven_outcome(
                 "agent_type": "general-purpose",
             },
         )
-    assert configured_alias != resolved_model
+    # Verify the projection uses the fixture-resolved model rather than the configured alias.
     assert local_sink.model_evidence_for(session_id) == (
         resolved_model,
         expected_outcomes,

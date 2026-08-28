@@ -8,6 +8,7 @@ quick scanning across retained committed sessions.
 
 from __future__ import annotations
 
+import os
 import shutil
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -31,6 +32,7 @@ from autoskillit.core import (
     SessionType,
     atomic_write,
     default_log_dir,
+    fsync_directory,
     get_logger,
     iter_merged_assistant_turns,
     write_versioned_json,
@@ -74,6 +76,23 @@ def resolve_log_dir(log_dir: str) -> Path:
 def session_index_lock_path(log_root: Path) -> Path:
     """Return the stable lease path for session-index transactions."""
     return Path(log_root) / ".locks" / "sessions-index.lock"
+
+
+def _append_session_archive_rows(archive_path: Path, rows: list[dict[str, Any]]) -> None:
+    if not rows:
+        return
+    payload = ("\n" + "".join(_fast_dumps(row, sort_keys=True) + "\n" for row in rows)).encode(
+        "utf-8"
+    )
+    archive_existed = archive_path.exists()
+    with archive_path.open("ab") as archive:
+        written = archive.write(payload)
+        if written != len(payload):
+            raise OSError(f"Short archive write: wrote {written} of {len(payload)} bytes")
+        archive.flush()
+        os.fsync(archive.fileno())
+    if not archive_existed:
+        fsync_directory(archive_path.parent)
 
 
 def write_telemetry_clear_marker(log_root: Path) -> None:
@@ -662,6 +681,7 @@ def flush_session_log(
             "schema_version": 8,
         }
         index_path = log_root / "sessions.jsonl"
+        archive_path = log_root / "sessions-archive.jsonl"
         index_rows = [
             row
             for row in read_tolerant_session_index_rows(index_path)
@@ -683,6 +703,13 @@ def flush_session_log(
         )
 
         retained_rows = [row for row in index_rows if row.get("dir_name") in surviving_names]
+        evicted_rows = [row for row in index_rows if row.get("dir_name") not in surviving_names]
+        if evicted_rows:
+            atomic_write(
+                index_path,
+                "".join(_fast_dumps(row, sort_keys=True) + "\n" for row in index_rows),
+            )
+            _append_session_archive_rows(archive_path, evicted_rows)
         atomic_write(
             index_path,
             "".join(_fast_dumps(row, sort_keys=True) + "\n" for row in retained_rows),

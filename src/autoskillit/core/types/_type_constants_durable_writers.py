@@ -202,6 +202,15 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.execution.session_log:_append_session_archive_rows",
+        artifact=(
+            "sessions-archive.jsonl machine-local historical telemetry written via "
+            "flush_session_log()"
+        ),
+        machine_local=True,
+        detection=("autoskillit.execution.session_index:find_stale_session_archive_references"),
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.execution.process._process_tether:write_tether",
         artifact=(
             "process-tethers/*.json under default_log_dir() — per-spawn spawner/child "

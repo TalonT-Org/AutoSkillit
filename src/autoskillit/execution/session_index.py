@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from autoskillit.core import default_log_dir
+
 
 def read_tolerant_session_index_rows(index_path: Path) -> list[dict[str, Any]]:
     if not index_path.is_file():
@@ -25,6 +27,21 @@ def read_tolerant_session_index_rows(index_path: Path) -> list[dict[str, Any]]:
         if isinstance(row, dict):
             rows.append(row)
     return rows
+
+
+def find_stale_session_archive_references(log_root: Path | None = None) -> list[str]:
+    root = default_log_dir() if log_root is None else Path(log_root)
+    stale: list[str] = []
+    seen: set[str] = set()
+    for row in read_tolerant_session_index_rows(root / "sessions-archive.jsonl"):
+        for field in ("cwd", "claude_code_log", "codex_log"):
+            value = row.get(field)
+            if isinstance(value, str):
+                path = Path(value)
+                if path.is_absolute() and not path.exists() and value not in seen:
+                    seen.add(value)
+                    stale.append(value)
+    return stale
 
 
 def read_session_index_rows(

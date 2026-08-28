@@ -19,6 +19,7 @@ from autoskillit.core.types._type_results_execution import (
 )
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
+from autoskillit.execution.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log import flush_session_log
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests._retention_surface import (
@@ -793,6 +794,12 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
     assert (sessions_dir / "session-0005").exists(), "session-0005 must survive"
     # Newly flushed session must be present
     assert (sessions_dir / "session-0008").exists()
+    archived_names = {
+        row["dir_name"]
+        for row in read_tolerant_session_index_rows(tmp_path / "sessions-archive.jsonl")
+    }
+    assert {"session-0000", "session-0001"}.isdisjoint(archived_names)
+    assert {"session-0002", "session-0003"} <= archived_names
 
 
 def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):

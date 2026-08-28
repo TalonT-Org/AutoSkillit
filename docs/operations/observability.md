@@ -79,6 +79,7 @@ sessions/
     anomalies.jsonl     # detected anomalies
     raw_stdout.jsonl    # captured headless stdout
 sessions.jsonl          # retained row per committed summary
+sessions-archive.jsonl  # append-only rows evicted from sessions.jsonl
 otlp.jsonl              # current native OTLP logs and metrics capture
 otlp.jsonl.1            # single rotated generation
 ```
@@ -95,7 +96,16 @@ jq 'select(.success == false)' ~/.local/share/autoskillit/logs/sessions.jsonl
 
 # Sessions with anomalies
 jq 'select(.anomaly_count > 0)' ~/.local/share/autoskillit/logs/sessions.jsonl
+
+# Historical rows evicted from the live projection, tolerant of damaged records
+jq -Rcn '[inputs | fromjson? | select(type == "object")] | unique_by(.dir_name)[]' \
+  ~/.local/share/autoskillit/logs/sessions-archive.jsonl
 ```
+
+The historical query buffers the archive before deduplicating its at-least-once
+rows by `dir_name`. Archive-only history excludes the current live survivor
+window. The archive retains index metadata, not pruned session artifact
+directories, and operational consumers continue to read only `sessions.jsonl`.
 
 ## Native headless OTLP capture
 
@@ -265,7 +275,9 @@ target. Under one exclusive lease, retention ranks only directories containing
 `summary.json`, deletes expired unprotected sessions, and rewrites
 `sessions.jsonl` to exactly the retained committed projection. `summary.json` is
 the final per-session artifact and completion witness; the index `timestamp` is
-still the session start time.
+still the session start time. Rows removed from the live projection are appended
+to `sessions-archive.jsonl`; protected sessions and deletion failures remain live
+and are not archived.
 
 ## Recording and replay
 

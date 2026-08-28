@@ -18,7 +18,6 @@ from autoskillit.core import (
     SkillSource,
     pkg_root,
 )
-from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.workspace import (
     DefaultSessionSkillManager,
     EffectiveSkillCatalog,
@@ -113,7 +112,7 @@ def test_resource_body_is_delivered_verbatim_after_skill_transforms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Substitution and exploration-looking text in a resource remains literal."""
-    import autoskillit.workspace._projected_artifact.materialization as materialization
+    import autoskillit.workspace._projected_artifact._documents as documents
 
     resource = SkillResourceDef(
         id="verbatim-fixture",
@@ -127,7 +126,7 @@ def test_resource_body_is_delivered_verbatim_after_skill_transforms(
         table_row_count=None,
     )
     monkeypatch.setattr(
-        materialization,
+        documents,
         "load_skill_resource",
         lambda resource_id: (
             resource
@@ -291,7 +290,8 @@ def test_resource_digest_order_has_one_sorted_projection_cache_identity(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Sorting resource ids is load-bearing: mapping insertion order is not identity."""
-    import autoskillit.workspace._projected_artifact.materialization as materialization
+    import autoskillit.workspace._projected_artifact._documents as documents
+    import autoskillit.workspace._projected_artifact.authority as projected_artifact_authority
 
     monkeypatch.setenv("HOME", str(tmp_path))
     resources = {
@@ -312,7 +312,7 @@ def test_resource_digest_order_has_one_sorted_projection_cache_identity(
             table_row_count=None,
         ),
     }
-    monkeypatch.setattr(materialization, "load_skill_resource", resources.__getitem__)
+    monkeypatch.setattr(documents, "load_skill_resource", resources.__getitem__)
     source_root = tmp_path / "plugin"
     skill_path = source_root / "canonical" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
@@ -378,7 +378,9 @@ def test_resource_digest_order_has_one_sorted_projection_cache_identity(
             adaptation_identity="resource-cache:",
             namespace_identity="",
             asset_digest=public_plugin_asset_digest(source_root),
-            rendered_hooks_digest=hashlib.sha256(render_hooks_json_text().encode()).hexdigest(),
+            rendered_hooks_digest=hashlib.sha256(
+                projected_artifact_authority.render_hooks_json_text().encode()
+            ).hexdigest(),
         ).digest()
 
         assert first.identity.semantic_key == second.identity.semantic_key == expected_key

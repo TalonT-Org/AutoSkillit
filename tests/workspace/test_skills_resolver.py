@@ -556,9 +556,11 @@ class TestSkillInfoSchemaExhaustiveness:
             "exploration_vectors",
             "frontmatter",
             "invalidities",
+            "resource_digests",
             "semantic_plan",
         }
         parseable_fields = dc_fields - constructor_only - derived_fields
+        frontmatter_keys = {"required_resources": "requires_resources"}
 
         source = inspect.getsource(_skill_info_from_frontmatter)
         tree = ast.parse(source)
@@ -573,7 +575,11 @@ class TestSkillInfoSchemaExhaustiveness:
             ):
                 data_gets.add(node.args[0].value)
 
-        missing = parseable_fields - data_gets
+        missing = {
+            field_name
+            for field_name in parseable_fields
+            if frontmatter_keys.get(field_name, field_name) not in data_gets
+        }
         assert not missing, (
             f"SkillInfo field(s) {sorted(missing)} are not read by "
             f"_skill_info_from_frontmatter via data.get(). "

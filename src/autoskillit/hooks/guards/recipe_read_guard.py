@@ -13,18 +13,16 @@ import json
 import os
 import re
 import sys
-from importlib import import_module
 from pathlib import Path
 
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
-_command_classification = import_module("_command_classification")
-command_has_blocked_protected_path_read = (
-    _command_classification.command_has_blocked_protected_path_read
+from _command_classification import (  # noqa: E402
+    PROTECTED_SOURCE_PATH_PATTERNS,
+    command_has_blocked_protected_path_read,
 )
-PROTECTED_SOURCE_PATH_PATTERNS = _command_classification.PROTECTED_SOURCE_PATH_PATTERNS
-parse_hook_command = import_module("_hook_payload").parse_hook_command
+from _hook_payload import parse_hook_command  # noqa: E402
 
 RECIPE_READ_DENY_TRIGGER: str = "must not read recipe/skill/agent files directly"
 

@@ -1071,6 +1071,7 @@ from .types import QuarantinedRetiringRecord as QuarantinedRetiringRecord
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
+from .types import RateLimitWindow as RateLimitWindow
 from .types import ReadinessProbe as ReadinessProbe
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver
@@ -1144,7 +1145,6 @@ from .types import RetiringArtifactRecord as RetiringArtifactRecord
 from .types import RetiringCacheReadResult as RetiringCacheReadResult
 from .types import RetiringCacheRepairResult as RetiringCacheRepairResult
 from .types import RetiringCacheState as RetiringCacheState
-from .types import RateLimitWindow as RateLimitWindow
 from .types import RetryReason as RetryReason
 from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
 from .types import ReviewOperationState as ReviewOperationState

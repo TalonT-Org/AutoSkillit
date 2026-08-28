@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
 
-import regex as re
-
 from autoskillit.core import (
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     CONTEXT_EXHAUSTION_MARKER,
@@ -17,9 +15,14 @@ from autoskillit.core import (
     CliSubtype,
     RetryReason,
     SessionOutcome,
+    get_logger,
 )
+from autoskillit.execution.session._exit_classification import (
+    _HANDLED_RECORD_TYPES as _HANDLED_RECORD_TYPES,
+)
+from autoskillit.execution.session._exit_classification import _parse_provider_records
 
-_ABS_PATH_RE: re.Pattern[str] = re.compile(r'(?:^|[\s="\'])(/(?:[a-zA-Z0-9._/~@+-]+))')
+logger = get_logger(__name__)
 
 _API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
     ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"),
@@ -37,9 +40,6 @@ FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
         CliSubtype.TIMEOUT,
         CliSubtype.IDLE_STALL,
     }
-)
-_HANDLED_RECORD_TYPES: frozenset[str] = frozenset(
-    {"assistant", "rate_limit_event", "result", "system", "user"}
 )
 
 
@@ -316,12 +316,71 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
 
 
 _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
-    {"type", "subtype", "is_error", "result", "session_id", "errors", "usage", "api_error_status"}
+    {
+        "type",
+        "subtype",
+        "is_error",
+        "result",
+        "session_id",
+        "errors",
+        "usage",
+        "api_error_status",
+        "terminal_reason",
+        "terminalReason",
+    }
 )
 
 
 def parse_session_result(stdout: str) -> ClaudeSessionResult:
     """Parse Claude Code NDJSON stdout into a typed result."""
-    from ._session_parser import parse_session_result as _parse_session_result
-
-    return _parse_session_result(stdout)
+    if not stdout.strip():
+        return ClaudeSessionResult(
+            subtype=CliSubtype.EMPTY_OUTPUT,
+            is_error=True,
+            result="",
+            session_id="",
+            errors=[],
+        )
+    acc = _parse_provider_records(stdout)
+    if acc.result_obj is not None:
+        extra_keys = frozenset(acc.result_obj.keys()) - _KNOWN_RESULT_KEYS
+        if extra_keys:
+            logger.debug("unknown_result_keys", unknown_fields=sorted(extra_keys))
+        subtype = CliSubtype.from_cli(acc.result_obj.get("subtype") or "unknown")
+        is_error: bool = acc.result_obj.get("is_error", False)
+        result_text: str = acc.result_obj.get("result") or ""
+        session_id: str = acc.result_obj.get("session_id") or ""
+        errors: list[str] = acc.result_obj.get("errors") or []
+    else:
+        subtype = (
+            CliSubtype.CONTEXT_EXHAUSTION
+            if acc.jsonl_context_exhausted
+            else CliSubtype.UNPARSEABLE
+        )
+        is_error, result_text, session_id, errors = True, stdout, "", []
+    return ClaudeSessionResult(
+        subtype=subtype,
+        is_error=is_error,
+        result=result_text,
+        session_id=session_id,
+        errors=errors,
+        token_usage=extract_token_usage(stdout),
+        assistant_messages=acc.assistant_messages,
+        tool_uses=acc.tool_uses,
+        jsonl_context_exhausted=acc.jsonl_context_exhausted,
+        stop_reasons=acc.stop_reasons,
+        has_thinking_only_turn=acc.has_thinking_only_turn,
+        seen_block_types=frozenset(acc.seen_block_types),
+        api_retry_count=acc.api_retry_count,
+        api_retry_last_error=acc.api_retry_last_error,
+        api_retry_last_status=acc.api_retry_last_status,
+        api_retry_exhausted=acc.api_retry_exhausted,
+        api_error_status=acc.api_error_status,
+        rate_limit_status=acc.rate_limit_status,
+        rate_limit_type=acc.rate_limit_type,
+        rate_limit_resets_at_epoch=acc.rate_limit_resets_at_epoch,
+        terminal_reason=acc.terminal_reason,
+        provider_error_code=acc.provider_error_code,
+        api_error_message_seen=acc.api_error_message_seen,
+        denied_tool_use_ids=frozenset(acc.denied_tool_use_ids),
+    )

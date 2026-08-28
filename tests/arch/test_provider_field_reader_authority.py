@@ -26,7 +26,7 @@ _WIRE_FIELDS = frozenset(
     }
 )
 _EXPECTED_READERS = frozenset(
-    ("execution/session/_session_parser.py", field_name) for field_name in _WIRE_FIELDS
+    ("execution/session/_exit_classification.py", field_name) for field_name in _WIRE_FIELDS
 )
 
 
@@ -81,10 +81,10 @@ def _read_fields(source: str) -> set[str]:
 
 
 def test_declared_provider_wire_fields_have_one_reader_authority() -> None:
-    source_path = SRC_ROOT / "execution/session/_session_parser.py"
+    source_path = SRC_ROOT / "execution/session/_exit_classification.py"
 
     actual = frozenset(
-        ("execution/session/_session_parser.py", field_name)
+        ("execution/session/_exit_classification.py", field_name)
         for field_name in _read_fields(source_path.read_text())
     )
 

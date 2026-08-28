@@ -1,8 +1,7 @@
 """Core result dataclasses — universal types.
-Execution-scoped types (SessionTelemetry, RecipeIdentity, CIRunScope) live in
-_type_results_execution.py for narrower test cascade. ProviderOutcome stays here
-because SkillResult.provider references it, and SkillResult is consumed by 13+
-directories — a cross-import would undermine the cascade narrowing.
+Execution-scoped types (ApiFailureOutcome, RateLimitWindow, SessionTelemetry,
+RecipeIdentity, CIRunScope) live in _type_results_execution.py for narrower test
+cascade. ProviderOutcome stays here because SkillResult.provider is universal.
 """
 
 from __future__ import annotations
@@ -16,11 +15,11 @@ from pathlib import Path
 from typing import Any, Generic, Literal, TypedDict, TypeVar
 
 from ..closure_hashing import HASH_RE as _HASH_RE
-from ._type_api_failure import ApiFailureOutcome, RateLimitWindow
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle_authority import AuditVerdict
 from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
 from ._type_execution_identity import ExecutionIdentity
+from ._type_results_execution import ApiFailureOutcome
 from ._type_results_records import (
     CapturedStream,
     CleanupResult,
@@ -66,8 +65,6 @@ __all__ = [
     "PreLaunchReadiness",
     "InfraOutcome",
     "ApiRetryOutcome",
-    "RateLimitWindow",
-    "ApiFailureOutcome",
     "NdjsonDriftOutcome",
     "SkillResult",
     "CleanupResult",

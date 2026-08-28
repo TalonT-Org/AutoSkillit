@@ -13,6 +13,7 @@ import io
 import os
 import signal
 import threading
+import time
 from pathlib import Path
 from typing import IO
 from unittest.mock import patch
@@ -187,9 +188,9 @@ class TestCampaignStateMutatorBoundedLocking:
             os.close(read_fd)
             result = b"sigint-not-delivered"
             try:
-                import autoskillit.fleet.state as fleet_state
+                import autoskillit.fleet._state_lock as state_lock
 
-                original_pthread_sigmask = fleet_state.signal.pthread_sigmask
+                original_pthread_sigmask = state_lock.signal.pthread_sigmask
                 sent_sigint = False
 
                 def inject_pending_sigint(
@@ -202,7 +203,7 @@ class TestCampaignStateMutatorBoundedLocking:
                         os.kill(os.getpid(), signal.SIGINT)
                     return previous_mask
 
-                fleet_state.signal.pthread_sigmask = inject_pending_sigint
+                state_lock.signal.pthread_sigmask = inject_pending_sigint
                 with CampaignStateMutator(state_path):
                     pass
             except KeyboardInterrupt:
@@ -221,12 +222,25 @@ class TestCampaignStateMutatorBoundedLocking:
             os._exit(0)
 
         os.close(write_fd)
+        status: int | None = None
         try:
-            _, status = os.waitpid(child_pid, 0)
+            deadline = time.monotonic() + 5.0
+            while True:
+                waited_pid, child_status = os.waitpid(child_pid, os.WNOHANG)
+                if waited_pid == child_pid:
+                    status = child_status
+                    break
+                if time.monotonic() >= deadline:
+                    pytest.fail("SIGINT cleanup child did not exit within 5 seconds")
+                time.sleep(0.01)
             result = os.read(read_fd, 64)
         finally:
+            if status is None:
+                os.kill(child_pid, signal.SIGKILL)
+                os.waitpid(child_pid, 0)
             os.close(read_fd)
 
+        assert status is not None
         assert os.WIFEXITED(status)
         assert os.WEXITSTATUS(status) == 0
         assert result == b"cleanup-complete"

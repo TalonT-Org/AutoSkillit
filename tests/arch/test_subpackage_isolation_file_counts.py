@@ -21,7 +21,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "cli/session": 11,
     "cli/doctor": 13,
     "pipeline": 19,
-    "fleet": 28,
+    "fleet": 29,
     "server/tools": 39,
     "execution/process": 11,
     "execution/backends": 30,

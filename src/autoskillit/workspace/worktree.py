@@ -11,14 +11,109 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from autoskillit.core import CleanupResult, SubprocessRunner, atomic_write, resolve_temp_dir
+from autoskillit.core import (
+    CleanupResult,
+    SubprocessRunner,
+    atomic_write,
+    destination_location,
+    get_logger,
+    resolve_temp_dir,
+)
+
+logger = get_logger(__name__)
 
 WORKTREES_DIR = "worktrees"
+_WORKTREE_COMMAND_TIMEOUT_SECONDS = 30
 
 
 def _sidecar_root_for(temp_dir: Path) -> Path:
     """Return the sidecar root directory for worktrees (``<temp_dir>/worktrees``)."""
     return temp_dir / WORKTREES_DIR
+
+
+def _contained_worktree_location(worktree_path: Path, worktree_root: Path) -> Path:
+    """Return a write destination only when it is contained by the trusted root."""
+    destination = destination_location(worktree_path)
+    trusted_root = destination_location(worktree_root)
+    if not destination.is_relative_to(trusted_root):
+        raise ValueError(f"Git worktree destination escapes trusted root: {destination}")
+    return destination
+
+
+async def _rollback_created_git_worktree(
+    project_root: Path,
+    worktree_root: Path,
+    worktree_path: Path,
+    runner: SubprocessRunner,
+) -> CleanupResult:
+    """Remove an allocator-owned worktree after revalidating its write location."""
+    destination = _contained_worktree_location(worktree_path, worktree_root)
+    return await remove_git_worktree(destination, project_root, runner)
+
+
+async def create_git_worktree(
+    project_root: Path,
+    worktree_root: Path,
+    worktree_path: Path,
+    revision: str,
+    runner: SubprocessRunner,
+) -> Path:
+    """Create a detached worktree at *revision* beneath a trusted worktree root.
+
+    The returned path is owned by the caller only after Git succeeds and the
+    created destination is still a contained, non-symlinked directory.  A
+    failure after Git creates the worktree rolls it back through the same
+    workspace removal helper.
+    """
+    destination = _contained_worktree_location(worktree_path, worktree_root)
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"Git worktree destination already exists: {destination}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    result = await runner(
+        [
+            "git",
+            "-C",
+            str(project_root),
+            "worktree",
+            "add",
+            "--detach",
+            str(destination),
+            revision,
+        ],
+        cwd=project_root,
+        timeout=_WORKTREE_COMMAND_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(
+            f"Git worktree add failed for {destination} (exit {result.returncode}): {detail}"
+        )
+
+    try:
+        if destination.is_symlink() or not destination.is_dir():
+            raise RuntimeError(f"Git worktree add did not materialize a directory: {destination}")
+        return _contained_worktree_location(destination, worktree_root)
+    except Exception as validation_error:
+        rollback_error = ""
+        try:
+            cleanup = await _rollback_created_git_worktree(
+                project_root, worktree_root, destination, runner
+            )
+        except Exception as cleanup_error:
+            logger.warning(
+                "git_worktree_rollback_failed", destination=str(destination), exc_info=True
+            )
+            rollback_error = str(cleanup_error)
+        else:
+            if cleanup.failed:
+                rollback_error = "; ".join(f"{path}: {detail}" for path, detail in cleanup.failed)
+        if rollback_error:
+            raise RuntimeError(
+                f"Git worktree post-create validation failed for {destination}: "
+                f"{validation_error}; rollback failed: {rollback_error}"
+            ) from validation_error
+        raise
 
 
 async def list_git_worktrees(

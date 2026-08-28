@@ -1798,6 +1798,8 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_process_tether.py": frozenset({"autoskillit.config"}),
     # workspace tests
     "tests/workspace/test_clone_ci_contract.py": frozenset({"autoskillit.execution"}),
+    # real Git worktree lifecycle coverage uses the production subprocess runner
+    "tests/workspace/test_worktree_allocator.py": frozenset({"autoskillit.execution"}),
     # skills split — categories tests call load_config() to validate tier assignments
     "tests/workspace/test_skills_categories.py": frozenset({"autoskillit.config"}),
     # project-local override detection tests import backend convention objects to verify scoping

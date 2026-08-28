@@ -147,6 +147,7 @@ from autoskillit.workspace.skills import (
 )
 from autoskillit.workspace.worktree import (
     WORKTREES_DIR,
+    create_git_worktree,
     list_git_worktrees,
     remove_git_worktree,
     remove_worktree_sidecar,
@@ -166,6 +167,7 @@ __all__ = [
     "DefaultCloneManager",
     "DefaultWorkspaceManager",
     "DefaultSessionSkillManager",
+    "create_git_worktree",
     "list_git_worktrees",
     "read_registry",
     "register_clone",

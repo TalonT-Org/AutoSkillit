@@ -3378,13 +3378,16 @@ def test_hot_path_lock_wait_is_explicit_and_deterministic() -> None:
     assert HOT_PATH_LOCK_WAIT == LockWaitSpec(max_wait_seconds=2.0)
 
 
+@pytest.mark.parametrize("field_name", ("max_wait_seconds",))
 @pytest.mark.parametrize(
     "value",
     (float("nan"), float("inf"), float("-inf"), True, False, 0.0, -1.0),
 )
 def test_lock_wait_spec_rejects_non_positive_or_non_finite_values(
+    field_name: str,
     value: object,
 ) -> None:
+    assert field_name == "max_wait_seconds"
     with pytest.raises(ValueError, match="lock wait must be positive and finite"):
         LockWaitSpec(max_wait_seconds=value)  # type: ignore[arg-type]
 

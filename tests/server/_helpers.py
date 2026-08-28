@@ -500,6 +500,16 @@ def _make_finalized_projection_from_recipe_steps(
     )
 
 
+def _install_active_recipe_projection(
+    tool_ctx: ToolContext,
+    steps: Mapping[str, Any],
+) -> None:
+    """Install one recipe-step fixture through the finalized projection authority."""
+    projection = _make_finalized_projection_from_recipe_steps(steps)
+    tool_ctx.active_recipe_projection = projection
+    tool_ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
+
+
 def _with_finalized_projection(
     result: dict[str, Any],
     *,

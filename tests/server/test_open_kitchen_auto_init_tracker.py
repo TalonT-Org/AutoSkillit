@@ -7,6 +7,7 @@ import json
 import pytest
 
 from tests.server._helpers import (
+    _install_active_recipe_projection,
     _make_finalized_projection_from_recipe_steps,
     _with_finalized_projection,
 )
@@ -41,12 +42,6 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
     mock_recipe_obj.steps = steps
     mock_recipe_obj.ingredients = {}
     ctx.recipes.load.return_value = mock_recipe_obj
-
-
-def _install_active_recipe_projection(ctx, steps) -> None:
-    projection = _make_finalized_projection_from_recipe_steps(steps)
-    ctx.active_recipe_projection = projection
-    ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
 
 
 class TestOpenKitchenAutoInitTracker:

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from autoskillit.core import FinalizedRecipeStep
 from autoskillit.server.tools.tools_execution import run_skill
-from tests.server._helpers import _make_finalized_projection_from_recipe_steps
+from tests.server._helpers import _install_active_recipe_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -28,15 +27,6 @@ def _make_finalized_step(
         skip_when_false=skip_when_false,
         with_args=with_args,
     )
-
-
-def _install_active_recipe_projection(
-    tool_ctx: Any,
-    steps: dict[str, FinalizedRecipeStep],
-) -> None:
-    projection = _make_finalized_projection_from_recipe_steps(steps)
-    tool_ctx.active_recipe_projection = projection
-    tool_ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
 
 
 def test_invalid_persisted_lock_state_returns_controlled_deny(

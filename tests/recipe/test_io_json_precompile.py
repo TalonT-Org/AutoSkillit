@@ -263,6 +263,12 @@ def test_collect_recipes_cache_tracks_json_sidecar_state(tmp_path):
     assert collect_description() == "A test recipe"
 
 
+def test_collect_recipes_metadata_cache_is_bounded() -> None:
+    import autoskillit.recipe._io_loading as io_loading
+
+    assert io_loading._parse_recipe_candidate.cache_parameters()["maxsize"] == 256
+
+
 def test_compile_recipes_roundtrip():
     for yaml_path in _tracked_builtin_recipe_paths():
         data = load_yaml(yaml_path)

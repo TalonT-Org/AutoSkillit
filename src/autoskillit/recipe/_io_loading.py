@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from functools import cache
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 
@@ -177,7 +177,7 @@ def load_recipe_dict_with_declarations(
     )
 
 
-@cache
+@lru_cache(maxsize=256)
 def _parse_recipe_candidate(
     path: Path,
     _yaml_mtime_ns: int,
@@ -232,8 +232,7 @@ def _collect_recipes_from_candidates(
                     json_stat = json_path.stat()
                 except OSError:
                     json_stat = None
-                # Performance-only metadata cache; exotic same-metadata writes can evade it,
-                # but Git enumeration is always rerun.
+                # Performance-only metadata cache; Git enumeration still runs on every call.
                 recipe, raw = _parse_recipe_candidate(
                     path,
                     yaml_stat.st_mtime_ns,

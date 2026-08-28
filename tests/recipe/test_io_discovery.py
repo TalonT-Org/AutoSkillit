@@ -504,6 +504,16 @@ def test_scan_shape_is_shared_between_enumerators(
     assert discovered == expected
 
 
+def test_non_recipe_directory_cannot_match_scan_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.recipe._io_loading as io_loading
+
+    monkeypatch.setattr(io_loading, "RECIPE_SCAN_DIRS", (".", "scripts"))
+
+    assert not io_loading.is_recipe_scan_path(PurePosixPath("scripts/not-a-recipe.yaml"))
+
+
 def test_list_recipes_tolerates_absent_scan_directories(tmp_path: Path) -> None:
     result = list_recipes(tmp_path)
 

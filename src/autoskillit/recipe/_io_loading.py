@@ -59,7 +59,11 @@ def is_recipe_scan_path(rel_to_root: PurePosixPath) -> bool:
     """Return whether a recipe-relative path has the live discovery shape."""
     if len(rel_to_root.parts) == 1:
         return "." in RECIPE_SCAN_DIRS
-    return len(rel_to_root.parts) == 2 and rel_to_root.parts[0] in RECIPE_SCAN_DIRS
+    return (
+        len(rel_to_root.parts) == 2
+        and rel_to_root.parts[0] in RECIPE_SCAN_DIRS
+        and rel_to_root.parts[0] not in NON_RECIPE_DIRS
+    )
 
 
 def substitute_temp_placeholder(text: str, temp_dir_relpath: str) -> str:

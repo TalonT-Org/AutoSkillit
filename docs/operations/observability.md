@@ -133,7 +133,8 @@ The local sink derives its model projection only from accepted Claude Code and
 Codex OTLP `/v1/logs` batches; it never reads Codex rollout JSONL. Raw metrics
 and traces are captured but unused. Within explicit session and outcome
 bounds, the earliest accepted valid evidence wins; excess observations follow
-the existing bounded write, failure, and rotation policy.
+the existing bounded write, failure, and rotation policy and are not
+guaranteed retained.
 
 After terminal execution, the best-effort lifecycle drains the sink, reads the
 retained snapshot, and then flushes diagnostics. `sessions.jsonl` remains the

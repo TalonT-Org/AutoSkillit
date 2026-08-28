@@ -103,10 +103,11 @@ remain outside this headless-only field. See the authoritative
 
 Schema-v9 rows add `subagent_model_outcomes`; v8 rows are retained without
 that field and require neither a rewrite nor a version-specific reader.
+Absent values read as empty lists.
 
 | Field | Meaning | Source |
 | --- | --- | --- |
-| `model_identifier` | Effective model (OTLP-proven native top-level when available, otherwise launch/token fallback). | `sessions.jsonl`, `token_usage.json`, `summary.json.versions.model_identifier` |
+| `model_identifier` | Effective model (OTLP-proven native top-level when available, otherwise launch/token fallback). | `sessions.jsonl`, `token_usage.json`, `summary.json.versions.model_identifier` (when a versions bundle exists) |
 | `configured_model` | Requested launch value. | `sessions.jsonl`, `token_usage.json`. Not written to `summary.json`. |
 
 ## Native OTLP capture and correlation

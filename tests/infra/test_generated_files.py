@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 def _tracked_files() -> set[str]:
-    return set(git_ls_files(REPO_ROOT, allow_empty=True))
+    return set(git_ls_files(REPO_ROOT))
 
 
 def test_generated_files_importable_from_core_paths():
@@ -41,26 +41,11 @@ def test_no_generated_files_tracked():
     )
 
 
-def test_tracked_files_allows_empty_git_inventory(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[Path, tuple[str, ...], bool]] = []
-
-    def fake_git_ls_files(
-        repo_root: Path, *pathspecs: str, allow_empty: bool = False
-    ) -> tuple[str, ...]:
-        calls.append((repo_root, pathspecs, allow_empty))
-        return ()
-
-    monkeypatch.setitem(globals(), "git_ls_files", fake_git_ls_files)
-
-    assert _tracked_files() == set()
-    assert calls == [(REPO_ROOT, (), True)]
-
-
 def test_tracked_files_propagates_git_inventory_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def raise_git_inventory_failure(*args: object, **kwargs: object) -> tuple[str, ...]:
         raise RuntimeError("git ls-files failed")
 
-    monkeypatch.setitem(globals(), "git_ls_files", raise_git_inventory_failure)
+    monkeypatch.setattr(f"{__name__}.git_ls_files", raise_git_inventory_failure)
 
     with pytest.raises(RuntimeError, match="git ls-files failed"):
         _tracked_files()

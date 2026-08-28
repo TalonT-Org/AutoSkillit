@@ -1121,7 +1121,25 @@ _SCRIPTS_ROOT = SRC_ROOT.parents[1] / "scripts"
 # (path, rationale) exemption — so a deferred fix can't sit unaddressed forever
 # without someone actively re-affirming it. _doctor_fleet.py's entry (#4768) was
 # fixed directly (see _check_stale_fleet_state) rather than deferred here.
-_ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {}
+_CONSOLIDATION_FAIL_CLOSED_KEY = (
+    SRC_ROOT / "planner" / "consolidation.py",
+    "_load_manifests",
+    _ENUMERATION_READ_STAT_KIND,
+)
+_ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {
+    _CONSOLIDATION_FAIL_CLOSED_KEY: TrackedDeferral(
+        issue=4903,
+        rationale=(
+            "Consolidation deliberately aborts when discovered evidence vanishes; "
+            "skipping it could report success from a partial manifest set."
+        ),
+        added_date=date(2026, 8, 28),
+        regression_test=(
+            "tests/planner/test_consolidation.py::"
+            "test_load_manifests_fails_closed_when_manifest_vanishes_before_read"
+        ),
+    )
+}
 
 
 def _dotted_name(node: ast.expr, aliases: dict[str, tuple[str, str | None]]) -> str | None:
@@ -2406,9 +2424,9 @@ def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
     )
 
 
-def test_enumeration_stat_allowlist_is_empty() -> None:
-    """Inherited enumeration/stat deferrals are prohibited; fix violations directly."""
-    assert _ENUMERATION_STAT_ALLOWLIST == {}
+def test_enumeration_stat_allowlist_contains_only_tracked_fail_closed_policy_sites() -> None:
+    """Mechanical race fixes must not grow the policy-decision deferral surface."""
+    assert set(_ENUMERATION_STAT_ALLOWLIST) == {_CONSOLIDATION_FAIL_CLOSED_KEY}
 
 
 def test_enumeration_stat_allowlist_entries_still_apply() -> None:

@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.arch._helpers import SRC_ROOT, _extract_module_level_internal_imports
+from tests.arch._helpers import (
+    PROCESS_PY,
+    PROCESS_RACE_PY,
+    SRC_ROOT,
+    _extract_module_level_internal_imports,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -31,55 +36,55 @@ class TestGroupCMigration:
     """REQ-SIG-001..008: anyio task group replaces asyncio task scaffolding."""
 
     def test_no_asyncio_create_task(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "asyncio.create_task(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_wait_call(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "asyncio.wait(" not in source  # REQ-SIG-001
 
     def test_no_asyncio_import_at_runtime(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "import asyncio" not in source  # REQ-SIG-001
 
     def test_anyio_create_task_group_present(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "anyio.create_task_group()" in source  # REQ-SIG-002
 
     def test_scan_done_signals_absent(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "def scan_done_signals(" not in source  # REQ-SIG-003
 
     def test_race_accumulator_present(self):
-        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
-        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
-        source = Path("src/autoskillit/execution/process/__init__.py").read_text()
+        source = PROCESS_PY.read_text()
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):
-        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "async def _watch_process(" in source  # REQ-SIG-007
 
     def test_watch_heartbeat_present(self):
-        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "async def _watch_heartbeat(" in source  # REQ-SIG-007
 
     def test_watch_session_log_present(self):
-        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_watch_child_activity_present(self):
-        source = Path("src/autoskillit/execution/process/_process_race.py").read_text()
+        source = PROCESS_RACE_PY.read_text()
         assert "async def _watch_child_activity(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):
@@ -129,9 +134,7 @@ def test_pipeline_fidelity_module_deleted():
 
 def test_pipeline_pr_gates_no_longer_has_domain_paths():
     """P2-F2: DOMAIN_PATHS must not be defined in pipeline/pr_gates.py."""
-    src = (
-        Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/pr_gates.py"
-    ).read_text()
+    src = (SRC_ROOT / "pipeline" / "pr_gates.py").read_text()
     assert "DOMAIN_PATHS" not in src
 
 
@@ -185,8 +188,7 @@ def test_update_checks_docstring_describes_both_windows() -> None:
     """The _update_checks module docstring and _is_dismissed docstring must
     mention both branch-aware window values."""
 
-    src_root = Path(__file__).parent.parent.parent / "src"
-    module_path = src_root / "autoskillit" / "cli" / "update" / "_update_checks.py"
+    module_path = SRC_ROOT / "cli" / "update" / "_update_checks.py"
     tree = ast.parse(module_path.read_text(encoding="utf-8"))
 
     module_doc = ast.get_docstring(tree) or ""

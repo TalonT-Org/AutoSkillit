@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import CleanupResult
 from autoskillit.workspace import (
+    create_git_worktree,
     list_git_worktrees,
     remove_git_worktree,
     remove_worktree_sidecar,
@@ -13,6 +14,118 @@ from autoskillit.workspace import (
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
+
+
+class TestCreateGitWorktree:
+    """create_git_worktree validates ownership before and after Git mutates disk."""
+
+    @pytest.mark.anyio
+    async def test_uses_detached_add_command_and_returns_materialized_destination(self, tmp_path):
+        project_root = tmp_path / "repo"
+        worktree_root = tmp_path / "worktrees"
+        destination = worktree_root / "assignment"
+        project_root.mkdir()
+
+        async def add_worktree(cmd, *, cwd, timeout):
+            destination.mkdir(parents=True)
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        runner = AsyncMock(side_effect=add_worktree)
+
+        result = await create_git_worktree(
+            project_root, worktree_root, destination, "abc123", runner
+        )
+
+        assert result == destination
+        runner.assert_awaited_once_with(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "worktree",
+                "add",
+                "--detach",
+                str(destination),
+                "abc123",
+            ],
+            cwd=project_root,
+            timeout=30,
+        )
+
+    @pytest.mark.anyio
+    async def test_nonzero_add_raises_without_claiming_destination(self, tmp_path):
+        project_root = tmp_path / "repo"
+        destination = tmp_path / "worktrees" / "assignment"
+        project_root.mkdir()
+        runner = AsyncMock(return_value=MagicMock(returncode=1, stdout="", stderr="fatal: bad"))
+
+        with pytest.raises(RuntimeError, match="Git worktree add failed"):
+            await create_git_worktree(
+                project_root, destination.parent, destination, "abc123", runner
+            )
+
+        assert not destination.exists()
+        assert runner.await_count == 1
+
+    @pytest.mark.anyio
+    async def test_rejects_existing_and_symlinked_destinations_before_git_runs(self, tmp_path):
+        project_root = tmp_path / "repo"
+        worktree_root = tmp_path / "worktrees"
+        project_root.mkdir()
+        worktree_root.mkdir()
+        runner = AsyncMock()
+
+        existing = worktree_root / "existing"
+        existing.mkdir()
+        with pytest.raises(FileExistsError):
+            await create_git_worktree(project_root, worktree_root, existing, "abc123", runner)
+
+        symlinked = worktree_root / "symlinked"
+        symlinked.symlink_to(tmp_path / "outside")
+        with pytest.raises(FileExistsError):
+            await create_git_worktree(project_root, worktree_root, symlinked, "abc123", runner)
+
+        runner.assert_not_awaited()
+
+    @pytest.mark.anyio
+    async def test_rejects_destination_outside_trusted_root_before_git_runs(self, tmp_path):
+        project_root = tmp_path / "repo"
+        worktree_root = tmp_path / "worktrees"
+        project_root.mkdir()
+        runner = AsyncMock()
+
+        with pytest.raises(ValueError, match="escapes trusted root"):
+            await create_git_worktree(
+                project_root,
+                worktree_root,
+                tmp_path / "worktrees-sibling" / "assignment",
+                "abc123",
+                runner,
+            )
+
+        runner.assert_not_awaited()
+
+    @pytest.mark.anyio
+    async def test_post_create_validation_rolls_back_and_reports_rollback_failure(self, tmp_path):
+        project_root = tmp_path / "repo"
+        worktree_root = tmp_path / "worktrees"
+        destination = worktree_root / "assignment"
+        project_root.mkdir()
+        calls = 0
+
+        async def runner(cmd, *, cwd, timeout):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text("not a worktree")
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return MagicMock(returncode=1, stdout="", stderr="not registered")
+
+        with pytest.raises(RuntimeError, match="post-create validation failed.*rollback failed"):
+            await create_git_worktree(project_root, worktree_root, destination, "abc123", runner)
+
+        assert calls == 2
 
 
 class TestListGitWorktrees:

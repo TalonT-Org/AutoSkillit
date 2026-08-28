@@ -711,15 +711,15 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "defining age/liveness re-verification for this candidate.",
     ),
     # -- workspace.worktree::remove_git_worktree --
-    f"{_WGW}::L73": _self_limiting(
+    f"{_WGW}::L168": _self_limiting(
         "The worktree path does not exist on disk at all; nothing here to reclaim."
     ),
-    f"{_WGW}::L82": _self_limiting(
+    f"{_WGW}::L177": _self_limiting(
         "The git worktree remove call already succeeded; this reports a completed removal, "
         "not a retention skip."
     ),
     # -- workspace.worktree::remove_worktree_sidecar --
-    f"{_WWS}::L114": _self_limiting(
+    f"{_WWS}::L209": _self_limiting(
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
     # -- execution._session_retention::apply_session_retention --

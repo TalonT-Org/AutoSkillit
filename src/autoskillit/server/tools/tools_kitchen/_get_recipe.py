@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from autoskillit import __version__
-from autoskillit.config import (
-    SERVER_AUTHORITATIVE_INGREDIENTS,
-    iter_display_categories,
-)
+from autoskillit.config import iter_display_categories
 from autoskillit.core import (
     ProcessStaleError,
     RecipeLoadError,
@@ -27,7 +23,6 @@ from autoskillit.server._recipe_delivery import (
 # cross-submodule helpers must be resolved via attribute access on the
 # package at call time rather than imported by name into this submodule.
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
-from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
 from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
 from autoskillit.server.tools._serve_helpers import (
     _admit_recipe_name,
@@ -35,6 +30,10 @@ from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
     pop_finalized_recipe_projection,
     render_served_response,
+)
+from autoskillit.server.tools._type_coercion import (
+    _RecipeLike,
+    _validate_override_types,
 )
 
 logger = get_logger(__name__)
@@ -145,43 +144,44 @@ def _check_override_keys(
     overrides: dict[str, str] | None,
     declared: frozenset[str],
     session_keys: set[str],
-    config_layer: dict[str, str],
 ) -> list[str]:
     if not overrides:
         return []
-    user_keys = set(overrides.keys()) - session_keys - SERVER_AUTHORITATIVE_INGREDIENTS
+    user_keys = set(overrides.keys()) - session_keys
     unknown = user_keys - declared
-    warnings: list[str] = []
     if unknown:
-        warnings.append(
+        return [
             f"Unknown override keys ignored: {sorted(unknown)}. "
             f"Valid ingredient keys: {sorted(declared)}"
-        )
-    warnings.extend(build_authority_clobber_warnings(overrides, config_layer))
-    return warnings
+        ]
+    return []
 
 
 def _render_ingredients_only_response(
-    result: dict[str, Any],
+    result: dict[str, object],
     *,
-    declared_ingredients: frozenset[str] | None,
+    declared_ingredients: frozenset[str],
     overrides: dict[str, str] | None,
     session_keys: set[str],
-    config_layer: dict[str, str],
+    recipe_obj: _RecipeLike,
 ) -> str:
-    """Build the canonical ingredients-only inspection response."""
+    """Build the canonical ingredients-only inspection response.
+
+    Runs the Tier-2 type gate before any rendering so caller-supplied override
+    values that fail coercion are rejected with a structured envelope. This is
+    the single choke point covering every ``ingredients_only=True`` path in
+    ``open_kitchen`` and ``load_recipe``.
+    """
+    type_gate_err = _validate_override_types(overrides, recipe_obj)
+    if type_gate_err is not None:
+        return type_gate_err
+
     inspection = strip_ingredients_only_keys(
         build_open_kitchen_recipe_payload(result, version=__version__)
     )
-    if declared_ingredients is not None:
-        warnings = _check_override_keys(
-            overrides,
-            declared_ingredients,
-            session_keys,
-            config_layer,
-        )
-        if warnings:
-            inspection["warnings"] = warnings
+    warnings = _check_override_keys(overrides, declared_ingredients, session_keys)
+    if warnings:
+        inspection["warnings"] = warnings
     from autoskillit.server._state import _get_ctx_or_none  # circular-break
 
     tool_ctx = _get_ctx_or_none()

@@ -8,6 +8,8 @@ import pathlib
 
 import pytest
 
+from autoskillit.recipe.schema import ALLOWED_INGREDIENT_TYPES
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
@@ -695,6 +697,41 @@ def test_recipe_ingredient_type_can_be_explicitly_none() -> None:
 
     ing = RecipeIngredient(description="d", type=None)
     assert ing.type is None
+
+
+def test_recipe_ingredient_type_rejects_unknown_value() -> None:
+    """RecipeIngredient must raise ValueError for unknown type values."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    with pytest.raises(ValueError, match="RecipeIngredient.type must be one of"):
+        RecipeIngredient(description="d", type="foobar")
+
+
+@pytest.mark.parametrize("allowed_type", sorted(ALLOWED_INGREDIENT_TYPES))
+def test_recipe_ingredient_type_accepts_each_allowed_value(allowed_type: str) -> None:
+    """Every value in ALLOWED_INGREDIENT_TYPES must be accepted by RecipeIngredient."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type=allowed_type)
+    assert ing.type == allowed_type
+
+
+def test_allowed_ingredient_types_membership_pinned() -> None:
+    """Pin the exact set of allowed ingredient types so additions/drops surface
+    as a test failure rather than a silent vocabulary drift."""
+    assert ALLOWED_INGREDIENT_TYPES == frozenset(
+        {
+            "absolute_path",
+            "boolean",
+            "dict",
+            "integer",
+            "list",
+            "optional_string",
+            "path",
+            "string",
+            "worktree_relative_path",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

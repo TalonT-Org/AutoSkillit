@@ -11,6 +11,7 @@ from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
 
 from autoskillit.config import (
+    SERVER_AUTHORITATIVE_INGREDIENTS,
     build_config_authoritative_layer,
     build_config_default_layer,
     resolve_ingredient_defaults,
@@ -36,7 +37,7 @@ from autoskillit.server._recipe_delivery import (
 )
 from autoskillit.server._recipe_initialization import build_completion_response
 from autoskillit.server._state import _get_ctx_or_none
-from autoskillit.server.tools._authority_feedback import build_authority_clobber_warnings
+from autoskillit.server.tools._authority_feedback import build_authority_rejection_envelope
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
 )
@@ -50,6 +51,7 @@ from autoskillit.server.tools._serve_helpers import (
     response_backstop_tool_meta,
     serve_recipe,
 )
+from autoskillit.server.tools._type_coercion import _validate_override_types
 from autoskillit.server.tools._types import _validate_result
 
 logger = get_logger(__name__)
@@ -263,6 +265,15 @@ async def load_recipe(
     if (gate := _require_enabled()) is not None:
         return gate
     try:
+        # Tier 1 — Authority gate: explicitly reject caller overrides for
+        # SERVER_AUTHORITATIVE_INGREDIENTS keys. Mirrors open_kitchen behavior
+        # (see tools_kitchen/_open_kitchen.py). Runs at function entry, before
+        # any setup, before serve_recipe, before any session_snapshot mutation.
+        if overrides:
+            authority_overlap = set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
+            if authority_overlap:
+                return json.dumps(build_authority_rejection_envelope(authority_overlap))
+
         with structlog.contextvars.bound_contextvars(tool="load_recipe"):
             tool_ctx = _get_ctx_or_none()
             if tool_ctx is None or tool_ctx.recipes is None:
@@ -271,6 +282,29 @@ async def load_recipe(
             _defaults = resolve_ingredient_defaults(tool_ctx.project_dir)
             _recipe_info_pre = _admit_recipe_name(tool_ctx, name)
             _raw_recipe_obj = tool_ctx.recipes.load(_recipe_info_pre.path)
+            # Tier 2 — Type gate (load_recipe): validate caller-supplied override
+            # values against declared ingredient types. Runs after recipe load
+            # (recipe object in scope), before serve_recipe and before any side
+            # effect. Mirrors open_kitchen's type gate placement. If the recipe
+            # object failed to load, the call cannot satisfy caller-supplied
+            # overrides safely — fail closed (matches open_kitchen's contract).
+            if overrides:
+                if _raw_recipe_obj is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "stage": "ingredient_type_validation",
+                            "retriable": False,
+                            "error": "Cannot validate override types: recipe failed to load",
+                            "user_visible_message": (
+                                "load_recipe cannot validate the supplied overrides because the "
+                                "recipe failed to load. Retry after verifying the recipe exists."
+                            ),
+                        }
+                    )
+                _type_gate_err = _validate_override_types(overrides, _raw_recipe_obj)
+                if _type_gate_err is not None:
+                    return _type_gate_err
             _session_overrides: dict[str, str] = {
                 "kitchen_id": tool_ctx.kitchen_id,
                 "diagnostics_log_dir": str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir)),
@@ -309,11 +343,6 @@ async def load_recipe(
             result = await _apply_triage_gate(result, name, recipe_info=recipe_info)
             if not result.get("valid", False):
                 result["validation_failed"] = True
-            _authority_warnings = build_authority_clobber_warnings(
-                overrides or {}, _config_layer, caller_tool="load_recipe"
-            )
-            if _authority_warnings:
-                result["warnings"] = _authority_warnings
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
             _required_keys: frozenset[str] = frozenset()

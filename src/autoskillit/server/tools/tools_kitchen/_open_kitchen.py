@@ -17,6 +17,7 @@ from fastmcp.dependencies import CurrentContext
 from mcp.types import ToolListChangedNotification
 
 from autoskillit import __version__
+from autoskillit.config import SERVER_AUTHORITATIVE_INGREDIENTS
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
     FinalizedRecipeProjection,
@@ -55,6 +56,7 @@ from autoskillit.server._recipe_delivery import (
 # cross-submodule helpers must be resolved via attribute access on the
 # package at call time rather than imported by name into this submodule.
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
+from autoskillit.server.tools._authority_feedback import build_authority_rejection_envelope
 from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._serve_helpers import (
@@ -65,6 +67,7 @@ from autoskillit.server.tools._serve_helpers import (
     render_served_response,
     response_backstop_tool_meta,
 )
+from autoskillit.server.tools._type_coercion import _validate_override_types
 from autoskillit.server.tools._types import _validate_result
 from autoskillit.server.tools.tools_kitchen._get_recipe import (
     _build_tool_category_listing,
@@ -329,18 +332,22 @@ async def open_kitchen(
             Use to activate hidden features (e.g., ``{"sprint_mode": "true"}``). Ingredients
             with ``authority: config`` (base_branch, local_review_rounds,
             adversarial_review_level) cannot be set via overrides — they resolve from
-            server config and caller values are ignored with a warning.
-            Config-default ingredients (pipeline_health) use config as the default
-            but an explicit override wins.
+            server config and caller values are rejected with a structured error envelope.
+            Typed ingredients are validated for value coercion; mismatched values are
+            rejected with a structured error envelope. Config-default ingredients
+            (pipeline_health) use config as the default but an explicit override wins.
         ingredients_only: When True and name is provided, return only the ingredient
             schema (ingredients_table, validity, suggestions) without the full recipe
             content, orchestration rules, or sous-chef discipline. Use for dispatch
-            workflows where the caller needs ingredient discovery but not pipeline
-            execution context.
+            workflows where the caller needs ingredient discovery but not pipeline execution.
 
     Never raises.
     """
     try:
+        if overrides:
+            if authority_overlap := set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS:
+                return json.dumps(build_authority_rejection_envelope(authority_overlap))
+
         # Headless guard — wrap denial in envelope shape
         if (h := _tk_pkg._require_orchestrator_exact("open_kitchen")) is not None:
             parsed_h = json.loads(h)
@@ -583,6 +590,13 @@ async def open_kitchen(
                             )
                         }
                     )
+            if overrides and _raw_recipe is None:
+                return _kitchen_failure_envelope(
+                    RuntimeError("recipe failed to load"), stage="ingredient_type_validation"
+                )
+            if _t := _validate_override_types(overrides, _raw_recipe):
+                return _t
+
             if _is_deferred_recall:
                 try:
                     _transition_start(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
@@ -621,11 +635,11 @@ async def open_kitchen(
                     return _render_ingredients_only_response(
                         result,
                         declared_ingredients=(
-                            frozenset(_raw_recipe.ingredients) if _raw_recipe is not None else None
+                            frozenset(_raw_recipe.ingredients) if _raw_recipe else frozenset()
                         ),
                         overrides=overrides,
                         session_keys=set(_session_overrides),
-                        config_layer=_config_layer,
+                        recipe_obj=_raw_recipe,
                     )
                 tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
                 tool_ctx.active_recipe_features = frozenset(result.get("requires_features", []))
@@ -686,7 +700,6 @@ async def open_kitchen(
                     overrides,
                     _deferred_finalized_projection.ingredient_names,
                     set(_session_overrides.keys()),
-                    _config_layer,
                 )
                 if _override_warnings:
                     result["warnings"] = _override_warnings
@@ -760,11 +773,11 @@ async def open_kitchen(
                 return _render_ingredients_only_response(
                     result,
                     declared_ingredients=(
-                        frozenset(_raw_recipe.ingredients) if _raw_recipe is not None else None
+                        frozenset(_raw_recipe.ingredients) if _raw_recipe else frozenset()
                     ),
                     overrides=overrides,
                     session_keys=set(_session_overrides),
-                    config_layer=_config_layer,
+                    recipe_obj=_raw_recipe,
                 )
 
             tool_ctx.active_recipe_packs = frozenset(result.get("requires_packs", []))
@@ -861,7 +874,6 @@ async def open_kitchen(
                 overrides,
                 _normal_finalized_projection.ingredient_names,
                 set(_session_overrides.keys()),
-                _config_layer,
             )
             if _override_warnings:
                 result["warnings"] = _override_warnings

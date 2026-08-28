@@ -1,17 +1,18 @@
-"""Load_recipe read-only invariants (P4) and authority-clobber warning contract
-(P7 authority surface).
+"""Load_recipe read-only invariants (P4) and authority/type gate contract
+(P7 authority surface, Tier-2 type surface).
 """
 
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from autoskillit.core import SkillResolver
+from autoskillit.recipe.schema import RecipeIngredient
 from autoskillit.server.tools.tools_recipe import load_recipe
-from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -58,13 +59,15 @@ class TestLoadRecipeReadOnly:
 
 
 class TestLoadRecipeAuthorityClobber:
-    """load_recipe must emit an authority-clobber warning when a server-authoritative
-    key is overridden by the caller. Enforcement (config-layer wins) already works;
-    this test verifies the *feedback* contract.
+    """load_recipe must reject server-authoritative overrides with a structured
+    envelope before any recipe load or session snapshot mutation. The previous
+    warning-based contract has been inverted: caller overrides for
+    ``authority: config`` keys are no longer silently overwritten, they are
+    rejected with the same envelope shape used by ``lock_ingredients``.
     """
 
     @pytest.mark.anyio
-    async def test_load_recipe_emits_authority_warning(self, tmp_path, monkeypatch):
+    async def test_load_recipe_rejects_authority_override(self, tmp_path, monkeypatch):
         from unittest.mock import MagicMock
 
         from tests.server.conftest import _make_mock_ctx
@@ -73,22 +76,6 @@ class TestLoadRecipeAuthorityClobber:
         mock_ctx = _make_mock_ctx()
         mock_ctx.enable_components = AsyncMock()
         mock_ctx.recipes = MagicMock()
-        mock_recipe_obj = MagicMock()
-        mock_recipe_obj.steps = {"do": MagicMock()}
-        mock_recipe_obj.ingredients = {"base_branch": MagicMock()}
-        mock_ctx.recipes.load.return_value = mock_recipe_obj
-        mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-            {
-                "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-                "valid": True,
-                "suggestions": [],
-                "diagram": None,
-                "ingredients_table": "--- TABLE ---",
-            },
-            projection=_make_finalized_projection(),
-        )
-        mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
-        mock_ctx.recipes.load.return_value = mock_recipe_obj
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
         mock_ctx.config.linux_tracing.log_dir = ""
@@ -102,34 +89,116 @@ class TestLoadRecipeAuthorityClobber:
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):
-                    with patch(
-                        "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
-                        return_value={
-                            "base_branch": "develop",
-                            "is_fleet_dispatch": "false",
-                            "dispatch_id": "",
-                        },
-                    ):
-                        from autoskillit.server.tools.tools_recipe import load_recipe
+                    from autoskillit.server.tools.tools_recipe import load_recipe
 
-                        result_str = await load_recipe(
-                            name="demo",
-                            overrides={"base_branch": "custom"},
-                        )
+                    result_str = await load_recipe(
+                        name="demo",
+                        overrides={"base_branch": "custom"},
+                    )
 
         parsed = json.loads(result_str)
-        warnings = parsed.get("warnings") or []
-        matching = [w for w in warnings if "base_branch" in w]
-        assert matching, (
-            f"load_recipe must emit a warning naming base_branch; got warnings={warnings}"
+        assert parsed["success"] is False
+        assert parsed["stage"] == "ingredient_authority_validation"
+        assert parsed["retriable"] is False
+        assert "base_branch" in parsed["error"]
+        # The authority gate runs at function entry, before recipes.load is
+        # called — confirms no recipe load side effect on rejection.
+        mock_ctx.recipes.load.assert_not_called()
+        mock_ctx.recipes.load_and_validate.assert_not_called()
+
+
+class TestLoadRecipeTypeGate:
+    """Tier-2 type gate: caller-supplied override values are rejected before
+    any serve_recipe or session side effect runs.
+    """
+
+    @pytest.mark.anyio
+    async def test_load_recipe_rejects_invalid_type_override(self, tmp_path, monkeypatch):
+        """An invalid-typed override returns the type-validation envelope and
+        serve_recipe must NOT have been called."""
+        from unittest.mock import AsyncMock
+
+        from tests.server.conftest import _make_mock_ctx
+
+        monkeypatch.chdir(tmp_path)
+        mock_ctx = _make_mock_ctx()
+        mock_ctx.enable_components = AsyncMock()
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.kitchen_id = "test-kitchen-type"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        typed_recipe = SimpleNamespace(
+            ingredients={"count": RecipeIngredient(description="Count", type="integer")},
+            steps={"do": MagicMock()},
         )
-        server_value_match = [w for w in warnings if "server value 'develop'" in w]
-        assert server_value_match, (
-            "Authority-clobber warning must confirm config value won — "
-            f"expected \"server value 'develop'\" in warning text; got warnings={warnings}"
-        )
-        caller_value_absent = [w for w in warnings if "server value 'custom'" in w]
-        assert not caller_value_absent, (
-            "Authority-clobber warning must NOT report the caller override as the server value — "
-            f"got warnings={warnings}"
-        )
+        mock_ctx.recipes.load.return_value = typed_recipe
+        mock_recipe_info = MagicMock()
+        mock_recipe_info.path = "/fake/recipe.yaml"
+        mock_ctx.recipes.find.return_value = mock_recipe_info
+
+        with patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ):
+                with patch("autoskillit.server.logger"):
+                    result_str = await load_recipe(
+                        name="demo",
+                        overrides={"count": "abc"},
+                    )
+
+        parsed = json.loads(result_str)
+        assert parsed["success"] is False
+        assert parsed["stage"] == "ingredient_type_validation"
+        assert parsed["retriable"] is False
+        assert "count" in parsed["error"]
+        # serve_recipe must not be invoked when the type gate rejects.
+        mock_ctx.recipes.load_and_validate.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_load_recipe_fails_closed_when_recipe_load_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        """If recipe load returns None and overrides are supplied, the call
+        fails closed with a type-validation envelope rather than proceeding
+        past the gate silently. Mirrors open_kitchen's contract.
+        """
+        from unittest.mock import AsyncMock
+
+        from tests.server.conftest import _make_mock_ctx
+
+        monkeypatch.chdir(tmp_path)
+        mock_ctx = _make_mock_ctx()
+        mock_ctx.enable_components = AsyncMock()
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.kitchen_id = "test-kitchen-fail-closed"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.recipes.load.return_value = None
+        mock_recipe_info = MagicMock()
+        mock_recipe_info.path = "/fake/recipe.yaml"
+        mock_ctx.recipes.find.return_value = mock_recipe_info
+
+        with patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ):
+                with patch("autoskillit.server.logger"):
+                    result_str = await load_recipe(
+                        name="demo",
+                        overrides={"any_key": "value"},
+                    )
+
+        parsed = json.loads(result_str)
+        assert parsed["success"] is False
+        assert parsed["stage"] == "ingredient_type_validation"
+        assert parsed["retriable"] is False
+        # No serve_recipe side effect.
+        mock_ctx.recipes.load_and_validate.assert_not_called()

@@ -35,6 +35,22 @@ NON_INTERACTIVE_KINDS: Final[frozenset[RecipeKind]] = frozenset(
     {RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}
 )
 
+# Canonical set of values allowed for RecipeIngredient.type. Defined beside the
+# dataclass it validates — RecipeIngredient is the only consumer.
+ALLOWED_INGREDIENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "string",
+        "integer",
+        "boolean",
+        "path",
+        "optional_string",
+        "list",
+        "dict",
+        "absolute_path",  # absolute filesystem path; non-empty required
+        "worktree_relative_path",  # worktree-relative path; empty allowed
+    }
+)
+
 
 @dataclass
 class RecipeIngredient:
@@ -52,6 +68,11 @@ class RecipeIngredient:
         if self.authority is not None and self.authority != "config":
             raise ValueError(
                 f"RecipeIngredient.authority must be None or 'config', got {self.authority!r}"
+            )
+        if self.type is not None and self.type not in ALLOWED_INGREDIENT_TYPES:
+            raise ValueError(
+                f"RecipeIngredient.type must be one of {sorted(ALLOWED_INGREDIENT_TYPES)} "
+                f"or None, got {self.type!r}"
             )
 
 

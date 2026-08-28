@@ -6,12 +6,10 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
 
-import autoskillit.recipe.io as recipe_io
 from autoskillit.core import CaptureEntrySpec, DispatchGateType, Severity, pkg_root
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import (
@@ -24,6 +22,7 @@ from autoskillit.recipe.io import (
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 from autoskillit.recipe.validator import validate_recipe_structure
+from tests.recipe._testing import count_discovery_calls, isolate_recipe_discovery_cache
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -31,9 +30,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 @pytest.fixture(autouse=True)
 def _clear_recipe_discovery_caches() -> Iterator[None]:
     """Campaign discovery must not inherit a prior test's process cache."""
-    recipe_io._clear_recipe_discovery_caches()
-    yield
-    recipe_io._clear_recipe_discovery_caches()
+    yield from isolate_recipe_discovery_cache()
 
 
 def _write_yaml(path: Path, data: dict) -> Path:
@@ -266,20 +263,7 @@ def test_load_and_validate_campaign_enumerates_and_collects_once(
         ),
     )
 
-    calls = {"enumerate": 0, "collect": 0}
-    enumerate_candidates = recipe_io._enumerate_recipe_candidates_uncached
-    collect_candidates = recipe_io.collect_recipes_from_candidates
-
-    def counting_enumeration(*args: Any, **kwargs: Any) -> Any:
-        calls["enumerate"] += 1
-        return enumerate_candidates(*args, **kwargs)
-
-    def counting_collection(*args: Any, **kwargs: Any) -> Any:
-        calls["collect"] += 1
-        return collect_candidates(*args, **kwargs)
-
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumeration)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collection)
+    calls = count_discovery_calls(monkeypatch)
 
     result = load_and_validate("multi-dispatch", project_dir=tmp_path)
 

@@ -14,18 +14,16 @@ import pytest
 import yaml
 
 import autoskillit
+import autoskillit.recipe.io as recipe_io
+from tests.recipe._testing import count_discovery_calls, isolate_recipe_discovery_cache
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def isolated_recipe_discovery_cache() -> Iterator[None]:
     """Keep the centralized discovery counters local to one wrapper regression."""
-    import autoskillit.recipe.io as recipe_io
-
-    recipe_io._clear_recipe_discovery_caches()
-    yield
-    recipe_io._clear_recipe_discovery_caches()
+    yield from isolate_recipe_discovery_cache()
 
 
 class TestDefaultRecipeRepository:
@@ -400,31 +398,15 @@ def test_load_and_validate_skips_file_read_when_content_in_recipe_info(
 
 # SW-B2: recipe discovery work is centrally cached, while callers get fresh results
 def test_list_recipes_reuses_discovery_cache_with_fresh_containers(
-    isolated_recipe_discovery_cache: None,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """Warm discovery avoids uncached work without sharing result containers."""
-    import autoskillit.recipe.io as recipe_io
-
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     _write_valid_recipe(recipes_dir / "my-recipe.yaml")
 
-    calls = {"enumerate": 0, "collect": 0}
-    enumerate_uncached = recipe_io._enumerate_recipe_candidates_uncached
-    collect_recipes = recipe_io.collect_recipes_from_candidates
-
-    def counting_enumerate(*args: object, **kwargs: object) -> object:
-        calls["enumerate"] += 1
-        return enumerate_uncached(*args, **kwargs)
-
-    def counting_collect(*args: object, **kwargs: object) -> object:
-        calls["collect"] += 1
-        return collect_recipes(*args, **kwargs)
-
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumerate)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collect)
+    calls = count_discovery_calls(monkeypatch)
 
     first = recipe_io.list_recipes(tmp_path)
     warm = recipe_io.list_recipes(tmp_path)
@@ -439,31 +421,15 @@ def test_list_recipes_reuses_discovery_cache_with_fresh_containers(
 
 # SW-B3: project updates invalidate only the affected discovery tier
 def test_list_recipes_reenumerates_only_project_candidates_after_recipe_added(
-    isolated_recipe_discovery_cache: None,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """Adding a project recipe re-enumerates and recollects without rescanning bundled recipes."""
-    import autoskillit.recipe.io as recipe_io
-
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     _write_valid_recipe(recipes_dir / "r1.yaml")
 
-    calls = {"enumerate": 0, "collect": 0}
-    enumerate_uncached = recipe_io._enumerate_recipe_candidates_uncached
-    collect_recipes = recipe_io.collect_recipes_from_candidates
-
-    def counting_enumerate(*args: object, **kwargs: object) -> object:
-        calls["enumerate"] += 1
-        return enumerate_uncached(*args, **kwargs)
-
-    def counting_collect(*args: object, **kwargs: object) -> object:
-        calls["collect"] += 1
-        return collect_recipes(*args, **kwargs)
-
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumerate)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collect)
+    calls = count_discovery_calls(monkeypatch)
 
     recipe_io.list_recipes(tmp_path)
     _write_valid_recipe(recipes_dir / "r2.yaml")
@@ -475,35 +441,21 @@ def test_list_recipes_reenumerates_only_project_candidates_after_recipe_added(
 
 # SW-B4: DefaultRecipeRepository delegates discovery to the public list_recipes API
 def test_default_recipe_repository_find_delegates_to_list_recipes(
-    isolated_recipe_discovery_cache: None,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """list() and find() both delegate so discovery cache ownership stays in recipe I/O."""
-    import autoskillit.recipe.io as recipe_io
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     call_count = 0
-    discovery_calls = {"enumerate": 0, "collect": 0}
-    enumerate_uncached = recipe_io._enumerate_recipe_candidates_uncached
-    collect_recipes = recipe_io.collect_recipes_from_candidates
+    discovery_calls = count_discovery_calls(monkeypatch)
 
     def counting_list(project_dir: Path) -> object:
         nonlocal call_count
         call_count += 1
         return recipe_io.list_recipes(project_dir)
 
-    def counting_enumerate(*args: object, **kwargs: object) -> object:
-        discovery_calls["enumerate"] += 1
-        return enumerate_uncached(*args, **kwargs)
-
-    def counting_collect(*args: object, **kwargs: object) -> object:
-        discovery_calls["collect"] += 1
-        return collect_recipes(*args, **kwargs)
-
     monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", counting_list)
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumerate)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collect)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

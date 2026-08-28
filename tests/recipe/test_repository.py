@@ -13,6 +13,12 @@ from autoskillit.core import RecipeSource
 from autoskillit.core.types._type_results import LoadResult
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.recipe.schema import RecipeInfo
+from tests.recipe._testing import (
+    isolate_recipe_discovery_cache,
+)
+from tests.recipe._testing import (
+    write_project_recipe as _write_project_recipe,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -20,9 +26,7 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 @pytest.fixture(autouse=True)
 def _clear_recipe_discovery_caches() -> Iterator[None]:
     """Keep repository delegation tests independent of global discovery state."""
-    recipe_io._clear_recipe_discovery_caches()
-    yield
-    recipe_io._clear_recipe_discovery_caches()
+    yield from isolate_recipe_discovery_cache()
 
 
 def _make_recipe_info(name: str, path: Path) -> RecipeInfo:
@@ -36,13 +40,6 @@ def _make_recipe_info(name: str, path: Path) -> RecipeInfo:
 
 def _load_result(*items: RecipeInfo) -> LoadResult[RecipeInfo]:
     return LoadResult(items=list(items))
-
-
-def _write_project_recipe(project_dir: Path, name: str) -> Path:
-    path = project_dir / ".autoskillit" / "recipes" / f"{name}.yaml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"name: {name}\ndescription: test\nsteps: {{}}\n", encoding="utf-8")
-    return path
 
 
 def _counting_list_recipes(calls: list[Path]) -> Callable[[Path], LoadResult[RecipeInfo]]:

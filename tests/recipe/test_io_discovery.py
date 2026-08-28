@@ -19,6 +19,13 @@ from autoskillit.recipe.io import (
     load_recipe,
 )
 from autoskillit.recipe.schema import RecipeKind
+from tests.recipe._testing import (
+    count_discovery_calls,
+    isolate_recipe_discovery_cache,
+)
+from tests.recipe._testing import (
+    write_project_recipe as _write_project_recipe,
+)
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
@@ -28,9 +35,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 @pytest.fixture(autouse=True)
 def _clear_recipe_discovery_caches() -> Iterator[None]:
     """Keep process-wide discovery caches isolated between these tests."""
-    recipe_io._clear_recipe_discovery_caches()
-    yield
-    recipe_io._clear_recipe_discovery_caches()
+    yield from isolate_recipe_discovery_cache()
 
 
 class TestListRecipes:
@@ -669,30 +674,10 @@ def test_eval_scan_dir_discoverable(tmp_path: Path) -> None:
     assert r.source == RecipeSource.PROJECT
 
 
-def _write_project_recipe(project_dir: Path, name: str) -> Path:
-    recipe_path = project_dir / ".autoskillit" / "recipes" / f"{name}.yaml"
-    recipe_path.parent.mkdir(parents=True, exist_ok=True)
-    recipe_path.write_text(f"name: {name}\ndescription: test\nsteps: {{}}\n", encoding="utf-8")
-    return recipe_path
-
-
 def test_list_recipes_reuses_warm_discovery_and_returns_independent_results(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls = {"enumerate": 0, "collect": 0}
-    enumerate_candidates = recipe_io._enumerate_recipe_candidates_uncached
-    collect_candidates = recipe_io.collect_recipes_from_candidates
-
-    def counting_enumeration(*args: Any, **kwargs: Any) -> Any:
-        calls["enumerate"] += 1
-        return enumerate_candidates(*args, **kwargs)
-
-    def counting_collection(*args: Any, **kwargs: Any) -> Any:
-        calls["collect"] += 1
-        return collect_candidates(*args, **kwargs)
-
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumeration)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collection)
+    calls = count_discovery_calls(monkeypatch)
 
     cold = recipe_io.list_recipes(tmp_path)
     warm = recipe_io.list_recipes(tmp_path)
@@ -721,20 +706,7 @@ def test_list_recipes_detects_add_remove_and_same_size_restored_mtime_edit(
     recipe_path = _write_project_recipe(tmp_path, "alpha")
     recipe_path.write_text(initial, encoding="utf-8")
 
-    calls = {"enumerate": 0, "collect": 0}
-    enumerate_candidates = recipe_io._enumerate_recipe_candidates_uncached
-    collect_candidates = recipe_io.collect_recipes_from_candidates
-
-    def counting_enumeration(*args: Any, **kwargs: Any) -> Any:
-        calls["enumerate"] += 1
-        return enumerate_candidates(*args, **kwargs)
-
-    def counting_collection(*args: Any, **kwargs: Any) -> Any:
-        calls["collect"] += 1
-        return collect_candidates(*args, **kwargs)
-
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumeration)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collection)
+    calls = count_discovery_calls(monkeypatch)
 
     assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
     assert calls == {"enumerate": 2, "collect": 1}
@@ -765,20 +737,7 @@ def test_list_recipes_detects_json_sidecar_lifecycle_and_parse_failure(
     json_path = recipe_path.with_suffix(".json")
     os.utime(recipe_path, ns=(1_000_000_000, 1_000_000_000))
 
-    calls = {"enumerate": 0, "collect": 0}
-    enumerate_candidates = recipe_io._enumerate_recipe_candidates_uncached
-    collect_candidates = recipe_io.collect_recipes_from_candidates
-
-    def counting_enumeration(*args: Any, **kwargs: Any) -> Any:
-        calls["enumerate"] += 1
-        return enumerate_candidates(*args, **kwargs)
-
-    def counting_collection(*args: Any, **kwargs: Any) -> Any:
-        calls["collect"] += 1
-        return collect_candidates(*args, **kwargs)
-
-    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumeration)
-    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collection)
+    calls = count_discovery_calls(monkeypatch)
 
     assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["from-yaml"]
     assert calls == {"enumerate": 2, "collect": 1}

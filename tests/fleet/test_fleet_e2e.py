@@ -363,12 +363,12 @@ def fleet_runtime(
     _write_claude_shim(shim_dir)
     monkeypatch.setenv("PATH", f"{shim_dir}:{os.environ['PATH']}")
 
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.core import DefaultManagedWorkerCapacity
 
     runner = FleetTestRunner()
     tool_ctx.runner = runner
     tool_ctx.executor = DefaultHeadlessExecutor(tool_ctx)
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     recipes = InMemoryRecipeRepository()
     tool_ctx.recipes = recipes
     tool_ctx.kitchen_id = uuid4().hex[:16]
@@ -418,9 +418,9 @@ def fleet_runtime_factory(fleet_runtime: FleetRuntime):
     """Factory variant of fleet_runtime that accepts max_concurrent_dispatches."""
 
     def _factory(max_concurrent_dispatches: int = 1) -> FleetRuntime:
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity
 
-        fleet_runtime.tool_ctx.fleet_lock = FleetSemaphore(
+        fleet_runtime.tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(
             max_concurrent=max_concurrent_dispatches
         )
         return fleet_runtime
@@ -917,7 +917,7 @@ async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_p
 
 
 # ---------------------------------------------------------------------------
-# Parallel dispatch tests — FleetSemaphore with max > 1
+# Parallel dispatch tests — shared capacity with max > 1
 # ---------------------------------------------------------------------------
 
 
@@ -925,7 +925,7 @@ async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_p
 async def test_two_concurrent_dispatches_allowed_with_max2(
     fleet_runtime_factory,
 ) -> None:
-    """FleetSemaphore(max=2) allows both L3 dispatches to complete successfully."""
+    """Capacity max=2 allows both L3 dispatches to complete successfully."""
     rt = fleet_runtime_factory(max_concurrent_dispatches=2)
     rt.add_recipe("slow-recipe")
     results: list[dict | None] = [None, None]
@@ -947,7 +947,7 @@ async def test_two_concurrent_dispatches_allowed_with_max2(
 async def test_third_concurrent_dispatch_refused_with_max2(
     fleet_runtime_factory,
 ) -> None:
-    """FleetSemaphore(max=2) rejects a third concurrent dispatch immediately."""
+    """Capacity max=2 rejects a third concurrent dispatch immediately."""
     rt = fleet_runtime_factory(max_concurrent_dispatches=2)
     rt.add_recipe("slow-recipe")
     results: list[dict | None] = [None, None, None]
@@ -977,7 +977,7 @@ async def test_third_concurrent_dispatch_refused_with_max2(
 async def test_fourth_concurrent_dispatch_refused_with_max3(
     fleet_runtime_factory,
 ) -> None:
-    """FleetSemaphore(max=3) rejects a fourth concurrent dispatch immediately."""
+    """Capacity max=3 rejects a fourth concurrent dispatch immediately."""
     rt = fleet_runtime_factory(max_concurrent_dispatches=3)
     rt.add_recipe("slow-recipe")
     results: list[dict | None] = [None, None, None, None]

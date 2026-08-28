@@ -20,10 +20,11 @@ from autoskillit.core import (
     AuditAdmissionLedger,
     AuditAdmissionStoreAuthority,
     ContextAdmissionStoreAuthority,
+    DefaultManagedWorkerCapacity,
     DirectInstall,
-    FleetLock,
     InstallationVersion,
     InstalledRecipeExecution,
+    ManagedWorkerCapacity,
     PluginArtifactAuthority,
     PluginRetirementCoordinator,
     RecipeExecutionId,
@@ -64,7 +65,7 @@ from autoskillit.execution import (
     build_replay_runner,
     get_backend,
 )
-from autoskillit.fleet import FleetSemaphore, build_protected_campaign_ids
+from autoskillit.fleet import build_protected_campaign_ids
 from autoskillit.migration import DefaultMigrationService, default_migration_engine
 from autoskillit.pipeline import (
     DefaultAuditAdmissionLedger,
@@ -191,7 +192,7 @@ def make_context(
     plugin_dir: str | None = _UNSET,
     plugin_authority: PluginArtifactAuthority = _UNSET,
     plugin_retirement_coordinator: PluginRetirementCoordinator | None = None,
-    fleet_lock: FleetLock | None = None,
+    worker_capacity: ManagedWorkerCapacity | None = None,
     project_dir: Path | None = None,
     audit_admission_store_authority: AuditAdmissionStoreAuthority | None = None,
 ) -> ToolContext:
@@ -213,8 +214,8 @@ def make_context(
                     artifacts from this root instead of pkg_root(). When
                     plugin_authority is also provided, plugin_authority wins.
         plugin_authority: Test-injection override for the lazy artifact authority.
-        fleet_lock: FleetLock implementation to inject. Defaults to
-                        FleetSemaphore(max_concurrent_dispatches) when None. Pass a
+        worker_capacity: ManagedWorkerCapacity implementation to inject. Defaults to
+                        DefaultManagedWorkerCapacity(max_concurrent_dispatches) when None. Pass a
                         custom implementation in tests to substitute without monkey-patching.
         project_dir: Explicit project root path. When supplied, used directly.
                      When None, resolve_project_dir() is called (git toplevel → cwd) —
@@ -409,10 +410,12 @@ def make_context(
         gateway=github_review_gateway,
         review_comment_cap=config.github.review_comment_cap,
     )
+    background = DefaultBackgroundSupervisor(audit=audit)
+    managed_join_attestation_authority = DefaultManagedJoinAttestationAuthority()
     ctx = ToolContext(
         config=config,
         audit=audit,
-        background=DefaultBackgroundSupervisor(audit=audit),
+        background=background,
         token_log=DefaultTokenLog(),
         timing_log=DefaultTimingLog(),
         gate=gate,
@@ -437,7 +440,7 @@ def make_context(
         skill_resolver=provider.resolver,
         skill_session_contract_store=DefaultSkillSessionContractStore(),
         managed_headless_session_lineage_store=(DefaultManagedHeadlessSessionLineageStore()),
-        managed_join_attestation_authority=DefaultManagedJoinAttestationAuthority(),
+        managed_join_attestation_authority=managed_join_attestation_authority,
         context_admission_ledger=context_admission_ledger,
         audit_admission_ledger=audit_admission_ledger,
         audit_authority_materializer=audit_authority_materializer,
@@ -450,14 +453,30 @@ def make_context(
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,
-        fleet_lock=(
-            fleet_lock
-            if fleet_lock is not None
-            else FleetSemaphore(
+        worker_capacity=(
+            worker_capacity
+            if worker_capacity is not None
+            else DefaultManagedWorkerCapacity(
                 max_concurrent=config.fleet.max_concurrent_dispatches,
                 timeout=config.fleet.acquire_timeout_sec,
             )
         ),
+    )
+    from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # noqa: PLC0415  # circular-break: compose after ToolContext exists
+        ManagedFixedBatchService,
+    )
+
+    assert ctx.worker_capacity is not None
+    ctx.managed_fixed_batch_service = ManagedFixedBatchService(
+        capacity=ctx.worker_capacity,
+        background=background,
+        state_root=ctx.temp_dir / "managed-fixed-batches",
+    )
+    managed_join_attestation_authority.set_recovery_gate(
+        lambda: (
+            ctx.managed_fixed_batch_service is not None
+            and ctx.managed_fixed_batch_service.recovery_ready
+        )
     )
     ctx.host_client_attestation = initialize_host_client_attestation()
     if runner is not None:

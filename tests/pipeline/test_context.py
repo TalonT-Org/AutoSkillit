@@ -456,11 +456,11 @@ def test_tool_context_has_token_factory_field():
     )
 
 
-def test_tool_context_has_fleet_lock_field():
-    """ToolContext has a fleet_lock field defaulting to None."""
+def test_tool_context_has_worker_capacity_field():
+    """ToolContext has a worker_capacity field defaulting to None."""
     from autoskillit.pipeline.context import ToolContext
 
-    field_info = ToolContext.__dataclass_fields__["fleet_lock"]
+    field_info = ToolContext.__dataclass_fields__["worker_capacity"]
     assert field_info.default is None
 
 

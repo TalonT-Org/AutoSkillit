@@ -23,11 +23,11 @@ def _read_state_file(tool_ctx) -> dict:
 
 
 def _setup_research_campaign(tool_ctx):
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.core import DefaultManagedWorkerCapacity
     from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
 
     design_info = _make_recipe_info("research-design")
@@ -256,7 +256,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
     campaign_path = builtin_recipes_dir() / "campaigns" / "research-campaign.yaml"
     campaign = load_recipe(campaign_path)
 
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.core import DefaultManagedWorkerCapacity
 
     repo = InMemoryRecipeRepository()
     for dispatch in campaign.dispatches:
@@ -266,7 +266,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
         repo.add_recipe(dispatch.recipe, info)
         repo.add_full_recipe(info.path, actual_recipe)
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=4)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=4)
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
 
@@ -572,7 +572,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
     campaign_path = builtin_recipes_dir() / "campaigns" / "research-campaign.yaml"
     campaign = load_recipe(campaign_path)
 
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.core import DefaultManagedWorkerCapacity
 
     repo = InMemoryRecipeRepository()
     for dispatch in campaign.dispatches:
@@ -582,7 +582,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
         repo.add_recipe(dispatch.recipe, info)
         repo.add_full_recipe(info.path, actual_recipe)
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=4)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=4)
     tool_ctx.recipes = repo
     tool_ctx.executor = InMemoryHeadlessExecutor()
 

@@ -514,8 +514,8 @@ class TestFleetRunDispatch:
         assert captured_args["resume_session_id"] == "sess-123"
         assert captured_args["prior_dispatch_id"] == "disp-456"
 
-    def test_fleet_run_uses_fleet_semaphore(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """ToolContext is constructed via make_context — FleetSemaphore auto-wired."""
+    def test_fleet_run_uses_shared_worker_capacity(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ToolContext is constructed via make_context with shared capacity wired."""
         monkeypatch.setattr(
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
@@ -524,7 +524,7 @@ class TestFleetRunDispatch:
         fake_ctx = MagicMock()
         fake_ctx.backend = _mock_backend()
         fake_ctx.config = MagicMock()
-        fake_ctx.fleet_lock = MagicMock()
+        fake_ctx.worker_capacity = MagicMock()
 
         def fake_make_context(cfg: object, **kwargs: object) -> MagicMock:
             make_context_calls.append(cfg)

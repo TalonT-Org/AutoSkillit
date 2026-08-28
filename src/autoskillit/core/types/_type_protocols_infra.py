@@ -9,7 +9,8 @@ from typing import Any, Protocol, runtime_checkable
 __all__ = [
     "GateState",
     "BackgroundSupervisor",
-    "FleetLock",
+    "ManagedFixedBatchSupervisor",
+    "ManagedWorkerCapacity",
     "KitchenTransitionLock",
     "QuotaPolicy",
     "QuotaRefreshTask",
@@ -50,17 +51,33 @@ class BackgroundSupervisor(Protocol):
 
 
 @runtime_checkable
-class FleetLock(Protocol):
-    """Protocol for a semaphore-style fleet dispatch guard.
+class ManagedFixedBatchSupervisor(Protocol):
+    """Server-owned managed fixed-batch lifecycle and recovery authority."""
 
-    Default implementation is FleetSemaphore in server/_factory.py.
-    """
+    @property
+    def recovery_ready(self) -> bool: ...
+
+    @property
+    def recovery_diagnostic(self) -> str: ...
+
+    async def reconcile_startup(self) -> bool: ...
+
+    async def close(self) -> None: ...
+
+
+@runtime_checkable
+class ManagedWorkerCapacity(Protocol):
+    """Protocol for the process-wide owner-bound managed worker capacity."""
 
     def at_capacity(self) -> bool: ...
 
-    async def acquire(self) -> None: ...
+    async def acquire(self, owner: object) -> Any: ...
 
-    def release(self) -> None: ...
+    def release(self, permit: Any) -> None: ...
+
+    def reconfigure(self, *, max_concurrent: int, timeout: float | None) -> None: ...
+
+    def restore_owner_debt(self, owner: object, permit_id: str) -> Any: ...
 
     @property
     def active_count(self) -> int: ...

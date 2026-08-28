@@ -9,7 +9,7 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 48,
+    "core": 49,  # +_managed_worker_capacity shared fleet/fixed-batch authority
     # _type_truth replaces the retired _type_tradition_manifest shard.
     "core/types": 76,
     "core/runtime": 11,

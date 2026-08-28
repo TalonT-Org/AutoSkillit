@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import DefaultManagedWorkerCapacity
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
     _make_recipe_info,
@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.featu
 class TestDispatchFoodTruckExecution:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -51,7 +51,7 @@ class TestDispatchFoodTruckExecution:
             quota_checker=_no_sleep_quota_checker,
             quota_refresher=_noop_quota_refresher,
         )
-        assert not tool_ctx.fleet_lock.at_capacity()
+        assert not tool_ctx.worker_capacity.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_exception(self, tool_ctx, monkeypatch):
@@ -76,7 +76,7 @@ class TestDispatchFoodTruckExecution:
         )
         result = json.loads(_dispatch_result.outcome.to_envelope())
         assert result["success"] is False
-        assert not tool_ctx.fleet_lock.at_capacity()
+        assert not tool_ctx.worker_capacity.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_releases_lock_on_cancellation(self, tool_ctx, monkeypatch):
@@ -98,7 +98,7 @@ class TestDispatchFoodTruckExecution:
                 quota_checker=_no_sleep_quota_checker,
                 quota_refresher=_noop_quota_refresher,
             )
-        assert not tool_ctx.fleet_lock.at_capacity()
+        assert not tool_ctx.worker_capacity.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_success_envelope(self, tool_ctx, monkeypatch):

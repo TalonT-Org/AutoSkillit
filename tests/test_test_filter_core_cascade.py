@@ -124,6 +124,7 @@ class TestModuleCascadeCore:
             "_linux_proc",
             "_reclamation",
             "_capacity",  # S1-1, S2-3
+            "_managed_worker_capacity",
             "executable_binding",
             "_type_plugin_source",
             "_type_persisted_formats",

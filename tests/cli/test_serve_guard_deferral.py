@@ -112,35 +112,38 @@ class TestActivityCheckCompleteness:
     def test_activity_check_true_when_execution_marker_exists(self, tmp_path: Path) -> None:
         marker_name = f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
         (tmp_path / marker_name).touch()
-        assert is_server_active(marker_dir=tmp_path, fleet_lock=None) is True
+        assert is_server_active(marker_dir=tmp_path, worker_capacity=None) is True
 
     @pytest.mark.anyio
-    async def test_activity_check_true_when_fleet_lock_active(self) -> None:
-        from autoskillit.fleet import FleetSemaphore
+    async def test_activity_check_true_when_worker_capacity_active(self) -> None:
+        from autoskillit.core import DefaultManagedWorkerCapacity
 
-        sem = FleetSemaphore()
-        await sem.acquire()
+        capacity = DefaultManagedWorkerCapacity()
+        permit = await capacity.acquire("active-dispatch")
         try:
-            assert is_server_active(marker_dir=None, fleet_lock=sem) is True
+            assert is_server_active(marker_dir=None, worker_capacity=capacity) is True
         finally:
-            sem.release()
+            capacity.release(permit)
 
     def test_activity_check_false_when_both_idle(self, tmp_path: Path) -> None:
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity
 
-        assert is_server_active(marker_dir=tmp_path, fleet_lock=FleetSemaphore()) is False
+        assert (
+            is_server_active(marker_dir=tmp_path, worker_capacity=DefaultManagedWorkerCapacity())
+            is False
+        )
 
     def test_activity_check_true_when_marker_within_age(self, tmp_path: Path) -> None:
         marker = tmp_path / f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
         marker.touch()
         os.utime(marker, (time.time() - 50, time.time() - 50))
-        assert is_server_active(marker_dir=tmp_path, fleet_lock=None) is True
+        assert is_server_active(marker_dir=tmp_path, worker_capacity=None) is True
 
     def test_activity_check_false_when_marker_expired(self, tmp_path: Path) -> None:
         marker = tmp_path / f"run-skill-in-progress-sess-{uuid.uuid4()}.marker"
         marker.touch()
         os.utime(marker, (time.time() - 120, time.time() - 120))
-        assert is_server_active(marker_dir=tmp_path, fleet_lock=None) is False
+        assert is_server_active(marker_dir=tmp_path, worker_capacity=None) is False
 
 
 class TestParameterNaming:

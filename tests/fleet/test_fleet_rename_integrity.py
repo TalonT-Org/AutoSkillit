@@ -27,10 +27,10 @@ def test_fleet_error_code_class_gone() -> None:
         from autoskillit.core import FranchiseErrorCode  # noqa: F401
 
 
-def test_fleet_lock_protocol_exists() -> None:
-    from autoskillit.core import FleetLock
+def test_managed_worker_capacity_protocol_exists() -> None:
+    from autoskillit.core import ManagedWorkerCapacity
 
-    assert FleetLock is not None
+    assert ManagedWorkerCapacity is not None
 
 
 def test_fleet_error_helper_exists() -> None:
@@ -99,13 +99,13 @@ def test_franchise_config_class_gone() -> None:
         from autoskillit.config import FranchiseConfig  # noqa: F401
 
 
-def test_tool_context_fleet_lock_field() -> None:
+def test_tool_context_worker_capacity_field() -> None:
     from dataclasses import fields
 
     from autoskillit.pipeline.context import ToolContext
 
     field_names = {f.name for f in fields(ToolContext)}
-    assert "fleet_lock" in field_names
+    assert "worker_capacity" in field_names
     assert "franchise_lock" not in field_names
 
 

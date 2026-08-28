@@ -318,10 +318,10 @@ class TestFoodTruckManagedLineage:
     async def test_concurrent_dispatches_keep_lineage_and_dispatch_identity_isolated(
         self, tool_ctx, monkeypatch, tmp_path: Path
     ) -> None:
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity
 
         _setup_dispatch(tool_ctx, monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=2)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
         tool_ctx.backend = _mock_backend_with_locator(project_log_dir=tmp_path)
 
         first, second = await asyncio.gather(

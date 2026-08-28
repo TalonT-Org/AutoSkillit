@@ -32,6 +32,7 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
 )
+from autoskillit.fleet import state as _fleet_state
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
 )
@@ -45,12 +46,13 @@ from autoskillit.fleet.dispatch._cleanup import (
     handle_generic_exception,
     run_finally_label_cleanup,
 )
+from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.fleet.dispatch._execution import ExecutionResult as _ExecResult
 from autoskillit.fleet.dispatch._execution import SpawnContext, run_execution
 from autoskillit.fleet.dispatch._lineage import run_lineage_preparation
 from autoskillit.fleet.dispatch._validation import run_pre_launch_gating
 from autoskillit.fleet.sidecar import sidecar_path
-from autoskillit.fleet.state import DispatchStatus
+from autoskillit.fleet.state import DispatchRecord, DispatchStatus
 from autoskillit.fleet.state_effects import (
     DispatchAggregatePhase,
     DispatchProvenanceTracker,
@@ -144,31 +146,21 @@ async def execute_dispatch(
                 f"Ingredient values must be strings. Non-string keys: {bad_vals}",
             )
 
-    lock = tool_ctx.fleet_lock
-    if lock is None:
+    capacity = tool_ctx.worker_capacity
+    if capacity is None:
         return _reject(
             error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
-            message="Fleet lock not initialized — open_kitchen with fleet mode.",
+            message="Managed worker capacity is not initialized — open_kitchen with fleet mode.",
         )
-    if lock.at_capacity():
+    if capacity.at_capacity():
         return _reject(
             error_code=FleetErrorCode.FLEET_PARALLEL_REFUSED,
             message=(
-                f"Fleet at capacity ({lock.active_count}/{lock.max_concurrent}"
+                f"Fleet at capacity ({capacity.active_count}/{capacity.max_concurrent}"
                 " dispatches running)."
             ),
         )
 
-    try:
-        await lock.acquire()
-    except TimeoutError:
-        return _reject(
-            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
-            message=(
-                f"Timed out waiting for fleet semaphore after {lock.timeout}s "
-                f"({lock.active_count}/{lock.max_concurrent} dispatches running)."
-            ),
-        )
     try:
         # Call ``_run_dispatch`` through the public facade so that
         # ``monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", ...)``
@@ -232,12 +224,7 @@ async def execute_dispatch(
             )
             if state_path_obj is not None:
                 try:
-                    from autoskillit.fleet.state import (  # noqa: PLC0415
-                        DispatchRecord,
-                        append_dispatch_record,
-                    )
-
-                    append_dispatch_record(
+                    _fleet_state.append_dispatch_record(
                         state_path_obj,
                         DispatchRecord(
                             name=effective_name,
@@ -275,8 +262,6 @@ async def execute_dispatch(
                 else "Food-truck dispatch failed during startup."
             ),
         )
-    finally:
-        lock.release()
 
 
 async def _run_dispatch(
@@ -303,12 +288,11 @@ async def _run_dispatch(
     provenance: DispatchProvenanceTracker | None = None,
     native_shell_capture_mode: NativeShellCaptureMode | None = None,
 ) -> DispatchResult:
-    """Inner dispatch body — called after lock acquisition.
+    """Inner dispatch body — acquires capacity after durable dispatch identity.
 
     Composes the per-phase shards (validation → lineage → execution →
-    classification → finalize). The lock-acquisition precondition is
-    established by the caller in ``execute_dispatch``; this function
-    assumes the fleet lock is held.
+    classification → finalize).  Capacity is acquired only after Phase B has
+    persisted ``ready.dispatch_id`` so the owner key is durable and immutable.
     """
     provenance = provenance or DispatchProvenanceTracker()
     # --- Phase A: pre-launch gating ---
@@ -399,6 +383,35 @@ async def _run_dispatch(
     prior_markers: list[str | None] | None = (
         [f"%%L3_DONE::{pid[:8]}%%" for pid in spawn_ctx.prior_ids] if spawn_ctx.prior_ids else None
     )
+
+    capacity = tool_ctx.worker_capacity
+    if capacity is None:
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_LOCK_NOT_INITIALIZED,
+            message="Managed worker capacity is not initialized.",
+            dispatch_id=ready.dispatch_id,
+            managed_lineage_ref=ready.managed_lineage_ref,
+            provenance=provenance,
+            state_path=ready.state_path,
+            effective_name=recipe_ctx.effective_name,
+            tool_ctx=tool_ctx,
+        )
+    try:
+        permit = await capacity.acquire(ready.dispatch_id)
+    except TimeoutError:
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
+            message=(
+                f"Timed out waiting for managed worker capacity after {capacity.timeout}s "
+                f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
+            ),
+            dispatch_id=ready.dispatch_id,
+            managed_lineage_ref=ready.managed_lineage_ref,
+            provenance=provenance,
+            state_path=ready.state_path,
+            effective_name=recipe_ctx.effective_name,
+            tool_ctx=tool_ctx,
+        )
 
     # --- Phase C + Phase D + Phase E in outer try/except/finally ---
     # ``execution`` is bound to ``None`` before the try block so the finally
@@ -519,13 +532,18 @@ async def _run_dispatch(
         #    the source's nesting where the inner finally: runs before the outer
         #    tracker-lease release.
         # 2. Tracker-lease release SECOND — always under the leases lock.
-        if not dispatch_completed_normally:
-            await run_finally_label_cleanup(
-                spawn_ctx=spawn_ctx,
-                dispatch_id=ready.dispatch_id,
-                dispatch_sidecar_path=str(sidecar_path(ready.dispatch_id, tool_ctx.project_dir)),
-                tool_ctx=tool_ctx,
-                provenance=provenance,
-            )
-        with tool_ctx.tracker_leases_lock:
-            release_tracker_lease(tool_ctx.tracker_leases, tracker_key)
+        try:
+            if not dispatch_completed_normally:
+                await run_finally_label_cleanup(
+                    spawn_ctx=spawn_ctx,
+                    dispatch_id=ready.dispatch_id,
+                    dispatch_sidecar_path=str(
+                        sidecar_path(ready.dispatch_id, tool_ctx.project_dir)
+                    ),
+                    tool_ctx=tool_ctx,
+                    provenance=provenance,
+                )
+            with tool_ctx.tracker_leases_lock:
+                release_tracker_lease(tool_ctx.tracker_leases, tracker_key)
+        finally:
+            capacity.release(permit)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC
+from inspect import isawaitable
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -109,6 +110,16 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     Sets ready_event when complete — tools needing audit data await this event.
     """
     try:
+        service = ctx.managed_fixed_batch_service
+        if service is not None:
+            recovery_result = service.reconcile_startup()
+            if isawaitable(recovery_result):
+                recovered = await recovery_result
+                if not recovered:
+                    logger.warning(
+                        "managed_fixed_batch_recovery_blocked",
+                        extra={"reason": service.recovery_diagnostic},
+                    )
         audit_recovery = ctx.audit_admission_ledger.recover_all()
         if audit_recovery.store_health.status is not AuditAdmissionStorageHealthStatus.HEALTHY:
             logger.warning(

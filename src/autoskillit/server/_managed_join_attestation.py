@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 
 from autoskillit.core import (
     MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
@@ -20,6 +21,13 @@ class DefaultManagedJoinAttestationAuthority:
         self._activation_epoch = 0
         self._issued: dict[str, SemanticAdaptationContext] = {}
         self._lock = threading.RLock()
+        self._recovery_gate: Callable[[], bool] | None = None
+
+    def set_recovery_gate(self, recovery_gate: Callable[[], bool]) -> None:
+        """Require successful managed recovery before issue or revalidation."""
+        with self._lock:
+            self._recovery_gate = recovery_gate
+            self._issued.clear()
 
     @property
     def activation_epoch(self) -> int:
@@ -47,6 +55,8 @@ class DefaultManagedJoinAttestationAuthority:
         guards_apply: bool,
     ) -> SemanticAdaptationContext:
         with self._lock:
+            if self._recovery_gate is not None and not self._recovery_gate():
+                raise RuntimeError("managed join attestation is blocked by recovery")
             context = SemanticAdaptationContext(
                 managed_join_attestation=ManagedJoinAttestation(
                     schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
@@ -79,7 +89,8 @@ class DefaultManagedJoinAttestationAuthority:
             issued = self._issued.get(context.digest)
             attestation = context.managed_join_attestation
             if (
-                issued != context
+                (self._recovery_gate is not None and not self._recovery_gate())
+                or issued != context
                 or attestation is None
                 or attestation.backend != backend
                 or attestation.parent_session_id != parent_session_id

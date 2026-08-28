@@ -59,6 +59,26 @@ def test_managed_join_attestation_is_server_issued_and_admits_preflight() -> Non
     assert authority.verify(context, backend="codex", parent_session_id="parent-1") is None
 
 
+def test_managed_join_attestation_refuses_until_recovery_gate_is_open() -> None:
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    authority = DefaultManagedJoinAttestationAuthority()
+    authority.set_recovery_gate(lambda: False)
+
+    with pytest.raises(RuntimeError, match="blocked by recovery"):
+        authority.issue(
+            backend="codex",
+            launch_context="direct",
+            parent_session_id="parent-1",
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            fixed_batch_tool_registry_digest="a" * 64,
+            hook_registry_digest="b" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+        )
+
+
 def test_shared_backend_compat_serializes_root_refusal_as_infeasible() -> None:
     from autoskillit.core import JoinSpec, SkillSemanticPlan
     from autoskillit.execution.backends import CodexBackend

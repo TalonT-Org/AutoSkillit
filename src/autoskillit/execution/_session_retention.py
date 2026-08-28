@@ -13,7 +13,7 @@ import json
 import shutil
 from pathlib import Path
 
-from autoskillit.core import get_logger, scan_observed
+from autoskillit.core import VANISHED_ERRORS, get_logger, scan_observed
 
 logger = get_logger(__name__)
 
@@ -52,7 +52,7 @@ def apply_session_retention(
         if protected_ids:
             try:
                 meta = json.loads((entry.path / "meta.json").read_text(encoding="utf-8"))
-            except FileNotFoundError:
+            except VANISHED_ERRORS:
                 meta = {}
             except (json.JSONDecodeError, OSError) as exc:
                 logger.warning(

@@ -1108,6 +1108,39 @@ def test_retention_continues_when_a_session_directory_vanishes_during_the_sort(
     assert (sessions_dir / "session-0003").exists()
 
 
+def test_retention_treats_not_a_directory_meta_read_as_vanished(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_sessions(tmp_path, count=2, campaign_id="active-campaign")
+    sessions_dir = tmp_path / "sessions"
+    vanished_meta = sessions_dir / "session-0000" / "meta.json"
+    original_read_text = Path.read_text
+    warning_events: list[str] = []
+
+    def read_with_replaced_parent(path: Path, *args: object, **kwargs: object) -> str:
+        if path == vanished_meta:
+            raise NotADirectoryError("injected")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_with_replaced_parent)
+    monkeypatch.setattr(
+        session_retention.logger,
+        "warning",
+        lambda event, **_kwargs: warning_events.append(event),
+    )
+
+    survivors = apply_session_retention(
+        sessions_dir,
+        max_sessions=1,
+        dir_name="current-session",
+        reuse_committed_recovery=False,
+        protected_ids=frozenset({"active-campaign"}),
+    )
+
+    assert survivors == {"session-0001"}
+    assert "session_retention_meta_read_failed" not in warning_events
+
+
 def test_retention_orders_survivors_by_observed_mtime(tmp_path: Path) -> None:
     _make_sessions(tmp_path, count=3)
     sessions_dir = tmp_path / "sessions"

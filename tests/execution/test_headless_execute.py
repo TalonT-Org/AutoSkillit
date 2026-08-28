@@ -42,6 +42,7 @@ def _install_fake_sink(
     expected_log_dir: str,
     *,
     close_raises: bool,
+    evidence: dict[str, tuple[str, tuple[dict[str, object], ...]]] | None = None,
 ) -> dict[str, str]:
     sink_env = _sink_env()
 
@@ -59,6 +60,10 @@ def _install_fake_sink(
             if close_raises:
                 raise OSError("best-effort sink shutdown")
 
+        def model_evidence_for(self, session_id: str):
+            events.append(f"lookup:{session_id}")
+            return (evidence or {}).get(session_id, ("", ()))
+
     monkeypatch.setattr(execute_module, "LocalOtlpSink", FakeSink)
     return sink_env
 
@@ -74,6 +79,7 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
 ) -> None:
     import autoskillit.execution.headless._headless_execute as _execute_module
     import autoskillit.execution.session_log as _session_log
+    from autoskillit.core import ModelIdentity, SessionTelemetry
     from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import _execute_claude_headless
     from tests.execution.conftest import _launch_preparation, _mock_backend
@@ -91,11 +97,24 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
         events,
         minimal_ctx.config.linux_tracing.log_dir,
         close_raises=close_raises,
+        evidence={
+            "sess-idle-test": (
+                "gpt-5.6-sol",
+                (
+                    {
+                        "model": "claude-sonnet-5",
+                        "final_model": "claude-opus-5",
+                        "model_swapped": True,
+                    },
+                ),
+            )
+        },
     )
+    flush_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         _session_log,
         "flush_session_log",
-        lambda **_kwargs: events.append("flush"),
+        lambda **kwargs: (events.append("flush"), flush_calls.append(kwargs)),
     )
 
     def build_spec(_binding, provider_extras):
@@ -114,10 +133,23 @@ async def test_execute_overlays_sink_endpoint_and_always_closes_it(
         step_name="sink-test",
         launch_resolver=minimal_ctx.launch_resolver,
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
+        model_identity=ModelIdentity(
+            configured_model="opus",
+            effective_model="opus",
+            profile_name="",
+        ),
     )
 
     assert result.success
-    assert events == ["start", "flush", "close"]
+    assert events == ["start", "close", "lookup:sess-idle-test", "flush", "close"]
+    assert flush_calls[0]["session_id"] == "sess-idle-test"
+    resolved_identity = flush_calls[0]["model_identity"]
+    telemetry = flush_calls[0]["telemetry"]
+    assert isinstance(resolved_identity, ModelIdentity)
+    assert isinstance(telemetry, SessionTelemetry)
+    assert resolved_identity.configured_model == "opus"
+    assert resolved_identity.effective_model == "gpt-5.6-sol"
+    assert telemetry.subagent_model_outcomes[0]["model_swapped"] is True
     runner_env = runner.call_args_list[0][3]["env"]
     assert {key: runner_env[key] for key in sink_env} == sink_env
     assert os.environ == parent_environment
@@ -172,7 +204,7 @@ async def test_sink_close_failure_does_not_replace_runner_crash(
 
     assert result.subtype == "crashed"
     assert result.result.startswith("RuntimeError: runner crashed")
-    assert events == ["start", "flush", "close"]
+    assert events == ["start", "close", "lookup:", "flush", "close"]
     assert {key: runner_envs[0][key] for key in sink_env} == sink_env
     assert os.environ == parent_environment
 
@@ -295,7 +327,7 @@ async def test_sink_close_failure_does_not_replace_deferred_cancellation(
             launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
         )
 
-    assert events == ["start", "flush", "close"]
+    assert events == ["start", "close", "lookup:", "flush", "close"]
     assert {key: runner_envs[0][key] for key in sink_env} == sink_env
     assert os.environ == parent_environment
 

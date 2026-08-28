@@ -1118,11 +1118,15 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
         def close(self) -> None:
             return None
 
+        def model_evidence_for(self, _session_id: str):
+            return "", ()
+
     async def fake_runner(_cmd, **_kwargs):
         return _sr()
 
     async def fake_nudge(*_args, **kwargs):
         nudge_kwargs.update(kwargs)
+        kwargs["on_session_id_resolved"]("nudge-session")
         return None
 
     recovery_result = SkillResult(
@@ -1170,4 +1174,5 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     expected_env = {**caller_env, **sink_env}
     assert built_envs == [expected_env]
     assert nudge_kwargs["provider_extras"] == expected_env
+    assert callable(nudge_kwargs["on_session_id_resolved"])
     assert os.environ == parent_environment

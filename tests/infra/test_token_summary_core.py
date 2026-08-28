@@ -1156,8 +1156,8 @@ def test_non_anthropic_session_shows_provider_model_name(tmp_path: Path) -> None
 @pytest.mark.parametrize(
     "scenario,model_identifier,configured_model,profile_name,expected_model",
     [
-        ("anthropic", "claude-sonnet-4-6", "claude-sonnet-4-6", "", "claude-sonnet-4-6"),
-        ("non-anthropic", "MiniMax-M2.7-highspeed", "sonnet", "minimax", "MiniMax-M2.7-highspeed"),
+        ("resolved-first", "claude-sonnet-5[1m]", "opus[1m]", "", "claude-sonnet-5[1m]"),
+        ("configured-only", None, "sonnet", "anthropic", "sonnet"),
     ],
 )
 def test_reader_agreement_contract(
@@ -1175,22 +1175,19 @@ def test_reader_agreement_contract(
     kitchen_id = f"kitchen-rac-{scenario}"
     log_root = tmp_path / f"rac-logs-{scenario}"
     log_root.mkdir()
-    _write_sessions(
-        log_root,
-        [
-            {
-                "session_id": f"rac-{scenario}",
-                "dir_name": f"rac-{scenario}",
-                "timestamp": "2026-06-01T00:00:00Z",
-                "kitchen_id": kitchen_id,
-                "model_identifier": model_identifier,
-                "configured_model": configured_model,
-                "profile_name": profile_name,
-                "input_tokens": 100,
-                "output_tokens": 50,
-            },
-        ],
-    )
+    entry = {
+        "session_id": f"rac-{scenario}",
+        "dir_name": f"rac-{scenario}",
+        "timestamp": "2026-06-01T00:00:00Z",
+        "kitchen_id": kitchen_id,
+        "configured_model": configured_model,
+        "profile_name": profile_name,
+        "input_tokens": 100,
+        "output_tokens": 50,
+    }
+    if model_identifier is not None:
+        entry["model_identifier"] = model_identifier
+    _write_sessions(log_root, [entry])
 
     disk_log = DefaultTokenLog()
     disk_log.load_from_log_dir(log_root)
@@ -1204,10 +1201,6 @@ def test_reader_agreement_contract(
 
     assert disk_model == hook_model, f"readers disagree: disk={disk_model!r}, hook={hook_model!r}"
     assert disk_model == expected_model
-
-    if scenario == "non-anthropic":
-        assert not disk_model.startswith("claude-")
-        assert disk_model not in ("sonnet", "opus", "haiku")
 
 
 def test_load_sessions_handles_null_cache_write(tmp_path: Path) -> None:

@@ -32,6 +32,7 @@ _FORBIDDEN = {
     "user.account_uuid": "private-account-uuid",
     "user.id": "private-user-id",
 }
+_FIXTURE_DIR = Path(__file__).with_name("fixtures")
 
 
 @pytest.fixture
@@ -160,6 +161,49 @@ def _payload() -> dict[str, Any]:
             }
         ],
     }
+
+
+def _native_fixture(name: str) -> dict[str, Any]:
+    return json.loads((_FIXTURE_DIR / name).read_text())
+
+
+def _native_records(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    return payload["resourceLogs"][0]["scopeLogs"][0]["logRecords"]
+
+
+def _attribute(record: dict[str, Any], key: str) -> dict[str, Any]:
+    matches = [item for item in record["attributes"] if item["key"] == key]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _record_for(payload: dict[str, Any], event_name: str) -> dict[str, Any]:
+    matches = [
+        record
+        for record in _native_records(payload)
+        if _attribute(record, "event.name")["value"]["stringValue"] == event_name
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _set_string(record: dict[str, Any], key: str, value: str) -> None:
+    _attribute(record, key)["value"] = {"stringValue": value}
+
+
+def _remove_attribute(record: dict[str, Any], key: str) -> None:
+    record["attributes"] = [item for item in record["attributes"] if item["key"] != key]
+
+
+def _post_native_logs(sink: Any, payload: dict[str, Any]) -> None:
+    status, _, response = _request(
+        sink,
+        "POST",
+        "/v1/logs",
+        json.dumps(payload).encode(),
+        {"Content-Type": "application/json"},
+    )
+    assert (status, response) == (200, {})
 
 
 @pytest.mark.parametrize(("signal", "path"), _SIGNALS)
@@ -294,6 +338,416 @@ def test_native_log_id_joins_authoritative_session_record(
         assert persisted_record["observedTimeUnixNano"] == "1787770000000000001"
     else:
         assert "claude_code" in persisted_scope["scope"]["name"]
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "configured_alias", "native_id_key", "session_id", "resolved_model"),
+    (
+        (
+            "claude_native_model_evidence.json",
+            "sonnet",
+            "session.id",
+            "claude-session-sentinel",
+            "claude-sonnet-5",
+        ),
+        (
+            "claude_native_model_evidence.json",
+            "opus[1m]",
+            "session.id",
+            "claude-session-sentinel",
+            "claude-opus-5[1m]",
+        ),
+        (
+            "codex_native_model_evidence.json",
+            "opus",
+            "conversation.id",
+            "codex-conversation-sentinel",
+            "gpt-5.6-sol",
+        ),
+    ),
+)
+def test_native_fixture_projects_verbatim_parent_and_fixture_proven_outcome(
+    local_sink: Any,
+    tmp_path: Path,
+    fixture_name: str,
+    configured_alias: str,
+    native_id_key: str,
+    session_id: str,
+    resolved_model: str,
+) -> None:
+    payload = _native_fixture(fixture_name)
+    parent_event = (
+        "api_request" if fixture_name.startswith("claude") else "codex.conversation_starts"
+    )
+    parent_record = (
+        _native_records(payload)[0]
+        if parent_event == "api_request"
+        else _record_for(payload, parent_event)
+    )
+    _set_string(parent_record, "model", resolved_model)
+    if fixture_name.startswith("codex"):
+        _set_string(parent_record, "slug", resolved_model)
+
+    _post_native_logs(local_sink, payload)
+
+    expected_outcomes: tuple[dict[str, Any], ...] = ()
+    if fixture_name.startswith("claude"):
+        expected_outcomes = (
+            {
+                "model": "claude-child-model-sentinel",
+                "final_model": "claude-child-final-model-sentinel",
+                "model_swapped": True,
+            },
+        )
+    assert configured_alias != resolved_model
+    assert local_sink.model_evidence_for(session_id) == (
+        resolved_model,
+        expected_outcomes,
+    )
+    assert local_sink.model_evidence_for("unrelated-session") == ("", ())
+    persisted = _wait_for_records(tmp_path / "otlp.jsonl", 1)
+    assert len(persisted) == 1
+    persisted_records = _native_records(persisted[0]["payload"])
+    assert _attribute(persisted_records[0], native_id_key)["value"]["stringValue"] == (session_id)
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "selected_key", "other_key", "selected_id"),
+    (
+        (
+            "claude_native_model_evidence.json",
+            "session.id",
+            "conversation.id",
+            "claude-session-sentinel",
+        ),
+        (
+            "codex_native_model_evidence.json",
+            "conversation.id",
+            "session.id",
+            "codex-conversation-sentinel",
+        ),
+    ),
+)
+def test_native_fixture_backend_key_wins_when_both_native_ids_are_present(
+    local_sink: Any,
+    fixture_name: str,
+    selected_key: str,
+    other_key: str,
+    selected_id: str,
+) -> None:
+    payload = _native_fixture(fixture_name)
+    for record in _native_records(payload):
+        record["attributes"].append(
+            {"key": other_key, "value": {"stringValue": "other-native-id"}}
+        )
+
+    _post_native_logs(local_sink, payload)
+
+    parent, outcomes = local_sink.model_evidence_for(selected_id)
+    assert parent.endswith("model-sentinel")
+    if fixture_name.startswith("claude"):
+        assert outcomes
+    else:
+        assert outcomes == ()
+    assert local_sink.model_evidence_for("other-native-id") == ("", ())
+    assert selected_key != other_key
+
+
+@pytest.mark.parametrize(
+    "malformation",
+    (
+        "missing_session",
+        "empty_discriminator",
+        "missing_discriminator",
+        "duplicate_discriminator",
+        "duplicate_session",
+        "duplicate_model",
+        "child_discriminator_on_parent",
+        "unrecognized_event",
+        "unrecognized_scope",
+    ),
+)
+def test_malformed_or_ambiguous_claude_parent_is_raw_only(
+    local_sink: Any, tmp_path: Path, malformation: str
+) -> None:
+    payload = _native_fixture("claude_native_model_evidence.json")
+    record = _native_records(payload)[0]
+    _native_records(payload)[:] = [record]
+    if malformation == "missing_session":
+        _remove_attribute(record, "session.id")
+    elif malformation == "empty_discriminator":
+        _set_string(record, "query_source", "")
+    elif malformation == "missing_discriminator":
+        _remove_attribute(record, "query_source")
+    elif malformation == "duplicate_discriminator":
+        record["attributes"].append({"key": "query_source", "value": {"stringValue": "sdk"}})
+    elif malformation == "duplicate_session":
+        record["attributes"].append(
+            {"key": "session.id", "value": {"stringValue": "conflicting-session"}}
+        )
+    elif malformation == "duplicate_model":
+        record["attributes"].append(
+            {"key": "model", "value": {"stringValue": "conflicting-model"}}
+        )
+    elif malformation == "child_discriminator_on_parent":
+        record["attributes"].append(
+            {"key": "agent.name", "value": {"stringValue": "general-purpose"}}
+        )
+    elif malformation == "unrecognized_event":
+        _set_string(record, "event.name", "assistant_response")
+    else:
+        payload["resourceLogs"][0]["scopeLogs"][0]["scope"]["name"] = "other.scope"
+
+    _post_native_logs(local_sink, payload)
+
+    assert local_sink.model_evidence_for("claude-session-sentinel") == ("", ())
+    assert len(_wait_for_records(tmp_path / "otlp.jsonl", 1)) == 1
+
+
+@pytest.mark.parametrize(
+    "malformation",
+    (
+        "missing_session",
+        "empty_discriminator",
+        "duplicate_discriminator",
+        "duplicate_session",
+        "duplicate_model",
+        "unrecognized_event",
+        "unrecognized_scope",
+    ),
+)
+def test_malformed_or_ambiguous_codex_parent_is_raw_only(
+    local_sink: Any, tmp_path: Path, malformation: str
+) -> None:
+    payload = _native_fixture("codex_native_model_evidence.json")
+    record = _record_for(payload, "codex.conversation_starts")
+    if malformation == "missing_session":
+        _remove_attribute(record, "conversation.id")
+    elif malformation == "empty_discriminator":
+        _set_string(record, "originator", "")
+    elif malformation == "duplicate_discriminator":
+        record["attributes"].append({"key": "originator", "value": {"stringValue": "codex_exec"}})
+    elif malformation == "duplicate_session":
+        record["attributes"].append(
+            {"key": "conversation.id", "value": {"stringValue": "conflict"}}
+        )
+    elif malformation == "duplicate_model":
+        record["attributes"].append({"key": "model", "value": {"stringValue": "conflict"}})
+    elif malformation == "unrecognized_event":
+        _set_string(record, "event.name", "codex.sse_event")
+    else:
+        payload["resourceLogs"][0]["scopeLogs"][0]["scope"]["name"] = "codex_otel"
+
+    _post_native_logs(local_sink, payload)
+
+    assert local_sink.model_evidence_for("codex-conversation-sentinel") == ("", ())
+    assert len(_wait_for_records(tmp_path / "otlp.jsonl", 1)) == 1
+
+
+@pytest.mark.parametrize(
+    "malformation",
+    (
+        "missing_child_key",
+        "missing_model",
+        "missing_final_model",
+        "missing_swapped",
+        "duplicate_child_key",
+        "duplicate_model",
+        "duplicate_final_model",
+        "duplicate_swapped",
+        "wrong_swapped_type",
+        "unrecognized_event",
+    ),
+)
+def test_incomplete_or_ambiguous_completion_is_raw_only(
+    local_sink: Any, tmp_path: Path, malformation: str
+) -> None:
+    payload = _native_fixture("claude_native_model_evidence.json")
+    record = _record_for(payload, "subagent_completed")
+    _native_records(payload)[:] = [record]
+    field = {
+        "missing_child_key": "agent_type",
+        "missing_model": "model",
+        "missing_final_model": "final_model",
+        "missing_swapped": "model_swapped",
+    }.get(malformation)
+    if field is not None:
+        _remove_attribute(record, field)
+    elif malformation.startswith("duplicate_"):
+        duplicate_key = {
+            "duplicate_child_key": "agent_type",
+            "duplicate_model": "model",
+            "duplicate_final_model": "final_model",
+            "duplicate_swapped": "model_swapped",
+        }[malformation]
+        record["attributes"].append(json.loads(json.dumps(_attribute(record, duplicate_key))))
+    elif malformation == "wrong_swapped_type":
+        _attribute(record, "model_swapped")["value"] = {"stringValue": "true"}
+    else:
+        _set_string(record, "event.name", "tool_result")
+
+    _post_native_logs(local_sink, payload)
+
+    assert local_sink.model_evidence_for("claude-session-sentinel") == ("", ())
+    assert len(_wait_for_records(tmp_path / "otlp.jsonl", 1)) == 1
+
+
+@pytest.mark.parametrize("path", ("/v1/metrics", "/v1/traces"))
+def test_non_log_signals_remain_raw_without_model_projection(
+    local_sink: Any, tmp_path: Path, path: str
+) -> None:
+    payload = _native_fixture("claude_native_model_evidence.json")
+    status, _, response = _request(
+        local_sink,
+        "POST",
+        path,
+        json.dumps(payload).encode(),
+        {"Content-Type": "application/json"},
+    )
+
+    assert (status, response) == (200, {})
+    assert local_sink.model_evidence_for("claude-session-sentinel") == ("", ())
+    assert len(_wait_for_records(tmp_path / "otlp.jsonl", 1)) == 1
+
+
+def test_model_evidence_lookup_states_and_post_close_snapshot(tmp_path: Path) -> None:
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    assert LocalOtlpSink().model_evidence_for("never-started") == ("", ())
+
+    outcomes_only = LocalOtlpSink.start(str(tmp_path / "outcomes-only"))
+    outcomes_payload = _native_fixture("claude_native_model_evidence.json")
+    completion = _record_for(outcomes_payload, "subagent_completed")
+    _native_records(outcomes_payload)[:] = [completion]
+    try:
+        _post_native_logs(outcomes_only, outcomes_payload)
+        assert outcomes_only.model_evidence_for("claude-session-sentinel") == (
+            "",
+            (
+                {
+                    "model": "claude-child-model-sentinel",
+                    "final_model": "claude-child-final-model-sentinel",
+                    "model_swapped": True,
+                },
+            ),
+        )
+    finally:
+        outcomes_only.close()
+
+    parent_only = LocalOtlpSink.start(str(tmp_path / "parent-only"))
+    parent_payload = _native_fixture("codex_native_model_evidence.json")
+    try:
+        _post_native_logs(parent_only, parent_payload)
+        assert parent_only.model_evidence_for("codex-conversation-sentinel") == (
+            "codex-parent-model-sentinel",
+            (),
+        )
+        parent_only.close()
+        assert parent_only.model_evidence_for("codex-conversation-sentinel") == (
+            "codex-parent-model-sentinel",
+            (),
+        )
+    finally:
+        parent_only.close()
+
+
+def test_projection_capacity_retains_earliest_sessions_without_raw_drops(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution.otlp_sink as otlp_sink
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    monkeypatch.setattr(otlp_sink, "_MODEL_EVIDENCE_SESSION_CAPACITY", 2)
+    sink = LocalOtlpSink.start(str(tmp_path))
+    try:
+        for index in range(3):
+            payload = _native_fixture("codex_native_model_evidence.json")
+            record = _record_for(payload, "codex.conversation_starts")
+            _set_string(record, "conversation.id", f"session-{index}")
+            _set_string(record, "model", f"model-{index}")
+            _set_string(record, "slug", f"model-{index}")
+            _post_native_logs(sink, payload)
+        later_parent = _native_fixture("codex_native_model_evidence.json")
+        later_record = _record_for(later_parent, "codex.conversation_starts")
+        _set_string(later_record, "conversation.id", "session-0")
+        _set_string(later_record, "model", "later-model")
+        _set_string(later_record, "slug", "later-model")
+        _post_native_logs(sink, later_parent)
+
+        assert sink.model_evidence_for("session-0") == ("model-0", ())
+        assert sink.model_evidence_for("session-1") == ("model-1", ())
+        assert sink.model_evidence_for("session-2") == ("", ())
+        assert len(_wait_for_records(tmp_path / "otlp.jsonl", 4)) == 4
+    finally:
+        sink.close()
+
+
+def test_outcome_capacity_retains_earliest_accepted_completions(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution.otlp_sink as otlp_sink
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    monkeypatch.setattr(otlp_sink, "_MODEL_EVIDENCE_OUTCOME_CAPACITY", 2)
+    sink = LocalOtlpSink.start(str(tmp_path))
+    try:
+        for index in range(3):
+            payload = _native_fixture("claude_native_model_evidence.json")
+            completion = _record_for(payload, "subagent_completed")
+            _native_records(payload)[:] = [completion]
+            _set_string(completion, "model", f"child-{index}")
+            _set_string(completion, "final_model", f"final-{index}")
+            _post_native_logs(sink, payload)
+
+        assert sink.model_evidence_for("claude-session-sentinel") == (
+            "",
+            (
+                {"model": "child-0", "final_model": "final-0", "model_swapped": True},
+                {"model": "child-1", "final_model": "final-1", "model_swapped": True},
+            ),
+        )
+        assert len(_wait_for_records(tmp_path / "otlp.jsonl", 3)) == 3
+    finally:
+        sink.close()
+
+
+def test_queue_full_and_shutdown_rejections_do_not_project_observations(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import autoskillit.execution.otlp_sink as otlp_sink
+    from autoskillit.execution.otlp_sink import LocalOtlpSink
+
+    monkeypatch.setattr(otlp_sink, "_QUEUE_CAPACITY", 1)
+    writer_entered = threading.Event()
+    release_writer = threading.Event()
+
+    def pause_writer(_sink: LocalOtlpSink, _line: bytes) -> None:
+        writer_entered.set()
+        assert release_writer.wait(2)
+
+    monkeypatch.setattr(LocalOtlpSink, "_persist_line", pause_writer)
+    sink = LocalOtlpSink.start(str(tmp_path))
+    try:
+        assert sink._enqueue(b"first\n") == "accepted"
+        assert writer_entered.wait(1)
+        assert (
+            sink._enqueue(b"second\n", (("accepted-session", "accepted-model", None),))
+            == "accepted"
+        )
+        assert (
+            sink._enqueue(b"third\n", (("queue-full-session", "not-retained", None),))
+            == "queue_full"
+        )
+        assert sink.model_evidence_for("accepted-session") == ("accepted-model", ())
+        assert sink.model_evidence_for("queue-full-session") == ("", ())
+    finally:
+        release_writer.set()
+        sink.close()
+    assert (
+        sink._enqueue(b"after-close\n", (("shutdown-session", "not-retained", None),))
+        == "shutdown"
+    )
+    assert sink.model_evidence_for("shutdown-session") == ("", ())
 
 
 def test_accepts_bounded_gzip_json_and_sanitizes_it(local_sink: Any, tmp_path: Path) -> None:
@@ -622,6 +1076,7 @@ def test_startup_failure_returns_disabled_sink_and_partial_start_releases_port(
     monkeypatch.setattr(LocalOtlpSink, "_server_class", FailingServer)
     disabled = LocalOtlpSink.start(str(tmp_path / "bind-failure"))
     assert disabled.env == {}
+    assert disabled.model_evidence_for("failed-start") == ("", ())
     disabled.close()
 
     created_servers: list[_OtlpHTTPServer] = []
@@ -645,6 +1100,7 @@ def test_startup_failure_returns_disabled_sink_and_partial_start_releases_port(
     monkeypatch.setattr(otlp_sink.threading.Thread, "start", fail_second_thread_start)
     partial = LocalOtlpSink.start(str(tmp_path / "partial-start"))
     assert partial.env == {}
+    assert partial.model_evidence_for("partial-start") == ("", ())
     assert created_servers
     assert partial._writer_thread is not None
     assert not partial._writer_thread.is_alive()

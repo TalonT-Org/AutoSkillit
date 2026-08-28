@@ -15,6 +15,7 @@ from typing import Any, ClassVar, cast
 from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
+    SubagentModelOutcomeDict,
     atomic_write,
     get_logger,
 )
@@ -26,10 +27,14 @@ _MAX_ENCODED_REQUEST_BYTES = 20 * 1024 * 1024
 _MAX_DECODED_REQUEST_BYTES = 20 * 1024 * 1024
 _MAX_GENERATION_BYTES = 20 * 1024 * 1024
 _QUEUE_CAPACITY = 128
+_MODEL_EVIDENCE_SESSION_CAPACITY = 256
+_MODEL_EVIDENCE_OUTCOME_CAPACITY = 64
 _HANDLER_DRAIN_SECONDS = 1.0
 _THREAD_JOIN_SECONDS = 2.0
 _WRITER_POLL_SECONDS = 0.05
 _SENTINEL = object()
+
+_ModelObservation = tuple[str, str, SubagentModelOutcomeDict | None]
 
 _SIGNALS = {
     "/v1/metrics": "metrics",
@@ -131,6 +136,113 @@ def _build_env(base_url: str) -> dict[str, str]:
             }
         )
     return env
+
+
+def _record_attributes(record: object) -> list[object] | None:
+    if not isinstance(record, dict):
+        return None
+    attributes = record.get("attributes")
+    return attributes if isinstance(attributes, list) else None
+
+
+def _unique_string_attribute(attributes: list[object], key: str) -> str | None:
+    matches = [item for item in attributes if isinstance(item, dict) and item.get("key") == key]
+    if len(matches) != 1:
+        return None
+    value = matches[0].get("value")
+    if not isinstance(value, dict):
+        return None
+    scalar = value.get("stringValue")
+    return scalar if isinstance(scalar, str) and scalar else None
+
+
+def _unique_bool_attribute(attributes: list[object], key: str) -> bool | None:
+    matches = [item for item in attributes if isinstance(item, dict) and item.get("key") == key]
+    if len(matches) != 1:
+        return None
+    value = matches[0].get("value")
+    if not isinstance(value, dict):
+        return None
+    scalar = value.get("boolValue")
+    return scalar if isinstance(scalar, bool) else None
+
+
+def _has_attribute(attributes: list[object], key: str) -> bool:
+    return any(isinstance(item, dict) and item.get("key") == key for item in attributes)
+
+
+def _model_observations(signal: str, payload: object) -> tuple[_ModelObservation, ...]:
+    if signal != "logs" or not isinstance(payload, dict):
+        return ()
+    resource_logs = payload.get("resourceLogs")
+    if not isinstance(resource_logs, list):
+        return ()
+
+    observations: list[_ModelObservation] = []
+    for resource_log in resource_logs:
+        if not isinstance(resource_log, dict):
+            continue
+        scope_logs = resource_log.get("scopeLogs")
+        if not isinstance(scope_logs, list):
+            continue
+        for scope_log in scope_logs:
+            if not isinstance(scope_log, dict):
+                continue
+            scope = scope_log.get("scope")
+            scope_name = scope.get("name") if isinstance(scope, dict) else None
+            records = scope_log.get("logRecords")
+            if not isinstance(scope_name, str) or not isinstance(records, list):
+                continue
+            for record in records:
+                attributes = _record_attributes(record)
+                if attributes is None:
+                    continue
+                event_name = _unique_string_attribute(attributes, "event.name")
+                if scope_name == "com.anthropic.claude_code.events":
+                    if event_name == "api_request":
+                        session_id = _unique_string_attribute(attributes, "session.id")
+                        model = _unique_string_attribute(attributes, "model")
+                        query_source = _unique_string_attribute(attributes, "query_source")
+                        if (
+                            session_id
+                            and model
+                            and query_source == "sdk"
+                            and not _has_attribute(attributes, "agent.name")
+                        ):
+                            observations.append((session_id, model, None))
+                    elif event_name == "subagent_completed":
+                        session_id = _unique_string_attribute(attributes, "session.id")
+                        child_key = _unique_string_attribute(attributes, "agent_type")
+                        model = _unique_string_attribute(attributes, "model")
+                        final_model = _unique_string_attribute(attributes, "final_model")
+                        model_swapped = _unique_bool_attribute(attributes, "model_swapped")
+                        if (
+                            session_id
+                            and child_key
+                            and model
+                            and final_model
+                            and model_swapped is not None
+                        ):
+                            observations.append(
+                                (
+                                    session_id,
+                                    "",
+                                    {
+                                        "model": model,
+                                        "final_model": final_model,
+                                        "model_swapped": model_swapped,
+                                    },
+                                )
+                            )
+                elif scope_name == "codex_otel.log_only" and event_name == (
+                    "codex.conversation_starts"
+                ):
+                    session_id = _unique_string_attribute(attributes, "conversation.id")
+                    model = _unique_string_attribute(attributes, "model")
+                    originator = _unique_string_attribute(attributes, "originator")
+                    if session_id and model and originator == "codex_exec":
+                        observations.append((session_id, model, None))
+    return tuple(observations)
 
 
 class _OtlpHTTPServer(ThreadingHTTPServer):
@@ -247,15 +359,17 @@ class _OtlpHandler(BaseHTTPRequestHandler):
             self._send_status(400, "Malformed UTF-8 JSON request body")
             return
 
+        sanitized_payload = _sanitize(payload)
         line = (
             json.dumps(
-                {"signal": signal, "payload": _sanitize(payload)},
+                {"signal": signal, "payload": sanitized_payload},
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode("utf-8")
             + b"\n"
         )
-        enqueue_status = sink._enqueue(line)
+        observations = _model_observations(signal, sanitized_payload)
+        enqueue_status = sink._enqueue(line, observations)
         if enqueue_status == "queue_full":
             self._send_status(503, "OTLP receiver queue is full")
             return
@@ -318,6 +432,15 @@ class LocalOtlpSink:
         self._enqueue_allowed = False
         self._writer_stop = False
         self._sentinel_inserted = False
+        self._started_successfully = False
+        self._acceptance_ordinal = 0
+        self._model_evidence: dict[
+            str,
+            tuple[
+                tuple[int, str] | None,
+                list[tuple[int, SubagentModelOutcomeDict]],
+            ],
+        ] = {}
         self._counters = {name: 0 for name in _COUNTER_NAMES}
 
     @classmethod
@@ -355,6 +478,7 @@ class LocalOtlpSink:
             with sink._condition:
                 sink._enqueue_allowed = True
                 sink._enabled = True
+                sink._started_successfully = True
             return sink
         except Exception:
             logger.debug("local_otlp_sink_start_failed", exc_info=True)
@@ -404,7 +528,11 @@ class LocalOtlpSink:
             self._active_handlers -= 1
             self._condition.notify_all()
 
-    def _enqueue(self, line: bytes) -> str:
+    def _enqueue(
+        self,
+        line: bytes,
+        observations: tuple[_ModelObservation, ...] = (),
+    ) -> str:
         with self._condition:
             self._counters["received"] += 1
             if not self._enqueue_allowed:
@@ -415,7 +543,44 @@ class LocalOtlpSink:
             except queue.Full:
                 self._counters["dropped_queue_full"] += 1
                 return "queue_full"
+            for session_id, parent_model, outcome in observations:
+                self._acceptance_ordinal += 1
+                ordinal = self._acceptance_ordinal
+                retained = self._model_evidence.get(session_id)
+                if retained is None:
+                    if len(self._model_evidence) >= _MODEL_EVIDENCE_SESSION_CAPACITY:
+                        continue
+                    retained = (None, [])
+                    self._model_evidence[session_id] = retained
+                parent, outcomes = retained
+                if parent_model and parent is None:
+                    parent = (ordinal, parent_model)
+                    self._model_evidence[session_id] = (parent, outcomes)
+                if outcome is not None and len(outcomes) < _MODEL_EVIDENCE_OUTCOME_CAPACITY:
+                    outcomes.append((ordinal, outcome))
             return "accepted"
+
+    def model_evidence_for(
+        self,
+        session_id: str,
+    ) -> tuple[str, tuple[SubagentModelOutcomeDict, ...]]:
+        with self._condition:
+            if not self._started_successfully or not session_id:
+                return "", ()
+            retained = self._model_evidence.get(session_id)
+            if retained is None:
+                return "", ()
+            parent, outcomes = retained
+            parent_model = parent[1] if parent is not None else ""
+            outcome_snapshot: tuple[SubagentModelOutcomeDict, ...] = tuple(
+                {
+                    "model": outcome["model"],
+                    "final_model": outcome["final_model"],
+                    "model_swapped": outcome["model_swapped"],
+                }
+                for _ordinal, outcome in sorted(outcomes, key=lambda item: item[0])
+            )
+            return parent_model, outcome_snapshot
 
     def _increment(self, counter: str) -> None:
         with self._condition:

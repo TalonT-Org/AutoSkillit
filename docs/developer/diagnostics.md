@@ -101,6 +101,19 @@ L0 leaves do not create AutoSkillit session rows, and interactive CLI sessions
 remain outside this headless-only field. See the authoritative
 [orchestration-level mapping](../orchestration-levels.md).
 
+Schema-v9 rows add `subagent_model_outcomes`. Existing v8 rows are retained
+unchanged and omit that field; consumers interpret an omitted value as an empty
+list. New writes use v9, and mixed retained v8/v9 rows require neither a rewrite
+nor a version-specific reader.
+
+Model fields distinguish effective identity from launch provenance.
+`model_identifier` is the fixture-proven native top-level model when that
+evidence is available, otherwise the existing launch/token fallback;
+`configured_model` remains the requested launch value. Both are top-level fields
+in `sessions.jsonl` and `token_usage.json`. When a versions bundle exists,
+`summary.json.versions.model_identifier` records the same effective identity;
+`configured_model` is not written to `summary.json`.
+
 ## Native OTLP capture and correlation
 
 Headless execution enables vendor-native logs and metrics against one

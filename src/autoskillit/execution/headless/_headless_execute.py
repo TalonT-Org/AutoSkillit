@@ -289,7 +289,19 @@ async def _execute_claude_headless(
     lifecycle_observation_enabled = bool(skill_command) and (
         _step_backend.capabilities.supports_task_lifecycle_events
     )
-    lineage_callbacks = _LineageCallbacks(managed_lineage_observer, on_session_id_resolved)
+    last_resolved_session_id = ""
+
+    def capture_resolved_session_id(candidate: str) -> None:
+        nonlocal last_resolved_session_id
+        if candidate:
+            last_resolved_session_id = candidate
+        if on_session_id_resolved is not None:
+            on_session_id_resolved(candidate)
+
+    lineage_callbacks = _LineageCallbacks(
+        managed_lineage_observer,
+        capture_resolved_session_id,
+    )
     launch_logged = False
     spec: CmdSpec | None = None
     current_launch_contract: ResolvedLaunchContract | None = None
@@ -456,6 +468,7 @@ async def _execute_claude_headless(
                         launch_preparation=launch_preparation,
                         expected_launch_contract=resume_launch_contract,
                         on_launch_resolved=observe_launch,
+                        on_session_id_resolved=capture_resolved_session_id,
                         natural_exit_grace_seconds=natural_exit_grace_seconds,
                         **lineage_callbacks.attempt_kwargs,
                     )
@@ -517,6 +530,24 @@ async def _execute_claude_headless(
             _step_backend,
             execution_identity,
         )
+        try:
+            with anyio.CancelScope(shield=True):
+                sink.close()
+        except Exception:
+            logger.debug("local_otlp_sink_close_failed", exc_info=True)
+        evidence_session_id = skill_result.session_id or last_resolved_session_id
+        try:
+            resolved_parent_model, subagent_model_outcomes = sink.model_evidence_for(
+                evidence_session_id
+            )
+        except Exception:
+            logger.debug("local_otlp_sink_model_evidence_failed", exc_info=True)
+            resolved_parent_model, subagent_model_outcomes = "", ()
+        resolved_model_identity = (
+            dataclasses.replace(model_identity, effective_model=resolved_parent_model)
+            if resolved_parent_model
+            else model_identity
+        )
         provider_outcome = ProviderOutcome(
             provider_used=current_provider_name,
             fallback_activated=fallback_activated,
@@ -550,7 +581,7 @@ async def _execute_claude_headless(
                     order_id=order_id,
                     loc_insertions=_metrics.loc_insertions,
                     loc_deletions=_metrics.loc_deletions,
-                    model=model_identity.effective_model,
+                    model=resolved_model_identity.effective_model,
                 )
             except Exception:
                 logger.debug("token_log_record_failed", exc_info=True)
@@ -561,16 +592,19 @@ async def _execute_claude_headless(
                 github_api_log=ctx.github_api_log,
                 loc_insertions=_metrics.loc_insertions,
                 loc_deletions=_metrics.loc_deletions,
+                session_id=evidence_session_id,
+                subagent_model_outcomes=subagent_model_outcomes,
                 step_name=step_name,
                 order_id=order_id,
             )
         else:
             terminal_telemetry = _build_error_path_telemetry(
                 ctx.github_api_log,
-                session_id="",
+                session_id=evidence_session_id,
                 step_name=step_name,
                 order_id=order_id,
                 execution_identity=skill_result.execution_identity,
+                subagent_model_outcomes=subagent_model_outcomes,
             )
 
         skill_result = dataclasses.replace(
@@ -595,7 +629,7 @@ async def _execute_claude_headless(
                 "dispatch_id": dispatch_id,
                 "project_dir": project_dir,
                 "build_protected_campaign_ids": ctx.build_protected_campaign_ids,
-                "session_id": skill_result.session_id if result is not None else "",
+                "session_id": evidence_session_id,
                 "pid": result.pid if result is not None else 0,
                 "skill_command": skill_command,
                 "success": skill_result.success,
@@ -611,7 +645,7 @@ async def _execute_claude_headless(
                 "provider_outcome": provider_outcome,
                 "recipe_identity": recipe_identity,
                 "max_sessions": ctx.config.linux_tracing.max_sessions,
-                "model_identity": model_identity,
+                "model_identity": resolved_model_identity,
                 "backend": cast(Literal["claude-code", "codex"], _step_backend.name),
                 "channel_b_capable": _step_backend.capabilities.channel_b_capable,
                 "comm_aliases": _step_backend.capabilities.process_name_aliases,

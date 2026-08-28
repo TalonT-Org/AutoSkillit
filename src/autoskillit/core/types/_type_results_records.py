@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from ._type_execution_identity import ChildExecutionIdentityDict
+from ._type_results_execution import SubagentModelOutcomeDict
 
 __all__ = [
     "CapturedStream",
@@ -288,4 +289,5 @@ class SessionIndexEntry(TypedDict):
     outcome_qualifier: str | None
     native_shell_capture: dict[str, object] | None
     session_type: str | None
+    subagent_model_outcomes: list[SubagentModelOutcomeDict]
     schema_version: int

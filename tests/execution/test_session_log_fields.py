@@ -85,7 +85,7 @@ def test_execution_identity_reaches_summary_and_schema_8_index(tmp_path):
 
     assert summary["execution_identity"] == identity.to_dict()
     assert summary["session_type"] == "skill"
-    assert entry["schema_version"] == 8
+    assert entry["schema_version"] == 9
     assert entry["session_type"] == "skill"
     assert entry["child_executions"] == [identity.children[0].to_dict()]
     assert entry["backend_override_tier"] == "recipe_step"
@@ -433,6 +433,7 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
         github_api_requests=0,
         loc_insertions=0,
         loc_deletions=0,
+        subagent_model_outcomes=(),
     )
     flush_session_log(
         log_dir=str(tmp_path),
@@ -785,6 +786,71 @@ def test_summary_json_versions_includes_model_identifier(tmp_path):
     _flush(tmp_path, session_id="vs-002", versions=_VERSIONS, model_identifier="claude-opus-4")
     summary = json.loads((tmp_path / "sessions" / "vs-002" / "summary.json").read_text())
     assert summary["versions"]["model_identifier"] == "claude-opus-4"
+
+
+def test_resolved_model_and_subagent_outcomes_are_consistent_across_artifacts(tmp_path):
+    outcome = {
+        "model": "claude-sonnet-5",
+        "final_model": "claude-opus-5",
+        "model_swapped": True,
+    }
+    _flush(
+        tmp_path,
+        session_id="resolved-model",
+        step_name="implement",
+        versions=_VERSIONS,
+        model_identity=ModelIdentity(
+            configured_model="opus",
+            effective_model="gpt-5.6-sol",
+            profile_name="",
+        ),
+        token_usage={"input_tokens": 10, "output_tokens": 5},
+        subagent_model_outcomes=(outcome,),
+        proc_snapshots=None,
+    )
+
+    session_dir = tmp_path / "sessions" / "resolved-model"
+    summary = json.loads((session_dir / "summary.json").read_text())
+    token_usage = json.loads((session_dir / "token_usage.json").read_text())
+    index_entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+
+    assert summary["versions"]["model_identifier"] == "gpt-5.6-sol"
+    assert token_usage["model_identifier"] == "gpt-5.6-sol"
+    assert token_usage["configured_model"] == "opus"
+    assert index_entry["model_identifier"] == "gpt-5.6-sol"
+    assert index_entry["configured_model"] == "opus"
+    assert index_entry["subagent_model_outcomes"] == [outcome]
+
+
+def test_appending_v9_row_preserves_retained_v8_row_bytes(tmp_path):
+    _flush(tmp_path, session_id="retained-v8", proc_snapshots=None)
+    index_path = tmp_path / "sessions.jsonl"
+    retained = json.loads(index_path.read_text().strip())
+    retained["schema_version"] = 8
+    retained.pop("subagent_model_outcomes")
+    retained_line = json.dumps(retained, sort_keys=True, separators=(",", ":"))
+    index_path.write_text(retained_line + "\n")
+
+    _flush(
+        tmp_path,
+        session_id="new-v9",
+        subagent_model_outcomes=(
+            {
+                "model": "claude-sonnet-5",
+                "final_model": "claude-sonnet-5",
+                "model_swapped": False,
+            },
+        ),
+        proc_snapshots=None,
+    )
+
+    lines = index_path.read_text().splitlines()
+    assert lines[0] == retained_line
+    old_row, new_row = map(json.loads, lines)
+    assert old_row["schema_version"] == 8
+    assert "subagent_model_outcomes" not in old_row
+    assert new_row["schema_version"] == 9
+    assert new_row["subagent_model_outcomes"][0]["model"] == "claude-sonnet-5"
 
 
 def test_summary_json_omits_versions_when_not_passed(tmp_path):

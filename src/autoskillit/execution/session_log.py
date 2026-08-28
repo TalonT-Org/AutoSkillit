@@ -216,6 +216,7 @@ def flush_session_log(
     audit_record = telemetry.audit_record
     loc_insertions = telemetry.loc_insertions
     loc_deletions = telemetry.loc_deletions
+    subagent_model_outcomes = telemetry.subagent_model_outcomes
     effective_write_path_warnings: list[str] = (
         write_path_warnings if write_path_warnings is not None else []
     )
@@ -692,10 +693,11 @@ def flush_session_log(
             "outcome_qualifier": outcome_qualifier,
             "native_shell_capture": native_shell_capture_projection,
             "session_type": session_type_value,
+            "subagent_model_outcomes": list(subagent_model_outcomes),
             "model_identifier": effective_model_id,
             "configured_model": model_identity.configured_model,
             "profile_name": model_identity.profile_name,
-            "schema_version": 8,
+            "schema_version": 9,
         }
         index_path = log_root / "sessions.jsonl"
         archive_path = log_root / "sessions-archive.jsonl"

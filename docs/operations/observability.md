@@ -123,13 +123,27 @@ directory. Startup, request, queue, persistence, and shutdown failures remain
 diagnostic-only and cannot change the headless result.
 
 The sink accepts the native log, metric, and trace OTLP paths, but AutoSkillit
-activates only the stable native log and metric exporters. It writes the
-PII-scrubbed vendor payload without normalization to `otlp.jsonl`, rotating one
-20 MiB generation to `otlp.jsonl.1`. No collector, daemon, telemetry database,
-or additional package is required.
+activates only the stable native log and metric exporters. Each `otlp.jsonl`
+record wraps the PII-scrubbed vendor-native payload as `{"signal", "payload"}`
+without normalizing its nested structure, rotating one 20 MiB generation to
+`otlp.jsonl.1`. No collector, daemon, telemetry database, or additional package
+is required.
 
-`sessions.jsonl` remains the retained committed-session projection. It is not a
-joined telemetry index.
+The local sink derives its model projection only from accepted Claude Code and
+Codex OTLP `/v1/logs` batches; it never reads Codex rollout JSONL. Raw metrics
+and traces remain captured but do not feed the projection. Candidate parsing
+occurs outside the queue lock, and projection mutation follows successful queue
+admission. Within explicit session and outcome bounds, the earliest accepted
+valid evidence wins. Those bounds do not change raw queue admission or
+persistence behavior; excess observations remain subject to the existing
+bounded write, failure, and rotation policy and are not guaranteed retained.
+
+After terminal execution, the best-effort lifecycle drains the sink, reads the
+retained snapshot, and then flushes diagnostics. Shutdown or persistence
+failures cannot replace the terminal result. `sessions.jsonl` remains the
+retained committed-session projection, not a general-purpose or raw telemetry
+join, but it now includes this explicitly bounded session-keyed model
+projection.
 
 ## Codex cook startup traces
 

@@ -19,6 +19,7 @@ from autoskillit.core import (
     RetryReason,
     SessionTelemetry,
     SkillResult,
+    SubagentModelOutcomeDict,
     WriteEvidence,
     extract_skill_name,
     get_logger,
@@ -267,11 +268,13 @@ def _build_session_telemetry(
     github_api_log: GitHubApiLog | None,
     loc_insertions: int,
     loc_deletions: int,
+    session_id: str,
+    subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...],
     step_name: str = "",
     order_id: str = "",
 ) -> SessionTelemetry:
     if github_api_log is not None:
-        _api_usage = github_api_log.drain_step(skill_result.session_id, step_name, order_id)
+        _api_usage = github_api_log.drain_step(session_id, step_name, order_id)
     else:
         _api_usage = None
     return SessionTelemetry(
@@ -282,6 +285,7 @@ def _build_session_telemetry(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=loc_insertions,
         loc_deletions=loc_deletions,
+        subagent_model_outcomes=subagent_model_outcomes,
         execution_identity=skill_result.execution_identity,
     )
 
@@ -292,6 +296,7 @@ def _build_error_path_telemetry(
     step_name: str = "",
     order_id: str = "",
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
+    subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...] = (),
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
     if github_api_log is not None:
@@ -306,5 +311,6 @@ def _build_error_path_telemetry(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=0,
         loc_deletions=0,
+        subagent_model_outcomes=subagent_model_outcomes,
         execution_identity=execution_identity,
     )

@@ -27,6 +27,7 @@ _REQUIRED_INDEX_FIELDS = {
     "backend",
     "skill_command",
     "session_type",
+    "subagent_model_outcomes",
 }
 
 

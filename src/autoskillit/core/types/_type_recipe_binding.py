@@ -12,6 +12,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TypeAlias
 
+from ._type_constants import RECIPE_TERMINAL_TARGETS
+
 __all__ = [
     "ABSENT_BOUND_VALUE",
     "AbsentBoundValue",
@@ -555,8 +557,15 @@ class FinalizedRecipeProjection:
             )
         if any(guard.step_name not in ordered_step_names for guard in ordered_step_guards):
             raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
-        if any(guard.bypass_target not in ordered_step_names for guard in ordered_step_guards):
-            raise ValueError("FinalizedRecipeProjection guard bypasses must name finalized steps")
+        if any(
+            guard.bypass_target not in ordered_step_names
+            and guard.bypass_target not in RECIPE_TERMINAL_TARGETS
+            for guard in ordered_step_guards
+        ):
+            raise ValueError(
+                "FinalizedRecipeProjection guard bypasses must name finalized steps "
+                "or terminal targets"
+            )
         if len({guard.step_name for guard in ordered_step_guards}) != len(ordered_step_guards):
             raise ValueError("FinalizedRecipeProjection guards must have unique step names")
         object.__setattr__(self, "ordered_step_guards", ordered_step_guards)

@@ -49,6 +49,39 @@ def test_projection_rejects_guards_outside_finalized_steps(guard: RecipeStepGuar
         _projection(guards=(guard,))
 
 
+def test_composed_guard_accepts_terminal_bypass(tmp_path) -> None:
+    recipes = tmp_path / ".autoskillit" / "recipes"
+    recipes.mkdir(parents=True)
+    recipes.joinpath("terminal-guard.yaml").write_text(
+        """\
+name: terminal-guard
+description: terminal guard projection
+steps:
+  probe:
+    tool: run_cmd
+    with:
+      cmd: printf true
+    capture:
+      should_skip: ${{ result.stdout }}
+    on_success: apply
+  apply:
+    tool: run_skill
+    with:
+      skill_command: /autoskillit:investigate
+    skip_when_true: context.should_skip
+    on_success: done
+"""
+    )
+
+    result = load_and_validate(
+        "terminal-guard", project_dir=tmp_path, include_finalized_projection=True
+    )
+
+    assert result["_finalized_projection"].ordered_step_guards == (
+        RecipeStepGuard("apply", "should_skip", "done"),
+    )
+
+
 def test_unguarded_composition_publishes_no_step_guards(tmp_path) -> None:
     recipes = tmp_path / ".autoskillit" / "recipes"
     recipes.mkdir(parents=True)

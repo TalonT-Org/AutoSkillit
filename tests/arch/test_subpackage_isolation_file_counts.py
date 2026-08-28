@@ -22,7 +22,7 @@ FILE_COUNT_LIMITS = collections.ChainMap(
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 18 Python files (REQ-DSGN-002).
+    """server/ must not exceed 28 Python files (REQ-DSGN-002).
 
     Limit updated from 14 to 16 after tools_integrations was split into
     tools_github, tools_issue_lifecycle, and tools_pr_ops.

@@ -10,6 +10,7 @@ import threading
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -25,6 +26,7 @@ from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
     SessionTelemetry,
 )
+from autoskillit.execution.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log import (
     flush_session_log,
     read_telemetry_clear_marker,
@@ -120,6 +122,40 @@ def _index_session_counter(log_root: Path) -> Counter[str]:
     )
 
 
+def _archive_session_counter(log_root: Path) -> Counter[str]:
+    return Counter(
+        row["dir_name"]
+        for row in read_tolerant_session_index_rows(log_root / "sessions-archive.jsonl")
+    )
+
+
+def test_retention_archives_complete_rows_in_eviction_order(tmp_path: Path) -> None:
+    index_path = tmp_path / "sessions.jsonl"
+
+    _flush(tmp_path, session_id="session-0", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "session-0", (1, 1))
+    session_0_row = read_tolerant_session_index_rows(index_path)[0]
+
+    _flush(tmp_path, session_id="session-1", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "session-1", (2, 2))
+    session_1_row = next(
+        row
+        for row in read_tolerant_session_index_rows(index_path)
+        if row["dir_name"] == "session-1"
+    )
+
+    _flush(tmp_path, session_id="session-2", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "session-2", (3, 3))
+    _flush(tmp_path, session_id="session-3", max_sessions=2)
+
+    assert _committed_session_counter(tmp_path) == Counter({"session-2": 1, "session-3": 1})
+    assert _index_session_counter(tmp_path) == Counter({"session-2": 1, "session-3": 1})
+    assert read_tolerant_session_index_rows(tmp_path / "sessions-archive.jsonl") == [
+        session_0_row,
+        session_1_row,
+    ]
+
+
 def test_next_writer_removes_abandoned_session_before_retention(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -170,6 +206,113 @@ def test_retention_delete_failure_preserves_index_projection(
 
     assert committed_old.is_dir()
     assert _index_session_counter(tmp_path) == _committed_session_counter(tmp_path)
+    assert _archive_session_counter(tmp_path) == Counter()
+
+
+def test_archive_failure_leaves_checkpoint_recoverable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.session_log as session_log
+
+    _flush(tmp_path, session_id="old", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "old", (1, 1))
+
+    def fail_archive(*_args: object) -> None:
+        raise OSError("archive failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(session_log, "_append_session_archive_rows", fail_archive)
+        with pytest.raises(OSError, match="archive failed"):
+            _flush(tmp_path, session_id="current", max_sessions=1)
+
+    assert _index_session_counter(tmp_path) == Counter({"old": 1, "current": 1})
+
+    _flush(tmp_path, session_id="retry", max_sessions=1)
+
+    assert _index_session_counter(tmp_path) == Counter({"retry": 1})
+    assert _archive_session_counter(tmp_path) == Counter({"old": 1, "current": 1})
+
+
+def test_archive_short_write_leaves_checkpoint_recoverable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+
+    class ShortWriter:
+        def __enter__(self) -> ShortWriter:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def write(self, payload: bytes) -> int:
+            return len(payload) - 1
+
+    _flush(tmp_path, session_id="old", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "old", (1, 1))
+    archive_path = tmp_path / "sessions-archive.jsonl"
+    original_open = Path.open
+
+    def short_archive_open(path: Path, *args: Any, **kwargs: Any) -> Any:
+        if path == archive_path and args == ("ab",):
+            return ShortWriter()
+        return original_open(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", short_archive_open)
+        with pytest.raises(OSError, match="Short archive write"):
+            _flush(tmp_path, session_id="current", max_sessions=1)
+
+    assert _index_session_counter(tmp_path) == Counter({"old": 1, "current": 1})
+
+    _flush(tmp_path, session_id="retry", max_sessions=1)
+
+    assert _index_session_counter(tmp_path) == Counter({"retry": 1})
+    assert _archive_session_counter(tmp_path) == Counter({"old": 1, "current": 1})
+
+
+def test_archive_append_recovers_after_truncated_tail(tmp_path: Path) -> None:
+    _flush(tmp_path, session_id="old", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "old", (1, 1))
+    archive_path = tmp_path / "sessions-archive.jsonl"
+    archive_path.write_bytes(b'{"dir_name":"damaged"')
+
+    _flush(tmp_path, session_id="current", max_sessions=1)
+
+    assert _archive_session_counter(tmp_path) == Counter({"old": 1})
+
+
+def test_compaction_failure_allows_at_least_once_archive_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import autoskillit.execution.session_log as session_log
+
+    _flush(tmp_path, session_id="old", max_sessions=2)
+    os.utime(tmp_path / "sessions" / "old", (1, 1))
+    original_atomic_write = session_log.atomic_write
+    index_writes = 0
+
+    def fail_compaction(path: Path, content: str) -> None:
+        nonlocal index_writes
+        if path == tmp_path / "sessions.jsonl":
+            index_writes += 1
+            if index_writes == 2:
+                raise OSError("compaction failed")
+        original_atomic_write(path, content)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(session_log, "atomic_write", fail_compaction)
+        with pytest.raises(OSError, match="compaction failed"):
+            _flush(tmp_path, session_id="current", max_sessions=1)
+
+    assert _index_session_counter(tmp_path) == Counter({"old": 1, "current": 1})
+    assert _archive_session_counter(tmp_path) == Counter({"old": 1})
+
+    _flush(tmp_path, session_id="retry", max_sessions=1)
+
+    archive_rows = read_tolerant_session_index_rows(tmp_path / "sessions-archive.jsonl")
+    assert Counter(row["dir_name"] for row in archive_rows) == Counter({"old": 2, "current": 1})
+    assert {row["dir_name"] for row in archive_rows} == {"old", "current"}
+    assert _index_session_counter(tmp_path) == Counter({"retry": 1})
 
 
 def test_concurrent_retention_preserves_committed_index_projection(
@@ -181,13 +324,17 @@ def test_concurrent_retention_preserves_committed_index_projection(
     _flush(tmp_path, session_id="seed-0", max_sessions=2)
     _flush(tmp_path, session_id="seed-1", max_sessions=2)
 
-    writer_a_at_index_replace = threading.Event()
+    writer_a_at_checkpoint = threading.Event()
     release_writer_a = threading.Event()
     original_atomic_write = session_log.atomic_write
 
     def pausing_atomic_write(path: Path, content: str) -> None:
-        if path == tmp_path / "sessions.jsonl" and threading.current_thread().name == "writer-a":
-            writer_a_at_index_replace.set()
+        if (
+            path == tmp_path / "sessions.jsonl"
+            and threading.current_thread().name == "writer-a"
+            and not writer_a_at_checkpoint.is_set()
+        ):
+            writer_a_at_checkpoint.set()
             assert release_writer_a.wait(timeout=10), "writer A was not released"
         original_atomic_write(path, content)
 
@@ -204,7 +351,7 @@ def test_concurrent_retention_preserves_committed_index_projection(
     writer_b = threading.Thread(target=flush, args=("writer-b",), name="writer-b")
     try:
         writer_a.start()
-        assert writer_a_at_index_replace.wait(timeout=5), "writer A never reached index replace"
+        assert writer_a_at_checkpoint.wait(timeout=5), "writer A never reached index checkpoint"
         writer_b.start()
         writer_b.join(timeout=0.2)
     finally:
@@ -217,6 +364,7 @@ def test_concurrent_retention_preserves_committed_index_projection(
     assert not errors
     assert _index_session_counter(tmp_path) == _committed_session_counter(tmp_path)
     assert _index_session_counter(tmp_path) == Counter({"writer-a": 1, "writer-b": 1})
+    assert _archive_session_counter(tmp_path) == Counter({"seed-0": 1, "seed-1": 1})
 
 
 def test_retention_cannot_delete_an_in_progress_writer(

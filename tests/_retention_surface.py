@@ -1000,68 +1000,68 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --
-    f"{_HC}::L229": _self_limiting(
+    f"{_HC}::L232": _self_limiting(
         "The plugin cache root is absent, leaving no hook incarnation to repair."
     ),
-    f"{_HC}::L241": _self_limiting(
+    f"{_HC}::L247": _self_limiting(
         "An incarnation without hooks.json has no hook payload this repairer can own."
     ),
     f"{_HC}::L244": _self_limiting(
         "The content-fingerprinted quarantine marker already records this hooks payload's "
         "terminal result."
     ),
-    f"{_HC}::L254": _self_limiting(
+    f"{_HC}::L257": _self_limiting(
         "A valid unbroken hook payload requires no repair or further lifecycle mutation."
     ),
-    f"{_HC}::L259": _self_limiting(
+    f"{_HC}::L262": _self_limiting(
         "The payload changed to a marked incarnation before the lease, so its disposition "
         "is complete."
     ),
-    f"{_HC}::L273": _self_limiting(
+    f"{_HC}::L276": _self_limiting(
         "A durable quarantine marker and QUARANTINED outcome complete this invalid payload's "
         "lifecycle."
     ),
-    f"{_HC}::L271": _self_limiting(
+    f"{_HC}::L274": _self_limiting(
         "The hook payload became valid under the lease and no repair remains necessary."
     ),
-    f"{_HC}::L289": _self_limiting(
+    f"{_HC}::L292": _self_limiting(
         "Identity validation writes a durable quarantine marker before reporting the terminal "
         "outcome."
     ),
-    f"{_HC}::L332": _resolves_with_contention(
+    f"{_HC}::L335": _resolves_with_contention(
         "An exclusive hook lease is held by another live repairer and will release."
     ),
-    f"{_HC}::L341": _retries_after_input_changes(
+    f"{_HC}::L344": _retries_after_input_changes(
         "A transient hook read, write, or rollback failure leaves the candidate retryable."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_projection_hooks --
-    f"{_HP}::L362": _self_limiting(
+    f"{_HP}::L365": _self_limiting(
         "The projections root is absent, leaving no projection hook payload to repair."
     ),
-    f"{_HP}::L373": _self_limiting(
+    f"{_HP}::L379": _self_limiting(
         "A projection without hooks.json has no hook payload this repairer can own."
     ),
     f"{_HP}::L376": _self_limiting(
         "The content-fingerprinted quarantine marker already records this hooks payload's "
         "terminal result."
     ),
-    f"{_HP}::L386": _self_limiting(
+    f"{_HP}::L389": _self_limiting(
         "A valid unbroken projection hook payload requires no repair or lifecycle mutation."
     ),
-    f"{_HP}::L391": _self_limiting(
+    f"{_HP}::L394": _self_limiting(
         "The payload changed to a marked incarnation before the lease, completing its disposition."
     ),
-    f"{_HP}::L405": _self_limiting(
+    f"{_HP}::L408": _self_limiting(
         "A durable quarantine marker and QUARANTINED outcome complete this invalid payload's "
         "lifecycle."
     ),
-    f"{_HP}::L403": _self_limiting(
+    f"{_HP}::L406": _self_limiting(
         "The hook payload became valid under the lease and no repair remains necessary."
     ),
-    f"{_HP}::L452": _resolves_with_contention(
+    f"{_HP}::L465": _resolves_with_contention(
         "An exclusive projection hook lease is held by another live repairer and will release."
     ),
-    f"{_HP}::L461": _retries_after_input_changes(
+    f"{_HP}::L474": _retries_after_input_changes(
         "A transient projection hook read, write, or rollback failure leaves the candidate "
         "retryable."
     ),

@@ -111,43 +111,6 @@ def test_responsibility_shards_are_collected_and_stay_small() -> None:
     assert not missing_markers
 
 
-def test_file_count_policies_are_disjoint_and_composed_without_copying() -> None:
-    from tests.arch._subpackage_isolation_file_counts_authoring import (
-        AUTHORING_FILE_COUNT_LIMITS,
-    )
-    from tests.arch._subpackage_isolation_file_counts_foundation import (
-        FOUNDATION_FILE_COUNT_LIMITS,
-    )
-    from tests.arch._subpackage_isolation_file_counts_runtime import (
-        RUNTIME_FILE_COUNT_LIMITS,
-    )
-    from tests.arch._subpackage_isolation_file_counts_tooling import (
-        TOOLING_FILE_COUNT_LIMITS,
-    )
-    from tests.arch.test_subpackage_isolation_file_counts import FILE_COUNT_LIMITS
-
-    policies = (
-        FOUNDATION_FILE_COUNT_LIMITS,
-        AUTHORING_FILE_COUNT_LIMITS,
-        RUNTIME_FILE_COUNT_LIMITS,
-        TOOLING_FILE_COUNT_LIMITS,
-    )
-    key_sets = [set(policy) for policy in policies]
-    for index, keys in enumerate(key_sets):
-        for other_keys in key_sets[index + 1 :]:
-            assert keys.isdisjoint(other_keys)
-
-    all_keys = set().union(*key_sets)
-    assert len(all_keys) == 23
-    assert set(FILE_COUNT_LIMITS) == all_keys
-    assert len(FILE_COUNT_LIMITS) == len(all_keys)
-    assert all(sum(key in policy for policy in policies) == 1 for key in FILE_COUNT_LIMITS)
-
-    scanner = (ARCH / "test_subpackage_isolation_file_counts.py").read_text(encoding="utf-8")
-    assert "for sub_dir in sorted(SRC_ROOT.iterdir()):" in scanner
-    assert "FILE_COUNT_LIMITS.get(rel_key, 10)" in scanner
-
-
 def test_source_map_records_moved_behavioral_successors() -> None:
     data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
     source_map = data["map"]

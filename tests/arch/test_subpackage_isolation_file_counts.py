@@ -1,24 +1,38 @@
 from __future__ import annotations
 
-import collections
 from pathlib import Path
 
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
-from tests.arch._subpackage_isolation_file_counts_authoring import AUTHORING_FILE_COUNT_LIMITS
-from tests.arch._subpackage_isolation_file_counts_foundation import FOUNDATION_FILE_COUNT_LIMITS
-from tests.arch._subpackage_isolation_file_counts_runtime import RUNTIME_FILE_COUNT_LIMITS
-from tests.arch._subpackage_isolation_file_counts_tooling import TOOLING_FILE_COUNT_LIMITS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-FILE_COUNT_LIMITS = collections.ChainMap(
-    FOUNDATION_FILE_COUNT_LIMITS,
-    AUTHORING_FILE_COUNT_LIMITS,
-    RUNTIME_FILE_COUNT_LIMITS,
-    TOOLING_FILE_COUNT_LIMITS,
-)
+FILE_COUNT_LIMITS: dict[str, int] = {
+    "core": 48,
+    "core/types": 76,
+    "core/runtime": 11,
+    "config": 20,
+    "recipe": 45,
+    "recipe/rules": 66,
+    "server": 28,
+    "execution": 23,
+    "cli": 9,
+    "cli/session": 11,
+    "cli/doctor": 13,
+    "pipeline": 19,
+    "fleet": 28,
+    "server/tools": 39,
+    "execution/process": 11,
+    "execution/backends": 30,
+    "execution/github_review": 15,
+    "execution/headless": 15,
+    "execution/session": 20,
+    "workspace": 31,
+    "hooks": 26,
+    "hooks/guards": 41,
+    "smoke_utils": 11,
+}
 
 
 def test_server_file_count_under_limit() -> None:

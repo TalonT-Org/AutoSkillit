@@ -59,20 +59,12 @@ Reads all per-lens outputs from the capture directory and produces a unified res
 
 ## §4. Configuration Knobs
 
-Four knobs control phoropter family behavior. The first three are configured per-family in `src/autoskillit/assets/phoropter-registry.yaml`; the fourth is a step-level field.
+Two currently implemented knobs control phoropter family behavior. Both are configured per-family in `src/autoskillit/assets/phoropter-registry.yaml`.
 
 | Knob | Values | Description |
 |------|--------|-------------|
 | `apply_mode` | `eager` (default), `lazy` | Controls whether the apply phase runs all selected lenses (`eager`) or stops at the first decisive result (`lazy`). Currently all families use `eager`. |
 | `synthesis.strategy` | `null`, `priority_hierarchy`, `electre_iii`, `dex` | Selects the synthesis strategy for the synthesize phase. See §6 for the full catalog. Configured per-family in `phoropter-registry.yaml`. |
-| `optional_phases` | List of phase names | Phases that may be skipped via `PhoropterPhaseSkip` configuration. Currently only `apply` is skippable. Configured per-family in `phoropter-registry.yaml` under `phase_skip`. |
-| `PhoropterPhaseSkip` | `skip_when_true` / `skip_when_false` | Conditional phase skipping. The `skip_field` names a context variable; `skip_semantics` determines whether the phase is skipped when the field is truthy or falsy. |
-
-**PhoropterPhaseSkip in detail:**
-
-- `skip_when_true` — The phase is skipped when the named context variable is truthy. Canonical example: vis-lens skips the `apply` phase when `context.is_silent_type` is true (configured in `phoropter-registry.yaml` as `phase_skip.skip_field: context.is_silent_type`, `phase_skip.skip_semantics: skip_when_true`). In recipe YAML, this maps to `skip_when_true: context.is_silent_type` on the apply step.
-- `skip_when_false` — The phase runs only when the named context variable is truthy. E.g., `skip_when_false: inputs.review_design` on the `dial` step skips the entire review-design family when the `review_design` input is not provided.
-
 **RecipeStep fields (from `src/autoskillit/recipe/schema.py`):**
 
 ```python
@@ -115,13 +107,12 @@ Note: The `SynthesisStrategy` enum also includes a `CUSTOM` value for future ext
 
 ## §7. IL-0 Type Cross-Reference
 
-Six phoropter types are defined in the IL-0 core types layer (`src/autoskillit/core/types/_type_phoropter.py` and `_type_enums.py`):
+Five phoropter types are defined in the IL-0 core types layer (`src/autoskillit/core/types/_type_phoropter.py` and `_type_enums.py`):
 
 | Type | Module | Status | Fields | Purpose |
 |------|--------|--------|--------|---------|
 | `PhoropterPrescription` | `_type_phoropter.py` | Implemented | `selected_lenses: str`, `lens_context_paths: str`, `failure_mode: str = "continue"` | Dial phase output — records which lenses were selected and their context paths. |
 | `ReadingToken` | `_type_phoropter.py` | Implemented | `output_prefix: str`, `path_value: str` | Structured capture of a single lens reading (path to output file with its prefix). `READING_TOKEN_PATTERN` regex: `r"^(?P<prefix>\w+) = (?P<path>/.+)$"`. |
-| `PhoropterPhaseSkip` | `_type_phoropter.py` | Implemented | `skip_field: str`, `skip_semantics: Literal["skip_when_true", "skip_when_false"]`, `applies_to: str = ""` | Configuration for conditional phase skipping (see §4). |
 | `CrossDomainPrescription` | `_type_phoropter.py` | Implemented | `family_names: tuple[str, ...]`, `merged_lenses: str = ""`, `merge_strategy: str = "union"` | Multi-family lens selection when families share a recipe context. |
 | `CrossDomainAssessment` | `_type_phoropter.py` | Implemented | `family_names: tuple[str, ...]`, `synthesis_strategy: SynthesisStrategy = SynthesisStrategy.NULL`, `combined_output: str = ""` | Multi-family synthesis assessment combining outputs across family boundaries. |
 | `SynthesisStrategy` | `_type_enums.py` | Implemented | `NULL`, `PRIORITY_HIERARCHY`, `ELECTRE_III`, `DEX`, `CUSTOM` | Enum of recognized synthesis algorithms (see §6 catalog). |

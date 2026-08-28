@@ -10,8 +10,8 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 FILE_COUNT_LIMITS: dict[str, int] = {
     "core": 48,
-    # Phase 1 adds _type_truth; phase 2 removes _type_tradition_manifest.
-    "core/types": 77,
+    # _type_truth replaces the retired _type_tradition_manifest shard.
+    "core/types": 76,
     "core/runtime": 11,
     "config": 20,
     "recipe": 45,
@@ -182,13 +182,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             _type_exceptions.py adds RecipeLoadError hierarchy (ProcessStaleError,
             RecipeNotFoundError) for exception-based error propagation from
             load_and_validate, bringing the count to 23.
-            _type_phoropter.py adds frozen phoropter family/phase types
-            (PhoropterPrescription, ReadingToken, PhoropterPhaseSkip,
-            CrossDomainPrescription, CrossDomainAssessment) for the phoropter
+            _type_phoropter.py adds frozen phoropter family types
+            (PhoropterPrescription, ReadingToken, CrossDomainPrescription,
+            CrossDomainAssessment) for the phoropter
             registry system, bringing the core/types count to 29.
-            _type_tradition_manifest.py adds TraditionManifest, LensEntry,
-            DialingConfig frozen dataclasses with from_yaml_path YAML loader
-            for the tradition manifest system, bringing the core/types count to 30.
             _type_invariant_registry.py adds InvariantDef frozen dataclass and
             INVARIANT_REGISTRY mapping 13 prose prohibitions to runtime gate targets,
             bringing the core/types count to 31.

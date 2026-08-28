@@ -139,7 +139,7 @@ class RecipeStep:
     block: str | None = None  # Named block anchor this step belongs to (e.g. "pre_queue_gate")
     pass_through: list[str] = field(
         default_factory=list
-    )  # Captured output names used for informational propagation, not flow control
+    )  # Captured output names checked by graph-output and graph-review validation rules
     phoropter_family: str | None = None
     skip_when_true: str | None = None
 

@@ -627,7 +627,6 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
         READING_TOKEN_PATTERN,
         CrossDomainAssessment,
         CrossDomainPrescription,
-        PhoropterPhaseSkip,
         PhoropterPrescription,
         ReadingToken,
         SynthesisStrategy,
@@ -637,7 +636,6 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
     assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
-    assert dataclasses.is_dataclass(PhoropterPhaseSkip)
     assert dataclasses.is_dataclass(CrossDomainPrescription)
     assert dataclasses.is_dataclass(CrossDomainAssessment)
 
@@ -650,7 +648,6 @@ def test_phoropter_symbols_importable_from_core_gateway() -> None:
         READING_TOKEN_PATTERN,
         CrossDomainAssessment,
         CrossDomainPrescription,
-        PhoropterPhaseSkip,
         PhoropterPrescription,
         ReadingToken,
         SynthesisStrategy,
@@ -660,7 +657,6 @@ def test_phoropter_symbols_importable_from_core_gateway() -> None:
     assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
-    assert dataclasses.is_dataclass(PhoropterPhaseSkip)
     assert dataclasses.is_dataclass(CrossDomainPrescription)
     assert dataclasses.is_dataclass(CrossDomainAssessment)
 

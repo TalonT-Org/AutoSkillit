@@ -888,7 +888,6 @@ from .types import DatabaseReader as DatabaseReader
 from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
 from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
-from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
@@ -984,7 +983,6 @@ from .types import LaunchSurface as LaunchSurface
 from .types import LaunchValueSource as LaunchValueSource
 from .types import LaunchValueSourceKind as LaunchValueSourceKind
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
-from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
@@ -1035,7 +1033,6 @@ from .types import PackDef as PackDef
 from .types import PersistedEnumDef as PersistedEnumDef
 from .types import PersistedEnumTolerance as PersistedEnumTolerance
 from .types import PersistedFormatDef as PersistedFormatDef
-from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
@@ -1234,7 +1231,6 @@ from .types import ToolInitializationOperation as ToolInitializationOperation
 from .types import ToolParamDef as ToolParamDef
 from .types import ToolParamRole as ToolParamRole
 from .types import ToolWireType as ToolWireType
-from .types import TraditionManifest as TraditionManifest
 from .types import TurnId as TurnId
 from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,

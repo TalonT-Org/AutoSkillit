@@ -22,26 +22,16 @@ from __future__ import annotations
 import ast
 import dataclasses
 import inspect
-from datetime import date
 from pathlib import Path
 
 import pytest
 
+from tests.arch._deferred_debt import TrackedDeferral, assert_not_stale
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-@dataclasses.dataclass(frozen=True)
-class ForwardDeclaredField:
-    """Structured forward-declaration for a config field without a consumer."""
-
-    issue: int
-    rationale: str
-    added_date: date
-
-
-_STALENESS_THRESHOLD_DAYS = 180
-
-_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {}
+_FORWARD_DECLARED: dict[str, TrackedDeferral] = {}
 
 
 def _config_dataclasses() -> list[type]:
@@ -183,7 +173,7 @@ def test_all_config_fields_have_production_consumers() -> None:
     assert not unconsumed, (
         f"Config fields with zero production read sites "
         f"(add a consumer, retire the key via RETIRED_CONFIG_KEYS, or add to "
-        f"_FORWARD_DECLARED as ForwardDeclaredField(issue=NNNN, rationale='...', "
+        f"_FORWARD_DECLARED as TrackedDeferral(issue=NNNN, rationale='...', "
         f"added_date=date(YYYY, M, D))): {sorted(unconsumed)}"
     )
 
@@ -239,15 +229,4 @@ def test_forward_declared_fields_exist_on_a_config_dataclass() -> None:
 
 def test_forward_declared_entries_not_stale() -> None:
     """Time-bomb: a forward declaration older than 180 days needs re-justification."""
-    today = date.today()
-    stale = [
-        f"{name} (added={entry.added_date}, age={(today - entry.added_date).days}d, "
-        f"issue=#{entry.issue})"
-        for name, entry in _FORWARD_DECLARED.items()
-        if (today - entry.added_date).days > _STALENESS_THRESHOLD_DAYS
-    ]
-    assert not stale, (
-        f"_FORWARD_DECLARED entries older than {_STALENESS_THRESHOLD_DAYS} days "
-        f"(wire a consumer, retire the key, or update added_date with a fresh "
-        f"tracking issue): {stale}"
-    )
+    assert_not_stale(_FORWARD_DECLARED, registry_name="_FORWARD_DECLARED")

@@ -9,32 +9,23 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._deferred_debt import TrackedDeferral, assert_not_stale
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-@dataclasses.dataclass(frozen=True)
-class ForwardDeclaredField:
-    """Structured forward-declaration for a BackendCapabilities field without a consumer."""
-
-    issue: int
-    rationale: str
-    added_date: date
-
-
-_STALENESS_THRESHOLD_DAYS = 180
-
-_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
-    "supports_thinking_blocks": ForwardDeclaredField(
+_FORWARD_DECLARED: dict[str, TrackedDeferral] = {
+    "supports_thinking_blocks": TrackedDeferral(
         issue=3497,
         rationale="thinking-block rendering gating",
         added_date=date(2026, 5, 31),
     ),
-    "mcp_env_forward_vars": ForwardDeclaredField(
+    "mcp_env_forward_vars": TrackedDeferral(
         issue=3458,
         rationale="MCP env forwarding — enforcement arch test exists, awaiting src/ consumer",
         added_date=date(2026, 5, 31),
     ),
-    "required_session_files": ForwardDeclaredField(
+    "required_session_files": TrackedDeferral(
         issue=3134,
         rationale=(
             "production consumer moved to CodexBackend.setup_session_dir — "
@@ -42,12 +33,12 @@ _FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {
         ),
         added_date=date(2026, 6, 2),
     ),
-    "patch_format": ForwardDeclaredField(
+    "patch_format": TrackedDeferral(
         issue=3776,
         rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",
         added_date=date(2026, 6, 5),
     ),
-    "github_api_callable": ForwardDeclaredField(
+    "github_api_callable": TrackedDeferral(
         issue=4204,
         rationale=(
             "Behavioral documentation field; production consumer added when "
@@ -90,7 +81,7 @@ def test_all_capability_fields_have_production_consumers():
     assert not unconsumed, (
         f"BackendCapabilities fields with zero production read sites "
         f"(add a consumer or add to _FORWARD_DECLARED as "
-        f"ForwardDeclaredField(issue=NNNN, rationale='...', added_date=date(YYYY, M, D))): "
+        f"TrackedDeferral(issue=NNNN, rationale='...', added_date=date(YYYY, M, D))): "
         f"{sorted(unconsumed)}"
     )
 
@@ -185,13 +176,4 @@ def test_forward_declared_entries_not_stale():
     - add a production consumer and remove from _FORWARD_DECLARED, or
     - update the added_date to reset the clock (with a current tracking issue)
     """
-    today = date.today()
-    stale = [
-        f"{name} (added={entry.added_date}, age={(today - entry.added_date).days}d)"
-        for name, entry in _FORWARD_DECLARED.items()
-        if (today - entry.added_date).days > _STALENESS_THRESHOLD_DAYS
-    ]
-    assert not stale, (
-        f"_FORWARD_DECLARED entries older than {_STALENESS_THRESHOLD_DAYS} days "
-        f"(add a consumer, or update added_date with a fresh tracking issue): {stale}"
-    )
+    assert_not_stale(_FORWARD_DECLARED, registry_name="_FORWARD_DECLARED")

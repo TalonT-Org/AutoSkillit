@@ -9,7 +9,6 @@ import pytest
 from autoskillit.core import (
     CrossDomainAssessment,
     CrossDomainPrescription,
-    PhoropterPhaseSkip,
     PhoropterPrescription,
     SynthesisStrategy,
 )
@@ -42,25 +41,6 @@ class TestSynthesisStrategy:
         assert SynthesisStrategy.NULL == "null"
 
 
-class TestPhoropterPhaseSkip:
-    def test_skip_when_true_accepted(self) -> None:
-        obj = PhoropterPhaseSkip(skip_field="ctx.x", skip_semantics="skip_when_true")
-        assert obj.skip_semantics == "skip_when_true"
-
-    def test_skip_when_false_accepted(self) -> None:
-        obj = PhoropterPhaseSkip(skip_field="ctx.x", skip_semantics="skip_when_false")
-        assert obj.skip_semantics == "skip_when_false"
-
-    def test_frozen(self) -> None:
-        obj = PhoropterPhaseSkip(skip_field="f", skip_semantics="skip_when_true")
-        with pytest.raises(FrozenInstanceError):
-            obj.skip_field = "x"  # type: ignore[misc]
-
-    def test_applies_to_defaults_to_empty_string(self) -> None:
-        obj = PhoropterPhaseSkip(skip_field="context.x", skip_semantics="skip_when_true")
-        assert obj.applies_to == ""
-
-
 class TestCrossdomainStubs:
     def test_cross_domain_prescription_instantiable(self) -> None:
         obj = CrossDomainPrescription(family_names=("a", "b"))
@@ -91,7 +71,6 @@ def test_all_guard() -> None:
         "PhoropterPrescription",
         "ReadingToken",
         "READING_TOKEN_PATTERN",
-        "PhoropterPhaseSkip",
         "CrossDomainPrescription",
         "CrossDomainAssessment",
     }
@@ -104,7 +83,6 @@ def test_importable_from_gateway() -> None:
         "PhoropterPrescription",
         "ReadingToken",
         "READING_TOKEN_PATTERN",
-        "PhoropterPhaseSkip",
         "CrossDomainPrescription",
         "CrossDomainAssessment",
         "SynthesisStrategy",

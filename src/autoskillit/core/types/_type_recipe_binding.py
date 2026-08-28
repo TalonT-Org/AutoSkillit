@@ -12,8 +12,6 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TypeAlias
 
-from ._type_constants import RECIPE_TERMINAL_TARGETS
-
 __all__ = [
     "ABSENT_BOUND_VALUE",
     "AbsentBoundValue",
@@ -43,6 +41,7 @@ __all__ = [
 
 
 BoundScalar: TypeAlias = str | int | bool
+_TERMINAL_BYPASS_TARGETS = frozenset({"done", "escalate"})
 
 
 RECIPE_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
@@ -559,7 +558,7 @@ class FinalizedRecipeProjection:
             raise ValueError("FinalizedRecipeProjection guards must name finalized steps")
         if any(
             guard.bypass_target not in ordered_step_names
-            and guard.bypass_target not in RECIPE_TERMINAL_TARGETS
+            and guard.bypass_target not in _TERMINAL_BYPASS_TARGETS
             for guard in ordered_step_guards
         ):
             raise ValueError(

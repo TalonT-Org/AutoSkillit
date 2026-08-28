@@ -42,7 +42,6 @@ __all__ = [
     "INFRASTRUCTURE_FAULT_OVERRIDE_CLAUSE",
     "ROUTING_AUTHORITY_CLAUSE",
     "STEP_SKIP_SEMANTICS_CLAUSE",
-    "RECIPE_TERMINAL_TARGETS",
     "ADMIRAL_DISPATCH_SECTIONS",
     "PR_TELEMETRY_SECTIONS",
     "KNOWN_CI_EVENTS",
@@ -273,9 +272,6 @@ PR_TELEMETRY_SECTIONS: tuple[str, ...] = (
     "## Token Efficiency",
     "## Model Usage Breakdown",
 )
-
-# Reserved recipe routing targets that do not name concrete steps.
-RECIPE_TERMINAL_TARGETS: frozenset[str] = frozenset({"done", "escalate"})
 
 KNOWN_CI_EVENTS: frozenset[str] = frozenset(
     {

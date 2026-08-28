@@ -36,11 +36,15 @@ def _live_fields() -> set[tuple[type[object], str]]:
 
 
 def test_ledger_keys_are_sorted() -> None:
-    keys = list(DECLARED_RECIPE_FIELDS) + list(DEFERRED_RECIPE_FIELDS)
-    assert keys == sorted(keys, key=_key_name), (
-        "recipe dataclass ledger keys must be owner/name sorted so a diff isolates "
-        "exactly the changed declaration"
-    )
+    for registry_name, registry in (
+        ("DECLARED_RECIPE_FIELDS", DECLARED_RECIPE_FIELDS),
+        ("DEFERRED_RECIPE_FIELDS", DEFERRED_RECIPE_FIELDS),
+    ):
+        keys = list(registry)
+        assert keys == sorted(keys, key=_key_name), (
+            f"{registry_name} keys must be owner/name sorted so a diff isolates "
+            "exactly the changed declaration"
+        )
 
 
 def test_no_silent_recipe_dataclass_field_additions() -> None:

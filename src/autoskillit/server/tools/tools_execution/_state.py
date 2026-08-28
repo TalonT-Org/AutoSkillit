@@ -140,7 +140,10 @@ class _RunSkillDispatchState:
     _tracker_key: TrackerParticipantKey | None = None
     _tracker_lease: ArtifactLease | None = None
     _cleanup_session_id: str | None = None
-    _child_resource_owner: AbstractAsyncContextManager[None] | None = None
+    _generated_home_cleanup_required: bool = False
+    _copied_snapshot_dir: Path | None = None
+    _child_resource_owner: AbstractAsyncContextManager[object] | None = None
+    _owned_cwd: Path | None = None
     _explorer_parent_identity: tuple[Path, str] | None = None
     _explorer_launch_lease: _ExplorerLaunchLease | None = None
 

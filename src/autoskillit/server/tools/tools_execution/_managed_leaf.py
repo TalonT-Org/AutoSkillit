@@ -13,31 +13,72 @@ import json
 import shutil
 import time
 import unicodedata
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Generic, TypeVar
+
+import anyio
 
 from autoskillit.core import (
-    CODEX_SESSIONS_SUBDIR,
     SkillContractError,
     SkillSemanticAdaptationResult,
     WriteBehaviorSpec,
     append_and_trim_jsonl,
     default_log_dir,
+    destination_location,
     get_logger,
 )
 
 if TYPE_CHECKING:
-    from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
+    from autoskillit.core import CleanupResult, SessionSkillManager, SubprocessRunner
 
 
 logger = get_logger(__name__)
 
 _MAX_CLEANUP_FAILURE_RECORDS = 5000
+_MAX_CLEANUP_FAILURE_MESSAGE_CHARS = 1000
 _PARENT_JOIN_INSTRUCTION = (
     "Use the server-owned managed fixed-batch route to declare, launch, and "
     "join the complete assignment set before parent synthesis."
 )
+
+_PreparedValue = TypeVar("_PreparedValue")
+
+
+@dataclass(frozen=True, slots=True)
+class _ChildWorktreeRequest:
+    """The allocation facts for an isolated child worktree."""
+
+    project_root: Path
+    worktree_root: Path
+    worktree_path: Path
+    revision: str
+    runner: SubprocessRunner
+    create_worktree: Callable[[Path, Path, Path, str, SubprocessRunner], Awaitable[Path]]
+    remove_worktree: Callable[[Path, Path, SubprocessRunner], Awaitable[CleanupResult]]
+
+
+@dataclass(slots=True)
+class _ChildResourceOwnerRequest(Generic[_PreparedValue]):
+    """Inputs owned for the complete lifetime of one prepared child."""
+
+    source_cwd: Path
+    prepare: Callable[[Path], Awaitable[_PreparedValue]]
+    session_manager: SessionSkillManager | None
+    generated_home_id: str | None
+    generated_home_materialized: Callable[[], bool]
+    copied_snapshot_path: Callable[[], Path | None]
+    worktree: _ChildWorktreeRequest | None = None
+    cleanup_errors_are_terminal: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedChildLaunch(Generic[_PreparedValue]):
+    """A child whose cwd and preparation remain owned until scope exit."""
+
+    owned_cwd: Path
+    value: _PreparedValue
 
 
 def _canonical(value: object) -> str:
@@ -402,7 +443,7 @@ def _record_cleanup_failure(session_id: str, path: str | None, exc: BaseExceptio
         "session_id": session_id,
         "path": path,
         "exception_type": type(exc).__name__,
-        "message": str(exc),
+        "message": str(exc)[:_MAX_CLEANUP_FAILURE_MESSAGE_CHARS],
     }
     try:
         append_and_trim_jsonl(log_path, _canonical(record), max_lines=_MAX_CLEANUP_FAILURE_RECORDS)
@@ -410,46 +451,101 @@ def _record_cleanup_failure(session_id: str, path: str | None, exc: BaseExceptio
         logger.warning("cleanup_failure_record_write_failed", session_id=session_id, exc_info=True)
 
 
-def _cleanup_generated_home(state: _RunSkillDispatchState) -> None:
-    session_id = state._cleanup_session_id
-    if session_id is None:
-        return
-    manager = state.tool_ctx.session_skill_manager
-    if manager is not None:
-        try:
-            manager.cleanup_session(session_id)
-        except Exception as exc:
-            logger.warning("session_skill_cleanup_failed", session_id=session_id, exc_info=True)
-            _record_cleanup_failure(session_id, None, exc)
-        return
-    if state.tool_ctx.ephemeral_root is None:
-        return
-    generated_home = state.tool_ctx.ephemeral_root / session_id
-    if generated_home.is_dir():
-        try:
-            shutil.rmtree(generated_home)
-        except Exception as exc:
-            logger.warning("session_dir_rmtree_failed", path=str(generated_home), exc_info=True)
-            _record_cleanup_failure(session_id, str(generated_home), exc)
-        return
-    codex_fallback = state.tool_ctx.temp_dir / CODEX_SESSIONS_SUBDIR / session_id
-    if codex_fallback.is_dir():
-        try:
-            shutil.rmtree(codex_fallback)
-        except Exception as exc:
-            logger.warning("session_dir_rmtree_failed", path=str(codex_fallback), exc_info=True)
-            _record_cleanup_failure(session_id, str(codex_fallback), exc)
-
-
 @contextlib.asynccontextmanager
 async def scoped_child_resource_owner(
-    state: _RunSkillDispatchState,
-) -> AsyncIterator[None]:
-    """Keep the generated home alive through execution finalization, then clean it."""
+    request: _ChildResourceOwnerRequest[_PreparedValue],
+) -> AsyncIterator[_PreparedChildLaunch[_PreparedValue]]:
+    """Own child cwd, preparation, and generated resources through finalization."""
+    owned_worktree: Path | None = None
+    body_error: BaseException | None = None
     try:
-        yield
+        if request.worktree is None:
+            owned_cwd = request.source_cwd.resolve()
+            if not owned_cwd.is_dir():
+                raise SkillContractError(f"Child source cwd does not exist: {owned_cwd}")
+        else:
+            worktree = request.worktree
+            owned_cwd = await worktree.create_worktree(
+                worktree.project_root,
+                worktree.worktree_root,
+                worktree.worktree_path,
+                worktree.revision,
+                worktree.runner,
+            )
+            owned_worktree = owned_cwd
+        prepared = await request.prepare(owned_cwd)
+        yield _PreparedChildLaunch(owned_cwd=owned_cwd, value=prepared)
+    except BaseException as exc:
+        body_error = exc
+        raise
     finally:
-        _cleanup_generated_home(state)
+        cleanup_errors: list[BaseException] = []
+        session_id = request.generated_home_id or "unknown-child-session"
+        with anyio.CancelScope(shield=True):
+            if request.generated_home_materialized():
+                if request.session_manager is None or request.generated_home_id is None:
+                    cleanup_errors.append(
+                        SkillContractError(
+                            "Generated home has no session-manager cleanup authority"
+                        )
+                    )
+                else:
+                    try:
+                        request.session_manager.cleanup_session(request.generated_home_id)
+                    except BaseException as exc:
+                        logger.warning(
+                            "session_skill_cleanup_failed",
+                            session_id=request.generated_home_id,
+                            exc_info=True,
+                        )
+                        _record_cleanup_failure(request.generated_home_id, None, exc)
+                        cleanup_errors.append(exc)
+
+            copied_snapshot = request.copied_snapshot_path()
+            if copied_snapshot is not None and copied_snapshot.is_dir():
+                try:
+                    shutil.rmtree(copied_snapshot)
+                except BaseException as exc:
+                    logger.warning(
+                        "snapshot_session_cleanup_failed",
+                        path=str(copied_snapshot),
+                        exc_info=True,
+                    )
+                    _record_cleanup_failure(session_id, str(copied_snapshot), exc)
+                    cleanup_errors.append(exc)
+
+            if owned_worktree is not None:
+                cleanup_worktree = request.worktree
+                assert cleanup_worktree is not None
+                try:
+                    destination = destination_location(owned_worktree)
+                    trusted_root = destination_location(cleanup_worktree.worktree_root)
+                    if not destination.is_relative_to(trusted_root):
+                        raise SkillContractError(
+                            f"Child worktree cleanup escapes trusted root: {destination}"
+                        )
+                    cleanup = await cleanup_worktree.remove_worktree(
+                        destination,
+                        cleanup_worktree.project_root,
+                        cleanup_worktree.runner,
+                    )
+                except BaseException as exc:
+                    logger.warning(
+                        "child_worktree_cleanup_failed",
+                        path=str(owned_worktree),
+                        exc_info=True,
+                    )
+                    _record_cleanup_failure(session_id, str(owned_worktree), exc)
+                    cleanup_errors.append(exc)
+                else:
+                    for path, detail in cleanup.failed:
+                        failure = RuntimeError(
+                            f"Child worktree cleanup failed for {path}: {detail}"
+                        )
+                        _record_cleanup_failure(session_id, path, failure)
+                        cleanup_errors.append(failure)
+        if body_error is None and cleanup_errors and request.cleanup_errors_are_terminal:
+            raise BaseExceptionGroup("Child resource cleanup failed", cleanup_errors)
 
 
 __all__ = [

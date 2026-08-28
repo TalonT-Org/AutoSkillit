@@ -28,17 +28,22 @@ from autoskillit.core import (
 )
 from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
+from autoskillit.core import (
+    resolve_skill_temp_dir as _resolve_skill_temp_dir,
+)
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
 from autoskillit.pipeline import gate_error_result
 from autoskillit.server._explorer_projection import _build_requested_execution_identity
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._execution_helpers import (
-    build_skill_session_contract as _build_skill_session_contract,
-)
-from autoskillit.server.tools._execution_helpers import (
+    bind_projection_backend,
+    build_fresh_projection_context,
     build_validated_skill_dispatch_contract,
     invocation_member_names,
     propagate_session_deadline,
+)
+from autoskillit.server.tools._execution_helpers import (
+    build_skill_session_contract as _build_skill_session_contract,
 )
 from autoskillit.server.tools._execution_helpers import (
     compute_write_prefixes as _compute_write_prefixes,
@@ -81,15 +86,85 @@ def _mint_fresh_explorer_binding(
     return binding_env
 
 
-def _prepare_dispatch_session(state: _RunSkillDispatchState) -> str | None:
+def _prepare_dispatch_session(state: _RunSkillDispatchState) -> None:
+    """Select the session branch and reserve its identity without allocating it."""
     assert state.resolved_command is not None
-    assert state.write_watch_dirs is not None
+    state._cleanup_session_id = None
+    state._generated_home_cleanup_required = False
+    state._copied_snapshot_dir = None
+    if state._stored_contract_entry is None:
+        state._cleanup_session_id = f"headless-{uuid4().hex[:12]}"
+
+
+def _rebuild_owned_dispatch_context(
+    state: _RunSkillDispatchState,
+    owned_cwd: Path,
+) -> str | None:
+    """Rebind fresh projection and cwd-derived write scope inside child ownership."""
+    state._owned_cwd = owned_cwd
+    state.cwd = str(owned_cwd)
+    if state._stored_contract_entry is None:
+        assert state.invocation is not None
+        previous_projection = state.projection_context
+        if previous_projection is None:
+            raise SkillContractError("Fresh execution lacks projection authority")
+        state.projection_context = bind_projection_backend(
+            build_fresh_projection_context(state.cwd, state.invocation),
+            state._effective_backend_obj,
+            resolution=state._explicit_resolution,
+            parent_sandbox_mode=state._fresh_parent_sandbox_mode or "workspace-write",
+            resolved_exploration_profile=previous_projection.resolved_exploration_profile,
+            active_exploration_applicabilities=state._active_exploration_applicabilities,
+        )
+
+    state.closure_report_root = None
+    if state.output_dir and state.closure_spec:
+        state._closure_root = Path(state.output_dir)
+        if not state._closure_root.is_absolute():
+            state._closure_root = owned_cwd / state.output_dir
+        state.closure_report_root = state._closure_root
+    elif state.closure_spec and not state.output_dir:
+        return json.dumps(
+            ToolFailureEnvelope(
+                success=False,
+                error=(
+                    "closure_spec requires output_dir to locate the closure report, "
+                    "but output_dir is empty"
+                ),
+                stage="validate_args:run_skill",
+                retriable=False,
+            )
+        )
+
+    state.write_watch_dirs = []
+    if state.output_dir:
+        resolved_dir = Path(state.output_dir)
+        if not resolved_dir.is_absolute():
+            resolved_dir = owned_cwd / state.output_dir
+        state.write_watch_dirs.append(resolved_dir)
+    if not state.write_watch_dirs:
+        state._default_temp = _resolve_skill_temp_dir(state.cwd, state.skill_command)
+        if state._default_temp:
+            state.write_watch_dirs.append(state._default_temp)
+    return None
+
+
+async def _prepare_owned_dispatch_session(
+    state: _RunSkillDispatchState,
+    owned_cwd: Path,
+) -> str | None:
+    assert state.resolved_command is not None
     assert state._contract_store is not None
     assert state._cfg is not None
     assert state.expected_output_patterns is not None
+    if (terminal := _rebuild_owned_dispatch_context(state, owned_cwd)) is not None:
+        return terminal
+    assert state.write_watch_dirs is not None
     state.skill_add_dirs = []
     state.replay_snapshot_used = False
     state._runner = state.tool_ctx.runner
+    state._ephemeral_root = None
+    state._restored = None
     if state._stored_contract_entry is not None:
         state.skill_add_dirs.append(
             ValidatedAddDir(path=str(state._stored_contract_entry.snapshot_dir))
@@ -110,8 +185,9 @@ def _prepare_dispatch_session(state: _RunSkillDispatchState) -> str | None:
                 state.step_name,
                 invocation_member_names(state.invocation),
             )
-        session_id = f"headless-{uuid4().hex[:12]}"
-        state._cleanup_session_id = session_id
+        session_id = state._cleanup_session_id
+        assert session_id is not None
+        state._copied_snapshot_dir = state._ephemeral_root / session_id
         state._restored = state._runner.restore_skill_snapshot(  # type: ignore[attr-defined]
             state.step_name, state._ephemeral_root, session_id
         )
@@ -145,11 +221,14 @@ def _prepare_dispatch_session(state: _RunSkillDispatchState) -> str | None:
             session_root = ValidatedAddDir(path=str(state._stored_contract_entry.snapshot_dir))
             session_id = state.resume_session_id
         elif state.invocation is not None:
-            session_id = f"headless-{uuid4().hex[:12]}"
-            state._cleanup_session_id = session_id
+            session_id = state._cleanup_session_id
+            assert session_id is not None
             if state.projection_context is None:
                 raise SkillContractError("Projection context was not prepared")
 
+            # materialize_invocation may create the home before failing, so its
+            # reserved identity is cleanup-owned before the call begins.
+            state._generated_home_cleanup_required = True
             session_root = state.tool_ctx.session_skill_manager.materialize_invocation(
                 session_id,
                 state.invocation,

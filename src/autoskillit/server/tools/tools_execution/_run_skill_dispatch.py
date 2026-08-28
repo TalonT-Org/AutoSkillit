@@ -49,7 +49,11 @@ from autoskillit.server.tools._execution_helpers import (
 from autoskillit.server.tools._types import deny_envelope
 from autoskillit.server.tools.tools_execution._managed_leaf import (  # noqa: F401
     _MAX_CLEANUP_FAILURE_RECORDS,
+    _ChildResourceOwnerRequest,
     _record_cleanup_failure,
+)
+from autoskillit.server.tools.tools_execution._run_skill_session import (
+    _prepare_owned_dispatch_session,
 )
 from autoskillit.server.tools.tools_execution._state import _RunSkillDispatchState
 from autoskillit.server.tools.tools_pipeline_tracker import (
@@ -378,11 +382,21 @@ async def run_skill(
             logger.info("run_skill", command=skill_command[:80], cwd=cwd)
             if (terminal := await _te_pkg._prepare_dispatch_backend(state)) is not None:
                 return terminal
-            resource_owner = _te_pkg.scoped_child_resource_owner(state)
-            await resource_owner.__aenter__()
+            _te_pkg._prepare_dispatch_session(state)
+            resource_request = _ChildResourceOwnerRequest(
+                source_cwd=Path(state.cwd),
+                prepare=lambda owned_cwd: _prepare_owned_dispatch_session(state, owned_cwd),
+                session_manager=state.tool_ctx.session_skill_manager,
+                generated_home_id=state._cleanup_session_id,
+                generated_home_materialized=lambda: state._generated_home_cleanup_required,
+                copied_snapshot_path=lambda: state._copied_snapshot_dir,
+                cleanup_errors_are_terminal=False,
+            )
+            resource_owner = _te_pkg.scoped_child_resource_owner(resource_request)
+            prepared = await resource_owner.__aenter__()
             state._child_resource_owner = resource_owner
-            if (terminal := _te_pkg._prepare_dispatch_session(state)) is not None:
-                return terminal
+            if prepared.value is not None:
+                return prepared.value
             return await _te_pkg._execute_and_finalize_run_skill(state)
     except InfrastructureFaultError as exc:
         logger.error("run_skill unhandled infrastructure fault", exc_info=True)

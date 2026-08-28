@@ -350,6 +350,65 @@ def test_backend_compat_precedes_dispatch() -> None:
     )
 
 
+def test_run_skill_public_finalizers_remain_outside_child_resource_owner() -> None:
+    """Owner cleanup failures must not bypass public completion/context finalizers."""
+    pkg_dir = SRC_ROOT / "server" / "tools" / "tools_execution"
+    dispatch_tree = ast.parse((pkg_dir / "_run_skill_dispatch.py").read_text())
+    run_skill_node = next(
+        (
+            node
+            for node in dispatch_tree.body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_skill"
+        ),
+        None,
+    )
+    assert run_skill_node is not None, "run_skill not found in _run_skill_dispatch.py"
+    outer_try = next(
+        (node for node in run_skill_node.body if isinstance(node, ast.Try) and node.finalbody),
+        None,
+    )
+    assert outer_try is not None, "run_skill must retain an outer try/finally"
+
+    finalizer_calls = {
+        node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
+        for node in ast.walk(ast.Module(body=outer_try.finalbody, type_ignores=[]))
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Attribute, ast.Name))
+    }
+    assert {
+        "abort",
+        "cleanup",
+        "_release_context_tracker",
+        "_cleanup_explorer_launch",
+        "reset",
+    } <= finalizer_calls
+
+    owner_tree = ast.parse((pkg_dir / "_managed_leaf.py").read_text())
+    owner_node = next(
+        (
+            node
+            for node in owner_tree.body
+            if isinstance(node, ast.AsyncFunctionDef)
+            and node.name == "scoped_child_resource_owner"
+        ),
+        None,
+    )
+    assert owner_node is not None, "scoped_child_resource_owner not found"
+    owner_calls = {
+        node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id
+        for node in ast.walk(owner_node)
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Attribute, ast.Name))
+    }
+    assert (
+        not {
+            "abort",
+            "_release_context_tracker",
+            "_cleanup_explorer_launch",
+            "reset",
+        }
+        & owner_calls
+    )
+
+
 def _backend_compat_dominance_violations(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     compat_calls: set[str],

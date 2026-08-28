@@ -22,7 +22,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_stale_session_path_returns_crashed(tool_ctx_kitchen_open, tmp_path) -> None:
-    """init_session returning a nonexistent path must crash-close before executor."""
+    """Materialization returning a nonexistent path must crash-close before executor."""
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
 
@@ -40,6 +40,7 @@ async def test_stale_session_path_returns_crashed(tool_ctx_kitchen_open, tmp_pat
     assert data["success"] is False
     assert data["subtype"] == "crashed"
     assert executor.calls == []
+    mock_mgr.cleanup_session.assert_called_once()
 
 
 @pytest.mark.anyio

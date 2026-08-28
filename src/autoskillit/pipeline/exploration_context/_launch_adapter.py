@@ -134,7 +134,6 @@ def reopen_launch_environment(
 
 def submit_from_launch_environment(
     store: OwnerBoundExplorationContextStore,
-    *,
     query: ExplorationQuerySpec,
     page_size: int,
     max_ttl_seconds: float,
@@ -181,7 +180,6 @@ def submit_from_launch_environment(
 
 def get_page_from_launch_environment(
     store: OwnerBoundExplorationContextStore,
-    *,
     page_size: int,
     cursor: ContinuationCursor | None,
     max_ttl_seconds: float,
@@ -218,7 +216,6 @@ def get_page_from_launch_environment(
 
 def validate_launch_environment(
     store: OwnerBoundExplorationContextStore,
-    *,
     max_ttl_seconds: float,
     clock: Callable[[], float],
 ) -> bool:

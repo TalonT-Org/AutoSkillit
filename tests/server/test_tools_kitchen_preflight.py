@@ -21,8 +21,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit.config._config_dataclasses import ProvidersConfig
-from autoskillit.recipe import RecipeStep
-from tests.server._helpers import _make_finalized_projection_from_recipe_steps
+from autoskillit.core import FinalizedRecipeStep, RecipeFlowEdge
+from tests.server._helpers import _make_finalized_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -627,19 +627,19 @@ class TestPreflightGateClosure:
         assert tool_ctx.gate.enabled is True
 
         tool_ctx.backend = _make_codex_backend()
-        recipe_step = RecipeStep(
+        recipe_step = FinalizedRecipeStep(
             name="s1",
             tool="run_skill",
             provider="",
-            on_success="done",
         )
         tool_ctx.recipes = MagicMock()
         tool_ctx.recipes.load_and_validate.return_value = {
             "valid": True,
             "content": "steps:\n  s1:\n    tool: run_skill",
             "post_prune_step_names": ["s1"],
-            "_finalized_projection": _make_finalized_projection_from_recipe_steps(
-                {"s1": recipe_step}
+            "_finalized_projection": _make_finalized_projection(
+                steps=(recipe_step,),
+                edges=(RecipeFlowEdge("s1", "success", "done", None, None),),
             ),
         }
         recipe_info = MagicMock()

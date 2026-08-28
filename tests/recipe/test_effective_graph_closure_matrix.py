@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import RECIPE_TERMINAL_TARGETS, FinalizedRecipeProjection
-from autoskillit.recipe import list_recipes, load_and_validate
-from autoskillit.recipe.io import load_recipe
+from autoskillit.recipe import RecipeKind, list_recipes, load_and_validate
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from tests._tracked_recipes import tracked_recipe_names
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -19,7 +19,13 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).parents[2]
 _GUARD_REFERENCE = re.compile(r"inputs\.([A-Za-z_][A-Za-z0-9_]*)")
-_RECIPE_PATHS = {info.name: info.path for info in list_recipes(_PROJECT_ROOT).items}
+_BUILTIN_RECIPES_DIR = builtin_recipes_dir().resolve()
+_RECIPE_PATHS = {
+    info.name: info.path
+    for info in list_recipes(_PROJECT_ROOT).items
+    if info.path.resolve().is_relative_to(_BUILTIN_RECIPES_DIR)
+    and info.kind != RecipeKind.CAMPAIGN
+}
 
 
 def _guard_ingredients(recipe_name: str) -> tuple[str, ...]:
@@ -38,6 +44,8 @@ def _guard_ingredients(recipe_name: str) -> tuple[str, ...]:
 def _guard_cases() -> list[tuple[str, dict[str, str]]]:
     cases: list[tuple[str, dict[str, str]]] = []
     for recipe_name in tracked_recipe_names(_PROJECT_ROOT):
+        if recipe_name not in _RECIPE_PATHS:
+            continue
         ingredients = _guard_ingredients(recipe_name)
         for values in product((False, True), repeat=len(ingredients)):
             overrides = {

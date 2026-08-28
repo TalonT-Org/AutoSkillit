@@ -56,9 +56,12 @@ class TestFleetDispatchPreflightBehavioral:
         self, build_ctx_open: Any
     ) -> None:
         """When preflight fails, execute_dispatch must not be called."""
-        from autoskillit.core import BackendCapabilities
-        from autoskillit.recipe import RecipeStep
-        from tests.server._helpers import _make_finalized_projection_from_recipe_steps
+        from autoskillit.core import (
+            BackendCapabilities,
+            FinalizedRecipeStep,
+            RecipeFlowEdge,
+        )
+        from tests.server._helpers import _make_finalized_projection
 
         tool_ctx = build_ctx_open()
 
@@ -71,18 +74,18 @@ class TestFleetDispatchPreflightBehavioral:
         backend.capabilities = caps
         tool_ctx.backend = backend
 
-        recipe_step = RecipeStep(
+        recipe_step = FinalizedRecipeStep(
             name="s1",
             tool="run_skill",
             provider="",
-            on_success="done",
         )
         tool_ctx.recipes = MagicMock()
         tool_ctx.recipes.load_and_validate.return_value = {
             "valid": True,
             "post_prune_step_names": ["s1"],
-            "_finalized_projection": _make_finalized_projection_from_recipe_steps(
-                {"s1": recipe_step}
+            "_finalized_projection": _make_finalized_projection(
+                steps=(recipe_step,),
+                edges=(RecipeFlowEdge("s1", "success", "done", None, None),),
             ),
         }
         recipe_info = MagicMock()

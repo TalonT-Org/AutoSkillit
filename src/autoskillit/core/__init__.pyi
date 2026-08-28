@@ -648,6 +648,7 @@ from .types import RECIPE_SECTION_PAGINATION_VERSION as RECIPE_SECTION_PAGINATIO
 from .types import RECIPE_SECTION_REGISTRY as RECIPE_SECTION_REGISTRY
 from .types import RECIPE_SECTION_REGISTRY_DIGEST as RECIPE_SECTION_REGISTRY_DIGEST
 from .types import RECIPE_SECTION_RESPONSE_FLOOR_BYTES as RECIPE_SECTION_RESPONSE_FLOOR_BYTES
+from .types import RECIPE_TERMINAL_TARGETS as RECIPE_TERMINAL_TARGETS
 from .types import REQUIRED_CONSUMER_FIELDS as REQUIRED_CONSUMER_FIELDS
 from .types import RESERVED_LOG_RECORD_KEYS as RESERVED_LOG_RECORD_KEYS
 from .types import RESPONSE_BACKSTOP_EXEMPTION_REGISTRY as RESPONSE_BACKSTOP_EXEMPTION_REGISTRY
@@ -1087,7 +1088,6 @@ from .types import RecipeExecutionLock as RecipeExecutionLock
 from .types import RecipeExecutionSnapshot as RecipeExecutionSnapshot
 from .types import RecipeExemptionFitnessError as RecipeExemptionFitnessError
 from .types import RecipeFlowEdge as RecipeFlowEdge
-from .types import RECIPE_TERMINAL_TARGETS as RECIPE_TERMINAL_TARGETS
 from .types import RecipeFlowGeneration as RecipeFlowGeneration
 from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError

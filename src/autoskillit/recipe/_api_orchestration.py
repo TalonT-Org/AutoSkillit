@@ -678,7 +678,7 @@ def _run_validation_pipeline(
         semantic_suggestions = findings_to_dicts(semantic_findings)
         t0 = _t("semantic_rules", t0, name)
 
-        if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+        if _skip_resolutions and any(v is not True for v in _skip_resolutions.values()):
             semantic_findings = filter_pruning_false_positives(
                 semantic_findings, _pre_prune_findings
             )

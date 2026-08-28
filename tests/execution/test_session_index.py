@@ -1,10 +1,12 @@
 """Tests for strict and tolerant retained session-index readers."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from autoskillit.execution.session_index import (
+    find_stale_session_archive_references,
     read_session_index_rows,
     read_tolerant_session_index_rows,
 )
@@ -53,4 +55,37 @@ def test_tolerant_session_index_reader_skips_only_invalid_utf8_rows(tmp_path: Pa
     assert read_tolerant_session_index_rows(index) == [
         {"session_id": "one"},
         {"session_id": "two"},
+    ]
+
+
+def test_find_stale_session_archive_references_is_tolerant_and_path_scoped(
+    tmp_path: Path,
+) -> None:
+    existing_dir = tmp_path / "existing-dir"
+    existing_dir.mkdir()
+    existing_file = tmp_path / "existing.log"
+    existing_file.write_text("")
+    missing_dir = tmp_path / "missing-dir"
+    missing_file = tmp_path / "missing.log"
+    archive = tmp_path / "sessions-archive.jsonl"
+    rows = [
+        {
+            "cwd": str(existing_dir),
+            "claude_code_log": str(missing_file),
+            "codex_log": "relative/codex.jsonl",
+        },
+        {
+            "cwd": str(missing_dir),
+            "claude_code_log": str(existing_file),
+            "codex_log": None,
+        },
+        {"cwd": 7, "claude_code_log": [], "codex_log": {}},
+    ]
+    archive.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows) + '"scalar"\n[]\n{"cwd":"truncated"'
+    )
+
+    assert find_stale_session_archive_references(tmp_path) == [
+        str(missing_file),
+        str(missing_dir),
     ]

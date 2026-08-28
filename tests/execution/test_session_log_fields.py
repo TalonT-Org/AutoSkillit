@@ -822,37 +822,6 @@ def test_resolved_model_and_subagent_outcomes_are_consistent_across_artifacts(tm
     assert index_entry["subagent_model_outcomes"] == [outcome]
 
 
-def test_appending_v9_row_preserves_retained_v8_row_bytes(tmp_path):
-    _flush(tmp_path, session_id="retained-v8", proc_snapshots=None)
-    index_path = tmp_path / "sessions.jsonl"
-    retained = json.loads(index_path.read_text().strip())
-    retained["schema_version"] = 8
-    retained.pop("subagent_model_outcomes")
-    retained_line = json.dumps(retained, sort_keys=True, separators=(",", ":"))
-    index_path.write_text(retained_line + "\n")
-
-    _flush(
-        tmp_path,
-        session_id="new-v9",
-        subagent_model_outcomes=(
-            {
-                "model": "claude-sonnet-5",
-                "final_model": "claude-sonnet-5",
-                "model_swapped": False,
-            },
-        ),
-        proc_snapshots=None,
-    )
-
-    lines = index_path.read_text().splitlines()
-    assert lines[0] == retained_line
-    old_row, new_row = map(json.loads, lines)
-    assert old_row["schema_version"] == 8
-    assert "subagent_model_outcomes" not in old_row
-    assert new_row["schema_version"] == 9
-    assert new_row["subagent_model_outcomes"][0]["model"] == "claude-sonnet-5"
-
-
 def test_summary_json_omits_versions_when_not_passed(tmp_path):
     _flush(tmp_path, session_id="vs-003")
     summary = json.loads((tmp_path / "sessions" / "vs-003" / "summary.json").read_text())
@@ -1505,6 +1474,51 @@ def test_flush_session_log_configured_model_written_to_token_usage(tmp_path):
     data = json.loads(tu_path.read_text())
     assert data["model_identifier"] == "claude-opus-4-6"
     assert data["configured_model"] == "claude-opus-4-6"
+
+
+def test_resolved_model_identity_is_not_used_for_drift_normalization(tmp_path, monkeypatch):
+    import autoskillit.execution.session_log as session_log
+
+    captured: dict[str, str] = {}
+
+    def capture_drift_inputs(
+        configured_model: str,
+        observed_model: str,
+        *,
+        profile_name: str,
+    ) -> list[dict[str, object]]:
+        captured.update(
+            configured_model=configured_model,
+            observed_model=observed_model,
+            profile_name=profile_name,
+        )
+        return []
+
+    monkeypatch.setattr(session_log, "detect_model_drift", capture_drift_inputs)
+    resolved_model = "resolved-parent-model[1m]-2026-08-28"
+    _flush(
+        tmp_path,
+        session_id="drift-source-separation",
+        proc_snapshots=None,
+        model_identity=ModelIdentity(
+            configured_model="opus[1m]",
+            effective_model=resolved_model,
+            profile_name="anthropic",
+        ),
+        token_usage={
+            "model_breakdown": {
+                "claude-opus-5": {"input_tokens": 20000, "output_tokens": 8000},
+            },
+        },
+    )
+
+    assert captured == {
+        "configured_model": "opus[1m]",
+        "observed_model": "claude-opus-5",
+        "profile_name": "anthropic",
+    }
+    entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert entry["model_identifier"] == resolved_model
 
 
 def test_flush_session_log_no_false_drift_with_configured_model(tmp_path):

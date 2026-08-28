@@ -417,17 +417,16 @@ def flush_session_log(
                 }
             )
 
-        effective_model_id = model_identity.effective_model or _primary_model_identifier(
-            token_usage
-        )
-        _observed = _primary_model_identifier(token_usage) if token_usage else ""
+        observed_token_model = _primary_model_identifier(token_usage) if token_usage else ""
+        # Drift compares launch provenance with token evidence, never the OTLP-resolved identity.
         anomalies.extend(
             detect_model_drift(
                 model_identity.configured_model,
-                _observed,
+                observed_token_model,
                 profile_name=model_identity.profile_name,
             )
         )
+        effective_model_id = model_identity.effective_model or observed_token_model
         if model_identity.profile_name and model_identity.profile_name != "anthropic":
             if effective_model_id.startswith("claude-") or effective_model_id in (
                 "sonnet",

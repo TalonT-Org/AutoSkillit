@@ -21,7 +21,6 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
-    STEP_SKIP_SEMANTICS_CLAUSE,
     BackendCapabilities,
     BoundedDeliveryRoundTripBudgetExceededError,
     FinalizedRecipeProjection,
@@ -106,11 +105,7 @@ if TYPE_CHECKING:
 
 def document_recipe_delivery_contract(function: Any) -> Any:
     """Append the generated Codex contract before FastMCP reads a tool docstring."""
-    description = (
-        (function.__doc__ or "")
-        .replace("{INFRA_FAULT}", _FAULT_CLAUSE)
-        .replace("{STEP_SKIP_SEMANTICS}", STEP_SKIP_SEMANTICS_CLAUSE)
-    )
+    description = (function.__doc__ or "").replace("{INFRA_FAULT}", _FAULT_CLAUSE)
     function.__doc__ = f"{description.rstrip()}\n\n{codex_recipe_delivery_calling_contract()}\n"
     return function
 

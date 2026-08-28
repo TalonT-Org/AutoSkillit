@@ -239,7 +239,7 @@ def _load_sessions(
                 "turn_count": 0,
             }
         entry = aggregated[key]
-        _model = data.get("model_identifier", "")
+        _model = data.get("model_identifier", "") or data.get("configured_model", "")
         if _model and not entry["model"]:
             entry["model"] = _model
         entry["input_tokens"] += data.get("input_tokens") or 0

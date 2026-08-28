@@ -12,16 +12,24 @@ Zero autoskillit imports outside this sub-package (IL-0).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from ._type_constants import KNOWN_CI_EVENTS
 from ._type_execution_identity import ExecutionIdentity
 
 __all__ = [
+    "SubagentModelOutcomeDict",
     "SessionTelemetry",
     "RecipeIdentity",
     "CIRunScope",
 ]
+
+
+class SubagentModelOutcomeDict(TypedDict):
+    model: str
+    final_model: str
+    model_swapped: bool
+    agent_type: NotRequired[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +48,7 @@ class SessionTelemetry:
     github_api_requests: int
     loc_insertions: int
     loc_deletions: int
+    subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...]
     execution_identity: ExecutionIdentity = ExecutionIdentity.empty()
 
     @classmethod
@@ -53,6 +62,7 @@ class SessionTelemetry:
             github_api_requests=0,
             loc_insertions=0,
             loc_deletions=0,
+            subagent_model_outcomes=(),
             execution_identity=ExecutionIdentity.empty(),
         )
 

@@ -1213,6 +1213,7 @@ from .types import StoreCapacityExhaustedError as StoreCapacityExhaustedError
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser
+from .types import SubagentModelOutcomeDict as SubagentModelOutcomeDict
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
 from .types import SupportsDebug as SupportsDebug

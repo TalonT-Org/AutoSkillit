@@ -19,6 +19,7 @@ from autoskillit.core import (
     RetryReason,
     SessionTelemetry,
     SkillResult,
+    SubagentModelOutcomeDict,
     WriteEvidence,
     extract_skill_name,
     get_logger,
@@ -69,7 +70,6 @@ def _apply_budget_guard(
     if not sr.needs_retry or audit is None or not skill_command:
         return sr
     consecutive = audit.consecutive_failures(skill_command)
-    # current failure already recorded; consecutive count includes this attempt
     if consecutive > max_consecutive_retries:
         logger.warning(
             "retry_budget_exhausted",
@@ -163,11 +163,7 @@ def _compute_write_evidence(
 ) -> WriteEvidence:
     write_names = backend.write_tool_names()
 
-    # Determine if this dispatch requires tracked-tree writes:
-    # A worktree skill's implementation evidence must come from outside
-    # the .autoskillit/temp/ tree, regardless of how write_watch_dirs
-    # was constructed (output_dir="." or default temp fallback).
-    # For ~40 non-worktree skills, all writes count (temp IS their target).
+    # Worktree implementation evidence must be outside temp; other skills count temp writes.
     extracted = extract_skill_name(skill_command) if skill_command else None
     is_worktree_dispatch = bool(
         extracted and extracted in WORKTREE_SKILLS and cwd and write_watch_dirs
@@ -198,7 +194,6 @@ def _compute_write_evidence(
             if t.get("name") in write_names and t.get("id") not in session.denied_tool_use_ids
         )
 
-    # Codex fallback: file_changes paths also need filtering for worktree skills
     if write_call_count == 0 and file_changes:
         if is_worktree_dispatch:
             resolved_cwd = str(Path(cwd).resolve())
@@ -267,11 +262,13 @@ def _build_session_telemetry(
     github_api_log: GitHubApiLog | None,
     loc_insertions: int,
     loc_deletions: int,
+    session_id: str,
+    subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...],
     step_name: str = "",
     order_id: str = "",
 ) -> SessionTelemetry:
     if github_api_log is not None:
-        _api_usage = github_api_log.drain_step(skill_result.session_id, step_name, order_id)
+        _api_usage = github_api_log.drain_step(session_id, step_name, order_id)
     else:
         _api_usage = None
     return SessionTelemetry(
@@ -282,6 +279,7 @@ def _build_session_telemetry(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=loc_insertions,
         loc_deletions=loc_deletions,
+        subagent_model_outcomes=subagent_model_outcomes,
         execution_identity=skill_result.execution_identity,
     )
 
@@ -292,6 +290,7 @@ def _build_error_path_telemetry(
     step_name: str = "",
     order_id: str = "",
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
+    subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...] = (),
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
     if github_api_log is not None:
@@ -306,5 +305,6 @@ def _build_error_path_telemetry(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=0,
         loc_deletions=0,
+        subagent_model_outcomes=subagent_model_outcomes,
         execution_identity=execution_identity,
     )

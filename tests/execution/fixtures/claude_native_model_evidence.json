@@ -1,0 +1,59 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {"attributes": []},
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "com.anthropic.claude_code.events",
+            "version": "stable-version-sentinel"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1000000001",
+              "observedTimeUnixNano": "1000000002",
+              "body": {"stringValue": "api_request"},
+              "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-session-sentinel"}},
+                {"key": "event.name", "value": {"stringValue": "api_request"}},
+                {"key": "event.sequence", "value": {"intValue": "1"}},
+                {"key": "prompt.id", "value": {"stringValue": "claude-prompt-sentinel"}},
+                {"key": "model", "value": {"stringValue": "claude-parent-model-sentinel"}},
+                {"key": "query_source", "value": {"stringValue": "sdk"}}
+              ]
+            },
+            {
+              "timeUnixNano": "1000000003",
+              "observedTimeUnixNano": "1000000004",
+              "body": {"stringValue": "api_request"},
+              "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-session-sentinel"}},
+                {"key": "event.name", "value": {"stringValue": "api_request"}},
+                {"key": "event.sequence", "value": {"intValue": "2"}},
+                {"key": "prompt.id", "value": {"stringValue": "claude-prompt-sentinel"}},
+                {"key": "model", "value": {"stringValue": "claude-child-model-sentinel"}},
+                {"key": "query_source", "value": {"stringValue": "agent:builtin:general-purpose"}},
+                {"key": "agent.name", "value": {"stringValue": "general-purpose"}}
+              ]
+            },
+            {
+              "timeUnixNano": "1000000005",
+              "observedTimeUnixNano": "1000000006",
+              "body": {"stringValue": "subagent_completed"},
+              "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-session-sentinel"}},
+                {"key": "event.name", "value": {"stringValue": "subagent_completed"}},
+                {"key": "event.sequence", "value": {"intValue": "3"}},
+                {"key": "prompt.id", "value": {"stringValue": "claude-prompt-sentinel"}},
+                {"key": "agent_type", "value": {"stringValue": "general-purpose"}},
+                {"key": "model", "value": {"stringValue": "claude-child-model-sentinel"}},
+                {"key": "final_model", "value": {"stringValue": "claude-child-final-model-sentinel"}},
+                {"key": "model_swapped", "value": {"boolValue": true}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

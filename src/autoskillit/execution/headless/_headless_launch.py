@@ -243,6 +243,7 @@ async def _attempt_contract_nudge(
     launch_preparation: LaunchPreparation | None = None,
     expected_launch_contract: ResolvedLaunchContract | None = None,
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    on_session_id_resolved: Callable[[str], None] | None = None,
     force_inactive_agent_teams: bool = False,
     natural_exit_grace_seconds: float,
 ) -> SkillResult | None:
@@ -412,6 +413,8 @@ async def _attempt_contract_nudge(
         return None
     if managed_lineage_observer is not None and nudge_session.session_id:
         managed_lineage_observer.bind_candidate(nudge_session.session_id)
+    if on_session_id_resolved is not None and nudge_session.session_id:
+        on_session_id_resolved(nudge_session.session_id)
     combined_result = skill_result.result + "\n" + nudge_session.output
     nudge_usage = nudge_session.raw.get("token_usage")
 

@@ -1,0 +1,30 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {"attributes": []},
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "codex_otel.log_only",
+            "version": ""
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "2000000001",
+              "observedTimeUnixNano": "2000000002",
+              "body": {"stringValue": "codex.conversation_starts"},
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "codex.conversation_starts"}},
+                {"key": "provider_name", "value": {"stringValue": "OpenAI"}},
+                {"key": "conversation.id", "value": {"stringValue": "codex-conversation-sentinel"}},
+                {"key": "originator", "value": {"stringValue": "codex_exec"}},
+                {"key": "model", "value": {"stringValue": "codex-parent-model-sentinel"}},
+                {"key": "slug", "value": {"stringValue": "codex-parent-model-sentinel"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

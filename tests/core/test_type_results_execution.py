@@ -31,9 +31,31 @@ class TestExecutionTypesImport:
             CIRunScope,
             RecipeIdentity,
             SessionTelemetry,
+            SubagentModelOutcomeDict,
         )
 
-        assert all(inspect.isclass(cls) for cls in [SessionTelemetry, RecipeIdentity, CIRunScope])
+        assert all(
+            inspect.isclass(cls)
+            for cls in [
+                SessionTelemetry,
+                RecipeIdentity,
+                CIRunScope,
+                SubagentModelOutcomeDict,
+            ]
+        )
+
+    def test_subagent_model_outcome_contract(self):
+        from typing import get_type_hints
+
+        from autoskillit.core import SessionTelemetry, SubagentModelOutcomeDict
+
+        assert get_type_hints(SubagentModelOutcomeDict) == {
+            "model": str,
+            "final_model": str,
+            "model_swapped": bool,
+            "agent_type": str,
+        }
+        assert SessionTelemetry.empty().subagent_model_outcomes == ()
 
 
 class TestExecutionTypesNotInResults:
@@ -56,7 +78,12 @@ class TestExecutionTypesNotInResults:
             __all__ as exec_all,
         )
 
-        expected = {"SessionTelemetry", "RecipeIdentity", "CIRunScope"}
+        expected = {
+            "SessionTelemetry",
+            "RecipeIdentity",
+            "CIRunScope",
+            "SubagentModelOutcomeDict",
+        }
         assert expected == set(exec_all)
 
     def test_skill_result_still_uses_provider_outcome(self):

@@ -143,6 +143,7 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
             github_api_requests=_usage.get("total_requests", 0) if _usage else 0,
             loc_insertions=0,
             loc_deletions=0,
+            subagent_model_outcomes=(),
         ),
         provider_outcome=ProviderOutcome.none_used(),
         recipe_identity=RecipeIdentity.empty(),

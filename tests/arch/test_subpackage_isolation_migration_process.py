@@ -129,8 +129,6 @@ def test_pipeline_fidelity_module_deleted():
 
 def test_pipeline_pr_gates_no_longer_has_domain_paths():
     """P2-F2: DOMAIN_PATHS must not be defined in pipeline/pr_gates.py."""
-    from pathlib import Path
-
     src = (
         Path(__file__).parent.parent.parent / "src/autoskillit/pipeline/pr_gates.py"
     ).read_text()

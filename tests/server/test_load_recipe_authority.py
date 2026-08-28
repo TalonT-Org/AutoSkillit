@@ -1,15 +1,17 @@
-"""Load_recipe read-only invariants (P4) and authority-rejection contract
-(P7 authority surface).
+"""Load_recipe read-only invariants (P4) and authority/type gate contract
+(P7 authority surface, Tier-2 type surface).
 """
 
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from autoskillit.core import SkillResolver
+from autoskillit.recipe.schema import RecipeIngredient
 from autoskillit.server.tools.tools_recipe import load_recipe
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -102,4 +104,56 @@ class TestLoadRecipeAuthorityClobber:
         # The authority gate runs at function entry, before recipes.load is
         # called — confirms no recipe load side effect on rejection.
         mock_ctx.recipes.load.assert_not_called()
+        mock_ctx.recipes.load_and_validate.assert_not_called()
+
+
+class TestLoadRecipeTypeGate:
+    """Tier-2 type gate: caller-supplied override values are rejected before
+    any serve_recipe or session side effect runs.
+    """
+
+    @pytest.mark.anyio
+    async def test_load_recipe_rejects_invalid_type_override(self, tmp_path, monkeypatch):
+        """An invalid-typed override returns the type-validation envelope and
+        serve_recipe must NOT have been called."""
+        from unittest.mock import AsyncMock
+
+        from tests.server.conftest import _make_mock_ctx
+
+        monkeypatch.chdir(tmp_path)
+        mock_ctx = _make_mock_ctx()
+        mock_ctx.enable_components = AsyncMock()
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.kitchen_id = "test-kitchen-type"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        typed_recipe = SimpleNamespace(
+            ingredients={"count": RecipeIngredient(description="Count", type="integer")},
+            steps={"do": MagicMock()},
+        )
+        mock_ctx.recipes.load.return_value = typed_recipe
+        mock_recipe_info = MagicMock()
+        mock_recipe_info.path = "/fake/recipe.yaml"
+        mock_ctx.recipes.find.return_value = mock_recipe_info
+
+        with patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ):
+                with patch("autoskillit.server.logger"):
+                    result_str = await load_recipe(
+                        name="demo",
+                        overrides={"count": "abc"},
+                    )
+
+        parsed = json.loads(result_str)
+        assert parsed["success"] is False
+        assert parsed["stage"] == "ingredient_type_validation"
+        assert parsed["retriable"] is False
+        assert "count" in parsed["error"]
+        # serve_recipe must not be invoked when the type gate rejects.
         mock_ctx.recipes.load_and_validate.assert_not_called()

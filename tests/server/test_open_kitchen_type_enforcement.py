@@ -122,10 +122,8 @@ async def test_open_kitchen_accepts_valid_integer_override(tmp_path, monkeypatch
         tmp_path, monkeypatch, recipe, {"count": "42"}
     )
     parsed = json.loads(result_str)
-    if isinstance(parsed, dict):
-        assert parsed.get("stage") != "ingredient_type_validation", (
-            f"Valid integer wrongly rejected: {parsed}"
-        )
+    assert parsed["success"] is True, f"Valid integer wrongly rejected: {parsed}"
+    assert parsed.get("stage") != "ingredient_type_validation"
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +151,8 @@ async def test_open_kitchen_accepts_each_boolean_value(tmp_path, monkeypatch, va
         tmp_path, monkeypatch, recipe, {"flag": value}
     )
     parsed = json.loads(result_str)
-    if isinstance(parsed, dict):
-        assert parsed.get("stage") != "ingredient_type_validation", (
-            f"Boolean value {value!r} wrongly rejected: {parsed}"
-        )
+    assert parsed["success"] is True, f"Boolean value {value!r} wrongly rejected: {parsed}"
+    assert parsed.get("stage") != "ingredient_type_validation"
 
 
 # ---------------------------------------------------------------------------
@@ -182,10 +178,8 @@ async def test_open_kitchen_accepts_valid_list_override(tmp_path, monkeypatch):
         tmp_path, monkeypatch, recipe, {"items": "[1,2,3]"}
     )
     parsed = json.loads(result_str)
-    if isinstance(parsed, dict):
-        assert parsed.get("stage") != "ingredient_type_validation", (
-            f"Valid list JSON wrongly rejected: {parsed}"
-        )
+    assert parsed["success"] is True, f"Valid list JSON wrongly rejected: {parsed}"
+    assert parsed.get("stage") != "ingredient_type_validation"
 
 
 @pytest.mark.anyio
@@ -206,10 +200,8 @@ async def test_open_kitchen_accepts_valid_dict_override(tmp_path, monkeypatch):
         tmp_path, monkeypatch, recipe, {"config": '{"a": 1}'}
     )
     parsed = json.loads(result_str)
-    if isinstance(parsed, dict):
-        assert parsed.get("stage") != "ingredient_type_validation", (
-            f"Valid dict JSON wrongly rejected: {parsed}"
-        )
+    assert parsed["success"] is True, f"Valid dict JSON wrongly rejected: {parsed}"
+    assert parsed.get("stage") != "ingredient_type_validation"
 
 
 # ---------------------------------------------------------------------------
@@ -224,10 +216,8 @@ async def test_open_kitchen_accepts_absolute_path_override(tmp_path, monkeypatch
         tmp_path, monkeypatch, recipe, {"target": "/tmp/foo"}
     )
     parsed = json.loads(result_str)
-    if isinstance(parsed, dict):
-        assert parsed.get("stage") != "ingredient_type_validation", (
-            f"Valid absolute_path wrongly rejected: {parsed}"
-        )
+    assert parsed["success"] is True, f"Valid absolute_path wrongly rejected: {parsed}"
+    assert parsed.get("stage") != "ingredient_type_validation"
 
 
 @pytest.mark.anyio
@@ -254,10 +244,8 @@ async def test_open_kitchen_skips_validation_for_untyped_ingredients(tmp_path, m
         tmp_path, monkeypatch, recipe, {"name": "anything-here"}
     )
     parsed = json.loads(result_str)
-    if isinstance(parsed, dict):
-        assert parsed.get("stage") != "ingredient_type_validation", (
-            f"Untyped ingredient wrongly rejected: {parsed}"
-        )
+    assert parsed["success"] is True, f"Untyped ingredient wrongly rejected: {parsed}"
+    assert parsed.get("stage") != "ingredient_type_validation"
 
 
 # ---------------------------------------------------------------------------

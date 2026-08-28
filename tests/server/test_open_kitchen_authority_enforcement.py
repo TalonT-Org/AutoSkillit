@@ -118,9 +118,8 @@ async def test_open_kitchen_still_accepts_non_authoritative_overrides(tmp_path, 
     mock_ctx.recipes.load.return_value = MagicMock(
         steps={"do": MagicMock()}, ingredients={"audit": MagicMock(spec=["type"], type=None)}
     )
-    mock_ctx.recipes.load_and_validate.return_value = MagicMock(get=MagicMock(return_value=True))
     # Provide enough mocking for the success path past the gate.
-    mock_ctx.recipes.load_and_validate.side_effect = lambda *_a, **_kw: {
+    mock_ctx.recipes.load_and_validate.side_effect = lambda *_args, **_kwargs: {  # noqa: ARG005
         "content": "name: demo\n",
         "valid": True,
         "suggestions": [],
@@ -154,10 +153,13 @@ async def test_open_kitchen_still_accepts_non_authoritative_overrides(tmp_path, 
 
     parsed = json.loads(result_str)
     # The gate must NOT have rejected this call. Either the success path returns
-    # valid response or some downstream failure occurs — what matters is the
-    # envelope does NOT have stage=ingredient_authority_validation.
-    if isinstance(parsed, dict) and parsed.get("stage") == "ingredient_authority_validation":
-        pytest.fail(f"Non-authoritative override wrongly rejected: {parsed}")
+    # a valid response or some downstream failure occurs — what matters is the
+    # envelope does NOT have stage=ingredient_authority_validation. Note that a
+    # downstream ``recipe_validation`` failure is acceptable here; the gate ran
+    # first and let the call through.
+    assert parsed.get("stage") != "ingredient_authority_validation", (
+        f"Non-authoritative override wrongly rejected: {parsed}"
+    )
 
 
 @pytest.mark.anyio
@@ -168,6 +170,16 @@ async def test_open_kitchen_authority_supersedes_type_validation(tmp_path, monke
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     _patched_env(mock_ctx)
+    # Configure a recipe with ``count: RecipeIngredient(type=integer)`` so the
+    # type gate WOULD fire if it ran before the authority gate.
+    typed_recipe = MagicMock(
+        ingredients={"count": MagicMock(spec=["type"], type="integer")},
+        steps={"do": MagicMock()},
+    )
+    mock_ctx.recipes.load.return_value = typed_recipe
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = "/fake/recipe.yaml"
+    mock_ctx.recipes.find.return_value = mock_recipe_info
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -238,10 +250,15 @@ async def test_open_kitchen_no_snapshot_persisted_on_rejection(tmp_path, monkeyp
 
     parsed = json.loads(result_str)
     assert parsed["success"] is False
-    # Snapshot must be unchanged.
+    # Snapshot must be unchanged. Asserting identity AND equality catches both
+    # full reassignment and in-place mutation (e.g. ``dict.update``).
     assert mock_ctx.session_serve_overrides is sentinel_overrides, (
-        "session_serve_overrides mutated on authority rejection — gate ran AFTER "
+        "session_serve_overrides reassigned on authority rejection — gate ran AFTER "
         "snapshot write instead of BEFORE."
+    )
+    assert mock_ctx.session_serve_overrides == {"audit": "false"}, (
+        "session_serve_overrides mutated in place on authority rejection — "
+        "gate ran AFTER snapshot write instead of BEFORE."
     )
 
 
@@ -283,10 +300,8 @@ async def test_open_kitchen_ingredients_only_rejects_authority_override(tmp_path
 
 
 @pytest.mark.anyio
-async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_open, tmp_path):
+async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_open):
     """load_recipe mirrors open_kitchen's authority gate."""
-    from unittest.mock import MagicMock, patch
-
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
@@ -308,12 +323,8 @@ async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_op
 
 
 @pytest.mark.anyio
-async def test_load_recipe_ingredients_only_rejects_authority_override(
-    tool_ctx_kitchen_open, tmp_path
-):
+async def test_load_recipe_ingredients_only_rejects_authority_override(tool_ctx_kitchen_open):
     """load_recipe's ingredients_only=True path also rejects."""
-    from unittest.mock import MagicMock, patch
-
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
@@ -334,8 +345,7 @@ async def test_load_recipe_ingredients_only_rejects_authority_override(
     tool_ctx_kitchen_open.recipes.load.assert_not_called()
 
 
-@pytest.mark.anyio
-async def test_authority_rejection_envelope_shape():
+def test_authority_rejection_envelope_shape():
     """The rejection envelope from build_authority_rejection_envelope has the
     expected field shape: success=False, error mentions key, stage=
     ingredient_authority_validation, retriable=False, user_visible_message

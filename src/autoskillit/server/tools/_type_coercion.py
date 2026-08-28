@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any, Final
 
-from autoskillit.core.types._type_constants import ALLOWED_INGREDIENT_TYPES
-
 __all__ = [
     "OverrideCoercionError",
     "_validate_override_types",
@@ -123,11 +121,11 @@ def _validate_override_types(
         if ing is None:
             continue  # unknown-key check handled by _check_override_keys
         ing_type = getattr(ing, "type", None)
-        # Treat anything that isn't a known string type as untyped. This covers
-        # both ``type=None`` (declared untyped) and ``MagicMock()`` auto-spec
-        # attrs used in tests, which would otherwise trigger the unknown-type
-        # branch below for ingredients that production code never typed.
-        if not isinstance(ing_type, str) or ing_type not in ALLOWED_INGREDIENT_TYPES:
+        # Treat anything that isn't a string as untyped — covers ``type=None``
+        # (declared untyped) and ``MagicMock()`` auto-spec attrs used in tests,
+        # which would otherwise trigger the unknown-type branch below for
+        # ingredients that production code never typed.
+        if not isinstance(ing_type, str):
             ing_type = None
         try:
             coerce_override_value(value, ing_type)

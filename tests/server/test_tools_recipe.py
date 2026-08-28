@@ -613,13 +613,12 @@ async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_op
 async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_open, tmp_path):
     """load_recipe integration: server-authoritative overrides are rejected at
     function entry — no recipe load, no projection, no session snapshot mutation."""
-    from unittest.mock import AsyncMock, MagicMock, patch
+    from unittest.mock import MagicMock, patch
 
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
     _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
-    tool_ctx_kitchen_open.recipes.apply_triage_gate = AsyncMock()
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
     with patch(

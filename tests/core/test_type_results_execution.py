@@ -44,6 +44,19 @@ class TestExecutionTypesImport:
             ]
         )
 
+    def test_subagent_model_outcome_contract(self):
+        from typing import get_type_hints
+
+        from autoskillit.core import SessionTelemetry, SubagentModelOutcomeDict
+
+        assert get_type_hints(SubagentModelOutcomeDict) == {
+            "model": str,
+            "final_model": str,
+            "model_swapped": bool,
+            "agent_type": str,
+        }
+        assert SessionTelemetry.empty().subagent_model_outcomes == ()
+
 
 class TestExecutionTypesNotInResults:
     """Moved types must no longer appear in _type_results.__all__."""
@@ -72,18 +85,6 @@ class TestExecutionTypesNotInResults:
             "SubagentModelOutcomeDict",
         }
         assert expected == set(exec_all)
-
-    def test_subagent_model_outcome_contract(self):
-        from typing import get_type_hints
-
-        from autoskillit.core import SessionTelemetry, SubagentModelOutcomeDict
-
-        assert get_type_hints(SubagentModelOutcomeDict) == {
-            "model": str,
-            "final_model": str,
-            "model_swapped": bool,
-        }
-        assert SessionTelemetry.empty().subagent_model_outcomes == ()
 
     def test_skill_result_still_uses_provider_outcome(self):
         """SkillResult.provider field default_factory references ProviderOutcome."""

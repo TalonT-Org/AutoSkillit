@@ -181,6 +181,36 @@ async def test_guard_precedes_dynamic_recipe_skill_branch(
     assert result["success"] is True
     assert result["skipped"] is True
     assert result["next_step"] == "synthesize"
+
+
+@pytest.mark.parametrize("tool_ctx_ready_recipe", [_GUARDED_RECIPE], indirect=True)
+async def test_guard_requires_verified_attestation_before_tracker_mutation(
+    tmp_path,
+    tool_ctx_ready_recipe,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.server.tools import tools_execution
+
+    ready = tool_ctx_ready_recipe
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    _write_guard_tracker(ready)
+    backend = AsyncMock(side_effect=AssertionError("unattested guard reached backend"))
+    monkeypatch.setattr(tools_execution, "_prepare_dispatch_backend", backend)
+
+    result = await tools_execution.run_skill(
+        **_run_kwargs(
+            ready,
+            work_dir,
+            recipe_execution_id="",
+            invocation_template_digest="",
+            step_guard_value="true",
+        )
+    )
+
+    assert "recipe_execution_attestation_missing" in _deny_tokens(result)
+    assert _tracker_data(ready)["steps"]["apply"]["status"] == "pending"
+    assert backend.await_count == 0
     assert backend.await_count == 0
 
 

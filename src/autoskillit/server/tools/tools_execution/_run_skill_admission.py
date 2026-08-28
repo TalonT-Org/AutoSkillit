@@ -212,8 +212,6 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         and state.step_name
         and state.step_name in state._installed_execution.snapshot.dynamic_skill_step_names
     )
-    if (terminal := _admit_step_guard(state)) is not None:
-        return terminal
     state._audit_output_mode = None
     if state._audit_publication is not None and not state.resume_session_id:
         state._audit_output_mode = (
@@ -238,6 +236,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         Path(state.cwd), state.tool_ctx.config.workspace.temp_dir
     )
     if state._dynamic_recipe_call:
+        if (terminal := _admit_step_guard(state)) is not None:
+            return terminal
         if state._claims_recipe_execution:
             return _recipe_execution_deny(
                 "recipe_execution_dynamic_attestation",
@@ -338,6 +338,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             )
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
+        if (terminal := _admit_step_guard(state)) is not None:
+            return terminal
         if state._audit_publication is not None:
             try:
                 state._slot_intent_digest = compute_audit_slot_intent_digest(

@@ -34,10 +34,15 @@ def test_taskfile_sweep_routes_through_the_shared_constant() -> None:
 def test_cleanup_stale_default_is_the_shared_constant() -> None:
     import inspect
 
+    from autoskillit.core import SessionSkillManager
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
-    sig = inspect.signature(DefaultSessionSkillManager.cleanup_stale)
-    assert sig.parameters["max_age_seconds"].default == SESSION_STALE_SECONDS
+    for cleanup_stale in (
+        SessionSkillManager.cleanup_stale,
+        DefaultSessionSkillManager.cleanup_stale,
+    ):
+        sig = inspect.signature(cleanup_stale)
+        assert sig.parameters["max_age_seconds"].default == SESSION_STALE_SECONDS
 
 
 def test_cleanup_stale_call_sites_do_not_override_the_shared_ttl() -> None:
@@ -60,10 +65,12 @@ def test_cleanup_stale_call_sites_do_not_override_the_shared_ttl() -> None:
                 (keyword.value for keyword in node.keywords if keyword.arg == "max_age_seconds"),
                 node.args[0] if node.args else None,
             )
-            if isinstance(max_age, ast.Constant) and isinstance(max_age.value, int | float):
+            if max_age is not None and not (
+                isinstance(max_age, ast.Name) and max_age.id == "SESSION_STALE_SECONDS"
+            ):
                 violations.append(
-                    f"{source_path.relative_to(REPO_ROOT)}:{node.lineno} passes "
-                    "a numeric max_age_seconds literal"
+                    f"{source_path.relative_to(REPO_ROOT)}:{node.lineno} overrides "
+                    "max_age_seconds without SESSION_STALE_SECONDS"
                 )
 
     assert not violations, (

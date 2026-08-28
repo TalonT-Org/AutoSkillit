@@ -233,11 +233,11 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/fleet/_dispatch_reaper.py", "reap_stale_dispatches")
     ),
     (
-        "src/autoskillit/workspace/session_skills.py",
+        "src/autoskillit/workspace/session_skill_manager.py",
         "DefaultSessionSkillManager.cleanup_stale",
     ): _convergence_adapters(
         (
-            "src/autoskillit/workspace/session_skills.py",
+            "src/autoskillit/workspace/session_skill_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         )
     ),

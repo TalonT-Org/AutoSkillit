@@ -43,9 +43,6 @@ from autoskillit.hooks import (
     reconcile_batch,
     settle_assignment,
 )
-from autoskillit.hooks._join_ledger import (  # noqa: PLC0415  # terminal outcomes are intentionally centralized
-    _TERMINAL_OUTCOMES,
-)
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
     ManagedLeafPreparedLaunch,
@@ -57,6 +54,20 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 
 logger = get_logger(__name__)
 
+# Mirror the canonical _TERMINAL_OUTCOMES frozenset from hooks._join_ledger.
+# Kept private to this module to honor the cross-package submodule import
+# guard; the validator in ManagedLeafLaunchResult continues to enforce the
+# same canonical set as the ledger.
+_TERMINAL_OUTCOMES = frozenset(
+    {
+        OUTCOME_CANCELLED,
+        OUTCOME_COMPLETED,
+        OUTCOME_FAILED,
+        OUTCOME_INTERRUPTED,
+        OUTCOME_LAUNCH_FAILED,
+        OUTCOME_REAPED,
+    }
+)
 _RECOVERY_SCHEMA_VERSION = 1
 _RESULT_SCHEMA_VERSION = 1
 _RESULT_REFERENCE_PREFIX = "fixed-batch-result-"

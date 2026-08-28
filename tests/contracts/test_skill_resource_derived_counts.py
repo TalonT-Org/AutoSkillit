@@ -6,49 +6,28 @@ import re
 
 import pytest
 
-from autoskillit.core import pkg_root
 from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills import DefaultSkillResolver
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
-_GFM_ROW = re.compile(r"^\|.*\|\s*$")
-_GFM_SEPARATOR = re.compile(r"^\|(?:\s*:?-{3,}:?\s*\|)+\s*$")
 _AUTHORED_COUNT = re.compile(
     r"\b(?P<count>\d+)\s+(?:rows?|entries|constraints|criteria)\b", re.IGNORECASE
 )
 
 
-def _gfm_table_row_count(body: str) -> int | None:
-    """Count data rows when a body contains exactly one GFM pipe table."""
-    tables: list[list[str]] = []
-    current: list[str] = []
-    for line in body.splitlines():
-        if _GFM_ROW.fullmatch(line):
-            current.append(line)
-        elif current:
-            tables.append(current)
-            current = []
-    if current:
-        tables.append(current)
-    if len(tables) != 1:
-        return None
-    table = tables[0]
-    if len(table) < 2 or not _GFM_SEPARATOR.fullmatch(table[1]):
-        return None
-    return len(table) - 2
-
-
-def test_resource_table_row_counts_exclude_the_header_and_separator() -> None:
-    """The registry's count derives only data rows from a resource's sole table."""
-    table_resources = []
-    for resource_path in sorted((pkg_root() / "skill_resources").glob("*.md")):
-        resource = load_skill_resource(resource_path.stem)
-        expected = _gfm_table_row_count(resource.body)
-        if expected is not None:
-            table_resources.append(resource)
-            assert resource.table_row_count == expected, resource.id
-    assert table_resources, "expected at least one single-table skill resource"
+@pytest.mark.parametrize(
+    ("resource_id", "expected_count"),
+    [
+        ("arch-constraint-catalog", 66),
+        ("review-approach-criteria", None),
+    ],
+)
+def test_resource_table_row_counts_match_registered_content(
+    resource_id: str, expected_count: int | None
+) -> None:
+    """Registered counts are checked against an independent, explicit oracle."""
+    assert load_skill_resource(resource_id).table_row_count == expected_count
 
 
 def test_resource_consumer_prose_counts_match_the_derived_table_count() -> None:

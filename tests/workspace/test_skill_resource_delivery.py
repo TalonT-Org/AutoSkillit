@@ -62,8 +62,11 @@ def _resource_marker(resource: SkillResourceDef) -> str:
 
 
 def _resource_section(content: str, resource: SkillResourceDef) -> str:
-    start = content.index(f"## Provided resource: {resource.title}")
+    heading = f"## Provided resource: {resource.title}"
+    assert heading in content, f"missing projected heading for resource {resource.id!r}"
+    start = content.index(heading)
     marker = _resource_marker(resource)
+    assert marker in content[start:], f"missing projected marker for resource {resource.id!r}"
     end = content.index(marker, start) + len(marker)
     return content[start:end]
 

@@ -1,8 +1,8 @@
-"""Recipe load-and-validate orchestration. See issue #4860.
+"""Public driver and monkeypatch hub for recipe load-and-validate orchestration.
 
-Decomposed 2026-08-28 under issue #4905 along the four-phase pipeline. This
-module remains the public driver and the monkeypatch hub for the validation
-pipeline. Implementation shards live in sibling modules:
+This module exposes :func:`load_and_validate` as the single public entry point
+for the four-phase recipe load pipeline. The implementation shards live in
+sibling modules:
 
     _api_orchestration_types        — seam-contract dataclasses
     _api_orchestration_text         — orchestration text builders
@@ -12,43 +12,12 @@ pipeline. Implementation shards live in sibling modules:
     _api_orchestration_validate     — Phase 3: validation pipeline
     _api_orchestration_assemble     — Phase 4: result assembly and cache write
 
-Monkeypatch hub contract: the 13 names listed below are module-level
-attributes of this module so ``monkeypatch.setattr(orch, NAME, mock)``
-(used in ``tests/recipe/test_api.py``,
-``tests/recipe/test_api_orchestration.py``,
-``tests/recipe/test_recipe_composition_vacuous_gate.py``,
-``tests/server/test_load_recipe_exception_handling.py``, and
-``tests/server/test_tools_load_recipe.py``) and
+The module also serves as the monkeypatch hub: it re-exports the names listed
+in ``__all__`` as module-level attributes so existing tests using
+``monkeypatch.setattr(orch, NAME, mock)`` and
 ``mock.patch("autoskillit.recipe._api_orchestration.NAME", ...)`` continue to
 resolve at call time. The sibling shards access these names through
-``_orch.{name}`` so the patches reach every call site:
-
-    load_recipe_dict_with_declarations
-    _parse_recipe
-    load_recipe_card
-    run_semantic_rules
-    validate_recipe_structure
-    list_recipes
-    validate_recipe_cards
-    check_contract_staleness
-    compute_recipe_validity
-    findings_to_dicts
-    pkg_root
-    _t (defined in this module)
-    logger (defined in this module)
-
-AST-guard invariants preserved:
-
-* The literal token ``SkillLister`` (re-imported with ``# noqa: F401``)
-  satisfies ``tests/arch/test_subpackage_isolation_module_boundaries.py``.
-* The literal string ``rule_registry_hash`` appears inside
-  ``load_and_validate``'s body (the cache-hit comparison) to satisfy
-  ``tests/arch/test_recipe_rule_registration.py``.
-* ``load_and_validate``'s body contains no ``return {..."error": ...}``
-  statement to satisfy ``tests/arch/test_no_error_dict_return.py``.
-* ``_prune_skipped_steps`` precedes ``run_semantic_rules`` in
-  ``_run_validation_pipeline`` (now in ``_api_orchestration_validate.py``)
-  to satisfy ``tests/arch/test_pipeline_ordering.py`` (retargeted in Step 9b).
+``_orch.{name}`` so the patches reach every call site.
 """
 
 from __future__ import annotations
@@ -56,13 +25,9 @@ from __future__ import annotations
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from autoskillit.core import (
-    BackendCapabilities,  # noqa: F401 — re-exported for type visibility
-    SkillLister,  # noqa: F401 — preserved for module-boundary literal-string check
-    get_logger,
-    pkg_root,  # noqa: F401 — monkeypatch target (tests/recipe/test_api.py:1915)
-)
+from autoskillit.core import get_logger, pkg_root  # noqa: F401 — monkeypatch target
 from autoskillit.recipe._api_orchestration_assemble import (
     _assemble_load_result,
     _finalize_recipe_steps,
@@ -86,13 +51,13 @@ from autoskillit.recipe._api_orchestration_validate import (
 from autoskillit.recipe._io_loading import (
     load_recipe_dict_with_declarations,  # noqa: F401 — monkeypatch
 )
+from autoskillit.recipe._recipe_ingredients import LoadRecipeResult
 from autoskillit.recipe.contracts import (  # noqa: F401 — monkeypatch targets
     check_contract_staleness,
     load_recipe_card,
     validate_recipe_cards,
 )
 from autoskillit.recipe.io import (  # noqa: F401 — monkeypatch targets
-    RecipeInfo,
     _parse_recipe,
     list_recipes,
 )
@@ -102,6 +67,10 @@ from autoskillit.recipe.validator import (  # noqa: F401 — monkeypatch targets
     run_semantic_rules,
     validate_recipe_structure,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.core import BackendCapabilities, SkillLister
+    from autoskillit.recipe.io import RecipeInfo
 
 logger = get_logger(__name__)
 
@@ -140,21 +109,16 @@ def load_and_validate(
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     backend_origin_map: dict[str, str] | None = None,
     include_finalized_projection: bool = False,
-):
+) -> LoadRecipeResult:
     """Load a recipe by name and run full validation.
 
     Raises:
         ProcessStaleError: Package directory was modified since server startup.
         RecipeNotFoundError: Named recipe could not be found.
-
-    Body preserved verbatim from the original ``_api_orchestration.py`` —
-    the AST guards require the literal ``rule_registry_hash`` and forbid
-    ``return {..."error": ...}`` patterns inside this function's body.
     """
     from typing import cast
 
     from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._recipe_ingredients import LoadRecipeResult
 
     t0 = time.perf_counter()
 
@@ -211,33 +175,35 @@ def load_and_validate(
 
 
 __all__ = [
-    # Phase symbols (identity aliases to sibling shard definitions).
-    "_LoadPipelineInputs",
-    "_ValidationResult",
-    "_resolve_cache_inputs",
-    "_resolve_recipe_match",
-    "_parse_and_compose",
-    "_run_validation_pipeline",
-    "_assemble_load_result",
-    "_finalize_recipe_steps",
-    "_record_pipeline_error",
-    "_infer_stop_failure",
-    "_build_stop_step_semantics",
-    "_build_orchestration_rules",
-    "_canonical_string_map",
-    # Monkeypatch hub re-exports (13 names).
-    "load_recipe_dict_with_declarations",
-    "_parse_recipe",
-    "load_recipe_card",
-    "run_semantic_rules",
-    "validate_recipe_structure",
-    "list_recipes",
-    "validate_recipe_cards",
-    "check_contract_staleness",
-    "compute_recipe_validity",
-    "findings_to_dicts",
-    "pkg_root",
-    # Local module-level.
+    # Phase-symbol aliases (must remain `is`-equal to the owning shard —
+    # enforced by test_phase_symbols_are_same_object_as_owning_shard).
+    "_LoadPipelineInputs",  # phase-alias: _api_orchestration_types
+    "_ValidationResult",  # phase-alias: _api_orchestration_types
+    "_resolve_cache_inputs",  # phase-alias: _api_orchestration_cache
+    "_resolve_recipe_match",  # phase-alias: _api_orchestration_match
+    "_parse_and_compose",  # phase-alias: _api_orchestration_parse
+    "_run_validation_pipeline",  # phase-alias: _api_orchestration_validate
+    "_assemble_load_result",  # phase-alias: _api_orchestration_assemble
+    "_finalize_recipe_steps",  # phase-alias: _api_orchestration_assemble
+    "_record_pipeline_error",  # phase-alias: _api_orchestration_validate
+    "_infer_stop_failure",  # phase-alias: _api_orchestration_text
+    "_build_stop_step_semantics",  # phase-alias: _api_orchestration_text
+    "_build_orchestration_rules",  # phase-alias: _api_orchestration_text
+    "_canonical_string_map",  # phase-alias: _api_orchestration_cache
+    # Monkeypatch-hub re-exports (must remain module attributes —
+    # enforced by test_monkeypatch_targets_are_module_attributes_of_api_orchestration).
+    "load_recipe_dict_with_declarations",  # monkeypatch-target: _io_loading
+    "_parse_recipe",  # monkeypatch-target: recipe.io
+    "load_recipe_card",  # monkeypatch-target: recipe.contracts
+    "run_semantic_rules",  # monkeypatch-target: recipe.validator
+    "validate_recipe_structure",  # monkeypatch-target: recipe.validator
+    "list_recipes",  # monkeypatch-target: recipe.io
+    "validate_recipe_cards",  # monkeypatch-target: recipe.contracts
+    "check_contract_staleness",  # monkeypatch-target: recipe.contracts
+    "compute_recipe_validity",  # monkeypatch-target: recipe.validator
+    "findings_to_dicts",  # monkeypatch-target: recipe.validator
+    "pkg_root",  # monkeypatch-target: autoskillit.core
+    # Local module-level (also monkeypatch targets — same test as above).
     "_t",
     "logger",
     # Public API.

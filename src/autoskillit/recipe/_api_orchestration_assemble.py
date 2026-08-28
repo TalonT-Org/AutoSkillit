@@ -1,13 +1,12 @@
 """Phase 4 of the load pipeline: assemble the LoadRecipeResult and write the cache.
 
-Moved 2026-08-28 from ``_api_orchestration.py`` under issue #4905.
-
 Phase 4 owns the cache write and the orchestration text assembly
 (``_stop_semantics`` and ``orchestration_rules``). No monkeypatchable
 symbols are called from this phase — the cache write uses ``_api_cache``
 directly and the orchestration text is built by helper functions imported
 from ``_api_orchestration_text``.
 """
+
 from __future__ import annotations
 
 from typing import Any, cast
@@ -21,19 +20,21 @@ from autoskillit.recipe._api_orchestration_text import (
 )
 from autoskillit.recipe._api_orchestration_types import _LoadPipelineInputs, _ValidationResult
 from autoskillit.recipe._io_loading import assert_no_raw_placeholders
+from autoskillit.recipe._recipe_composition import _DeferredGuardState
 from autoskillit.recipe._recipe_ingredients import (
     DeferredGuard,
     LoadRecipeResult,
     format_ingredients_table,
 )
 from autoskillit.recipe.diagrams import annotate_diagram_with_pruning, load_recipe_diagram
+from autoskillit.recipe.schema import Recipe
 
 __all__ = ["_assemble_load_result", "_finalize_recipe_steps"]
 
 
 def _finalize_recipe_steps(
-    recipe: Any,
-    deferred_guard_state: dict[str, Any],
+    recipe: Recipe,
+    deferred_guard_state: dict[str, _DeferredGuardState],
 ) -> tuple[FinalizedRecipeStep, ...]:
     """Freeze the execution-relevant fields of the active recipe steps."""
     return tuple(
@@ -62,9 +63,8 @@ def _assemble_load_result(
 ) -> LoadRecipeResult:
     """Build the user-visible ``LoadRecipeResult`` and write the cache entry.
 
-    Cache write uses two nested guards: ``if match is not None:`` (defense
-    against ``RecipeNotFoundError`` short-circuit) and ``if cacheable:``
-    (caller-supplied non-None lister disables caching).
+    Cache write is guarded by ``cacheable`` (caller-supplied non-None lister
+    disables caching).
     """
     match = pipeline_result.match
     recipes_dir = pipeline_result.recipes_dir
@@ -171,9 +171,7 @@ def _assemble_load_result(
         result["post_prune_routing_edges"] = sorted(
             {edge.target for edge in _effective_flow_edges if edge.target in _step_names_set}
         )
-    # Two nested guards: outer against RecipeNotFoundError short-circuit,
-    # inner against non-None lister (cacheable).
-    if match is not None:
+    if cacheable:
         entry = _LoadCacheEntry(
             recipe_path=match.path,
             recipe_mtime=_api_cache._path_mtime_ns(match.path),
@@ -184,7 +182,6 @@ def _assemble_load_result(
             rule_registry_hash=_rule_hash,
             result=result,
         )
-        if cacheable:
-            _api_cache._LOAD_CACHE.put(cache_key, entry)
+        _api_cache._LOAD_CACHE.put(cache_key, entry)
 
     return cast(LoadRecipeResult, result)

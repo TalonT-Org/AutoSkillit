@@ -31,9 +31,13 @@ def git_ls_files(
             timeout=_GIT_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        detail = str(exc)
+        stderr = getattr(exc, "stderr", None)
+        if isinstance(stderr, str) and stderr.strip():
+            detail = f"{detail}: {stderr.strip()}"
         raise RuntimeError(
             "git ls-files failed for pathspec(s) "
-            f"{pathspec_description} in repository {repo_root}: {exc}"
+            f"{pathspec_description} in repository {repo_root}: {detail}"
         ) from exc
 
     paths = tuple(path for path in result.stdout.split("\0") if path)

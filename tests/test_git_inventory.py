@@ -80,3 +80,5 @@ def test_git_ls_files_wraps_subprocess_failures_with_pathspec_context(
         _git_inventory.git_ls_files(tmp_path, "recipes")
 
     assert error.value.__cause__ is failure
+    if isinstance(failure, subprocess.CalledProcessError):
+        assert failure.stderr in str(error.value)

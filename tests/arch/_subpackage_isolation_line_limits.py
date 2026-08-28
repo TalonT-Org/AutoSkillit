@@ -37,11 +37,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
         "circular imports; all enums/protocols/constants consolidated here",
     ),
-    "recipe/_binding.py": (
-        1050,
-        "REQ-CNST-010-E24: #4402 keeps runtime attestation admission and its "
-        "parameter-role denial remedies beside the compile-time binding pipeline",
-    ),
     "hooks/_capture_artifacts.py": (
         1200,
         "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "
@@ -227,17 +222,5 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "#4678 rectify adds spawn-identity capture to _record_spawn and verify-before-mark "
         "identity checks to recover() — both belong to the same transaction boundary as "
         "the leases they gate, and fit under this cap post-extraction.",
-    ),
-    "hook_registry.py": (
-        1200,
-        "REQ-CNST-010-E21: hook_registry.py is a stdlib-only, package-root module imported "
-        "directly by standalone hook subprocess scripts, so it deliberately stays a flat "
-        "module rather than a sub-package (a package split would change how hook scripts "
-        "resolve the import on the low-latency startup path). Relocatable hook commands "
-        "(${CLAUDE_PLUGIN_ROOT} token generation in _build_hook_command, "
-        "relocatable command rendering, and token-aware find_broken_hook_scripts/"
-        "validate_plugin_cache_hooks) add 114 net lines to the existing registry+drift-"
-        "detection surface. #4512 adds the exact exploration request-identity hook and "
-        "its lifecycle resource contract to the same canonical registry.",
     ),
 }

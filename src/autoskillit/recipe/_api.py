@@ -3,7 +3,11 @@
 Re-exports the public surface (``load_and_validate``, ``list_all``,
 ``format_recipe_list_response``, ``validate_from_path``) plus the cache,
 listing, ingredients, and orchestration helpers. Implementation:
-``_api_cache.py``, ``_api_listing.py``, ``_api_orchestration.py``.
+``_api_cache.py``, ``_api_listing.py``, ``_api_orchestration.py``,
+``_api_orchestration_assemble.py``, ``_api_orchestration_cache.py``,
+``_api_orchestration_match.py``, ``_api_orchestration_parse.py``,
+``_api_orchestration_text.py``, ``_api_orchestration_types.py``,
+``_api_orchestration_validate.py``.
 """
 
 from __future__ import annotations

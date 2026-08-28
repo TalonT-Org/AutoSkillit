@@ -717,6 +717,23 @@ MODULE_CASCADE_CONFIG: dict[str, frozenset[str]] = {
     "ingredient_defaults": frozenset({"config", "recipe", "server"}),
 }
 
+_API_ORCHESTRATION_SHARD_CASCADE: frozenset[str] = frozenset(
+    {
+        "recipe",
+        "server/test_tools_list_recipes.py",
+        "server/test_tools_kitchen_envelope_failure.py",
+        "server/test_tools_kitchen_envelope_hook_drift.py",
+        "server/test_tools_kitchen_envelope_validation.py",
+        "server/test_tools_load_recipe.py",
+        "server/test_mcp_overrides.py",
+        "server/test_service_wrappers.py",
+        "cli/test_cli_prompts.py",
+        "infra/test_pretty_output_recipe.py",
+        "contracts/test_tools_recipe_contracts.py",
+        "contracts/test_package_gateways.py",
+    }
+)
+
 MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
     # --- Narrowest: recipe/ only (no out-of-recipe importers) ---
     "rules_actions": frozenset({"recipe"}),
@@ -900,38 +917,17 @@ MODULE_CASCADE_RECIPE: dict[str, frozenset[str]] = {
             "contracts/test_instruction_surface.py",
         }
     ),
-    "_api": frozenset(
-        {
-            "recipe",
-            "server/test_tools_list_recipes.py",
-            "server/test_tools_kitchen_envelope_failure.py",
-            "server/test_tools_kitchen_envelope_hook_drift.py",
-            "server/test_tools_kitchen_envelope_validation.py",
-            "server/test_tools_load_recipe.py",
-            "server/test_mcp_overrides.py",
-            "server/test_service_wrappers.py",
-            "cli/test_cli_prompts.py",
-            "infra/test_pretty_output_recipe.py",
-            "contracts/test_tools_recipe_contracts.py",
-            "contracts/test_package_gateways.py",
-        }
-    ),
-    "_api_orchestration": frozenset(
-        {
-            "recipe",
-            "server/test_tools_list_recipes.py",
-            "server/test_tools_kitchen_envelope_failure.py",
-            "server/test_tools_kitchen_envelope_hook_drift.py",
-            "server/test_tools_kitchen_envelope_validation.py",
-            "server/test_tools_load_recipe.py",
-            "server/test_mcp_overrides.py",
-            "server/test_service_wrappers.py",
-            "cli/test_cli_prompts.py",
-            "infra/test_pretty_output_recipe.py",
-            "contracts/test_tools_recipe_contracts.py",
-            "contracts/test_package_gateways.py",
-        }
-    ),
+    "_api": _API_ORCHESTRATION_SHARD_CASCADE,
+    # Issue #4905: decomposed shards of _api_orchestration all share the
+    # same cascade set because they are the same pipeline phase boundary.
+    "_api_orchestration": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_assemble": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_cache": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_match": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_parse": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_text": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_types": _API_ORCHESTRATION_SHARD_CASCADE,
+    "_api_orchestration_validate": _API_ORCHESTRATION_SHARD_CASCADE,
     "io": frozenset(
         {
             "recipe",

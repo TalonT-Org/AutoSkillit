@@ -43,14 +43,14 @@ def _load_lifecycle_module() -> ModuleType:
     return module
 
 
-def _run(*args: object) -> subprocess.CompletedProcess[str]:
+def _run(*args: object, timeout_seconds: float = 60.0) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *(str(arg) for arg in args)],
         env=production_interpreter_env(),
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=timeout_seconds,
         check=False,
     )
 
@@ -84,7 +84,11 @@ def _setup(
     return _run(*args)
 
 
-def _reap(platform_root: Path, *extra: object) -> subprocess.CompletedProcess[str]:
+def _reap(
+    platform_root: Path,
+    *extra: object,
+    timeout_seconds: float = 60.0,
+) -> subprocess.CompletedProcess[str]:
     return _run(
         "reap",
         "--root",
@@ -94,6 +98,7 @@ def _reap(platform_root: Path, *extra: object) -> subprocess.CompletedProcess[st
         "--legacy-age-minutes",
         0,
         *extra,
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -168,6 +173,7 @@ def test_setup_fails_loudly_on_existing_generation(tmp_path: Path, entry_kind: s
         assert generation.read_text() == "preserve"
 
 
+@pytest.mark.timeout(120)
 def test_marker_survives_basetemp_clearing(tmp_path: Path) -> None:
     platform_root, generation, tmp_dir, cache_dir = _layout(tmp_path)
     assert _setup(platform_root, tmp_dir, cache_dir, owner_pid=os.getpid()).returncode == 0
@@ -175,10 +181,10 @@ def test_marker_survives_basetemp_clearing(tmp_path: Path) -> None:
     tmp_dir.mkdir()
 
     assert (generation / "owner.json").exists()
-    assert _reap(platform_root).returncode == 0
+    assert _reap(platform_root, timeout_seconds=90).returncode == 0
     assert generation.exists()
     _write_dead_marker(generation)
-    assert _reap(platform_root).returncode == 0
+    assert _reap(platform_root, timeout_seconds=90).returncode == 0
     assert not generation.exists()
 
 

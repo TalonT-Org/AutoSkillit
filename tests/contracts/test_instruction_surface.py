@@ -464,7 +464,11 @@ _SKIP_SEMANTICS_MODULES = {
     "_build_food_truck_prompt": "autoskillit.fleet._prompts",
     "_build_orchestrator_prompt": "autoskillit.cli.prompts._prompts_orchestrator",
     "_build_open_kitchen_prompt": "autoskillit.cli.prompts._prompts_kitchen",
-    "_build_orchestration_rules": "autoskillit.recipe._api_orchestration",
+    # Issue #4905: _build_orchestration_rules lives in the text shard, not the
+    # public-driver facade. STEP_SKIP_SEMANTICS_CLAUSE is imported there at
+    # module load time, so monkeypatching the facade module does not reach the
+    # function's lexical scope.
+    "_build_orchestration_rules": "autoskillit.recipe._api_orchestration_text",
 }
 
 
@@ -518,7 +522,12 @@ class TestAntiFabricationSurfaceContract:
         if not src_pkg.is_dir():
             src_pkg = project_root
         prompt_files = sorted(
-            [*src_pkg.rglob("_prompts*.py"), src_pkg / "recipe" / "_api_orchestration.py"]
+            [
+                *src_pkg.rglob("_prompts*.py"),
+                src_pkg / "recipe" / "_api_orchestration.py",
+                # Issue #4905: _build_orchestration_rules moved to the text shard.
+                src_pkg / "recipe" / "_api_orchestration_text.py",
+            ]
         )
 
         assert prompt_files, (

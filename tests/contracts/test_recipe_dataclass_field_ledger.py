@@ -7,14 +7,12 @@ registries visibly covers every declared owner.
 
 from __future__ import annotations
 
-from typing import get_args
-
 import pytest
 
+from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 from tests.arch.test_recipe_dataclass_consumption import (
     DECLARED_RECIPE_FIELDS,
     DEFERRED_RECIPE_FIELDS,
-    RecipeDataclass,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
@@ -34,4 +32,4 @@ def test_ledger_keys_are_sorted() -> None:
 
 def test_recipe_dataclass_registry_covers_all_three_owners() -> None:
     owners = {key[0] for key in DECLARED_RECIPE_FIELDS | DEFERRED_RECIPE_FIELDS}
-    assert owners == set(get_args(RecipeDataclass))
+    assert owners == {Recipe, RecipeIngredient, RecipeStep}

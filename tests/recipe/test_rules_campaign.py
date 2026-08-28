@@ -310,7 +310,7 @@ def test_dispatch_recipe_in_declared_packs_no_allow_list_warns_with_real_target(
         f"{[f.message for f in found]}"
     )
     assert found[0].severity == Severity.WARNING
-    assert found[0].rule_name == "dispatch-recipe-in-declared-packs"
+    assert found[0].step_name == "(top-level)"
     assert "allowed-recipe" in found[0].message
 
 

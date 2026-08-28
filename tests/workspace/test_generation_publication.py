@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import generation_store_root, managed_home_for
+from autoskillit.core import _InstallLock, generation_store_root, managed_home_for
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
@@ -50,5 +50,5 @@ def test_prune_stale_generations_skips_a_disappearing_enumeration_root(
     monkeypatch.setattr(fs_observation.os, "scandir", disappearing_scandir)
     monkeypatch.setattr(Path, "iterdir", disappearing_iterdir)
 
-    with publication._InstallLock(home):
+    with _InstallLock(home):
         assert publication.prune_stale_generations(home, _PLUGIN_REF) == 0

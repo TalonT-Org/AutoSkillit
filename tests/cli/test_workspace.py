@@ -507,7 +507,7 @@ class TestRunWorkspaceCleanWorktrees:
         monkeypatch.setattr(workspace_module, "list_git_worktrees", fake_list)
         monkeypatch.setattr(workspace_module, "remove_git_worktree", fake_remove)
         monkeypatch.setattr(workspace_module, "safe_mtime", observe_then_remove)
-        monkeypatch.setattr(workspace_module, "time.time", lambda: now)
+        monkeypatch.setattr(workspace_module.time, "time", lambda: now)
         monkeypatch.setattr(workspace_module, "load_config", lambda p=None: _make_workspace_cfg())
 
         await run_workspace_clean(dir=str(base), force=True, project_root=base)

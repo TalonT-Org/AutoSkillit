@@ -948,29 +948,31 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "liveness evidence."
     ),
     # -- workspace._projected_artifact._generation_publication::prune_stale_generations --
-    f"{_GP}::L809": _self_limiting(
+    f"{_GP}::L811": _self_limiting(
         "The generation store does not exist, so this invocation has no candidates to prune."
     ),
-    f"{_GP}::L816": _self_limiting(
-        "A hidden version directory belongs to staging or bookkeeping, not generation retirement."
+    f"{_GP}::L824": _self_limiting(
+        "A hidden, symlinked, or non-directory version entry cannot contain a generation "
+        "incarnation this reclaimer owns."
     ),
-    f"{_GP}::L818": _self_limiting(
-        "A non-directory version entry cannot contain a generation incarnation this "
-        "reclaimer owns."
-    ),
-    f"{_GP}::L823": _self_limiting(
+    f"{_GP}::L832": _self_limiting(
         "An unmanaged hidden entry is outside the deterministic generation-residue "
         "lifecycle namespace."
     ),
-    f"{_GP}::L825": _self_limiting(
-        "A symlink generation entry is excluded before any retirement mutation for "
-        "containment safety."
+    f"{_GP}::L834": _self_limiting(
+        "A symlink or non-directory incarnation cannot be a managed generation retirement "
+        "candidate."
     ),
-    f"{_GP}::L827": _self_limiting(
-        "A non-directory incarnation cannot be a managed generation retirement candidate."
-    ),
-    f"{_GP}::L829": _self_limiting(
+    f"{_GP}::L836": _self_limiting(
         "The selected generation remains active and is not a stale candidate for this pass."
+    ),
+    f"{_GP}::L839": _self_limiting(
+        "The generation root or version directory vanished during enumeration, leaving no "
+        "stable candidate set for this pass."
+    ),
+    f"{_GP}::L842": _self_limiting(
+        "Generation enumeration hit an I/O failure, so this fail-open maintenance pass "
+        "defers every candidate without making a retention decision."
     ),
     # -- workspace._install_state::_enqueue_legacy_installed_plugin_versions --
     f"{_IL}::L417": _self_limiting(

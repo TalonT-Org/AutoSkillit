@@ -819,6 +819,12 @@ class TestSessionLogMonitorDirMissing:
                     remove_victim()
                 return self._entry.stat(follow_symlinks=follow_symlinks)
 
+            def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+                return self._entry.is_dir(follow_symlinks=follow_symlinks)
+
+            def is_symlink(self) -> bool:
+                return self._entry.is_symlink()
+
         class FakeScandir:
             def __init__(self, scanner: os.ScandirIterator[str]) -> None:
                 self._scanner = scanner

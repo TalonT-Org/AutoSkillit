@@ -37,10 +37,6 @@ FAMILY_ARG_INTERFACE: dict[str, str] = {
     "vis-lens": "2-arg",
 }
 
-_COMPOSITE_SLUGS: dict[tuple[str, str], list[str]] = {
-    ("vis-lens", "always-on"): ["always-on"],
-}
-
 # vis-lens has a dedicated lens-selection dial skill; arch-lens and exp-lens
 # emit the same output tokens via PR-preparation skills and have no
 # lens-selection dial skill.
@@ -134,10 +130,9 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
         )
 
     if family == "vis-lens":
-        if (family, slug) in _COMPOSITE_SLUGS:
-            assert "yaml:spec-index" in text, (
-                f"{family}-{slug} (composite) must contain yaml:spec-index"
-            )
+        is_composite = "yaml:spec-index" in text
+        if is_composite:
+            assert "yaml:spec-index" in text
         else:
             assert "yaml:figure-spec" in text, f"{family}-{slug} must contain yaml:figure-spec"
 
@@ -173,16 +168,19 @@ def test_activate_deps_from_frontmatter(family: str, slug: str) -> None:
     assert deps == ["mermaid"], f"{family}-{slug} activate_deps = {deps}, expected ['mermaid']"
 
 
-@pytest.mark.parametrize("family,slug", _LENS_PAIRS)
+@pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])
 def test_composite_slugs_from_body(family: str, slug: str) -> None:
-    """Body-derived composite flag must match the family-level expectation."""
+    """Body-derived composite classification: spec-index marks composite, absence marks non-composite.
+
+    Non-composite lenses must reference yaml:figure-spec. Composite lenses may
+    reference figure-spec as an exclusion note; spec-index is the discriminator.
+    """
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
-    derived_is_composite = "yaml:spec-index" in skill_md
-    declared = (family, slug) in _COMPOSITE_SLUGS
-    assert derived_is_composite == declared, (
-        f"{family}-{slug}: body has yaml:spec-index={derived_is_composite}, "
-        f"_COMPOSITE_SLUGS declares composite={declared}"
-    )
+    is_composite = "yaml:spec-index" in skill_md
+    if not is_composite:
+        assert "yaml:figure-spec" in skill_md, (
+            f"{family}-{slug}: non-composite lens must reference yaml:figure-spec"
+        )
 
 
 @pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])

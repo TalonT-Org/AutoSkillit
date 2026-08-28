@@ -36,6 +36,7 @@ from autoskillit.execution import (
     MANAGED_CODEX_LEAF_GUARD_SET,
     MANAGED_CODEX_PARENT_GUARD_SET,
 )
+from autoskillit.hooks import OUTCOME_COMPLETED, OUTCOME_FAILED
 from autoskillit.hooks._hook_settings import validate_session_id
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
@@ -485,12 +486,16 @@ class _ManagedLeafLaunchAdapter:
                     caller_session_id=self.launch.parent_session_id,
                 )
                 return ManagedLeafLaunchResult(
-                    outcome="completed" if result.success else "failed",
+                    outcome=OUTCOME_COMPLETED if result.success else OUTCOME_FAILED,
                     backend_session_id=result.session_id,
                     result_payload=result.to_json(),
                 )
 
             async def finalize(_result: ManagedLeafLaunchResult) -> None:
+                # The leaf binding has no durable state to release after execute().
+                # ``scoped_child_resource_owner`` owns all session/worktree cleanup,
+                # and the executor publishes the result inside execute(). The
+                # callable exists only because ManagedLeafPreparedLaunch requires one.
                 return None
 
             yield ManagedLeafPreparedLaunch(

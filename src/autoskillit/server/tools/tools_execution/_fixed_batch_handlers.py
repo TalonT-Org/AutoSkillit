@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from string import ascii_letters, digits
@@ -25,6 +26,7 @@ from autoskillit.core import (
     BackendAuthorityTier,
     SkillContractError,
     SkillExecutionRole,
+    SkillSemanticAdaptationResult,
     WriteBehaviorSpec,
     atomic_write,
     get_logger,
@@ -51,6 +53,7 @@ from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import project_agent_skill_document
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._run_skill_completion import _request_session_identity
+from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
     bind_projection_backend,
@@ -61,7 +64,14 @@ from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     ManagedLaunchBinding,
     ManagedLeafLaunchResult,
 )
-from autoskillit.server.tools.tools_execution._managed_leaf import ManagedLeafAssignmentInput
+from autoskillit.server.tools.tools_execution._managed_leaf import (
+    ManagedLeafAssignmentInput,
+    ManagedLeafPreparedLaunch,
+    _ChildResourceOwnerRequest,
+    _ChildWorktreeRequest,
+    bind_managed_leaf,
+    project_managed_leaf,
+)
 
 _MAX_ASSIGNMENTS = 128
 _MAX_IDEMPOTENCY_KEY_CHARS = 160
@@ -313,6 +323,7 @@ class _ManagedLeafLaunchAdapter:
     source_name: str
     write_behavior: WriteBehaviorSpec
     read_only: bool
+    adaptation: object
 
     def _write_leaf_binding(self, leaf_session_id: str, projection: object) -> None:
         attestation = getattr(
@@ -351,64 +362,142 @@ class _ManagedLeafLaunchAdapter:
             elif existing != expected:
                 raise SkillContractError("managed leaf binding conflicts with an existing route")
 
-    async def __call__(self, projection, _permit) -> ManagedLeafLaunchResult:
-        if projection.binding.workspace.requires_isolated_worktree:
-            raise SkillContractError(
-                "managed fixed-batch isolated-worktree launch adapter is unavailable"
-            )
+    @asynccontextmanager
+    async def __call__(
+        self, projection, _permit
+    ) -> AsyncIterator[ManagedLeafPreparedLaunch[ManagedLeafLaunchResult]]:
         manager = self.tool_ctx.session_skill_manager
         executor = self.tool_ctx.executor
         backend = self.tool_ctx.backend
+        runner = self.tool_ctx.runner
         if manager is None or executor is None or backend is None:
             raise SkillContractError("managed leaf launch infrastructure is unavailable")
+        adaptation = self.adaptation
+        if not isinstance(adaptation, SkillSemanticAdaptationResult):
+            raise SkillContractError("managed leaf launch has an invalid semantic adaptation")
         leaf_session_id = projection.binding.assignment.generated_home_id
-        if backend.capabilities.managed_fixed_batch_route_capable:
-            self._write_leaf_binding(leaf_session_id, projection)
-        add_dir = manager.materialize_invocation(
-            leaf_session_id,
-            self.invocation,
-            self.projection_context,
-        )
-        conventions = self.projection_context.conventions
-        if conventions is None:
-            raise SkillContractError("managed leaf launch has no backend conventions")
-        leaf_document = (
-            Path(add_dir.path) / conventions.skills_subdir / self.source_name / "SKILL.md"
-        )
-        try:
+        materialized = False
+        source_cwd = Path(self.tool_ctx.project_dir)
+        worktree = None
+        if projection.binding.workspace.requires_isolated_worktree:
+            if runner is None:
+                raise SkillContractError("managed leaf worktree allocation requires a runner")
+            revision = await runner(["git", "rev-parse", "HEAD"], cwd=source_cwd, timeout=10)
+            if revision.returncode != 0 or not revision.stdout.strip():
+                raise SkillContractError("managed leaf source revision could not be resolved")
+            worktree_root = Path(self.tool_ctx.temp_dir) / "managed-leaf-worktrees"
+            worktree = _ChildWorktreeRequest(
+                project_root=source_cwd,
+                worktree_root=worktree_root,
+                worktree_path=worktree_root / leaf_session_id,
+                revision=revision.stdout.strip(),
+                runner=runner,
+                create_worktree=_te_pkg.create_git_worktree,
+                remove_worktree=_te_pkg.remove_git_worktree,
+            )
+
+        async def prepare(owned_cwd: Path):
+            nonlocal materialized
+            leaf_context = bind_projection_backend(
+                build_fresh_projection_context(
+                    str(owned_cwd),
+                    self.invocation,
+                    adaptation_context=self.projection_context.adaptation_context,
+                ),
+                backend,
+                parent_sandbox_mode=self.projection_context.parent_sandbox_mode,
+            )
+            if backend.capabilities.managed_fixed_batch_route_capable:
+                leaf_context = replace(leaf_context, managed_codex_route="leaf")
+            source_document = project_agent_skill_document(
+                self.invocation.root,
+                leaf_context,
+                semantic_adaptation=adaptation,
+            )
+            leaf_projection = project_managed_leaf(
+                bind_managed_leaf(
+                    assignment=projection.binding.assignment,
+                    selected_source=self.launch.selected_source,
+                    source_document=source_document,
+                    adaptation=adaptation,
+                    default_model=projection.binding.model,
+                    write_behavior=self.write_behavior,
+                    read_only=self.read_only,
+                ),
+                source_document,
+            )
+            add_dir = manager.materialize_invocation(
+                leaf_session_id, self.invocation, leaf_context
+            )
+            materialized = True
+            conventions = leaf_context.conventions
+            if conventions is None:
+                raise SkillContractError("managed leaf launch has no backend conventions")
+            leaf_document = (
+                Path(add_dir.path) / conventions.skills_subdir / self.source_name / "SKILL.md"
+            )
             if not leaf_document.is_file():
                 raise SkillContractError("managed leaf source document was not materialized")
-            atomic_write(leaf_document, projection.prompt)
-            root = self.invocation.root
-            source = getattr(root, "source_ref", None) or getattr(root, "source", None)
-            if source is None:
-                raise SkillContractError("managed leaf invocation lacks source authority")
-            result = await executor.run(
-                render_target_skill_command(
-                    f"/{self.source_name}",
-                    source,
-                    conventions,
-                ),
-                str(self.tool_ctx.project_dir),
-                model=projection.binding.model,
-                add_dirs=(add_dir,),
-                write_behavior=self.write_behavior,
-                readonly_skill=self.read_only,
-                backend_authority=BackendAuthority(
-                    backend=backend.name,
-                    kind=BackendAuthorityKind.GLOBAL,
-                    tier=BackendAuthorityTier.GLOBAL,
-                    key_path="managed_fixed_batch",
-                ),
-                caller_session_id=self.launch.parent_session_id,
+            atomic_write(leaf_document, leaf_projection.prompt)
+            if backend.capabilities.managed_fixed_batch_route_capable:
+                self._write_leaf_binding(leaf_session_id, leaf_projection)
+            return leaf_projection, add_dir, leaf_context
+
+        request = _ChildResourceOwnerRequest(
+            source_cwd=source_cwd,
+            prepare=prepare,
+            session_manager=manager,
+            generated_home_id=leaf_session_id,
+            generated_home_materialized=lambda: materialized,
+            copied_snapshot_path=lambda: None,
+            worktree=worktree,
+        )
+        async with _te_pkg.scoped_child_resource_owner(request) as child:
+            leaf_projection, add_dir, leaf_context = child.value
+            conventions = leaf_context.conventions
+            assert conventions is not None
+            leaf_document = (
+                Path(add_dir.path) / conventions.skills_subdir / self.source_name / "SKILL.md"
             )
-            return ManagedLeafLaunchResult(
-                outcome="completed" if result.success else "failed",
-                backend_session_id=result.session_id,
-                result_payload=result.to_json(),
+            if not leaf_document.is_file():
+                raise SkillContractError("managed leaf source document was not materialized")
+
+            async def execute() -> ManagedLeafLaunchResult:
+                # The executor owns spawning: its subprocess runner delegates to
+                # run_managed_async, which creates and settles the process group once.
+                root = self.invocation.root
+                source = getattr(root, "source_ref", None) or getattr(root, "source", None)
+                if source is None:
+                    raise SkillContractError("managed leaf invocation lacks source authority")
+                result = await executor.run(
+                    render_target_skill_command(f"/{self.source_name}", source, conventions),
+                    str(child.owned_cwd),
+                    model=leaf_projection.binding.model,
+                    add_dirs=(add_dir,),
+                    write_behavior=self.write_behavior,
+                    readonly_skill=self.read_only,
+                    backend_authority=BackendAuthority(
+                        backend=backend.name,
+                        kind=BackendAuthorityKind.GLOBAL,
+                        tier=BackendAuthorityTier.GLOBAL,
+                        key_path="managed_fixed_batch",
+                    ),
+                    caller_session_id=self.launch.parent_session_id,
+                )
+                return ManagedLeafLaunchResult(
+                    outcome="completed" if result.success else "failed",
+                    backend_session_id=result.session_id,
+                    result_payload=result.to_json(),
+                )
+
+            async def finalize(_result: ManagedLeafLaunchResult) -> None:
+                return None
+
+            yield ManagedLeafPreparedLaunch(
+                ledger_attempt_evidence=leaf_projection.ledger_attempt_evidence,
+                execute=execute,
+                finalize=finalize,
             )
-        finally:
-            manager.cleanup_session(leaf_session_id)
 
 
 def _resolve_launch_binding(
@@ -511,6 +600,7 @@ def _resolve_launch_binding(
             source_name=facts.selected_source.skill_name,
             write_behavior=write_behavior,
             read_only=read_only,
+            adaptation=adaptation,
         ),
     )
 

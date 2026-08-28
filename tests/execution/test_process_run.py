@@ -383,6 +383,30 @@ class TestTracingStopOnException:
         assert len(stop_called) >= 1
 
 
+class TestManagedProcessOwnership:
+    """The subprocess boundary, not a server supervisor, owns process cleanup."""
+
+    @pytest.mark.anyio
+    async def test_run_managed_async_settles_its_owned_group_on_cancellation(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        from autoskillit.execution.process._process_kill import OwnedProcessGroup
+
+        settled: list[BaseException] = []
+        original_settle = OwnedProcessGroup.settle_preserving
+
+        def record_settle(self, cause, **kwargs):
+            settled.append(cause)
+            return original_settle(self, cause, **kwargs)
+
+        monkeypatch.setattr(OwnedProcessGroup, "settle_preserving", record_settle)
+
+        with anyio.move_on_after(0.1):
+            await run_managed_async(["sleep", "10"], cwd=tmp_path, timeout=30)
+
+        assert settled
+
+
 class TestOuterCancelRaceGuard:
     """timeout_scope None-guard prevents AttributeError when outer cancel fires
     before move_on_after() inside the task group can bind."""

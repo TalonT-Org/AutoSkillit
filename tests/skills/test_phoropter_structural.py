@@ -4,12 +4,13 @@ import re
 
 import pytest
 
-from autoskillit.core import pkg_root
+from autoskillit.core import load_yaml, pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.workspace.skill_format import parse_frontmatter_content
 from tests._helpers import IMPLEMENTED_FAMILIES
 
 SKILLS_DIR = pkg_root() / "skills_extended"
+_REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
 
 # Lens families are filesystem-discovered. The registry carries only
 # ``step_naming.prefix`` and is read exclusively by
@@ -23,6 +24,24 @@ _LENS_PAIRS: list[tuple[str, str]] = sorted(
     if child.is_dir() and child.name.startswith(f"{family}-")
 )
 
+
+def _load_registry_prefixes() -> dict[str, str | None]:
+    """Read ``step_naming.prefix`` per family from the registry.
+
+    Mirrors ``_load_family_prefixes()`` in
+    ``recipe/rules/rules_phoropter_adjacency.py`` so tests assert against
+    the same source of truth production reads.
+    """
+    registry = load_yaml(_REGISTRY_PATH)
+    families = registry.get("families", {})
+    return {
+        family: entry.get("step_naming", {}).get("prefix") for family, entry in families.items()
+    }
+
+
+# Maps below name the families each retired registry field described.
+# They are consumed by body-derived tests as the expected interface —
+# keep them in sync with the SKILL.md sources.
 FAMILY_ARG_INTERFACE: dict[str, str] = {
     "arch-lens": "1-arg",
     "exp-lens": "2-arg",
@@ -41,9 +60,9 @@ _DIAL_SKILLS: dict[str, str | None] = {
     "exp-lens": None,
 }
 
-_DIAL_SKILL_PAIRS: list[tuple[str, str]] = [
+_DIAL_SKILL_PAIRS: list[tuple[str, str]] = sorted(
     (family, skill) for family, skill in _DIAL_SKILLS.items() if skill is not None
-]
+)
 
 RESEARCH_RECIPE = load_recipe(builtin_recipes_dir() / "research.yaml")
 RESEARCH_DESIGN_RECIPE = load_recipe(builtin_recipes_dir() / "research-design.yaml")
@@ -56,9 +75,9 @@ _RECIPE_FAMILIES: frozenset[str] = frozenset(
 )
 
 _FAMILY_PREFIX: dict[str, str | None] = {
-    "arch-lens": None,
-    "exp-lens": None,
-    "vis-lens": "vis",
+    family: prefix
+    for family, prefix in _load_registry_prefixes().items()
+    if family in _RECIPE_FAMILIES
 }
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
@@ -87,12 +106,8 @@ def test_discovery_is_non_empty_and_covers_all_families() -> None:
 def test_phoropter_lens_structure(family: str, slug: str) -> None:
     """SKILL.md content contract for every discovered lens.
 
-    Body-derived checks (``## Arguments``, ``context_path``, ``Step 0``,
-    ``diagram_path``, ``categories`` frontmatter, ``activate_deps``
-    frontmatter, ``experiment_plan_path`` for 2-arg families, vis-lens
-    composite marker, vis-lens-methodology-norms special assertions). The
-    registry is not consulted at runtime — these checks all derive from
-    the SKILL.md file itself.
+    All checks derive from the SKILL.md file (body + frontmatter). The
+    registry only contributes ``step_naming.prefix`` (see ``_FAMILY_PREFIX``).
     """
     path = SKILLS_DIR / f"{family}-{slug}" / "SKILL.md"
     assert path.exists(), f"{family}-{slug}/SKILL.md is missing"
@@ -131,10 +146,6 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
             assert "yaml:figure-spec" in text, f"{family}-{slug} must contain yaml:figure-spec"
 
     if (family, slug) == ("vis-lens", "methodology-norms"):
-        # vis-lens-methodology-norms carries the special_assertions
-        # ``tradition_slug`` and ``two_stage_matching`` (formerly
-        # ``lens_metadata.methodology-norms.special_assertions`` in the
-        # registry). Body markers must agree.
         assert "tradition_slug" in text, f"{family}-{slug} must document tradition_slug"
         assert "Stage A" in text or "stage A" in text, f"{family}-{slug} must document Stage A"
         assert "Stage B" in text or "stage B" in text, f"{family}-{slug} must document Stage B"
@@ -145,12 +156,7 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_arg_interface_derived_from_skill_md(family: str, slug: str) -> None:
-    """``arg_interface`` is derived from the SKILL.md ``## Arguments`` shape.
-
-    2-arg families declare ``experiment_plan_path`` in their Arguments
-    section; 1-arg families do not. The module-level
-    ``FAMILY_ARG_INTERFACE`` map is the audit trail.
-    """
+    """Body-derived arg-interface must match the family-level expected value."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
     args_section = _extract_arguments_section(skill_md)
     has_experiment_plan = "experiment_plan_path" in args_section
@@ -163,12 +169,7 @@ def test_arg_interface_derived_from_skill_md(family: str, slug: str) -> None:
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_activate_deps_from_frontmatter(family: str, slug: str) -> None:
-    """``activate_deps`` is read directly from SKILL.md frontmatter.
-
-    All current lenses declare ``["mermaid"]``. If a future lens introduces a
-    different dependency, update FAMILY_ACTIVATE_DEPS — but more cleanly,
-    just declare it on the lens itself.
-    """
+    """Every lens declares ``activate_deps: ['mermaid']`` in its frontmatter."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
     frontmatter = parse_frontmatter_content(skill_md).data
     deps = (frontmatter or {}).get("activate_deps", [])
@@ -177,12 +178,7 @@ def test_activate_deps_from_frontmatter(family: str, slug: str) -> None:
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_composite_slugs_from_body(family: str, slug: str) -> None:
-    """``composite_slugs`` is derived from the ``yaml:spec-index`` body marker.
-
-    Asserts agreement between the body marker and the (now-hardcoded)
-    composite-slug map; the map itself is the audit trail for which lenses
-    are composite.
-    """
+    """Body-derived composite flag must match the family-level expectation."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
     derived_is_composite = "yaml:spec-index" in skill_md
     declared = (family, slug) in _COMPOSITE_SLUGS
@@ -194,10 +190,7 @@ def test_composite_slugs_from_body(family: str, slug: str) -> None:
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_output_prefix_from_body(family: str, slug: str) -> None:
-    """``output_prefix`` is derived from body text.
-
-    Only vis-lens carries the ``vis_spec_`` output prefix marker.
-    """
+    """Body-derived vis-lens prefix marker must agree with the family."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
     if family == "vis-lens":
         assert "vis_spec_" in skill_md, (
@@ -207,12 +200,7 @@ def test_output_prefix_from_body(family: str, slug: str) -> None:
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_lens_metadata_special_assertions_from_body(family: str, slug: str) -> None:
-    """``lens_metadata.special_assertions`` is derived from body markers.
-
-    Currently only ``vis-lens-methodology-norms`` carries both
-    ``tradition_slug`` and ``two_stage_matching`` assertions. Body markers
-    must agree with the assertion set.
-    """
+    """vis-lens-methodology-norms must declare its two special assertions."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
     assertions: list[str] = []
     if "tradition_slug" in skill_md:
@@ -227,38 +215,6 @@ def test_lens_metadata_special_assertions_from_body(family: str, slug: str) -> N
     assert assertions == expected, (
         f"{family}-{slug}: derived assertions {assertions} != expected {expected}"
     )
-
-
-def test_collection_does_not_read_registry() -> None:
-    """Re-accretion guard: phoropter-registry.yaml must carry only ``step_naming``.
-
-    The structural test derives every lens invariant from each lens's
-    SKILL.md content (frontmatter + body); it does not read the registry
-    at runtime. Re-introducing a retired leaf here would silently re-create
-    the dual-source-of-truth that issue #4894 retired.
-    """
-    registry_path = pkg_root() / "assets" / "phoropter-registry.yaml"
-    registry_text = registry_path.read_text()
-    retired_leaves = (
-        "arg_interface",
-        "activate_deps",
-        "composite_slugs",
-        "output_prefix",
-        "lens_metadata",
-        "phase_skip",
-        "synthesis",
-        "dial_skill",
-        "failure_mode",
-        "default_enabled",
-        "lens_count",
-        "mode_label",
-        "output_type",
-        "description",
-    )
-    for leaf in retired_leaves:
-        assert leaf not in registry_text, (
-            f"phoropter-registry.yaml still contains retired leaf {leaf!r}"
-        )
 
 
 @pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)

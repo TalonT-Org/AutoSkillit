@@ -3,28 +3,16 @@
 Tracks issue #4894.
 
 Generalizes the ``inert-tracked:#NNNN`` discipline documented in
-tests/AGENTS.md § run_skill Parameter-Role Ledgers (precedent:
-tests/contracts/test_config_field_has_consumer.py, which applies it to
-config dataclass fields; and
-tests/contracts/test_recipe_step_field_ledger.py, which applies it to
-``RecipeStep`` fields) to the phoropter registry YAML.
+tests/AGENTS.md § run_skill Parameter-Role Ledgers to the phoropter registry
+YAML. A leaf is "live" iff either (a) some production module outside
+``src/autoskillit/assets/`` reads the leaf via attribute or chained
+``.get()`` access, or (b) the YAML comment block immediately preceding
+the leaf entry carries an ``inert-tracked:#NNNN`` annotation.
 
-A leaf is "live" iff either (a) some production module outside
-``src/autoskillit/assets/`` reads the leaf via dotted attribute access
-(``entry.step_naming.prefix``) or chained ``dict.get()`` calls
-(``entry.get("step_naming", {}).get("prefix")``), or (b) the YAML comment
-block immediately preceding the leaf entry carries an
-``inert-tracked:#NNNN`` annotation citing an open issue.
-
-The consumer scan excludes ``src/autoskillit/skills_extended/`` because
-SKILL.md frontmatter is documentation, not consumption — including it would
-falsely mark ``activate_deps`` as consumed by 47 SKILL.md frontmatter
-blocks after a future re-accretion, defeating the contract.
-
-Distinct from tests/skills/test_phoropter_structural.py::test_collection_does_not_read_registry,
-which guards that the structural test does not read the registry at
-collection time (a different invariant — the structural test is a *consumer*
-of filesystem SKILL.md content, not of the registry).
+Consumer detection parses each production ``.py`` file with ``ast`` and
+walks every ``ast.Attribute`` and ``ast.Call`` chain, so common names
+(``description``, ``status``, etc.) cannot satisfy the contract via
+incidental attribute access or string literals.
 
 Scope: enforces every leaf (recursive) under ``families.<family-name>.*`` in
 ``src/autoskillit/assets/phoropter-registry.yaml``. The top-level
@@ -33,6 +21,7 @@ Scope: enforces every leaf (recursive) under ``families.<family-name>.*`` in
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 from typing import Any
@@ -43,48 +32,30 @@ from autoskillit.core import load_yaml, pkg_root
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
+REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 _INERT_TRACKED_RE = re.compile(r"inert-tracked:#[1-9]\d*")
 
-# Scan roots mirror ``test_config_field_has_consumer.py:111-117``: production
-# ``.py`` (excluding ``assets/`` which holds the registry itself and
-# ``skills_extended/`` whose SKILL.md frontmatter is documentation, not
-# consumption) plus the production YAML files that could reference leaves.
-_SCAN_PY_ROOTS: tuple[Path, ...] = (_SRC_ROOT,)
-
-_SCAN_YAML_PATHS: tuple[Path, ...] = (
-    _SRC_ROOT / "recipes" / "phoropter.yaml",
-    _SRC_ROOT / "recipe" / "skill_contracts.yaml",
-    _SRC_ROOT / "config" / "defaults.yaml",
-)
-
+# Scan production ``.py`` files only (excluding ``assets/`` which holds
+# the registry itself and ``skills_extended/`` whose SKILL.md frontmatter
+# is documentation, not consumption).
 _EXCLUDE_PY_DIRS: frozenset[str] = frozenset({"assets", "skills_extended"})
 
 
 def _load_production_sources() -> dict[Path, str]:
-    """Scan all production source files for leaf-consumer references.
+    """Scan production ``.py`` files for leaf-consumer access.
 
-    ``.py`` files under ``src/autoskillit/`` (excluding ``assets/`` and
-    ``skills_extended/``). ``.yaml`` files at the hardcoded production
-    paths in ``_SCAN_YAML_PATHS``. Returned as a path -> text map.
+    Only ``.py`` files under ``src/autoskillit/`` are returned; the
+    contract operates on parsed AST access chains, not on text. Files
+    that fail to read raise — a contract whose scan silently skipped
+    sources would itself be the silent failure mode.
     """
     sources: dict[Path, str] = {}
-    for py_root in _SCAN_PY_ROOTS:
-        for py_path in py_root.rglob("*.py"):
-            if any(part in _EXCLUDE_PY_DIRS for part in py_path.relative_to(_SRC_ROOT).parts):
-                continue
-            try:
-                sources[py_path] = py_path.read_text(encoding="utf-8")
-            except OSError:
-                continue
-    for yaml_path in _SCAN_YAML_PATHS:
-        if yaml_path.exists():
-            try:
-                sources[yaml_path] = yaml_path.read_text(encoding="utf-8")
-            except OSError:
-                continue
+    for py_path in _SRC_ROOT.rglob("*.py"):
+        if any(part in _EXCLUDE_PY_DIRS for part in py_path.relative_to(_SRC_ROOT).parts):
+            continue
+        sources[py_path] = py_path.read_text(encoding="utf-8")
     return sources
 
 
@@ -114,63 +85,92 @@ def _walk_leaves(entry: dict[str, Any]) -> list[tuple[str, Any]]:
     return leaves
 
 
-def _has_consumer(leaf_path: str) -> bool:
-    """True iff some production source reads the leaf via dotted attribute
-    access or chained ``.get()`` calls.
+def _attribute_chain(node: ast.Attribute) -> list[str]:
+    """Return the trailing attribute names from ``node`` outward.
 
-    Two access patterns are recognized (per the plan's T9 spec):
-
-    - **Dotted attribute access**: ``.step_naming.prefix`` (precedent from
-      ``test_config_field_has_consumer.py:171`` — regex ``\\.{name}\\b``).
-    - **Chained ``.get()`` calls**: ``.get(\"step_naming\").get(\"prefix\")``
-      (the actual production pattern in
-      ``src/autoskillit/recipe/rules/rules_phoropter_adjacency.py:31``).
-
-    For each leaf path (e.g., ``step_naming.prefix``), split on ``.`` to
-    get segments. A source file is a consumer if EITHER:
-
-    - It contains ``.{first_segment}.{second_segment}\\b`` (dotted access), OR
-    - It contains a chained ``.get()`` pattern that walks both segments.
-      The regex anchors ``.get(\"first\").get(\"second\")`` (DOTALL so the
-      two calls may span lines).
-
-    For a single-segment leaf (no ``.``), match ``.{leaf_name}\\b``.
+    ``obj.a.b.c`` → ``["a", "b", "c"]``.
     """
-    segments = leaf_path.split(".")
-    if len(segments) == 1:
-        # Top-level single-segment leaf — dotted attribute access only.
-        pattern = re.compile(rf"\.{re.escape(segments[0])}\b")
-        return any(pattern.search(text) for text in _PRODUCTION_SOURCES.values())
-
-    first, second = segments[0], segments[1]
-    dotted = re.compile(rf"\.{re.escape(first)}\.{re.escape(second)}\b")
-    # Allow default values between the key and the closing paren — e.g.
-    # ``.get("step_naming", {}).get("prefix")`` — which is the actual
-    # production pattern in ``rules_phoropter_adjacency.py``.
-    chained = re.compile(
-        rf"\.get\(\s*[\"']{re.escape(first)}[\"'][^)]*\)[^.]*\.get\(\s*[\"']"
-        rf"{re.escape(second)}[\"'][^)]*\)",
-        re.DOTALL,
-    )
-    return any(
-        dotted.search(text) or chained.search(text) for text in _PRODUCTION_SOURCES.values()
-    )
+    parts: list[str] = []
+    current: ast.expr = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    parts.reverse()
+    return parts
 
 
-def _is_inert_tracked(
-    registry_text: str,
-    family_name: str,
-    leaf_path: str,
-) -> bool:
+def _get_chain(node: ast.Call) -> list[str] | None:
+    """Return the string keys from a ``.get("x").get("y")`` chain rooted at ``node``.
+
+    Returns ``None`` if the chain is not a valid string-keyed ``.get()``
+    sequence (e.g., keys are non-string literals or methods are not
+    named ``get``).
+    """
+    keys: list[str] = []
+    current: ast.expr = node
+    while isinstance(current, ast.Call):
+        func = current.func
+        if not isinstance(func, ast.Attribute) or func.attr != "get":
+            return None
+        if not current.args:
+            return None
+        first_arg = current.args[0]
+        if not isinstance(first_arg, ast.Constant) or not isinstance(first_arg.value, str):
+            return None
+        keys.append(first_arg.value)
+        current = func.value
+    keys.reverse()
+    return keys
+
+
+def _ast_has_consumer(tree: ast.Module, segments: tuple[str, ...]) -> bool:
+    """Return ``True`` iff ``tree`` accesses a path that ends with ``segments``.
+
+    Detected patterns:
+
+    - ``obj.a.b.c`` — ``ast.Attribute`` whose trailing chain equals ``segments``.
+    - ``obj.get("a").get("b")`` — ``ast.Call`` chain whose string keys equal ``segments``.
+    """
+    target = list(segments)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            chain = _attribute_chain(node)
+            if len(chain) >= len(target) and chain[-len(target) :] == target:
+                return True
+        elif isinstance(node, ast.Call):
+            keys = _get_chain(node)
+            if keys is not None and len(keys) >= len(target) and keys[-len(target) :] == target:
+                return True
+    return False
+
+
+def _has_consumer(leaf_path: str) -> bool:
+    """True iff some production source reads the leaf via attribute or chained ``.get()`` access.
+
+    Common names like ``description`` or ``prefix`` cannot satisfy the
+    contract via incidental access: detection parses each production
+    ``.py`` file with ``ast`` and matches only genuine access chains.
+    """
+    segments = tuple(leaf_path.split("."))
+    if not segments or not all(segments):
+        return False
+    for source in _PRODUCTION_SOURCES.values():
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        if _ast_has_consumer(tree, segments):
+            return True
+    return False
+
+
+def _is_inert_tracked(registry_text: str, family_name: str) -> bool:
     """True iff the YAML comment block immediately preceding the family's
     declaration carries an ``inert-tracked:#NNNN`` annotation.
 
-    The annotation marks the whole family entry as inert (rather than per-leaf),
-    so we walk back from the family line collecting contiguous comment lines.
-    ``leaf_path`` is accepted for API symmetry with ``_check_registry_leaves``
-    but is not consulted here.
+    The annotation marks the whole family entry as inert rather than
+    per-leaf; collect contiguous comment lines above the family declaration.
     """
-    del leaf_path  # intentionally unused — annotation is family-scoped
     lines = registry_text.splitlines()
     family_idx = next(
         (
@@ -198,10 +198,10 @@ def _check_registry_leaves(path: Path) -> None:
     registry = load_yaml(path)
     violations: list[str] = []
     for family_name, family_entry in registry["families"].items():
+        if _is_inert_tracked(registry_text, family_name):
+            continue
         for leaf_path, _ in _walk_leaves(family_entry):
             if _has_consumer(leaf_path):
-                continue
-            if _is_inert_tracked(registry_text, family_name, leaf_path):
                 continue
             violations.append(f"{family_name}.{leaf_path}")
     assert not violations, (
@@ -212,11 +212,8 @@ def _check_registry_leaves(path: Path) -> None:
 def test_every_registry_leaf_has_consumer_or_inert_track() -> None:
     """Every leaf in phoropter-registry.yaml must have either a production
     consumer or an ``inert-tracked:#NNNN`` annotation.
-
-    Mirrors the violations-accumulator pattern at lines 232-246 of
-    ``test_config_field_has_consumer.py``.
     """
-    _check_registry_leaves(_REGISTRY_PATH)
+    _check_registry_leaves(REGISTRY_PATH)
 
 
 def test_inert_tracked_regex_matches_yaml_comment_shapes() -> None:
@@ -231,15 +228,15 @@ def test_inert_tracked_regex_matches_yaml_comment_shapes() -> None:
         "    step_naming:\n"
         "      prefix: vis\n"
     )
-    assert _is_inert_tracked(positive, "vis-lens", "step_naming.prefix")
+    assert _is_inert_tracked(positive, "vis-lens")
 
     # Negative case — no comment block.
     negative = "  vis-lens:\n    step_naming:\n      prefix: vis\n"
-    assert not _is_inert_tracked(negative, "vis-lens", "step_naming.prefix")
+    assert not _is_inert_tracked(negative, "vis-lens")
 
     # Negative case — unrelated comment.
     unrelated = "# unrelated comment\n  vis-lens:\n    step_naming:\n      prefix: vis\n"
-    assert not _is_inert_tracked(unrelated, "vis-lens", "step_naming.prefix")
+    assert not _is_inert_tracked(unrelated, "vis-lens")
 
 
 def test_rejected_accretion_canary(tmp_path: Path) -> None:

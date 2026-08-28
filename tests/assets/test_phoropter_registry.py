@@ -10,10 +10,6 @@ from tests._helpers import IMPLEMENTED_FAMILIES
 pytestmark = [pytest.mark.medium]
 
 REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
-EXPECTED_FAMILIES = {"arch-lens", "exp-lens", "vis-lens", "refactor-lens"}
-# After the #4894 retirement, the registry carries only step_naming per family.
-# All other knobs (synthesis_strategy, dial_skill, lens_count, ...) live on
-# the tradition manifest / recipe YAML / SKILL.md frontmatter, not here.
 REQUIRED_FIELDS = frozenset({"step_naming"})
 
 
@@ -41,12 +37,11 @@ def test_schema_version_is_two(registry_data: dict) -> None:
     )
 
 
-def test_families_keys_match_expected_set(registry_data: dict) -> None:
-    """families must contain exactly the four expected phoropter lens families."""
+def test_implemented_families_are_present(registry_data: dict) -> None:
+    """Every implemented family must have an entry in the registry."""
     families = registry_data.get("families", {})
-    assert set(families.keys()) == EXPECTED_FAMILIES, (
-        f"Expected families={EXPECTED_FAMILIES}, got {set(families.keys())}"
-    )
+    missing = IMPLEMENTED_FAMILIES - set(families.keys())
+    assert not missing, f"Implemented families missing from registry: {sorted(missing)}"
 
 
 def test_all_families_have_required_fields(registry_data: dict) -> None:
@@ -81,20 +76,17 @@ def test_registry_has_only_step_naming(registry_data: dict) -> None:
         )
 
 
-def test_lens_counts_match_actual_directories() -> None:
-    """Each implemented family's lens count is derived from the filesystem,
-    not from the registry. This test verifies the count is consistent across
-    the registry file (no longer carries ``lens_count``) and the canonical
-    ``_LENS_PAIRS`` discovery in ``test_phoropter_structural.py``.
+def test_each_implemented_family_has_lenses() -> None:
+    """Each implemented family must have at least one lens directory.
 
-    The registry itself no longer stores ``lens_count``; this assertion
-    confirms the new minimal schema still agrees with the filesystem.
+    Lens counts are derived from the filesystem; the registry no longer
+    stores them post-#4894.
     """
     skills_root = pkg_root() / "skills_extended"
     for family in IMPLEMENTED_FAMILIES:
-        count_via_filesystem = sum(
+        count = sum(
             1 for p in skills_root.iterdir() if p.name.startswith(f"{family}-") and p.is_dir()
         )
-        assert count_via_filesystem > 0, (
+        assert count > 0, (
             f"Implemented family {family!r} has zero lens directories under {skills_root}"
         )

@@ -80,6 +80,25 @@ def test_ledger_dimensions_match_registry_and_pinned_combinations() -> None:
             assert tuple(backend_statuses) == expected_backends
 
 
+@pytest.mark.parametrize(
+    ("combination", "expected_count"),
+    [
+        ((admission_ledger.SkillExecutionRole.ORCHESTRATOR, False), 2),
+        ((admission_ledger.SkillExecutionRole.SESSION, False), 67),
+        (admission_ledger.COOK_SESSION_COMBINATION, 82),
+    ],
+    ids=_COMBINATION_IDS,
+)
+def test_managed_codex_admission_rows_are_complete_and_join_refusal_free(
+    combination: admission_ledger.CatalogCombination,
+    expected_count: int,
+) -> None:
+    rows = admission_ledger._live_admission_rows(combination)
+
+    assert len(rows) == expected_count
+    assert all(statuses["codex"] == "admitted" for statuses in rows.values())
+
+
 def test_ledger_is_sorted() -> None:
     assert tuple(admission_ledger.SKILL_ADMISSION_LEDGER) == (admission_ledger.PINNED_COMBINATIONS)
     for rows in admission_ledger.SKILL_ADMISSION_LEDGER.values():

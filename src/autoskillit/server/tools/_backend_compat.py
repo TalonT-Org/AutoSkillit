@@ -11,6 +11,7 @@ from uuid import uuid4
 from autoskillit.core import (
     DISPATCH_ID_ENV_VAR,
     CodingAgentBackend,
+    SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
     SkillResult,
@@ -60,6 +61,7 @@ def _check_backend_compat(
     skill_info: object | None,
     effective_backend_obj: CodingAgentBackend | None,
     skill_resolver: object | None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str | None:
     """Fail closed when an effective skill invocation is backend-incompatible.
 
@@ -92,7 +94,11 @@ def _check_backend_compat(
     effective_backend = effective_backend_obj.name
     root = getattr(skill_info, "root", None)
     root_plan = getattr(root, "semantic_plan", None)
-    semantic_error = check_skill_semantic_feasibility(root_plan, effective_backend_obj)
+    semantic_error = check_skill_semantic_feasibility(
+        root_plan,
+        effective_backend_obj,
+        adaptation_context=adaptation_context,
+    )
     if semantic_error:
         return SkillResult.infeasible(
             skill_name=target_name,
@@ -158,6 +164,8 @@ def _prepare_direct_skill_dispatch(
     skill_command: str,
     cwd: str | Path,
     tool_ctx: ToolContext,
+    *,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> tuple[DirectSkillDispatch | None, str | None]:
     """Resolve policy once, then materialize its agent-safe projection."""
     target_name = extract_skill_name(skill_command)
@@ -209,6 +217,7 @@ def _prepare_direct_skill_dispatch(
         skill_info=invocation,
         effective_backend_obj=tool_ctx.backend,
         skill_resolver=tool_ctx.skill_resolver,
+        adaptation_context=adaptation_context,
     )
     if compatibility_error is not None:
         return None, compatibility_error
@@ -222,6 +231,7 @@ def _prepare_direct_skill_dispatch(
         conventions=backend.conventions if backend is not None else None,
         substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
         gating=False,
+        adaptation_context=adaptation_context,
     )
     session_id = f"direct-{uuid4().hex[:12]}"
     try:

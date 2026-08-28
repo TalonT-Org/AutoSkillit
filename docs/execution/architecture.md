@@ -134,11 +134,48 @@ A skill that declares `semantic_requirements.join.required: true` enters a join-
    * `join_settle_guard` (PostToolUse + PostToolUseFailure) maps the upstream event to one of `success / failure / timeout / cancelled / interruption / missing` and records the outcome on the claimed handle. Empty results are mapped to `missing`, never `success`.
    * `join_followup_guard` (matcherless PreToolUse) denies non-`Agent` side-effecting calls while a wave is unresolved.
    * `join_stop_guard` (Stop, exit code 2) blocks Claude from completing until the wave is `complete`.
-4. **Backend admission** — `BackendCapabilities.fixed_set_join_capable` is statically `True` only for Claude Code, and only when the full guard set is registered in the same commit. Codex returns `unsupported_operation(REQUIRED_JOIN)` at admission; current Codex has wait-any/mailbox semantics, not fixed-set fan-in.
+4. **Backend admission** — `BackendCapabilities.fixed_set_join_capable` is statically `True` only for Claude Code, and only when the full guard set is registered in the same commit. Native Codex remains `fixed_set_join_capable=False`: its wait-any/mailbox behavior cannot satisfy `declare_join_batch`, so native and unattested Codex projections return `unsupported_operation(REQUIRED_JOIN)`.
 5. **Session binding monotonicity** — `skill_load_post_hook.py` writes a JSON envelope with OR-accumulated `join_required`. A later join-false Skill load does not downgrade an established binding. A missing or unreadable projection manifest fails closed by forcing `join_required: true` so dispatch guards refuse all join-bearing work.
 6. **Repository force-inactive option** — `agent_backend.force_inactive_agent_teams` (default False) neutralizes `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and detects conflicting entries in the target repository's `.claude/settings.json` / `.claude/settings.local.json`. Repositories with the option disabled remain byte-for-byte unchanged.
 
 The session flag carries join policy; the manifest carries projection identity; the ledger carries wave state. Each is read by the matching hook family. None of them is a duplicate authority — they are three projections of one decision.
+
+### Attested managed Codex route
+
+Managed Codex is a separate, server-owned route; it does not change the native
+capability. Before a join-bearing skill is compiled or its generated home is
+issued, the server retrieves one current `SemanticAdaptationContext` from its
+attestation authority. The authority admits only the exact in-process issuance
+for the selected backend and parent session, the active epoch, direct tool mode,
+the configured model and effort, catalog/tool/hook digests, applicable Skill
+load and guards, and a recovery-ready managed batch service. Without that
+evidence the normal unfiltered source catalog is compiled under the native
+refusal rule; a later materialization never attempts to restore a skill that
+was already omitted.
+
+With the attestation, catalog compilation, projection binding, and generated
+skill documents carry the same adaptation context. The managed parent may use
+`run_fixed_batch`, which validates the exact loaded source and then records
+fixed membership in the JoinLedger. It cannot use native spawning or
+`declare_join_batch`; the latter remains a native-only capability gate and
+cannot mint managed authority. Each worker is launched as an isolated managed
+leaf with its own binding and a deliberately small direct-tool surface. Leaves
+cannot launch batches, spawn, follow up, or stop the parent.
+
+The ledger's active batch is parent-scoped. It records immutable assignment and
+attempt identities, then progresses through admission, running, and one
+terminal settlement. Result bytes are published behind opaque references, but
+the reference alone grants no access: reads revalidate request session, managed
+parent, selected source artifact and incarnation, batch, assignment, and digest.
+On restart, unresolved work blocks the route until bounded recovery can prove
+the prior process absent and persist a terminal outcome; uncertain work is not
+silently retried.
+
+The attestation includes the configured hook-registry digest and bindings carry
+that digest as route metadata. Explicit epoch rotation clears issued contexts;
+the digest is not an ambient hook-side authorization check or an automatic
+rotation mechanism. This separation keeps a changed or unavailable trust input
+fail-closed without claiming that an external framework provides the contract.
 
 ## Durable Codex Cook Sessions
 

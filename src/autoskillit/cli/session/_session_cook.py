@@ -34,7 +34,10 @@ from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
     from autoskillit.cli.session.pty._observer import PtyObserver
-    from autoskillit.core import CodingAgentBackend, RepositoryProfileId
+    from autoskillit.core import (
+        CodingAgentBackend,
+        RepositoryProfileId,
+    )
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillProjectionContext,

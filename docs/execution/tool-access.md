@@ -55,6 +55,14 @@ Visibility is not authority. At the application and hook layers, `run_skill` is 
 to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks through
 `dispatch_food_truck`; they retain `run_cmd` and `run_python` but cannot call `run_skill`.
 
+For Codex, native `declare_join_batch` remains unavailable because the backend's
+native coordination surface is wait-any rather than fixed-set fan-in. A managed
+parent is admitted only with a server-issued direct-mode attestation and uses
+`run_fixed_batch` instead. Its leaf sessions are separate, bound contexts with a
+small direct-tool allow-list; they are not a delegated copy of the parent's
+orchestration surface. Doctor reports project-specific configuration and
+conformance observations. It does not act as an external attestation authority.
+
 ## Behavioral Evidence Readers
 
 `delegate_evidence_reader` is a headless parent tool for writable L1 Codex skill sessions.
@@ -160,7 +168,9 @@ TL = `telemetry`, FL = `fleet`
 | `configure_fleet` | AS | `server/tools_config.py` |
 | `configure_order` | AS | `server/tools_config.py` |
 | `lock_ingredients` | AS | `server/tools_kitchen.py` |
-| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Opens one declared-batch JoinLedger for the next wave; see `JoinLedger` lifecycle. Claude-only when `fixed_set_join_capable`. |
+| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Native declared-batch gateway. It is Claude-only when `fixed_set_join_capable` and never mints managed Codex authority. |
+| `run_fixed_batch` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Attested managed-Codex parent route. It validates the current parent binding, exact loaded skill, recovery state, and fixed assignment declaration before the server supervises leaves. |
+| `read_fixed_batch_result` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Reads bounded pages from an opaque managed-batch result only after reauthorizing the request, parent, source artifact/incarnation, batch, assignment, and digest. |
 
 ---
 

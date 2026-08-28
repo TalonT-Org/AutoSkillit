@@ -120,6 +120,7 @@ def _materialize_profile_skill_infos(
         active_exploration_applicabilities=projection_context.active_exploration_applicabilities,
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
         adaptation_context=projection_context.adaptation_context,
+        managed_codex_route=projection_context.managed_codex_route,
         explorer_provisioning_eligible=projection_context.explorer_provisioning_eligible,
         projection_version=projection_context.projection_version,
     )
@@ -427,6 +428,8 @@ def _materialize_session(
         resolved_exploration_profile=projection_context.resolved_exploration_profile,
         active_exploration_applicabilities=(projection_context.active_exploration_applicabilities),
         parent_sandbox_mode=projection_context.parent_sandbox_mode,
+        adaptation_context=projection_context.adaptation_context,
+        managed_codex_route=projection_context.managed_codex_route,
         explorer_provisioning_eligible=(
             explorer_binding_env is not None or projection_context.explorer_provisioning_eligible
         ),

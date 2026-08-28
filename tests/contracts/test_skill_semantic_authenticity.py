@@ -140,6 +140,27 @@ def test_every_bundled_semantic_plan_adapts_on_every_registered_backend() -> Non
     assert not violations, "bundled semantic adaptation failures:\n" + "\n".join(violations)
 
 
+def test_managed_codex_admits_every_bundled_join_required_plan() -> None:
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.workspace import DefaultSkillResolver
+    from tests.contracts._skill_admission_ledger import _production_managed_codex_context
+
+    managed_context = _production_managed_codex_context()
+    refusals = [
+        skill.name
+        for skill in DefaultSkillResolver().list_all()
+        if skill.semantic_plan is not None
+        and skill.semantic_plan.join is not None
+        and skill.semantic_plan.join.required
+        and CodexBackend()
+        .adapt_skill_semantics(skill.semantic_plan, managed_context)
+        .unsupported_operation
+        is not None
+    ]
+
+    assert not refusals
+
+
 def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:
     from autoskillit.core import load_bundled_agent_definitions
     from autoskillit.execution.backends import CodexBackend

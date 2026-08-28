@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import (
     RepositoryProfileId,
+    SemanticAdaptationContext,
     SkillExecutionRole,
     SkillFrontmatterAuthority,
     SkillResolver,
@@ -195,6 +196,8 @@ class SkillsDirectoryProvider:
         backend: CodingAgentBackend | None = None,
         durable_scripts_root: Path,
         resolved_exploration_profile: RepositoryProfileId | None = None,
+        adaptation_context: SemanticAdaptationContext | None = None,
+        managed_codex_route: str | None = None,
     ) -> SkillProjectionContext:
         """Build one projection context bound to a resolved path-free catalog.
 
@@ -214,6 +217,8 @@ class SkillsDirectoryProvider:
             backend=backend,
             conventions=backend.conventions if backend is not None else None,
             resolved_exploration_profile=resolved_exploration_profile,
+            adaptation_context=adaptation_context,
+            managed_codex_route=managed_codex_route,
             substitutions={
                 "{{AUTOSKILLIT_TEMP}}": self._temp_dir_relpath,
                 "{{AUTOSKILLIT_SCRIPTS}}": str(scripts_root / "recipes" / "scripts"),

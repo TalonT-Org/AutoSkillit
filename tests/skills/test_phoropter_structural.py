@@ -183,6 +183,24 @@ def test_composite_slugs_from_body(family: str, slug: str) -> None:
         )
 
 
+def test_vis_lens_composite_discriminator_present() -> None:
+    """Tripwire: at least one vis-lens lens must declare yaml:spec-index.
+
+    Ensures the composite-vs-non-composite classification is non-empty across
+    the family — guards against silent regression if all lenses lose the
+    discriminator marker.
+    """
+    composite_count = sum(
+        1
+        for family, slug in _LENS_PAIRS
+        if family == "vis-lens"
+        and "yaml:spec-index" in (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    )
+    assert composite_count >= 1, (
+        "No vis-lens lens declares yaml:spec-index (composite marker lost across family)"
+    )
+
+
 @pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])
 def test_output_prefix_from_body(family: str, slug: str) -> None:
     """Body-derived vis-lens prefix marker must agree with the family."""

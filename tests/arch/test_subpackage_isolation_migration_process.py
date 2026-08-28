@@ -83,8 +83,6 @@ class TestGroupCMigration:
         assert "async def _watch_child_activity(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):
-        import dataclasses
-
         from autoskillit.execution.process import RaceSignals
 
         fields = {f.name for f in dataclasses.fields(RaceSignals)}

@@ -19,7 +19,7 @@ from autoskillit.execution.process._process_jsonl import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import SessionEvent, StreamParser
+    from autoskillit.core import ObservedEntry, SessionEvent, StreamParser
 
 logger = get_logger(__name__)
 
@@ -239,7 +239,7 @@ async def _session_log_monitor(
             return SessionMonitorResult(ChannelBStatus.STALE, "")
         await anyio.sleep(_phase1_poll)
         try:
-            session_entry = None
+            session_entry: ObservedEntry | None = None
             candidates = [
                 entry
                 for entry in scan_observed(session_log_dir)
@@ -250,7 +250,6 @@ async def _session_log_monitor(
                 if expected_file.is_file():
                     session_file = expected_file
             if session_file is None and candidates:
-                session_entry = None
                 if expected_session_id:
                     # Identity-based selection: match filename stem to session ID
                     for entry in candidates:

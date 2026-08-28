@@ -41,6 +41,21 @@ def _install_composed_recipe(tmp_path: Path) -> None:
     )
 
 
+def test_failed_serve_clears_all_cached_projection_authority() -> None:
+    from autoskillit.server.tools.tools_kitchen import _clear_active_recipe_projection
+
+    tool_ctx = MagicMock()
+    tool_ctx.active_recipe_projection = object()
+    tool_ctx.active_recipe_steps = {"stale": object()}
+    tool_ctx.active_recipe_ingredients = frozenset({"stale"})
+
+    _clear_active_recipe_projection(tool_ctx)
+
+    assert tool_ctx.active_recipe_projection is None
+    assert tool_ctx.active_recipe_steps == {}
+    assert tool_ctx.active_recipe_ingredients == frozenset()
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("deferred_recall", [False, True], ids=["cold-open", "deferred-recall"])
 async def test_open_kitchen_installs_steps_from_the_finalized_projection(

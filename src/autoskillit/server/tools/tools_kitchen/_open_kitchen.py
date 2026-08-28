@@ -107,6 +107,8 @@ def _cache_finalized_recipe_projection(
 def _clear_active_recipe_projection(tool_ctx: Any) -> None:
     """Prevent a failed serve from retaining prior execution-graph authority."""
     tool_ctx.active_recipe_projection = None
+    tool_ctx.active_recipe_steps = {}
+    tool_ctx.active_recipe_ingredients = frozenset()
 
 
 async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str | None:

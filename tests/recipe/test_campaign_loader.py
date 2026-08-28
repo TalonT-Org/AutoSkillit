@@ -4,11 +4,14 @@ find_campaign_by_name, load_campaign_recipes_in_packs, and validate_recipe campa
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
+import autoskillit.recipe.io as recipe_io
 from autoskillit.core import CaptureEntrySpec, DispatchGateType, Severity, pkg_root
 from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe.io import (
@@ -23,6 +26,14 @@ from autoskillit.recipe.schema import CampaignDispatch, Recipe, RecipeKind
 from autoskillit.recipe.validator import validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+@pytest.fixture(autouse=True)
+def _clear_recipe_discovery_caches() -> Iterator[None]:
+    """Campaign discovery must not inherit a prior test's process cache."""
+    recipe_io._clear_recipe_discovery_caches()
+    yield
+    recipe_io._clear_recipe_discovery_caches()
 
 
 def _write_yaml(path: Path, data: dict) -> Path:
@@ -210,6 +221,60 @@ def test_load_campaign_recipes_in_packs_includes_allowed_recipes(tmp_path: Path)
     )
     assert len(results) == 1
     assert results[0].name == "special-campaign"
+
+
+def test_load_and_validate_campaign_enumerates_and_collects_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Semantic dispatch-target lookups share one central discovery result."""
+    import autoskillit.recipe._api_cache as cache_mod
+    from autoskillit.recipe._api import load_and_validate
+
+    monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+    campaigns_dir.mkdir(parents=True)
+    _write_yaml(
+        campaigns_dir / "multi-dispatch.yaml",
+        _campaign_data(
+            name="multi-dispatch",
+            dispatches=[
+                {
+                    "name": "first",
+                    "recipe": "implementation",
+                    "task": "First task",
+                    "ingredients": {"task": "First task"},
+                    "depends_on": [],
+                },
+                {
+                    "name": "second",
+                    "recipe": "implementation",
+                    "task": "Second task",
+                    "ingredients": {"task": "Second task"},
+                    "depends_on": ["first"],
+                },
+            ],
+        ),
+    )
+
+    calls = {"enumerate": 0, "collect": 0}
+    enumerate_candidates = recipe_io._enumerate_recipe_candidates_uncached
+    collect_candidates = recipe_io.collect_recipes_from_candidates
+
+    def counting_enumeration(*args: Any, **kwargs: Any) -> Any:
+        calls["enumerate"] += 1
+        return enumerate_candidates(*args, **kwargs)
+
+    def counting_collection(*args: Any, **kwargs: Any) -> Any:
+        calls["collect"] += 1
+        return collect_candidates(*args, **kwargs)
+
+    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumeration)
+    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collection)
+
+    result = load_and_validate("multi-dispatch", project_dir=tmp_path)
+
+    assert result["valid"], result["errors"]
+    assert calls == {"enumerate": 2, "collect": 1}
 
 
 # ---------------------------------------------------------------------------

@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.recipe.io as recipe_io
 from autoskillit.core import RecipeSource
 from autoskillit.core.types._type_results import LoadResult
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.recipe.schema import RecipeInfo
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+@pytest.fixture(autouse=True)
+def _clear_recipe_discovery_caches() -> Iterator[None]:
+    """Keep repository delegation tests independent of global discovery state."""
+    recipe_io._clear_recipe_discovery_caches()
+    yield
+    recipe_io._clear_recipe_discovery_caches()
 
 
 def _make_recipe_info(name: str, path: Path) -> RecipeInfo:
@@ -38,12 +48,12 @@ def test_find_returns_matching_recipe(tmp_path: Path) -> None:
     foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
     mock_result = _load_result(foo)
 
-    with patch("autoskillit.recipe.repository.list_recipes", return_value=mock_result):
-        with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
-            repo = DefaultRecipeRepository()
-            result = repo.find("foo", tmp_path)
+    with patch("autoskillit.recipe.repository.list_recipes", return_value=mock_result) as listing:
+        repo = DefaultRecipeRepository()
+        result = repo.find("foo", tmp_path)
 
     assert result is foo
+    listing.assert_called_once_with(tmp_path)
 
 
 def test_find_returns_none_when_no_match(tmp_path: Path) -> None:
@@ -51,88 +61,41 @@ def test_find_returns_none_when_no_match(tmp_path: Path) -> None:
     foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
     mock_result = _load_result(foo)
 
-    with patch("autoskillit.recipe.repository.list_recipes", return_value=mock_result):
-        with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
-            repo = DefaultRecipeRepository()
-            result = repo.find("bar", tmp_path)
+    with patch("autoskillit.recipe.repository.list_recipes", return_value=mock_result) as listing:
+        repo = DefaultRecipeRepository()
+        result = repo.find("bar", tmp_path)
 
     assert result is None
+    listing.assert_called_once_with(tmp_path)
 
 
 # ---------------------------------------------------------------------------
-# _get_list mtime caching
+# Public listing delegation
 # ---------------------------------------------------------------------------
 
 
-def test_get_list_is_cached_on_identical_mtime(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Call _get_list twice with same mtime → list_recipes called once (cache hit)."""
-    mock_result = _load_result()
-    call_count = {"n": 0}
+def test_list_delegates_to_central_list_recipes(tmp_path: Path) -> None:
+    expected = _load_result(_make_recipe_info("foo", tmp_path / "foo.yaml"))
 
-    def _list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
-        call_count["n"] += 1
-        return mock_result
+    with patch("autoskillit.recipe.repository.list_recipes", return_value=expected) as listing:
+        result = DefaultRecipeRepository().list(tmp_path)
 
-    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", _list_recipes)
-    monkeypatch.setattr("autoskillit.recipe.repository._dir_mtime", lambda _: 42.0)
+    assert result is expected
+    listing.assert_called_once_with(tmp_path)
 
+
+def test_repository_find_observes_in_place_recipe_edit(tmp_path: Path) -> None:
+    recipe_path = tmp_path / ".autoskillit" / "recipes" / "recipe.yaml"
+    recipe_path.parent.mkdir(parents=True)
+    recipe_path.write_text("name: before\ndescription: test\nsteps: {}\n", encoding="utf-8")
     repo = DefaultRecipeRepository()
-    repo._get_list(tmp_path)
-    repo._get_list(tmp_path)
 
-    assert call_count["n"] == 1
+    assert repo.find("before", tmp_path) is not None
 
+    recipe_path.write_text("name: afterr\ndescription: test\nsteps: {}\n", encoding="utf-8")
 
-def test_get_list_invalidated_on_mtime_change(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Change mtime between calls → list_recipes called twice (cache miss)."""
-    mock_result = _load_result()
-    call_count = {"n": 0}
-    mtime_value = {"v": 1.0}
-
-    def _list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
-        call_count["n"] += 1
-        return mock_result
-
-    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", _list_recipes)
-    monkeypatch.setattr("autoskillit.recipe.repository._dir_mtime", lambda _: mtime_value["v"])
-
-    repo = DefaultRecipeRepository()
-    repo._get_list(tmp_path)
-
-    mtime_value["v"] = 2.0  # simulate directory change
-    repo._get_list(tmp_path)
-
-    assert call_count["n"] == 2
-
-
-def test_get_list_invalidated_on_project_dir_change(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Call with dir_a then dir_b → list_recipes called twice."""
-    mock_result = _load_result()
-    call_count = {"n": 0}
-
-    def _list_recipes(project_dir: Path) -> LoadResult[RecipeInfo]:
-        call_count["n"] += 1
-        return mock_result
-
-    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", _list_recipes)
-    monkeypatch.setattr("autoskillit.recipe.repository._dir_mtime", lambda _: 1.0)
-
-    dir_a = tmp_path / "a"
-    dir_b = tmp_path / "b"
-    dir_a.mkdir()
-    dir_b.mkdir()
-
-    repo = DefaultRecipeRepository()
-    repo._get_list(dir_a)
-    repo._get_list(dir_b)
-
-    assert call_count["n"] == 2
+    assert repo.find("before", tmp_path) is None
+    assert repo.find("afterr", tmp_path) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -148,9 +111,8 @@ def test_load_and_validate_delegates_to_api(tmp_path: Path) -> None:
     foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
     with patch("autoskillit.recipe._api.load_and_validate", mock_api):
         with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
-            with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
-                repo = DefaultRecipeRepository()
-                result = repo.load_and_validate("foo", tmp_path)
+            repo = DefaultRecipeRepository()
+            result = repo.load_and_validate("foo", tmp_path)
 
     assert result == expected
     mock_api.assert_called_once()
@@ -251,12 +213,11 @@ def test_load_and_validate_normalizes_relative_project_dir_at_repository_boundar
 
     with patch("autoskillit.recipe._api.load_and_validate", mock_api):
         with patch("autoskillit.recipe.repository.list_recipes", side_effect=list_from_project):
-            with patch("autoskillit.recipe.repository._dir_mtime", return_value=1.0):
-                repo = DefaultRecipeRepository()
-                monkeypatch.chdir(first_project)
-                repo.load_and_validate("test-recipe", ".")
-                monkeypatch.chdir(second_project)
-                repo.load_and_validate("test-recipe", ".")
+            repo = DefaultRecipeRepository()
+            monkeypatch.chdir(first_project)
+            repo.load_and_validate("test-recipe", ".")
+            monkeypatch.chdir(second_project)
+            repo.load_and_validate("test-recipe", ".")
 
     assert discovered == [first_project.absolute(), second_project.absolute()]
     assert [call.kwargs["project_dir"] for call in mock_api.call_args_list] == discovered
@@ -288,52 +249,3 @@ def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) 
     assert captured_kwargs["recipe_list"] is not None
     assert isinstance(captured_kwargs["recipe_list"], list)
     assert captured_kwargs["recipe_list"][0].name == "foo"
-
-
-def test_repository_cache_invalidates_on_campaign_subdir_change(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Cache must detect changes in campaigns/ subdirectory, not just root."""
-    from autoskillit.core.types import LoadResult
-
-    captured_results: list[LoadResult] = []
-
-    def mock_list_recipes(project_dir: Path) -> LoadResult:
-        result = LoadResult(items=[])
-        captured_results.append(result)
-        return result
-
-    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", mock_list_recipes)
-
-    project_recipes = tmp_path / ".autoskillit" / "recipes"
-    project_campaigns = project_recipes / "campaigns"
-    project_campaigns.mkdir(parents=True)
-
-    # phase[0]==1: stable mtimes for all dirs (cache populates on first call)
-    # phase[0]==2: campaigns dir mtime bumped (cache invalidates on second call)
-    phase: list[int] = [1]
-
-    def mock_dir_mtime(path: Path) -> float:
-        if phase[0] == 2 and path == project_campaigns:
-            return 2.0
-        return 1.0
-
-    monkeypatch.setattr("autoskillit.recipe.repository._dir_mtime", mock_dir_mtime)
-
-    repo = DefaultRecipeRepository()
-
-    repo._get_list(tmp_path)
-    first_call_count = len(captured_results)
-    assert first_call_count == 1
-
-    (project_campaigns / "new-campaign.yaml").write_text(
-        "name: new-campaign\nkind: campaign\ndescription: test\nsteps:\n  s1:\n    skill: noop\n"
-    )
-    phase[0] = 2
-
-    repo._get_list(tmp_path)
-    second_call_count = len(captured_results)
-
-    assert second_call_count > first_call_count, (
-        "Cache was not invalidated after adding a campaign recipe to campaigns/ subdirectory"
-    )

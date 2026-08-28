@@ -122,3 +122,72 @@ class TestFleetCampaignPreview:
         _fleet_campaign("test-campaign", resume_campaign=campaign_id)
         assert len(calls["launch"]) == 1
         assert calls["launch"][0]["kwargs"].get("ingredients_table") == table
+
+    def test_dispatch_preview_excludes_standalone_ineligible_recipes_and_maps_campaign_children(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Preview first filters standalone recipes, then maps dispatch-only campaign children."""
+        import autoskillit.recipe.io as recipe_io
+        from autoskillit.cli.fleet._fleet_preview import _print_dispatch_preview
+        from autoskillit.recipe import RecipeKind
+        from autoskillit.recipe import list_recipes as real_list_recipes
+
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        (recipes_dir / "standalone.yaml").write_text(
+            "name: standalone\ndescription: Standalone recipe\nsteps: {}\n"
+        )
+        (recipes_dir / "campaign-child.yaml").write_text(
+            "name: campaign-child\n"
+            "description: Campaign child recipe\n"
+            "dispatch_only: true\n"
+            "steps: {}\n"
+        )
+        (recipes_dir / "release-campaign.yaml").write_text(
+            "name: release-campaign\n"
+            "description: Release campaign\n"
+            "kind: campaign\n"
+            "dispatches:\n"
+            "  - name: child-work\n"
+            "    recipe: campaign-child\n"
+            "steps: {}\n"
+        )
+
+        calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def tracking_list_recipes(*args: object, **kwargs: object) -> object:
+            calls.append((args, kwargs))
+            return real_list_recipes(*args, **kwargs)
+
+        builtin_root = tmp_path / "empty-builtin-root"
+        builtin_root.mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(recipe_io, "pkg_root", lambda: builtin_root)
+        monkeypatch.setattr("autoskillit.recipe.list_recipes", tracking_list_recipes)
+        monkeypatch.setattr("autoskillit.cli.ui._ansi.supports_color", lambda: False)
+        monkeypatch.setattr(
+            "autoskillit.cli.ui._ansi.permissions_warning", lambda: "permissions warning"
+        )
+
+        recipe_io._clear_recipe_discovery_caches()
+        try:
+            greeting_table = _print_dispatch_preview()
+        finally:
+            recipe_io._clear_recipe_discovery_caches()
+
+        output = capsys.readouterr().out
+        standalone_section, campaign_section = output.split("Campaign sub-recipes", maxsplit=1)
+        assert "standalone" in greeting_table
+        assert "campaign-child" not in greeting_table
+        assert "release-campaign" not in greeting_table
+        assert "standalone" in standalone_section
+        assert "campaign-child" not in standalone_section
+        assert "release-campaign" not in standalone_section
+        assert "release-campaign" in campaign_section
+        assert "-> campaign-child" in campaign_section
+        assert len(calls) == 2
+        assert calls[0][1] == {
+            "exclude_kinds": frozenset({RecipeKind.CAMPAIGN}),
+            "exclude_dispatch_only": True,
+        }
+        assert calls[1][1] == {"exclude_dispatch_only": False}

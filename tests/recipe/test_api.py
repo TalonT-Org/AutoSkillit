@@ -4,14 +4,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+import autoskillit.recipe.io as recipe_io
 from autoskillit.core.types import Severity
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+
+@pytest.fixture
+def isolated_recipe_discovery_cache() -> Iterator[None]:
+    """Prevent the listing cache from leaking across API validation tests."""
+    recipe_io._clear_recipe_discovery_caches()
+    yield
+    recipe_io._clear_recipe_discovery_caches()
+
 
 # Minimal recipe YAML with kitchen_rules
 _RECIPE_WITH_RULES = """\
@@ -1832,10 +1843,13 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
         orch.load_and_validate("nonexistent_recipe", tmp_path)
 
 
-def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
-    """Staleness detection clears YamlFileCache + lru_cache helpers."""
+def test_lru_cache_helpers_cleared_on_process_staleness(
+    isolated_recipe_discovery_cache, tmp_path, monkeypatch
+):
+    """Staleness detection clears validation, discovery, and parser caches."""
     import autoskillit.recipe._api_cache as cache_mod
     import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe._io_loading as io_loading
     from autoskillit.core import ProcessStaleError
     from autoskillit.recipe._api_cache import _MISSING
     from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE
@@ -1861,16 +1875,20 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     assert _ML_SUB_AREA_CACHE._value is not _MISSING
     assert _PREFIXES_CACHE._value is not _MISSING
 
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
+    recipe_io.list_recipes(tmp_path)
+    assert recipe_io._cached_recipe_candidates.cache_info().currsize > 0
+    assert recipe_io._cached_recipe_collection.cache_info().currsize > 0
+    assert io_loading._parse_recipe_candidate.cache_info().currsize > 0
+
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
     monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
     monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_baseline")
     monkeypatch.setattr(cache_mod, "_compute_content_hash", lambda: "fakehash_changed")
-
-    recipes_dir = tmp_path / ".autoskillit" / "recipes"
-    recipes_dir.mkdir(parents=True)
-    (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
 
     with pytest.raises(ProcessStaleError):
         orch.load_and_validate("myrecipe", tmp_path)
@@ -1879,6 +1897,9 @@ def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     assert _MANIFEST_CACHE._value is _MISSING
     assert _ML_SUB_AREA_CACHE._value is _MISSING
     assert _PREFIXES_CACHE._value is _MISSING
+    assert recipe_io._cached_recipe_candidates.cache_info().currsize == 0
+    assert recipe_io._cached_recipe_collection.cache_info().currsize == 0
+    assert io_loading._parse_recipe_candidate.cache_info().currsize == 0
 
 
 def test_mid_process_yaml_only_update(tmp_path, monkeypatch):

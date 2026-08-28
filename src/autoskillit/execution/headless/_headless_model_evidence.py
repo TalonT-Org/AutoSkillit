@@ -46,7 +46,7 @@ def _drain_model_evidence(
     try:
         resolved_parent_model, outcomes = sink.model_evidence_for(evidence_session_id)
     except Exception:
-        logger.debug("local_otlp_sink_model_evidence_failed", exc_info=True)
+        logger.warning("local_otlp_sink_model_evidence_failed", exc_info=True)
         resolved_parent_model, outcomes = "", ()
     resolved_identity = (
         dataclasses.replace(model_identity, effective_model=resolved_parent_model)

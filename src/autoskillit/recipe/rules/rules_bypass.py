@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_detectors import _context_refs_in_value
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
-from autoskillit.recipe.contracts import _CONTEXT_REF_RE
 from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
@@ -16,14 +16,10 @@ def _step_context_refs(step: object) -> set[str]:
     values = [
         getattr(step, "model", None),
         getattr(step, "note", None),
-        *(getattr(step, "with_args", {}) or {}).values(),
+        getattr(step, "message", None),
+        getattr(step, "with_args", {}) or {},
     ]
-    return {
-        match.group(1)
-        for value in values
-        if isinstance(value, str)
-        for match in _CONTEXT_REF_RE.finditer(value)
-    }
+    return set().union(*(_context_refs_in_value(value) for value in values))
 
 
 @semantic_rule(

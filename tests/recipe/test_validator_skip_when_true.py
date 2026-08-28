@@ -109,3 +109,44 @@ def test_skip_when_true_capture_consumers_rejects_missing_optional_context_refs(
     assert findings[0].severity is Severity.ERROR
     assert findings[0].step_name == "consumer"
     assert "artifact_path" in findings[0].message
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        RecipeStep(
+            tool="run_skill",
+            with_args={
+                "skill_command": "/autoskillit:investigate",
+                "skill_inputs": {"artifact_path": "${{ context.artifact_path }}"},
+            },
+            on_success="done",
+        ),
+        RecipeStep(action="stop", message="artifact: ${{ context.artifact_path }}"),
+    ],
+    ids=["nested-with-args", "message"],
+)
+def test_skip_when_true_capture_consumers_scan_nested_and_message_fields(
+    consumer: RecipeStep,
+) -> None:
+    recipe = Recipe(
+        name="nested-guarded-consumer",
+        description="guarded capture consumer",
+        steps={
+            "guarded": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:investigate"},
+                skip_when_true="context.should_skip",
+                capture={"artifact_path": "${{ result.artifact_path }}"},
+                on_success="consumer",
+            ),
+            "consumer": consumer,
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+
+    findings = _capture_consumer_findings(recipe)
+
+    assert len(findings) == 1
+    assert findings[0].step_name == "consumer"
+    assert "artifact_path" in findings[0].message

@@ -138,13 +138,6 @@ def _effective_routing_target_errors(
     ]
 
 
-def _validate_effective_routing_edges(
-    recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
-) -> list[str]:
-    """Validate effective targets after unreachable-step sweeping."""
-    return _effective_routing_target_errors(recipe, edges)
-
-
 def _effective_step_graph(
     recipe: Recipe, edges: tuple[RecipeFlowEdge, ...]
 ) -> dict[str, set[str]]:
@@ -182,7 +175,7 @@ def _validate_post_sweep_effective_graph(
     errors = [f"dangling route: {error}" for error in _validate_no_dangling_routes(recipe)]
     errors.extend(
         f"effective route: {error}"
-        for error in _validate_effective_routing_edges(recipe, edges)
+        for error in _effective_routing_target_errors(recipe, edges)
         if error not in pre_sweep_route_errors
     )
     errors.extend(

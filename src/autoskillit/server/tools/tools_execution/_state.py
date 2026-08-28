@@ -123,7 +123,7 @@ class _RunSkillDispatchState:
     closure_base_sha: str
     closure_diff_sha: str
     closure_target_sha: str
-    step_guard_value: str | None
+    step_guard_value: str | bool | None
     skill_inputs: dict[str, str | int | bool] | None
     tool_ctx: ToolContext
     ctx: Context

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -71,6 +72,13 @@ def _run_kwargs(ready, work_dir, **overrides: object) -> dict[str, object]:
 def _deny_tokens(result: str) -> str:
     payload = json.loads(result)
     return json.dumps(payload, sort_keys=True)
+
+
+def test_run_skill_declares_boolean_guard_values() -> None:
+    from autoskillit.server.tools.tools_execution._run_skill_dispatch import run_skill
+
+    annotation = inspect.signature(run_skill).parameters["step_guard_value"].annotation
+    assert annotation == str | bool | None
 
 
 def _replace_snapshot(

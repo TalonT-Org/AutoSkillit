@@ -5,9 +5,6 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._rules import RuleDescriptor
-from tests.arch._subpackage_isolation_line_limits import (
-    _LINE_LIMIT_EXEMPTIONS as _LINE_LIMIT_EXEMPTIONS,
-)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

@@ -65,6 +65,8 @@ __all__ = [
     "PreLaunchReadiness",
     "InfraOutcome",
     "ApiRetryOutcome",
+    "RateLimitWindow",
+    "ApiFailureOutcome",
     "NdjsonDriftOutcome",
     "SkillResult",
     "CleanupResult",
@@ -418,6 +420,26 @@ class ApiRetryOutcome:
 
 
 @dataclass(frozen=True, slots=True)
+class RateLimitWindow:
+    """Observed provider rate-limit window evidence."""
+
+    status: str = ""
+    limit_type: str = ""
+    resets_at_epoch: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ApiFailureOutcome:
+    """Structured provider-failure evidence retained from a session."""
+
+    status: int | None = None
+    terminal_reason: str = ""
+    error_code: str = ""
+    api_error_message_seen: bool = False
+    rate_limit: RateLimitWindow = field(default_factory=RateLimitWindow)
+
+
+@dataclass(frozen=True, slots=True)
 class ContaminationOutcome:
     """Pre-contamination context preserved when clone_guard fires.
 
@@ -520,6 +542,8 @@ class SkillResult:
     """Infrastructure exit classification bundle."""
     api_retry: ApiRetryOutcome = field(default_factory=ApiRetryOutcome)
     """API retry event accumulation bundle."""
+    api_failure: ApiFailureOutcome = field(default_factory=ApiFailureOutcome)
+    """Structured provider-failure evidence bundle."""
     contamination: ContaminationOutcome = field(default_factory=ContaminationOutcome)
     """Pre-contamination context bundle — populated only when clone_guard fires."""
     ndjson_drift: NdjsonDriftOutcome = field(default_factory=NdjsonDriftOutcome)
@@ -566,6 +590,13 @@ class SkillResult:
             "api_retry_last_error": self.api_retry.last_error,
             "api_retry_last_status": self.api_retry.last_status,
             "api_retry_exhausted": self.api_retry.exhausted,
+            "api_error_status": self.api_failure.status,
+            "api_terminal_reason": self.api_failure.terminal_reason,
+            "api_error_code": self.api_failure.error_code,
+            "api_error_message_seen": self.api_failure.api_error_message_seen,
+            "rate_limit_status": self.api_failure.rate_limit.status,
+            "rate_limit_type": self.api_failure.rate_limit.limit_type,
+            "rate_limit_resets_at_epoch": self.api_failure.rate_limit.resets_at_epoch,
             "pre_contamination_retry_reason": self.contamination.retry_reason,
             "pre_contamination_subtype": self.contamination.subtype,
             "ndjson_unknown_event_count": self.ndjson_drift.unknown_event_count,

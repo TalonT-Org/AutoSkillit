@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init"}
+{"type":"user","message":{"content":[]}}
+{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1735689600,"rateLimitType":"seven_day"}}
+{"type":"result","subtype":"empty_output","is_error":true,"result":"","session_id":"synthetic-rate-limit","api_error_status":429}

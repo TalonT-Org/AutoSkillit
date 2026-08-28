@@ -1,0 +1,2 @@
+{"type":"assistant","is_api_error_message":true,"message":{"content":"synthetic provider error"}}
+{"type":"result","subtype":"empty_output","is_error":true,"result":"","session_id":"synthetic-404","api_error_status":404,"terminal_reason":"api_error"}

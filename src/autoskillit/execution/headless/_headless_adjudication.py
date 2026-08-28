@@ -15,10 +15,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import (
+    ApiFailureOutcome,
     ApiRetryOutcome,
     InfraOutcome,
     NdjsonDriftOutcome,
     ProviderOutcome,
+    RateLimitWindow,
     RetryReason,
     SkillResult,
     WriteBehaviorSpec,
@@ -67,6 +69,21 @@ def _build_api_retry_outcome(session: ClaudeSessionResult) -> ApiRetryOutcome:
         last_error=session.api_retry_last_error,
         last_status=session.api_retry_last_status,
         exhausted=session.api_retry_exhausted,
+    )
+
+
+def _build_api_failure_outcome(session: ClaudeSessionResult) -> ApiFailureOutcome:
+    """Project retained provider-failure evidence onto the public result bundle."""
+    return ApiFailureOutcome(
+        status=session.api_error_status,
+        terminal_reason=session.terminal_reason,
+        error_code=session.provider_error_code,
+        api_error_message_seen=session.api_error_message_seen,
+        rate_limit=RateLimitWindow(
+            status=session.rate_limit_status,
+            limit_type=session.rate_limit_type,
+            resets_at_epoch=session.rate_limit_resets_at_epoch,
+        ),
     )
 
 
@@ -122,6 +139,7 @@ def _make_terminated_result(
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         infra=infra,
         api_retry=api_retry,
+        api_failure=_build_api_failure_outcome(session),
         ndjson_drift=NdjsonDriftOutcome(
             unknown_event_count=session.seen_ndjson_unknown_event_count,
             unknown_item_count=session.seen_ndjson_unknown_item_count,

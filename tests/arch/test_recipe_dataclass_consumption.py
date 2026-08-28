@@ -234,6 +234,7 @@ DEFERRED_RECIPE_FIELDS = dict(
 _PRODUCTION_MODULES = (
     "autoskillit.recipe._analysis",
     "autoskillit.recipe._api_orchestration",
+    "autoskillit.recipe._io_loading",
     "autoskillit.recipe._recipe_composition",
     "autoskillit.recipe.io",
     "autoskillit.recipe.validator",

@@ -33,6 +33,7 @@ from autoskillit.exploration.snapshot import (
     stable_artifact_matches,
 )
 from autoskillit.pipeline import ExplorationContext, OwnerBoundExplorationContextStore
+from tests._helpers import delete_once_then_delegate
 
 pytestmark = [
     pytest.mark.layer("exploration"),
@@ -605,14 +606,20 @@ def test_snapshot_survives_a_real_entry_deleted_during_the_worktree_walk(
     real_observe_path_mode = snapshot_module.observe_path_mode
     unlinked = False
 
-    def unlink_first_then_delegate(path: Path):
+    def unlink_fifo() -> None:
         nonlocal unlinked
-        if not unlinked and path == fifo_path:
-            unlinked = True
-            fifo_path.unlink()
-        return real_observe_path_mode(path)
+        unlinked = True
+        fifo_path.unlink()
 
-    monkeypatch.setattr(snapshot_module, "observe_path_mode", unlink_first_then_delegate)
+    monkeypatch.setattr(
+        snapshot_module,
+        "observe_path_mode",
+        delete_once_then_delegate(
+            real_observe_path_mode,
+            delete=unlink_fifo,
+            when=lambda path: path == fifo_path,
+        ),
+    )
 
     result = _capture(root)
 

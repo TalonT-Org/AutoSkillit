@@ -8,7 +8,12 @@ from typing import Any
 
 import pytest
 
-from tests.planner.conftest import make_wp_result, write_json
+import autoskillit.planner.manifests as manifests_module
+from tests.planner.conftest import (
+    make_wp_result,
+    unlink_second_accepted_result,
+    write_json,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -54,6 +59,27 @@ def test_finalize_wp_manifest_from_result_files(tmp_path):
         assert item["result_path"]
         assert item["id"]
         assert item["name"]
+
+
+def test_finalize_wp_manifest_skips_a_vanished_result(tmp_path, monkeypatch):
+    from autoskillit.planner import finalize_wp_manifest
+
+    wp_dir = tmp_path / "work_packages"
+    wp_dir.mkdir()
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    write_json(wp_dir / "P1-A1-WP1_result.json", make_wp_result("P1-A1-WP1"))
+    write_json(wp_dir / "P1-A1-WP2_result.json", make_wp_result("P1-A1-WP2"))
+    unlink_second_accepted_result(monkeypatch, manifests_module)
+
+    result = finalize_wp_manifest(str(wp_dir), str(output_dir))
+
+    manifest = json.loads(Path(result["manifest_path"]).read_text())
+    assert result["total_count"] == "1"
+    assert [item["id"] for item in manifest["items"]] == ["P1-A1-WP1"]
+    assert [entry["id"] for entry in json.loads((wp_dir / "wp_index.json").read_text())] == [
+        "P1-A1-WP1"
+    ]
 
 
 def test_finalize_wp_manifest_skips_non_result_files(tmp_path):

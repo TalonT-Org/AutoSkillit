@@ -8,7 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
 
-from autoskillit.core import atomic_write, get_logger, read_versioned_json, write_versioned_json
+from autoskillit.core import (
+    VANISHED_ERRORS,
+    atomic_write,
+    get_logger,
+    read_versioned_json,
+    write_versioned_json,
+)
 from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.lifecycle import (
     LifecycleCategory,
@@ -112,6 +118,8 @@ def build_phase_assignment_manifest(phases_dir: str, output_dir: str) -> dict[st
     for f in phase_files:
         try:
             raw = json.loads(f.read_text())
+        except VANISHED_ERRORS:
+            continue
         except json.JSONDecodeError as exc:
             raise json.JSONDecodeError(
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
@@ -178,6 +186,8 @@ def build_phase_wp_manifest(
     for f in assign_files:
         try:
             raw = json.loads(f.read_text())
+        except VANISHED_ERRORS:
+            continue
         except json.JSONDecodeError as exc:
             raise json.JSONDecodeError(
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos
@@ -263,6 +273,8 @@ def finalize_wp_manifest(work_packages_dir: str, output_dir: str) -> dict[str, s
     for f in result_files:
         try:
             raw = json.loads(f.read_text())
+        except VANISHED_ERRORS:
+            continue
         except json.JSONDecodeError as exc:
             raise json.JSONDecodeError(
                 f"Failed to parse {f}: {exc.msg}", exc.doc, exc.pos

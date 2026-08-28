@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from tests.arch._deferred_debt import TrackedDeferral, assert_not_stale
+from tests.arch._deferred_debt import (
+    TrackedDeferral,
+    assert_deferrals_have_regression_tests,
+    assert_entries_still_apply,
+    assert_not_stale,
+    assert_rationale_present,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -19,11 +25,19 @@ _FORWARD_DECLARED: dict[str, TrackedDeferral] = {
         issue=3497,
         rationale="thinking-block rendering gating",
         added_date=date(2026, 5, 31),
+        regression_test=(
+            "tests/arch/test_capability_consumption.py::"
+            "test_forward_declared_capability_remains_present_and_unconsumed[supports_thinking_blocks]"
+        ),
     ),
     "mcp_env_forward_vars": TrackedDeferral(
         issue=3458,
         rationale="MCP env forwarding — enforcement arch test exists, awaiting src/ consumer",
         added_date=date(2026, 5, 31),
+        regression_test=(
+            "tests/arch/test_capability_consumption.py::"
+            "test_forward_declared_capability_remains_present_and_unconsumed[mcp_env_forward_vars]"
+        ),
     ),
     "required_session_files": TrackedDeferral(
         issue=3134,
@@ -32,11 +46,19 @@ _FORWARD_DECLARED: dict[str, TrackedDeferral] = {
             "field retained for validate_session_layout"
         ),
         added_date=date(2026, 6, 2),
+        regression_test=(
+            "tests/arch/test_capability_consumption.py::"
+            "test_forward_declared_capability_remains_present_and_unconsumed[required_session_files]"
+        ),
     ),
     "patch_format": TrackedDeferral(
         issue=3776,
         rationale="patch path extraction routing — P2-A3-WP1 (#3787) co-lands consumer",
         added_date=date(2026, 6, 5),
+        regression_test=(
+            "tests/arch/test_capability_consumption.py::"
+            "test_forward_declared_capability_remains_present_and_unconsumed[patch_format]"
+        ),
     ),
     "github_api_callable": TrackedDeferral(
         issue=4204,
@@ -45,6 +67,10 @@ _FORWARD_DECLARED: dict[str, TrackedDeferral] = {
             "network-capability gate is wired to a BackendCapabilities check"
         ),
         added_date=date(2026, 7, 7),
+        regression_test=(
+            "tests/arch/test_capability_consumption.py::"
+            "test_forward_declared_capability_remains_present_and_unconsumed[github_api_callable]"
+        ),
     ),
 }
 
@@ -81,7 +107,8 @@ def test_all_capability_fields_have_production_consumers():
     assert not unconsumed, (
         f"BackendCapabilities fields with zero production read sites "
         f"(add a consumer or add to _FORWARD_DECLARED as "
-        f"TrackedDeferral(issue=NNNN, rationale='...', added_date=date(YYYY, M, D))): "
+        f"TrackedDeferral(issue=NNNN, rationale='...', added_date=date(YYYY, M, D), "
+        f"regression_test='tests/...::test_name')): "
         f"{sorted(unconsumed)}"
     )
 
@@ -129,51 +156,36 @@ def test_hook_trust_policy_has_a_real_production_consumer() -> None:
     assert automated_keyword.value.value is False
 
 
-def test_forward_declared_has_linked_issues():
-    """Every _FORWARD_DECLARED entry must have a positive issue number."""
-    invalid = {
-        field: entry.issue for field, entry in _FORWARD_DECLARED.items() if entry.issue <= 0
-    }
-    assert not invalid, (
-        f"_FORWARD_DECLARED entries with invalid issue number (need positive int): {invalid}"
-    )
-
-
-def test_forward_declared_fields_have_no_consumers():
-    """_FORWARD_DECLARED entries must NOT have production consumers.
-
-    If a field gains a consumer in src/, it must be removed from
-    _FORWARD_DECLARED — the exemption is no longer needed.
-    """
+@pytest.mark.parametrize("field", _FORWARD_DECLARED)
+def test_forward_declared_capability_remains_present_and_unconsumed(field: str) -> None:
+    """Forward declarations retain structural evidence until their consumer lands."""
     from autoskillit.core import BackendCapabilities, paths
 
     src_root = paths.pkg_root()
     field_names = frozenset(f.name for f in dataclasses.fields(BackendCapabilities))
     reads = _collect_attribute_reads(src_root, field_names)
 
-    stale = {name: sites for name, sites in reads.items() if name in _FORWARD_DECLARED and sites}
-    assert not stale, (
-        f"_FORWARD_DECLARED entries that now have production consumers "
-        f"(remove from _FORWARD_DECLARED): {stale}"
+    assert field in field_names
+    assert not reads[field], (
+        f"_FORWARD_DECLARED entry {field!r} now has production consumers "
+        f"(remove it from the registry): {reads[field]}"
     )
 
 
-def test_forward_declared_fields_exist_on_dataclass():
-    """Every _FORWARD_DECLARED key must be a real field on BackendCapabilities."""
+def test_every_tracked_deferral_names_a_resolvable_regression_test(
+    request: pytest.FixtureRequest,
+) -> None:
     from autoskillit.core import BackendCapabilities
 
-    real_fields = frozenset(f.name for f in dataclasses.fields(BackendCapabilities))
-    unknown = frozenset(_FORWARD_DECLARED.keys()) - real_fields
-    assert not unknown, (
-        f"_FORWARD_DECLARED keys that are not BackendCapabilities fields: {sorted(unknown)}"
+    assert_entries_still_apply(
+        _FORWARD_DECLARED,
+        registry_name="_FORWARD_DECLARED",
+        live_keys={field.name for field in dataclasses.fields(BackendCapabilities)},
     )
-
-
-def test_forward_declared_entries_not_stale():
-    """Time-bomb: forward-declared fields older than 180 days require re-justification.
-
-    If a field has been forward-declared for > 180 days, either:
-    - add a production consumer and remove from _FORWARD_DECLARED, or
-    - update the added_date to reset the clock (with a current tracking issue)
-    """
     assert_not_stale(_FORWARD_DECLARED, registry_name="_FORWARD_DECLARED")
+    assert_rationale_present(_FORWARD_DECLARED, registry_name="_FORWARD_DECLARED")
+    assert_deferrals_have_regression_tests(
+        _FORWARD_DECLARED,
+        registry_name="_FORWARD_DECLARED",
+        collected_node_ids={item.nodeid for item in request.session.items},
+    )

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.planner.merge as merge_module
 from autoskillit.planner.merge import merge_files, merge_tier_results
 from tests.planner.conftest import (
     make_assignment_result,
@@ -162,6 +163,35 @@ def test_merge_tier_results_single_file(tmp_path):
     data = json.loads(out.read_text())
     assert len(data["phases"]) == 1
     assert data["phases"][0]["id"] == "P1"
+
+
+def test_merge_tier_results_skips_a_result_file_that_vanishes(tmp_path, monkeypatch):
+    results_dir = tmp_path / "phases"
+    results_dir.mkdir()
+    for phase_number in range(1, 4):
+        (results_dir / f"P{phase_number}_result.json").write_text(
+            json.dumps(
+                {
+                    "id": f"P{phase_number}",
+                    "name": f"Phase {phase_number}",
+                    "ordering": phase_number,
+                }
+            )
+        )
+    out = tmp_path / "combined.json"
+    original_collect = merge_module.collect_tier_result_files
+
+    def collect_then_unlink(*args, **kwargs):
+        paths = original_collect(*args, **kwargs)
+        paths[1].unlink()
+        return paths
+
+    monkeypatch.setattr(merge_module, "collect_tier_result_files", collect_then_unlink)
+
+    result = merge_tier_results(str(results_dir), str(out), "phases")
+
+    assert result["skipped_result_files"] == ["P2_result.json"]
+    assert [phase["id"] for phase in json.loads(out.read_text())["phases"]] == ["P1", "P3"]
 
 
 def test_merge_tier_results_reads_task_from_task_file_path(tmp_path):

@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import json
+import os
 import time
+from pathlib import Path
 
 import anyio
 import pytest
 
+import autoskillit.core.fs_observation as fs_observation
+import autoskillit.execution.process._process_monitor as process_monitor
+from autoskillit.core import ObservedEntry
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import (
+    EventCursor,
     RaceAccumulator,
     _session_log_monitor,
     _watch_session_log,
@@ -25,6 +31,13 @@ PARTIAL_OUTPUT_THEN_HANG_SCRIPT = (
     "sys.stdout.flush()\n"
     "time.sleep(3600)\n"
 )
+
+
+def _observed_entry(path: Path, *, ctime: float) -> ObservedEntry:
+    return ObservedEntry(
+        path=path,
+        status=os.stat_result((0, 0, 0, 0, 0, 0, 0, 0, 0, ctime)),
+    )
 
 
 class TestSessionLogMonitor:
@@ -657,12 +670,292 @@ class TestSessionIdBasedSelection:
         assert result_box[0].status == ChannelBStatus.COMPLETION
         assert result_box[0].session_id == session_b
 
+    @pytest.mark.anyio
+    async def test_session_log_monitor_still_excludes_logs_older_than_spawn_time(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Observed ctime keeps an older candidate out of Phase-1 selection."""
+        old_file = tmp_path / "older.jsonl"
+        old_file.write_text(json.dumps({"type": "assistant", "message": {"content": "old"}}))
+        spawn_time = time.time()
+        selected: list[Path] = []
 
-class TestSessionLogMonitorDirMissing:
-    """DIR_MISSING: _session_log_monitor returns immediately when dir is absent."""
+        monkeypatch.setattr(
+            process_monitor,
+            "scan_observed",
+            lambda _root: iter([_observed_entry(old_file, ctime=spawn_time - 1)]),
+        )
+
+        result = await _session_log_monitor(
+            tmp_path,
+            "MARKER",
+            stale_threshold=1.0,
+            spawn_time=spawn_time,
+            _phase1_poll=0.005,
+            _phase1_timeout=0.05,
+            on_session_file_selected=lambda path, _cursor: selected.append(path),
+        )
+
+        assert result.status is ChannelBStatus.STALE
+        assert selected == []
 
     @pytest.mark.anyio
-    async def test_session_log_monitor_returns_dir_missing_when_dir_absent(self, tmp_path):
+    async def test_session_log_monitor_selects_expected_session_file_on_resume(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A resumed expected file wins while it exists, then selection falls back."""
+        expected_file = tmp_path / "resume-target.jsonl"
+        competing_file = tmp_path / "newer-competitor.jsonl"
+        expected_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "previous run"}})
+        )
+        competing_file.write_text(
+            json.dumps({"type": "assistant", "message": {"content": "new run"}})
+        )
+        resume_cursor = EventCursor(expected_file, run_boundary=expected_file.stat().st_size)
+        spawn_time = time.time()
+
+        def observed_candidates(_root: Path):
+            entries = [_observed_entry(competing_file, ctime=spawn_time + 1)]
+            if expected_file.exists():
+                entries.insert(0, _observed_entry(expected_file, ctime=spawn_time - 1))
+            return iter(entries)
+
+        monkeypatch.setattr(process_monitor, "scan_observed", observed_candidates)
+        selected: list[Path] = []
+
+        async def append_marker(path: Path) -> None:
+            await anyio.sleep(0.05)
+            with path.open("a") as stream:
+                stream.write(
+                    "\n"
+                    + json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": "done\n\nMARKER"},
+                        }
+                    )
+                )
+
+        async def monitor_once() -> SessionMonitorResult:
+            return await _session_log_monitor(
+                tmp_path,
+                "MARKER",
+                stale_threshold=1.0,
+                spawn_time=spawn_time,
+                expected_session_id="resume-target",
+                resume_cursor=resume_cursor,
+                _phase1_poll=0.005,
+                _phase2_poll=0.005,
+                on_session_file_selected=lambda path, _cursor: selected.append(path),
+            )
+
+        with anyio.fail_after(1.0):
+            async with anyio.create_task_group() as task_group:
+                first_result: list[SessionMonitorResult] = []
+
+                async def run_first_monitor() -> None:
+                    first_result.append(await monitor_once())
+
+                task_group.start_soon(run_first_monitor)
+                task_group.start_soon(append_marker, expected_file)
+
+        assert first_result[0].status is ChannelBStatus.COMPLETION
+        expected_file.unlink()
+
+        with anyio.fail_after(1.0):
+            async with anyio.create_task_group() as task_group:
+                second_result: list[SessionMonitorResult] = []
+
+                async def run_second_monitor() -> None:
+                    second_result.append(await monitor_once())
+
+                task_group.start_soon(run_second_monitor)
+                task_group.start_soon(append_marker, competing_file)
+
+        assert second_result[0].status is ChannelBStatus.COMPLETION
+        assert selected == [expected_file, competing_file]
+
+
+class TestSessionLogMonitorDirMissing:
+    """DIR_MISSING is reserved for a missing session-log directory."""
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_survives_candidate_log_vanishing_mid_scan(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A vanished candidate is elided without treating the directory as absent."""
+        spawn_time = time.time() - 1
+        victim = tmp_path / "oldest-vanished.jsonl"
+        survivor = tmp_path / "middle-survivor.jsonl"
+        newest = tmp_path / "newest-selected.jsonl"
+        victim.write_text(json.dumps({"type": "assistant", "message": {"content": "start"}}))
+        await anyio.sleep(0.02)
+        survivor.write_text(json.dumps({"type": "assistant", "message": {"content": "start"}}))
+        await anyio.sleep(0.02)
+        newest.write_text(json.dumps({"type": "assistant", "message": {"content": "start"}}))
+        victim_removed = False
+
+        def remove_victim() -> None:
+            nonlocal victim_removed
+            if not victim_removed:
+                victim_removed = True
+                victim.unlink()
+
+        class FakeDirEntry:
+            def __init__(self, entry: os.DirEntry[str]) -> None:
+                self._entry = entry
+                self.name = entry.name
+                self.path = entry.path
+
+            def stat(self, *, follow_symlinks: bool = True) -> os.stat_result:
+                if Path(self.path) == victim:
+                    remove_victim()
+                return self._entry.stat(follow_symlinks=follow_symlinks)
+
+            def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+                return self._entry.is_dir(follow_symlinks=follow_symlinks)
+
+            def is_symlink(self) -> bool:
+                return self._entry.is_symlink()
+
+        class FakeScandir:
+            def __init__(self, scanner: os.ScandirIterator[str]) -> None:
+                self._scanner = scanner
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                self.close()
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                return FakeDirEntry(next(self._scanner))
+
+            def close(self) -> None:
+                self._scanner.close()
+
+        original_scandir = os.scandir
+        original_stat = Path.stat
+
+        def direct_stat(path: Path, *args: object, **kwargs: object) -> os.stat_result:
+            if path == victim:
+                remove_victim()
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(
+            fs_observation.os,
+            "scandir",
+            lambda root: FakeScandir(original_scandir(root)),
+        )
+        monkeypatch.setattr(Path, "stat", direct_stat)
+
+        selected: list[Path] = []
+        results: list[SessionMonitorResult] = []
+
+        async def append_marker() -> None:
+            await anyio.sleep(0.05)
+            with newest.open("a") as stream:
+                stream.write(
+                    "\n"
+                    + json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": "done\n\nMARKER"},
+                        }
+                    )
+                )
+
+        async def run_monitor() -> None:
+            results.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "MARKER",
+                    stale_threshold=1.0,
+                    spawn_time=spawn_time,
+                    _phase1_poll=0.005,
+                    _phase2_poll=0.005,
+                    on_session_file_selected=lambda path, _cursor: selected.append(path),
+                )
+            )
+
+        with anyio.fail_after(1.0):
+            async with anyio.create_task_group() as task_group:
+                task_group.start_soon(run_monitor)
+                task_group.start_soon(append_marker)
+
+        assert results[0].status is ChannelBStatus.COMPLETION
+        assert results[0].status is not ChannelBStatus.DIR_MISSING
+        assert selected == [newest]
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_retries_on_a_non_vanish_oserror(
+        self,
+        tmp_path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A Phase-1 permission error is retried instead of becoming DIR_MISSING."""
+        session_file = tmp_path / "retry.jsonl"
+        session_file.write_text(json.dumps({"type": "assistant", "message": {"content": "start"}}))
+        original_scan_observed = process_monitor.scan_observed
+        scan_calls = 0
+
+        def permission_then_scan(root: Path):
+            nonlocal scan_calls
+            scan_calls += 1
+            if scan_calls == 1:
+                raise PermissionError("injected")
+            return original_scan_observed(root)
+
+        monkeypatch.setattr(process_monitor, "scan_observed", permission_then_scan)
+        results: list[SessionMonitorResult] = []
+
+        async def append_marker() -> None:
+            await anyio.sleep(0.05)
+            with session_file.open("a") as stream:
+                stream.write(
+                    "\n"
+                    + json.dumps(
+                        {
+                            "type": "assistant",
+                            "message": {"content": "done\n\nMARKER"},
+                        }
+                    )
+                )
+
+        async def run_monitor() -> None:
+            results.append(
+                await _session_log_monitor(
+                    tmp_path,
+                    "MARKER",
+                    stale_threshold=1.0,
+                    spawn_time=time.time() - 1,
+                    _phase1_poll=0.005,
+                    _phase2_poll=0.005,
+                )
+            )
+
+        with anyio.fail_after(1.0):
+            async with anyio.create_task_group() as task_group:
+                task_group.start_soon(run_monitor)
+                task_group.start_soon(append_marker)
+
+        assert scan_calls >= 2
+        assert results[0].status is ChannelBStatus.COMPLETION
+
+    @pytest.mark.anyio
+    async def test_session_log_monitor_returns_dir_missing_only_when_directory_absent(
+        self, tmp_path
+    ):
         """When session_log_dir does not exist, monitor returns DIR_MISSING immediately
         instead of burning phase1_timeout absorbing OSError."""
         nonexistent = tmp_path / "does_not_exist"  # NOT created

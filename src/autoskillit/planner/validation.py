@@ -16,7 +16,7 @@ from typing import Any, NamedTuple
 
 import regex as re
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import VANISHED_ERRORS, get_logger, write_versioned_json
 from autoskillit.planner._dag_ops import find_sccs, topological_sort
 from autoskillit.planner.lifecycle import load_lifecycle_registry
 from autoskillit.planner.schema import (
@@ -80,6 +80,8 @@ def _load_phase_results(root: Path) -> tuple[dict[str, dict], list[Path]]:
             raw = json.loads(f.read_text())
             data = validate_phase_result(raw)
             phase_id = f"P{data['phase_number']}"
+        except VANISHED_ERRORS:
+            continue
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed phase result file {f}: {exc}") from exc
         results[phase_id] = data
@@ -97,6 +99,8 @@ def _load_assignment_results(root: Path) -> tuple[dict[str, dict], list[Path]]:
             raw = json.loads(f.read_text())
             data = validate_assignment_result(raw)
             assign_id = f"P{data['phase_number']}-A{data['assignment_number']}"
+        except VANISHED_ERRORS:
+            continue
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed assignment result file {f}: {exc}") from exc
         results[assign_id] = data
@@ -114,6 +118,8 @@ def _load_wp_results(root: Path) -> tuple[dict[str, dict], list[Path]]:
             raw = json.loads(f.read_text())
             data = validate_wp_result(raw, allow_stub=True)
             results[data["id"]] = data
+        except VANISHED_ERRORS:
+            continue
         except (json.JSONDecodeError, KeyError, ValueError) as exc:
             raise RuntimeError(f"Malformed WP result file {f}: {exc}") from exc
     return results, discovery.rejected

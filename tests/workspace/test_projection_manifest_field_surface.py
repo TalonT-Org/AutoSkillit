@@ -17,6 +17,7 @@ from autoskillit.workspace._projected_artifact.materialization import (
 from autoskillit.workspace._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
 )
+from tests._helpers import inject_vanishing_subtree_on_descent
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -83,6 +84,64 @@ def test_manifest_validator_rejects_removed_per_skill_fields(
 
     assert any(removed_field in error and "unexpected fields" in error for error in errors)
     assert not any("adaptation_digest" in error for error in errors)
+
+
+def test_manifest_validator_uses_strict_observations_for_skill_shape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An extra skill file is rejected without a second bare-path enumeration."""
+    skill, public_root, manifest_path, manifest = _public_artifact(tmp_path)
+    (public_root / "skills" / skill.name / "unexpected.md").write_text(
+        "unexpected", encoding="utf-8"
+    )
+    write_versioned_json(
+        manifest_path,
+        manifest,
+        schema_version=SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
+    )
+
+    def unexpected_iterdir(_self: Path):  # type: ignore[no-untyped-def]
+        raise AssertionError("validator must use strict_walk observations")
+
+    monkeypatch.setattr(Path, "iterdir", unexpected_iterdir)
+
+    errors = validate_sanitized_plugin_artifact(
+        skill.path.parents[2],
+        public_root,
+        manifest_path,
+        (skill,),
+    )
+
+    assert any("public skill directory must contain only SKILL.md" in error for error in errors)
+
+
+def test_manifest_validator_reports_a_skill_tree_race_without_reenumerating(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A strict-walk race remains a finding instead of reaching raw ``iterdir``."""
+    skill, public_root, manifest_path, manifest = _public_artifact(tmp_path)
+    write_versioned_json(
+        manifest_path,
+        manifest,
+        schema_version=SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
+    )
+    inject_vanishing_subtree_on_descent(monkeypatch, public_root / "skills" / skill.name)
+
+    def unexpected_iterdir(_self: Path):  # type: ignore[no-untyped-def]
+        raise AssertionError("validator must not re-enumerate after strict_walk")
+
+    monkeypatch.setattr(Path, "iterdir", unexpected_iterdir)
+
+    errors = validate_sanitized_plugin_artifact(
+        skill.path.parents[2],
+        public_root,
+        manifest_path,
+        (skill,),
+    )
+
+    assert any("public plugin tree enumeration raced" in error for error in errors)
 
 
 def test_sanitized_and_projection_manifest_schema_versions_are_distinct() -> None:

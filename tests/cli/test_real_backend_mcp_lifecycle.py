@@ -9,6 +9,7 @@ import os
 import secrets
 import select
 import shutil
+import signal
 import socket
 import struct
 import subprocess
@@ -360,11 +361,11 @@ def test_real_backend_pretrusts_project_and_closes_mcp_stdio_on_client_death(
         with contextlib.suppress(psutil.NoSuchProcess):
             client_tree = psutil.Process(client.pid).children(recursive=True)
 
-        client.terminate()
+        os.killpg(client.pid, signal.SIGTERM)
         try:
             client.wait(timeout=8)
         except subprocess.TimeoutExpired:
-            client.kill()
+            os.killpg(client.pid, signal.SIGKILL)
             client.wait(timeout=3)
         stop_drain.set()
         drain.join(timeout=1)

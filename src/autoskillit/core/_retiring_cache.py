@@ -99,7 +99,7 @@ def _open_lock(lock_path: Path) -> IO[str]:
             timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
             path=lock_path,
         )
-    except Exception:
+    except BaseException:
         fh.close()
         raise
     return fh

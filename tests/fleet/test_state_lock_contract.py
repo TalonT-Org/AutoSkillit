@@ -354,17 +354,15 @@ class TestAllMutationsAcquireLock:
     )
     def test_state_mutation_acquires_flock(self, tmp_path: Path, fn_name: str, fn: object) -> None:
         """Each state mutation function must take the exclusive sidecar lock."""
-        from autoskillit.core import acquire_flock_with_timeout
-
         sp = tmp_path / "state.json"
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
 
         flock_calls: list[tuple[int, int]] = []
-        original_acquire_flock = acquire_flock_with_timeout
+        original_flock = fcntl.flock
 
-        def tracking_acquire_flock(fd: int, *, operation: int, timeout: float, path: Path) -> None:
+        def tracking_flock(fd: int, operation: int) -> None:
             flock_calls.append((fd, operation))
-            return original_acquire_flock(fd, operation=operation, timeout=timeout, path=path)
+            original_flock(fd, operation)
 
         # Some transitions require specific pre-states
         if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
@@ -376,8 +374,8 @@ class TestAllMutationsAcquireLock:
             sp.write_text(json.dumps(raw))
 
         with patch(
-            "autoskillit.fleet._state_lock.acquire_flock_with_timeout",
-            side_effect=tracking_acquire_flock,
+            "autoskillit.core.runtime.artifact_lease.fcntl.flock",
+            side_effect=tracking_flock,
         ):
             if fn_name == "mark_dispatch_running":
                 fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
@@ -403,9 +401,12 @@ class TestAllMutationsAcquireLock:
                 fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
 
         assert flock_calls, f"{fn_name} did not acquire the flock sidecar"
-        assert any(op == fcntl.LOCK_EX for _, op in flock_calls), (
-            f"{fn_name} called flock but not with LOCK_EX"
-        )
+        acquisition_operations = [op for _, op in flock_calls if op != fcntl.LOCK_UN]
+        assert acquisition_operations
+        assert all(
+            operation & fcntl.LOCK_EX and operation & fcntl.LOCK_NB
+            for operation in acquisition_operations
+        ), f"{fn_name} called flock without both LOCK_EX and LOCK_NB: {acquisition_operations}"
 
 
 # -------------------------------------------------------------------

@@ -1164,7 +1164,6 @@ from .types import SessionOutcome as SessionOutcome
 from .types import SessionSkillManager as SessionSkillManager
 from .types import SessionSummary as SessionSummary
 from .types import SessionTelemetry as SessionTelemetry
-from .types import SubagentModelOutcomeDict as SubagentModelOutcomeDict
 from .types import SessionType as SessionType
 from .types import Severity as Severity
 from .types import ShadowContextAdmissionRecord as ShadowContextAdmissionRecord
@@ -1215,6 +1214,7 @@ from .types import StoreCapacityExhaustedError as StoreCapacityExhaustedError
 from .types import StoredContextAdmissionEnvelope as StoredContextAdmissionEnvelope
 from .types import StoredSkillSessionContract as StoredSkillSessionContract
 from .types import StreamParser as StreamParser
+from .types import SubagentModelOutcomeDict as SubagentModelOutcomeDict
 from .types import SubprocessResult as SubprocessResult
 from .types import SubprocessRunner as SubprocessRunner
 from .types import SupportsDebug as SupportsDebug

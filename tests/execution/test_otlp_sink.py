@@ -1179,10 +1179,10 @@ def test_close_rejects_handler_that_reaches_enqueue_after_shutdown_gate(
     response: list[tuple[int, str, dict[str, Any]]] = []
     original_enqueue = sink._enqueue
 
-    def delayed_enqueue(line: bytes) -> str:
+    def delayed_enqueue(line: bytes, observations: tuple[Any, ...] = ()) -> str:
         entered_enqueue.set()
         assert release_enqueue.wait(2)
-        return original_enqueue(line)
+        return original_enqueue(line, observations)
 
     def post_request() -> None:
         response.append(

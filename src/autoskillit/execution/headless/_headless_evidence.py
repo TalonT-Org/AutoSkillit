@@ -70,7 +70,6 @@ def _apply_budget_guard(
     if not sr.needs_retry or audit is None or not skill_command:
         return sr
     consecutive = audit.consecutive_failures(skill_command)
-    # current failure already recorded; consecutive count includes this attempt
     if consecutive > max_consecutive_retries:
         logger.warning(
             "retry_budget_exhausted",
@@ -164,11 +163,7 @@ def _compute_write_evidence(
 ) -> WriteEvidence:
     write_names = backend.write_tool_names()
 
-    # Determine if this dispatch requires tracked-tree writes:
-    # A worktree skill's implementation evidence must come from outside
-    # the .autoskillit/temp/ tree, regardless of how write_watch_dirs
-    # was constructed (output_dir="." or default temp fallback).
-    # For ~40 non-worktree skills, all writes count (temp IS their target).
+    # Worktree implementation evidence must be outside temp; other skills count temp writes.
     extracted = extract_skill_name(skill_command) if skill_command else None
     is_worktree_dispatch = bool(
         extracted and extracted in WORKTREE_SKILLS and cwd and write_watch_dirs
@@ -199,7 +194,6 @@ def _compute_write_evidence(
             if t.get("name") in write_names and t.get("id") not in session.denied_tool_use_ids
         )
 
-    # Codex fallback: file_changes paths also need filtering for worktree skills
     if write_call_count == 0 and file_changes:
         if is_worktree_dispatch:
             resolved_cwd = str(Path(cwd).resolve())

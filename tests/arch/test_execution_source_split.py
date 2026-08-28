@@ -16,6 +16,7 @@ NEW_HEADLESS_MODULES = [
     "_headless_helpers.py",
     "_headless_execute.py",
     "_headless_evidence.py",
+    "_headless_model_evidence.py",
 ]
 HEADLESS_SIZE_BUDGETS = {
     "headless/__init__.py": 550,
@@ -34,7 +35,9 @@ HEADLESS_SIZE_BUDGETS = {
     # #4686: threads natural_exit_grace_seconds through to run_managed_async so the
     # configured drain window reaches execute_termination_action's grace_seconds.
     # #4628: one run-scoped OTLP sink lifecycle spans attempts through final diagnostics.
-    "headless/_headless_execute.py": 687,
+    # #4626: terminal native-session capture and model-evidence consumption happen before
+    # every token and persistence consumer.
+    "headless/_headless_execute.py": 711,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,
@@ -44,6 +47,7 @@ HEADLESS_SIZE_BUDGETS = {
     # same success-path construction it must not destroy.
     "headless/_headless_result.py": 1053,
     "headless/_headless_evidence.py": 310,
+    "headless/_headless_model_evidence.py": 60,
 }
 
 

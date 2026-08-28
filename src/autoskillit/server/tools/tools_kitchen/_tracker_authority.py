@@ -137,10 +137,18 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
         logger.warning("pipeline_tracker_auto_init_deps_failed", exc_info=True)
         return None
 
+    if not deps:
+        if not tool_ctx.kitchen_id:
+            return None
+        existing_target = TrackerAuthorityTarget.for_project(
+            tool_ctx.project_dir,
+            tool_ctx.kitchen_id,
+            expected=False,
+        )
+        if not (existing_target.path.exists() or existing_target.path.is_symlink()):
+            return None
+
     key, lease = _retain_kitchen_tracker_authority(tool_ctx)
-    if not deps and not (key.target.path.exists() or key.target.path.is_symlink()):
-        _release_kitchen_tracker_authority(tool_ctx, unregister=False, retire=False)
-        return None
     steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}
     dependencies: dict[str, list[str]] = dict(deps)
 

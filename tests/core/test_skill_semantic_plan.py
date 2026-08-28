@@ -157,3 +157,34 @@ def test_skill_semantic_adaptation_result_enforces_exact_diagnostic_boundary() -
     assert diagnostic.diagnostic == (
         "backend 'codex' does not support skill semantic operation 'git_metadata_write'"
     )
+
+
+def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
+    from autoskillit.core import (
+        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        ManagedJoinAttestation,
+        SemanticAdaptationContext,
+    )
+
+    attestation = ManagedJoinAttestation(
+        schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        activation_epoch=4,
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-sol",
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+        provenance="autoskillit-server",
+    )
+    context = SemanticAdaptationContext(managed_join_attestation=attestation)
+
+    assert context.admits_managed_join_for("codex")
+    assert not context.admits_managed_join_for("claude")
+    assert context.digest == SemanticAdaptationContext(managed_join_attestation=attestation).digest
+    assert not hasattr(context, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        context.managed_join_attestation = None  # type: ignore[misc]

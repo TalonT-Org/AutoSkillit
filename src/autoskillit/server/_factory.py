@@ -92,6 +92,7 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultCommittedDispositionResolver,
 )
 from autoskillit.server._exploration_service import DefaultExplorationService
+from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 from autoskillit.server._recipe_delivery_helpers import initialize_host_client_attestation
 from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.workspace import (
@@ -436,6 +437,7 @@ def make_context(
         skill_resolver=provider.resolver,
         skill_session_contract_store=DefaultSkillSessionContractStore(),
         managed_headless_session_lineage_store=(DefaultManagedHeadlessSessionLineageStore()),
+        managed_join_attestation_authority=DefaultManagedJoinAttestationAuthority(),
         context_admission_ledger=context_admission_ledger,
         audit_admission_ledger=audit_admission_ledger,
         audit_authority_materializer=audit_authority_materializer,

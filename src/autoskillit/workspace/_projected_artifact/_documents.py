@@ -36,6 +36,7 @@ from autoskillit.core import (
     ExplorationVectorDisposition,
     ProfileActivation,
     RepositoryProfileId,
+    SemanticAdaptationContext,
     SkillAuthority,
     SkillContractError,
     SkillSemanticAdaptationResult,
@@ -116,6 +117,7 @@ class SkillProjectionContext:
         {ExplorationVectorApplicabilityId.ALWAYS}
     )
     parent_sandbox_mode: str = "workspace-write"
+    adaptation_context: SemanticAdaptationContext | None = None
     explorer_provisioning_eligible: bool | None = None
     projection_version: int = SKILL_PROJECTION_VERSION
 
@@ -277,6 +279,7 @@ def _direct_install_projection_context(
     backend: CodingAgentBackend,
     destination: Path,
     default_base_branch: str,
+    adaptation_context: SemanticAdaptationContext | None = None,
     projection_version: int = SKILL_PROJECTION_VERSION,
 ) -> SkillProjectionContext:
     """Bind every byte-affecting input shared by a direct install and dispatch."""
@@ -292,6 +295,7 @@ def _direct_install_projection_context(
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
             "{{DEFAULT_BASE_BRANCH}}": default_base_branch,
         },
+        adaptation_context=adaptation_context,
         projection_version=projection_version,
     )
 
@@ -363,7 +367,8 @@ def project_agent_skill_document(
         semantic_digest = skill_info.semantic_plan.digest
     if skill_info.semantic_plan is not None and context.backend is not None:
         adaptation = semantic_adaptation or context.backend.adapt_skill_semantics(
-            skill_info.semantic_plan
+            skill_info.semantic_plan,
+            context.adaptation_context,
         )
         adaptation.validate_for(skill_info.semantic_plan, backend=context.backend.name)
         adaptation_payload = adaptation.canonical_payload

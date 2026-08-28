@@ -138,9 +138,11 @@ def test_session_catalog_uses_structured_operation_not_diagnostic_text_for_admis
     diagnostic = "This backend cannot delegate child work in the current environment."
     backend = SimpleNamespace(
         name="limited",
-        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult(
-            unsupported_operation=SkillSemanticOperation.CHILD_SPAWN,
-            diagnostic=diagnostic,
+        adapt_skill_semantics=(
+            lambda _plan, _adaptation_context=None: SkillSemanticAdaptationResult(
+                unsupported_operation=SkillSemanticOperation.CHILD_SPAWN,
+                diagnostic=diagnostic,
+            )
         ),
     )
 
@@ -166,9 +168,11 @@ def test_session_catalog_rejects_unsupported_operation_absent_from_skill_plan(
     catalog = _child_spawn_catalog(tmp_path)
     backend = SimpleNamespace(
         name="limited",
-        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult.unsupported(
-            backend="limited",
-            operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+        adapt_skill_semantics=(
+            lambda _plan, _adaptation_context=None: SkillSemanticAdaptationResult.unsupported(
+                backend="limited",
+                operation=SkillSemanticOperation.GIT_METADATA_WRITE,
+            )
         ),
     )
 

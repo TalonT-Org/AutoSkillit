@@ -46,6 +46,7 @@ from autoskillit.core import (
     KitchenTransitionLock,
     LaunchResolver,
     ManagedHeadlessSessionLineageStore,
+    ManagedJoinAttestationAuthority,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -262,6 +263,9 @@ class ToolContext:
     skill_session_contract_store: SkillSessionContractStore = field(default=_MISSING)
     managed_headless_session_lineage_store: ManagedHeadlessSessionLineageStore = field(
         default=_MISSING
+    )
+    managed_join_attestation_authority: ManagedJoinAttestationAuthority | None = field(
+        default=None
     )
     context_admission_ledger: ContextAdmissionLedger = field(default=_MISSING)
     audit_admission_ledger: AuditAdmissionLedger = field(default=_MISSING)

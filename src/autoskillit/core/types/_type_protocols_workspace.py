@@ -35,9 +35,10 @@ from ._type_skill_contract import (
     SkillSourceRef,
     SkillVisibilitySpec,
 )
-from ._type_skill_semantics import SkillSemanticPlan
+from ._type_skill_semantics import SemanticAdaptationContext, SkillSemanticPlan
 
 __all__ = [
+    "ManagedJoinAttestationAuthority",
     "WorkspaceManager",
     "PluginArtifactAuthority",
     "PluginArtifactRetirementOwner",
@@ -56,6 +57,35 @@ __all__ = [
     "SkillProjectionContextAuthority",
     "SkillResolver",
 ]
+
+
+class ManagedJoinAttestationAuthority(Protocol):
+    """Server-owned issuer and verifier for managed-join adaptation evidence."""
+
+    @property
+    def activation_epoch(self) -> int: ...
+
+    def issue(
+        self,
+        *,
+        backend: str,
+        launch_context: str,
+        parent_session_id: str,
+        direct_tool_mode: bool,
+        resolved_model: str,
+        fixed_batch_tool_registry_digest: str,
+        hook_registry_digest: str,
+        skill_load_applies: bool,
+        guards_apply: bool,
+    ) -> SemanticAdaptationContext: ...
+
+    def verify(
+        self,
+        context: SemanticAdaptationContext | None,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None: ...
 
 
 @runtime_checkable
@@ -321,6 +351,9 @@ class SkillProjectionContextAuthority(Protocol):
 
     @property
     def parent_sandbox_mode(self) -> str: ...
+
+    @property
+    def adaptation_context(self) -> SemanticAdaptationContext | None: ...
 
     @property
     def explorer_provisioning_eligible(self) -> bool | None: ...

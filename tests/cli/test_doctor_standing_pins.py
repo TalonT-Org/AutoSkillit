@@ -32,7 +32,7 @@ class TestStandingBackendPinsFeasibility:
             "UnsupportedBackend",
             (),
             {
-                "adapt_skill_semantics": lambda self, plan: (
+                "adapt_skill_semantics": lambda self, plan, adaptation_context=None: (
                     SkillSemanticAdaptationResult.unsupported(
                         backend="codex",
                         operation=SkillSemanticOperation.GIT_METADATA_WRITE,
@@ -101,7 +101,7 @@ class TestStandingBackendPinsFeasibility:
             "MalformedBackend",
             (),
             {
-                "adapt_skill_semantics": lambda self, plan: result,
+                "adapt_skill_semantics": lambda self, plan, adaptation_context=None: result,
                 "capabilities": BackendCapabilities(),
             },
         )()

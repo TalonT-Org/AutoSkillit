@@ -62,6 +62,7 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PreLaunchReadiness,
     ResumeSpec,
+    SemanticAdaptationContext,
     SessionCheckpoint,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
@@ -1059,7 +1060,11 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
             if f not in data
         ]
 
-    def adapt_skill_semantics(self, plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
+    def adapt_skill_semantics(
+        self,
+        plan: SkillSemanticPlan,
+        adaptation_context: SemanticAdaptationContext | None = None,
+    ) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Claude Code instructions."""
         if required_join_is_unsupported(plan, self.capabilities):
             return SkillSemanticAdaptationResult(

@@ -19,6 +19,7 @@ def test_backend_protocols_importable_from_core():
     from autoskillit.core import (  # noqa: F401
         CodingAgentBackend,
         ResultParser,
+        SemanticAdaptationContext,
         StreamParser,
     )
 
@@ -56,14 +57,16 @@ def test_backend_protocol_consumes_il0_skill_semantic_plan() -> None:
 
     from autoskillit.core import (
         CodingAgentBackend,
+        SemanticAdaptationContext,
         SkillSemanticAdaptationResult,
         SkillSemanticPlan,
     )
 
     signature = inspect.signature(CodingAgentBackend.adapt_skill_semantics)
-    assert tuple(signature.parameters) == ("self", "plan")
+    assert tuple(signature.parameters) == ("self", "plan", "adaptation_context")
     hints = typing.get_type_hints(CodingAgentBackend.adapt_skill_semantics)
     assert hints["plan"] is SkillSemanticPlan
+    assert hints["adaptation_context"] == SemanticAdaptationContext | None
     assert hints["return"] is SkillSemanticAdaptationResult
 
 

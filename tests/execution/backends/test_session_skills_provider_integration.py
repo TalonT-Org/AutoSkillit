@@ -68,7 +68,7 @@ def test_materialize_invocation_uses_structured_refusal_and_preserves_diagnostic
     monkeypatch.setattr(
         CodexBackend,
         "adapt_skill_semantics",
-        lambda _self, _plan: SkillSemanticAdaptationResult(
+        lambda _self, _plan, _adaptation_context=None: SkillSemanticAdaptationResult(
             unsupported_operation=SkillSemanticOperation.CHILD_SPAWN,
             diagnostic=diagnostic,
         ),

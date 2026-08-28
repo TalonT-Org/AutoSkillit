@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.core import Severity, get_logger
+from autoskillit.core import SemanticAdaptationContext, Severity, get_logger
 
 from ._doctor_types import DoctorResult
 
@@ -195,6 +195,8 @@ def _iter_backend_pins(data: dict[str, Any]) -> list[tuple[str, str, str]]:
 
 def _check_standing_backend_pins_feasibility(
     project_dir: Path | None = None,
+    *,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> list[DoctorResult]:
     """Check that every standing agent_backend pin can adapt skill semantics.
 
@@ -363,7 +365,10 @@ def _check_standing_backend_pins_feasibility(
 
                 if skill_info.semantic_plan is None:
                     continue
-                adaptation = backend.adapt_skill_semantics(skill_info.semantic_plan)
+                adaptation = backend.adapt_skill_semantics(
+                    skill_info.semantic_plan,
+                    adaptation_context,
+                )
                 unsupported_operation = adaptation.validate_refusal_for(
                     skill_info.semantic_plan,
                     backend=backend_name,

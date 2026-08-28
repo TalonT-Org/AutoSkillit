@@ -311,7 +311,7 @@ def test_projection_binding_excludes_refused_dependency_with_structured_detail(
 
     conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
 
-    def adapt_semantics(plan):
+    def adapt_semantics(plan, _adaptation_context=None):
         if plan.join is None or not plan.join.required:
             return SkillSemanticAdaptationResult()
         return SkillSemanticAdaptationResult(

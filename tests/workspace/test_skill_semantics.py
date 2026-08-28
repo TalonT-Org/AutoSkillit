@@ -365,11 +365,13 @@ def test_projection_appends_backend_native_semantic_instructions(tmp_path: Path)
     backend = SimpleNamespace(
         name="test-backend",
         conventions=BackendConventions(skills_subdir=Path("skills")),
-        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult(
-            instruction_fragments=("Use native-child-call for reviewer.",),
-            logical_role_mapping={"reviewer": "reviewer"},
-            sibling_skill_targets={"investigate": "native:investigate"},
-            model_effort_policy={"reviewer": ("native-model", "high")},
+        adapt_skill_semantics=(
+            lambda _plan, _adaptation_context=None: SkillSemanticAdaptationResult(
+                instruction_fragments=("Use native-child-call for reviewer.",),
+                logical_role_mapping={"reviewer": "reviewer"},
+                sibling_skill_targets={"investigate": "native:investigate"},
+                model_effort_policy={"reviewer": ("native-model", "high")},
+            )
         ),
     )
 
@@ -419,9 +421,11 @@ def test_session_catalog_filters_unsupported_semantics_with_exact_metadata(
     )
     backend = SimpleNamespace(
         name="limited",
-        adapt_skill_semantics=lambda _plan: SkillSemanticAdaptationResult.unsupported(
-            backend="limited",
-            operation=SkillSemanticOperation.CHILD_SPAWN,
+        adapt_skill_semantics=(
+            lambda _plan, _adaptation_context=None: SkillSemanticAdaptationResult.unsupported(
+                backend="limited",
+                operation=SkillSemanticOperation.CHILD_SPAWN,
+            )
         ),
     )
 
@@ -465,7 +469,7 @@ def test_session_catalog_propagates_unexpected_adapter_contract_error(
         execution_role=SkillExecutionRole.SESSION,
     )
 
-    def fail_adaptation(_plan):
+    def fail_adaptation(_plan, _adaptation_context=None):
         raise SkillContractError("unexpected adapter contract failure")
 
     backend = SimpleNamespace(
@@ -534,7 +538,8 @@ def test_projection_binding_records_mixed_admission_and_reuses_exact_adaptation(
         def __init__(self) -> None:
             self.calls: list[object] = []
 
-        def adapt_skill_semantics(self, plan):
+        def adapt_skill_semantics(self, plan, adaptation_context=None):
+            del adaptation_context
             self.calls.append(plan)
             if plan is refused.semantic_plan:
                 return refusal_adaptation
@@ -601,7 +606,7 @@ def test_projection_binding_propagates_unexpected_adapter_contract_error(
         execution_role=SkillExecutionRole.SESSION,
     )
 
-    def fail_adaptation(_plan):
+    def fail_adaptation(_plan, _adaptation_context=None):
         raise SkillContractError("unexpected projection adapter contract failure")
 
     conventions = BackendConventions(skills_subdir=Path(".agents/skills"))
@@ -623,3 +628,82 @@ def test_projection_binding_propagates_unexpected_adapter_contract_error(
                 conventions=conventions,
             )
         )
+
+
+def test_projection_threads_one_adaptation_context_into_catalog_and_document(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    from autoskillit.core import (
+        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        BackendConventions,
+        ManagedJoinAttestation,
+        SemanticAdaptationContext,
+        SkillExecutionRole,
+    )
+    from autoskillit.workspace import (
+        EffectiveSkillCatalog,
+        SkillCatalogEntry,
+        SkillProjectionContext,
+        compile_session_skill_catalog,
+        project_agent_skill_document,
+    )
+    from tests.fakes import adapt_test_skill_semantics
+
+    skill_path = tmp_path / "portable" / "SKILL.md"
+    _write_skill(skill_path)
+    entry = SkillCatalogEntry.from_skill_info(
+        _skill_info_from_frontmatter("portable", SkillSource.PROJECT_LOCAL, skill_path)
+    )
+    catalog = EffectiveSkillCatalog(
+        skills=(entry,),
+        execution_role=SkillExecutionRole.SESSION,
+    )
+    adaptation_context = SemanticAdaptationContext(
+        managed_join_attestation=ManagedJoinAttestation(
+            schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+            backend="codex",
+            launch_context="direct",
+            parent_session_id="parent-1",
+            activation_epoch=0,
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            fixed_batch_tool_registry_digest="a" * 64,
+            hook_registry_digest="b" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+            provenance="autoskillit-server",
+        )
+    )
+    observed_contexts: list[object] = []
+
+    def adapt(plan, supplied_context):
+        observed_contexts.append(supplied_context)
+        return replace(
+            adapt_test_skill_semantics(plan),
+            adaptation_context_digest=supplied_context.digest,
+        )
+
+    backend = SimpleNamespace(
+        name="codex",
+        conventions=BackendConventions(skills_subdir=Path("skills")),
+        adapt_skill_semantics=adapt,
+    )
+    compilation = compile_session_skill_catalog(
+        catalog,
+        backend,
+        adaptation_context=adaptation_context,
+    )
+    document = project_agent_skill_document(
+        entry,
+        SkillProjectionContext(
+            cwd=tmp_path,
+            catalog=compilation.catalog,
+            backend=backend,
+            adaptation_context=adaptation_context,
+        ),
+    )
+
+    assert observed_contexts == [adaptation_context, adaptation_context]
+    assert document.adaptation_payload["adaptation_context_digest"] == adaptation_context.digest

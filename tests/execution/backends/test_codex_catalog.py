@@ -123,3 +123,40 @@ def test_reader_projection_rejects_incomplete_or_preprojected_surfaces(
             expected_model=_READER_MODEL,
             expected_reasoning_effort=_READER_REASONING_EFFORT,
         )
+
+
+def test_codex_managed_join_adaptation_requires_context_without_native_capability() -> None:
+    from autoskillit.core import (
+        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        JoinSpec,
+        ManagedJoinAttestation,
+        SemanticAdaptationContext,
+        SkillSemanticPlan,
+    )
+    from autoskillit.execution.backends import CodexBackend
+
+    plan = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
+    context = SemanticAdaptationContext(
+        managed_join_attestation=ManagedJoinAttestation(
+            schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+            backend="codex",
+            launch_context="direct",
+            parent_session_id="parent-1",
+            activation_epoch=0,
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            fixed_batch_tool_registry_digest="a" * 64,
+            hook_registry_digest="b" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+            provenance="autoskillit-server",
+        )
+    )
+    backend = CodexBackend()
+
+    assert backend.capabilities.fixed_set_join_capable is False
+    assert backend.adapt_skill_semantics(plan).unsupported_operation is not None
+    adaptation = backend.adapt_skill_semantics(plan, context)
+    assert adaptation.unsupported_operation is None
+    assert adaptation.adaptation_context_digest == context.digest
+    assert adaptation.instruction_fragments[-1].startswith("Use the server-owned managed")

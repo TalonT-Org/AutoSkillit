@@ -112,6 +112,57 @@ def test_codex_materializes_exact_guarded_investigate_document(
         project_agent_skill_document(invocation.root, context)
 
 
+def test_codex_projects_join_skill_only_with_managed_adaptation_context(
+    make_session_skill_manager,
+) -> None:
+    from autoskillit.core import (
+        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        ExplorationVectorApplicabilityId,
+        ManagedJoinAttestation,
+        SemanticAdaptationContext,
+    )
+    from autoskillit.workspace import (
+        DefaultSkillResolver,
+        SkillProjectionContext,
+        project_agent_skill_document,
+    )
+
+    manager = make_session_skill_manager()
+    invocation = DefaultSkillResolver().resolve_invocation(
+        "investigate",
+        manager._root,
+        SkillExecutionRole.SESSION,
+    )
+    context = SkillProjectionContext(
+        cwd=manager._root,
+        invocation=invocation,
+        backend=_make_codex_backend(),
+        resolved_exploration_profile=RepositoryProfileId.AUTOSKILLIT,
+        active_exploration_applicabilities=frozenset(ExplorationVectorApplicabilityId),
+        parent_sandbox_mode="read-only",
+        adaptation_context=SemanticAdaptationContext(
+            managed_join_attestation=ManagedJoinAttestation(
+                schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+                backend="codex",
+                launch_context="direct",
+                parent_session_id="parent-1",
+                activation_epoch=0,
+                direct_tool_mode=True,
+                resolved_model="gpt-5.6-sol",
+                fixed_batch_tool_registry_digest="a" * 64,
+                hook_registry_digest="b" * 64,
+                skill_load_applies=True,
+                guards_apply=True,
+                provenance="autoskillit-server",
+            )
+        ),
+    )
+
+    document = project_agent_skill_document(invocation.root, context)
+
+    assert "Use the server-owned managed fixed-batch route" in document.content
+
+
 def test_materialization_forwards_only_server_explorer_binding_env(
     make_session_skill_manager,
     codex_env,

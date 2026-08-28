@@ -485,6 +485,13 @@ def test_recipe_has_continue_on_failure_field_defaulting_to_false() -> None:
     assert r.continue_on_failure is False
 
 
+def test_recipe_has_blocks_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    r = Recipe(name="x", description="y")
+    assert r.blocks == ()
+
+
 def test_existing_recipe_construction_unchanged() -> None:
     """All pre-existing Recipe construction patterns still work."""
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep

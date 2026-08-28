@@ -24,7 +24,19 @@ from autoskillit.recipe.staleness_cache import (
 
 
 class DefaultRecipeRepository:
-    """Concrete RecipeRepository backed by centralized recipe discovery."""
+    """Stateless ``RecipeRepository`` delegate over centralized recipe discovery.
+
+    The repository holds no cache state of its own. ``list()``, ``find()``, and
+    ``load_and_validate()`` all route through :func:`list_recipes`, whose results
+    are memoized process-wide by the discovery caches in ``_io_loading``. Those
+    caches key on directory and per-file stat signatures, so an on-disk recipe
+    change invalidates them automatically; a forced refresh requires
+    ``recipe.io._clear_recipe_discovery_caches()``.
+
+    Consequences of being stateless: recreating the repository does **not**
+    refresh anything, and two instances pointing at different project roots are
+    not isolated caches — they share one keyed-by-project-root cache.
+    """
 
     def _get_list(self, project_dir: Path) -> LoadResult[RecipeInfo]:
         return list_recipes(project_dir)

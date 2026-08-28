@@ -6,7 +6,6 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
-import autoskillit.recipe._io_loading as _io_loading
 from autoskillit.core import (
     CAPTURE_VALID_VALUE_TYPES,
     CORE_PACKS,
@@ -29,14 +28,11 @@ from autoskillit.recipe._io_loading import (
     RECIPE_SCAN_DIRS as RECIPE_SCAN_DIRS,
 )
 from autoskillit.recipe._io_loading import (
-    _cached_recipe_candidates,
-    _cached_recipe_collection,
     _collect_recipes_from_candidates,
     _discover_recipe_collection,
+    _enumerate_recipe_candidates,
+    clear_recipe_discovery_caches,
     load_recipe_dict_with_declarations,
-)
-from autoskillit.recipe._io_loading import (
-    _enumerate_recipe_candidates_uncached as _enumerate_candidates,
 )
 from autoskillit.recipe._io_loading import (
     is_recipe_scan_path as is_recipe_scan_path,
@@ -126,14 +122,16 @@ def _registry_position(r: RecipeInfo) -> int:
 
 
 def _enumerate_recipe_candidates_uncached(source_root: Path) -> tuple[Path, ...]:
-    return _enumerate_candidates(source_root, RECIPE_SCAN_DIRS)
+    return _enumerate_recipe_candidates(source_root, RECIPE_SCAN_DIRS)
 
 
 def _clear_recipe_discovery_caches() -> None:
-    """Clear both discovery stages and the existing candidate parser cache."""
-    _cached_recipe_candidates.cache_clear()
-    _cached_recipe_collection.cache_clear()
-    _io_loading._parse_recipe_candidate.cache_clear()
+    """Re-export of the discovery cache-clear seam owned by ``_io_loading``.
+
+    Kept as a module-level name so callers and tests that reach for
+    ``recipe.io`` do not have to bind to the private sibling module.
+    """
+    clear_recipe_discovery_caches()
 
 
 def list_recipes(

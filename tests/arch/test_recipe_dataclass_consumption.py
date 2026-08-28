@@ -80,7 +80,6 @@ DECLARED_RECIPE_FIELDS: dict[FieldKey, DeclaredFieldDef] = (
         RecipeStep,
         (
             "action",
-            "declared_with_args",
             "idle_output_timeout",
             "message",
             "model",
@@ -154,7 +153,6 @@ DECLARED_RECIPE_FIELDS: dict[FieldKey, DeclaredFieldDef] = (
     | _field_defs(
         Recipe,
         (
-            "continue_on_failure",
             "delivery_segments",
             "dispatches",
             "kind",
@@ -166,7 +164,7 @@ DECLARED_RECIPE_FIELDS: dict[FieldKey, DeclaredFieldDef] = (
     )
     | _field_defs(
         Recipe,
-        ("blocks", "recipe_version", "version"),
+        ("recipe_version", "version"),
         "validation-only",
         _VALIDATION_SITE,
     )
@@ -191,9 +189,31 @@ DEFERRED_RECIPE_FIELDS: dict[FieldKey, TrackedDeferral] = {
         rationale="Recipe allowlists are parsed but not enforced by recipe dispatch.",
         added_date=date(2026, 8, 27),
     ),
+    (Recipe, "blocks"): TrackedDeferral(
+        issue=4893,
+        rationale=(
+            "Parsed recipe blocks are assigned but have no external validation or runtime reader."
+        ),
+        added_date=date(2026, 8, 27),
+    ),
+    (Recipe, "continue_on_failure"): TrackedDeferral(
+        issue=4893,
+        rationale=(
+            "The recipe failure-continuation declaration has no composition or execution consumer."
+        ),
+        added_date=date(2026, 8, 27),
+    ),
     (Recipe, "requires_recipe_packs"): TrackedDeferral(
         issue=4893,
         rationale="Required recipe packs are parsed but not enforced by recipe dispatch.",
+        added_date=date(2026, 8, 27),
+    ),
+    (RecipeStep, "declared_with_args"): TrackedDeferral(
+        issue=4893,
+        rationale=(
+            "The declared argument snapshot is self-validated but has no external "
+            "behavior consumer."
+        ),
         added_date=date(2026, 8, 27),
     ),
 }

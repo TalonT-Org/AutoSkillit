@@ -1,0 +1,28 @@
+# Recipe name ledger — every Git-tracked recipe name accepted by discovery.
+# One lowercase kebab-case name per line, sorted, no duplicates.
+#
+# Enforced by tests/contracts/test_recipe_name_ledger.py in both directions:
+#   - each discovered recipe name must appear here (no silent additions)
+#   - each line must name a currently tracked recipe (no silent removals)
+#
+# Update this ledger in the same change that adds, removes, or renames a recipe.
+agent-eval
+bem-wrapper
+consolidate-health-reports
+full-audit
+implement-findings
+implementation
+implementation-groups
+merge-prs
+planner
+promote-to-main-campaign
+promote-to-main-wrapper
+remediation
+research
+research-archive
+research-campaign
+research-design
+research-implement
+research-review
+skill-eval
+smoke-test

@@ -7,13 +7,23 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import Severity
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.core.types import RecipeSource
+from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
-_BUNDLED_RECIPE_YAMLS = list(builtin_recipes_dir().glob("*.yaml"))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+_BUNDLED_RECIPE_YAMLS = list(
+    tracked_recipe_paths(
+        _PROJECT_ROOT,
+        source=RecipeSource.BUILTIN,
+        scan_dirs=(".",),
+    )
+)
 assert _BUNDLED_RECIPE_YAMLS, (
     "builtin_recipes_dir() returned no YAMLs — parametrize would silently vacuous-pass"
 )

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import CaptureEntrySpec
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import (
     _parse_recipe,
     _parse_step,
@@ -21,9 +22,12 @@ from autoskillit.recipe.schema import (
     RecipeStep,
     StepResultRoute,
 )
+from tests._tracked_recipes import tracked_recipe_paths
 from tests.recipe.conftest import VALID_RECIPE, _write_yaml
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def test_load_recipe_smoke() -> None:
@@ -227,8 +231,11 @@ class TestRecipeParser:
 
     # WF_SUM3
     def test_builtin_recipes_summary_is_str(self) -> None:
-        bd = builtin_recipes_dir()
-        for f in bd.glob("*.yaml"):
+        for f in tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        ):
             wf = load_recipe(f)
             assert isinstance(wf.summary, str), f"{f.name}: summary is not str"
 
@@ -498,8 +505,11 @@ class TestRecipeParser:
 
     # MOD4
     def test_bundled_resolve_failures_steps_use_config_default(self) -> None:
-        bd = builtin_recipes_dir()
-        for f in bd.glob("*.yaml"):
+        for f in tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        ):
             wf = load_recipe(f)
             for step_name, step in wf.steps.items():
                 if (
@@ -572,7 +582,11 @@ def test_bundled_recipes_all_skill_commands_start_with_slash() -> None:
     from autoskillit.core.types import SKILL_COMMAND_PREFIX, SKILL_TOOLS
 
     violations: list[str] = []
-    for yaml_path in builtin_recipes_dir().glob("*.yaml"):
+    for yaml_path in tracked_recipe_paths(
+        _PROJECT_ROOT,
+        source=RecipeSource.BUILTIN,
+        scan_dirs=(".",),
+    ):
         recipe = load_recipe(yaml_path)
         for step_name, step in recipe.steps.items():
             if step.tool in SKILL_TOOLS:

@@ -9,11 +9,13 @@ where different CI trigger rules apply.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.recipe.io import builtin_recipes_dir
+from autoskillit.core.types import RecipeSource
+from tests._tracked_recipes import tracked_recipe_paths
 
 from .conftest import (
     PRIMARY_CI_EVENT_KEYS,
@@ -25,6 +27,7 @@ from .conftest import (
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 _TEMPLATE_RE = re.compile(r"\$\{\{\s*(.+?)\s*\}\}")
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _extract_ref(template: str) -> str | None:
@@ -42,7 +45,14 @@ def _find_capture_source(steps: dict, capture_name: str) -> tuple[str, dict] | N
     return None
 
 
-RECIPE_FILES = sorted(builtin_recipes_dir().glob("*.yaml"))
+RECIPE_FILES = sorted(
+    tracked_recipe_paths(
+        _PROJECT_ROOT,
+        source=RecipeSource.BUILTIN,
+        scan_dirs=(".",),
+    )
+)
+assert RECIPE_FILES
 
 
 @pytest.fixture(params=RECIPE_FILES, ids=lambda p: p.stem)

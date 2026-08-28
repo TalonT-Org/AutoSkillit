@@ -12,13 +12,13 @@ routes under .autoskillit/temp/ are excluded because that directory is gitignore
 from __future__ import annotations
 
 import functools
-import subprocess
 from pathlib import Path
 
 import pathspec
 import pytest
 
 from autoskillit._test_filter import load_manifest
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -75,18 +75,7 @@ def _tracked_non_python_files() -> tuple[str, ...]:
     both _files_to_check() (collection time) and test_manifest_pattern_matches_real_file
     (test execution) call this function.
     """
-    try:
-        result = subprocess.run(
-            ["git", "ls-files", "--cached"],
-            capture_output=True,
-            text=True,
-            cwd=_REPO_ROOT,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        msg = f"git ls-files failed in {_REPO_ROOT}: {e.stderr.strip()}"
-        raise RuntimeError(msg) from e
-    return tuple(f for f in result.stdout.splitlines() if not f.endswith(".py"))
+    return tuple(f for f in git_ls_files(_REPO_ROOT) if not f.endswith(".py"))
 
 
 @functools.cache
@@ -96,20 +85,9 @@ def _tracked_files_for_orphan_check() -> tuple[str, ...]:
     Includes all non-Python files plus Python files outside src/ and tests/
     (which are routed through the manifest rather than cascade logic).
     """
-    try:
-        result = subprocess.run(
-            ["git", "ls-files", "--cached"],
-            capture_output=True,
-            text=True,
-            cwd=_REPO_ROOT,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        msg = f"git ls-files failed in {_REPO_ROOT}: {e.stderr.strip()}"
-        raise RuntimeError(msg) from e
     return tuple(
         f
-        for f in result.stdout.splitlines()
+        for f in git_ls_files(_REPO_ROOT)
         if not f.endswith(".py") or (not f.startswith("src/") and not f.startswith("tests/"))
     )
 

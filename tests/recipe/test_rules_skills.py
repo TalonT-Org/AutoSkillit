@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import Severity
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.core.types import RecipeSource
+from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.fixture(autouse=True)
@@ -129,7 +135,13 @@ def test_bundled_skill_names_not_computed_at_import_v2() -> None:
 
 def test_all_bundled_recipes_skill_commands_resolve() -> None:
     """Every skill_command in bundled recipes references a skill that exists on disk."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         skill_findings = [f for f in findings if f.rule == "unknown-skill-command"]

@@ -15,6 +15,7 @@ from autoskillit.workspace.clone import (
     clone_repo,
     remove_clone,
 )
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
@@ -586,14 +587,14 @@ class TestCloneDecontamination:
         result = clone_repo(str(repo), "decontam-test", strategy="clone_local")
         clone_path = Path(result["clone_path"])
         try:
-            ls_result = subprocess.run(
-                ["git", "ls-files", "--", "src/autoskillit/hooks/hooks.json"],
-                cwd=str(clone_path),
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            assert ls_result.stdout.strip() == "", "Generated file should be untracked in clone"
+            assert (
+                git_ls_files(
+                    clone_path,
+                    "src/autoskillit/hooks/hooks.json",
+                    allow_empty=True,
+                )
+                == ()
+            ), "Generated file should be untracked in clone"
         finally:
             shutil.rmtree(clone_path.parent, ignore_errors=True)
 

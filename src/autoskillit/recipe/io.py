@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -12,7 +12,6 @@ from autoskillit.core import (
     CaptureEntrySpec,
     CaptureValueType,
     DispatchGateType,
-    LoadReport,
     LoadResult,
     RecipeSource,
     get_logger,
@@ -23,7 +22,17 @@ from autoskillit.recipe._io_loading import (
     _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
 )
 from autoskillit.recipe._io_loading import (
+    NON_RECIPE_DIRS as NON_RECIPE_DIRS,
+)
+from autoskillit.recipe._io_loading import (
+    RECIPE_SCAN_DIRS as RECIPE_SCAN_DIRS,
+)
+from autoskillit.recipe._io_loading import (
+    _collect_recipes_from_candidates,
     load_recipe_dict_with_declarations,
+)
+from autoskillit.recipe._io_loading import (
+    is_recipe_scan_path as is_recipe_scan_path,
 )
 from autoskillit.recipe._io_loading import (
     substitute_scripts_placeholder as substitute_scripts_placeholder,
@@ -52,25 +61,6 @@ logger = get_logger(__name__)
 def step_byte_ranges_from_yaml(content: str) -> dict[str, tuple[int, int]]:
     """Return UTF-8 byte ranges for entries in the recipe ``steps`` mapping."""
     return mapping_entry_byte_ranges_from_yaml(content, ("steps",))
-
-
-RECIPE_SCAN_DIRS: tuple[str, ...] = (
-    ".",  # root — standard recipes
-    "campaigns",  # campaign recipes
-    "eval",  # eval recipes
-)
-
-NON_RECIPE_DIRS: frozenset[str] = frozenset(
-    {
-        "contracts",
-        "diagrams",
-        "examples",
-        "experiment-types",
-        "methodology-traditions",
-        "scripts",
-        "sub-recipes",
-    }
-)
 
 
 def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Recipe:
@@ -135,27 +125,32 @@ def list_recipes(
     exclude_dispatch_only: bool = False,
 ) -> LoadResult[RecipeInfo]:
     """Find available recipes from project and built-in sources."""
-    seen: set[str] = set()
-    items: list[RecipeInfo] = []
-    errors: list[LoadReport] = []
-
     project_base = project_dir / ".autoskillit" / "recipes"
     builtin_base = pkg_root() / "recipes"
 
-    for subdir in RECIPE_SCAN_DIRS:
-        project_dir_scan = project_base / subdir
-        _collect_recipes(RecipeSource.PROJECT, project_dir_scan, seen, items, errors)
+    def live_recipe_files(base: Path) -> Iterator[Path]:
+        for subdir in RECIPE_SCAN_DIRS:
+            directory = base / subdir
+            if not directory.is_dir():
+                continue
+            for path in directory.iterdir():
+                if path.suffix in (".yaml", ".yml") and path.is_file():
+                    yield path
 
-    for subdir in RECIPE_SCAN_DIRS:
-        builtin_dir_scan = builtin_base / subdir
-        _collect_recipes(RecipeSource.BUILTIN, builtin_dir_scan, seen, items, errors)
-
-    filtered = [r for r in items if r.kind not in exclude_kinds] if exclude_kinds else items
+    result = collect_recipes_from_candidates(
+        project_base,
+        live_recipe_files(project_base),
+        builtin_base,
+        live_recipe_files(builtin_base),
+    )
+    filtered = (
+        [r for r in result.items if r.kind not in exclude_kinds] if exclude_kinds else result.items
+    )
     if exclude_dispatch_only:
         filtered = [r for r in filtered if not r.dispatch_only]
     return LoadResult(
         items=sorted(filtered, key=lambda r: (group_rank(r), _registry_position(r), r.name)),
-        errors=errors,
+        errors=result.errors,
     )
 
 
@@ -704,44 +699,17 @@ def _parse_step(
     )
 
 
-def _collect_recipes(
-    source: RecipeSource,
-    directory: Path,
-    seen: set[str],
-    result: list[RecipeInfo],
-    errors: list[LoadReport],
-) -> None:
-    if not directory.is_dir():
-        return
-    for f in sorted(directory.iterdir()):
-        if f.suffix in (".yaml", ".yml") and f.is_file():
-            try:
-                raw = f.read_text(encoding="utf-8")
-                data, declared_data = load_recipe_dict_with_declarations(f, raw_text=raw)
-                recipe = _parse_recipe(data, declared_data=declared_data)
-                if recipe.name and recipe.name not in seen:
-                    seen.add(recipe.name)
-                    from autoskillit.recipe.staleness_cache import (  # noqa: PLC0415
-                        compute_recipe_hash as _crh,
-                    )
-
-                    result.append(
-                        RecipeInfo(
-                            name=recipe.name,
-                            description=recipe.description,
-                            source=source,
-                            path=f,
-                            summary=recipe.summary,
-                            version=recipe.version,
-                            recipe_version=recipe.recipe_version,
-                            content_hash=_crh(f),
-                            content=raw,
-                            kind=recipe.kind,
-                            experimental=recipe.experimental,
-                            requires_packs=recipe.requires_packs,
-                            dispatch_only=recipe.dispatch_only,
-                        )
-                    )
-            except Exception as exc:
-                logger.warning("Failed to load recipe file", path=str(f), error=str(exc))
-                errors.append(LoadReport(path=f, error=str(exc)))
+def collect_recipes_from_candidates(
+    project_base: Path,
+    project_files: Iterable[Path],
+    builtin_base: Path,
+    builtin_files: Iterable[Path],
+) -> LoadResult[RecipeInfo]:
+    """Parse, deduplicate, and report collisions for recipe candidates by tier."""
+    return _collect_recipes_from_candidates(
+        project_base,
+        project_files,
+        builtin_base,
+        builtin_files,
+        parse_recipe=_parse_recipe,
+    )

@@ -13,12 +13,15 @@ import pytest
 
 from autoskillit.core import SKILL_TOOLS
 from autoskillit.core.io import load_yaml
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.contracts import load_bundled_manifest, resolve_skill_name
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe.io import load_recipe
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _RECIPE_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "recipes"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 @pytest.fixture(scope="module")
@@ -26,7 +29,14 @@ def planner_yaml() -> dict:
     return load_yaml(_RECIPE_DIR / "planner.yaml")
 
 
-_ALL_BUNDLED_RECIPE_PATHS = sorted(builtin_recipes_dir().glob("*.yaml"))
+_ALL_BUNDLED_RECIPE_PATHS = sorted(
+    tracked_recipe_paths(
+        _PROJECT_ROOT,
+        source=RecipeSource.BUILTIN,
+        scan_dirs=(".",),
+    )
+)
+assert _ALL_BUNDLED_RECIPE_PATHS
 
 
 @pytest.mark.parametrize("recipe_yaml", _ALL_BUNDLED_RECIPE_PATHS, ids=lambda p: p.stem)

@@ -7,8 +7,12 @@ plus only the tools from packs declared in the recipe's requires_packs field.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from autoskillit.core.types import RecipeSource
+from tests._tracked_recipes import tracked_recipe_paths
 from tests.fleet._helpers import (
     KITCHEN_CORE_TOOLS,
     TOOLS_BY_PACK,
@@ -16,6 +20,8 @@ from tests.fleet._helpers import (
 )
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # --- MCP state isolation (module-level; only this file mutates MCP tags) ---
 
@@ -289,12 +295,18 @@ class TestSyntheticPackScenarios:
 
 
 def test_every_bundled_recipe_declares_requires_packs() -> None:
-    from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+    from autoskillit.recipe.io import load_recipe
 
     MCP_TOOL_PACKS = {"github", "ci", "clone", "telemetry", "kitchen-core"}
     RESEARCH_PACKS = {"research", "exp-lens", "vis-lens"}
 
-    for path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(path)
         assert recipe.requires_packs, f"{path.name} does not declare requires_packs"
         pack_set = set(recipe.requires_packs)

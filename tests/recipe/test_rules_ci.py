@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import PRState, Severity
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import _parse_step, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep, StepResultCondition, StepResultRoute
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _make_recipe(steps: dict[str, RecipeStep]) -> Recipe:
@@ -89,7 +95,13 @@ def test_run_cmd_without_gh_not_flagged() -> None:
 
 def test_bundled_recipes_no_inline_ci_polling() -> None:
     """All bundled recipes must be free of ci-polling-inline-shell findings."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         ci_findings = [f for f in findings if f.rule == "ci-polling-inline-shell"]
@@ -749,7 +761,13 @@ def test_ci_no_runs_unguarded_silent_for_non_ci_tools() -> None:
 
 def test_bundled_recipes_no_runs_guarded() -> None:
     """All bundled recipes with wait_for_ci must guard against no_runs."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         no_runs_findings = [f for f in findings if f.rule == _NO_RUNS_RULE]
@@ -848,7 +866,13 @@ def test_ci_timed_out_unguarded_silent_for_non_ci_tools() -> None:
 
 
 def test_bundled_recipes_timed_out_guarded() -> None:
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(yaml_path)
         findings = [f for f in run_semantic_rules(recipe) if f.rule == _TIMED_OUT_RULE]
         assert not findings, f"{yaml_path.name}: {[f.message for f in findings]}"
@@ -919,7 +943,13 @@ def test_wait_for_ci_without_event_not_flagged() -> None:
 
 def test_bundled_recipes_no_literal_merge_group_event() -> None:
     """No bundled recipe must hardcode event='merge_group' in a wait_for_ci step."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         mg_findings = [f for f in findings if f.rule == _CI_EVENT_MG_RULE]
@@ -1181,7 +1211,13 @@ def test_mergeability_conflicting_direct_to_resolution_passes() -> None:
 
 def test_bundled_recipes_pass_ci_cwd_branch_context_mismatch() -> None:
     """All bundled recipes must pass the ci-cwd-branch-context-mismatch rule."""
-    for yaml_path in sorted(builtin_recipes_dir().glob("*.yaml")):
+    for yaml_path in sorted(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    ):
         recipe = load_recipe(yaml_path)
         findings = run_semantic_rules(recipe)
         matched = [f for f in findings if f.rule == _CWD_BRANCH_RULE]

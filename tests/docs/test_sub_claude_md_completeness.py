@@ -8,6 +8,8 @@ from pathlib import Path, PurePosixPath
 
 import pytest
 
+from tests._git_inventory import git_ls_files
+
 pytestmark = pytest.mark.medium
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -15,23 +17,10 @@ SRC_ROOT = REPO_ROOT / "src" / "autoskillit"
 
 
 def _load_tracked_guidance_paths(repo_root: Path = REPO_ROOT) -> frozenset[str]:
-    result = subprocess.run(
-        [
-            "git",
-            "ls-files",
-            "--cached",
-            "--",
-            ":(glob)**/AGENTS.md",
-            ":(glob)**/CLAUDE.md",
-        ],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
     return frozenset(
-        path for path in result.stdout.splitlines() if path and (repo_root / path).is_file()
+        path
+        for path in git_ls_files(repo_root, ":(glob)**/AGENTS.md", ":(glob)**/CLAUDE.md")
+        if (repo_root / path).is_file()
     )
 
 

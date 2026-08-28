@@ -36,7 +36,6 @@ from autoskillit.core import (
 from autoskillit.execution.backends import BACKEND_REGISTRY, CODEX_HISTORY_RETENTION_TOKEN_LIMIT
 from autoskillit.recipe import (
     NON_INTERACTIVE_KINDS,
-    list_recipes,
     load_and_validate,
 )
 from autoskillit.server._recipe_delivery import (
@@ -51,7 +50,7 @@ from autoskillit.server._response_budget import (
 from autoskillit.server.tools._serve_helpers import (
     build_open_kitchen_recipe_payload,
 )
-from tests._tracked_recipes import tracked_recipe_names
+from tests._tracked_recipes import tracked_recipe_load_result, tracked_recipe_names
 from tests.contracts._delivery_constants import (
     CALIBRATED_PAGES_PER_SECTION,
     MAX_ENVELOPE_MANIFEST_BYTES,
@@ -69,12 +68,11 @@ def _recipe_names() -> list[str]:
 
 
 def _delivery_recipe_names() -> list[str]:
-    result = list_recipes(
-        _PROJECT_ROOT,
-        exclude_kinds=NON_INTERACTIVE_KINDS,
-        exclude_dispatch_only=True,
+    return sorted(
+        recipe.name
+        for recipe in tracked_recipe_load_result(_PROJECT_ROOT).items
+        if recipe.kind not in NON_INTERACTIVE_KINDS and not recipe.dispatch_only
     )
-    return sorted(recipe.name for recipe in result.items)
 
 
 def _backend_capabilities():

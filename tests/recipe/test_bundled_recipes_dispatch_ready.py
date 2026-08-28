@@ -28,6 +28,7 @@ _CONTRACTS_DIR = _RECIPES_DIR / "contracts"
 # Unified discovery: covers builtin, campaigns, eval, and project-local recipes
 _RECIPE_STEMS = tracked_recipe_names(_PROJECT_ROOT)
 _CONTRACT_STEMS = sorted(p.stem for p in _CONTRACTS_DIR.glob("*.yaml"))
+assert _CONTRACT_STEMS, f"Expected at least one contract card in {_CONTRACTS_DIR}."
 
 
 _KNOWN_NON_CONFORMING_RULES: dict[str, set[str]] = {}

@@ -8,16 +8,23 @@ import pytest
 
 import autoskillit.recipe  # noqa: F401 -- pyright: ignore[reportUnusedImport] -- triggers rule registration
 from autoskillit.core import Severity
-from autoskillit.recipe.io import builtin_recipes_dir, builtin_sub_recipes_dir, load_recipe
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import DataFlowReport, RecipeKind
 from autoskillit.recipe.validator import analyze_dataflow, run_semantic_rules
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 RECIPE_DIR = builtin_recipes_dir()
 
 _RESEARCH_SUB_RECIPE_PATHS: list[Path] = sorted(
-    builtin_sub_recipes_dir().glob("research-*.yaml"),
+    _PROJECT_ROOT / path
+    for path in git_ls_files(
+        _PROJECT_ROOT,
+        "src/autoskillit/recipes/sub-recipes/research-*.yaml",
+        allow_empty=True,
+    )
 )
 
 if not _RESEARCH_SUB_RECIPE_PATHS:

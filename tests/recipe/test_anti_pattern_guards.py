@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core.io import load_yaml
+from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.rules.rules_blocks import _block_budgets  # re-use the cached loader
+from tests._tracked_recipes import tracked_recipe_paths
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]
@@ -18,7 +24,15 @@ def _budget_for(block_name: str) -> dict:  # type: ignore[type-arg]
 
 
 def _all_bundled_recipes():
-    return list(builtin_recipes_dir().glob("*.yaml"))
+    paths = list(
+        tracked_recipe_paths(
+            _PROJECT_ROOT,
+            source=RecipeSource.BUILTIN,
+            scan_dirs=(".",),
+        )
+    )
+    assert paths
+    return paths
 
 
 @pytest.mark.parametrize("recipe_path", _all_bundled_recipes(), ids=lambda p: p.stem)

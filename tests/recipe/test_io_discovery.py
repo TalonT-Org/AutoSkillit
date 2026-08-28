@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
 from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import (
     builtin_recipes_dir,
+    is_recipe_scan_path,
     list_recipes,
     load_recipe,
 )
@@ -226,7 +227,7 @@ class TestListRecipes:
         assert r.requires_packs == []
 
     def test_requires_packs_forwarded_to_recipe_info(self, tmp_path: Path) -> None:
-        """_collect_recipes must populate RecipeInfo.requires_packs from YAML."""
+        """Recipe collection must populate RecipeInfo.requires_packs from YAML."""
         recipe_dir = tmp_path / ".autoskillit" / "recipes"
         recipe_dir.mkdir(parents=True)
         (recipe_dir / "custom.yaml").write_text(
@@ -418,6 +419,121 @@ def test_list_recipes_includes_campaigns_subdir(tmp_path: Path) -> None:
     assert "c1" in names
 
 
+# ---------------------------------------------------------------------------
+# Recipe enumeration authority
+# ---------------------------------------------------------------------------
+
+
+def test_same_tier_duplicate_recipe_name_is_reported(tmp_path: Path) -> None:
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    first = recipes_dir / "a-first.yaml"
+    second = recipes_dir / "b-second.yaml"
+    for path in (first, second):
+        path.write_text("name: shared-name\ndescription: test\nsteps: {}\n")
+
+    result = list_recipes(tmp_path)
+
+    assert [recipe.name for recipe in result.items].count("shared-name") == 1
+    duplicate_reports = [
+        report
+        for report in result.errors
+        if report.path in {first, second} and "same-tier duplicate names" in report.error
+    ]
+    assert len(duplicate_reports) == 1
+    report_text = f"{duplicate_reports[0].path}: {duplicate_reports[0].error}"
+    assert str(first) in report_text
+    assert str(second) in report_text
+
+
+def test_project_recipe_may_shadow_bundled_recipe_without_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import autoskillit.recipe.io as recipe_io
+
+    fake_pkg = tmp_path / "package"
+    builtin_dir = fake_pkg / "recipes"
+    project_dir = tmp_path / ".autoskillit" / "recipes"
+    builtin_dir.mkdir(parents=True)
+    project_dir.mkdir(parents=True)
+    (builtin_dir / "bundled.yaml").write_text(
+        "name: shared-name\ndescription: bundled\nsteps: {}\n"
+    )
+    (project_dir / "project.yaml").write_text(
+        "name: shared-name\ndescription: project\nsteps: {}\n"
+    )
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: fake_pkg)
+
+    result = list_recipes(tmp_path)
+
+    recipes = [recipe for recipe in result.items if recipe.name == "shared-name"]
+    assert len(recipes) == 1
+    assert recipes[0].source is RecipeSource.PROJECT
+    assert result.errors == []
+
+
+def test_scan_shape_is_shared_between_enumerators(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import autoskillit.recipe.io as recipe_io
+
+    fake_pkg = tmp_path / "package"
+    project_base = tmp_path / ".autoskillit" / "recipes"
+    paths = [
+        project_base / "root.yaml",
+        project_base / "campaigns" / "campaign.yaml",
+        project_base / "eval" / "evaluation.yaml",
+        project_base / "contracts" / "not-a-recipe.yaml",
+        project_base / "campaigns" / "nested" / "too-deep.yaml",
+    ]
+    for index, path in enumerate(paths):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"name: scan-shape-{index}\ndescription: test\nsteps: {{}}\n")
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: fake_pkg)
+
+    result = list_recipes(tmp_path)
+
+    expected = {
+        path.resolve()
+        for path in paths
+        if is_recipe_scan_path(PurePosixPath(path.relative_to(project_base).as_posix()))
+    }
+    discovered = {
+        recipe.path.resolve() for recipe in result.items if recipe.source is RecipeSource.PROJECT
+    }
+    assert discovered == expected
+
+
+def test_non_recipe_directory_cannot_match_scan_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.recipe._io_loading as io_loading
+
+    monkeypatch.setattr(io_loading, "RECIPE_SCAN_DIRS", (".", "scripts"))
+
+    assert not io_loading.is_recipe_scan_path(PurePosixPath("scripts/not-a-recipe.yaml"))
+
+
+def test_list_recipes_tolerates_absent_scan_directories(tmp_path: Path) -> None:
+    result = list_recipes(tmp_path)
+
+    assert any(recipe.source is RecipeSource.BUILTIN for recipe in result.items)
+
+
+def test_recipe_with_empty_name_is_skipped_without_error(tmp_path: Path) -> None:
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    blank_name = recipes_dir / "blank-name.yaml"
+    missing_name = recipes_dir / "missing-name.yaml"
+    blank_name.write_text("name: ''\ndescription: blank\nsteps: {}\n")
+    missing_name.write_text("description: missing\nsteps: {}\n")
+
+    result = list_recipes(tmp_path)
+
+    assert {recipe.path for recipe in result.items}.isdisjoint({blank_name, missing_name})
+    assert result.errors == []
+
+
 def test_all_builtin_recipe_yamls_are_discoverable(tmp_path: Path) -> None:
     """Every .yaml in a RECIPE_SCAN_DIR must appear in list_recipes results.
 
@@ -431,7 +547,7 @@ def test_all_builtin_recipe_yamls_are_discoverable(tmp_path: Path) -> None:
     for subdir in RECIPE_SCAN_DIRS:
         scan_dir = base / subdir if subdir else base
         if scan_dir.is_dir():
-            # Non-recursive: _collect_recipes scans only one level deep per RECIPE_SCAN_DIR.
+            # Non-recursive: recipe discovery scans only one level deep per RECIPE_SCAN_DIR.
             # If recursion is ever added to the implementation, this test must be updated too.
             for f in scan_dir.iterdir():
                 if f.suffix in (".yaml", ".yml") and f.is_file():

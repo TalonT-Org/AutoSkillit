@@ -1,16 +1,20 @@
 """Tests that generated files with machine-local paths are not tracked in git."""
 
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.paths import GENERATED_FILES, is_generated_path
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).parent.parent.parent
+
+
+def _tracked_files() -> set[str]:
+    return set(git_ls_files(REPO_ROOT))
 
 
 def test_generated_files_importable_from_core_paths():
@@ -23,13 +27,7 @@ def test_generated_files_importable_from_core_paths():
 
 def test_no_generated_files_tracked():
     """Generated config and diagram files must not be tracked in git."""
-    result = subprocess.run(
-        ["git", "ls-files"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    tracked = set(result.stdout.splitlines())
+    tracked = _tracked_files()
 
     def _tracked_for_entry(entry: str) -> list[str]:
         if entry.endswith("/"):
@@ -41,6 +39,16 @@ def test_no_generated_files_tracked():
         f"Generated files must not be tracked in git: {tracked_generated}. "
         "Run 'git rm --cached <file>' and ensure the path is in .gitignore."
     )
+
+
+def test_tracked_files_propagates_git_inventory_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_git_inventory_failure(*args: object, **kwargs: object) -> tuple[str, ...]:
+        raise RuntimeError("git ls-files failed")
+
+    monkeypatch.setattr(f"{__name__}.git_ls_files", raise_git_inventory_failure)
+
+    with pytest.raises(RuntimeError, match="git ls-files failed"):
+        _tracked_files()
 
 
 def test_gitignore_covers_generated_paths():

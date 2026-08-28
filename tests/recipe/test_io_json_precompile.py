@@ -9,15 +9,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from autoskillit.core import RecipeSource
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe._io_loading import load_recipe_dict, load_recipe_dict_with_declarations
-from autoskillit.recipe.io import (
-    _collect_recipes,
-    builtin_recipes_dir,
-)
+from autoskillit.recipe.io import collect_recipes_from_candidates
+from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_BUILTIN_RECIPES_PATHSPEC = "src/autoskillit/recipes"
 
 _MINIMAL_RECIPE = {
     "name": "test-recipe",
@@ -30,6 +30,22 @@ _MINIMAL_RECIPE = {
 
 def _write_yaml(path: Path, data: dict) -> None:
     path.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
+
+
+def _tracked_builtin_recipe_paths() -> list[Path]:
+    """Return every tracked builtin YAML, including non-discoverable artifacts.
+
+    These roundtrip/freshness tests intentionally cover the recursive tree that
+    the former ``builtin_recipes_dir().rglob("*.yaml")`` covered: contract cards,
+    examples, methodology files, and sub-recipes as well as discoverable recipes.
+    ``tracked_recipe_paths`` cannot preserve that scope because it intentionally
+    filters candidates through ``RECIPE_SCAN_DIRS``.
+    """
+    return sorted(
+        _PROJECT_ROOT / path
+        for path in git_ls_files(_PROJECT_ROOT, _BUILTIN_RECIPES_PATHSPEC)
+        if path.endswith(".yaml")
+    )
 
 
 def _compile_json(yaml_path: Path) -> None:
@@ -167,7 +183,7 @@ def test_load_recipe_dict_falls_back_when_json_is_not_mapping(tmp_path, monkeypa
     assert load_yaml_calls == [1], "load_yaml should be called when JSON is not a mapping"
 
 
-def test_collect_recipes_identical_with_json(tmp_path):
+def test_collect_recipes_identical_with_json(tmp_path, monkeypatch):
     recipes = [
         {"name": "recipe-a", "description": "A", "steps": {"done": {"action": "stop"}}},
         {"name": "recipe-b", "description": "B", "steps": {"done": {"action": "stop"}}},
@@ -176,11 +192,9 @@ def test_collect_recipes_identical_with_json(tmp_path):
     for r in recipes:
         _write_yaml(tmp_path / f"{r['name']}.yaml", r)
 
-    # Collect without JSON siblings
-    seen1: set[str] = set()
-    items1: list = []
-    errors1: list = []
-    _collect_recipes(RecipeSource.PROJECT, tmp_path, seen1, items1, errors1)
+    yaml_paths = [tmp_path / f"{recipe['name']}.yaml" for recipe in recipes]
+    result1 = collect_recipes_from_candidates(tmp_path, yaml_paths, tmp_path, ())
+    assert result1.errors == []
 
     # Compile JSON siblings and set future mtime so the fast path is exercised
     for r in recipes:
@@ -190,22 +204,73 @@ def test_collect_recipes_identical_with_json(tmp_path):
         future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
         os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
-    # Collect with JSON siblings
-    seen2: set[str] = set()
-    items2: list = []
-    errors2: list = []
-    _collect_recipes(RecipeSource.PROJECT, tmp_path, seen2, items2, errors2)
+    import autoskillit.recipe._io_loading as io_loading
+
+    fast_loads_calls = []
+    original_fast_loads = io_loading.fast_loads
+
+    def counting_fast_loads(text: str):
+        fast_loads_calls.append(text)
+        return original_fast_loads(text)
+
+    monkeypatch.setattr(io_loading, "fast_loads", counting_fast_loads)
+    result2 = collect_recipes_from_candidates(tmp_path, yaml_paths, tmp_path, ())
+    assert result2.errors == []
+    assert len(fast_loads_calls) == len(recipes)
 
     # Assert identical name/description/version/kind
-    for a, b in zip(sorted(items1, key=lambda x: x.name), sorted(items2, key=lambda x: x.name)):
+    assert len(result1.items) == len(result2.items)
+    for a, b in zip(
+        sorted(result1.items, key=lambda recipe: recipe.name),
+        sorted(result2.items, key=lambda recipe: recipe.name),
+    ):
         assert a.name == b.name
         assert a.description == b.description
         assert a.version == b.version
         assert a.kind == b.kind
 
 
+def test_collect_recipes_cache_tracks_json_sidecar_state(tmp_path):
+    yaml_path = tmp_path / "recipe.yaml"
+    _write_yaml(yaml_path, _MINIMAL_RECIPE)
+
+    def collect_description() -> str:
+        result = collect_recipes_from_candidates(tmp_path, (yaml_path,), tmp_path, ())
+        assert result.errors == []
+        assert len(result.items) == 1
+        return result.items[0].description
+
+    assert collect_description() == "A test recipe"
+
+    json_path = yaml_path.with_suffix(".json")
+    json_path.write_text(
+        json.dumps({**_MINIMAL_RECIPE, "description": "First JSON description"}),
+        encoding="utf-8",
+    )
+    first_json_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
+    os.utime(json_path, ns=(first_json_mtime_ns, first_json_mtime_ns))
+    assert collect_description() == "First JSON description"
+
+    json_path.write_text(
+        json.dumps({**_MINIMAL_RECIPE, "description": "Second JSON description"}),
+        encoding="utf-8",
+    )
+    second_json_mtime_ns = first_json_mtime_ns + 10_000_000_000
+    os.utime(json_path, ns=(second_json_mtime_ns, second_json_mtime_ns))
+    assert collect_description() == "Second JSON description"
+
+    json_path.unlink()
+    assert collect_description() == "A test recipe"
+
+
+def test_collect_recipes_metadata_cache_is_bounded() -> None:
+    import autoskillit.recipe._io_loading as io_loading
+
+    assert io_loading._parse_recipe_candidate.cache_parameters()["maxsize"] == 256
+
+
 def test_compile_recipes_roundtrip():
-    for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
+    for yaml_path in _tracked_builtin_recipe_paths():
         data = load_yaml(yaml_path)
         json_text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         roundtripped = json.loads(json_text)
@@ -213,7 +278,7 @@ def test_compile_recipes_roundtrip():
 
 
 def test_bundled_json_files_are_fresh():
-    for yaml_path in sorted(builtin_recipes_dir().rglob("*.yaml")):
+    for yaml_path in _tracked_builtin_recipe_paths():
         json_path = yaml_path.with_suffix(".json")
         assert json_path.exists(), f"Missing JSON sibling for {yaml_path.name}"
 

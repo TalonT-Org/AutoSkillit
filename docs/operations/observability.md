@@ -131,16 +131,12 @@ is required.
 
 The local sink derives its model projection only from accepted Claude Code and
 Codex OTLP `/v1/logs` batches; it never reads Codex rollout JSONL. Raw metrics
-and traces remain captured but do not feed the projection. Candidate parsing
-occurs outside the queue lock, and projection mutation follows successful queue
-admission. Within explicit session and outcome bounds, the earliest accepted
-valid evidence wins. Those bounds do not change raw queue admission or
-persistence behavior; excess observations remain subject to the existing
-bounded write, failure, and rotation policy and are not guaranteed retained.
+and traces are captured but unused. Within explicit session and outcome
+bounds, the earliest accepted valid evidence wins; excess observations follow
+the existing bounded write, failure, and rotation policy.
 
 After terminal execution, the best-effort lifecycle drains the sink, reads the
-retained snapshot, and then flushes diagnostics. Shutdown or persistence
-failures cannot replace the terminal result. `sessions.jsonl` remains the
+retained snapshot, and then flushes diagnostics. `sessions.jsonl` remains the
 retained committed-session projection, not a general-purpose or raw telemetry
 join, but it now includes this explicitly bounded session-keyed model
 projection.

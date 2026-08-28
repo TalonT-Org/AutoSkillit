@@ -141,6 +141,9 @@ def test_validation_result_field_list_matches_spec() -> None:
         "suggestions",
         "skip_resolutions",
         "pre_prune_steps",
+        "deferred_guard_state",
+        "unreachable_step_names",
+        "effective_flow_edges",
         "finalized_projection",
         "valid",
     }

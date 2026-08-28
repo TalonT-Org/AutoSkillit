@@ -18,7 +18,11 @@ from autoskillit.pipeline import (
     claim_kitchen_request,
     release_kitchen_request,
 )
-from tests.server._helpers import _configure_admitted_recipe, _with_finalized_projection
+from tests.server._helpers import (
+    _configure_admitted_recipe,
+    _make_finalized_projection,
+    _with_finalized_projection,
+)
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -46,7 +50,8 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
         "diagram": None,
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     _configure_admitted_recipe(mock_ctx, recipes_dir / "test-recipe.yaml")
     mock_ctx.config.migration.suppressed = []

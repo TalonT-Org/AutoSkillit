@@ -131,6 +131,7 @@ class LoadRecipeResult(TypedDict, total=False):
     recipe_version: str | None
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
+    unreachable_step_names: list[str]
     post_prune_routing_edges: list[str]
     flow_records: list[str]
     recipe_flow: dict[str, str | int]
@@ -171,6 +172,7 @@ class OpenKitchenResult(TypedDict, total=False):
     recipe_version: str | None
     deferred_guards: list[DeferredGuard]
     post_prune_step_names: list[str]
+    unreachable_step_names: list[str]
     post_prune_routing_edges: list[str]
     flow_records: list[str]
     recipe_flow: dict[str, str | int]

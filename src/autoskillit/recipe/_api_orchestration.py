@@ -11,6 +11,7 @@ from typing import Any, cast
 from autoskillit.core import (
     BackendCapabilities,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     ProcessStaleError,
     RecipeFlowEdge,
     RecipeNotFoundError,
@@ -23,7 +24,7 @@ from autoskillit.core import (
     resolve_temp_dir,
 )
 from autoskillit.recipe import _api_cache
-from autoskillit.recipe._analysis import _extract_routing_edges, make_validation_context
+from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._api_cache import _LoadCacheEntry
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe._io_loading import (
@@ -31,12 +32,17 @@ from autoskillit.recipe._io_loading import (
     load_recipe_dict_with_declarations,
 )
 from autoskillit.recipe._recipe_composition import (
+    _analysis_edges_from_effective_routes,
     _assert_content_integrity,
     _build_active_recipe,
+    _DeferredGuardState,
     _derive_rate_limit_routes,
+    _effective_routing_edges,
+    _effective_routing_target_errors,
     _prune_skipped_steps,
     _resolve_hidden_inputs_in_content,
-    _validate_no_dangling_routes,
+    _sweep_unreachable_steps,
+    _validate_post_sweep_effective_graph,
     _validate_route_consistency,
 )
 from autoskillit.recipe._recipe_ingredients import (
@@ -172,6 +178,32 @@ def _build_orchestration_rules(
     return "\n\n".join(parts)
 
 
+def _finalize_recipe_steps(
+    recipe: Recipe,
+    deferred_guard_state: dict[str, _DeferredGuardState],
+) -> tuple[FinalizedRecipeStep, ...]:
+    """Freeze the execution-relevant fields of the active recipe steps."""
+    return tuple(
+        FinalizedRecipeStep(
+            name=name,
+            tool=step.tool,
+            skill_name=step.skill_name,
+            provider=step.provider,
+            model=step.model,
+            with_args=dict(step.with_args),
+            stale_threshold=step.stale_threshold,
+            idle_output_timeout=step.idle_output_timeout,
+            action=step.action,
+            skip_when_false=(
+                deferred_guard_state[name].guard_reference
+                if name in deferred_guard_state
+                else step.skip_when_false
+            ),
+        )
+        for name, step in recipe.steps.items()
+    )
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class _LoadPipelineInputs:
     name: str
@@ -210,6 +242,9 @@ class _ValidationResult:
     suggestions: list[dict[str, Any]]
     skip_resolutions: dict[str, bool | None]
     pre_prune_steps: dict[str, RecipeStep]
+    deferred_guard_state: dict[str, _DeferredGuardState]
+    unreachable_step_names: tuple[str, ...]
+    effective_flow_edges: tuple[RecipeFlowEdge, ...]
     finalized_projection: FinalizedRecipeProjection | None
     valid: bool
 
@@ -388,6 +423,9 @@ def _resolve_recipe_match(
             suggestions=[],
             skip_resolutions={},
             pre_prune_steps={},
+            deferred_guard_state={},
+            unreachable_step_names=(),
+            effective_flow_edges=(),
             finalized_projection=None,
             valid=False,
         ),
@@ -471,6 +509,9 @@ def _run_validation_pipeline(
     source_recipe: Recipe | None = None
     active_recipe: Recipe | None = None
     _skip_resolutions: dict[str, bool | None] = {}
+    _deferred_guard_state: dict[str, _DeferredGuardState] = {}
+    _unreachable_step_names: tuple[str, ...] = ()
+    _effective_flow_edges: tuple[RecipeFlowEdge, ...] = ()
     _pre_prune_steps: dict[str, RecipeStep] = {}
     _finalized_projection: FinalizedRecipeProjection | None = None
 
@@ -531,7 +572,7 @@ def _run_validation_pipeline(
         )
         _pre_prune_findings = run_semantic_rules(_pre_prune_val_ctx)
         _pre_prune_steps = dict(active_recipe.steps)
-        active_recipe, _skip_resolutions = _prune_skipped_steps(
+        active_recipe, _skip_resolutions, _deferred_guard_state = _prune_skipped_steps(
             active_recipe, ingredient_overrides, defer_unresolved
         )
         if active_recipe is None:
@@ -539,10 +580,10 @@ def _run_validation_pipeline(
             # so the except clause records a structured suggestion.
             raise ValueError("_prune_skipped_steps returned None")
         _source_pre_prune_steps = dict(source_recipe.steps) if source_recipe else {}
-        _source_recipe, _source_skip_resolutions = (
+        _source_recipe, _source_skip_resolutions, _source_deferred_guard_state = (
             _prune_skipped_steps(source_recipe, ingredient_overrides, defer_unresolved)
             if source_recipe
-            else (None, {})
+            else (None, {}, {})
         )
         if _source_skip_resolutions and _source_recipe is not None:
             raw = _resolve_skip_guards_in_content(
@@ -557,10 +598,35 @@ def _run_validation_pipeline(
                 )
                 raw = ""
         active_recipe = _derive_rate_limit_routes(active_recipe)
-        _dangling_errors = _validate_no_dangling_routes(active_recipe)
-        if _dangling_errors:
-            errors.extend(f"[post-prune] dangling route: {e}" for e in _dangling_errors)
+        _effective_flow_edges = _effective_routing_edges(active_recipe, _deferred_guard_state)
+        _pre_sweep_route_errors = _effective_routing_target_errors(
+            active_recipe, _effective_flow_edges
+        )
+        if _pre_sweep_route_errors:
+            errors.extend(
+                f"[post-prune] effective route: {error}" for error in _pre_sweep_route_errors
+            )
             raw = ""
+        active_recipe, _unreachable_step_names = _sweep_unreachable_steps(
+            active_recipe, _effective_flow_edges
+        )
+        _deferred_guard_state = {
+            step_name: state
+            for step_name, state in _deferred_guard_state.items()
+            if step_name in active_recipe.steps
+        }
+        _effective_flow_edges = _effective_routing_edges(active_recipe, _deferred_guard_state)
+        _post_sweep_errors = _validate_post_sweep_effective_graph(
+            active_recipe,
+            _effective_flow_edges,
+            pre_sweep_route_errors=_pre_sweep_route_errors,
+        )
+        if _post_sweep_errors:
+            errors.extend(f"[post-prune] {error}" for error in _post_sweep_errors)
+            raw = ""
+        _effective_analysis_edges = _analysis_edges_from_effective_routes(
+            active_recipe, _effective_flow_edges
+        )
         t0 = _t("prune_skipped_steps", t0, name)
 
         # Stage: semantic rules
@@ -579,27 +645,10 @@ def _run_validation_pipeline(
         if project_sub_dir.is_dir():
             known_sub_recipes |= frozenset(p.stem for p in project_sub_dir.glob("*.yaml"))
         _post_prune_bindings = bind_recipe(active_recipe, ingredient_values=ingredient_overrides)
-        if include_finalized_projection:
+        if include_finalized_projection and not _pre_sweep_route_errors and not _post_sweep_errors:
             _ordered_step_names = tuple(active_recipe.steps)
-            _ordered_flow_edges = tuple(
-                RecipeFlowEdge(
-                    source=step_name,
-                    edge_type=edge.edge_type,
-                    target=edge.target,
-                    condition=edge.condition,
-                    result_field=(
-                        step.on_result.field
-                        if edge.edge_type == "result_condition"
-                        and step.on_result is not None
-                        and step.on_result.field
-                        else None
-                    ),
-                )
-                for step_name, step in active_recipe.steps.items()
-                for edge in _extract_routing_edges(step)
-            )
             _delivery_segments, _delivery_segment_errors = _finalize_delivery_segments(
-                active_recipe, _ordered_flow_edges
+                active_recipe, _effective_flow_edges
             )
             if _delivery_segment_errors:
                 errors.extend(
@@ -611,7 +660,9 @@ def _run_validation_pipeline(
                 binding_projection=_post_prune_bindings,
                 ordered_step_names=_ordered_step_names,
                 entrypoint=next(iter(_ordered_step_names), ""),
-                ordered_flow_edges=_ordered_flow_edges,
+                ordered_flow_edges=_effective_flow_edges,
+                ordered_steps=_finalize_recipe_steps(active_recipe, _deferred_guard_state),
+                ingredient_names=frozenset(active_recipe.ingredients),
                 delivery_segments=_delivery_segments,
             )
         val_ctx = make_validation_context(
@@ -626,12 +677,13 @@ def _run_validation_pipeline(
             backend_capabilities_map=backend_capabilities_map,
             backend_origin_map=backend_origin_map,
             binding_projection=_post_prune_bindings,
+            effective_routing_edges=_effective_analysis_edges,
         )
         semantic_findings = run_semantic_rules(val_ctx)
         semantic_suggestions = findings_to_dicts(semantic_findings)
         t0 = _t("semantic_rules", t0, name)
 
-        if _skip_resolutions and any(v is False for v in _skip_resolutions.values()):
+        if _skip_resolutions and any(v is not True for v in _skip_resolutions.values()):
             semantic_findings = filter_pruning_false_positives(
                 semantic_findings, _pre_prune_findings
             )
@@ -707,6 +759,9 @@ def _run_validation_pipeline(
         suggestions=suggestions,
         skip_resolutions=_skip_resolutions,
         pre_prune_steps=_pre_prune_steps,
+        deferred_guard_state=_deferred_guard_state,
+        unreachable_step_names=_unreachable_step_names,
+        effective_flow_edges=_effective_flow_edges,
         finalized_projection=_finalized_projection,
         valid=valid,
     )
@@ -745,6 +800,9 @@ def _assemble_load_result(
     active_recipe = pipeline_result.active_recipe
     _skip_resolutions = pipeline_result.skip_resolutions
     _pre_prune_steps = pipeline_result.pre_prune_steps
+    _deferred_guard_state = pipeline_result.deferred_guard_state
+    _unreachable_step_names = pipeline_result.unreachable_step_names
+    _effective_flow_edges = pipeline_result.effective_flow_edges
     _finalized_projection = pipeline_result.finalized_projection
 
     name = pipeline_inputs.name
@@ -797,9 +855,9 @@ def _assemble_load_result(
         result["ingredients_table"] = ing_table
     # Two delivery paths: orchestration_rules embeds text for Channel A;
     # stop_step_semantics is a dedicated field for Channel B.
-    _stop_semantics = _build_stop_step_semantics(recipe) if recipe else ""
+    _stop_semantics = _build_stop_step_semantics(active_recipe) if active_recipe else ""
     result["orchestration_rules"] = _build_orchestration_rules(
-        recipe, stop_semantics=_stop_semantics
+        active_recipe, stop_semantics=_stop_semantics
     )
     result["stop_step_semantics"] = _stop_semantics
     result["content_hash"] = recipe.content_hash if recipe else ""
@@ -807,10 +865,8 @@ def _assemble_load_result(
     result["recipe_version"] = recipe.recipe_version if recipe else None
 
     _deferred_guard_list: list[DeferredGuard] = []
-    for _dg_step, _dg_resolved in _skip_resolutions.items() if _skip_resolutions else []:
-        if _dg_resolved is None:
-            _dg_step_obj = _pre_prune_steps.get(_dg_step)
-            _dg_ref = getattr(_dg_step_obj, "skip_when_false", None) if _dg_step_obj else None
+    for _dg_step, (_dg_ref, _dg_target) in _deferred_guard_state.items():
+        if _skip_resolutions.get(_dg_step) is None:
             _dg_ingredient = (
                 _dg_ref[len("inputs.") :] if _dg_ref and _dg_ref.startswith("inputs.") else _dg_ref
             )
@@ -834,14 +890,10 @@ def _assemble_load_result(
         if include_finalized_projection and _finalized_projection is not None:
             result["_finalized_projection"] = _finalized_projection
         result["post_prune_step_names"] = list(active_recipe.steps.keys())
+        result["unreachable_step_names"] = list(_unreachable_step_names)
         _step_names_set = set(active_recipe.steps)
         result["post_prune_routing_edges"] = sorted(
-            {
-                edge.target
-                for step in active_recipe.steps.values()
-                for edge in _extract_routing_edges(step)
-                if edge.target in _step_names_set
-            }
+            {edge.target for edge in _effective_flow_edges if edge.target in _step_names_set}
         )
     # Two nested guards: outer against RecipeNotFoundError short-circuit,
     # inner against non-None lister (cacheable).

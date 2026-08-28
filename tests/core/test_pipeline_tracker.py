@@ -247,6 +247,29 @@ def test_kitchen_merge_preserves_progress_and_manual_init_is_create_only(tmp_pat
         lease.close()
 
 
+def test_kitchen_merge_recomputes_dependencies_and_preserves_progress(tmp_path):
+    target = _target(tmp_path, expected=False)
+    lease = retain_tracker_lease({}, _key(target, tmp_path))
+    try:
+        initial = _tracker()
+        initial["dependencies"] = {"dry_walkthrough": ["make_plan"]}
+        assert initialize_kitchen_tracker(target, lease, initial).data == initial
+
+        current = json.loads(target.path.read_text())
+        current["steps"]["prepare"] = {"status": "complete"}
+        target.path.write_text(json.dumps(current))
+
+        refreshed = _tracker()
+        refreshed["dependencies"] = {}
+        result = initialize_kitchen_tracker(target, lease, refreshed)
+
+        assert result.data is not None
+        assert result.data["dependencies"] == {}
+        assert result.data["steps"]["prepare"] == {"status": "complete"}
+    finally:
+        lease.close()
+
+
 def test_exact_retirement_skips_contention_and_never_unlinks_sidecar(monkeypatch, tmp_path):
     target = _target(tmp_path)
     target.path.parent.mkdir(parents=True)

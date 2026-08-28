@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.core import SkillResolver
 from autoskillit.server.tools.tools_recipe import load_recipe
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -84,7 +84,8 @@ class TestLoadRecipeAuthorityClobber:
                 "suggestions": [],
                 "diagram": None,
                 "ingredients_table": "--- TABLE ---",
-            }
+            },
+            projection=_make_finalized_projection(),
         )
         mock_ctx.recipes.find.return_value = MagicMock(path=tmp_path / "demo.yaml")
         mock_ctx.recipes.load.return_value = mock_recipe_obj

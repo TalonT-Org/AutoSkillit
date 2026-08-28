@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server._helpers import _configure_admitted_recipe, _with_finalized_projection
+from tests.server._helpers import (
+    _configure_admitted_recipe,
+    _make_finalized_projection,
+    _with_finalized_projection,
+)
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -41,7 +45,8 @@ async def test_named_delivery_preserves_finalized_bytes_across_anonymous_guidanc
         "ingredients_table": "",
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []

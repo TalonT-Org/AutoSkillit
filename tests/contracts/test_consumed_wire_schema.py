@@ -45,6 +45,7 @@ _RECIPE_PAYLOAD_FIELDS = frozenset(
         "requires_packs",
         "stop_step_semantics",
         "suggestions",
+        "unreachable_step_names",
         "valid",
         "version",
     }
@@ -67,6 +68,7 @@ _SEGMENTED_INLINE_FIELDS = frozenset(
         "requires_packs",
         "success",
         "summary",
+        "unreachable_step_names",
         "valid",
         "version",
     }

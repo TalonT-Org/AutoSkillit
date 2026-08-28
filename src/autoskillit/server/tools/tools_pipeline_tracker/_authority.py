@@ -104,9 +104,9 @@ def _select_tracker_authority(
         return None, None, None, None
     if expected is None:
         expected = bool(explicit_target)
-        if not expected and tool_ctx.active_recipe_steps:
+        if not expected and tool_ctx.active_recipe_projection is not None:
             try:
-                expected = bool(_derive_phase_a_deps(tool_ctx.active_recipe_steps))
+                expected = bool(_derive_phase_a_deps(tool_ctx.active_recipe_projection))
             except (AttributeError, TypeError):
                 expected = False
     target = TrackerAuthorityTarget.for_project(

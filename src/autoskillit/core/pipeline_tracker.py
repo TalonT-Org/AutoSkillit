@@ -275,11 +275,10 @@ def initialize_kitchen_tracker(
         merged = dict(incoming)
         if current.data is not None:
             merged.update(current.data)
+            # Step statuses are observed execution state and therefore existing-wins.
+            # Dependencies are recipe-derived state and must be replaced on each serve.
             merged["steps"] = {**incoming["steps"], **current.data["steps"]}
-            merged["dependencies"] = {
-                **incoming["dependencies"],
-                **current.data["dependencies"],
-            }
+            merged["dependencies"] = incoming["dependencies"]
         target.path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
         atomic_write(target.path, json.dumps(merged))
         return TrackerAuthorityReadResult(target, data=merged)

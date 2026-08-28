@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from autoskillit.core import (
     CodingAgentBackend,
     EffectiveSkillInvocationAuthority,
     ExplorationVectorApplicabilityId,
+    FinalizedRecipeStep,
     RepositoryProfileId,
     SkillContractError,
     ValidatedAddDir,
@@ -226,7 +228,7 @@ def resolve_skill_dispatch_metadata(
 
 def resolve_step_name_from_recipe(
     skill_command: str,
-    active_recipe_steps: dict[str, object],
+    active_recipe_steps: Mapping[str, FinalizedRecipeStep],
 ) -> tuple[str, bool]:
     """Match a command prefix to exactly one active recipe step."""
     command_prefix = skill_command.split()[0] if skill_command.strip() else ""

@@ -1,22 +1,18 @@
-"""Curated Phase A pipeline dependency derivation from recipe routing graphs.
+"""Curated Phase A dependencies from the finalized recipe routing graph.
 
 Underscore-prefixed helper module (not ``tools_*.py``) — exempt from the
 ``tools_*.py`` import-namespace restriction (REQ-ARCH-003 / REQ-IMP-003),
 which does not permit ``autoskillit.recipe`` imports. Same exemption class
 as ``_auto_overrides.py`` / ``_serve_helpers.py``. See ``tools/AGENTS.md``.
 
-Routing-edge extraction is inlined from public ``RecipeStep`` fields rather
-than imported from ``recipe._analysis_graph`` — REQ-IMP-007 forbids
-cross-package submodule imports; only the ``autoskillit.recipe`` package
-gateway may be imported here, and the routing-edge helpers are private.
+The finalized projection is the single authority for executable routes.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from autoskillit.core import FinalizedRecipeProjection, get_logger
 
-if TYPE_CHECKING:
-    from autoskillit.recipe import RecipeStep
+logger = get_logger(__name__)
 
 # Curated Phase A dependency targets: step_name -> candidate predecessor step
 # names that satisfy the dependency when they are a *direct* predecessor of
@@ -29,43 +25,6 @@ _CURATED_TARGETS: dict[str, frozenset[str]] = {
     "review_approach": frozenset({"rectify", "make_plan"}),
     "dry_walkthrough": frozenset({"rectify", "make_plan"}),
 }
-
-
-def _successor_targets(step: RecipeStep) -> set[str]:
-    """Return the step names *step* routes to on success/failure/etc.
-
-    Covers every routing field on ``RecipeStep``: ``on_success``,
-    ``on_failure``, ``on_context_limit``, ``on_rate_limit``, ``on_exhausted``,
-    and ``on_result`` (both ``conditions[].route`` and ``routes`` dict form).
-    """
-    targets: set[str] = set()
-    if step.on_success:
-        targets.add(step.on_success)
-    if step.on_failure:
-        targets.add(step.on_failure)
-    if step.on_context_limit:
-        targets.add(step.on_context_limit)
-    if step.on_rate_limit:
-        targets.add(step.on_rate_limit)
-    if step.on_exhausted and step.action is None:
-        targets.add(step.on_exhausted)
-    if step.on_result:
-        if step.on_result.routes:
-            targets.update(step.on_result.routes.values())
-        for condition in step.on_result.conditions:
-            targets.add(condition.route)
-    return targets
-
-
-def _build_local_step_graph(active_steps: dict[str, RecipeStep]) -> dict[str, set[str]]:
-    """Build a routing adjacency list scoped to *active_steps* only.
-
-    Operates on a plain ``dict[str, RecipeStep]`` (the shape available at
-    ``open_kitchen`` time via ``ctx.active_recipe_steps``). Edge targets
-    outside *active_steps* are dropped.
-    """
-    step_names = set(active_steps)
-    return {name: _successor_targets(step) & step_names for name, step in active_steps.items()}
 
 
 def _find_cycle_members(graph: dict[str, set[str]]) -> set[str]:
@@ -92,17 +51,23 @@ def _find_cycle_members(graph: dict[str, set[str]]) -> set[str]:
     return cycle_members
 
 
-def _derive_phase_a_deps(active_steps: dict[str, RecipeStep]) -> dict[str, list[str]]:
+def _derive_phase_a_deps(
+    projection: FinalizedRecipeProjection | None,
+) -> dict[str, list[str]]:
     """Derive curated, single-edge, loop-free step dependencies for Phase A.
 
-    For each step name in ``_CURATED_TARGETS`` present in *active_steps*,
-    find curated candidate predecessors that are direct predecessors of it
-    in the routing graph built from *active_steps*. Steps involved in a
-    cycle (e.g. the ``test -> check_test_fix_loop -> assess -> test`` or
-    ``next_or_done -> dry_walkthrough`` loops) are skipped entirely, since
-    Phase A only derives single-edge, loop-free prerequisites.
+    Steps involved in a cycle are skipped. Multiple matching predecessors are
+    branch alternatives that the all-of tracker cannot represent, so they are
+    reported and deliberately left without a derived dependency.
     """
-    graph = _build_local_step_graph(active_steps)
+    if projection is None:
+        return {}
+
+    step_names = set(projection.ordered_step_names)
+    graph: dict[str, set[str]] = {name: set() for name in projection.ordered_step_names}
+    for edge in projection.ordered_flow_edges:
+        if edge.target in step_names:
+            graph[edge.source].add(edge.target)
     cycle_members = _find_cycle_members(graph)
 
     predecessors: dict[str, set[str]] = {name: set() for name in graph}
@@ -112,13 +77,19 @@ def _derive_phase_a_deps(active_steps: dict[str, RecipeStep]) -> dict[str, list[
 
     deps: dict[str, list[str]] = {}
     for step_name, candidates in _CURATED_TARGETS.items():
-        if step_name not in active_steps or step_name in cycle_members:
+        if step_name not in graph or step_name in cycle_members:
             continue
         matched = sorted(
             pred
             for pred in predecessors.get(step_name, set())
             if pred in candidates and pred not in cycle_members
         )
-        if matched:
+        if len(matched) == 1:
             deps[step_name] = matched
+        elif len(matched) > 1:
+            logger.warning(
+                "pipeline_dependency_ambiguous_predecessors",
+                step_name=step_name,
+                predecessors=matched,
+            )
     return deps

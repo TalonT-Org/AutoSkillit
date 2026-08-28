@@ -7,6 +7,7 @@ to break the circular import between validator.py and the rule modules.
 from __future__ import annotations
 
 from autoskillit.core import (
+    RECIPE_TERMINAL_TARGETS,
     FinalizedRecipeSegment,
     RecipeFlowEdge,
     get_logger,
@@ -36,7 +37,7 @@ from autoskillit.recipe.registry import (
     run_semantic_rules,
     semantic_rule,
 )
-from autoskillit.recipe.schema import _TERMINAL_TARGETS, Recipe, RecipeKind
+from autoskillit.recipe.schema import Recipe, RecipeKind
 
 logger = get_logger(__name__)
 
@@ -203,13 +204,16 @@ def validate_recipe_structure(recipe: Recipe) -> list[str]:
         # Routing target validation
         for goto_field in ("on_success", "on_failure", "on_context_limit", "on_rate_limit"):
             target = getattr(step, goto_field)
-            if target and target not in step_names and target not in _TERMINAL_TARGETS:
+            if target and target not in step_names and target not in RECIPE_TERMINAL_TARGETS:
                 errors.append(
                     f"Step '{step_name}'.{goto_field} references unknown step '{target}'."
                 )
 
         # on_exhausted: may be a step name OR one of the reserved terminal targets
-        if step.on_exhausted not in step_names and step.on_exhausted not in _TERMINAL_TARGETS:
+        if (
+            step.on_exhausted not in step_names
+            and step.on_exhausted not in RECIPE_TERMINAL_TARGETS
+        ):
             errors.append(
                 f"Step '{step_name}'.on_exhausted references unknown step '{step.on_exhausted}'."
             )
@@ -379,6 +383,7 @@ def _finalize_delivery_segments(
         later_targets = {
             edge.target
             for edge in _extract_routing_edges(recipe.steps[step_name])
+            if not (edge.edge_type == "exhausted" and recipe.steps[step_name].action is not None)
             if edge.target in segment_index and segment_index[edge.target] > route_source_index
         }
         missing_targets = sorted(later_targets - targets)
@@ -465,7 +470,7 @@ def edge_routes_success(
     """Return whether one finalized tool edge selects the success carrier."""
     if not automatic and recovery:
         return False
-    if edge.edge_type == "success":
+    if edge.edge_type in {"success", "skip"}:
         return True
     if edge.edge_type != "result_condition":
         return False

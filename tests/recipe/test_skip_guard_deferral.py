@@ -39,7 +39,7 @@ class TestPruneSkippedStepsDeferral:
         from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 
         recipe = _make_recipe_with_skip_guard("review", "inputs.review_approach", default="false")
-        pruned, resolutions = _prune_skipped_steps(
+        pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
             recipe, ingredient_overrides={}, defer_unresolved=True
         )
         assert "review" in pruned.steps, "Step was pruned despite missing override"
@@ -52,7 +52,7 @@ class TestPruneSkippedStepsDeferral:
         from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 
         recipe = _make_recipe_with_skip_guard("review", "inputs.review_approach", default="false")
-        pruned, resolutions = _prune_skipped_steps(
+        pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
             recipe,
             ingredient_overrides={"review_approach": "false"},
             defer_unresolved=True,

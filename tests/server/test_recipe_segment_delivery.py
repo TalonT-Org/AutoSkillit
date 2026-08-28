@@ -12,6 +12,7 @@ from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     FinalizedRecipeProjection,
     FinalizedRecipeSegment,
+    FinalizedRecipeStep,
     RecipeBindingProjection,
 )
 from autoskillit.pipeline import NoActiveRecipe, ReadyRecipe
@@ -38,6 +39,8 @@ def _projection(*, segmented: bool) -> FinalizedRecipeProjection:
         ordered_step_names=("step",),
         entrypoint="step",
         ordered_flow_edges=(),
+        ordered_steps=(FinalizedRecipeStep(name="step"),),
+        ingredient_names=frozenset(),
         delivery_segments=(
             (FinalizedRecipeSegment(name="Initial", ordered_step_names=("step",)),)
             if segmented

@@ -8,17 +8,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import _make_finalized_projection, _with_finalized_projection
 from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-def _make_mock_recipes(load_result: dict) -> MagicMock:
+def _make_mock_recipes(
+    load_result: dict,
+    *,
+    ingredient_names: frozenset[str] = frozenset(),
+) -> MagicMock:
     """Create a mock recipe repository that returns the given load result."""
     mock = MagicMock()
     if load_result.get("valid") is True:
-        load_result = _with_finalized_projection(load_result)
+        load_result = _with_finalized_projection(
+            load_result,
+            projection=_make_finalized_projection(ingredient_names=ingredient_names),
+        )
     mock.load_and_validate.return_value = load_result
     mock.find.return_value = MagicMock(path=Path("/fake/test-recipe.yaml"))
     mock.load.return_value = MagicMock(steps={}, ingredients={})
@@ -244,7 +251,10 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = tmp_path / "test.yaml"
 
-    mock_recipes = _make_mock_recipes({"content": "name: test", "valid": True, "suggestions": []})
+    mock_recipes = _make_mock_recipes(
+        {"content": "name: test", "valid": True, "suggestions": []},
+        ingredient_names=frozenset({"audit"}),
+    )
     mock_recipes.find.return_value = mock_recipe_info
     mock_recipes.load.return_value = mock_recipe
 

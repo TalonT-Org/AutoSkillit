@@ -19,6 +19,7 @@ from mcp.types import ToolListChangedNotification
 from autoskillit import __version__
 from autoskillit.core import (
     PIPELINE_FORBIDDEN_TOOLS,
+    FinalizedRecipeProjection,
     ProcessStaleError,
     RecipeDeliveryRequest,
     RecipeLoadError,
@@ -32,6 +33,7 @@ from autoskillit.core import (
 from autoskillit.pipeline import (
     KITCHEN_EFFECT_RECIPE_SERVING,
     KitchenOpenPhase,
+    ToolContext,
     advance_kitchen_phase,
     exploration_auto_provision_eligible,
     transition_abort,
@@ -55,7 +57,6 @@ from autoskillit.server._recipe_delivery import (
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._auto_overrides import _compute_effective_backend_map
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
-from autoskillit.server.tools._preflight import filter_steps_by_post_prune
 from autoskillit.server.tools._serve_helpers import (
     _admit_recipe_name,
     build_backend_capabilities_map,
@@ -94,6 +95,23 @@ from autoskillit.server.tools.tools_kitchen._tracker_authority import (
 logger = get_logger(__name__)
 
 
+def _cache_finalized_recipe_projection(
+    tool_ctx: ToolContext,
+    projection: FinalizedRecipeProjection,
+) -> None:
+    """Install the finalized execution graph as the active runtime authority."""
+    tool_ctx.active_recipe_projection = projection
+    tool_ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
+    tool_ctx.active_recipe_ingredients = projection.ingredient_names
+
+
+def _clear_active_recipe_projection(tool_ctx: ToolContext) -> None:
+    """Prevent a failed serve from retaining prior execution-graph authority."""
+    tool_ctx.active_recipe_projection = None
+    tool_ctx.active_recipe_steps = {}
+    tool_ctx.active_recipe_ingredients = frozenset()
+
+
 async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str | None:
     """Set the tools-enabled flag. Extracted for testability.
 
@@ -115,6 +133,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
         ctx.active_recipe_packs = frozenset()
         ctx.active_recipe_features = frozenset()
         ctx.active_recipe_steps = {}
+        ctx.active_recipe_projection = None
         ctx.active_recipe_ingredients = frozenset()
         _tk_pkg.clear_recipe_execution(ctx)
         transition_confirm(ctx, "active_recipe_reset", receipt="active_recipe:cleared")
@@ -587,9 +606,11 @@ async def open_kitchen(
                         else None
                     )
                 except ProcessStaleError as exc:
+                    _clear_active_recipe_projection(tool_ctx)
                     logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
                     return _kitchen_failure_envelope(exc, stage="process_stale")
                 except Exception as exc:
+                    _clear_active_recipe_projection(tool_ctx)
                     logger.warning(
                         "open_kitchen_failure", stage="load_and_validate", exc_info=True
                     )
@@ -612,32 +633,28 @@ async def open_kitchen(
                 tool_ctx.recipe_composite_hash = result.get("composite_hash", "")
                 tool_ctx.recipe_version = result.get("recipe_version") or ""
                 recipe_info = _recipe_info
-                _deferred_recipe_obj = None
-                try:
-                    recipe_obj = tool_ctx.recipes.load(recipe_info.path)
-                    _deferred_recipe_obj = recipe_obj
-                    tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
-                        recipe_obj.steps, result.get("post_prune_step_names", [])
-                    )
-                    tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
-                except Exception:
-                    logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
-                    tool_ctx.active_recipe_steps = None
-                    tool_ctx.active_recipe_ingredients = None
                 # Default to False for missing 'valid' so a absent key is treated as invalid
                 if not result.get("valid", False) or not result.get("content", ""):
+                    _clear_active_recipe_projection(tool_ctx)
                     transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
                     return _recipe_validation_error_response(name, result)
+                if _deferred_finalized_projection is None:
+                    _clear_active_recipe_projection(tool_ctx)
+                    return _recipe_validation_error_response(name, result)
+                _cache_finalized_recipe_projection(tool_ctx, _deferred_finalized_projection)
                 # Dispatch-feasibility preflight: verify the backend can enforce
                 # all fix-required hooks for the recipe's run_skill steps.
                 if tool_ctx.active_recipe_steps is not None:
                     _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
                     if _tracker_error is not None:
+                        _clear_active_recipe_projection(tool_ctx)
                         return _pipeline_tracker_auto_init_failure(tool_ctx, _tracker_error)
                     _preflight_err = _tk_pkg._check_dispatch_feasibility(
-                        post_prune_step_names=result.get("post_prune_step_names", []),
+                        post_prune_step_names=list(
+                            _deferred_finalized_projection.ordered_step_names
+                        ),
                         active_recipe_steps=tool_ctx.active_recipe_steps,
                         backend=tool_ctx.backend,
                         config_providers=tool_ctx.config.providers,
@@ -648,6 +665,7 @@ async def open_kitchen(
                         temp_dir=tool_ctx.temp_dir,
                     )
                     if _preflight_err is not None:
+                        _clear_active_recipe_projection(tool_ctx)
                         transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                         tool_ctx.gate.disable()
                         tool_ctx.gate_infrastructure_ready = False
@@ -659,19 +677,19 @@ async def open_kitchen(
                         result, name, recipe_info=recipe_info
                     )
                 except Exception as exc:
+                    _clear_active_recipe_projection(tool_ctx)
                     logger.warning(
                         "open_kitchen_failure", stage="apply_triage_gate", exc_info=True
                     )
                     return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
-                if _deferred_recipe_obj is not None:
-                    _override_warnings = _check_override_keys(
-                        overrides,
-                        frozenset(_deferred_recipe_obj.ingredients.keys()),
-                        set(_session_overrides.keys()),
-                        _config_layer,
-                    )
-                    if _override_warnings:
-                        result["warnings"] = _override_warnings
+                _override_warnings = _check_override_keys(
+                    overrides,
+                    _deferred_finalized_projection.ingredient_names,
+                    set(_session_overrides.keys()),
+                    _config_layer,
+                )
+                if _override_warnings:
+                    result["warnings"] = _override_warnings
                 if ingredients_only:
                     result = strip_ingredients_only_keys(result)
                 # When caller provides explicit overrides, update the snapshot so
@@ -729,9 +747,11 @@ async def open_kitchen(
                     pop_finalized_recipe_projection(result) if result.get("valid", False) else None
                 )
             except ProcessStaleError as exc:
+                _clear_active_recipe_projection(tool_ctx)
                 logger.warning("open_kitchen_failure", stage="process_stale", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="process_stale")
             except Exception as exc:
+                _clear_active_recipe_projection(tool_ctx)
                 logger.warning("open_kitchen_failure", stage="load_and_validate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="load_and_validate")
             if ingredients_only:
@@ -774,30 +794,23 @@ async def open_kitchen(
 
             recipe_info = _recipe_info
 
-            _normal_recipe_obj = None
-            try:
-                recipe_obj = tool_ctx.recipes.load(recipe_info.path)
-                _normal_recipe_obj = recipe_obj
-                tool_ctx.active_recipe_steps = filter_steps_by_post_prune(
-                    recipe_obj.steps, result.get("post_prune_step_names", [])
-                )
-                tool_ctx.active_recipe_ingredients = frozenset(recipe_obj.ingredients.keys())
-            except Exception:
-                logger.warning("open_kitchen_recipe_steps_cache_failed", exc_info=True)
-                tool_ctx.active_recipe_steps = None
-                tool_ctx.active_recipe_ingredients = None
-
             try:
                 result = await _tk_pkg._apply_triage_gate(result, name, recipe_info=recipe_info)
             except Exception as exc:
+                _clear_active_recipe_projection(tool_ctx)
                 logger.warning("open_kitchen_failure", stage="apply_triage_gate", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="apply_triage_gate")
 
             if not result.get("valid", False) or not result.get("content", ""):
+                _clear_active_recipe_projection(tool_ctx)
                 transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                 tool_ctx.gate.disable()
                 tool_ctx.gate_infrastructure_ready = False
                 return _recipe_validation_error_response(name, result)
+            if _normal_finalized_projection is None:
+                _clear_active_recipe_projection(tool_ctx)
+                return _recipe_validation_error_response(name, result)
+            _cache_finalized_recipe_projection(tool_ctx, _normal_finalized_projection)
 
             # Dispatch-feasibility preflight: verify the backend can enforce
             # all fix-required hooks for the recipe's run_skill steps.
@@ -812,9 +825,10 @@ async def open_kitchen(
                     logger.warning("open_kitchen_deferred_prune_failed", exc_info=True)
                 _tracker_error = _auto_init_pipeline_tracker(tool_ctx)
                 if _tracker_error is not None:
+                    _clear_active_recipe_projection(tool_ctx)
                     return _pipeline_tracker_auto_init_failure(tool_ctx, _tracker_error)
                 _preflight_err = _tk_pkg._check_dispatch_feasibility(
-                    post_prune_step_names=result.get("post_prune_step_names", []),
+                    post_prune_step_names=list(_normal_finalized_projection.ordered_step_names),
                     active_recipe_steps=tool_ctx.active_recipe_steps,
                     backend=tool_ctx.backend,
                     config_providers=tool_ctx.config.providers,
@@ -825,6 +839,7 @@ async def open_kitchen(
                     temp_dir=tool_ctx.temp_dir,
                 )
                 if _preflight_err is not None:
+                    _clear_active_recipe_projection(tool_ctx)
                     transition_abort(tool_ctx, KITCHEN_EFFECT_RECIPE_SERVING)
                     tool_ctx.gate.disable()
                     tool_ctx.gate_infrastructure_ready = False
@@ -842,15 +857,14 @@ async def open_kitchen(
             if ingredients_only:
                 result = strip_ingredients_only_keys(result)
 
-            if _normal_recipe_obj is not None:
-                _override_warnings = _check_override_keys(
-                    overrides,
-                    frozenset(_normal_recipe_obj.ingredients.keys()),
-                    set(_session_overrides.keys()),
-                    _config_layer,
-                )
-                if _override_warnings:
-                    result["warnings"] = _override_warnings
+            _override_warnings = _check_override_keys(
+                overrides,
+                _normal_finalized_projection.ingredient_names,
+                set(_session_overrides.keys()),
+                _config_layer,
+            )
+            if _override_warnings:
+                result["warnings"] = _override_warnings
 
             try:
                 warning = (
@@ -861,6 +875,7 @@ async def open_kitchen(
                     else None
                 )
             except Exception as exc:
+                _clear_active_recipe_projection(tool_ctx)
                 logger.warning("open_kitchen_failure", stage="hook_diagnostic", exc_info=True)
                 return _kitchen_failure_envelope(exc, stage="hook_diagnostic")
             if warning:
@@ -873,6 +888,7 @@ async def open_kitchen(
                 result, required_keys=_required_keys, tool_name="open_kitchen"
             )
             if _validation_err is not None:
+                _clear_active_recipe_projection(tool_ctx)
                 logger.warning(
                     "open_kitchen_fail_closed",
                     tool="open_kitchen",
@@ -882,6 +898,7 @@ async def open_kitchen(
 
             if not ingredients_only:
                 if _normal_finalized_projection is None:
+                    _clear_active_recipe_projection(tool_ctx)
                     return _recipe_validation_error_response(name, result)
                 _prepared_generation = prepare_recipe_delivery_generation(
                     result,

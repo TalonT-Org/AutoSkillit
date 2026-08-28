@@ -154,14 +154,14 @@ def test_prune_skipped_steps_truthy_clears_field() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, resolutions = _prune_skipped_steps(
+    pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
         recipe, ingredient_overrides={"pipeline_health": "true"}
     )
     assert "diag" in pruned.steps
     assert pruned.steps["diag"].skip_when_false is None
     assert resolutions["diag"] is True
 
-    pruned2, resolutions2 = _prune_skipped_steps(
+    pruned2, resolutions2, _deferred_guard_state = _prune_skipped_steps(
         recipe, ingredient_overrides={"pipeline_health": "false"}
     )
     assert "diag" not in pruned2.steps
@@ -200,7 +200,9 @@ def test_prune_skipped_steps_removes_step_and_cleans_routes() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"pipeline_health": "false"})
+    pruned, _, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"pipeline_health": "false"}
+    )
     assert "diag" not in pruned.steps
     # Route repaired: upstream.on_success now points to diag's on_success (done)
     assert pruned.steps["upstream"].on_success == "done"
@@ -231,7 +233,7 @@ def test_prune_skipped_chain_is_order_independent(
         },
     )
 
-    pruned, _ = _prune_skipped_steps(recipe)
+    pruned, _, _deferred_guard_state = _prune_skipped_steps(recipe)
 
     assert tuple(pruned.steps) == ("survivor", "done")
 
@@ -264,7 +266,7 @@ def test_prune_skipped_steps_url_string_is_truthy() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, resolutions = _prune_skipped_steps(
+    pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
         recipe, ingredient_overrides={"issue_url": "https://github.com/org/repo/issues/42"}
     )
     assert "claim_and_resolve" in pruned.steps
@@ -301,7 +303,7 @@ def test_prune_skipped_steps_empty_string_is_falsy() -> None:
     )
 
     for falsy_value in ("", "false", "no"):
-        pruned, resolutions = _prune_skipped_steps(
+        pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
             recipe, ingredient_overrides={"issue_url": falsy_value}
         )
         assert "claim_and_resolve" not in pruned.steps, (
@@ -310,7 +312,9 @@ def test_prune_skipped_steps_empty_string_is_falsy() -> None:
         assert resolutions["claim_and_resolve"] is False
 
     # Absent override (no default on ingredient) — also falsy
-    pruned_absent, resolutions_absent = _prune_skipped_steps(recipe, ingredient_overrides={})
+    pruned_absent, resolutions_absent, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={}
+    )
     assert "claim_and_resolve" not in pruned_absent.steps
     assert resolutions_absent["claim_and_resolve"] is False
 
@@ -364,7 +368,9 @@ def test_prune_skipped_steps_truthiness_boundary(value: str, expected_truthy: bo
         },
         kitchen_rules=["test"],
     )
-    pruned, resolutions = _prune_skipped_steps(recipe, ingredient_overrides={"flag": value})
+    pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"flag": value}
+    )
     assert resolutions["guarded"] is expected_truthy, (
         f"value={value!r}: expected truthy={expected_truthy}, got {resolutions['guarded']}"
     )
@@ -405,7 +411,9 @@ def test_prune_investigate_auto_default_evaluates_truthy() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, resolutions = _prune_skipped_steps(recipe, ingredient_overrides={})
+    pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={}
+    )
     assert resolutions["investigate"] is True
     assert "investigate" in pruned.steps
     assert pruned.steps["investigate"].skip_when_false is None
@@ -511,7 +519,9 @@ def test_prune_on_result_only_step_repairs_upstream_routes() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, resolutions = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
+    pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"flag": "false"}
+    )
     assert "skippable" not in pruned.steps
     assert resolutions["skippable"] is False
     assert pruned.steps["upstream"].on_success == "done"
@@ -678,7 +688,9 @@ def test_prune_repairs_upstream_on_result_pointing_to_pruned_step() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
+    pruned, _, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"flag": "false"}
+    )
     assert "skippable" not in pruned.steps
     router = pruned.steps["router"]
     assert router.on_result is not None
@@ -721,7 +733,9 @@ def test_prune_repairs_legacy_on_result_routes_pointing_to_pruned_step() -> None
         kitchen_rules=["test"],
     )
 
-    pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
+    pruned, _, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"flag": "false"}
+    )
     assert "skippable" not in pruned.steps
     router = pruned.steps["router"]
     assert router.on_result is not None
@@ -761,7 +775,9 @@ def test_prune_on_result_no_default_uses_explicit_on_skip() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
+    pruned, _, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"flag": "false"}
+    )
     assert "skippable" not in pruned.steps
     assert pruned.steps["upstream"].on_success == "done"
 
@@ -796,7 +812,9 @@ def test_prune_legacy_on_result_routes_uses_explicit_on_skip() -> None:
         kitchen_rules=["test"],
     )
 
-    pruned, _ = _prune_skipped_steps(recipe, ingredient_overrides={"flag": "false"})
+    pruned, _, _deferred_guard_state = _prune_skipped_steps(
+        recipe, ingredient_overrides={"flag": "false"}
+    )
     assert "skippable" not in pruned.steps
     assert pruned.steps["upstream"].on_success == "done"
 
@@ -872,6 +890,26 @@ def test_post_prune_dangling_route_returns_errors() -> None:
     assert len(errors) > 0
     assert any("missing_step" in e for e in errors)
     assert any("upstream" in e for e in errors)
+
+
+def test_post_prune_dangling_routes_ignore_action_exhausted_target() -> None:
+    from autoskillit.recipe._recipe_composition import _validate_no_dangling_routes
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={},
+        steps={
+            "done": RecipeStep(
+                action="stop",
+                message="done",
+                on_exhausted="swept_step",
+            ),
+        },
+        kitchen_rules=["test"],
+    )
+
+    assert _validate_no_dangling_routes(recipe) == []
 
 
 def test_route_consistency_rejects_source_swapped_edges() -> None:
@@ -1121,7 +1159,7 @@ def test_guarded_chain_pruning_matches_independent_oracle(
         "    message: done\n"
     )
 
-    pruned, resolutions = _prune_skipped_steps(recipe)
+    pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(recipe)
     repaired = _resolve_skip_guards_in_content(raw, resolutions, recipe.steps)
     reparsed = _parse_recipe(load_yaml(repaired))
 
@@ -1239,7 +1277,7 @@ steps:
     )
 
     source_recipe = load_recipe(recipe_path)
-    pruned_source, _ = _prune_skipped_steps(source_recipe)
+    pruned_source, _, _deferred_guard_state = _prune_skipped_steps(source_recipe)
     result = load_and_validate(
         "non-next-entry",
         project_dir=tmp_path,
@@ -1279,7 +1317,7 @@ def test_bundled_recipes_prune_produces_no_dangling_routes() -> None:
             if not ref.startswith("inputs."):
                 continue
             ingredient_name = ref[len("inputs.") :]
-            pruned, resolutions = _prune_skipped_steps(
+            pruned, resolutions, _deferred_guard_state = _prune_skipped_steps(
                 recipe, ingredient_overrides={ingredient_name: "false"}
             )
             errors = _validate_no_dangling_routes(pruned)

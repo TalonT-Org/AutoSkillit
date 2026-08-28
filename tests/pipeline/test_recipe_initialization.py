@@ -14,6 +14,7 @@ from autoskillit.core import (
     RECIPE_ARTIFACT_SCHEMA_VERSION,
     RECIPE_FLOW_SCHEMA_VERSION,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     InstallationVersion,
     InstalledRecipeExecution,
     RecipeArtifactGeneration,
@@ -98,8 +99,23 @@ def _projection() -> FinalizedRecipeProjection:
     return FinalizedRecipeProjection(
         binding_projection=RecipeBindingProjection(invocations={}),
         ordered_step_names=("step",),
+        ordered_steps=(
+            FinalizedRecipeStep(
+                name="step",
+                tool=None,
+                skill_name=None,
+                provider=None,
+                model=None,
+                with_args={},
+                stale_threshold=None,
+                idle_output_timeout=None,
+                action=None,
+                skip_when_false=None,
+            ),
+        ),
         entrypoint="step",
         ordered_flow_edges=(),
+        ingredient_names=frozenset(),
     )
 
 

@@ -8,15 +8,25 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from autoskillit.core import FinalizedRecipeStep
 from autoskillit.server.tools.tools_execution import run_skill
+from tests.server._helpers import _install_active_recipe_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
-def _make_step_mock(skip_when_false: str | None = None) -> MagicMock:
-    step = MagicMock()
-    step.skip_when_false = skip_when_false
-    return step
+def _make_finalized_step(
+    name: str,
+    skip_when_false: str | None = None,
+    *,
+    skill_command: str | None = None,
+) -> FinalizedRecipeStep:
+    with_args = {"skill_command": skill_command} if skill_command is not None else {}
+    return FinalizedRecipeStep(
+        name=name,
+        skip_when_false=skip_when_false,
+        with_args=with_args,
+    )
 
 
 def test_invalid_persisted_lock_state_returns_controlled_deny(
@@ -134,9 +144,10 @@ class TestRunSkillDeniesLockedStep:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -164,9 +175,10 @@ class TestRunSkillAllowsUnlockedStep:
         overlay.write_text(json.dumps({"locked_steps": {"": {"investigate": True}}}))
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -204,9 +216,10 @@ class TestRunSkillLockCheckUsesOrderId:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -237,9 +250,10 @@ class TestRunSkillLockCheckUsesOrderId:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -265,9 +279,10 @@ class TestRunSkillLockCheckUsesOrderId:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -298,9 +313,10 @@ class TestPerPipelineLockIsolation:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -326,9 +342,10 @@ class TestPerPipelineLockIsolation:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -359,9 +376,10 @@ class TestRunSkillAllowsResumeOfLockedStep:
         )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "investigate": _make_step_mock("inputs.investigate"),
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"investigate": _make_finalized_step("investigate", "inputs.investigate")},
+        )
 
         result = json.loads(
             await run_skill(
@@ -396,11 +414,14 @@ class TestRunSkillResolvesStepNameFromRecipe:
             )
         )
 
-        step = _make_step_mock("inputs.investigate")
-        step.with_args = {"skill_command": "/autoskillit:investigate ${{ inputs.target }}"}
+        step = _make_finalized_step(
+            "investigate",
+            "inputs.investigate",
+            skill_command="/autoskillit:investigate ${{ inputs.target }}",
+        )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {"investigate": step}
+        _install_active_recipe_projection(tool_ctx_kitchen_open, {"investigate": step})
 
         result = json.loads(
             await run_skill(
@@ -432,16 +453,21 @@ class TestRunSkillResolvesStepNameFromRecipe:
             )
         )
 
-        step_a = _make_step_mock("inputs.assess")
-        step_a.with_args = {"skill_command": "/autoskillit:resolve-failures ..."}
-        step_b = _make_step_mock(None)
-        step_b.with_args = {"skill_command": "/autoskillit:resolve-failures ..."}
+        step_a = _make_finalized_step(
+            "assess",
+            "inputs.assess",
+            skill_command="/autoskillit:resolve-failures ...",
+        )
+        step_b = _make_finalized_step(
+            "merge_gate_assess",
+            skill_command="/autoskillit:resolve-failures ...",
+        )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {
-            "assess": step_a,
-            "merge_gate_assess": step_b,
-        }
+        _install_active_recipe_projection(
+            tool_ctx_kitchen_open,
+            {"assess": step_a, "merge_gate_assess": step_b},
+        )
 
         result = json.loads(
             await run_skill(
@@ -471,11 +497,14 @@ class TestRunSkillResolvesStepNameFromRecipe:
             )
         )
 
-        step = _make_step_mock("inputs.investigate")
-        step.with_args = {"skill_command": "/autoskillit:investigate ..."}
+        step = _make_finalized_step(
+            "investigate",
+            "inputs.investigate",
+            skill_command="/autoskillit:investigate ...",
+        )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {"investigate": step}
+        _install_active_recipe_projection(tool_ctx_kitchen_open, {"investigate": step})
 
         result = json.loads(
             await run_skill(
@@ -499,6 +528,7 @@ class TestRunSkillResolvesStepNameFromRecipe:
 
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.active_recipe_steps = None
+        tool_ctx_kitchen_open.active_recipe_projection = None
 
         result = json.loads(
             await run_skill(
@@ -528,11 +558,14 @@ class TestRunSkillResolvesStepNameFromRecipe:
             )
         )
 
-        step = _make_step_mock("inputs.investigate")
-        step.with_args = {"skill_command": "/autoskillit:other-skill ..."}
+        step = _make_finalized_step(
+            "investigate",
+            "inputs.investigate",
+            skill_command="/autoskillit:other-skill ...",
+        )
 
         tool_ctx_kitchen_open.project_dir = tmp_path
-        tool_ctx_kitchen_open.active_recipe_steps = {"investigate": step}
+        _install_active_recipe_projection(tool_ctx_kitchen_open, {"investigate": step})
 
         result = json.loads(
             await run_skill(

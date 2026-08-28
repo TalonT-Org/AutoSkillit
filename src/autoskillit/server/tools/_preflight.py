@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
+    FinalizedRecipeStep,
     SkillContractError,
     SkillExecutionRole,
     SkillSemanticPlan,
@@ -52,18 +54,9 @@ def check_skill_semantic_feasibility(
     return None
 
 
-def filter_steps_by_post_prune(
-    raw_steps: dict[str, Any],
-    post_prune_step_names: list[str],
-) -> dict[str, Any]:
-    """Return only the steps whose names survived skip_when_false pruning."""
-    keep = set(post_prune_step_names)
-    return {k: v for k, v in raw_steps.items() if k in keep}
-
-
 def _check_dispatch_feasibility(
     post_prune_step_names: list[str],
-    active_recipe_steps: dict[str, Any],
+    active_recipe_steps: Mapping[str, FinalizedRecipeStep],
     backend: Any | None,
     config_providers: Any,
     recipe_name: str = "",

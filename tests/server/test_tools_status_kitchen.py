@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import anyio
 import pytest
@@ -23,6 +24,7 @@ from autoskillit.server.tools.tools_status import (
     kitchen_status,
 )
 from tests.conftest import _make_result
+from tests.server._helpers import _make_finalized_projection_from_recipe_steps
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -62,6 +64,12 @@ def _dependency_recipe_steps() -> dict[str, RecipeStep]:
         "rectify": RecipeStep(name="rectify", on_success="review_approach"),
         "review_approach": RecipeStep(name="review_approach"),
     }
+
+
+def _set_active_recipe_steps(tool_ctx: Any, steps: dict[str, RecipeStep]) -> None:
+    projection = _make_finalized_projection_from_recipe_steps(steps)
+    tool_ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
+    tool_ctx.active_recipe_projection = projection
 
 
 class TestKitchenStatus:
@@ -172,7 +180,7 @@ class TestKitchenStatus:
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
-        tool_ctx_kitchen_open.active_recipe_steps = _dependency_recipe_steps()
+        _set_active_recipe_steps(tool_ctx_kitchen_open, _dependency_recipe_steps())
         dispatch_path = (
             tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "dispatch-status.json"
         )
@@ -192,7 +200,10 @@ class TestKitchenStatus:
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
-        tool_ctx_kitchen_open.active_recipe_steps = {"review": RecipeStep(name="review")}
+        _set_active_recipe_steps(
+            tool_ctx_kitchen_open,
+            {"review": RecipeStep(name="review")},
+        )
 
         status = json.loads(await kitchen_status())
 
@@ -213,7 +224,7 @@ class TestKitchenStatus:
     ):
         tool_ctx_kitchen_open.project_dir = tmp_path
         tool_ctx_kitchen_open.kitchen_id = "kitchen-status"
-        tool_ctx_kitchen_open.active_recipe_steps = _dependency_recipe_steps()
+        _set_active_recipe_steps(tool_ctx_kitchen_open, _dependency_recipe_steps())
         tracker_path = (
             tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-status.json"
         )

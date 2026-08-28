@@ -120,24 +120,33 @@ def _auto_init_pipeline_tracker(tool_ctx: ToolContext) -> str | None:
     """Auto-derive and initialize the kitchen-scoped pipeline dependency tracker.
 
     Self-arming, server-internal counterpart to ``record_pipeline_step(op="init")``
-    — runs at ``open_kitchen`` time from ``ctx.active_recipe_steps``, requiring
+    — runs at ``open_kitchen`` time from the finalized recipe projection, requiring
     no LLM action, mirroring how ingredient locks are primed. The core authority
     seam performs the locked merge while this caller retains the kitchen lease.
 
-    Idempotent across the deferred-override re-call pattern: an existing
-    tracker's step statuses and previously-tracked dependency keys are
-    preserved rather than overwritten.
+    Across deferred-override recalls, observed step statuses are preserved while
+    recipe-derived dependency keys are replaced by the fresh derivation.
     """
     active_steps = tool_ctx.active_recipe_steps
-    if not active_steps:
+    projection = tool_ctx.active_recipe_projection
+    if not active_steps or projection is None:
         return None
     try:
-        deps = _derive_phase_a_deps(active_steps)
+        deps = _derive_phase_a_deps(projection)
     except Exception:
         logger.warning("pipeline_tracker_auto_init_deps_failed", exc_info=True)
         return None
+
     if not deps:
-        return None
+        if not tool_ctx.kitchen_id:
+            return None
+        existing_target = TrackerAuthorityTarget.for_project(
+            tool_ctx.project_dir,
+            tool_ctx.kitchen_id,
+            expected=False,
+        )
+        if not (existing_target.path.exists() or existing_target.path.is_symlink()):
+            return None
 
     key, lease = _retain_kitchen_tracker_authority(tool_ctx)
     steps: dict[str, dict[str, str]] = {name: {"status": "pending"} for name in active_steps}

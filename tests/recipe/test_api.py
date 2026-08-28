@@ -165,7 +165,7 @@ steps:
 def test_load_recipe_result_has_post_prune_step_names(tmp_path):
     """LoadRecipeResult includes post_prune_step_names reflecting surviving steps.
 
-    step_b is pruned (enable_step_b defaults to "false"); step_a and step_c survive.
+    step_b is guard-pruned and step_c is unreachable from the true step_a route.
     """
     from autoskillit.recipe._api import load_and_validate
 
@@ -174,8 +174,9 @@ def test_load_recipe_result_has_post_prune_step_names(tmp_path):
     assert "post_prune_step_names" in result, "post_prune_step_names must be in LoadRecipeResult"
     post_prune = set(result["post_prune_step_names"])
     assert "step_a" in post_prune
-    assert "step_c" in post_prune
     assert "step_b" not in post_prune, "step_b should be pruned (enable_step_b=false)"
+    assert "step_c" not in post_prune
+    assert result["unreachable_step_names"] == ["step_c"]
 
 
 # ---------------------------------------------------------------------------
@@ -255,22 +256,50 @@ def test_finalized_projection_preserves_ordered_steps_entrypoint_and_routes(tmp_
         ("step_a", "exhausted", "escalate", None, None),
         ("step_a", "result_condition", "step_b", "ok", "status"),
         ("step_a", "result_condition", "step_c", "retry", "status"),
-        ("step_b", "exhausted", "escalate", None, None),
-        ("step_c", "exhausted", "escalate", None, None),
     )
     assert tuple(projection.binding_projection.invocations) == ("step_a",)
 
 
 def test_finalized_projection_rejects_an_empty_entrypoint() -> None:
-    from autoskillit.core import FinalizedRecipeProjection, RecipeBindingProjection
+    from autoskillit.core import (
+        FinalizedRecipeProjection,
+        FinalizedRecipeStep,
+        RecipeBindingProjection,
+    )
 
     with pytest.raises(ValueError, match="entrypoint must be a non-empty string"):
         FinalizedRecipeProjection(
             binding_projection=RecipeBindingProjection(invocations={}),
+            ingredient_names=frozenset(),
             ordered_step_names=("step",),
             entrypoint="",
             ordered_flow_edges=(),
+            ordered_steps=(FinalizedRecipeStep(name="step"),),
         )
+
+
+def test_validation_context_excludes_terminal_effective_targets() -> None:
+    """Terminal routes construct safely without entering step-indexed analyses."""
+    from autoskillit.recipe._analysis import make_validation_context
+    from autoskillit.recipe._analysis_graph import RouteEdge
+    from autoskillit.recipe.schema import Recipe, RecipeStep
+
+    recipe = Recipe(
+        name="terminal-effective-route",
+        description="terminal effective route",
+        steps={"entry": RecipeStep(name="entry", action="confirm", message="continue")},
+    )
+    context = make_validation_context(
+        recipe,
+        effective_routing_edges={
+            "entry": (RouteEdge(edge_type="success", target="done"),),
+        },
+    )
+
+    assert context.step_graph == {"entry": set()}
+    assert "done" not in context.predecessors
+    assert "done" not in context.must_defined_context
+    assert "done" not in context.predecessor_edges
 
 
 # ---------------------------------------------------------------------------
@@ -1341,6 +1370,98 @@ def test_build_stop_step_semantics_includes_sentinel_instruction():
     )
     assert "success=true" in sem, "Must include success=true for non-failure stop steps"
     assert "success=false" in sem, "Must include success=false for failure stop steps"
+
+
+def test_load_result_includes_merged_sub_recipe_stop_semantics(tmp_path: Path) -> None:
+    """Stop guidance is built from the composed active recipe."""
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(
+        tmp_path,
+        "stop-parent",
+        """\
+name: stop-parent
+description: parent with a composed stop step
+kitchen_rules: [Follow routes.]
+ingredients:
+  include_child:
+    description: Include child.
+    default: "true"
+    hidden: true
+steps:
+  child:
+    sub_recipe: stop-child
+    gate: include_child
+    on_success: done
+    on_failure: escalate
+""",
+    )
+    sub_recipes = tmp_path / ".autoskillit" / "recipes" / "sub-recipes"
+    sub_recipes.mkdir()
+    (sub_recipes / "stop-child.yaml").write_text(
+        """\
+name: stop-child
+description: child stop
+kitchen_rules: [Stop when complete.]
+steps:
+  child_done:
+    action: stop
+    message: Emit the L3 sentinel block with success=true and reason=Completed.
+"""
+    )
+
+    result = load_and_validate(
+        "stop-parent",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+    )
+
+    assert result["valid"], result["errors"]
+    assert "stop_child_child_done" in result["stop_step_semantics"]
+    assert "stop_child_child_done" in result["orchestration_rules"]
+
+
+def test_load_result_excludes_pruned_stop_semantics(tmp_path: Path) -> None:
+    """Stop guidance excludes guarded stops removed from the active recipe."""
+    from autoskillit.recipe._api import load_and_validate
+
+    _setup_project_recipe(
+        tmp_path,
+        "pruned-stop",
+        """\
+name: pruned-stop
+description: guarded stop semantics
+kitchen_rules: [Follow routes.]
+ingredients:
+  include_removed:
+    description: Include removed stop.
+    default: "false"
+steps:
+  entry:
+    action: confirm
+    message: Continue.
+    on_success: removed_stop
+    on_failure: kept_stop
+  removed_stop:
+    action: stop
+    message: Emit the L3 sentinel block with success=false and reason=Removed.
+    skip_when_false: inputs.include_removed
+    on_skip: kept_stop
+  kept_stop:
+    action: stop
+    message: Emit the L3 sentinel block with success=true and reason=Kept.
+""",
+    )
+
+    result = load_and_validate(
+        "pruned-stop",
+        project_dir=tmp_path,
+        temp_dir=tmp_path / "cache",
+    )
+
+    assert result["valid"], result["errors"]
+    assert "kept_stop" in result["stop_step_semantics"]
+    assert "removed_stop" not in result["stop_step_semantics"]
 
 
 def test_build_ingredient_rows_resolved_overrides_literal_default():

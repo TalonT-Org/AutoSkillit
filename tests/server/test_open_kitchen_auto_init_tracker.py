@@ -6,7 +6,11 @@ import json
 
 import pytest
 
-from tests.server._helpers import _with_finalized_projection
+from tests.server._helpers import (
+    _install_active_recipe_projection,
+    _make_finalized_projection_from_recipe_steps,
+    _with_finalized_projection,
+)
 from tests.server.conftest import _set_mock_kitchen_transition
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -28,7 +32,8 @@ def _configure_open_kitchen_mock(ctx, steps, tmp_path):
             "recipe_version": "1.0",
             "suggestions": [],
             "post_prune_step_names": list(steps.keys()),
-        }
+        },
+        projection=_make_finalized_projection_from_recipe_steps(steps),
     )
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = tmp_path / "remediation.yaml"
@@ -48,10 +53,13 @@ class TestOpenKitchenAutoInitTracker:
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
         ctx.kitchen_id = "kitchen-error"
-        ctx.active_recipe_steps = {
-            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-            "review_approach": RecipeStep(name="review_approach"),
-        }
+        _install_active_recipe_projection(
+            ctx,
+            {
+                "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+                "review_approach": RecipeStep(name="review_approach"),
+            },
+        )
 
         def _raise(*_args):
             raise RuntimeError("initialization failed")
@@ -76,10 +84,13 @@ class TestOpenKitchenAutoInitTracker:
         ctx = _make_mock_ctx()
         ctx.project_dir = tmp_path
         ctx.kitchen_id = "kitchen-corrupt"
-        ctx.active_recipe_steps = {
-            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
-            "review_approach": RecipeStep(name="review_approach"),
-        }
+        _install_active_recipe_projection(
+            ctx,
+            {
+                "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+                "review_approach": RecipeStep(name="review_approach"),
+            },
+        )
         tracker_path = (
             tmp_path / ".autoskillit" / "temp" / "pipeline_tracker" / "kitchen-corrupt.json"
         )
@@ -175,6 +186,54 @@ class TestOpenKitchenAutoInitTracker:
         tracker_after = json.loads(tracker_path.read_text())
         assert tracker_after["steps"]["rectify"]["status"] == "complete"
         assert tracker_after["dependencies"].get("review_approach") == ["rectify"]
+
+    @pytest.mark.anyio
+    async def test_open_kitchen_clears_stale_dependencies_for_existing_tracker(self, tmp_path):
+        from unittest.mock import patch
+
+        from autoskillit.recipe.schema import RecipeStep
+        from autoskillit.server.tools.tools_kitchen import open_kitchen
+        from tests.server.conftest import _make_mock_ctx
+
+        temp_dir = tmp_path / ".autoskillit" / "temp"
+        temp_dir.mkdir(parents=True)
+        (temp_dir / ".hook_config.json").write_text("{}")
+        kitchen_id = "kitchen-clear-stale-dependencies"
+
+        initial_steps = {
+            "rectify": RecipeStep(name="rectify", on_success="review_approach"),
+            "review_approach": RecipeStep(name="review_approach"),
+        }
+        first_ctx = _make_mock_ctx()
+        first_ctx.gate.enabled = True
+        first_ctx.gate_infrastructure_ready = True
+        first_ctx.kitchen_id = kitchen_id
+        _set_mock_kitchen_transition(first_ctx, kitchen_id=kitchen_id)
+        _configure_open_kitchen_mock(first_ctx, initial_steps, tmp_path)
+        with patch("autoskillit.server._get_ctx", return_value=first_ctx):
+            first_result = json.loads(await open_kitchen(name="remediation", ctx=first_ctx))
+        assert first_result["success"] is True
+
+        tracker_path = temp_dir / "pipeline_tracker" / f"{kitchen_id}.json"
+        tracker = json.loads(tracker_path.read_text())
+        tracker["steps"]["rectify"]["status"] = "complete"
+        tracker_path.write_text(json.dumps(tracker))
+
+        no_dependency_steps = {"rectify": RecipeStep(name="rectify")}
+        second_ctx = _make_mock_ctx()
+        second_ctx.gate.enabled = True
+        second_ctx.gate_infrastructure_ready = True
+        second_ctx.recipe_name = "remediation"
+        second_ctx.kitchen_id = kitchen_id
+        _set_mock_kitchen_transition(second_ctx, kitchen_id=kitchen_id)
+        _configure_open_kitchen_mock(second_ctx, no_dependency_steps, tmp_path)
+        with patch("autoskillit.server._get_ctx", return_value=second_ctx):
+            second_result = json.loads(await open_kitchen(name="remediation", ctx=second_ctx))
+        assert second_result["success"] is True
+
+        tracker_after = json.loads(tracker_path.read_text())
+        assert tracker_after["dependencies"] == {}
+        assert tracker_after["steps"]["rectify"]["status"] == "complete"
 
     @pytest.mark.anyio
     async def test_open_kitchen_auto_init_multi_pipeline(self, tmp_path):

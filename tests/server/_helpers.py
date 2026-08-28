@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -13,8 +14,11 @@ import pytest
 from autoskillit.core import (
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY_DIGEST,
+    RECIPE_TERMINAL_TARGETS,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     RecipeBindingProjection,
+    RecipeFlowEdge,
     SkillResult,
     client_serialized_char_len,
     recipe_section_digest,
@@ -401,9 +405,115 @@ def _ready_recipe_segment_step(
     raise AssertionError(f"step {step_name!r} was not delivered by its checkpoint carrier")
 
 
+def _make_finalized_projection(
+    *,
+    steps: tuple[FinalizedRecipeStep, ...] | None = None,
+    edges: tuple[RecipeFlowEdge, ...] = (),
+    ingredient_names: frozenset[str] = frozenset(),
+    binding_projection: RecipeBindingProjection | None = None,
+) -> FinalizedRecipeProjection:
+    """Build one coherent finalized-recipe projection for a server fixture."""
+    finalized_steps = steps or (FinalizedRecipeStep(name="fixture-entrypoint"),)
+    return FinalizedRecipeProjection(
+        binding_projection=binding_projection or RecipeBindingProjection(invocations={}),
+        ordered_step_names=tuple(step.name for step in finalized_steps),
+        entrypoint=finalized_steps[0].name,
+        ordered_steps=finalized_steps,
+        ingredient_names=ingredient_names,
+        ordered_flow_edges=edges,
+    )
+
+
+def _make_finalized_projection_from_recipe_steps(
+    steps: Mapping[str, Any],
+    *,
+    ingredient_names: frozenset[str] = frozenset(),
+    binding_projection: RecipeBindingProjection | None = None,
+) -> FinalizedRecipeProjection:
+    """Convert a coherent RecipeStep fixture into the server's finalized projection."""
+    finalized_steps = tuple(
+        FinalizedRecipeStep(
+            name=name,
+            tool=getattr(step, "tool", None),
+            skill_name=getattr(step, "skill_name", None),
+            provider=getattr(step, "provider", None),
+            model=getattr(step, "model", None),
+            with_args=dict(getattr(step, "with_args", {}) or {}),
+            stale_threshold=getattr(step, "stale_threshold", None),
+            idle_output_timeout=getattr(step, "idle_output_timeout", None),
+            action=getattr(step, "action", None),
+            skip_when_false=getattr(step, "skip_when_false", None),
+        )
+        for name, step in steps.items()
+    )
+    edge_types = (
+        ("on_success", "success"),
+        ("on_failure", "failure"),
+        ("on_skip", "skip"),
+    )
+    allowed_targets = set(steps) | RECIPE_TERMINAL_TARGETS
+    edges = [
+        RecipeFlowEdge(
+            source=name,
+            edge_type=edge_type,
+            target=target,
+            condition=None,
+            result_field=None,
+        )
+        for name, step in steps.items()
+        for attribute, edge_type in edge_types
+        if isinstance(target := getattr(step, attribute, None), str) and target
+        if target in allowed_targets
+    ]
+    ordered_names = tuple(steps)
+    if ordered_names:
+        reachable = {ordered_names[0]}
+        changed = True
+        while changed:
+            changed = False
+            for edge in edges:
+                if (
+                    edge.source in reachable
+                    and edge.target in steps
+                    and edge.target not in reachable
+                ):
+                    reachable.add(edge.target)
+                    changed = True
+        for index, name in enumerate(ordered_names[1:], start=1):
+            if name in reachable:
+                continue
+            edges.append(
+                RecipeFlowEdge(
+                    source=ordered_names[index - 1],
+                    edge_type="success",
+                    target=name,
+                    condition=None,
+                    result_field=None,
+                )
+            )
+            reachable.add(name)
+    return _make_finalized_projection(
+        steps=finalized_steps,
+        edges=tuple(edges),
+        ingredient_names=ingredient_names,
+        binding_projection=binding_projection,
+    )
+
+
+def _install_active_recipe_projection(
+    tool_ctx: ToolContext,
+    steps: Mapping[str, Any],
+) -> None:
+    """Install one recipe-step fixture through the finalized projection authority."""
+    projection = _make_finalized_projection_from_recipe_steps(steps)
+    tool_ctx.active_recipe_projection = projection
+    tool_ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
+
+
 def _with_finalized_projection(
     result: dict[str, Any],
     *,
+    projection: FinalizedRecipeProjection,
     binding_projection: RecipeBindingProjection | None = None,
 ) -> dict[str, Any]:
     """Attach the server-only projection required by a successful serve fixture."""
@@ -411,17 +521,9 @@ def _with_finalized_projection(
         digest = result.get(key)
         if not isinstance(digest, str) or not digest.startswith("sha256:") or len(digest) != 71:
             result[key] = "sha256:" + (fill * 64)
-    names = tuple(
-        name for name in result.get("post_prune_step_names", ()) if isinstance(name, str) and name
-    )
-    if not names:
-        names = ("fixture-entrypoint",)
-    result["_finalized_projection"] = FinalizedRecipeProjection(
-        binding_projection=binding_projection or RecipeBindingProjection(invocations={}),
-        ordered_step_names=names,
-        entrypoint=names[0],
-        ordered_flow_edges=(),
-    )
+    if binding_projection is not None:
+        assert projection.binding_projection is binding_projection
+    result["_finalized_projection"] = projection
     return result
 
 

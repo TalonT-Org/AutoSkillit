@@ -224,13 +224,25 @@ def make_validation_context(
     backend_origin_map: dict[str, str] | None = None,
     binding_projection: RecipeBindingProjection | None = None,
     binding_ingredient_values: dict[str, BoundScalar] | None = None,
+    effective_routing_edges: dict[str, tuple[RouteEdge, ...]] | None = None,
 ) -> ValidationContext:
     """Build a ``ValidationContext`` from a recipe.
 
     Constructs the step graph and data-flow report once so that semantic
     rules can share the pre-built objects without redundant computation.
     """
-    raw_edges = _build_raw_step_edges(recipe)
+    if effective_routing_edges is None:
+        raw_edges = _build_raw_step_edges(recipe)
+    else:
+        step_names = frozenset(recipe.steps)
+        raw_edges = {
+            source: tuple(
+                edge
+                for edge in effective_routing_edges.get(source, ())
+                if edge.target in step_names
+            )
+            for source in recipe.steps
+        }
     step_graph = {source: {edge.target for edge in edges} for source, edges in raw_edges.items()}
     must_defined_context, predecessor_edges = _must_definition_facts(recipe, raw_edges)
     dataflow = analyze_dataflow(recipe, step_graph=step_graph)

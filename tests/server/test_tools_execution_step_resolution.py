@@ -4,9 +4,32 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import FinalizedRecipeStep
 from autoskillit.server.tools.tools_execution import run_skill
+from tests.server._helpers import _make_finalized_projection
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+def _install_active_step(ctx, step) -> None:
+    projection = _make_finalized_projection(
+        steps=(
+            FinalizedRecipeStep(
+                name=step.name,
+                tool=step.tool,
+                skill_name=step.skill_name,
+                provider=step.provider,
+                model=step.model,
+                with_args=step.with_args,
+                stale_threshold=step.stale_threshold,
+                idle_output_timeout=step.idle_output_timeout,
+                action=step.action,
+                skip_when_false=step.skip_when_false,
+            ),
+        ),
+    )
+    ctx.active_recipe_projection = projection
+    ctx.active_recipe_steps = {step.name: step for step in projection.ordered_steps}
 
 
 @pytest.mark.anyio
@@ -25,7 +48,7 @@ async def test_run_skill_resolves_output_dir_from_recipe_step(
         name="verify",
         with_args={"output_dir": str(tmp_path / ".autoskillit" / "temp")},
     )
-    tool_ctx_kitchen_open.active_recipe_steps = {"verify": step}
+    _install_active_step(tool_ctx_kitchen_open, step)
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     plan = tmp_path / "plan.md"
@@ -51,7 +74,7 @@ async def test_run_skill_resolves_stale_threshold_from_recipe_step(
     tool_ctx_kitchen_open.executor = executor
 
     step = RecipeStep(name="implement", stale_threshold=2400)
-    tool_ctx_kitchen_open.active_recipe_steps = {"implement": step}
+    _install_active_step(tool_ctx_kitchen_open, step)
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/implement ...", str(tmp_path), step_name="implement")
@@ -72,7 +95,7 @@ async def test_run_skill_resolves_idle_output_timeout_from_recipe_step(
     tool_ctx_kitchen_open.executor = executor
 
     step = RecipeStep(name="idle-scope", idle_output_timeout=0)
-    tool_ctx_kitchen_open.active_recipe_steps = {"idle-scope": step}
+    _install_active_step(tool_ctx_kitchen_open, step)
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     await run_skill("/idle-scope ...", str(tmp_path), step_name="idle-scope")
@@ -96,7 +119,7 @@ async def test_run_skill_llm_provided_params_override_recipe_step(
         with_args={"output_dir": str(tmp_path / "recipe-default")},
         stale_threshold=2400,
     )
-    tool_ctx_kitchen_open.active_recipe_steps = {"verify": step}
+    _install_active_step(tool_ctx_kitchen_open, step)
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
 
     plan = tmp_path / "plan.md"

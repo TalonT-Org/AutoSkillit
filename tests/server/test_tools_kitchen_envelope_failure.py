@@ -13,6 +13,7 @@ from tests.server._helpers import (
     _PATCHED_DEFAULTS,
     _SERVER_ONLY_KEYS,
     _configure_admitted_recipe,
+    _make_finalized_projection,
     _with_finalized_projection,
 )
 from tests.server.conftest import _make_mock_ctx
@@ -121,7 +122,8 @@ async def test_open_kitchen_recipe_found_returns_envelope_with_content_and_ingre
         "ingredients_table": "--- INGREDIENTS TABLE ---\n  task  required\n--- END TABLE ---",
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
@@ -377,7 +379,8 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
         "ingredients_table": "--- TABLE ---",
     }
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value
+        mock_ctx.recipes.load_and_validate.return_value,
+        projection=_make_finalized_projection(),
     )
     mock_recipe_info = MagicMock()
     mock_recipe_info.path = Path("/fake/recipe.yaml")

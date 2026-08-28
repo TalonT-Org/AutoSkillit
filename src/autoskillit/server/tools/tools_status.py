@@ -122,7 +122,7 @@ async def kitchen_status() -> str:
             )
 
             expected = bool(
-                ctx.active_recipe_steps and _derive_phase_a_deps(ctx.active_recipe_steps)
+                ctx.active_recipe_projection and _derive_phase_a_deps(ctx.active_recipe_projection)
             )
             target, authority, key, _lease = _select_tracker_authority(
                 ctx,

@@ -1672,6 +1672,16 @@ def test_pipeline_exploration_context_shards_under_900_lines() -> None:
     )
 
 
+def test_pipeline_exploration_context_store_under_750_lines() -> None:
+    """Keep the exploration-context Store shard within its permanent ceiling."""
+    store_path = SRC_ROOT / "pipeline" / "exploration_context" / "_store.py"
+    assert store_path.is_file(), "Missing pipeline/exploration_context/_store.py"
+    line_count = len(store_path.read_text().splitlines())
+    assert line_count <= 750, (
+        f"pipeline/exploration_context/_store.py exceeds the 750-line ceiling: {line_count} lines"
+    )
+
+
 def test_session_skills_e13_e14_exemption_is_retired() -> None:
     """REQ-CNST-010-E13/E14 (workspace/session_skills.py) is retired without replacement.
 
@@ -1687,6 +1697,20 @@ def test_session_skills_e13_e14_exemption_is_retired() -> None:
     assert "workspace/session_skills.py" not in exemptions, (
         "E13/E14 retirement for workspace/session_skills.py was not applied; "
         "the decomposition replaces this module with a facade under the 1000-line limit"
+    )
+
+
+def test_stale_workspace_skill_line_limit_exemptions_are_retired() -> None:
+    """Retired workspace skill ceilings stay absent from the exemption registry."""
+    retired_exemptions = {
+        "skills.py",
+        "workspace/skill_capabilities.py",
+        "workspace/skills.py",
+    }
+    stale_exemptions = retired_exemptions.intersection(_LINE_LIMIT_EXEMPTIONS)
+    assert not stale_exemptions, (
+        "Retired workspace skill line-limit exemptions remain registered: "
+        + ", ".join(sorted(stale_exemptions))
     )
 
 

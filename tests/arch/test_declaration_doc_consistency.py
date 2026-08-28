@@ -48,7 +48,7 @@ def _deferred_runtime_claims(
     for source, text in texts.items():
         for line in text.splitlines():
             for field in deferred_names:
-                field_pattern = re.escape(field)
+                field_pattern = rf"(?:`{re.escape(field)}`|Recipe\w*\.{re.escape(field)})"
                 if re.search(
                     rf"(?:{field_pattern}.{{0,100}}\b(?:{_EFFECT_VERBS})\b|"
                     rf"\b(?:{_EFFECT_VERBS})\b.{{0,100}}{field_pattern})",
@@ -76,7 +76,7 @@ def test_deferred_skip_when_true_claim_is_rejected_without_global_mutation() -> 
         )
     }
     claims = _deferred_runtime_claims(
-        {"synthetic": "skip_when_true will skip the guarded recipe step"},
+        {"synthetic": "`skip_when_true` will skip the guarded recipe step"},
         synthetic_deferrals,
     )
     assert claims == {"synthetic": {"skip_when_true"}}

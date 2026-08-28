@@ -370,3 +370,11 @@ def extract_always_block(skill_text: str) -> str:
     block = skill_text[start:end]
     lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
     return "\n".join(lines)
+
+
+# Implemented phoropter lens families — designed-only families (e.g.
+# refactor-lens) are excluded because they have zero lens directories under
+# skills_extended/. Shared between tests/assets/test_phoropter_registry.py
+# and tests/skills/test_phoropter_structural.py to keep a single source of
+# truth.
+IMPLEMENTED_FAMILIES: frozenset[str] = frozenset({"arch-lens", "exp-lens", "vis-lens"})

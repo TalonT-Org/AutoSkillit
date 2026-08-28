@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import load_yaml, pkg_root
+from tests._helpers import IMPLEMENTED_FAMILIES
 
 pytestmark = [pytest.mark.medium]
 
@@ -14,10 +15,6 @@ EXPECTED_FAMILIES = {"arch-lens", "exp-lens", "vis-lens", "refactor-lens"}
 # All other knobs (synthesis_strategy, dial_skill, lens_count, ...) live on
 # the tradition manifest / recipe YAML / SKILL.md frontmatter, not here.
 REQUIRED_FIELDS = frozenset({"step_naming"})
-
-# Implemented families — designed-only families (e.g. refactor-lens) are
-# excluded because they have zero lens directories under skills_extended/.
-_IMPLEMENTED_FAMILIES: frozenset[str] = frozenset({"arch-lens", "exp-lens", "vis-lens"})
 
 
 @pytest.fixture(scope="module")
@@ -94,7 +91,7 @@ def test_lens_counts_match_actual_directories() -> None:
     confirms the new minimal schema still agrees with the filesystem.
     """
     skills_root = pkg_root() / "skills_extended"
-    for family in _IMPLEMENTED_FAMILIES:
+    for family in IMPLEMENTED_FAMILIES:
         count_via_filesystem = sum(
             1 for p in skills_root.iterdir() if p.name.startswith(f"{family}-") and p.is_dir()
         )

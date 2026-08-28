@@ -681,6 +681,7 @@ def flush_session_log(
             "schema_version": 8,
         }
         index_path = log_root / "sessions.jsonl"
+        archive_path = log_root / "sessions-archive.jsonl"
         index_rows = [
             row
             for row in read_tolerant_session_index_rows(index_path)
@@ -702,6 +703,13 @@ def flush_session_log(
         )
 
         retained_rows = [row for row in index_rows if row.get("dir_name") in surviving_names]
+        evicted_rows = [row for row in index_rows if row.get("dir_name") not in surviving_names]
+        if evicted_rows:
+            atomic_write(
+                index_path,
+                "".join(_fast_dumps(row, sort_keys=True) + "\n" for row in index_rows),
+            )
+            _append_session_archive_rows(archive_path, evicted_rows)
         atomic_write(
             index_path,
             "".join(_fast_dumps(row, sort_keys=True) + "\n" for row in retained_rows),

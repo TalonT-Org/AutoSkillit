@@ -42,7 +42,9 @@ def _install_composed_recipe(tmp_path: Path) -> None:
 
 
 def test_failed_serve_clears_all_cached_projection_authority() -> None:
-    from autoskillit.server.tools.tools_kitchen import _clear_active_recipe_projection
+    from autoskillit.server.tools.tools_kitchen._open_kitchen import (
+        _clear_active_recipe_projection,
+    )
 
     tool_ctx = MagicMock()
     tool_ctx.active_recipe_projection = object()

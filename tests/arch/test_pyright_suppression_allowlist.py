@@ -22,7 +22,7 @@ PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
         "recipe/__init__.py",
         316,
     ): "lazy-registry: method added by _register_rule_module() side effects",
-    ("recipe/_api_orchestration.py", 361): (
+    ("recipe/_api_orchestration.py", 362): (
         "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()"
     ),
 }

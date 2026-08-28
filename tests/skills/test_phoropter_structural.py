@@ -170,7 +170,7 @@ def test_activate_deps_from_frontmatter(family: str, slug: str) -> None:
 
 @pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])
 def test_composite_slugs_from_body(family: str, slug: str) -> None:
-    """Body-derived composite classification: spec-index marks composite, absence marks non-composite.
+    """Body-derived composite classification: spec-index marks composite.
 
     Non-composite lenses must reference yaml:figure-spec. Composite lenses may
     reference figure-spec as an exclusion note; spec-index is the discriminator.

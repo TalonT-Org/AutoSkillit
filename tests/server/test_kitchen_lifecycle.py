@@ -184,7 +184,7 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
     peer_target = TrackerAuthorityTarget.for_project(tmp_path, "AB", expected=False)
     peer_lease_path = tracker_lease_path(peer_target)
 
-    lease = ArtifactLease.acquire_shared(peer_lease_path)
+    lease = ArtifactLease.acquire_shared(peer_lease_path, timeout=2.0)
     peer_lease_inode = peer_lease_path.stat().st_ino
     try:
         with (
@@ -215,7 +215,7 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
         assert peer_lease_path.exists()
         assert peer_lease_path.stat().st_ino == peer_lease_inode
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(peer_lease_path, blocking=False)
+            ArtifactLease.acquire_exclusive(peer_lease_path, timeout=0.0)
         assert not current_target.path.exists()
         assert tracker_lease_path(current_target).exists()
     finally:
@@ -339,7 +339,7 @@ def test_open_preserves_orphan_while_shared_lease_is_held(monkeypatch, tmp_path)
     _write_registry(monkeypatch, tmp_path, [])
     target = TrackerAuthorityTarget.for_project(tmp_path, "K1", expected=False)
 
-    lease = ArtifactLease.acquire_shared(tracker_lease_path(target))
+    lease = ArtifactLease.acquire_shared(tracker_lease_path(target), timeout=2.0)
     try:
         prune_stale_kitchen_state(tmp_path, "K2")
         assert target.path.exists()

@@ -296,7 +296,7 @@ class TestCheckSessionIndexProjection:
         self._write_summary(tmp_path, "complete")
         self._write_index(tmp_path, "complete")
         lock_path = session_index_lock_path(tmp_path)
-        writer = ArtifactLease.acquire_exclusive(lock_path, blocking=True)
+        writer = ArtifactLease.acquire_exclusive(lock_path, timeout=2.0)
         completed = threading.Event()
         result: list[object] = []
 
@@ -334,7 +334,7 @@ class TestCheckSessionIndexProjection:
             snapshot = original_read(log_root)
             if reads == 1:
                 with ArtifactLease.acquire_exclusive(
-                    session_index_lock_path(log_root), blocking=True
+                    session_index_lock_path(log_root), timeout=2.0
                 ):
                     pass
             return snapshot
@@ -360,15 +360,15 @@ class TestCheckSessionIndexProjection:
 
         def racing_read(log_root: Path):
             snapshot = original_read(log_root)
-            with ArtifactLease.acquire_exclusive(lock_path, blocking=True):
+            with ArtifactLease.acquire_exclusive(lock_path, timeout=2.0):
                 pass
             return snapshot
 
         original_acquire = ArtifactLease.acquire_existing_shared
 
-        def disappearing_acquire(path: Path):
+        def disappearing_acquire(path: Path, *, timeout: float):
             path.unlink()
-            return original_acquire(path)
+            return original_acquire(path, timeout=timeout)
 
         monkeypatch.setattr(doctor_runtime, "_read_session_index_projection", racing_read)
         monkeypatch.setattr(ArtifactLease, "acquire_existing_shared", disappearing_acquire)

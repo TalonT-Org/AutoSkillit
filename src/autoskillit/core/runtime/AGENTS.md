@@ -8,6 +8,11 @@ All modules are stdlib-only (safe for import from hook subprocesses). `readiness
 `core.io.atomic_write`; `worktree_gate_lease.py` uses the `core.io` versioned-JSON helpers and
 `core.paths.default_log_dir` so its lock cannot be deleted by worktree cleanup.
 
+`ArtifactLease.acquire_shared`, `acquire_existing_shared`, and `acquire_exclusive` require an
+explicit finite, non-negative keyword-only `timeout`. `0.0` is fail-fast; positive values use
+bounded nonblocking polling. Keep the implementation and the shared flock deadline helper
+stdlib-only so they remain safe at IL-0.
+
 `_reclamation.py` classifies kernel-derived path evidence by `Revocability` (`REVOCABLE` —
 cwd/fd/maps, a live kernel view that can genuinely become false — vs `MONOTONIC` —
 environ/cmdline, an `execve()`-time snapshot that cannot) and exposes `veto_paths()`/

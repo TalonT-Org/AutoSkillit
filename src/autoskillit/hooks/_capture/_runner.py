@@ -86,6 +86,7 @@ UnavailableCaptureReference = _snapshot.UnavailableCaptureReference
 verify_capture_snapshot = _snapshot.verify_capture_snapshot
 CaptureCapacitySpec = _types.CaptureCapacitySpec
 CaptureFailureEvidence = _types.CaptureFailureEvidence
+HOT_PATH_LOCK_WAIT = _types.HOT_PATH_LOCK_WAIT
 _CAPTURE_ID_RE = _capture_contract._CAPTURE_ID_RE
 _MAX_COMMAND_BYTES = _capture_contract._MAX_COMMAND_BYTES
 CaptureFailureReason = _capture_contract.CaptureFailureReason
@@ -285,9 +286,15 @@ def _policy_capacity(value: object) -> CaptureCapacitySpec | None:
     if not validated:
         return None
     try:
-        return replace(CaptureCapacitySpec(), **validated)
+        candidate = replace(CaptureCapacitySpec(), **validated)
     except (TypeError, ValueError):
         return None
+    if (
+        candidate.compaction_low_bytes < _types.REQUIRED_RETENTION_BYTES
+        or candidate.hard_ledger_bytes > _capture_lifecycle.MAX_LEDGER_BYTES
+    ):
+        return None
+    return candidate
 
 
 def read_capture_policy(anchor: ProjectAnchor) -> CapturePolicy:
@@ -607,12 +614,37 @@ def run_capture(
                     )
                 )
 
-        root = open_capture_root(anchor, create=True)
-        lifecycle = CaptureLifecycleStore.from_open_authorities(
-            anchor, root, capacity=policy.capacity
-        )
-        artifact = create_capture_artifact(root, capture_id, lifecycle)
-        artifact_writer_fd = _duplicate_artifact_writer(artifact)
+        failure_stage = "capture root open"
+        try:
+            root = open_capture_root(anchor, create=True)
+            failure_stage = "capture lifecycle store open"
+            lifecycle = CaptureLifecycleStore.from_open_authorities(
+                anchor,
+                root,
+                lock_wait=HOT_PATH_LOCK_WAIT,
+                capacity=policy.capacity,
+            )
+            failure_stage = "capture artifact creation"
+            artifact = create_capture_artifact(root, capture_id, lifecycle)
+            failure_stage = "capture writer duplication"
+            artifact_writer_fd = _duplicate_artifact_writer(artifact)
+        except BaseException as exc:
+            reason = _capture_failure_policy.runtime_failure_reason(exc)
+            failure = _capture_replay.failure_transport(
+                reason=reason,
+                stage=(
+                    "capture setup"
+                    if reason in _capture_failure_policy.CAPACITY_FAILURE_REASONS
+                    else failure_stage
+                ),
+                detail=f"{failure_stage} failed",
+                shell_returncode=None,
+                settlement=None,
+            )
+            if not isinstance(exc, _CAPTURE_RUNTIME_ERRORS):
+                _capture_replay.capture_failure_return(failure)
+                raise
+            return _capture_replay.capture_failure_return(failure)
         command_outcome: CommandOutcome | None = None
         command_returncode: int | None = None
         settlement: _capture_replay.RunnerSettlementEvidence | None = None

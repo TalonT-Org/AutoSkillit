@@ -9,9 +9,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from . import _authority, _migration, _orphan_scan
+from . import _authority, _migration, _orphan_scan, _sweep
 from ._failure_policy import CaptureFailureReason, runtime_failure_reason
-from ._lifecycle_policy import CaptureRetentionPhase
+from ._lifecycle_policy import CaptureRetentionPhase, CaptureState
 from ._module_identity import register_module_aliases
 from ._syntax import PUBLIC_NAME_RE
 from ._types import (
@@ -22,6 +22,7 @@ from ._types import (
     LockContended,
     SweepBudgetSpec,
     classify_cleanup_outcome,
+    lock_wait_for_budget,
 )
 
 if TYPE_CHECKING:
@@ -69,16 +70,32 @@ def _failure_outcome(blocker: CleanupBlocker) -> CaptureCleanupOutcome:
 
 
 _FAILURE_BLOCKERS = {
+    CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.RECLAMATION_DEBT_ASSIST: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.RECLAMATION_DEBT_STALL: CleanupBlocker.CAPACITY_EXHAUSTED,
+    CaptureFailureReason.FILESYSTEM_AUTHORITY: CleanupBlocker.FILESYSTEM_AUTHORITY,
     CaptureFailureReason.PERMISSION_DENIED: CleanupBlocker.PERMISSION_DENIED,
     CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
     CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
     CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
+    CaptureFailureReason.RECOVERY_CONTENDED: CleanupBlocker.RECOVERY_CONTENDED,
     CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+    CaptureFailureReason.UNKNOWN_SETUP: CleanupBlocker.UNKNOWN_SETUP,
 }
+if set(_FAILURE_BLOCKERS) != set(CaptureFailureReason):
+    raise AssertionError(
+        "_FAILURE_BLOCKERS must cover exactly the CaptureFailureReason members: "
+        f"missing={set(CaptureFailureReason) - set(_FAILURE_BLOCKERS)}, "
+        f"extra={set(_FAILURE_BLOCKERS) - set(CaptureFailureReason)}"
+    )
 
 
 def _failure_blocker(reason: CaptureFailureReason) -> CleanupBlocker:
-    return _FAILURE_BLOCKERS.get(reason, CleanupBlocker.FILESYSTEM_AUTHORITY)
+    return _FAILURE_BLOCKERS[reason]
 
 
 def reconcile_capture_store(
@@ -90,7 +107,7 @@ def reconcile_capture_store(
     started = time.monotonic()
     try:
         with _authority.open_capture_lifecycle(
-            project_cwd, create=False, open_budget=budget
+            project_cwd, create=False, lock_wait=lock_wait_for_budget(budget)
         ) as lifecycle:
             return lifecycle.sweep(budget)
     except _authority.CaptureStoreAbsentError:
@@ -134,6 +151,10 @@ class CaptureStoreStats:
 
     blocker: CleanupBlocker
     live_records: int = 0
+    # ACTIVE finalized records become due without entering ELIGIBLE; this
+    # field is the true store-wide due count, while eligible_records remains
+    # the narrow ABANDONED-only retention phase counter.
+    due_records: int = 0
     eligible_records: int = 0
     deleting_records: int = 0
     ledger_bytes: int = 0
@@ -149,18 +170,19 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
     the doctor battery's read-only check and ``autoskillit capture-store``
     (without ``--reclaim``) both call this and only this, so neither surface
     can drift from what a real reconciliation pass would find. A diagnostic
-    read must never hang: opened with RUNNER_TAIL_BUDGET as its open_budget
-    so a contended lock — at store-open time or this function's own record
-    load — is bounded the same way a real sweep would be, never blocking
-    indefinitely.
+    A read must never hang: its lock-wait policy is derived from
+    ``RUNNER_TAIL_BUDGET``, so store-open and record-load contention are
+    bounded the same way as a real sweep.
     """
     if not isinstance(project_cwd, str) or not project_cwd:
         return CaptureStoreStats(CleanupBlocker.FILESYSTEM_AUTHORITY)
     try:
         with _authority.open_capture_lifecycle(
-            project_cwd, create=False, open_budget=RUNNER_TAIL_BUDGET
+            project_cwd,
+            create=False,
+            lock_wait=lock_wait_for_budget(RUNNER_TAIL_BUDGET),
         ) as store:
-            with store._locked(blocking=False):
+            with store._locked():
                 records, _compaction_epoch, ledger_bytes = store._load_locked()
             tracked = frozenset(
                 record.public_name
@@ -190,6 +212,11 @@ def capture_store_stats(project_cwd: str) -> CaptureStoreStats:
                     1
                     for record in records.values()
                     if record.retention_phase is not CaptureRetentionPhase.DELETED
+                ),
+                due_records=_sweep.count_due_records(
+                    records.values(),
+                    now,
+                    {CaptureState.DELETED},
                 ),
                 eligible_records=sum(
                     1

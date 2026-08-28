@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .._json import fast_dumps as _fast_dumps
 from ._linux_proc import read_boot_id, read_starttime_ticks
+from .artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, acquire_flock_with_timeout
 
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 runtime is stdlib-only
 
@@ -50,7 +51,12 @@ def _registry_lock(path: Path) -> Iterator[None]:
     """Serialize mutations of one session registry."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.with_suffix(".lock").open("w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        acquire_flock_with_timeout(
+            lock_file.fileno(),
+            operation=fcntl.LOCK_EX,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            path=path.with_suffix(".lock"),
+        )
         yield
 
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import concurrent.futures
 import errno
+import fcntl
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -15,7 +17,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import FrozenInstanceError, asdict, replace
+from dataclasses import FrozenInstanceError, asdict, fields, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -24,6 +26,7 @@ import pytest
 
 import autoskillit.hooks._capture._capacity as capture_capacity
 import autoskillit.hooks._capture._ledger_view as capture_ledger_view
+import autoskillit.hooks._capture._lifecycle_policy as capture_lifecycle_policy
 import autoskillit.hooks._capture._orphan_scan as orphan_scan
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._sweep as capture_sweep
@@ -47,6 +50,14 @@ from autoskillit.hooks._capture._snapshot import (
 from autoskillit.hooks._capture._syntax import PUBLIC_NAME_RE
 from autoskillit.hooks._capture._types import (
     BLOCKER_FAMILY,
+    DEBT_ASSIST_BUDGET,
+    DEBT_ASSIST_MAX_TRANSITIONS,
+    HOT_PATH_LOCK_WAIT,
+    MEASURED_BYTES_PER_RECORD,
+    REQUIRED_RETENTION_BYTES,
+    SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND,
+    SUPPORTED_PEAK_ADMISSIONS_PER_SECOND,
+    SUPPORTED_PEAK_PRODUCERS,
     TRANSITION_RESCUE_BUDGET,
     CaptureCapacitySpec,
     CaptureCleanupOutcome,
@@ -54,6 +65,8 @@ from autoskillit.hooks._capture._types import (
     CleanupBlocker,
     CleanupProgress,
     CleanupSeverity,
+    LockContended,
+    LockWaitSpec,
     SweepBudgetSpec,
     classify_cleanup_outcome,
 )
@@ -117,6 +130,44 @@ def _start_lock_holder(lock_path: Path, *, hold_seconds: float) -> subprocess.Po
     return holder
 
 
+def _start_thread_lock_holder(
+    lock_path: Path,
+) -> tuple[
+    threading.Thread,
+    threading.Event,
+    threading.Event,
+    threading.Event,
+    list[BaseException],
+]:
+    """Hold a lifecycle lock until the caller releases the test thread."""
+    acquired = threading.Event()
+    release = threading.Event()
+    stopped = threading.Event()
+    failures: list[BaseException] = []
+
+    def hold_lock() -> None:
+        fd = -1
+        try:
+            fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            acquired.set()
+            assert release.wait(timeout=5)
+        except BaseException as exc:
+            failures.append(exc)
+            acquired.set()
+        finally:
+            if fd >= 0:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                finally:
+                    os.close(fd)
+            stopped.set()
+
+    holder = threading.Thread(target=hold_lock)
+    holder.start()
+    return holder, acquired, release, stopped, failures
+
+
 _CAPTURE_ID = "0123456789abcdef"
 
 
@@ -148,21 +199,22 @@ class _Clock:
 def test_capacity_failure_reason_mapping_is_exhaustive_and_enum_keyed() -> None:
     mapping = capture_capacity._FAILURE_REASONS
 
-    assert mapping == {
-        CaptureCapacityReason.ACTIVE_CAPACITY: (CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED),
-        CaptureCapacityReason.RETENTION_CAPACITY: (
-            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED
-        ),
-        CaptureCapacityReason.EVIDENCE_CAPACITY: (
-            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED
-        ),
-        CaptureCapacityReason.PROJECTED_COMPACTED_BYTES: (
-            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED
-        ),
-        CaptureCapacityReason.HARD_LEDGER_CAPACITY: (
-            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED
-        ),
-    }
+    assert tuple(mapping) == tuple(CaptureCapacityReason)
+    assert mapping[CaptureCapacityReason.RECLAMATION_DEBT_ASSIST] is (
+        CaptureFailureReason.RECLAMATION_DEBT_ASSIST
+    )
+    assert mapping[CaptureCapacityReason.RECLAMATION_DEBT_STALL] is (
+        CaptureFailureReason.RECLAMATION_DEBT_STALL
+    )
+
+
+def test_capture_enum_mappings_are_total_drift_guards() -> None:
+    """Drift guard: these closed enum mappings may already be correct today."""
+    assert set(capture_capacity._REASON_DETAILS) == set(CaptureCapacityReason)
+    assert set(capture_lifecycle_policy._STATE_SUCCESSORS) == set(CaptureState)
+    assert set(capture_lifecycle_policy._REFERENCE_SUCCESSORS) == set(CaptureReferenceStatus)
+    assert set(capture_lifecycle_policy._DELIVERY_SUCCESSORS) == set(CaptureDeliveryStatus)
+    assert set(capture_lifecycle_policy._RETENTION_SUCCESSORS) == set(CaptureRetentionPhase)
 
 
 @pytest.mark.parametrize("reason", tuple(CaptureCapacityReason))
@@ -253,6 +305,80 @@ def test_capacity_rescue_propagates_second_capacity_failure(
     finally:
         root.close()
         anchor.close()
+
+
+def test_reserve_capture_capacity_rescue_retries_with_a_bounded_lock_wait(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A byte-capacity rescue cannot turn its retry into an unbounded wait."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        project,
+        clock,
+        lock_wait=LockWaitSpec(max_wait_seconds=0.05),
+    )
+    lock_path = _capture_dir(project) / capture_lifecycle.LOCK_NAME
+    real_admission_reason = store._admission_reason
+    real_sweep = store.sweep
+    holder_state: (
+        tuple[
+            threading.Thread,
+            threading.Event,
+            threading.Event,
+            threading.Event,
+            list[BaseException],
+        ]
+        | None
+    ) = None
+    forced_capacity_rescue = False
+
+    def force_projected_byte_pressure(*args, **kwargs):
+        nonlocal forced_capacity_rescue, holder_state
+        if not forced_capacity_rescue:
+            forced_capacity_rescue = True
+            holder_state = _start_thread_lock_holder(lock_path)
+            return capture_capacity.AdmissionDecision(
+                CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+            )
+        return real_admission_reason(*args, **kwargs)
+
+    def sweep_after_holder_acquires(budget: SweepBudgetSpec) -> CaptureCleanupOutcome:
+        assert holder_state is not None
+        _holder, acquired, _release, _stopped, failures = holder_state
+        assert acquired.wait(timeout=1)
+        assert failures == []
+        return real_sweep(budget)
+
+    monkeypatch.setattr(store, "_admission_reason", force_projected_byte_pressure)
+    monkeypatch.setattr(store, "sweep", sweep_after_holder_acquires)
+    monkeypatch.setattr(store, "_monotonic", time.monotonic)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(store.reserve_capture, _CAPTURE_ID)
+    try:
+        with pytest.raises(LockContended):
+            future.result(timeout=0.5)
+        assert forced_capacity_rescue
+    finally:
+        if holder_state is not None:
+            holder, _acquired, release, stopped, failures = holder_state
+            release.set()
+            try:
+                future.result(timeout=1)
+            except LockContended:
+                pass
+            root.close()
+            anchor.close()
+            executor.shutdown(wait=True, cancel_futures=True)
+            holder.join(timeout=1)
+            assert stopped.is_set()
+            assert not holder.is_alive()
+            assert failures == []
+        else:
+            root.close()
+            anchor.close()
+            executor.shutdown(wait=True, cancel_futures=True)
 
 
 def test_retention_seconds_use_lifecycle_policy_authority() -> None:
@@ -438,21 +564,23 @@ def test_mutation_then_boundary_admission_matches_uncached_decision(
             compaction_high_bytes=projected_bytes,
             hard_ledger_bytes=projected_bytes + store._capacity.recovery_headroom_bytes + 1,
         )
-        cold_reason = capture_capacity.admission_reason(
+        cold_decision = capture_capacity.admission_reason(
             records,
             candidate,
             compaction_epoch=compaction_epoch,
             spec=boundary_capacity,
             active_limit=boundary_capacity.max_operational_records,
             sizer=capture_capacity.CompactedFrameSizer(),
+            now=store._wall_clock(),
+            sweep_active=False,
         )
-        assert cold_reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
+        assert cold_decision.reason is CaptureCapacityReason.PROJECTED_COMPACTED_BYTES
 
         monkeypatch.setattr(store, "_capacity", boundary_capacity)
         with pytest.raises(CaptureCapacityError) as failure:
             store.reserve_capture("f" * 16)
 
-        assert failure.value.reason is cold_reason
+        assert failure.value.reason is cold_decision.reason
     finally:
         root.close()
         anchor.close()
@@ -668,10 +796,31 @@ def test_store_factory_rejects_invalid_capacity_specification(tmp_path: Path) ->
     root = open_capture_root(anchor, create=True)
     try:
         with pytest.raises(CaptureLifecycleError, match="invalid capture capacity"):
-            CaptureLifecycleStore.from_open_authorities(anchor, root, capacity=object())  # type: ignore[arg-type]
+            CaptureLifecycleStore.from_open_authorities(
+                anchor,
+                root,
+                lock_wait=HOT_PATH_LOCK_WAIT,
+                capacity=object(),  # type: ignore[arg-type]
+            )
     finally:
         root.close()
         anchor.close()
+
+
+def test_lifecycle_lock_apis_expose_no_unbounded_wait_option() -> None:
+    """Lock acquisition is policy-owned; callers cannot request blocking I/O."""
+    assert "blocking" not in inspect.signature(CaptureLifecycleStore._locked).parameters
+    assert (
+        "blocking" not in inspect.signature(capture_lifecycle._admission._acquire_flock).parameters
+    )
+
+
+def test_store_factory_requires_an_explicit_lock_wait_policy() -> None:
+    lock_wait = inspect.signature(CaptureLifecycleStore.from_open_authorities).parameters[
+        "lock_wait"
+    ]
+    assert lock_wait.kind is inspect.Parameter.KEYWORD_ONLY
+    assert lock_wait.default is inspect.Parameter.empty
 
 
 @pytest.mark.parametrize("field_name", ("created_at", "next_attempt_at", "retention_at"))
@@ -734,6 +883,7 @@ def _open_store(
     clock: _Clock,
     *,
     capacity: CaptureCapacitySpec | None = None,
+    lock_wait: LockWaitSpec = HOT_PATH_LOCK_WAIT,
 ):
     project.mkdir(exist_ok=True)
     anchor = open_project_anchor(str(project))
@@ -747,6 +897,7 @@ def _open_store(
         root,
         wall_clock=clock.wall,
         monotonic=clock.monotonic,
+        lock_wait=lock_wait,
         capacity=capacity,
     )
     return anchor, root, store
@@ -925,14 +1076,14 @@ def _coordinate_transition_race(
     load_entries = 0
 
     @contextmanager
-    def coordinated_locked(*, blocking: bool = True):
+    def coordinated_locked():
         nonlocal lock_entries
         with counter_lock:
             lock_entries += 1
             coordinate = lock_entries <= 2
         if coordinate:
             entrants.wait(timeout=5)
-        with real_locked(blocking=blocking):
+        with real_locked():
             yield
 
     def coordinated_load():
@@ -976,6 +1127,7 @@ def test_lifecycle_store_rejects_direct_construction(tmp_path: Path) -> None:
                 root.fd,
                 project_identity=(anchor.identity.device, anchor.identity.inode),
                 root_identity=(root.identity.device, root.identity.inode),
+                lock_wait=HOT_PATH_LOCK_WAIT,
             )
     finally:
         root.close()
@@ -1053,6 +1205,7 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
             anchor,
             root,
             wall_clock=lambda: 1_000_000.0,
+            lock_wait=HOT_PATH_LOCK_WAIT,
         )
         migrated = store.get_record(_CAPTURE_ID)
         preserved = store.get_record(other_id)
@@ -1061,6 +1214,7 @@ def test_mixed_legacy_history_migrates_once_without_manufacturing_final_authorit
             anchor,
             root,
             wall_clock=lambda: 1_000_000.0,
+            lock_wait=HOT_PATH_LOCK_WAIT,
         )
 
         assert migrated is not None
@@ -1138,12 +1292,15 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         root.fd,
         project_identity=project_identity,
         root_identity=root_identity,
+        lock_wait=HOT_PATH_LOCK_WAIT,
         wall_clock=lambda: 3_000_000.0,
         capacity=CaptureCapacitySpec(
             max_operational_records=8,
             max_retained_records=8,
             max_evidence_records=8,
             max_tombstones=1,
+            reclamation_debt_assist_records=6,
+            reclamation_debt_stall_records=7,
             compaction_low_bytes=low,
             compaction_high_bytes=high,
             hard_ledger_bytes=high + 5120,
@@ -1173,12 +1330,14 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         assert bounded.cursor_writes == 0
 
         store._sweep_budget = capture_reconcile.RUNNER_TAIL_BUDGET
+        store._sweep_started_monotonic = store._monotonic()
         store._sweep_records_inspected = store._sweep_replay_bytes = 0
         store._sweep_transitions = store._sweep_cursor_writes = 0
         try:
             store.get_record(_CAPTURE_ID)
         finally:
             store._sweep_budget = None
+            store._sweep_started_monotonic = None
 
         assert store._sweep_cursor_writes == 1
         decoded = capture_lifecycle._capture_ledger.decode_ledger(ledger.read_bytes())
@@ -1236,12 +1395,15 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
         root.fd,
         project_identity=project_identity,
         root_identity=root_identity,
+        lock_wait=HOT_PATH_LOCK_WAIT,
         wall_clock=lambda: 3_000_000.0,
         capacity=CaptureCapacitySpec(
             max_operational_records=128,
             max_retained_records=128,
             max_evidence_records=128,
             max_tombstones=1,
+            reclamation_debt_assist_records=126,
+            reclamation_debt_stall_records=127,
             compaction_low_bytes=low,
             compaction_high_bytes=low + 4096,
             hard_ledger_bytes=low + 8192,
@@ -1263,12 +1425,14 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
             max_cursor_writes=len(capture_ids),
             max_duration_seconds=5.0,
         )
+        store._sweep_started_monotonic = store._monotonic()
         with encode_frame_accounting(monkeypatch) as encoded_capture_ids:
             store.get_record(capture_ids[-1])
 
         assert len(encoded_capture_ids) <= len(capture_ids) * 8
     finally:
         store._sweep_budget = None
+        store._sweep_started_monotonic = None
         root.close()
         anchor.close()
 
@@ -1616,6 +1780,7 @@ def test_restart_normalization_surfaces_unexpected_lease_failure(
                 root,
                 wall_clock=clock.wall,
                 monotonic=clock.monotonic,
+                lock_wait=HOT_PATH_LOCK_WAIT,
             )
     finally:
         artifact.close_artifact_fd()
@@ -2698,10 +2863,13 @@ def test_terminated_producer_is_recovered_by_independent_store(tmp_path: Path) -
         "from autoskillit.hooks._capture._authority import "
         "open_capture_root, open_project_anchor\n"
         "from autoskillit.hooks._capture_artifacts import create_capture_artifact\n"
+        "from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT\n"
         "from autoskillit.hooks._capture_lifecycle import CaptureLifecycleStore\n"
         "anchor = open_project_anchor(sys.argv[1])\n"
         "root = open_capture_root(anchor, create=True)\n"
-        "store = CaptureLifecycleStore.from_open_authorities(anchor, root)\n"
+        "store = CaptureLifecycleStore.from_open_authorities(\n"
+        "    anchor, root, lock_wait=HOT_PATH_LOCK_WAIT\n"
+        ")\n"
         "artifact = create_capture_artifact(root, sys.argv[2], store)\n"
         "os.write(artifact.fd, b'abandoned')\n"
         "os.fsync(artifact.fd)\n"
@@ -3158,6 +3326,129 @@ def test_runner_tail_budget_always_retires_at_least_one_record_from_a_backlog(
 
         assert outcome.deleted >= 1
     finally:
+        root.close()
+        anchor.close()
+
+
+def test_sweep_lock_wait_clamps_each_acquisition_to_the_active_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Later sweep records cannot each claim a fresh lock-wait interval."""
+    project = tmp_path / "project"
+    clock = _Clock()
+    lock_wait = LockWaitSpec(max_wait_seconds=0.02)
+    anchor, root, store = _open_store(project, clock, lock_wait=lock_wait)
+    sleep_durations: list[float] = []
+    lock_attempts: list[float] = []
+
+    def contend_then_succeed(_fd: int, operation: int) -> None:
+        if operation == fcntl.LOCK_UN:
+            return
+        assert operation == fcntl.LOCK_EX | fcntl.LOCK_NB
+        lock_attempts.append(clock.monotonic())
+        if len(lock_attempts) % 2:
+            raise OSError(errno.EAGAIN, "lifecycle lock is held")
+
+    def advance_sleep(seconds: float) -> None:
+        sleep_durations.append(seconds)
+        clock.advance(seconds)
+
+    try:
+        _seed_finalized_captures(root, store, count=3)
+        clock.advance(3601)
+        monkeypatch.setattr(capture_lifecycle._admission.fcntl, "flock", contend_then_succeed)
+        monkeypatch.setattr(capture_lifecycle._admission.time, "sleep", advance_sleep)
+        monkeypatch.setattr(capture_lifecycle._admission.random, "uniform", lambda *_args: 0.01)
+
+        sweep_deadline = clock.monotonic() + 0.05
+        outcome = store.sweep(_sweep_budget(8, 0.05))
+
+        assert outcome.duration == pytest.approx(0.05)
+        assert len(sleep_durations) >= 5
+        assert all(duration <= 0.01 for duration in sleep_durations)
+        assert all(attempt < sweep_deadline for attempt in lock_attempts)
+        assert len(lock_attempts) >= 6
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_hot_path_lock_wait_is_explicit_and_deterministic() -> None:
+    assert HOT_PATH_LOCK_WAIT == LockWaitSpec(max_wait_seconds=2.0)
+
+
+@pytest.mark.parametrize("field_name", ("max_wait_seconds",))
+@pytest.mark.parametrize(
+    "value",
+    (float("nan"), float("inf"), float("-inf"), True, False, 0.0, -1.0),
+)
+def test_lock_wait_spec_rejects_non_positive_or_non_finite_values(
+    field_name: str,
+    value: object,
+) -> None:
+    assert field_name == "max_wait_seconds"
+    with pytest.raises(ValueError, match="lock wait must be positive and finite"):
+        LockWaitSpec(max_wait_seconds=value)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("field_name", tuple(field.name for field in fields(SweepBudgetSpec)))
+def test_sweep_budget_spec_exercises_each_field(field_name: str) -> None:
+    """Drift guard: every bounded sweep field is exercised by this matrix."""
+    values = asdict(SweepBudgetSpec())
+    if field_name == "max_directory_entries_scanned":
+        values[field_name] = 1
+        assert SweepBudgetSpec(**values).max_directory_entries_scanned == 1
+        return
+
+    values[field_name] = 0
+    with pytest.raises(ValueError, match="cleanup bounds must be positive and finite"):
+        SweepBudgetSpec(**values)
+
+
+@pytest.mark.parametrize("field_name", tuple(field.name for field in fields(CaptureCapacitySpec)))
+def test_capture_capacity_spec_exercises_each_field(field_name: str) -> None:
+    """Drift guard: every bounded capacity field rejects an exhausted value."""
+    values = asdict(CaptureCapacitySpec())
+    values[field_name] = 0
+
+    with pytest.raises(ValueError, match="invalid capture capacity specification"):
+        CaptureCapacitySpec(**values)
+
+
+def test_store_open_contention_uses_the_hot_path_lock_wait(tmp_path: Path) -> None:
+    """The no-budget factory shape still has a bounded lock acquisition."""
+    project = tmp_path / "project"
+    anchor, root, _store = _open_store(project, _Clock())
+    holder, acquired, release, stopped, holder_failures = _start_thread_lock_holder(
+        _capture_dir(project) / capture_lifecycle.LOCK_NAME
+    )
+    assert acquired.wait(timeout=1)
+    assert holder_failures == []
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(
+        CaptureLifecycleStore.from_open_authorities,
+        anchor,
+        root,
+        lock_wait=HOT_PATH_LOCK_WAIT,
+    )
+    try:
+        started = time.monotonic()
+        with pytest.raises(LockContended):
+            future.result(timeout=2.5)
+        elapsed = time.monotonic() - started
+        assert elapsed < 2.25, f"store-open lock contention was not bounded: {elapsed}s"
+    finally:
+        release.set()
+        try:
+            future.result(timeout=1)
+        except LockContended:
+            pass
+        executor.shutdown(wait=True, cancel_futures=True)
+        holder.join(timeout=1)
+        assert stopped.is_set()
+        assert not holder.is_alive()
+        assert holder_failures == []
         root.close()
         anchor.close()
 
@@ -3678,6 +3969,7 @@ def test_persisted_cursor_reaches_reclaimable_work_behind_live_prefix(
             root,
             wall_clock=clock.wall,
             monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
         )
         second = reopened.sweep(budget)
 
@@ -4070,44 +4362,13 @@ def test_reconcile_adapter_preserves_runtime_failure_reason(
     assert outcome.errors == 1
 
 
-@pytest.mark.parametrize(
-    ("reason", "blocker"),
-    (
-        (
-            CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED,
-            CleanupBlocker.FILESYSTEM_AUTHORITY,
-        ),
-        (
-            CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED,
-            CleanupBlocker.FILESYSTEM_AUTHORITY,
-        ),
-        (
-            CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED,
-            CleanupBlocker.FILESYSTEM_AUTHORITY,
-        ),
-        (
-            CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED,
-            CleanupBlocker.FILESYSTEM_AUTHORITY,
-        ),
-        (
-            CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
-            CleanupBlocker.FILESYSTEM_AUTHORITY,
-        ),
-        (CaptureFailureReason.PERMISSION_DENIED, CleanupBlocker.PERMISSION_DENIED),
-        (CaptureFailureReason.FILESYSTEM_IO, CleanupBlocker.FILESYSTEM_IO),
-        (CaptureFailureReason.LEDGER_INTEGRITY, CleanupBlocker.LEDGER_INTEGRITY),
-        (CaptureFailureReason.MIGRATION_BLOCKED, CleanupBlocker.MIGRATION_BLOCKED),
-        (CaptureFailureReason.FILESYSTEM_AUTHORITY, CleanupBlocker.FILESYSTEM_AUTHORITY),
-        (CaptureFailureReason.RECOVERY_CONTENDED, CleanupBlocker.FILESYSTEM_AUTHORITY),
-        (CaptureFailureReason.SNAPSHOT_INTEGRITY, CleanupBlocker.LEDGER_INTEGRITY),
-        (CaptureFailureReason.UNKNOWN_SETUP, CleanupBlocker.FILESYSTEM_AUTHORITY),
-    ),
-)
+@pytest.mark.parametrize("reason", tuple(CaptureFailureReason))
 def test_reconcile_adapter_preserves_closed_setup_reason(
     monkeypatch: pytest.MonkeyPatch,
     reason: CaptureFailureReason,
-    blocker: CleanupBlocker,
 ) -> None:
+    """The generated enum coverage prevents setup-reason mapping drift."""
+
     def fail_open(*_args, **_kwargs):
         raise CaptureSetupError(reason, "capture setup failed")
 
@@ -4118,7 +4379,27 @@ def test_reconcile_adapter_preserves_closed_setup_reason(
         capture_reconcile.RUNNER_TAIL_BUDGET,
     )
 
-    assert outcome.blocker is blocker
+    expected_blockers = {
+        CaptureFailureReason.ACTIVE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RETENTION_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED: (
+            CleanupBlocker.CAPACITY_EXHAUSTED
+        ),
+        CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED: (CleanupBlocker.CAPACITY_EXHAUSTED),
+        CaptureFailureReason.RECLAMATION_DEBT_ASSIST: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RECLAMATION_DEBT_STALL: CleanupBlocker.CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RECOVERY_CONTENDED: CleanupBlocker.RECOVERY_CONTENDED,
+        CaptureFailureReason.FILESYSTEM_AUTHORITY: CleanupBlocker.FILESYSTEM_AUTHORITY,
+        CaptureFailureReason.PERMISSION_DENIED: CleanupBlocker.PERMISSION_DENIED,
+        CaptureFailureReason.FILESYSTEM_IO: CleanupBlocker.FILESYSTEM_IO,
+        CaptureFailureReason.LEDGER_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+        CaptureFailureReason.MIGRATION_BLOCKED: CleanupBlocker.MIGRATION_BLOCKED,
+        CaptureFailureReason.SNAPSHOT_INTEGRITY: CleanupBlocker.LEDGER_INTEGRITY,
+        CaptureFailureReason.UNKNOWN_SETUP: CleanupBlocker.UNKNOWN_SETUP,
+    }
+    assert set(expected_blockers) == set(CaptureFailureReason)
+    assert outcome.blocker is expected_blockers[reason]
     assert outcome.errors == 1
 
 
@@ -4172,9 +4453,11 @@ def test_evidence_capacity_counts_operational_and_forensic_records(tmp_path: Pat
         clock,
         capacity=replace(
             CaptureCapacitySpec(),
-            max_operational_records=2,
+            max_operational_records=3,
             max_retained_records=2,
             max_evidence_records=2,
+            reclamation_debt_assist_records=1,
+            reclamation_debt_stall_records=2,
         ),
     )
     first = store.reserve_capture(_CAPTURE_ID)
@@ -4208,9 +4491,11 @@ def test_retention_occupancy_has_distinct_capacity_reason(tmp_path: Path) -> Non
         clock,
         capacity=replace(
             CaptureCapacitySpec(),
-            max_operational_records=2,
+            max_operational_records=3,
             max_retained_records=1,
             max_evidence_records=3,
+            reclamation_debt_assist_records=1,
+            reclamation_debt_stall_records=2,
         ),
     )
     try:
@@ -4237,11 +4522,14 @@ def test_projected_compacted_bytes_preserve_recovery_headroom(tmp_path: Path) ->
             root,
             wall_clock=clock.wall,
             monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
             capacity=CaptureCapacitySpec(
                 max_operational_records=8,
                 max_retained_records=8,
                 max_evidence_records=8,
                 max_tombstones=2,
+                reclamation_debt_assist_records=6,
+                reclamation_debt_stall_records=7,
                 compaction_low_bytes=hard_bound // 3,
                 compaction_high_bytes=hard_bound // 2,
                 hard_ledger_bytes=hard_bound,
@@ -4285,11 +4573,14 @@ def test_recovery_transition_compacts_within_reserved_headroom(
             root,
             wall_clock=clock.wall,
             monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
             capacity=CaptureCapacitySpec(
                 max_operational_records=8,
                 max_retained_records=8,
                 max_evidence_records=8,
                 max_tombstones=2,
+                reclamation_debt_assist_records=6,
+                reclamation_debt_stall_records=7,
                 compaction_low_bytes=encoded - 4,
                 compaction_high_bytes=encoded - 3,
                 hard_ledger_bytes=encoded,
@@ -4501,6 +4792,7 @@ def test_unknown_lifecycle_enum_frames_survive_incremental_load_and_compaction(
             anchor,
             root,
             wall_clock=_Clock().wall,
+            lock_wait=HOT_PATH_LOCK_WAIT,
         )
         assert reopened.get_record(_CAPTURE_ID) is None
         assert reopened._ledger_view.opaque_frames == (opaque, later)
@@ -4529,6 +4821,7 @@ def test_future_ledger_format_reports_observed_and_current_versions(
             root.fd,
             project_identity=(anchor.identity.device, anchor.identity.inode),
             root_identity=(root.identity.device, root.identity.inode),
+            lock_wait=HOT_PATH_LOCK_WAIT,
             _factory_token=capture_lifecycle._STORE_FACTORY_TOKEN,
         )
 
@@ -4847,3 +5140,339 @@ def test_emit_owner_diagnostic_healthy_case_is_silent() -> None:
     written: list[str] = []
     capture_reconcile.emit_owner_diagnostic(outcome, owner="runner_tail", write=written.append)
     assert written == []
+
+
+def _debt_capacity(
+    *,
+    assist_records: int = 2,
+    stall_records: int = 4,
+    max_records: int = 16,
+) -> CaptureCapacitySpec:
+    return replace(
+        CaptureCapacitySpec(),
+        max_operational_records=max_records,
+        max_retained_records=max_records,
+        max_evidence_records=max_records,
+        reclamation_debt_assist_records=assist_records,
+        reclamation_debt_stall_records=stall_records,
+    )
+
+
+def _future_admission_candidate(
+    records: dict[str, CaptureLifecycleRecord],
+    clock: _Clock,
+) -> CaptureLifecycleRecord:
+    source = next(iter(records.values()))
+    return replace(
+        source,
+        capture_id="f" * 16,
+        staging_name=f".capture-staging-{'f' * 16}-{'e' * 16}",
+        public_name=f"shell_{'f' * 16}.log",
+        created_at=clock.wall(),
+        next_attempt_at=clock.wall() + SWEEP_GRACE_SECONDS,
+        incarnation="e" * 32,
+        revision=1,
+    )
+
+
+def _admission_decision_for_due_records(
+    store: CaptureLifecycleStore,
+    clock: _Clock,
+    records: dict[str, CaptureLifecycleRecord] | None = None,
+):
+    with store._locked():
+        loaded_records, compaction_epoch, _size = store._load_locked()
+        decision_records = loaded_records if records is None else records
+        return store._admission_reason(
+            decision_records,
+            _future_admission_candidate(decision_records, clock),
+            compaction_epoch,
+            clock.wall(),
+        )
+
+
+def test_concurrent_admission_never_succeeds_from_stall_level_debt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admission records its locked debt observation before a concurrent sweep runs."""
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=3, max_records=8),
+    )
+    failed_capture_id = "a" * 16
+    successful_capture_id = "b" * 16
+    decision_barrier = threading.Barrier(2)
+    release_failed_decision = threading.Event()
+    observations: dict[str, tuple[int, CaptureCapacityReason | None]] = {}
+    real_admission_reason = store._admission_reason
+
+    def observe_admission(
+        records: dict[str, CaptureLifecycleRecord],
+        candidate: CaptureLifecycleRecord,
+        compaction_epoch: int,
+        now: float,
+    ):
+        decision = real_admission_reason(records, candidate, compaction_epoch, now)
+        due_records = sum(
+            capture_sweep.is_due_record(record, now, {CaptureState.DELETED})
+            for record in records.values()
+        )
+        observations[candidate.capture_id] = (due_records, decision.reason)
+        if candidate.capture_id == failed_capture_id:
+            decision_barrier.wait(timeout=3)
+            assert release_failed_decision.wait(timeout=3)
+        return decision
+
+    monkeypatch.setattr(store, "_admission_reason", observe_admission)
+    try:
+        _reserve_many(store, 3)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            failed = executor.submit(store.reserve_capture, failed_capture_id)
+            decision_barrier.wait(timeout=3)
+            sweeping = executor.submit(store.sweep, _sweep_budget(6, 1.0))
+            release_failed_decision.set()
+
+            with pytest.raises(CaptureCapacityError) as failure:
+                failed.result(timeout=3)
+            outcome = sweeping.result(timeout=3)
+            admitted = executor.submit(store.reserve_capture, successful_capture_id).result(
+                timeout=3
+            )
+
+        assert failure.value.reason is CaptureCapacityReason.RECLAMATION_DEBT_STALL
+        assert outcome.deleted >= 3
+        assert admitted.state is CaptureState.RESERVED
+        assert observations[failed_capture_id] == (
+            3,
+            CaptureCapacityReason.RECLAMATION_DEBT_STALL,
+        )
+        successful_observation = observations[successful_capture_id]
+        assert successful_observation[0] < store._capacity.reclamation_debt_stall_records
+        assert successful_observation[1] is None
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize("due_count", (3, 4))
+def test_reclamation_debt_stall_refuses_equal_and_greater_debt(
+    tmp_path: Path,
+    due_count: int,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=3),
+    )
+    try:
+        _reserve_many(store, due_count)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        with pytest.raises(CaptureCapacityError) as failure:
+            store.reserve_capture(f"{due_count + 8:016x}")
+
+        assert failure.value.reason is CaptureCapacityReason.RECLAMATION_DEBT_STALL
+        assert failure.value.failure_reason is CaptureFailureReason.RECLAMATION_DEBT_STALL
+    finally:
+        root.close()
+        anchor.close()
+
+
+@pytest.mark.parametrize(
+    ("due_count", "expected_limit"),
+    (
+        (2, 1),
+        (5, 4),
+        (DEBT_ASSIST_MAX_TRANSITIONS + 2, DEBT_ASSIST_MAX_TRANSITIONS),
+    ),
+)
+def test_reclamation_debt_assist_limit_scales_and_caps(
+    tmp_path: Path,
+    due_count: int,
+    expected_limit: int,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(
+            assist_records=2,
+            stall_records=DEBT_ASSIST_MAX_TRANSITIONS + 4,
+            max_records=64,
+        ),
+    )
+    try:
+        _reserve_many(store, due_count)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        decision = _admission_decision_for_due_records(store, clock)
+
+        assert decision.reason is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST
+        assert decision.assist_transition_limit == expected_limit
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reclamation_debt_assist_uses_carried_budget_and_retries_once(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=8),
+    )
+    observed_budgets: list[SweepBudgetSpec] = []
+    outcomes: list[CaptureCleanupOutcome] = []
+    real_sweep = store.sweep
+    attempts = 0
+    expected = object()
+
+    def observe_sweep(budget: SweepBudgetSpec) -> CaptureCleanupOutcome:
+        outcome = real_sweep(budget)
+        observed_budgets.append(budget)
+        outcomes.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(store, "sweep", observe_sweep)
+    try:
+        store.reserve_capture("0" * 16)
+        assert observed_budgets == []
+        _reserve_many(store, 4)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+
+        def attempt() -> object:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise CaptureCapacityError(
+                    CaptureCapacityReason.RECLAMATION_DEBT_ASSIST,
+                    assist_transition_limit=4,
+                )
+            return expected
+
+        result = store._with_capacity_rescue(
+            attempt,
+            rescuable_reasons=frozenset({CaptureCapacityReason.RECLAMATION_DEBT_ASSIST}),
+        )
+
+        expected_budget = replace(DEBT_ASSIST_BUDGET, max_transitions=4)
+        assert result is expected
+        assert attempts == 2
+        assert observed_budgets == [expected_budget]
+        assert outcomes[0].transitions <= expected_budget.max_transitions
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_reclamation_debt_assist_is_suppressed_only_during_a_sweep(tmp_path: Path) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=4),
+    )
+    try:
+        _reserve_many(store, 4)
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+        with store._locked():
+            records, compaction_epoch, _size = store._load_locked()
+        assist_records = dict(tuple(records.items())[:2])
+        candidate = _future_admission_candidate(assist_records, clock)
+
+        assert (
+            store._admission_reason(
+                assist_records, candidate, compaction_epoch, clock.wall()
+            ).reason
+            is CaptureCapacityReason.RECLAMATION_DEBT_ASSIST
+        )
+        store._sweep_budget = DEBT_ASSIST_BUDGET
+        try:
+            assert (
+                store._admission_reason(
+                    assist_records, candidate, compaction_epoch, clock.wall()
+                ).reason
+                is None
+            )
+            assert (
+                store._admission_reason(records, candidate, compaction_epoch, clock.wall()).reason
+                is CaptureCapacityReason.RECLAMATION_DEBT_STALL
+            )
+        finally:
+            store._sweep_budget = None
+    finally:
+        root.close()
+        anchor.close()
+
+
+def test_session_start_orphan_adoption_suppresses_nested_debt_assist(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _Clock()
+    anchor, root, store = _open_store(
+        tmp_path / "project",
+        clock,
+        capacity=_debt_capacity(assist_records=2, stall_records=4, max_records=8),
+    )
+    artifacts = []
+    nested_rescues = 0
+    real_with_capacity_rescue = store._with_capacity_rescue
+    orphan_capture_id = "c" * 16
+    orphan_name = f"shell_{orphan_capture_id}.log"
+
+    def observe_capacity_rescue(*args, **kwargs):
+        nonlocal nested_rescues
+        nested_rescues += 1
+        return real_with_capacity_rescue(*args, **kwargs)
+
+    try:
+        for capture_id in ("a" * 16, "b" * 16):
+            artifacts.append(create_capture_artifact(root, capture_id, store))
+        clock.advance(SWEEP_GRACE_SECONDS + 1)
+        fd = os.open(orphan_name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=root.fd)
+        os.close(fd)
+        old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 1
+        os.utime(orphan_name, (old, old), dir_fd=root.fd)
+        monkeypatch.setattr(store, "_with_capacity_rescue", observe_capacity_rescue)
+
+        outcome = store.sweep(capture_reconcile.SESSION_START_BUDGET)
+
+        assert outcome.errors == 0
+        assert nested_rescues == 0
+        assert store.get_record(orphan_capture_id) is not None
+    finally:
+        for artifact in artifacts:
+            artifact.close_artifact_fd()
+            artifact.release_lease()
+        root.close()
+        anchor.close()
+
+
+def test_capacity_window_covers_the_supported_retention_envelope() -> None:
+    expected_admission_rate = SUPPORTED_PEAK_PRODUCERS * SUPPORTED_ADMISSIONS_PER_PRODUCER_SECOND
+    expected_retention_bytes = math.ceil(
+        expected_admission_rate * SWEEP_GRACE_SECONDS * MEASURED_BYTES_PER_RECORD
+    )
+
+    assert SUPPORTED_PEAK_ADMISSIONS_PER_SECOND == expected_admission_rate
+    assert REQUIRED_RETENTION_BYTES == expected_retention_bytes
+    assert CaptureCapacitySpec().compaction_low_bytes >= REQUIRED_RETENTION_BYTES
+
+
+def test_installed_reclamation_owners_include_a_directory_scan_budget() -> None:
+    installed_owner_budgets = (
+        capture_reconcile.RUNNER_TAIL_BUDGET,
+        capture_reconcile.SESSION_START_BUDGET,
+    )
+
+    assert any(budget.max_directory_entries_scanned > 0 for budget in installed_owner_budgets)

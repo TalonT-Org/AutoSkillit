@@ -22,6 +22,7 @@ from typing import IO
 from .io import _AtomicWriteDurabilityError, atomic_write, write_versioned_json
 from .logging import get_logger
 from .paths import destination_location
+from .runtime.artifact_lease import ARTIFACT_LEASE_TIMEOUT_SECONDS, acquire_flock_with_timeout
 from .types import (
     LegacyRetiringEvidence,
     ManagedHome,
@@ -92,8 +93,13 @@ def _open_lock(lock_path: Path) -> IO[str]:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fh = open(lock_path, "w")
     try:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-    except Exception:
+        acquire_flock_with_timeout(
+            fh.fileno(),
+            operation=fcntl.LOCK_EX,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            path=lock_path,
+        )
+    except BaseException:
         fh.close()
         raise
     return fh

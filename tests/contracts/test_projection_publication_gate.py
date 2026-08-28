@@ -545,7 +545,7 @@ class TestProjectionRepair:
         original_text = hooks_path.read_text()
 
         # Hold an exclusive lease to simulate contention
-        with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
+        with ArtifactLease.acquire_exclusive(lease_path, timeout=0.0):
             outcomes = repair_broken_projection_hooks(projections_root)
 
         assert len(outcomes) == 1
@@ -570,7 +570,7 @@ class TestProjectionRepair:
         )
 
         # First run — contended
-        with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
+        with ArtifactLease.acquire_exclusive(lease_path, timeout=0.0):
             outcomes = repair_broken_projection_hooks(projections_root)
         assert outcomes[0].status is PluginHookRepairStatus.CONTENDED
 

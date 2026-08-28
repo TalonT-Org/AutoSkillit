@@ -32,6 +32,7 @@ from autoskillit.hooks._capture._snapshot import (
     CommandOutcome,
     verify_capture_snapshot,
 )
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     CaptureSetupError,
@@ -79,6 +80,7 @@ def _open_store(project: Path, clock: _Clock):
         root,
         wall_clock=clock.wall,
         monotonic=clock.monotonic,
+        lock_wait=HOT_PATH_LOCK_WAIT,
     )
     return anchor, root, store
 
@@ -455,9 +457,12 @@ def test_fifo_substitution_is_rejected_without_blocking(tmp_path: Path) -> None:
     code = (
         "import sys;"
         "from autoskillit.hooks._capture_artifacts import open_capture_lifecycle;"
+        "from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT;"
         "from autoskillit.hooks._capture._snapshot import CaptureAuthorityError;"
         "\ntry:\n"
-        "  with open_capture_lifecycle(sys.argv[1],create=False) as lifecycle:\n"
+        "  with open_capture_lifecycle(\n"
+        "      sys.argv[1],create=False,lock_wait=HOT_PATH_LOCK_WAIT\n"
+        "  ) as lifecycle:\n"
         "    lifecycle.open_verified_capture(sys.argv[2])\n"
         "except CaptureAuthorityError as exc:\n"
         "  print(f'{type(exc).__name__}:{exc}',file=sys.stderr)\n"
@@ -696,6 +701,7 @@ def test_store_reopen_does_not_normalize_live_producer_reference(
             root,
             wall_clock=clock.wall,
             monotonic=clock.monotonic,
+            lock_wait=HOT_PATH_LOCK_WAIT,
         )
         current = reopened.get_record(_CAPTURE_ID)
 

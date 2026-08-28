@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
-import fcntl
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import IO, Any
+from typing import Any
 
 from autoskillit.core import (
     DispatchIdentity,
@@ -17,6 +16,7 @@ from autoskillit.core import (
     read_versioned_json,
     write_versioned_json,
 )
+from autoskillit.fleet._state_lock import CampaignStateMutatorOwnership
 from autoskillit.fleet.state_effects import (
     DispatchAggregatePhase,
     DispatchEffectName,
@@ -57,6 +57,7 @@ from autoskillit.fleet.state_transitions import (
 )
 
 _resume_lock = threading.Lock()
+_FLEET_STATE_LOCK_TIMEOUT_SECONDS = 2.0
 
 __all__ = [
     # re-exported from state_gates
@@ -284,28 +285,24 @@ class CampaignStateMutator:
         self._state_path = state_path
         self._lock_path = state_path.with_suffix(".lock")
         self._state: CampaignState | None = None
-        self._flock_handle: IO[bytes] | None = None
+        self._ownership: CampaignStateMutatorOwnership | None = None
         self._dirty: bool = False
 
     def __enter__(self) -> CampaignStateMutator:
-        _resume_lock.acquire()
+        ownership = CampaignStateMutatorOwnership()
         try:
-            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
-            # Lock files are intentionally not deleted after use. Safe cleanup after
-            # fcntl release requires inode-comparison to avoid a TOCTOU race; the
-            # files are empty and bounded to one per state file, so accumulation cost
-            # is negligible compared to the complexity of safe deletion.
-            fh = open(self._lock_path, "wb")
-            try:
-                fcntl.flock(fh, fcntl.LOCK_EX)
-            except BaseException:
-                fh.close()
-                raise
-            self._flock_handle = fh
+            ownership.acquire(
+                self._lock_path,
+                process_lock=_resume_lock,
+                timeout=_FLEET_STATE_LOCK_TIMEOUT_SECONDS,
+            )
+            self._ownership = ownership
             self._state = read_state(self._state_path)
             return self
         except BaseException:
-            _resume_lock.release()
+            ownership.close()
+            if self._ownership is ownership:
+                self._ownership = None
             raise
 
     @property
@@ -333,16 +330,14 @@ class CampaignStateMutator:
                     )
                     raise
         finally:
+            ownership = self._ownership
             try:
-                if self._flock_handle is not None:
-                    try:
-                        self._flock_handle.close()
-                    except Exception:
-                        logger.debug(
-                            "CampaignStateMutator.__exit__: flock close failed", exc_info=True
-                        )
+                if ownership is not None:
+                    ownership.close()
             finally:
-                _resume_lock.release()
+                self._ownership = None
+                self._state = None
+                self._dirty = False
 
 
 def _write_state(state_path: Path, state: CampaignState) -> None:

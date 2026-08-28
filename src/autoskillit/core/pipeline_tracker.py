@@ -24,7 +24,11 @@ from ._active_kitchens import (
     read_active_kitchens_registry,
 )
 from .io import atomic_write
-from .runtime.artifact_lease import ArtifactLease
+from .runtime.artifact_lease import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ArtifactLease,
+    acquire_flock_with_timeout,
+)
 
 TrackerOwnerKind = Literal["kitchen", "dispatch", "manual"]
 TrackerData = dict[str, Any]
@@ -158,7 +162,10 @@ def retain_tracker_lease(
     current = leases.get(key)
     if current is not None and not current.closed:
         return current
-    lease = ArtifactLease.acquire_shared(tracker_lease_path(key.target))
+    lease = ArtifactLease.acquire_shared(
+        tracker_lease_path(key.target),
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    )
     leases[key] = lease
     return lease
 
@@ -188,7 +195,12 @@ class _TrackerLock:
         fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
         try:
             os.fchmod(fd, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            acquire_flock_with_timeout(
+                fd,
+                operation=fcntl.LOCK_EX,
+                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                path=self._lock_path,
+            )
         except BaseException:
             os.close(fd)
             raise
@@ -327,7 +339,10 @@ def mutate_tracker(
 def try_retire_tracker(target: TrackerAuthorityTarget) -> bool:
     """Retire exactly one unleased, valid tracker after fresh liveness checks."""
     try:
-        exclusive = ArtifactLease.acquire_exclusive(tracker_lease_path(target), blocking=False)
+        exclusive = ArtifactLease.acquire_exclusive(
+            tracker_lease_path(target),
+            timeout=0.0,
+        )
     except (OSError, RuntimeError):
         return False
     try:

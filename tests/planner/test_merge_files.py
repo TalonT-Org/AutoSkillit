@@ -54,6 +54,16 @@ def test_merge_files_schema_version_1(tmp_path):
     assert json.loads(out.read_text())["schema_version"] == 1
 
 
+def test_merge_files_propagates_lock_timeout(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_lock(*args: object, **kwargs: object) -> None:
+        raise TimeoutError
+
+    monkeypatch.setattr("autoskillit.planner.merge.acquire_flock_with_timeout", fail_lock)
+
+    with pytest.raises(TimeoutError):
+        merge_files(file_paths=[], output_path=str(tmp_path / "combined.json"), key="phases")
+
+
 def test_merge_files_accumulates_existing(tmp_path):
     existing = {
         "task": "t",

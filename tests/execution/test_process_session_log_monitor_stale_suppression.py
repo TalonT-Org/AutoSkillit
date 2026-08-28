@@ -274,7 +274,11 @@ class TestStaleSuppressionBounded:
 
     @pytest.mark.anyio
     async def test_shared_suppression_timer_prevents_chaining(self, tmp_path, monkeypatch):
-        """Switching suppression gates (API → marker) does not chain independent timers."""
+        """Switching suppression gates (API → marker) does not chain independent timers.
+
+        Keeping the API gate active until the shared deadline is nearly exhausted
+        makes an incorrectly restarted marker timer add the full suppression window.
+        """
         session_file = tmp_path / "session.jsonl"
         session_file.write_text("")
         spawn_time = time.time() - 10
@@ -283,7 +287,7 @@ class TestStaleSuppressionBounded:
 
         def _api_conn(pid):
             call_count["n"] += 1
-            return call_count["n"] <= 2
+            return call_count["n"] <= 6
 
         monkeypatch.setattr(
             "autoskillit.execution.process._process_monitor._has_active_api_connection",
@@ -313,7 +317,7 @@ class TestStaleSuppressionBounded:
         elapsed = time.monotonic() - suppression_start
 
         assert result.status == ChannelBStatus.STALE
-        assert elapsed <= 0.45, f"elapsed {elapsed:.2f}s exceeds 0.45s — timer may have chained"
+        assert elapsed <= 0.55, f"elapsed {elapsed:.2f}s exceeds 0.55s — timer may have chained"
         assert elapsed >= 0.15, (
             f"elapsed {elapsed:.2f}s below 0.15s — suppression may not have fired"
         )

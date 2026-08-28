@@ -1,6 +1,12 @@
 from __future__ import annotations
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    "hooks/_capture/_runner.py": (
+        1050,
+        "REQ-CNST-010-E31: #4511 requires a dedicated setup failure boundary before "
+        "the command-body handler because the latter assumes an initialized artifact; "
+        "keeping both stages in the runner preserves one owner for capture settlement",
+    ),
     "core/types/_type_constants.py": (
         1050,
         "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "

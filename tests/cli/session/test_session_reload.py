@@ -114,6 +114,26 @@ def test_consume_reload_sentinel_rejects_non_object_json(tmp_path: Path, payload
     assert consume_reload_sentinel(tmp_path) is None
 
 
+def test_consume_reload_sentinel_logs_lock_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel_dir = tmp_path / ".autoskillit" / "temp" / "reload_sentinel"
+    sentinel_dir.mkdir(parents=True)
+    logger = Mock()
+    monkeypatch.setattr(
+        "autoskillit.cli.session._session_reload.acquire_flock_with_timeout",
+        Mock(side_effect=TimeoutError),
+    )
+    monkeypatch.setattr("autoskillit.cli.session._session_reload.logger", logger)
+
+    assert consume_reload_sentinel(tmp_path) is None
+    logger.warning.assert_called_once_with(
+        "reload_sentinel_lock_timeout",
+        path=str(sentinel_dir),
+    )
+
+
 def test_consume_reload_sentinel_serializes_concurrent_callers(tmp_path: Path) -> None:
     """N threads calling consume_reload_sentinel concurrently against a shared
     directory must never crash or double-consume the same sentinel — the

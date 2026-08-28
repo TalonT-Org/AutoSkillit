@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,
     ArtifactLeaseContention,
     PluginArtifactContentionError,
@@ -22,6 +23,7 @@ from autoskillit.core import (
     PluginArtifactValidationError,
     PluginLaunchBinding,
     PluginLoadMode,
+    acquire_flock_with_timeout,
 )
 from tests.conftest import production_interpreter_env
 
@@ -59,11 +61,81 @@ def test_raw_constructor_cannot_claim_an_unrelated_descriptor(tmp_path: Path) ->
         os.close(write_fd)
 
 
+@pytest.mark.parametrize("timeout_seconds", [-1, float("inf"), float("nan"), True])
+def test_lease_acquire_requires_a_finite_nonnegative_timeout(
+    tmp_path: Path,
+    timeout_seconds: float,
+) -> None:
+    assert ARTIFACT_LEASE_TIMEOUT_SECONDS == 2.0
+    with pytest.raises(ValueError, match="finite non-negative"):
+        ArtifactLease.acquire_shared(
+            tmp_path / "projection.lock",
+            timeout=timeout_seconds,
+        )
+
+
+def test_flock_helper_retries_with_nonblocking_bounded_jitter(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from autoskillit.core.runtime import artifact_lease as _flock
+
+    calls: list[int] = []
+    delays: list[float] = []
+
+    def contended_then_acquired(_lock_file: object, operation: int) -> None:
+        calls.append(operation)
+        if len(calls) == 1:
+            raise OSError(errno.EAGAIN, "lock is held")
+
+    monkeypatch.setattr(_flock.fcntl, "flock", contended_then_acquired)
+    monkeypatch.setattr(_flock.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(_flock.random, "uniform", lambda _minimum, _maximum: 0.01)
+    monkeypatch.setattr(_flock.time, "sleep", delays.append)
+
+    acquire_flock_with_timeout(
+        3,
+        operation=_flock.fcntl.LOCK_EX,
+        timeout=0.1,
+        path=tmp_path / "projection.lock",
+    )
+
+    assert calls == [_flock.fcntl.LOCK_EX | _flock.fcntl.LOCK_NB] * 2
+    assert delays == [0.01]
+
+
+def test_flock_helper_timeout_identifies_the_contended_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from autoskillit.core.runtime import artifact_lease as _flock
+
+    lock_path = tmp_path / "projection.lock"
+    monkeypatch.setattr(
+        _flock.fcntl,
+        "flock",
+        lambda _lock_file, _operation: (_ for _ in ()).throw(
+            OSError(errno.EACCES, "lock is held")
+        ),
+    )
+    monkeypatch.setattr(_flock.time, "monotonic", lambda: 100.0)
+
+    with pytest.raises(TimeoutError, match=str(lock_path)):
+        acquire_flock_with_timeout(
+            3,
+            operation=_flock.fcntl.LOCK_EX,
+            timeout=0.0,
+            path=lock_path,
+        )
+
+
 def test_independent_shared_readers_own_distinct_descriptors(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
 
-    with ArtifactLease.acquire_shared(lock_path) as first:
-        with ArtifactLease.acquire_shared(lock_path) as second:
+    with ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS) as first:
+        with ArtifactLease.acquire_shared(
+            lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+        ) as second:
             assert first.path == lock_path
             assert second.path == lock_path
             assert first.shared is True
@@ -76,12 +148,14 @@ def test_independent_shared_readers_own_distinct_descriptors(tmp_path: Path) -> 
 def test_existing_shared_requires_existing_parent_and_sidecar(tmp_path: Path) -> None:
     missing_parent_lock = tmp_path / "missing" / "projection.lock"
     with pytest.raises(FileNotFoundError):
-        ArtifactLease.acquire_existing_shared(missing_parent_lock)
+        ArtifactLease.acquire_existing_shared(
+            missing_parent_lock, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+        )
     assert not missing_parent_lock.parent.exists()
 
     lock_path = tmp_path / "projection.lock"
     with pytest.raises(FileNotFoundError):
-        ArtifactLease.acquire_existing_shared(lock_path)
+        ArtifactLease.acquire_existing_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     assert not lock_path.exists()
 
 
@@ -93,7 +167,9 @@ def test_existing_shared_is_read_only_and_preserves_modes(tmp_path: Path) -> Non
     tmp_path.chmod(0o750)
     lock_path.chmod(0o640)
 
-    with ArtifactLease.acquire_existing_shared(lock_path) as reader:
+    with ArtifactLease.acquire_existing_shared(
+        lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    ) as reader:
         descriptor_flags = fcntl.fcntl(reader.fileno(), fcntl.F_GETFL)
         assert descriptor_flags & os.O_ACCMODE == os.O_RDONLY
         assert reader.path == lock_path
@@ -107,17 +183,19 @@ def test_existing_shared_is_read_only_and_preserves_modes(tmp_path: Path) -> Non
 
 def test_existing_shared_blocks_exclusive_until_close(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
-    with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+    with ArtifactLease.acquire_exclusive(lock_path, timeout=0.0):
         pass
-    reader = ArtifactLease.acquire_existing_shared(lock_path)
+    reader = ArtifactLease.acquire_existing_shared(
+        lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
 
     try:
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+            ArtifactLease.acquire_exclusive(lock_path, timeout=0.0)
     finally:
         reader.close()
 
-    with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+    with ArtifactLease.acquire_exclusive(lock_path, timeout=0.0):
         pass
 
 
@@ -140,13 +218,17 @@ def test_existing_shared_child_blocks_writer_without_mutating_sidecar(
                 "missing_lock = Path(sys.argv[1])\n"
                 "lock_path = Path(sys.argv[2])\n"
                 "try:\n"
-                "    ArtifactLease.acquire_existing_shared(missing_lock)\n"
+                "    ArtifactLease.acquire_existing_shared(\n"
+                "        missing_lock, timeout=2.0\n"
+                "    )\n"
                 "except FileNotFoundError:\n"
                 "    pass\n"
                 "else:\n"
                 "    raise AssertionError('missing lease sidecar was created')\n"
                 "assert not missing_lock.parent.exists()\n"
-                "reader = ArtifactLease.acquire_existing_shared(lock_path)\n"
+                "reader = ArtifactLease.acquire_existing_shared(\n"
+                "    lock_path, timeout=2.0\n"
+                ")\n"
                 "fd = reader.fileno()\n"
                 "flags = fcntl.fcntl(fd, fcntl.F_GETFL)\n"
                 "assert reader.shared is True\n"
@@ -189,7 +271,7 @@ def test_existing_shared_child_blocks_writer_without_mutating_sidecar(
         assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o750
         assert stat.S_IMODE(lock_path.stat().st_mode) == 0o640
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+            ArtifactLease.acquire_exclusive(lock_path, timeout=0.0)
 
         assert child.stdin is not None
         child.stdin.write("x")
@@ -202,7 +284,7 @@ def test_existing_shared_child_blocks_writer_without_mutating_sidecar(
         assert child.stderr is not None
         assert child.stderr.read() == ""
 
-        with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+        with ArtifactLease.acquire_exclusive(lock_path, timeout=0.0):
             pass
     finally:
         if child.stdin is not None and not child.stdin.closed:
@@ -219,13 +301,13 @@ def test_existing_shared_rejects_symlink_and_non_regular_sidecar(tmp_path: Path)
     symlink.symlink_to(target)
 
     with pytest.raises(OSError):
-        ArtifactLease.acquire_existing_shared(symlink)
+        ArtifactLease.acquire_existing_shared(symlink, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     assert symlink.is_symlink()
 
     fifo = tmp_path / "fifo.lock"
     os.mkfifo(fifo)
     with pytest.raises(RuntimeError, match="regular file"):
-        ArtifactLease.acquire_existing_shared(fifo)
+        ArtifactLease.acquire_existing_shared(fifo, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     assert stat.S_ISFIFO(fifo.stat().st_mode)
 
 
@@ -233,7 +315,9 @@ def test_artifact_lease_context_preserves_body_error(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     real_close = ArtifactLease.close
 
     def fail_after_close(owner: ArtifactLease) -> None:
@@ -254,20 +338,20 @@ def test_artifact_lease_context_preserves_body_error(
 
 def test_exclusive_lease_waits_for_final_shared_close(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
-    first = ArtifactLease.acquire_shared(lock_path)
-    second = ArtifactLease.acquire_shared(lock_path)
+    first = ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
+    second = ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
 
     try:
         with pytest.raises(ArtifactLeaseContention) as caught:
-            ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+            ArtifactLease.acquire_exclusive(lock_path, timeout=0.0)
         assert caught.value.path == lock_path
 
         first.close()
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+            ArtifactLease.acquire_exclusive(lock_path, timeout=0.0)
 
         second.close()
-        with ArtifactLease.acquire_exclusive(lock_path, blocking=False) as writer:
+        with ArtifactLease.acquire_exclusive(lock_path, timeout=0.0) as writer:
             assert writer.path == lock_path
             assert writer.shared is False
     finally:
@@ -277,7 +361,7 @@ def test_exclusive_lease_waits_for_final_shared_close(tmp_path: Path) -> None:
 
 def test_blocking_exclusive_lease_waits_then_acquires(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
-    reader = ArtifactLease.acquire_shared(lock_path)
+    reader = ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     writer_started = threading.Event()
     writer_acquired = threading.Event()
     failures: list[BaseException] = []
@@ -285,7 +369,7 @@ def test_blocking_exclusive_lease_waits_then_acquires(tmp_path: Path) -> None:
     def acquire_writer() -> None:
         writer_started.set()
         try:
-            with ArtifactLease.acquire_exclusive(lock_path, blocking=True):
+            with ArtifactLease.acquire_exclusive(lock_path, timeout=1.0):
                 writer_acquired.set()
         except BaseException as exc:
             failures.append(exc)
@@ -313,7 +397,7 @@ def test_blocking_exclusive_lease_waits_then_acquires(tmp_path: Path) -> None:
 
 def test_inherited_descriptor_keeps_lease_after_parent_close(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
-    lease = ArtifactLease.acquire_shared(lock_path)
+    lease = ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     child = subprocess.Popen(
         [
             sys.executable,
@@ -343,14 +427,14 @@ def test_inherited_descriptor_keeps_lease_after_parent_close(tmp_path: Path) -> 
 
         lease.close()
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(lock_path, blocking=False)
+            ArtifactLease.acquire_exclusive(lock_path, timeout=0.0)
 
         assert child.stdin is not None
         child.stdin.write("x")
         child.stdin.close()
         assert child.wait(timeout=5) == 0
 
-        with ArtifactLease.acquire_exclusive(lock_path, blocking=False):
+        with ArtifactLease.acquire_exclusive(lock_path, timeout=0.0):
             pass
     finally:
         lease.close()
@@ -361,7 +445,7 @@ def test_inherited_descriptor_keeps_lease_after_parent_close(tmp_path: Path) -> 
 
 def test_lease_file_is_regular_and_close_is_idempotent(tmp_path: Path) -> None:
     lock_path = tmp_path / "projection.lock"
-    lease = ArtifactLease.acquire_shared(lock_path)
+    lease = ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     owned_fd = lease.fileno()
 
     assert stat.S_ISREG(lock_path.stat(follow_symlinks=False).st_mode)
@@ -382,7 +466,9 @@ def test_lease_file_is_regular_and_close_is_idempotent(tmp_path: Path) -> None:
 
 def test_lease_rejects_non_lock_suffix_and_final_symlink(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=r"\.lock"):
-        ArtifactLease.acquire_shared(tmp_path / "projection.lease")
+        ArtifactLease.acquire_shared(
+            tmp_path / "projection.lease", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+        )
 
     target = tmp_path / "target.lock"
     target.touch()
@@ -390,7 +476,7 @@ def test_lease_rejects_non_lock_suffix_and_final_symlink(tmp_path: Path) -> None
     link.symlink_to(target)
 
     with pytest.raises(OSError):
-        ArtifactLease.acquire_shared(link)
+        ArtifactLease.acquire_shared(link, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
     assert link.is_symlink()
     assert target.is_file()
 
@@ -400,7 +486,7 @@ def test_lease_rejects_non_regular_file(tmp_path: Path) -> None:
     os.mkfifo(lock_path)
 
     with pytest.raises(RuntimeError, match="regular file"):
-        ArtifactLease.acquire_shared(lock_path)
+        ArtifactLease.acquire_shared(lock_path, timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS)
 
 
 def test_acquire_preserves_primary_error_when_descriptor_cleanup_fails(
@@ -430,7 +516,9 @@ def test_acquire_preserves_primary_error_when_descriptor_cleanup_fails(
 
     try:
         with pytest.raises(OSError, match="primary flock failure") as caught:
-            ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+            ArtifactLease.acquire_shared(
+                tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+            )
         assert caught.value.errno == errno.EIO
         assert sum("cleanup close failure" in note for note in caught.value.__notes__) == 2
     finally:
@@ -463,7 +551,9 @@ def test_directory_close_failure_releases_acquired_lease_fd(
 
     try:
         with pytest.raises(OSError, match="directory close failure"):
-            ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+            ArtifactLease.acquire_shared(
+                tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+            )
         assert len(opened_fds) == 2
         with pytest.raises(OSError):
             os.fstat(opened_fds[1])
@@ -517,7 +607,9 @@ def test_plugin_load_modes_identify_artifact_consumers() -> None:
 
 
 def test_launch_binding_context_closes_lease_idempotently(tmp_path: Path) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     binding = PluginLaunchBinding(
         load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         plugin_dir=tmp_path / "projection",
@@ -539,7 +631,9 @@ def test_launch_binding_context_preserves_body_error(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     binding = PluginLaunchBinding(
         load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
         plugin_dir=tmp_path / "projection",
@@ -566,7 +660,9 @@ def test_launch_binding_context_preserves_body_error(
 
 
 def test_launch_binding_rejects_path_identity_mismatch(tmp_path: Path) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     try:
         with pytest.raises(ValueError, match="must match the leased artifact identity"):
             PluginLaunchBinding(
@@ -583,8 +679,12 @@ def test_launch_binding_rejects_path_identity_mismatch(tmp_path: Path) -> None:
 def test_launch_binding_rejects_descriptors_owned_by_another_lease(
     tmp_path: Path,
 ) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
-    other = ArtifactLease.acquire_shared(tmp_path / "other.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
+    other = ArtifactLease.acquire_shared(
+        tmp_path / "other.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     try:
         with pytest.raises(ValueError, match="owned by the launch lease"):
             PluginLaunchBinding(
@@ -604,7 +704,9 @@ def test_launch_binding_rejects_invalid_inherited_descriptors(
     tmp_path: Path,
     inherited_fds: tuple[object, ...],
 ) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     try:
         with pytest.raises(ValueError, match="non-negative integer"):
             PluginLaunchBinding(
@@ -626,7 +728,9 @@ def test_launch_binding_rejects_non_consuming_modes(
     tmp_path: Path,
     load_mode: PluginLoadMode,
 ) -> None:
-    lease = ArtifactLease.acquire_shared(tmp_path / "projection.lock")
+    lease = ArtifactLease.acquire_shared(
+        tmp_path / "projection.lock", timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    )
     try:
         with pytest.raises(ValueError, match="non-artifact mode"):
             PluginLaunchBinding(

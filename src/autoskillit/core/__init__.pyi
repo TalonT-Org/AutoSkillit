@@ -322,8 +322,12 @@ from .runtime._reclamation import snapshot_referenced as snapshot_referenced
 from .runtime._reclamation import trim_jsonl_lines as trim_jsonl_lines
 from .runtime._reclamation import user_generation_root as user_generation_root
 from .runtime._reclamation import veto_paths as veto_paths
+from .runtime.artifact_lease import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS as ARTIFACT_LEASE_TIMEOUT_SECONDS,
+)
 from .runtime.artifact_lease import ArtifactLease as ArtifactLease
 from .runtime.artifact_lease import ArtifactLeaseContention as ArtifactLeaseContention
+from .runtime.artifact_lease import acquire_flock_with_timeout as acquire_flock_with_timeout
 from .runtime.artifact_lease import plugin_launch_binding_scope as plugin_launch_binding_scope
 from .runtime.executable_binding import (
     executable_binding_matches_current_file as executable_binding_matches_current_file,

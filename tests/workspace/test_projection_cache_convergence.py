@@ -503,7 +503,7 @@ def test_contended_invalid_projection_reconciles_after_lease_release(tmp_path: P
     candidate, manifest = _seed_invalid_projection(root, "malformed_json_manifest")
     lease_path = projection_cache.projected_artifact_lease_path(candidate)
 
-    with ArtifactLease.acquire_exclusive(lease_path, blocking=False):
+    with ArtifactLease.acquire_exclusive(lease_path, timeout=0.0):
         with capture_logs() as contended_logs:
             assert (
                 projection_cache.prune_stale_projections(

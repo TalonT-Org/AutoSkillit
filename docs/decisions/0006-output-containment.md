@@ -100,12 +100,23 @@ terminal transition; an abandoned producer becomes eligible one hour after its
 durable creation time. Eligibility is reclaimed only on the next enabled,
 trusted trigger, not by a wall-clock scheduler.
 
+Admission participates in that trigger-owned model. When store-wide due debt
+reaches the assist threshold, the admitting runner performs one debt-scaled
+sweep under a fixed 50 ms/16-transition ceiling before retrying its admission.
+At the higher stall threshold, admission is refused until reclamation lowers
+the observed debt. This adds no owner or scheduler: the assist is work
+performed by the existing `same_runner` role on its existing trigger.
+
 There are two installed cleanup roles. Every valid runner invocation performs
 one bounded tail sweep after all producer resources and the writer lease are
 released. The independent cleanup-only `capture_lifecycle_hook.py` performs a
 bounded `SessionStart` sweep in interactive and headless sessions.
 Cleanup failure is fail-open and cannot replace the mapped command result. If
 hooks are disabled, neither owner runs and eligible artifacts remain.
+Trigger-only ownership remains adequate while assist work stays bounded and
+at least one installed reclamation owner retains a positive directory-scan
+budget. Removing either condition requires a new ownership decision; the
+read-only doctor must not become a scheduler implicitly.
 
 Deletion is confined to the shared store's identity-revalidated quarantine
 transaction. Only lifecycle-recorded `shell_[0-9a-f]{16}.log` artifacts are
@@ -158,10 +169,11 @@ hook can be retired in favor of that mechanism.
 - **Lock contention:** a single non-blocking `flock()` attempt aborted a sweep
   immediately on any contention, including the 256-attempt `SESSION_START_BUDGET`
   pass, even though `session_scope="any"` makes every concurrent session contend
-  the same lock at startup. Non-blocking lock acquisition now retries with
-  jittered, doubling backoff bounded by the sweep's own `max_duration_seconds`
-  budget — no new configuration knob — so a contended lock recovers within the
-  same invocation instead of zeroing it.
+  the same lock at startup. Every lifecycle-lock acquisition now uses
+  non-blocking acquisition with a deadline: sweep callers compose that deadline
+  with `max_duration_seconds`, while ordinary callers use the lifecycle
+  lock-wait policy. There is no blocking-acquisition form, so contention either
+  recovers within the invocation or fails as bounded `LOCK_CONTENDED` work.
 
 ## Enforcement
 
@@ -173,11 +185,22 @@ arch rule is the registry's own import-time totality assertion — a
 `CaptureFailureReason` member with no declared disposition raises
 `AssertionError` at import, so the module cannot load until every reason is
 classified — backed by `tests/hooks/test_capture_failure_disposition.py`'s
-`TestDispositionRegistryTotality`. `DS-012` in
+`TestDispositionRegistryTotality`. `tests/arch/test_hook_flock_nonblocking.py`
+also inventories every executable hook `fcntl.flock()` acquisition and fails
+closed unless it statically includes `LOCK_NB` (with `LOCK_UN` releases
+exempt). `DS-012` in
 `audit-defense-standards/SKILL.md` is the periodic audit-time check that no
 bookkeeping failure discards or misreports a verified primary result outside
 of what the import-time assertion alone can catch (e.g. a `PRESERVE_OUTPUT`
 classification applied to a reason that should be `DISCARD_OUTPUT`).
+
+The same enforcement surface bounds admission by measured reclamation debt:
+assist and stall are admission-only capacity reasons, and import-time totality
+requires their gate, failure, disposition, detail, and blocker classifications.
+The production compaction floor is derived from the code-owned sustained
+admission envelope, the canonical one-hour sweep grace, and the incident's
+measured bytes per record. Runtime policy overrides below that derived floor
+are rejected in favor of the safe production default.
 
 ## Consequences
 

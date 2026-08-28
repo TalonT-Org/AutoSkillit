@@ -78,6 +78,27 @@ def source_root(tmp_path: Path) -> Path:
     return root
 
 
+def test_retiring_cache_lock_closes_handle_on_control_flow_exception(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.core._retiring_cache as retiring_cache
+
+    lock_path = tmp_path / "retiring_cache.lock"
+    handle = lock_path.open("w")
+
+    def interrupt(*_args: object, **_kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(retiring_cache, "open", lambda *_args, **_kwargs: handle, raising=False)
+    monkeypatch.setattr(retiring_cache, "acquire_flock_with_timeout", interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        retiring_cache._open_lock(lock_path)
+
+    assert handle.closed
+
+
 # ---------------------------------------------------------------------------
 # The infrastructure landmine
 # ---------------------------------------------------------------------------
@@ -485,7 +506,7 @@ def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
 
     old = _publish_install_root(home, "1.0.0")
     held_lease = ArtifactLease.acquire_existing_shared(
-        installed_plugin_artifact_lease_path(old.managed_path)
+        installed_plugin_artifact_lease_path(old.managed_path), timeout=2.0
     )
     try:
         _publish_install_root(home, "1.0.1")
@@ -567,7 +588,7 @@ def test_same_version_republication_does_not_reclaim_a_live_generation(
 
     first = _publish_install_root(home, "1.0.0")
     held_lease = ArtifactLease.acquire_existing_shared(
-        installed_plugin_artifact_lease_path(first.managed_path)
+        installed_plugin_artifact_lease_path(first.managed_path), timeout=2.0
     )
     try:
         second = _publish_install_root(home, "1.0.0")

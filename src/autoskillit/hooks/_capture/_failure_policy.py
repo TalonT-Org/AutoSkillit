@@ -22,6 +22,8 @@ class CaptureFailureReason(StrEnum):
     EVIDENCE_CAPACITY_EXHAUSTED = "EVIDENCE_CAPACITY_EXHAUSTED"
     PROJECTED_COMPACTED_BYTES_EXHAUSTED = "PROJECTED_COMPACTED_BYTES_EXHAUSTED"
     HARD_LEDGER_CAPACITY_EXHAUSTED = "HARD_LEDGER_CAPACITY_EXHAUSTED"
+    RECLAMATION_DEBT_ASSIST = "RECLAMATION_DEBT_ASSIST"
+    RECLAMATION_DEBT_STALL = "RECLAMATION_DEBT_STALL"
     MIGRATION_BLOCKED = "MIGRATION_BLOCKED"
     LEDGER_INTEGRITY = "LEDGER_INTEGRITY"
     FILESYSTEM_AUTHORITY = "FILESYSTEM_AUTHORITY"
@@ -39,6 +41,8 @@ CAPACITY_FAILURE_REASONS = frozenset(
         CaptureFailureReason.EVIDENCE_CAPACITY_EXHAUSTED,
         CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED,
         CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
+        CaptureFailureReason.RECLAMATION_DEBT_ASSIST,
+        CaptureFailureReason.RECLAMATION_DEBT_STALL,
     }
 )
 
@@ -158,6 +162,16 @@ FAILURE_DISPOSITIONS: dict[CaptureFailureReason, CaptureFailureDispositionDef] =
         reason=CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
         disposition=CaptureFailureDisposition.PRESERVE_OUTPUT,
         rationale="capacity bookkeeping — verified output is unaffected",
+    ),
+    CaptureFailureReason.RECLAMATION_DEBT_ASSIST: CaptureFailureDispositionDef(
+        reason=CaptureFailureReason.RECLAMATION_DEBT_ASSIST,
+        disposition=CaptureFailureDisposition.PRESERVE_OUTPUT,
+        rationale="bounded reclamation assist — verified output is unaffected",
+    ),
+    CaptureFailureReason.RECLAMATION_DEBT_STALL: CaptureFailureDispositionDef(
+        reason=CaptureFailureReason.RECLAMATION_DEBT_STALL,
+        disposition=CaptureFailureDisposition.PRESERVE_OUTPUT,
+        rationale="reclamation debt admission control — verified output is unaffected",
     ),
     CaptureFailureReason.MIGRATION_BLOCKED: CaptureFailureDispositionDef(
         reason=CaptureFailureReason.MIGRATION_BLOCKED,

@@ -8,7 +8,13 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
-from autoskillit.core import ArtifactLease, get_logger, read_versioned_json, write_versioned_json
+from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ArtifactLease,
+    get_logger,
+    read_versioned_json,
+    write_versioned_json,
+)
 
 __all__ = [
     "PublicationObligation",
@@ -81,7 +87,9 @@ def write_obligation(
         previous_identity_key=previous_identity_key,
         expected_identity_key=None,
     )
-    with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
+    with ArtifactLease.acquire_exclusive(
+        _obligation_lock_path(home), timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+    ):
         _write(home, record)
     return record
 
@@ -100,7 +108,9 @@ def update_obligation_expected_version(
     as "version unknown" — a degraded-but-safe state, not a lost record.
     """
     try:
-        with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
+        with ArtifactLease.acquire_exclusive(
+            _obligation_lock_path(home), timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+        ):
             current = read_obligation(home)
             if current != expected:
                 return None
@@ -198,7 +208,9 @@ def clear_obligation(home: Path, *, expected: PublicationObligation) -> bool:
     clears it.
     """
     try:
-        with ArtifactLease.acquire_exclusive(_obligation_lock_path(home), blocking=True):
+        with ArtifactLease.acquire_exclusive(
+            _obligation_lock_path(home), timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS
+        ):
             if read_obligation(home) != expected:
                 return False
             _obligation_path(home).unlink(missing_ok=True)

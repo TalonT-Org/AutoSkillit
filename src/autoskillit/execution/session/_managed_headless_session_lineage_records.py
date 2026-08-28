@@ -15,10 +15,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineage,
     NativeShellCaptureDecision,
+    acquire_flock_with_timeout,
     atomic_write,
 )
 from autoskillit.execution.session._managed_headless_session_lineage import (
@@ -155,10 +157,17 @@ def _store_lock(root: Path, *, exclusive: bool) -> Iterator[None]:
         flags |= os.O_NOFOLLOW
     fd = os.open(lock_path, flags, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
-        yield
+        acquire_flock_with_timeout(
+            fd,
+            operation=fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            path=lock_path,
+        )
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
 
 

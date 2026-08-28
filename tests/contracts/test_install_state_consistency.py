@@ -322,12 +322,14 @@ class TestVerifyInstallState:
         acquire_existing_shared = ArtifactLease.acquire_existing_shared
         advanced = False
 
-        def advance_then_acquire(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+        def advance_then_acquire(
+            _cls: type[ArtifactLease], lock_path: Path, *, timeout: float
+        ) -> ArtifactLease:
             nonlocal advanced
             if not advanced:
                 advanced = True
                 _publish_generation(home, __version__)
-            return acquire_existing_shared(lock_path)
+            return acquire_existing_shared(lock_path, timeout=timeout)
 
         monkeypatch.setattr(
             ArtifactLease,
@@ -815,14 +817,18 @@ class TestRetiredArtifactShapeRegistry:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from autoskillit.core import ArtifactLeaseContention
+        from autoskillit.core import (
+            ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            ArtifactLeaseContention,
+        )
         from autoskillit.workspace import _install_state, reconcile_install_artifacts
 
         legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
         legacy_version.mkdir(parents=True)
         marker = legacy_version.parent / ".1.2.3.autoskillit-rejected-legacy"
 
-        def contend(path: Path) -> None:
+        def contend(path: Path, *, timeout: float) -> None:
+            assert timeout == ARTIFACT_LEASE_TIMEOUT_SECONDS
             raise ArtifactLeaseContention(path)
 
         monkeypatch.setattr(_install_state.ArtifactLease, "acquire_shared", contend)
@@ -895,9 +901,11 @@ class TestRetiredArtifactShapeRegistry:
         acquire_shared = ArtifactLease.acquire_shared
         acquired_paths: list[Path] = []
 
-        def recording_acquire_shared(_cls: type[ArtifactLease], lock_path: Path) -> ArtifactLease:
+        def recording_acquire_shared(
+            _cls: type[ArtifactLease], lock_path: Path, *, timeout: float
+        ) -> ArtifactLease:
             acquired_paths.append(lock_path)
-            return acquire_shared(lock_path)
+            return acquire_shared(lock_path, timeout=timeout)
 
         monkeypatch.setattr(ArtifactLease, "acquire_shared", classmethod(recording_acquire_shared))
 

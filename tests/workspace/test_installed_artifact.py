@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
@@ -113,7 +114,10 @@ def _publish_exact(spec: InstallStateSpec) -> PluginArtifactIdentity:
         schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         strict_durability=True,
     )
-    with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True):
+    with ArtifactLease.acquire_exclusive(
+        spec.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ):
         pass
     return identity
 
@@ -287,7 +291,7 @@ def test_successful_standalone_verification_rereads_registry_under_shared_lease(
             return (state.managed_root.parent / "stale-preflight",)
         if read_count == 2:
             with pytest.raises(ArtifactLeaseContention):
-                ArtifactLease.acquire_exclusive(state.lease_path, blocking=False)
+                ArtifactLease.acquire_exclusive(state.lease_path, timeout=0.0)
         return original(trusted_home)
 
     monkeypatch.setattr(
@@ -340,7 +344,10 @@ def test_reuses_caller_owned_shared_lease_without_closing_it(home: Path) -> None
     spec = _spec(home)
     expected = _publish_exact(spec)
     _write_registry(home, spec.managed_root)
-    shared = ArtifactLease.acquire_existing_shared(spec.lease_path)
+    shared = ArtifactLease.acquire_existing_shared(
+        spec.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    )
     try:
         result = verify_installed_plugin_artifact(
             _spec(
@@ -382,7 +389,10 @@ def test_reuses_caller_owned_exclusive_lease_without_closing_it(home: Path) -> N
     expected = _publish_exact(initial)
     _write_registry(home, initial.managed_root)
 
-    with ArtifactLease.acquire_exclusive(initial.lease_path, blocking=True) as lease:
+    with ArtifactLease.acquire_exclusive(
+        initial.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ) as lease:
         result = verify_installed_plugin_artifact(
             _spec(
                 home,
@@ -402,7 +412,10 @@ def test_install_precommit_can_verify_under_exclusive_lease_before_registration(
     initial = _spec(home)
     expected = _publish_exact(initial)
 
-    with ArtifactLease.acquire_exclusive(initial.lease_path, blocking=True) as lease:
+    with ArtifactLease.acquire_exclusive(
+        initial.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ) as lease:
         result = verify_installed_plugin_artifact(
             _spec(
                 home,
@@ -436,7 +449,10 @@ def test_rejects_wrong_supplied_mode_without_closing_caller_lease(home: Path) ->
     _publish_exact(spec)
     _write_registry(home, spec.managed_root)
 
-    with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True) as lease:
+    with ArtifactLease.acquire_exclusive(
+        spec.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ) as lease:
         result = verify_installed_plugin_artifact(
             _spec(
                 home,
@@ -454,7 +470,10 @@ def test_rejects_shared_lease_for_exclusive_mode_without_closing_caller_lease(
     spec = _spec(home)
     _publish_exact(spec)
     _write_registry(home, spec.managed_root)
-    lease = ArtifactLease.acquire_existing_shared(spec.lease_path)
+    lease = ArtifactLease.acquire_existing_shared(
+        spec.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    )
     try:
         result = verify_installed_plugin_artifact(
             _spec(
@@ -473,7 +492,10 @@ def test_digest_failure_does_not_close_caller_owned_shared_lease(home: Path) -> 
     spec = _spec(home)
     _publish_exact(spec)
     _write_registry(home, spec.managed_root)
-    shared = ArtifactLease.acquire_existing_shared(spec.lease_path)
+    shared = ArtifactLease.acquire_existing_shared(
+        spec.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    )
     (spec.managed_root / ".claude-plugin" / "plugin.json").write_text(
         '{"name":"autoskillit","version":"corrupt"}',
         encoding="utf-8",
@@ -494,7 +516,10 @@ def test_closed_or_wrong_path_supplied_lease_is_rejected(home: Path) -> None:
     spec = _spec(home)
     _publish_exact(spec)
     _write_registry(home, spec.managed_root)
-    closed = ArtifactLease.acquire_existing_shared(spec.lease_path)
+    closed = ArtifactLease.acquire_existing_shared(
+        spec.lease_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    )
     closed.close()
 
     closed_result = verify_installed_plugin_artifact(_spec(home, supplied_lease=closed))
@@ -503,7 +528,10 @@ def test_closed_or_wrong_path_supplied_lease_is_rejected(home: Path) -> None:
     }
 
     wrong_path = spec.lease_path.parent / "wrong.lock"
-    with ArtifactLease.acquire_exclusive(wrong_path, blocking=True) as wrong:
+    with ArtifactLease.acquire_exclusive(
+        wrong_path,
+        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ) as wrong:
         wrong_result = verify_installed_plugin_artifact(
             _spec(
                 home,

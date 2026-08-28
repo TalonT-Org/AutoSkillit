@@ -88,6 +88,7 @@ from autoskillit.execution.process import (
     spawn_owned_process,
 )
 from autoskillit.hook_registry import generate_hooks_json
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     open_capture_lifecycle,
@@ -2074,7 +2075,11 @@ def test_codex_shell_capture_preserves_divergent_execution_workdir(
     assert (capture_root / ".capture-lifecycle.ledger").is_file()
     assert (capture_root / ".capture-lifecycle.lock").is_file()
     assert not list(capture_root.glob(f".capture-staging-{request.capture_id}-*"))
-    with open_capture_lifecycle(str(workspace), create=False) as lifecycle:
+    with open_capture_lifecycle(
+        str(workspace),
+        create=False,
+        lock_wait=HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
         record = lifecycle.get_record(request.capture_id)
     assert record is not None
     assert record.state is CaptureState.FINALIZED

@@ -609,7 +609,7 @@ def _reconcile_projection_entry(
     try:
         writer = ArtifactLease.acquire_exclusive(
             owner.lease_path(entry),
-            blocking=False,
+            timeout=0.0,
         )
     except ArtifactLeaseContention:
         return ProjectionReconcileDisposition.DEFERRED_CONTENDED
@@ -735,7 +735,7 @@ def _resume_projection_residue(
             return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
         writer = ArtifactLease.acquire_exclusive(
             owner.lease_path(managed_path),
-            blocking=False,
+            timeout=0.0,
         )
     except ArtifactLeaseContention:
         return ProjectionReconcileDisposition.DEFERRED_CONTENDED

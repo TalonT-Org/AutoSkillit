@@ -21,7 +21,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from autoskillit.core import ArtifactLease, ArtifactLeaseContention, get_logger
+from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    ArtifactLease,
+    ArtifactLeaseContention,
+    get_logger,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -122,7 +127,7 @@ class _SessionLease:
         try:
             lease = ArtifactLease.acquire_exclusive(
                 lock_path,
-                blocking=blocking,
+                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS if blocking else 0.0,
             )
         except ArtifactLeaseContention:
             return None

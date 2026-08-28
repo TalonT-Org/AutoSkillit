@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 import errno
 import json
 import os
+import select
 import shlex
 import stat
 import subprocess
 import sys
+import threading
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,10 +20,12 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.hooks._capture._authority as capture_authority
+import autoskillit.hooks._capture._failure_policy as capture_failure_policy
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture._runner as capture_runner
 import autoskillit.hooks._capture._types as capture_types
+import autoskillit.hooks._capture_lifecycle._admission as capture_admission
 import autoskillit.hooks._capture_process as capture_process
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
@@ -32,6 +37,7 @@ from autoskillit.hooks._capture._types import (
     CleanupBlocker,
     CleanupProgress,
     LockContended,
+    LockWaitSpec,
 )
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
@@ -60,6 +66,7 @@ from autoskillit.hooks._capture_contract import (
     parse_capture_v2,
 )
 from autoskillit.hooks._capture_lifecycle import (
+    LOCK_NAME,
     CaptureCapacityError,
     CaptureCapacityReason,
     CaptureDeliveryStatus,
@@ -70,6 +77,7 @@ from autoskillit.hooks._capture_lifecycle import (
     CaptureState,
     CaptureTransitionCommittedError,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -81,10 +89,70 @@ def _capture_dir(project: Path) -> Path:
 
 
 def _capture_record(project: Path) -> CaptureLifecycleRecord:
-    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
         record = lifecycle.get_record(_CAPTURE_ID)
     assert record is not None
     return record
+
+
+def _start_capture_lock_holder(lock_path: Path) -> subprocess.Popen[str]:
+    holder_script = (
+        "import fcntl, os, sys\n"
+        "fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT, 0o600)\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('ready', flush=True)\n"
+        "sys.stdin.readline()\n"
+        "fcntl.flock(fd, fcntl.LOCK_UN)\n"
+        "os.close(fd)\n"
+    )
+    holder = subprocess.Popen(
+        [sys.executable, "-c", holder_script, str(lock_path)],
+        env=production_interpreter_env(),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert holder.stdout is not None
+    readable, _, _ = select.select([holder.stdout], [], [], 5.0)
+    if not readable:
+        holder.terminate()
+        try:
+            _, stderr = holder.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            holder.kill()
+            _, stderr = holder.communicate(timeout=1)
+        raise AssertionError(f"capture lock-holder subprocess did not become ready: {stderr}")
+    assert holder.stdout.readline() == "ready\n"
+    return holder
+
+
+def _release_capture_lock_holder(holder: subprocess.Popen[str]) -> None:
+    assert holder.stdin is not None
+    holder.stdin.write("release\n")
+    holder.stdin.flush()
+    holder.stdin.close()
+    try:
+        holder.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        holder.terminate()
+        holder.wait(timeout=1)
+        pytest.fail("capture lock-holder subprocess did not stop")
+    assert holder.stderr is not None
+    assert holder.returncode == 0, holder.stderr.read()
+
+
+def test_capture_lock_holder_readiness_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(select, "select", lambda *_args, **_kwargs: ([], [], []))
+
+    with pytest.raises(AssertionError, match="did not become ready"):
+        _start_capture_lock_holder(tmp_path / "capture.lock")
 
 
 def _single_v2_marker(output: str) -> CaptureV2Fields:
@@ -154,12 +222,20 @@ def _open_authority(project: Path):
 
 
 def _create_artifact(anchor, root, capture_id: str = _CAPTURE_ID):
-    lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
+    lifecycle = CaptureLifecycleStore.from_open_authorities(
+        anchor,
+        root,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    )
     return create_capture_artifact(root, capture_id, lifecycle)
 
 
 def _finalize_artifact(anchor, root, artifact, data: bytes = b"captured"):
-    lifecycle = CaptureLifecycleStore.from_open_authorities(anchor, root)
+    lifecycle = CaptureLifecycleStore.from_open_authorities(
+        anchor,
+        root,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    )
     os.write(artifact.fd, data)
     verified = verify_capture_snapshot(
         fd=artifact.fd,
@@ -926,6 +1002,80 @@ def test_setup_failure_prevents_user_command_and_emits_failure_marker(
     assert not (project / "command_ran").exists()
 
 
+def test_reclamation_debt_stall_emits_structured_failure_without_starting_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    capacity = capture_types.CaptureCapacitySpec(
+        max_operational_records=4,
+        max_retained_records=4,
+        max_evidence_records=4,
+        reclamation_debt_assist_records=1,
+        reclamation_debt_stall_records=2,
+    )
+    anchor, root = _open_authority(project)
+    try:
+        seed_store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=lambda: 0.0,
+            lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+            capacity=capacity,
+        )
+        for capture_id in ("a" * 16, "b" * 16):
+            seed_store.reserve_capture(capture_id)
+    finally:
+        root.close()
+        anchor.close()
+
+    factory = capture_runner.CaptureLifecycleStore.from_open_authorities
+
+    def due_store(
+        anchor: capture_authority.ProjectAnchor,
+        root: capture_authority.CaptureRoot,
+        *,
+        lock_wait: capture_types.LockWaitSpec,
+        capacity: capture_types.CaptureCapacitySpec | None = None,
+    ) -> CaptureLifecycleStore:
+        return factory(
+            anchor,
+            root,
+            wall_clock=lambda: 10**12,
+            lock_wait=lock_wait,
+            capacity=capacity,
+        )
+
+    monkeypatch.setattr(
+        capture_runner.CaptureLifecycleStore,
+        "from_open_authorities",
+        due_store,
+    )
+    monkeypatch.setattr(
+        capture_runner,
+        "read_capture_policy",
+        lambda _anchor: CapturePolicy(capacity=capacity),
+    )
+
+    sentinel = project / "command_ran"
+    assert (
+        capture_runner._main(
+            _runner_args(command=f"printf ran > {shlex.quote(str(sentinel))}", cwd=str(project))
+        )
+        == 1
+    )
+
+    failure = _single_failure_marker(capfd.readouterr().err)
+    assert failure.reason is CaptureFailureReason.RECLAMATION_DEBT_STALL
+    assert (
+        capture_failure_policy.FAILURE_DISPOSITIONS[failure.reason].disposition
+        is capture_failure_policy.CaptureFailureDisposition.PRESERVE_OUTPUT
+    )
+    assert not sentinel.exists()
+
+
 @pytest.mark.parametrize("root_shape", ["blocking_file", "symlink"])
 def test_validated_direct_bypasses_unusable_capture_root_without_artifact_or_lease(
     tmp_path: Path,
@@ -1068,7 +1218,7 @@ def test_setup_failure_reason_survives_runner_transport_without_sensitive_detail
     captured = capfd.readouterr()
     failure = _single_failure_marker(captured.err)
     assert failure.reason is reason
-    assert failure.detail == "capture setup failed"
+    assert failure.detail == "capture artifact creation failed"
     assert sensitive not in captured.err
     assert str(project) not in captured.err
     assert _CAPTURE_ID not in captured.err
@@ -1097,6 +1247,100 @@ def test_recovery_contention_is_classified_at_the_runner_boundary(
     failure = _single_failure_marker(capfd.readouterr().err)
     assert failure.reason is CaptureFailureReason.RECOVERY_CONTENDED
     assert not sentinel.exists()
+
+
+def test_setup_keyboard_interrupt_emits_failure_before_reraising(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Interrupting retry sleep reports setup failure without masking Ctrl-C."""
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor, root = _open_authority(project)
+    root.close()
+    anchor.close()
+    holder = _start_capture_lock_holder(_capture_dir(project) / LOCK_NAME)
+    original_factory = capture_runner.CaptureLifecycleStore.from_open_authorities
+
+    def with_short_lock_wait(cls, anchor, root, **kwargs):
+        del cls
+        kwargs["lock_wait"] = LockWaitSpec(max_wait_seconds=0.05)
+        return original_factory(anchor, root, **kwargs)
+
+    def interrupt_sleep(_seconds: float) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(
+        capture_runner.CaptureLifecycleStore,
+        "from_open_authorities",
+        classmethod(with_short_lock_wait),
+    )
+    monkeypatch.setattr(
+        capture_admission,
+        "time",
+        SimpleNamespace(sleep=interrupt_sleep),
+    )
+    raised: list[BaseException] = []
+
+    def invoke() -> None:
+        try:
+            run_capture("printf must-not-run", str(project), _CAPTURE_ID)
+        except BaseException as exc:
+            raised.append(exc)
+
+    worker = threading.Thread(target=invoke)
+    worker.start()
+    try:
+        worker.join(timeout=1)
+        assert not worker.is_alive()
+    finally:
+        _release_capture_lock_holder(holder)
+        worker.join(timeout=1)
+
+    assert len(raised) == 1
+    assert isinstance(raised[0], KeyboardInterrupt)
+    failure = _single_failure_marker(capfd.readouterr().err)
+    assert failure.reason is CaptureFailureReason.UNKNOWN_SETUP
+    assert failure.stage == "capture_lifecycle_store_open"
+
+
+def test_lifecycle_lock_contention_prevents_child_command_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """A setup lock deadline returns a capture failure before spawning bash."""
+    project = tmp_path / "project"
+    project.mkdir()
+    anchor, root = _open_authority(project)
+    root.close()
+    anchor.close()
+    holder = _start_capture_lock_holder(_capture_dir(project) / LOCK_NAME)
+    spawned: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def unexpected_spawn(*args: object, **kwargs: object) -> None:
+        spawned.append((args, kwargs))
+        raise AssertionError("the child command ran after setup contention")
+
+    monkeypatch.setattr(capture_runner, "_spawn_bash", unexpected_spawn)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(run_capture, "printf must-not-run", str(project), _CAPTURE_ID)
+    result: int | None = None
+    try:
+        result = future.result(timeout=2.5)
+    finally:
+        _release_capture_lock_holder(holder)
+        try:
+            future.result(timeout=1)
+        except BaseException:
+            pass
+        executor.shutdown(wait=True, cancel_futures=True)
+
+    assert result == 1
+    assert spawned == []
+    failure = _single_failure_marker(capfd.readouterr().err)
+    assert failure.reason is CaptureFailureReason.RECOVERY_CONTENDED
 
 
 @pytest.mark.parametrize("capture_id", ["", "0123456789abcde", "0123456789abcdeg"])
@@ -1842,7 +2086,11 @@ def test_oversized_delivery_publishes_parseable_resolvable_v2(
     assert record.state is CaptureState.FINALIZED
     assert record.reference_status is CaptureReferenceStatus.PUBLISHED
     assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
-    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
         with lifecycle.open_verified_capture(parsed.reference) as reader:
             assert reader.read(0, len(expected)) == expected
 
@@ -1884,7 +2132,11 @@ def test_oversized_v2_preserves_distinct_raw_wait_outcome(
     assert record.manifest.command_outcome.value == value
     assert record.manifest.command_outcome.shell_returncode == 143
     assert record.delivery_status is CaptureDeliveryStatus.DELIVERED
-    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
         with lifecycle.open_verified_capture(parsed.reference) as reader:
             assert reader.read(0, 16) == b"0123456789abcdef"
 
@@ -2569,7 +2821,11 @@ def test_oversized_finish_failure_leaves_flushed_marker_and_resolvable_token(
     assert record.state is CaptureState.FINALIZED
     assert record.reference_status is CaptureReferenceStatus.PUBLISHED
     assert record.delivery_status is CaptureDeliveryStatus.UNKNOWN
-    with open_capture_lifecycle(str(project), create=False) as lifecycle:
+    with open_capture_lifecycle(
+        str(project),
+        create=False,
+        lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
+    ) as lifecycle:
         with lifecycle.open_verified_capture(parsed.reference) as reader:
             assert reader.read(0, parsed.total_bytes) == b"oversized"
 
@@ -2718,6 +2974,7 @@ def test_restart_normalization_never_reissues_or_reemits_reference(
             anchor,
             root,
             wall_clock=lambda: 1_000_001.0,
+            lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
         )
         publication = None
         if phase != "issued":
@@ -2745,6 +3002,7 @@ def test_restart_normalization_never_reissues_or_reemits_reference(
             anchor,
             root,
             wall_clock=lambda: 1_000_001.0,
+            lock_wait=capture_types.HOT_PATH_LOCK_WAIT,
         )
         after = restarted.get_record(_CAPTURE_ID)
         recovered = restarted.recover_interrupted_delivery(_CAPTURE_ID)

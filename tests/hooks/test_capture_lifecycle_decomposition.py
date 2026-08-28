@@ -120,7 +120,7 @@ def test_admit_new_record_class_method_wrapper_delegates_to_module_function() ->
 
     store_method = CaptureLifecycleStore._admit_new_record
     assert callable(store_method)
-    # The wrapper signature matches: (self, record, records, compaction_epoch, size)
+    # The wrapper signature matches: (self, record, records, compaction_epoch, size, now)
     sig = inspect.signature(store_method)
     assert list(sig.parameters.keys()) == [
         "self",
@@ -128,6 +128,7 @@ def test_admit_new_record_class_method_wrapper_delegates_to_module_function() ->
         "records",
         "compaction_epoch",
         "size",
+        "now",
     ]
 
 
@@ -143,9 +144,7 @@ def test_acquire_flock_wrapper_preserves_signature() -> None:
 
     sig = inspect.signature(CaptureLifecycleStore._acquire_flock)
     params = list(sig.parameters.keys())
-    assert params == ["self", "fd", "blocking"]
-    # ``blocking`` is keyword-only — confirm it carries the keyword-only kind.
-    assert sig.parameters["blocking"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params == ["self", "fd"]
 
 
 def test_admission_reason_wrapper_preserves_signature() -> None:
@@ -153,7 +152,7 @@ def test_admission_reason_wrapper_preserves_signature() -> None:
 
     sig = inspect.signature(CaptureLifecycleStore._admission_reason)
     params = list(sig.parameters.keys())
-    assert params == ["self", "records", "candidate", "compaction_epoch"]
+    assert params == ["self", "records", "candidate", "compaction_epoch", "now"]
 
 
 def test_capture_lifecycle_store_registers_both_module_aliases() -> None:

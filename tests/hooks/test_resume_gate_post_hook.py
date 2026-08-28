@@ -58,6 +58,32 @@ def _read_state(tmp_dir) -> dict | None:
     return json.loads(state_path.read_text())
 
 
+def test_resume_gate_lock_contention_stops_at_its_fake_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A held resume-gate lock cannot turn its post-hook into an unbounded wait."""
+    from autoskillit.hooks import resume_gate_post_hook as hook_module  # noqa: PLC0415
+
+    timestamps = iter((0.0, 0.1, 0.25))
+    sleeps: list[float] = []
+    attempts = 0
+
+    def always_contended(_fd: int, _operation: int) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise BlockingIOError("resume gate lock is held")
+
+    monkeypatch.setattr(hook_module.time, "monotonic", lambda: next(timestamps))
+    monkeypatch.setattr(hook_module.time, "sleep", sleeps.append)
+    monkeypatch.setattr(hook_module.fcntl, "flock", always_contended)
+
+    with pytest.raises(BlockingIOError):
+        hook_module._acquire_lock(17)
+
+    assert attempts == 2
+    assert sleeps == [hook_module._LOCK_RETRY_INTERVAL_SECONDS]
+
+
 # T1.1 — PostToolUse hook writes resume_attempted[dispatch_id]=true
 
 

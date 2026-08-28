@@ -185,7 +185,7 @@ class PluginArtifactRetirementEngine:
         try:
             writer = ArtifactLease.acquire_exclusive(
                 self._lease_path(record.managed_path),
-                blocking=False,
+                timeout=0.0,
             )
         except ArtifactLeaseContention as exc:
             return self._log_reclaim(
@@ -357,7 +357,7 @@ class PluginArtifactRetirementEngine:
                 return RetirementOutcome.DEFERRED_IO_ERROR
             return RetirementOutcome.RECORD_REMOVED
         try:
-            writer = ArtifactLease.acquire_exclusive(self._lease_path(path), blocking=False)
+            writer = ArtifactLease.acquire_exclusive(self._lease_path(path), timeout=0.0)
         except ArtifactLeaseContention:
             return RetirementOutcome.DEFERRED_CONTENDED
         except (OSError, RuntimeError) as exc:

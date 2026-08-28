@@ -113,7 +113,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/migration/store.py", 54),
     ("src/autoskillit/migration/store.py", 64),
     # clone_registry.py — clones dict (CloneRegistry.__exit__ atomic write-back)
-    ("src/autoskillit/workspace/clone_registry.py", 89),
+    ("src/autoskillit/workspace/clone_registry.py", 97),
     # staleness_cache.py — cache dict
     ("src/autoskillit/recipe/staleness_cache.py", 67),
     # _hook_repair.py — hooks.json self-heal for plugin cache and projection scopes,
@@ -127,12 +127,12 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 115),
     ("src/autoskillit/server/tools/tools_kitchen/_hook_config.py", 147),
     # _overlay_state.py — session-scoped hook config overlay (not schema-versioned)
-    ("src/autoskillit/server/tools/_overlay_state.py", 114),
+    ("src/autoskillit/server/tools/_overlay_state.py", 132),
     # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
     # unversioned tracker file schema.
-    ("src/autoskillit/core/pipeline_tracker.py", 283),
-    ("src/autoskillit/core/pipeline_tracker.py", 305),
-    ("src/autoskillit/core/pipeline_tracker.py", 323),
+    ("src/autoskillit/core/pipeline_tracker.py", 295),
+    ("src/autoskillit/core/pipeline_tracker.py", 317),
+    ("src/autoskillit/core/pipeline_tracker.py", 335),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 587),
     # tools_github.py — bug report dict (non-blocking report-bug status file)

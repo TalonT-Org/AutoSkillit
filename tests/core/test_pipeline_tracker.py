@@ -115,7 +115,7 @@ def test_complete_participant_key_prevents_owner_kind_collision(tmp_path):
         assert kitchen.closed
         assert not dispatch.closed
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(tracker_lease_path(target), blocking=False)
+            ArtifactLease.acquire_exclusive(tracker_lease_path(target), timeout=0.0)
     finally:
         release_tracker_lease(leases, kitchen_key)
         release_tracker_lease(leases, dispatch_key)
@@ -136,7 +136,7 @@ def test_access_takes_shared_lease_before_tracker_lock(monkeypatch, tmp_path):
         nonlocal lock_entered
         lock_entered = True
         with pytest.raises(ArtifactLeaseContention):
-            ArtifactLease.acquire_exclusive(tracker_lease_path(target), blocking=False)
+            ArtifactLease.acquire_exclusive(tracker_lease_path(target), timeout=0.0)
         return real_enter(lock)
 
     monkeypatch.setattr(tracker_module._TrackerLock, "__enter__", asserting_enter)

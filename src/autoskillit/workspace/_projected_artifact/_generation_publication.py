@@ -19,6 +19,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,
     ArtifactLeaseContention,
     LegacyRetiringEvidence,
@@ -177,7 +178,10 @@ def _finalize_generation(
     safe_to_discard = True
     try:
         _fsync_directory(version_root)
-        with ArtifactLease.acquire_exclusive(lease_path, blocking=True):
+        with ArtifactLease.acquire_exclusive(
+            lease_path,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        ):
             identity = write_installed_plugin_artifact_manifest_locked(
                 generation_root,
                 semantic_key=semantic_key,
@@ -655,7 +659,7 @@ def _resume_generation_residue(
             return _GenerationPruneDisposition.DEFERRED_UNMANAGED
         writer = ArtifactLease.acquire_exclusive(
             owner.lease_path(managed_path),
-            blocking=False,
+            timeout=0.0,
         )
     except ArtifactLeaseContention:
         return _GenerationPruneDisposition.DEFERRED_CONTENDED
@@ -716,7 +720,7 @@ def _reconcile_generation_candidate(
     try:
         writer = ArtifactLease.acquire_exclusive(
             owner.lease_path(candidate),
-            blocking=False,
+            timeout=0.0,
         )
     except ArtifactLeaseContention:
         return _GenerationPruneDisposition.DEFERRED_CONTENDED

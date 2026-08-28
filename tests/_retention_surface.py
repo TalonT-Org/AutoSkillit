@@ -731,42 +731,42 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "the dispatch reaper's protected-id set.",
     ),
     # -- hooks._capture._sweep::sweep_one --
-    f"{_SW}::L616": RetentionDecision(
+    f"{_SW}::L634": RetentionDecision(
         Revocability.REVOCABLE,
         "The record is absent, already deleted, or its next_attempt_at is still in the "
         "future -- the schedule/age gate retains anything not yet eligible for its next "
         "sweep attempt.",
     ),
-    f"{_SW}::L627": RetentionDecision(
+    f"{_SW}::L645": RetentionDecision(
         Revocability.REVOCABLE,
         "An issued or published capture reference has not yet reached its recorded expiry; "
         "retained until the reference-expiry deadline passes.",
     ),
-    f"{_SW}::L652": RetentionDecision(
+    f"{_SW}::L670": RetentionDecision(
         Revocability.REVOCABLE,
         "Re-verified under the second lock: the record vanished, changed identity since "
         "the first check, or is still not due -- the same due-date gate re-applied after "
         "the lease acquisition race window.",
     ),
-    f"{_SW}::L675": _self_limiting(
+    f"{_SW}::L693": _self_limiting(
         "Abandoned-record normalization determined the record is already DELETED; this "
         "reports that terminal outcome, not a retention gate."
     ),
-    f"{_SW}::L715": _self_limiting(
+    f"{_SW}::L733": _self_limiting(
         "The successful-deletion completion path; not a retention skip, this line reports "
         "that reclamation succeeded."
     ),
-    f"{_SW}::L717": RetentionDecision(
+    f"{_SW}::L735": RetentionDecision(
         Revocability.REVOCABLE,
         "A CarrierLeaseLive exception means an active lease currently holds this capture; "
         "retained until the lease is released, a directly observed live reference.",
     ),
-    f"{_SW}::L739": RetentionDecision(
+    f"{_SW}::L757": RetentionDecision(
         Revocability.REVOCABLE,
         "A tampered record is retained for a fixed forensic hold window recorded via "
         "next_attempt_at, evidence preserved for investigation before re-eligibility.",
     ),
-    f"{_SW}::L753": _self_limiting(
+    f"{_SW}::L771": _self_limiting(
         "A lifecycle or OSError during the delete attempt is an execution failure, not "
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
@@ -931,64 +931,64 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "that reclamation succeeded."
     ),
     # -- cli.install._plugin_artifact::sweep_due --
-    f"{_CT}::L528": _retries_after_input_changes(
+    f"{_CT}::L533": _retries_after_input_changes(
         "The retiring cache is not in a safe exact-v2 state, corrupt or future-versioned; "
         "an infrastructure guard, not a liveness decision."
     ),
-    f"{_CT}::L536": _retries_after_input_changes(
+    f"{_CT}::L541": _retries_after_input_changes(
         "No registered owner claims this legacy evidence's artifact kind; a routing guard, "
         "not liveness evidence."
     ),
-    f"{_CT}::L541": _retries_after_input_changes(
+    f"{_CT}::L546": _retries_after_input_changes(
         "Reading due retiring records failed under an unsafe cache state; an infrastructure "
         "failure, not evidence about any record's liveness."
     ),
-    f"{_CT}::L546": _retries_after_input_changes(
+    f"{_CT}::L551": _retries_after_input_changes(
         "No registered owner claims this record's artifact kind; a routing guard, not "
         "liveness evidence."
     ),
     # -- workspace._projected_artifact._generation_publication::prune_stale_generations --
-    f"{_GP}::L805": _self_limiting(
+    f"{_GP}::L809": _self_limiting(
         "The generation store does not exist, so this invocation has no candidates to prune."
     ),
-    f"{_GP}::L812": _self_limiting(
+    f"{_GP}::L816": _self_limiting(
         "A hidden version directory belongs to staging or bookkeeping, not generation retirement."
     ),
-    f"{_GP}::L814": _self_limiting(
+    f"{_GP}::L818": _self_limiting(
         "A non-directory version entry cannot contain a generation incarnation this "
         "reclaimer owns."
     ),
-    f"{_GP}::L819": _self_limiting(
+    f"{_GP}::L823": _self_limiting(
         "An unmanaged hidden entry is outside the deterministic generation-residue "
         "lifecycle namespace."
     ),
-    f"{_GP}::L821": _self_limiting(
+    f"{_GP}::L825": _self_limiting(
         "A symlink generation entry is excluded before any retirement mutation for "
         "containment safety."
     ),
-    f"{_GP}::L823": _self_limiting(
+    f"{_GP}::L827": _self_limiting(
         "A non-directory incarnation cannot be a managed generation retirement candidate."
     ),
-    f"{_GP}::L825": _self_limiting(
+    f"{_GP}::L829": _self_limiting(
         "The selected generation remains active and is not a stale candidate for this pass."
     ),
     # -- workspace._install_state::_enqueue_legacy_installed_plugin_versions --
-    f"{_IL}::L413": _self_limiting(
+    f"{_IL}::L417": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),
-    f"{_IL}::L416": _self_limiting(
+    f"{_IL}::L420": _self_limiting(
         "A durable rejected-legacy marker already records this invalid candidate's terminal "
         "disposition."
     ),
-    f"{_IL}::L437": _self_limiting(
+    f"{_IL}::L444": _self_limiting(
         "Another reconciler created the same durable rejection marker, completing this "
         "candidate's disposition."
     ),
-    f"{_IL}::L443": _self_limiting(
+    f"{_IL}::L450": _self_limiting(
         "Writing the rejected-legacy marker durably records this invalid candidate for quiet "
         "later passes."
     ),
-    f"{_IL}::L445": _resolves_with_contention(
+    f"{_IL}::L452": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --

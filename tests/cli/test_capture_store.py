@@ -27,9 +27,16 @@ from autoskillit.cli.ops import run_capture_store
 from autoskillit.core import Severity
 from autoskillit.hooks._capture import _reconcile as capture_reconcile
 from autoskillit.hooks._capture._authority import open_capture_root, open_project_anchor
+from autoskillit.hooks._capture._lifecycle_policy import SWEEP_GRACE_SECONDS
 from autoskillit.hooks._capture._orphan_scan import ADOPTION_AGE_SECONDS
 from autoskillit.hooks._capture._reconcile import CaptureStoreStats, capture_store_stats
-from autoskillit.hooks._capture._types import CleanupBlocker
+from autoskillit.hooks._capture._snapshot import (
+    CaptureMeasurement,
+    CommandOutcome,
+    verify_capture_snapshot,
+)
+from autoskillit.hooks._capture._types import HOT_PATH_LOCK_WAIT, CleanupBlocker
+from autoskillit.hooks._capture_artifacts import CaptureArtifact, create_capture_artifact
 from autoskillit.hooks._capture_lifecycle import LOCK_NAME, CaptureLifecycleStore
 from tests.conftest import production_interpreter_env
 
@@ -50,7 +57,12 @@ def _seed_store_with_backlog_and_orphans(project: Path) -> Path:
     root = open_capture_root(anchor, create=True)
     try:
         past_clock = lambda: time.time() - 4000.0  # noqa: E731
-        store = CaptureLifecycleStore.from_open_authorities(anchor, root, wall_clock=past_clock)
+        store = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=past_clock,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
         for index in range(5):
             store.reserve_capture(f"{index + 1:016x}")
 
@@ -93,6 +105,59 @@ def test_doctor_capture_store_check_reports_stats_without_mutating(tmp_path: Pat
     assert stats.ledger_bytes > 0
     assert stats.unledgered_aged_files == 10
     assert stats.unledgered_aged_bytes == 10 * len(b"orphan-debris")
+
+
+def test_capture_store_stats_reports_due_finalized_record_to_operators(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    finalized_at = time.time() - SWEEP_GRACE_SECONDS - 1.0
+    anchor = open_project_anchor(str(project))
+    root = open_capture_root(anchor, create=True)
+    artifact: CaptureArtifact | None = None
+    try:
+        lifecycle = CaptureLifecycleStore.from_open_authorities(
+            anchor,
+            root,
+            wall_clock=lambda: finalized_at,
+            lock_wait=HOT_PATH_LOCK_WAIT,
+        )
+        artifact = create_capture_artifact(root, "1" * 16, lifecycle)
+        payload = b"finalized"
+        os.write(artifact.fd, payload)
+        verified = verify_capture_snapshot(
+            fd=artifact.fd,
+            capture_id=artifact.authority.capture_id,
+            incarnation=artifact.authority.incarnation,
+            project_identity=(anchor.identity.device, anchor.identity.inode),
+            root_identity=(root.identity.device, root.identity.inode),
+            carrier_name=artifact.name,
+            carrier_identity=(artifact.identity.device, artifact.identity.inode),
+            measurement=CaptureMeasurement.from_bytes(payload, inline_bytes=len(payload)),
+            command_outcome=CommandOutcome.exited(0),
+            expected_revision=artifact.authority.expected_revision,
+            finalized_at=finalized_at,
+            retention_deadline=finalized_at + SWEEP_GRACE_SECONDS,
+        )
+        lifecycle.commit_verified_snapshot(verified, issue_reference=False)
+    finally:
+        if artifact is not None:
+            artifact.close_artifact_fd()
+            artifact.release_lease()
+        root.close()
+        anchor.close()
+
+    stats = capture_store_stats(str(project))
+
+    assert stats.due_records == 1
+    assert stats.eligible_records == 0
+    assert "due_records=1" in _check_capture_store_stats(project).message
+    monkeypatch.chdir(project)
+    run_capture_store(reclaim=False)
+    assert "due_records=1" in capsys.readouterr().out
 
 
 def test_doctor_capture_store_reports_absent_store(
@@ -172,7 +237,7 @@ def test_doctor_capture_store_warning_threshold(
     assert result.severity is expected_severity
     assert result.check == "capture_store_stats"
     assert "live=3" in result.message
-    assert "eligible=2" in result.message
+    assert "eligible_abandoned=2" in result.message
     assert "deleting=1" in result.message
     assert ("--reclaim" in result.message) is expects_remediation
 
@@ -248,12 +313,12 @@ def test_capture_store_reclaim_retries_capacity_refusal(
     real_admit = CaptureLifecycleStore._admit_new_record
     refused_once = False
 
-    def refuse_first_orphan(self, record, records, compaction_epoch, size):
+    def refuse_first_orphan(self, record, records, compaction_epoch, size, now):
         nonlocal refused_once
         if not refused_once and record.legacy_cleanup is not None:
             refused_once = True
             return False
-        return real_admit(self, record, records, compaction_epoch, size)
+        return real_admit(self, record, records, compaction_epoch, size, now)
 
     monkeypatch.setattr(CaptureLifecycleStore, "_admit_new_record", refuse_first_orphan)
 
@@ -266,15 +331,19 @@ def test_capture_store_reclaim_retries_capacity_refusal(
 
 def test_capture_store_stats_does_not_hang_on_lock_contention(tmp_path: Path) -> None:
     """A diagnostic stats read must never hang: capture_store_stats() opens
-    with RUNNER_TAIL_BUDGET as its open_budget, so a contended store-open
-    lock is bounded the same way a real sweep would be — the doctor check
+    with a lock wait derived from RUNNER_TAIL_BUDGET, so a contended
+    store-open lock is bounded the same way a real sweep would be — the doctor check
     and the CLI's default (no --reclaim) path both depend on this to stay
     responsive under contention rather than blocking indefinitely."""
     project = tmp_path / "project"
     project.mkdir()
     anchor = open_project_anchor(str(project))
     root = open_capture_root(anchor, create=True)
-    store = CaptureLifecycleStore.from_open_authorities(anchor, root)
+    store = CaptureLifecycleStore.from_open_authorities(
+        anchor,
+        root,
+        lock_wait=HOT_PATH_LOCK_WAIT,
+    )
     store.reserve_capture("1" * 16)
     root.close()
     anchor.close()

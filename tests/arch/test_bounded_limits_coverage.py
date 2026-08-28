@@ -1,4 +1,4 @@
-"""Standing invariant: every bounding *Limits/*Budget dataclass has per-field coverage.
+"""Standing invariant: every bounding limits dataclass has per-field coverage.
 
 A bounding-limits dataclass with N fields but only one ever driven to a
 triggering value gives false confidence: the untested fields could be
@@ -54,7 +54,22 @@ _BOUNDED_LIMITS_REGISTRY: dict[str, tuple[str, tuple[str, ...]]] = {
         "autoskillit.server.tools._evidence_reader._startup",
         ("server/test_tools_evidence_reader.py",),
     ),
+    "SweepBudgetSpec": (
+        "autoskillit.hooks._capture._types",
+        ("hooks/test_capture_lifecycle.py",),
+    ),
+    "CaptureCapacitySpec": (
+        "autoskillit.hooks._capture._types",
+        ("hooks/test_capture_lifecycle.py",),
+    ),
+    "LockWaitSpec": (
+        "autoskillit.hooks._capture._types",
+        ("hooks/test_capture_lifecycle.py",),
+    ),
 }
+_REQUIRED_CAPTURE_BOUNDED_SPEC_NAMES = frozenset(
+    {"SweepBudgetSpec", "CaptureCapacitySpec", "LockWaitSpec"}
+)
 
 # dataclass name -> rationale — the shape _DETACHED_SPAWN_ALLOWLIST uses, keyed
 # by name instead of path since a *Limits dataclass is what this guard tracks.
@@ -89,7 +104,7 @@ def _dataclass_field_annotations(class_def: ast.ClassDef) -> dict[str, str] | No
 
 
 def _discover_bounded_limits_dataclasses() -> dict[str, Path]:
-    """Every ``@dataclass`` in ``src/`` named ``*Limits``/``*Budget`` with all-numeric fields."""
+    """Every numeric ``@dataclass`` named ``*Limits`` or ``*Budget`` in ``src/``."""
     found: dict[str, Path] = {}
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         try:
@@ -99,7 +114,7 @@ def _discover_bounded_limits_dataclasses() -> dict[str, Path]:
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
-            if not (node.name.endswith("Limits") or node.name.endswith("Budget")):
+            if not node.name.endswith(("Limits", "Budget")):
                 continue
             if not any(_is_dataclass_decorator(dec) for dec in node.decorator_list):
                 continue
@@ -119,11 +134,15 @@ def test_every_bounded_limits_dataclass_is_registered() -> None:
         if name not in _BOUNDED_LIMITS_REGISTRY
     )
     assert not missing, (
-        "Bounding *Limits/*Budget dataclasses missing from _BOUNDED_LIMITS_REGISTRY in "
+        "Bounding limits dataclasses missing from _BOUNDED_LIMITS_REGISTRY in "
         "tests/arch/test_bounded_limits_coverage.py. Add a registry entry naming the "
         "test module(s) that exercise every field, or an allowlist entry with a "
         "rationale and tracking issue:\n" + "\n".join(missing)
     )
+
+
+def test_required_capture_bounded_specs_are_registered() -> None:
+    assert _REQUIRED_CAPTURE_BOUNDED_SPEC_NAMES <= _BOUNDED_LIMITS_REGISTRY.keys()
 
 
 def _target_field_names(module_path: str, class_name: str) -> frozenset[str]:

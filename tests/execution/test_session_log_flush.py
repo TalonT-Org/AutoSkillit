@@ -62,6 +62,40 @@ def test_flush_session_log_writes_proc_trace_as_jsonl(tmp_path):
         assert "vm_rss_kb" in record
 
 
+def test_flush_session_log_defers_artifact_publication_on_lock_contention(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.execution.session_log as session_log
+    from autoskillit.core import ARTIFACT_LEASE_TIMEOUT_SECONDS, ArtifactLeaseContention
+
+    pending = tmp_path / "sessions" / "pending-recovery"
+    pending.mkdir(parents=True)
+    (pending / "proc_trace.jsonl").write_text("incomplete\n", encoding="utf-8")
+    observed_timeouts: list[float] = []
+    warnings: list[tuple[str, dict[str, object]]] = []
+
+    def contend(lock_path: Path, *, timeout: float) -> None:
+        observed_timeouts.append(timeout)
+        raise ArtifactLeaseContention(lock_path)
+
+    monkeypatch.setattr(session_log.ArtifactLease, "acquire_exclusive", contend)
+    monkeypatch.setattr(
+        session_log.logger,
+        "warning",
+        lambda event, **kwargs: warnings.append((event, kwargs)),
+    )
+
+    _flush(tmp_path, session_id="contended-session")
+
+    assert observed_timeouts == [ARTIFACT_LEASE_TIMEOUT_SECONDS]
+    assert warnings[-1][0] == "session_log_flush_lock_contention"
+    assert warnings[-1][1]["session_id"] == "contended-session"
+    assert pending.is_dir()
+    assert not (tmp_path / "sessions" / "contended-session").exists()
+    assert not (tmp_path / "sessions.jsonl").exists()
+
+
 def test_flush_session_log_writes_summary_json(tmp_path):
     """summary.json contains expected session metadata."""
     _flush(tmp_path)

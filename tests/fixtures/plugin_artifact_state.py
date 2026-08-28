@@ -246,7 +246,7 @@ def _publish_exact(
         schema_version=INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,
         strict_durability=True,
     )
-    with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True):
+    with ArtifactLease.acquire_exclusive(spec.lease_path, timeout=2.0):
         pass
     return identity
 
@@ -317,7 +317,7 @@ def build_plugin_artifact_state(
             encoding="utf-8",
         )
         spec.manifest_path.symlink_to(spec.manifest_path.parent / "missing-manifest")
-        with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True):
+        with ArtifactLease.acquire_exclusive(spec.lease_path, timeout=2.0):
             pass
     elif selected is PluginArtifactStateKind.DANGLING_LEASE:
         identity = _publish_exact(spec)
@@ -332,7 +332,7 @@ def build_plugin_artifact_state(
                 json.dumps({"name": "autoskillit", "version": version}),
                 encoding="utf-8",
             )
-            with ArtifactLease.acquire_exclusive(spec.lease_path, blocking=True):
+            with ArtifactLease.acquire_exclusive(spec.lease_path, timeout=2.0):
                 pass
         elif selected is PluginArtifactStateKind.MALFORMED_IDENTITY:
             identity = _publish_exact(spec)

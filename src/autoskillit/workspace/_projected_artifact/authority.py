@@ -14,6 +14,7 @@ from types import MappingProxyType
 from typing import cast
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     DIRECT_PREFIX,
     SKILL_PROJECTION_VERSION,
     ArtifactLease,
@@ -553,7 +554,10 @@ class ProjectedPluginArtifactAuthority:
                 "projected plugin publication planning failed"
             ) from exc
         try:
-            reader = ArtifactLease.acquire_shared(plan.lease_path)
+            reader = ArtifactLease.acquire_shared(
+                plan.lease_path,
+                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
             raise PluginArtifactPublicationError(
                 f"projected plugin reader lease acquisition failed: {plan.semantic_key}"
@@ -571,7 +575,7 @@ class ProjectedPluginArtifactAuthority:
             "repair" if plan.destination.exists() or plan.manifest_path.exists() else "publish"
         )
         try:
-            writer = ArtifactLease.acquire_exclusive(plan.lease_path, blocking=False)
+            writer = ArtifactLease.acquire_exclusive(plan.lease_path, timeout=0.0)
         except ArtifactLeaseContention as exc:
             log_plugin_artifact_lifecycle(
                 logger,
@@ -659,7 +663,10 @@ class ProjectedPluginArtifactAuthority:
             writer.close()
 
         try:
-            reader = ArtifactLease.acquire_shared(plan.lease_path)
+            reader = ArtifactLease.acquire_shared(
+                plan.lease_path,
+                timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            )
         except Exception as exc:
             raise PluginArtifactPublicationError(
                 f"projected plugin reader lease acquisition failed: {plan.semantic_key}"

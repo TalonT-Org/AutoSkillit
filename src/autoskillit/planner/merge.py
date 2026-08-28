@@ -7,7 +7,12 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import get_logger, write_versioned_json
+from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    acquire_flock_with_timeout,
+    get_logger,
+    write_versioned_json,
+)
 from autoskillit.planner.lifecycle import LifecycleCategory, record_lifecycle_event
 from autoskillit.planner.schema import (
     ASSIGN_RESULT_FILE_RE,
@@ -21,6 +26,7 @@ from autoskillit.planner.validation import discover_tier_files
 logger = get_logger(__name__)
 
 _TIER_KEYS = ("phases", "assignments", "work_packages")
+_PLANNER_MERGE_LOCK_TIMEOUT_SECONDS = ARTIFACT_LEASE_TIMEOUT_SECONDS
 
 _TIER_FILE_RE: dict[str, re.Pattern[str]] = {
     "phases": PHASE_RESULT_FILE_RE,
@@ -48,7 +54,12 @@ def merge_files(
     existing_items: list[dict[str, Any]] = []
 
     with open(out, "a+b") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
+        acquire_flock_with_timeout(
+            fh.fileno(),
+            operation=fcntl.LOCK_EX,
+            timeout=_PLANNER_MERGE_LOCK_TIMEOUT_SECONDS,
+            path=out,
+        )
         try:
             fh.seek(0)
             content = fh.read()
@@ -272,7 +283,12 @@ def replace_item(
     found = False
     with open(src, "r+b") as fh:
         try:
-            fcntl.flock(fh, fcntl.LOCK_EX)
+            acquire_flock_with_timeout(
+                fh.fileno(),
+                operation=fcntl.LOCK_EX,
+                timeout=_PLANNER_MERGE_LOCK_TIMEOUT_SECONDS,
+                path=src,
+            )
             data: dict[str, Any] = json.loads(fh.read())
             for tier_key in _TIER_KEYS:
                 tier: list[dict[str, Any]] = data.get(tier_key, [])

@@ -233,7 +233,7 @@ class TestInstallBindingSeal:
         monkeypatch.setattr(
             ArtifactLease,
             "acquire_existing_shared",
-            lambda path: acquired.append(path) or object(),
+            lambda path, *, timeout: acquired.append(path) or object(),
         )
 
         binding._acquire_self_lease(package_root, "1.2.3")

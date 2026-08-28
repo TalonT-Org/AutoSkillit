@@ -31,6 +31,8 @@ class TestDispositionRegistryTotality:
         for reason in (
             CaptureFailureReason.PROJECTED_COMPACTED_BYTES_EXHAUSTED,
             CaptureFailureReason.HARD_LEDGER_CAPACITY_EXHAUSTED,
+            CaptureFailureReason.RECLAMATION_DEBT_ASSIST,
+            CaptureFailureReason.RECLAMATION_DEBT_STALL,
             CaptureFailureReason.LEDGER_INTEGRITY,
         ):
             assert (

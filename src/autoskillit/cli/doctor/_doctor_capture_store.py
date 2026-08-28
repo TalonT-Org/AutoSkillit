@@ -14,6 +14,9 @@ from ._doctor_types import DoctorResult
 # a handful of aged orphans is unremarkable churn; hundreds is the debris
 # field this whole reconciliation mechanism exists to prevent.
 _UNLEDGERED_WARNING_THRESHOLD = 100
+# Production warns at the default assist tier, before the higher stall tier
+# begins refusing new captures. Runtime capacity overrides remain runner-local.
+_RECLAMATION_DEBT_WARNING_THRESHOLD = 256
 
 
 def _check_capture_store_stats(project_dir: Path | None = None) -> DoctorResult:
@@ -35,13 +38,17 @@ def _check_capture_store_stats(project_dir: Path | None = None) -> DoctorResult:
             f"Capture-store stats unavailable (blocker={stats.blocker.value})",
         )
     message = (
-        f"ledger: live={stats.live_records} eligible={stats.eligible_records} "
+        f"ledger: live={stats.live_records} due_records={stats.due_records} "
+        f"eligible_abandoned={stats.eligible_records} "
         f"deleting={stats.deleting_records} ledger_bytes={stats.ledger_bytes}; "
         f"directory: files={stats.directory_files} "
         f"unledgered_aged={stats.unledgered_aged_files} "
         f"unledgered_aged_bytes={stats.unledgered_aged_bytes}"
     )
-    if stats.unledgered_aged_files >= _UNLEDGERED_WARNING_THRESHOLD:
+    if (
+        stats.unledgered_aged_files >= _UNLEDGERED_WARNING_THRESHOLD
+        or stats.due_records >= _RECLAMATION_DEBT_WARNING_THRESHOLD
+    ):
         return DoctorResult(
             Severity.WARNING,
             "capture_store_stats",

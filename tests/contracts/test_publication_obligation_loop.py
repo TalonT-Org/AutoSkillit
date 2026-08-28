@@ -60,7 +60,7 @@ def _publish_cache_incarnation(
 
     with ArtifactLease.acquire_exclusive(
         installed_plugin_artifact_lease_path(version_dir),
-        blocking=True,
+        timeout=2.0,
     ):
         write_installed_plugin_artifact_manifest_locked(
             version_dir,
@@ -605,7 +605,7 @@ def test_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
     (version_dir / "hooks/_dispatch.py").unlink()
     with ArtifactLease.acquire_exclusive(
         installed_plugin_artifact_lease_path(version_dir),
-        blocking=True,
+        timeout=2.0,
     ):
         write_installed_plugin_artifact_manifest_locked(
             version_dir,
@@ -641,7 +641,7 @@ def test_repair_skips_a_contended_lease(monkeypatch: pytest.MonkeyPatch, tmp_pat
     original_content = (version_dir / "hooks" / "hooks.json").read_text()
 
     lease_path = installed_plugin_artifact_lease_path(version_dir)
-    held_lease = ArtifactLease.acquire_exclusive(lease_path, blocking=True)
+    held_lease = ArtifactLease.acquire_exclusive(lease_path, timeout=2.0)
     try:
         outcomes = repair_broken_plugin_cache_hooks(cache_dir)
     finally:

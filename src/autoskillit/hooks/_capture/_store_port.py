@@ -24,11 +24,7 @@ DeliveryValue: TypeAlias = (
 
 
 class LedgerReadStorePort(Protocol):
-    def _locked(
-        self,
-        *,
-        blocking: bool = True,
-    ) -> AbstractContextManager[None]: ...
+    def _locked(self) -> AbstractContextManager[None]: ...
 
     def _load_locked(self) -> LoadedLedger: ...
 
@@ -138,6 +134,7 @@ class SweepStorePort(TransitionStorePort, Protocol):
         records: Records,
         compaction_epoch: int,
         size: int,
+        now: float,
     ) -> bool: ...
 
 

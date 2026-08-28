@@ -561,18 +561,7 @@ async def scoped_child_resource_owner(
             raise BaseExceptionGroup("Child resource cleanup failed", cleanup_errors)
 
 
-__all__ = [
-    "ManagedLeafAssignmentIdentity",
-    "ManagedLeafAssignmentInput",
-    "ManagedLeafBinding",
-    "ManagedLeafIdentityPlan",
-    "ManagedLeafProjection",
-    "ManagedLeafPreparedLaunch",
-    "ManagedLeafWorkspacePlan",
-    "bind_managed_leaf",
-    "classify_managed_leaf_workspace",
-    "may_retry_managed_leaf",
-    "plan_managed_leaf_identities",
-    "project_managed_leaf",
-    "scoped_child_resource_owner",
-]
+# Note: this leading-underscore module deliberately exposes a small public surface
+# for sibling modules under ``tools_execution``. The leading-underscore
+# convention would normally pair with ``__all__ = ()``; callers import the
+# names explicitly. The public names are not re-exported via star imports.

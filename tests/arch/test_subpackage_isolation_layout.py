@@ -111,10 +111,6 @@ def test_responsibility_shards_are_collected_and_stay_small() -> None:
     assert not missing_markers
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="coverage source map is regenerated after isolation guards move (#4886)",
-)
 def test_source_map_records_moved_behavioral_successors() -> None:
     data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
     source_map = data["map"]

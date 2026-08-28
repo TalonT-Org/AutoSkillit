@@ -8,6 +8,7 @@ The original Codex schema probes also record ``CanaryState`` issue updates.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import http.server
 import json
@@ -22,6 +23,7 @@ import threading
 import time
 import tomllib
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple, Protocol, TypeVar
@@ -39,7 +41,13 @@ from autoskillit.core import (
     CLAUDE_CODE_CAPABILITIES,
     OUTPUT_DISCIPLINE_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    DefaultManagedWorkerCapacity,
     OutputFormat,
+    SemanticAdaptationContext,
+    SkillContractError,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
+    WriteBehaviorSpec,
     agent_definition_digest,
     load_agent_definitions,
     normalize_codex_cli_version,
@@ -49,7 +57,12 @@ from autoskillit.execution.backends._codex_config import (
     CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     ensure_codex_mcp_registered,
 )
-from autoskillit.execution.backends._codex_hooks import sync_hooks_to_codex_config
+from autoskillit.execution.backends._codex_hooks import (
+    MANAGED_CODEX_LEAF_GUARD_SET,
+    MANAGED_CODEX_PARENT_GUARD_SET,
+    MANAGED_CODEX_PARENT_MCP_TOOLS,
+    sync_hooks_to_codex_config,
+)
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._explorer_conformance import (
     EXPLORER_ATTESTATION_SCHEMA_VERSION,
@@ -88,6 +101,14 @@ from autoskillit.execution.process import (
     spawn_owned_process,
 )
 from autoskillit.hook_registry import generate_hooks_json
+from autoskillit.hooks import (
+    OUTCOME_CANCELLED,
+    OUTCOME_COMPLETED,
+    OUTCOME_FAILED,
+    JoinLedgerError,
+    active_batch,
+    settle_assignment,
+)
 from autoskillit.hooks._capture_artifacts import (
     CAPTURE_PATH_COMPONENTS,
     open_capture_lifecycle,
@@ -100,6 +121,18 @@ from autoskillit.hooks._capture_contract import (
     encode_capture_request,
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
+from autoskillit.hooks._join_ledger import can_release_stop
+from autoskillit.hooks._session_binding import LoadedSkillEntry
+from autoskillit.pipeline import DefaultBackgroundSupervisor
+from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
+    ManagedFixedBatchLaunchBinding,
+    ManagedFixedBatchService,
+    ManagedLaunchBinding,
+    ManagedLeafLaunchResult,
+)
+from autoskillit.server.tools.tools_execution._managed_leaf import ManagedLeafAssignmentInput
+from autoskillit.workspace import AgentSkillDocument, DefaultSkillResolver
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution._process_group_helpers import _cleanup_owned_process_group
 from tests.execution.backends._conformance_assertions import (
@@ -1646,6 +1679,363 @@ def test_generated_codex_child_luna_max_sandbox_conformance(
         record_success=lambda _version: None,
         record_failure=lambda _kind, _name, _version, _detail: None,
     )
+
+
+def _load_managed_fixed_batch_smoke_skill(
+    name: str,
+    backend: CodexBackend,
+    adaptation_context: SemanticAdaptationContext,
+) -> tuple[
+    LoadedSkillEntry,
+    AgentSkillDocument,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
+]:
+    skill = DefaultSkillResolver().resolve(name)
+    assert skill is not None and not skill.invalidities
+    plan = skill.semantic_plan
+    assert plan is not None and plan.join is not None and plan.join.required
+    adaptation = backend.adapt_skill_semantics(plan, adaptation_context)
+    assert adaptation.unsupported_operation is None
+    cardinality: dict[str, int | str] = {}
+    for spawn in plan.child_spawns:
+        if spawn.for_each is not None:
+            cardinality[spawn.role] = spawn.for_each
+        else:
+            assert spawn.count is not None
+            cardinality[spawn.role] = spawn.count
+    source = LoadedSkillEntry(
+        skill_name=skill.name,
+        ts="2026-08-28T00:00:00Z",
+        join_required=True,
+        child_spawn_cardinality=cardinality,
+        semantic_digest=plan.digest,
+        adaptation_digest=adaptation.digest,
+        projected_digest=skill.canonical_digest,
+        canonical_digest=skill.canonical_digest,
+        source_artifact_digest=skill.canonical_digest,
+        source_artifact_incarnation_id=f"smoke-{skill.name}",
+        binding_valid=True,
+        binding_error=None,
+    )
+    document = AgentSkillDocument(
+        content=skill.canonical_content,
+        projected_digest=source.projected_digest,
+        canonical_digest=source.canonical_digest,
+        source_identity=skill.source_identity,
+        semantic_digest=source.semantic_digest,
+        adaptation_digest=source.adaptation_digest,
+    )
+    return source, document, adaptation, plan
+
+
+def _managed_fixed_batch_smoke_binding(
+    *,
+    channel: Path,
+    caller_key: str,
+    source: LoadedSkillEntry,
+    document: AgentSkillDocument,
+    adaptation: object,
+    assignments: tuple[ManagedLeafAssignmentInput, ...],
+    launch_leaf,
+) -> ManagedFixedBatchLaunchBinding:
+    return ManagedFixedBatchLaunchBinding(
+        launch=ManagedLaunchBinding(
+            request_session_id="managed-smoke-session",
+            managed_parent_id="managed-smoke-parent",
+            parent_session_id="managed-smoke-session",
+            caller_key=caller_key,
+            attestation_epoch=0,
+            recovery_ready=True,
+            selected_source=source,
+        ),
+        flag_dir=channel,
+        source_document=document,
+        adaptation=adaptation,
+        assignments=assignments,
+        default_model="gpt-5.6-sol",
+        write_behavior=WriteBehaviorSpec(),
+        read_only=True,
+        launch_leaf=launch_leaf,
+    )
+
+
+@pytest.mark.timeout(60)
+def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
+    """Exercise server-owned managed batches without relying on model prompt choices."""
+
+    async def exercise() -> None:
+        backend = CodexBackend()
+        authority = DefaultManagedJoinAttestationAuthority()
+        context = authority.issue(
+            backend="codex",
+            launch_context="direct",
+            parent_session_id="managed-smoke-session",
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            resolved_reasoning_effort="high",
+            codex_catalog_digest="a" * 64,
+            fixed_batch_tool_registry_digest="b" * 64,
+            hook_registry_digest="c" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+        )
+        code_mode_context = authority.issue(
+            backend="codex",
+            launch_context="code_mode_only",
+            parent_session_id="managed-smoke-session",
+            direct_tool_mode=False,
+            resolved_model="gpt-5.6-sol",
+            resolved_reasoning_effort="high",
+            codex_catalog_digest="a" * 64,
+            fixed_batch_tool_registry_digest="b" * 64,
+            hook_registry_digest="c" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+        )
+        static_source, static_document, static_adaptation, static_plan = (
+            _load_managed_fixed_batch_smoke_skill("audit-bugs", backend, context)
+        )
+        dynamic_source, dynamic_document, dynamic_adaptation, _dynamic_plan = (
+            _load_managed_fixed_batch_smoke_skill("investigate", backend, context)
+        )
+
+        assert backend.capabilities.fixed_set_join_capable is False
+        assert backend.adapt_skill_semantics(static_plan).unsupported_operation is not None
+        assert (
+            authority.verify(
+                context,
+                backend="codex",
+                parent_session_id="managed-smoke-session",
+            )
+            == context
+        )
+        assert (
+            backend.adapt_skill_semantics(
+                static_plan,
+                code_mode_context,
+            ).unsupported_operation
+            is not None
+        )
+        assert MANAGED_CODEX_PARENT_MCP_TOOLS == (
+            "run_fixed_batch",
+            "read_fixed_batch_result",
+        )
+        assert {"background_exec_guard", "join_followup_guard", "join_stop_guard"} <= (
+            MANAGED_CODEX_PARENT_GUARD_SET
+        )
+        assert "join_followup_guard" not in MANAGED_CODEX_LEAF_GUARD_SET
+        assert "join_stop_guard" not in MANAGED_CODEX_LEAF_GUARD_SET
+
+        capacity = DefaultManagedWorkerCapacity(max_concurrent=3)
+        service = ManagedFixedBatchService(
+            capacity=capacity,
+            background=DefaultBackgroundSupervisor(),
+            state_root=tmp_path / "state",
+        )
+        assert await service.reconcile_startup()
+        observed: list[tuple[str, str]] = []
+
+        async def controlled_leaf(projection, _permit):
+            assignment = projection.binding.assignment
+            backend_session_id = f"stock-codex-{assignment.assignment_id}"
+            observed.append((assignment.generated_home_id, backend_session_id))
+            outcome = {
+                "dynamic-failure": OUTCOME_FAILED,
+                "dynamic-cancelled": OUTCOME_CANCELLED,
+            }.get(assignment.label, OUTCOME_COMPLETED)
+            return ManagedLeafLaunchResult(
+                outcome=outcome,
+                backend_session_id=backend_session_id,
+                result_payload={"label": assignment.label, "outcome": outcome},
+            )
+
+        static_binding = _managed_fixed_batch_smoke_binding(
+            channel=tmp_path / "static-channel",
+            caller_key="static-smoke-key",
+            source=static_source,
+            document=static_document,
+            adaptation=static_adaptation,
+            assignments=(
+                ManagedLeafAssignmentInput(
+                    role="delegated-worker",
+                    label="static-success",
+                    task_prompt="Return the static conformance evidence.",
+                ),
+            ),
+            launch_leaf=controlled_leaf,
+        )
+        dynamic_binding = _managed_fixed_batch_smoke_binding(
+            channel=tmp_path / "dynamic-channel",
+            caller_key="dynamic-smoke-key",
+            source=dynamic_source,
+            document=dynamic_document,
+            adaptation=dynamic_adaptation,
+            assignments=(
+                ManagedLeafAssignmentInput(
+                    role="delegated-worker",
+                    label="dynamic-success",
+                    runtime_key="success",
+                    task_prompt="Return successful dynamic evidence.",
+                ),
+                ManagedLeafAssignmentInput(
+                    role="delegated-worker",
+                    label="dynamic-failure",
+                    runtime_key="failure",
+                    task_prompt="Return failed dynamic evidence.",
+                ),
+                ManagedLeafAssignmentInput(
+                    role="delegated-worker",
+                    label="dynamic-cancelled",
+                    runtime_key="cancelled",
+                    task_prompt="Return cancelled dynamic evidence.",
+                ),
+            ),
+            launch_leaf=controlled_leaf,
+        )
+
+        try:
+            static_result = await service.run(static_binding)
+            dynamic_result = await service.run(dynamic_binding)
+            static_replay = await service.run(static_binding)
+
+            assert static_result.wave_outcome == "complete"
+            assert static_replay.replayed is True
+            assert static_replay.batch_id == static_result.batch_id
+            assert dynamic_result.wave_outcome != "complete"
+            assert len({home for home, _session in observed}) == len(observed)
+            assert len({session for _home, session in observed}) == len(observed)
+            assert capacity.active_count == 0
+
+            static_batch = active_batch(
+                static_binding.flag_dir,
+                session_id=static_binding.launch.request_session_id,
+                top_level_parent=static_binding.launch.managed_parent_id,
+            )
+            dynamic_batch = active_batch(
+                dynamic_binding.flag_dir,
+                session_id=dynamic_binding.launch.request_session_id,
+                top_level_parent=dynamic_binding.launch.managed_parent_id,
+            )
+            assert static_batch is not None and dynamic_batch is not None
+            assert static_batch["source_artifact_digest"] == static_source.source_artifact_digest
+            assert (
+                dynamic_batch["source_artifact_incarnation_id"]
+                == dynamic_source.source_artifact_incarnation_id
+            )
+            assert [item["outcome"] for item in dynamic_batch["assignments"]] == [
+                OUTCOME_COMPLETED,
+                OUTCOME_FAILED,
+                OUTCOME_CANCELLED,
+            ]
+            assert all(len(item["attempts"]) == 1 for item in dynamic_batch["assignments"])
+
+            assert static_result.result_reference is not None
+            ordered = service.read_result(
+                reference=static_result.result_reference,
+                launch=static_binding.launch,
+                batch_id=static_result.batch_id,
+            )
+            assert isinstance(ordered, dict)
+            assert [item["assignment_id"] for item in ordered["assignments"]] == [
+                item["assignment_id"] for item in static_batch["assignments"]
+            ]
+            with pytest.raises(SkillContractError, match="authorization"):
+                service.read_result(
+                    reference=static_result.result_reference,
+                    launch=replace(
+                        static_binding.launch,
+                        managed_parent_id="foreign-managed-smoke-parent",
+                    ),
+                    batch_id=static_result.batch_id,
+                )
+
+            static_assignment = static_batch["assignments"][0]
+            settle_assignment(
+                static_binding.flag_dir,
+                session_id=static_binding.launch.request_session_id,
+                top_level_parent=static_binding.launch.managed_parent_id,
+                tool_use_id=static_assignment["assignment_id"],
+                outcome=static_assignment["outcome"],
+                batch_id=static_result.batch_id,
+                assignment_id=static_assignment["assignment_id"],
+                attempt_id=static_assignment["current_attempt_id"],
+                run_id=static_assignment["current_run_id"],
+                terminal_event_id=static_assignment["terminal_event_id"],
+                terminal_payload_digest=static_assignment["terminal_payload_digest"],
+                result_reference=static_assignment["result_reference"],
+                result_digest=static_assignment["result_digest"],
+            )
+            with pytest.raises(JoinLedgerError, match="stale"):
+                settle_assignment(
+                    static_binding.flag_dir,
+                    session_id=static_binding.launch.request_session_id,
+                    top_level_parent=static_binding.launch.managed_parent_id,
+                    tool_use_id=static_assignment["assignment_id"],
+                    outcome=static_assignment["outcome"],
+                    batch_id=static_result.batch_id,
+                    assignment_id=static_assignment["assignment_id"],
+                    attempt_id="stale-attempt",
+                    run_id=static_assignment["current_run_id"],
+                )
+            with pytest.raises(JoinLedgerError, match="conflicting terminal event"):
+                settle_assignment(
+                    static_binding.flag_dir,
+                    session_id=static_binding.launch.request_session_id,
+                    top_level_parent=static_binding.launch.managed_parent_id,
+                    tool_use_id=static_assignment["assignment_id"],
+                    outcome=static_assignment["outcome"],
+                    batch_id=static_result.batch_id,
+                    assignment_id=static_assignment["assignment_id"],
+                    attempt_id=static_assignment["current_attempt_id"],
+                    run_id=static_assignment["current_run_id"],
+                    terminal_event_id=static_assignment["terminal_event_id"],
+                    terminal_payload_digest="changed-payload",
+                )
+
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def blocked_leaf(_projection, _permit):
+                started.set()
+                await release.wait()
+                return ManagedLeafLaunchResult(result_payload={"label": "blocked"})
+
+            pending_binding = _managed_fixed_batch_smoke_binding(
+                channel=tmp_path / "pending-channel",
+                caller_key="pending-smoke-key",
+                source=static_source,
+                document=static_document,
+                adaptation=static_adaptation,
+                assignments=(
+                    ManagedLeafAssignmentInput(
+                        role="delegated-worker",
+                        label="blocked",
+                        task_prompt="Wait for the server-owned release signal.",
+                    ),
+                ),
+                launch_leaf=blocked_leaf,
+            )
+            pending = asyncio.create_task(service.run(pending_binding))
+            await asyncio.wait_for(started.wait(), timeout=5)
+            allowed, reason = can_release_stop(
+                pending_binding.flag_dir,
+                session_id=pending_binding.launch.request_session_id,
+                top_level_parent=pending_binding.launch.managed_parent_id,
+                session_binding={
+                    "join_required": True,
+                    "binding_valid": True,
+                    "managed_parent_id": pending_binding.launch.managed_parent_id,
+                },
+            )
+            assert allowed is False
+            assert "unresolved" in reason
+            release.set()
+            assert (await pending).wave_outcome == "complete"
+        finally:
+            await service.close()
+
+    asyncio.run(exercise())
 
 
 def _policy_denial_reason(transcript: str) -> str | None:

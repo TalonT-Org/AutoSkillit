@@ -1,7 +1,7 @@
 {
   "provenance": {
-    "generated_at": "2026-08-28T17:32:09.001060+00:00",
-    "source_commit": "43d20410fe105cd816b01bc85bbfcf240f1daa23",
+    "generated_at": "2026-08-28T18:29:47.986552+00:00",
+    "source_commit": "107b3f6cef91db7434b7dc86581308d14587b41a",
     "pytest_exit_code": 0,
     "tool_version": "0.10.1082",
     "source_file_count": 798
@@ -3821,8 +3821,8 @@
       "tests/server/test_response_backstop_metadata.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
-      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
+      "tests/server/test_tools_agents.py",
       "tests/server/test_tools_dispatch_params.py",
       "tests/server/test_tools_evidence_reader.py",
       "tests/server/test_tools_evidence_reader_delegate.py",
@@ -3935,8 +3935,8 @@
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
       "tests/server/test_session_deadline.py",
-      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
+      "tests/server/test_tools_agents.py",
       "tests/server/test_tools_kitchen_cache_poison.py",
       "tests/server/test_tools_kitchen_envelope_failure.py",
       "tests/server/test_tools_kitchen_envelope_hook_drift.py",
@@ -9553,8 +9553,8 @@
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
       "tests/server/test_session_deadline.py",
-      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
+      "tests/server/test_tools_agents.py",
       "tests/server/test_tools_dispatch.py",
       "tests/server/test_tools_dispatch_halt.py",
       "tests/server/test_tools_dispatch_params.py",
@@ -16129,7 +16129,6 @@
       "tests/server/test_declare_join_batch_handler.py",
       "tests/server/test_enable_exploration.py",
       "tests/server/test_factory_context_construction.py",
-      "tests/server/test_headless_session.py",
       "tests/server/test_lifespan.py",
       "tests/server/test_lifespan_fleet_boot.py",
       "tests/server/test_response_backstop_metadata.py",
@@ -16967,7 +16966,6 @@
       "tests/infra/test_skill_exemption_enforcement.py"
     ],
     "src/autoskillit/hooks/guards/quota_guard.py": [
-      "tests/contracts/test_exogenous_string_coupling.py",
       "tests/execution/test_quota_sleep.py",
       "tests/hooks/test_hook_config_bridge.py",
       "tests/hooks/test_quota_check.py"
@@ -17050,7 +17048,6 @@
       "tests/hooks/test_quota_guard_state_post_hook.py"
     ],
     "src/autoskillit/hooks/quota_post_hook.py": [
-      "tests/contracts/test_exogenous_string_coupling.py",
       "tests/hooks/test_hook_output_contract.py",
       "tests/hooks/test_quota_post_check.py"
     ],
@@ -40719,8 +40716,8 @@
       "tests/server/test_response_backstop_metadata.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
-      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
+      "tests/server/test_tools_agents.py",
       "tests/server/test_tools_kitchen_visibility.py",
       "tests/server/test_tools_recipe.py",
       "tests/server/test_wire_compat.py"

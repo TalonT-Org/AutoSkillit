@@ -224,12 +224,7 @@ async def load_recipe(
     - NEVER skip a step for any other reason (PR size, diff triviality, etc.).
     - A running optional step that returns success: false MUST follow on_failure.
 
-    STEP SKIP SEMANTICS:
-    - skip_when_false ingredient references are resolved server-side before delivery;
-      never evaluate inputs.* references yourself.
-    - skip_when_true is adjudicated by the host at run_skill dispatch. Pass its resolved
-      context value as step_guard_value and never skip a step on your own initiative.
-    - When the host returns skipped: true, route only to its next_step bypass target.
+    {STEP_SKIP_SEMANTICS}
 
     To CREATE a new recipe, use the /write-recipe skill.
     This tool is for loading and executing existing recipes.

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX, STEP_SKIP_SEMANTICS_CLAUSE
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
@@ -448,6 +448,41 @@ def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
 
 _ANTI_FAB_BUILDERS = _anti_fab_prompt_builders()
 
+_SKIP_SEMANTICS_BUILDERS = [
+    item
+    for item in _ANTI_FAB_BUILDERS
+    if item[0]
+    in {
+        "_build_food_truck_prompt",
+        "_build_orchestrator_prompt",
+        "_build_open_kitchen_prompt",
+        "_build_orchestration_rules",
+    }
+]
+
+_SKIP_SEMANTICS_MODULES = {
+    "_build_food_truck_prompt": "autoskillit.fleet._prompts",
+    "_build_orchestrator_prompt": "autoskillit.cli.prompts._prompts_orchestrator",
+    "_build_open_kitchen_prompt": "autoskillit.cli.prompts._prompts_kitchen",
+    "_build_orchestration_rules": "autoskillit.recipe._api_orchestration",
+}
+
+
+def _load_recipe_docstring_text() -> str:
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    return load_recipe.__doc__ or ""
+
+
+def _sous_chef_text() -> str:
+    return (
+        _project_root() / "src" / "autoskillit" / "skills" / "sous-chef" / "SKILL.md"
+    ).read_text()
+
+
+def _normalized_instruction_text(text: str) -> str:
+    return " ".join(text.split())
+
 
 class TestAntiFabricationSurfaceContract:
     """Every prompt builder that generates system prompts for recipe-execution sessions
@@ -523,19 +558,34 @@ class TestAntiFabricationSurfaceContract:
 
     @pytest.mark.parametrize(
         "name,builder,kwargs",
-        [
-            item
-            for item in _ANTI_FAB_BUILDERS
-            if item[0]
-            in {
-                "_build_orchestrator_prompt",
-                "_build_open_kitchen_prompt",
-                "_build_orchestration_rules",
-            }
-        ],
+        _SKIP_SEMANTICS_BUILDERS,
     )
     def test_instruction_surface_mentions_skip_when_true(self, name, builder, kwargs):
         assert "skip_when_true" in builder(**kwargs), f"{name} omits skip_when_true semantics"
+
+    @pytest.mark.parametrize(
+        "name,builder,kwargs",
+        _SKIP_SEMANTICS_BUILDERS,
+    )
+    def test_importable_skip_semantics_surfaces_use_shared_constant(
+        self, monkeypatch, name, builder, kwargs
+    ):
+        marker = f"canonical-skip-semantics-marker:{name}"
+        module = importlib.import_module(_SKIP_SEMANTICS_MODULES[name])
+        monkeypatch.setattr(module, "STEP_SKIP_SEMANTICS_CLAUSE", marker)
+        assert marker in builder(**kwargs)
+
+    @pytest.mark.parametrize(
+        "name,text_loader",
+        [
+            ("load_recipe docstring", _load_recipe_docstring_text),
+            ("sous-chef SKILL.md", _sous_chef_text),
+        ],
+    )
+    def test_text_skip_semantics_surfaces_match_canonical_clause(self, name, text_loader):
+        expected = _normalized_instruction_text(STEP_SKIP_SEMANTICS_CLAUSE.strip())
+        actual = _normalized_instruction_text(text_loader())
+        assert expected in actual, f"{name} drifted from STEP_SKIP_SEMANTICS_CLAUSE"
 
 
 class TestSousChefMergePhaseContract:

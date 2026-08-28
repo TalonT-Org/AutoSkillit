@@ -866,18 +866,16 @@ every step at full fidelity regardless of session length.
 ### 3. The word "optional" in YAML
 
 `optional: true` on a recipe step does NOT mean the step is discretionary. It means:
-- The step is SKIPPED when its `skip_when_false` ingredient resolves to false.
-  `skip_when_false` references are resolved server-side — falsy steps are removed
-  entirely through their author-declared `on_skip` configuration continuation;
-  truthy steps appear without `optional:`, `skip_when_false:`, or `on_skip:` fields.
-  `on_skip` is never a runtime result edge.
-  Never evaluate `inputs.*` references yourself.
+- The step is configuration-guarded; it is not permissible to skip it by judgment.
 - When the ingredient evaluates to true, the step is MANDATORY.
 - A running optional step that returns `success: false` MUST follow `on_failure`.
 
-`skip_when_true` is host-adjudicated at `run_skill` dispatch. Pass the resolved context
-value as `step_guard_value`; never skip the step yourself. A `skipped: true` response
-authorizes only its returned `next_step` bypass.
+STEP SKIP SEMANTICS:
+- skip_when_false ingredient references are resolved server-side before delivery;
+  never evaluate inputs.* references yourself.
+- skip_when_true is adjudicated by the host at run_skill dispatch. Pass its resolved
+  context value as step_guard_value and never skip a step on your own initiative.
+- When the host returns skipped: true, route only to its next_step bypass target.
 
 ### 4. Anti-shortcut rule
 

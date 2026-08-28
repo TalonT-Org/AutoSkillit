@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from autoskillit.core import Severity
+from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
-from autoskillit.recipe.validator import validate_recipe_structure
+from autoskillit.recipe.validator import run_semantic_rules, validate_recipe_structure
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
@@ -60,3 +62,50 @@ def test_valid_skip_when_true_has_no_guard_errors() -> None:
         )
     )
     assert not [error for error in errors if "skip_when_true" in error]
+
+
+def _capture_consumer_findings(recipe: Recipe):
+    return [
+        finding
+        for finding in run_semantic_rules(recipe)
+        if finding.rule == "skip-when-true-capture-consumers"
+    ]
+
+
+def test_bundled_research_design_passes_skip_when_true_capture_consumers() -> None:
+    recipe = load_recipe(builtin_recipes_dir() / "research-design.yaml")
+    assert _capture_consumer_findings(recipe) == []
+
+
+def test_skip_when_true_capture_consumers_rejects_missing_optional_context_refs() -> None:
+    recipe = Recipe(
+        name="missing-optional-ref",
+        description="guarded capture consumer",
+        steps={
+            "produce_guard": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "printf true"},
+                capture={"is_silent_type": "${{ result.stdout }}"},
+                on_success="guarded",
+            ),
+            "guarded": RecipeStep(
+                tool="run_skill",
+                with_args={"skill_command": "/autoskillit:investigate"},
+                skip_when_true="context.is_silent_type",
+                capture={"artifact_path": "${{ result.artifact_path }}"},
+                on_success="consumer",
+            ),
+            "consumer": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "test -f '${{ context.artifact_path }}'"},
+                on_success="done",
+            ),
+            "done": RecipeStep(action="stop", message="done"),
+        },
+    )
+
+    findings = _capture_consumer_findings(recipe)
+    assert len(findings) == 1
+    assert findings[0].severity is Severity.ERROR
+    assert findings[0].step_name == "consumer"
+    assert "artifact_path" in findings[0].message

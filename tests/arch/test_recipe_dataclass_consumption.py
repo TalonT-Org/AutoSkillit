@@ -269,6 +269,9 @@ def _module_path(module: str) -> Path:
 
 
 def _function_names(tree: ast.AST) -> set[str]:
+    # Only top-level functions and class methods are tracked. Consumer sites
+    # and behavioral anchors are documented as module-level or class-level;
+    # a future entry pointing inside a nested helper would silently miss.
     names: set[str] = set()
 
     def visit(nodes: list[ast.stmt], prefix: str = "") -> None:
@@ -310,7 +313,7 @@ def _test_anchor_exists(anchor: str) -> bool:
     return function_name in _function_names(ast.parse(path.read_text(encoding="utf-8")))
 
 
-def _all_live_fields() -> set[FieldKey]:
+def live_fields() -> set[FieldKey]:
     return {
         (owner, field.name)
         for owner in (RecipeIngredient, RecipeStep, Recipe)
@@ -352,14 +355,14 @@ def _assert_registry_is_truthful(
 
 
 def test_recipe_dataclass_fields_are_classified_or_deferred() -> None:
-    live_fields = _all_live_fields()
+    fields = live_fields()
     classified = set(DECLARED_RECIPE_FIELDS)
     deferred = set(DEFERRED_RECIPE_FIELDS)
     assert not classified & deferred, "field classifications and deferrals must be disjoint"
-    assert classified | deferred == live_fields, (
+    assert classified | deferred == fields, (
         "recipe dataclass ledger does not match live fields; "
-        f"missing={sorted(map(_field_label, live_fields - classified - deferred))}, "
-        f"stale={sorted(map(_field_label, (classified | deferred) - live_fields))}"
+        f"missing={sorted(map(_field_label, fields - classified - deferred))}, "
+        f"stale={sorted(map(_field_label, (classified | deferred) - fields))}"
     )
 
 
@@ -370,7 +373,7 @@ def test_declared_recipe_field_consumers_are_real() -> None:
 
 
 def test_deferred_recipe_fields_are_current_and_explained() -> None:
-    unconsumed = {key for key in _all_live_fields() if key not in DECLARED_RECIPE_FIELDS}
+    unconsumed = {key for key in live_fields() if key not in DECLARED_RECIPE_FIELDS}
     assert_entries_still_apply(
         DEFERRED_RECIPE_FIELDS,
         registry_name="DEFERRED_RECIPE_FIELDS",

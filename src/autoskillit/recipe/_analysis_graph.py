@@ -63,8 +63,7 @@ def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
 
     Edges represent routing connections. Each edge carries:
     - ``edge_type``: one of ``"success"``, ``"failure"``, ``"context_limit"``,
-      ``"result_condition"``, ``"exhausted"``, ``"configuration_skip"``,
-      ``"configuration_sub_recipe"``, and ``"runtime_skip_bypass"``
+      ``"result_condition"``, and ``"exhausted"``
     - ``condition``: for ``on_result`` edges, the ``when`` expression; otherwise ``""``
 
     Args:

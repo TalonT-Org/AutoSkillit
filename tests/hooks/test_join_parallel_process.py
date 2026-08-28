@@ -26,6 +26,7 @@ from autoskillit.hooks._join_ledger import (
     JoinLedgerError,
     claim_assignment,
     declare_batch,
+    open_or_replay,
     settle_assignment,
 )
 
@@ -88,6 +89,27 @@ def _worker_settle(args: tuple[str, str, str, str, str]) -> str:
             outcome=outcome,
         )
         return "ok"
+    except JoinLedgerError as exc:
+        return f"error:{exc}"
+
+
+def _worker_open_or_replay(flag_dir_str: str) -> str:
+    """Open the same managed declaration from independently locked processes."""
+    from autoskillit.hooks._join_ledger import JoinLedgerError, open_or_replay
+
+    try:
+        batch = open_or_replay(
+            Path(flag_dir_str),
+            parent={"request_session_id": "s1", "managed_parent_id": "p1", "managed_leaf_id": ""},
+            selected_source={
+                "skill_name": "skill",
+                "source_artifact_digest": "artifact",
+                "source_artifact_incarnation_id": "incarnation",
+            },
+            key="same-key",
+            declaration={"assignments": [{"label": "a1", "role": "worker"}]},
+        )
+        return str(batch["join_batch_id"])
     except JoinLedgerError as exc:
         return f"error:{exc}"
 
@@ -392,4 +414,26 @@ def test_declaration_validates_skill_name(tmp_path: Path) -> None:
             skill_name="",
             artifact_digest="abc",
             assignments=("a1",),
+        )
+
+
+def test_parallel_open_or_replay_returns_one_immutable_batch(tmp_path: Path) -> None:
+    """Real cross-process flock contention cannot split one declaration key."""
+    ctx = multiprocessing.get_context("spawn")
+    with ctx.Pool(processes=4) as pool:
+        results = pool.map(_worker_open_or_replay, [str(tmp_path)] * 4)
+
+    assert not [result for result in results if result.startswith("error:")]
+    assert len(set(results)) == 1
+    with pytest.raises(JoinLedgerError, match="changed declaration"):
+        open_or_replay(
+            tmp_path,
+            parent={"request_session_id": "s1", "managed_parent_id": "p1", "managed_leaf_id": ""},
+            selected_source={
+                "skill_name": "skill",
+                "source_artifact_digest": "artifact",
+                "source_artifact_incarnation_id": "incarnation",
+            },
+            key="same-key",
+            declaration={"assignments": [{"label": "changed"}]},
         )

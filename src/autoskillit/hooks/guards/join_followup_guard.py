@@ -31,6 +31,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
+    session_managed_scope,
     write_join_diagnostic,
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
@@ -88,7 +89,28 @@ def main() -> None:
     if not isinstance(tool_name, str) or tool_name == "Agent":
         sys.exit(0)
 
-    top_level_parent = "top_level"
+    scope = session_managed_scope(payload_cwd, session_id)
+    if scope is None:
+        write_join_diagnostic(
+            {
+                "gate": "join_followup_guard",
+                "session_id": session_id,
+                "status": "block",
+                "denial_reason": "invalid_managed_scope",
+            },
+            caller="join_followup_guard",
+        )
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": "required-join binding has no valid managed scope.",
+                }
+            )
+            + "\n"
+        )
+        sys.exit(2)
+    top_level_parent, _managed_leaf_id = scope
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     batch = active_batch(
         flag_dir,

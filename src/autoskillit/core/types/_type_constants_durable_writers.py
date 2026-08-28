@@ -139,6 +139,15 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.hooks._join_ledger:write_join_ledger",
+        artifact=(
+            "join_ledger.json — immutable declared-batch records and the "
+            "declaration-key index, serialized under the sibling flock"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer=(
             "autoskillit.workspace._projected_artifact._hook_repair:"
             "repair_broken_plugin_cache_hooks"

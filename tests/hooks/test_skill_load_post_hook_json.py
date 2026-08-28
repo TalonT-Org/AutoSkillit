@@ -135,5 +135,5 @@ def test_existing_flag_is_json_envelope(tmp_path: Path) -> None:
     raw = flag_path.read_text(encoding="utf-8")
     parsed = json.loads(raw)  # Raises if the hook wrote a non-JSON literal
     assert parsed["session_id"] == "abc123"
-    assert parsed["schema_version"] == 2
+    assert parsed["schema_version"] == 3
     assert "loaded_skills" in parsed

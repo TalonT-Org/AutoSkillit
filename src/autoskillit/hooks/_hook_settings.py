@@ -461,6 +461,16 @@ DIAGNOSTIC_KEYS: frozenset[str] = frozenset(
         "adaptation_digest",
         "artifact_digest",
         "artifact_incarnation",
+        "source_artifact_digest",
+        "source_artifact_incarnation_id",
+        "managed_parent_id",
+        "managed_leaf_id",
+        "assignment_id",
+        "attempt_id",
+        "run_id",
+        "terminal_event_id",
+        "terminal_payload_digest",
+        "lifecycle_state",
         "selector_presence",
         "activation_source",
         "launch_policy_state",
@@ -552,3 +562,20 @@ def session_join_required(payload_cwd: str, session_id: str) -> bool:
     """Return whether the payload-identified binding requires a fixed-set join."""
     binding = read_session_binding(payload_cwd, session_id)
     return binding is not None and bool(binding.get("join_required", False))
+
+
+def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] | None:
+    """Return the binding-authoritative parent/leaf scope for join guards.
+
+    A join-bearing binding without a valid scope is deliberately not repaired
+    from ambient values.  Callers that already established join applicability
+    must deny rather than substitute the former ``top_level`` literal.
+    """
+    binding = read_session_binding(payload_cwd, session_id)
+    if binding is None or not binding.get("join_required") or not binding.get("binding_valid"):
+        return None
+    parent = binding.get("managed_parent_id")
+    leaf = binding.get("managed_leaf_id")
+    if not isinstance(parent, str) or not parent or not isinstance(leaf, str):
+        return None
+    return (parent, leaf)

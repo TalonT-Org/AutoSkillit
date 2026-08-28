@@ -522,7 +522,7 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
 
     # Atomic JSON envelope — parse cleanly without manual coercion.
     payload = json.loads(flag.read_text())
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["session_id"] == "abc123"
     assert payload["join_required"] is True
     assert payload["binding_valid"] is True
@@ -537,7 +537,8 @@ def test_join_bearing_skill_load_writes_complete_json_envelope(tmp_path: Path) -
     assert entry["semantic_digest"] == "sem-xyz"
     assert entry["adaptation_digest"] == "adapt-xyz"
     assert entry["projected_digest"] == "proj-xyz"
-    assert entry["artifact_incarnation"] == ""
+    assert entry["source_artifact_digest"] == "art-abc"
+    assert entry["source_artifact_incarnation_id"] == "00000000000040008000000000000001"
     assert entry["binding_valid"] is True
     assert entry["child_spawn_cardinality"] == {"explicit_slots": 4, "max_inflight": 4}
 

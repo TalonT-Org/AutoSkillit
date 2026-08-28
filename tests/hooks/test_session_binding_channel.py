@@ -217,12 +217,13 @@ def test_binding_envelope_round_trips_through_one_shared_type() -> None:
         adaptation_digest="adaptation",
         projected_digest="projected",
         canonical_digest="canonical",
-        artifact_incarnation="",
+        source_artifact_digest="artifact",
+        source_artifact_incarnation_id="incarnation",
         binding_valid=True,
         binding_error=None,
     )
     binding = SessionBinding(
-        schema_version=2,
+        schema_version=3,
         session_id="session-1",
         join_required=True,
         binding_valid=True,
@@ -235,24 +236,16 @@ def test_binding_envelope_round_trips_through_one_shared_type() -> None:
     with pytest.raises(SessionBindingError):
         SessionBinding.from_json({**json.loads(serialized), "schema_version": 99})
 
-    legacy = SessionBinding.from_json(
-        {
-            "schema_version": 1,
-            "session_id": "session-1",
-            "join_required": True,
-            "binding_valid": True,
-            "loaded_skills": [
-                {
-                    **json.loads(entry.to_json()),
-                    "artifact_incarnation": "legacy-incarnation",
-                }
-            ],
-        }
-    )
-    assert legacy.schema_version == 2
-    assert legacy.binding_valid is False
-    assert legacy.loaded_skills[0].binding_valid is False
-    assert legacy.loaded_skills[0].binding_error == "legacy session-binding schema 1 is unresolved"
+    with pytest.raises(SessionBindingError, match="unsupported session-binding schema_version"):
+        SessionBinding.from_json(
+            {
+                "schema_version": 1,
+                "session_id": "session-1",
+                "join_required": True,
+                "binding_valid": True,
+                "loaded_skills": [json.loads(entry.to_json())],
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -264,7 +257,8 @@ def test_binding_envelope_round_trips_through_one_shared_type() -> None:
         "adaptation_digest",
         "projected_digest",
         "canonical_digest",
-        "artifact_incarnation",
+        "source_artifact_digest",
+        "source_artifact_incarnation_id",
     ),
 )
 def test_loaded_skill_rejects_non_string_schema_fields(field: str) -> None:
@@ -283,7 +277,8 @@ def test_loaded_skill_rejects_non_string_schema_fields(field: str) -> None:
         "adaptation_digest": "adaptation",
         "projected_digest": "projected",
         "canonical_digest": "canonical",
-        "artifact_incarnation": "",
+        "source_artifact_digest": "artifact",
+        "source_artifact_incarnation_id": "incarnation",
         "binding_valid": True,
         "binding_error": None,
     }
@@ -352,7 +347,7 @@ def test_write_binding_closes_descriptor_when_fdopen_fails(
 
     monkeypatch.setattr(binding_module.os, "fdopen", fail_fdopen)
     binding = binding_module.SessionBinding(
-        schema_version=2,
+        schema_version=3,
         session_id="session-1",
         join_required=False,
         binding_valid=True,

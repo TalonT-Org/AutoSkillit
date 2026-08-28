@@ -8,9 +8,12 @@ only serialized JSON and filesystem paths, never Python class instances.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple
 
@@ -20,12 +23,12 @@ else:
     import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
 
 
-SESSION_BINDING_SCHEMA_VERSION: int = 2
+SESSION_BINDING_SCHEMA_VERSION: int = 3
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2
 
-_LEGACY_BINDING_ERROR = "legacy session-binding schema 1 is unresolved"
 _BINDING_CANDIDATE_LIMIT = 20
 _CANONICAL_SKILL_PREFIX = "autoskillit:"
+_BINDING_LOCK_SUFFIX = ".lock"
 
 
 class SessionBindingError(Exception):
@@ -80,7 +83,8 @@ class LoadedSkillEntry(NamedTuple):
     adaptation_digest: str
     projected_digest: str
     canonical_digest: str
-    artifact_incarnation: str
+    source_artifact_digest: str
+    source_artifact_incarnation_id: str
     binding_valid: bool
     binding_error: str | None
 
@@ -94,7 +98,8 @@ class LoadedSkillEntry(NamedTuple):
             "adaptation_digest": self.adaptation_digest,
             "projected_digest": self.projected_digest,
             "canonical_digest": self.canonical_digest,
-            "artifact_incarnation": self.artifact_incarnation,
+            "source_artifact_digest": self.source_artifact_digest,
+            "source_artifact_incarnation_id": self.source_artifact_incarnation_id,
             "binding_valid": self.binding_valid,
             "binding_error": self.binding_error,
         }
@@ -110,11 +115,7 @@ class LoadedSkillEntry(NamedTuple):
         return _loaded_skill_from_mapping(_json_object(value))
 
 
-def _loaded_skill_from_mapping(
-    value: dict[str, object],
-    *,
-    legacy: bool = False,
-) -> LoadedSkillEntry:
+def _loaded_skill_from_mapping(value: dict[str, object]) -> LoadedSkillEntry:
     error = value.get("binding_error")
     if error is not None and not isinstance(error, str):
         raise SessionBindingError("binding_error must be a string or null")
@@ -127,9 +128,10 @@ def _loaded_skill_from_mapping(
         adaptation_digest=_string_field(value, "adaptation_digest"),
         projected_digest=_string_field(value, "projected_digest"),
         canonical_digest=_string_field(value, "canonical_digest"),
-        artifact_incarnation=_string_field(value, "artifact_incarnation"),
-        binding_valid=False if legacy else bool(value.get("binding_valid", False)),
-        binding_error=_LEGACY_BINDING_ERROR if legacy else error,
+        source_artifact_digest=_string_field(value, "source_artifact_digest"),
+        source_artifact_incarnation_id=_string_field(value, "source_artifact_incarnation_id"),
+        binding_valid=bool(value.get("binding_valid", False)),
+        binding_error=error,
     )
 
 
@@ -140,6 +142,8 @@ class SessionBinding(NamedTuple):
     binding_valid: bool
     artifact_digest: str
     loaded_skills: tuple[LoadedSkillEntry, ...]
+    managed_parent_id: str = "top_level"
+    managed_leaf_id: str = ""
 
     def to_json(self) -> str:
         return json.dumps(
@@ -150,6 +154,8 @@ class SessionBinding(NamedTuple):
                 "binding_valid": self.binding_valid,
                 "artifact_digest": self.artifact_digest,
                 "loaded_skills": [entry._as_json_object() for entry in self.loaded_skills],
+                "managed_parent_id": self.managed_parent_id,
+                "managed_leaf_id": self.managed_leaf_id,
             },
             sort_keys=True,
         )
@@ -167,16 +173,6 @@ class SessionBinding(NamedTuple):
         if not all(isinstance(entry, dict) for entry in loaded_raw):
             raise SessionBindingError("loaded_skills entries must be objects")
 
-        if schema_version == 1:
-            loaded = tuple(_loaded_skill_from_mapping(entry, legacy=True) for entry in loaded_raw)
-            return cls(
-                schema_version=SESSION_BINDING_SCHEMA_VERSION,
-                session_id=str(parsed.get("session_id", "")),
-                join_required=bool(parsed.get("join_required", False)),
-                binding_valid=False,
-                artifact_digest="",
-                loaded_skills=loaded,
-            )
         if schema_version == SESSION_BINDING_SCHEMA_VERSION:
             loaded = tuple(_loaded_skill_from_mapping(entry) for entry in loaded_raw)
             return cls(
@@ -186,6 +182,8 @@ class SessionBinding(NamedTuple):
                 binding_valid=bool(parsed.get("binding_valid", False)),
                 artifact_digest=str(parsed.get("artifact_digest", "")),
                 loaded_skills=loaded,
+                managed_parent_id=_string_field(parsed, "managed_parent_id"),
+                managed_leaf_id=_string_field(parsed, "managed_leaf_id"),
             )
         raise SessionBindingError(
             f"unsupported session-binding schema_version: {schema_version!r}"
@@ -209,6 +207,40 @@ def resolve_binding_path(payload_cwd: str, session_id: str) -> Path:
         _hook_payload_module.normalize_payload_cwd(payload_cwd)
     )
     return resolve_channel_dir(state_root) / f"skill_guard_{session_id}.flag"
+
+
+def binding_lock_path(path: Path) -> Path:
+    """Return the sibling lock that serializes binding snapshots and writes."""
+    return path.with_name(f"{path.name}{_BINDING_LOCK_SUFFIX}")
+
+
+@contextmanager
+def binding_lock(path: Path) -> Generator[None, None, None]:
+    """Hold the binding lock.
+
+    Managed callers acquire this lock before opening the join ledger and retain
+    it through the ledger mutation.  That fixed ordering prevents a selected
+    source entry from being mixed with a later binding rewrite.
+    """
+    lock_path = binding_lock_path(path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        os.close(fd)
+
+
+@contextmanager
+def binding_snapshot(path: Path) -> Generator[SessionBinding | None, None, None]:
+    """Yield a locked binding snapshot for a subsequent ledger operation."""
+    with binding_lock(path):
+        yield read_binding(path)
 
 
 def enumerate_binding_paths(channel_dir: Path) -> tuple[Path, ...]:
@@ -245,6 +277,8 @@ def read_manifest(path: Path) -> dict[str, object]:
         )
     if not isinstance(parsed.get("artifact_digest"), str):
         raise SessionBindingError("projection manifest artifact_digest must be a string")
+    if not isinstance(parsed.get("incarnation_id"), str):
+        raise SessionBindingError("projection manifest incarnation_id must be a string")
     if not isinstance(parsed.get("skills"), dict):
         raise SessionBindingError("projection manifest skills must be an object")
     return parsed
@@ -269,7 +303,8 @@ def loaded_skill_from_manifest(
         adaptation_digest=str(raw.get("adaptation_digest", "")),
         projected_digest=str(raw.get("projected_digest", "")),
         canonical_digest=str(raw.get("canonical_digest", "")),
-        artifact_incarnation=str(raw.get("artifact_incarnation", "")),
+        source_artifact_digest=str(manifest["artifact_digest"]),
+        source_artifact_incarnation_id=str(manifest["incarnation_id"]),
         binding_valid=True,
         binding_error=None,
     )
@@ -290,7 +325,8 @@ def unresolved_loaded_skill(
         adaptation_digest="",
         projected_digest="",
         canonical_digest="",
-        artifact_incarnation="",
+        source_artifact_digest="",
+        source_artifact_incarnation_id="",
         binding_valid=False,
         binding_error=error,
     )
@@ -302,6 +338,8 @@ def merge_binding(
     session_id: str,
     new_entry: LoadedSkillEntry,
     artifact_digest: str,
+    managed_parent_id: str = "top_level",
+    managed_leaf_id: str = "",
 ) -> SessionBinding:
     loaded = (*existing.loaded_skills, new_entry) if existing else (new_entry,)
     return SessionBinding(
@@ -315,6 +353,10 @@ def merge_binding(
             else (existing.artifact_digest if existing else "")
         ),
         loaded_skills=loaded,
+        managed_parent_id=(
+            existing.managed_parent_id if existing is not None else managed_parent_id
+        ),
+        managed_leaf_id=existing.managed_leaf_id if existing is not None else managed_leaf_id,
     )
 
 
@@ -355,3 +397,26 @@ def atomic_write(path: Path, content: str) -> None:
 
 def write_binding(path: Path, binding: SessionBinding) -> None:
     atomic_write(path, binding.to_json())
+
+
+def merge_and_write_binding(
+    path: Path,
+    *,
+    session_id: str,
+    new_entry: LoadedSkillEntry,
+    artifact_digest: str,
+    managed_parent_id: str = "top_level",
+    managed_leaf_id: str = "",
+) -> SessionBinding:
+    """Atomically merge one skill-load entry under the binding lock."""
+    with binding_lock(path):
+        merged = merge_binding(
+            read_binding(path),
+            session_id=session_id,
+            new_entry=new_entry,
+            artifact_digest=artifact_digest,
+            managed_parent_id=managed_parent_id,
+            managed_leaf_id=managed_leaf_id,
+        )
+        write_binding(path, merged)
+        return merged

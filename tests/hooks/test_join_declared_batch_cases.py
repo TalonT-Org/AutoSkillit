@@ -28,9 +28,11 @@ from autoskillit.hooks._join_ledger import (
     WAVE_PENDING,
     JoinLedgerError,
     active_batch,
+    admit_assignment,
     claim_assignment,
     declare_batch,
     ledger_paths,
+    open_or_replay,
     settle_assignment,
 )
 
@@ -597,3 +599,126 @@ def test_negative_trace_ledger_path_creates_correct_files(tmp_path: Path) -> Non
     payload = json.loads(ledger.read_text())
     assert "sessions" in payload
     assert "s1" in payload["sessions"]
+
+
+def test_open_or_replay_retains_immutable_batch_for_exact_declaration(tmp_path: Path) -> None:
+    """A stable caller key replays bytes, including after the batch is terminal."""
+    parent = {"request_session_id": "s1", "managed_parent_id": "p1", "managed_leaf_id": ""}
+    source = {
+        "skill_name": "skill",
+        "source_artifact_digest": "artifact",
+        "source_artifact_incarnation_id": "incarnation",
+    }
+    declaration = {
+        "assignments": [
+            {"label": "a1", "role": "worker", "runtime_key": "one", "prompt_digest": "p1"}
+        ]
+    }
+    first = open_or_replay(
+        tmp_path, parent=parent, selected_source=source, key="caller-key", declaration=declaration
+    )
+    assignment = first["assignments"][0]
+    admit_assignment(
+        tmp_path,
+        batch_id=first["join_batch_id"],
+        assignment_id=assignment["assignment_id"],
+        attempt_id="attempt-1",
+        run_id="run-1",
+        evidence={"leaf_projection_artifact_digest": "leaf-digest"},
+    )
+    settled = settle_assignment(
+        tmp_path,
+        session_id="s1",
+        top_level_parent="p1",
+        tool_use_id="managed-tool",
+        outcome=OUTCOME_SUCCESS,
+        batch_id=first["join_batch_id"],
+        assignment_id=assignment["assignment_id"],
+        attempt_id="attempt-1",
+        run_id="run-1",
+        terminal_event_id="terminal-1",
+        terminal_payload_digest="payload-1",
+        result_reference="result-1",
+        result_digest="result-digest-1",
+    )
+    replay = open_or_replay(
+        tmp_path, parent=parent, selected_source=source, key="caller-key", declaration=declaration
+    )
+
+    assert replay["join_batch_id"] == first["join_batch_id"]
+    assert settled["wave_outcome"] == WAVE_COMPLETE
+    assert (
+        replay["assignments"][0]["attempts"][0]["leaf_projection_artifact_digest"] == "leaf-digest"
+    )
+    with pytest.raises(JoinLedgerError, match="changed declaration"):
+        open_or_replay(
+            tmp_path,
+            parent=parent,
+            selected_source=source,
+            key="caller-key",
+            declaration={"assignments": [{"label": "changed"}]},
+        )
+
+
+def test_settlement_rejects_changed_event_payload_or_stale_attempt(tmp_path: Path) -> None:
+    """Terminal evidence is idempotent only for the same current attempt and payload."""
+    batch = open_or_replay(
+        tmp_path,
+        parent={"request_session_id": "s1", "managed_parent_id": "p1", "managed_leaf_id": ""},
+        selected_source={
+            "skill_name": "skill",
+            "source_artifact_digest": "artifact",
+            "source_artifact_incarnation_id": "incarnation",
+        },
+        key="caller-key",
+        declaration={"assignments": [{"label": "a1"}]},
+    )
+    assignment = batch["assignments"][0]
+    admit_assignment(
+        tmp_path,
+        batch_id=batch["join_batch_id"],
+        assignment_id=assignment["assignment_id"],
+        attempt_id="attempt-1",
+        run_id="run-1",
+    )
+    settle_assignment(
+        tmp_path,
+        session_id="s1",
+        top_level_parent="p1",
+        tool_use_id="tool-1",
+        outcome=OUTCOME_SUCCESS,
+        batch_id=batch["join_batch_id"],
+        assignment_id=assignment["assignment_id"],
+        attempt_id="attempt-1",
+        run_id="run-1",
+        terminal_event_id="event-1",
+        terminal_payload_digest="payload-1",
+    )
+    # Same event/payload is the only idempotent duplicate.
+    settle_assignment(
+        tmp_path,
+        session_id="s1",
+        top_level_parent="p1",
+        tool_use_id="tool-1",
+        outcome=OUTCOME_SUCCESS,
+        batch_id=batch["join_batch_id"],
+        assignment_id=assignment["assignment_id"],
+        attempt_id="attempt-1",
+        run_id="run-1",
+        terminal_event_id="event-1",
+        terminal_payload_digest="payload-1",
+    )
+    with pytest.raises(JoinLedgerError, match="conflicting terminal event"):
+        settle_assignment(
+            tmp_path,
+            session_id="s1",
+            top_level_parent="p1",
+            tool_use_id="tool-1",
+            outcome=OUTCOME_SUCCESS,
+            batch_id=batch["join_batch_id"],
+            assignment_id=assignment["assignment_id"],
+            attempt_id="attempt-1",
+            run_id="run-1",
+            terminal_event_id="event-1",
+            terminal_payload_digest="changed-payload",
+        )

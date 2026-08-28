@@ -111,7 +111,6 @@ def test_snapshot_facade_all_resolves() -> None:
         "read_stable_contained_file",
         "DEFAULT_IGNORE_POLICY",
     }
-    stdlib_modules: set[str] = set()
     function_anchors = {
         "_capture_once": capture_shard._capture_once,
         "activate_repository_profiles": capture_shard.activate_repository_profiles,
@@ -127,11 +126,7 @@ def test_snapshot_facade_all_resolves() -> None:
             f"snapshot facade missing {name} — test_snapshot.py monkeypatch sites "
             f"rely on this re-export"
         )
-        if name in stdlib_modules:
-            assert getattr(snapshot_module, name) is __import__(name), (
-                f"snapshot facade {name} must re-export the stdlib module"
-            )
-        elif name in function_anchors:
+        if name in function_anchors:
             assert getattr(snapshot_module, name) is function_anchors[name], (
                 f"snapshot facade {name} must re-export the function defined in its source shard"
             )

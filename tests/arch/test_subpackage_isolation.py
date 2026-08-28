@@ -1426,13 +1426,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "splitting into sub-modules would obscure the check sequence and break the test "
         "filter cascade",
     ),
-    "skills.py": (
-        1350,
-        "REQ-CNST-010-E14: skill resolution + sidecar parsing — exploration.yaml sidecar "
-        "loader and parser are tightly coupled to _skill_info_from_frontmatter and the "
-        "marker binder; extracting them would create an artificial module boundary while "
-        "the sidecar is read exactly once in the same parse event as SKILL.md frontmatter",
-    ),
     "server/_recipe_delivery.py": (
         750,
         "REQ-CNST-010-E12: #4557 decomposes recipe delivery into _recipe_delivery.py "
@@ -1504,30 +1497,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "both SkillResult construction seams; _build_skill_result remains here as the "
         "headless orchestration authority. The 827-line residual is dominated by that "
         "single 741-line function, which owns the success-gate adjacency rule.",
-    ),
-    "workspace/skill_capabilities.py": (
-        1120,
-        "REQ-SEM-SCHEMA-001: versioned semantic declarations, closed-operation parsing, "
-        "retired-key rejection, and precise per-skill diagnostics remain co-located at "
-        "the sole skill-frontmatter validation boundary; #4507 parses runtime child "
-        "cardinality at that same boundary and classifies its dedicated typed invalidity "
-        "before the general semantic-plan failure path.",
-    ),
-    "workspace/skills.py": (
-        1550,
-        "REQ-SEM-SCHEMA-002: semantic-plan threading and invalid-override fallback remain "
-        "inside the existing precedence resolver so a rejected project-local declaration "
-        "cannot poison unrelated skills or bypass the valid bundled fallback; typed "
-        "invalidity and exclusion records remain adjacent to the resolver transitions "
-        "whose rejected candidates they describe; "
-        "REQ-CNST-010-E20: exploration-vector frontmatter parsing, canonical marker "
-        "binding, and exact migrated-body replacement stay beside the SKILL.md parser so "
-        "discovery and projection share one fail-closed content authority. Bumped to 1350 "
-        "by the exploration-vector sidecar migration: exploration.yaml loading and the "
-        "slim-schema sidecar parser stay beside the marker binder and frontmatter parser "
-        "they feed so the sidecar digest, migrated/retained vector shapes, and marker "
-        "contract remain one fail-closed parsing authority. Bumped to 1550 by typed "
-        "skill-invalidity threading and the completed explorer sidecar migration.",
     ),
     "execution/backends/_codex_session_storage.py": (
         1500,
@@ -1672,6 +1641,16 @@ def test_pipeline_exploration_context_shards_under_900_lines() -> None:
     )
 
 
+def test_pipeline_exploration_context_store_under_750_lines() -> None:
+    """Keep the exploration-context Store shard within its permanent ceiling."""
+    store_path = SRC_ROOT / "pipeline" / "exploration_context" / "_store.py"
+    assert store_path.is_file(), "Missing pipeline/exploration_context/_store.py"
+    line_count = len(store_path.read_text().splitlines())
+    assert line_count <= 750, (
+        f"pipeline/exploration_context/_store.py exceeds the 750-line ceiling: {line_count} lines"
+    )
+
+
 def test_session_skills_e13_e14_exemption_is_retired() -> None:
     """REQ-CNST-010-E13/E14 (workspace/session_skills.py) is retired without replacement.
 
@@ -1687,6 +1666,20 @@ def test_session_skills_e13_e14_exemption_is_retired() -> None:
     assert "workspace/session_skills.py" not in exemptions, (
         "E13/E14 retirement for workspace/session_skills.py was not applied; "
         "the decomposition replaces this module with a facade under the 1000-line limit"
+    )
+
+
+def test_stale_workspace_skill_line_limit_exemptions_are_retired() -> None:
+    """Retired workspace skill ceilings stay absent from the exemption registry."""
+    retired_exemptions = {
+        "skills.py",
+        "workspace/skill_capabilities.py",
+        "workspace/skills.py",
+    }
+    stale_exemptions = retired_exemptions.intersection(_LINE_LIMIT_EXEMPTIONS)
+    assert not stale_exemptions, (
+        "Retired workspace skill line-limit exemptions remain registered: "
+        + ", ".join(sorted(stale_exemptions))
     )
 
 

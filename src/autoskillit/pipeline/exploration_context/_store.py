@@ -1,9 +1,4 @@
-"""``OwnerBoundExplorationContextStore`` — sole production aggregate lease-state owner.
-
-This shard owns every mutator of in-process lease state.  The
-:mod:`._launch_adapter` shard contains pure helpers called only from
-inside the store's own locked sections.
-"""
+"""``OwnerBoundExplorationContextStore`` — sole production aggregate lease-state owner."""
 
 from __future__ import annotations
 
@@ -24,13 +19,11 @@ from autoskillit.core import (
     SnapshotCaptureReason,
     SnapshotCaptureStatus,
     SnapshotUnavailable,
-    get_logger,
 )
 from autoskillit.pipeline.exploration_context_durable import (
     EXPLORATION_PRINCIPAL_ROLE,
     _ExplorationLaunchAuthorityStore,
     _ReopenedLaunchAuthority,
-    _safe_submit_failure_reason,
 )
 
 from . import _launch_adapter as launch_adapter
@@ -48,8 +41,6 @@ from ._types import (
     ExplorationServiceProtocol,
     _CapabilityLease,
 )
-
-logger = get_logger(__name__)
 
 
 class OwnerBoundExplorationContextStore(Generic[_T]):
@@ -566,32 +557,9 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         page_size: int,
     ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
         """Collect using only authority injected into the role-local server config."""
-        reopened = self._reopen_launch_environment()
-        if reopened is None:
-            return CapabilityResolutionStatus.INVALID, None
-        capability, authority = reopened
-        try:
-            _replacement, page = self.submit_for_capability(
-                capability=capability,
-                query=query,
-                page_size=page_size,
-            )
-        except (RuntimeError, ValueError) as exc:
-            logger.warning(
-                "exploration_submit_failed",
-                exception_type=type(exc).__name__,
-                reason=_safe_submit_failure_reason(
-                    exc,
-                    capability=capability,
-                    authority=authority,
-                ),
-            )
-            return CapabilityResolutionStatus.INVALID, None
-        # A terminal cleanup or replacement may have occurred while collecting.
-        if self._reopen_launch_environment() != reopened:
-            self.discard(capability)
-            return CapabilityResolutionStatus.INVALID, None
-        return CapabilityResolutionStatus.OK, page
+        return launch_adapter.submit_from_launch_environment(
+            self, query, page_size, self._max_ttl_seconds, self._clock
+        )
 
     def get_page_from_launch_environment(
         self,
@@ -600,25 +568,13 @@ class OwnerBoundExplorationContextStore(Generic[_T]):
         cursor: ContinuationCursor | None = None,
     ) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
         """Read an active page while proving the durable authority is still live."""
-        reopened = self._reopen_launch_environment()
-        if reopened is None:
-            return CapabilityResolutionStatus.INVALID, None
-        capability, _authority = reopened
-        status, page = self.get_page_for_capability(
-            capability=capability,
-            page_size=page_size,
-            cursor=cursor,
+        return launch_adapter.get_page_from_launch_environment(
+            self, page_size, cursor, self._max_ttl_seconds, self._clock
         )
-        if status is not CapabilityResolutionStatus.OK or page is None:
-            return status, page
-        if self._reopen_launch_environment() != reopened:
-            self.discard(capability)
-            return CapabilityResolutionStatus.INVALID, None
-        return CapabilityResolutionStatus.OK, page
 
     def validate_launch_environment(self) -> bool:
         """Prove that this process holds a current durable explorer authority."""
-        return self._reopen_launch_environment() is not None
+        return launch_adapter.validate_launch_environment(self, self._max_ttl_seconds, self._clock)
 
     def get_page(
         self,

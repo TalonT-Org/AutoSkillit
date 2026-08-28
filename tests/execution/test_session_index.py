@@ -89,3 +89,16 @@ def test_find_stale_session_archive_references_is_tolerant_and_path_scoped(
         str(missing_file),
         str(missing_dir),
     ]
+
+
+def test_find_stale_session_archive_references_deduplicates_paths(tmp_path: Path) -> None:
+    missing = str(tmp_path / "missing")
+    archive = tmp_path / "sessions-archive.jsonl"
+    archive.write_text(
+        json.dumps({"cwd": missing, "claude_code_log": missing})
+        + "\n"
+        + json.dumps({"codex_log": missing})
+        + "\n"
+    )
+
+    assert find_stale_session_archive_references(tmp_path) == [missing]

@@ -52,6 +52,7 @@ def test_production_read_surface_caches_only_canonical_root(
     monkeypatch: pytest.MonkeyPatch,
     cleared_ambient_env_scan_caches: None,
 ) -> None:
+    assert SRC_ROOT == ambient_env_surface._PRODUCTION_SRC_ROOT
     scanned_roots: list[Path] = []
     original_scan = ambient_env_surface._scan_production_env_read_surface_uncached
 

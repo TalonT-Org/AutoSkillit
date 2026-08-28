@@ -316,3 +316,45 @@ async def test_open_kitchen_ingredients_only_rejects_invalid_type(tmp_path, monk
     parsed = json.loads(result_str)
     assert parsed["success"] is False
     assert parsed["stage"] == "ingredient_type_validation"
+
+
+@pytest.mark.anyio
+async def test_open_kitchen_fails_closed_when_recipe_load_returns_none(tmp_path, monkeypatch):
+    """If recipe load returns None and overrides are supplied, the call fails
+    closed with a type-validation envelope rather than proceeding past the
+    gate silently. Mirrors load_recipe's contract.
+    """
+    monkeypatch.chdir(tmp_path)
+    mock_ctx = _make_mock_ctx()
+    _patched_env(mock_ctx)
+    mock_ctx.recipes.load.return_value = None
+    mock_recipe_info = MagicMock()
+    mock_recipe_info.path = "/fake/recipe.yaml"
+    mock_ctx.recipes.find.return_value = mock_recipe_info
+
+    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.logger"):
+            with patch(
+                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                new=AsyncMock(),
+            ):
+                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+                    with patch(
+                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        return_value="test-kitchen-fail-closed",
+                    ):
+                        with patch(
+                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                            return_value={"base_branch": "develop"},
+                        ):
+                            from autoskillit.server.tools.tools_kitchen import open_kitchen
+
+                            result_str = await open_kitchen(
+                                name="demo",
+                                overrides={"count": "42"},
+                                ctx=mock_ctx,
+                            )
+
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "ingredient_type_validation"

@@ -157,3 +157,48 @@ class TestLoadRecipeTypeGate:
         assert "count" in parsed["error"]
         # serve_recipe must not be invoked when the type gate rejects.
         mock_ctx.recipes.load_and_validate.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_load_recipe_fails_closed_when_recipe_load_returns_none(
+        self, tmp_path, monkeypatch
+    ):
+        """If recipe load returns None and overrides are supplied, the call
+        fails closed with a type-validation envelope rather than proceeding
+        past the gate silently. Mirrors open_kitchen's contract.
+        """
+        from unittest.mock import AsyncMock
+
+        from tests.server.conftest import _make_mock_ctx
+
+        monkeypatch.chdir(tmp_path)
+        mock_ctx = _make_mock_ctx()
+        mock_ctx.enable_components = AsyncMock()
+        mock_ctx.recipes = MagicMock()
+        mock_ctx.config.migration.suppressed = []
+        mock_ctx.kitchen_id = "test-kitchen-fail-closed"
+        mock_ctx.config.linux_tracing.log_dir = ""
+        mock_ctx.recipes.load.return_value = None
+        mock_recipe_info = MagicMock()
+        mock_recipe_info.path = "/fake/recipe.yaml"
+        mock_ctx.recipes.find.return_value = mock_recipe_info
+
+        with patch(
+            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+            return_value=mock_ctx,
+        ):
+            with patch(
+                "autoskillit.server.tools.tools_recipe._require_enabled",
+                return_value=None,
+            ):
+                with patch("autoskillit.server.logger"):
+                    result_str = await load_recipe(
+                        name="demo",
+                        overrides={"any_key": "value"},
+                    )
+
+        parsed = json.loads(result_str)
+        assert parsed["success"] is False
+        assert parsed["stage"] == "ingredient_type_validation"
+        assert parsed["retriable"] is False
+        # No serve_recipe side effect.
+        mock_ctx.recipes.load_and_validate.assert_not_called()

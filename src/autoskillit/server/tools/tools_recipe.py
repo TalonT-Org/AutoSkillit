@@ -285,8 +285,23 @@ async def load_recipe(
             # Tier 2 — Type gate (load_recipe): validate caller-supplied override
             # values against declared ingredient types. Runs after recipe load
             # (recipe object in scope), before serve_recipe and before any side
-            # effect. Mirrors open_kitchen's type gate placement.
-            if _raw_recipe_obj is not None:
+            # effect. Mirrors open_kitchen's type gate placement. If the recipe
+            # object failed to load, the call cannot satisfy caller-supplied
+            # overrides safely — fail closed (matches open_kitchen's contract).
+            if overrides:
+                if _raw_recipe_obj is None:
+                    return json.dumps(
+                        {
+                            "success": False,
+                            "stage": "ingredient_type_validation",
+                            "retriable": False,
+                            "error": "Cannot validate override types: recipe failed to load",
+                            "user_visible_message": (
+                                "load_recipe cannot validate the supplied overrides because the "
+                                "recipe failed to load. Retry after verifying the recipe exists."
+                            ),
+                        }
+                    )
                 _type_gate_err = _validate_override_types(overrides, _raw_recipe_obj)
                 if _type_gate_err is not None:
                     return _type_gate_err

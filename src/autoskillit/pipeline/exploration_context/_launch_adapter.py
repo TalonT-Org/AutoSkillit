@@ -1,11 +1,11 @@
-"""Launch-environment adaptation helpers — pure functions of the store.
+"""Adapt durable launch authority to Store-owned exploration operations.
 
-Three helpers — ``verified_repository_root_from_launch_environment``,
-``_shared_source_identity``, ``reopen_launch_environment`` — either
-return a value or mutate the store's state under its private lock.
-
-File I/O via ``load_from_environment()`` runs BEFORE ``store._lock`` is
-acquired; the lock covers state mutation only.
+This private shard recovers durable authority, executes service operations
+through Store APIs, and converts submit failures to bounded diagnostics. The
+Store remains the sole owner of exploration state: ``reopen_launch_environment``
+mutates that state while holding ``store._lock``, while the public-method
+workflows coordinate separately locking Store APIs without owning state or a
+separate lock.
 """
 
 from __future__ import annotations
@@ -16,11 +16,19 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from autoskillit.core import canonical_json_bytes, get_logger
+from autoskillit.core import (
+    CapabilityResolutionStatus,
+    ContinuationCursor,
+    EvidencePage,
+    ExplorationQuerySpec,
+    canonical_json_bytes,
+    get_logger,
+)
 from autoskillit.pipeline.exploration_context_durable import (
     EXPLORATION_PRINCIPAL_ROLE,
     _ExplorationLaunchAuthorityStore,
     _ReopenedLaunchAuthority,
+    _safe_submit_failure_reason,
 )
 
 from ._constants import _SHARED_SOURCE_IDENTITY_DOMAIN
@@ -122,3 +130,104 @@ def reopen_launch_environment(
         )
         store._session_capabilities.setdefault(authority.session_id, set()).add(capability)
         return reopened
+
+
+def submit_from_launch_environment(
+    store: OwnerBoundExplorationContextStore,
+    *,
+    query: ExplorationQuerySpec,
+    page_size: int,
+    max_ttl_seconds: float,
+    clock: Callable[[], float],
+) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
+    """Collect using only authority injected into the role-local server config."""
+    reopened = reopen_launch_environment(
+        store,
+        max_ttl_seconds=max_ttl_seconds,
+        clock=clock,
+    )
+    if reopened is None:
+        return CapabilityResolutionStatus.INVALID, None
+    capability, authority = reopened
+    try:
+        _replacement, page = store.submit_for_capability(
+            capability=capability,
+            query=query,
+            page_size=page_size,
+        )
+    except (RuntimeError, ValueError) as exc:
+        logger.warning(
+            "exploration_submit_failed",
+            exception_type=type(exc).__name__,
+            reason=_safe_submit_failure_reason(
+                exc,
+                capability=capability,
+                authority=authority,
+            ),
+        )
+        return CapabilityResolutionStatus.INVALID, None
+    if (
+        reopen_launch_environment(
+            store,
+            max_ttl_seconds=max_ttl_seconds,
+            clock=clock,
+        )
+        != reopened
+    ):
+        store.discard(capability)
+        return CapabilityResolutionStatus.INVALID, None
+    return CapabilityResolutionStatus.OK, page
+
+
+def get_page_from_launch_environment(
+    store: OwnerBoundExplorationContextStore,
+    *,
+    page_size: int,
+    cursor: ContinuationCursor | None,
+    max_ttl_seconds: float,
+    clock: Callable[[], float],
+) -> tuple[CapabilityResolutionStatus, EvidencePage | None]:
+    """Read an active page while proving the durable authority is still live."""
+    reopened = reopen_launch_environment(
+        store,
+        max_ttl_seconds=max_ttl_seconds,
+        clock=clock,
+    )
+    if reopened is None:
+        return CapabilityResolutionStatus.INVALID, None
+    capability, _authority = reopened
+    status, page = store.get_page_for_capability(
+        capability=capability,
+        page_size=page_size,
+        cursor=cursor,
+    )
+    if status is not CapabilityResolutionStatus.OK or page is None:
+        return status, page
+    if (
+        reopen_launch_environment(
+            store,
+            max_ttl_seconds=max_ttl_seconds,
+            clock=clock,
+        )
+        != reopened
+    ):
+        store.discard(capability)
+        return CapabilityResolutionStatus.INVALID, None
+    return CapabilityResolutionStatus.OK, page
+
+
+def validate_launch_environment(
+    store: OwnerBoundExplorationContextStore,
+    *,
+    max_ttl_seconds: float,
+    clock: Callable[[], float],
+) -> bool:
+    """Prove that this process holds a current durable explorer authority."""
+    return (
+        reopen_launch_environment(
+            store,
+            max_ttl_seconds=max_ttl_seconds,
+            clock=clock,
+        )
+        is not None
+    )

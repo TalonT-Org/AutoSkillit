@@ -1,22 +1,9 @@
-"""Contract: phoropter-registry.yaml leaves have a production consumer or inert-tracked annotation.
+"""Contract: phoropter-registry.yaml leaves have a consumer or inert-tracked annotation.
 
-Tracks issue #4894.
-
-Generalizes the ``inert-tracked:#NNNN`` discipline documented in
-tests/AGENTS.md § run_skill Parameter-Role Ledgers to the phoropter registry
-YAML. A leaf is "live" iff either (a) some production module outside
+A leaf is "live" iff either (a) some production module outside
 ``src/autoskillit/assets/`` reads the leaf via attribute or chained
 ``.get()`` access, or (b) the YAML comment block immediately preceding
 the leaf entry carries an ``inert-tracked:#NNNN`` annotation.
-
-Consumer detection parses each production ``.py`` file with ``ast`` and
-walks every ``ast.Attribute`` and ``ast.Call`` chain, so common names
-(``description``, ``status``, etc.) cannot satisfy the contract via
-incidental attribute access or string literals.
-
-Scope: enforces every leaf (recursive) under ``families.<family-name>.*`` in
-``src/autoskillit/assets/phoropter-registry.yaml``. The top-level
-``schema_version`` and ``families`` keys are not leaves.
 """
 
 from __future__ import annotations
@@ -46,10 +33,7 @@ _EXCLUDE_PY_DIRS: frozenset[str] = frozenset({"assets", "skills_extended"})
 def _load_production_sources() -> dict[Path, str]:
     """Scan production ``.py`` files for leaf-consumer access.
 
-    Only ``.py`` files under ``src/autoskillit/`` are returned; the
-    contract operates on parsed AST access chains, not on text. Files
-    that fail to read raise — a contract whose scan silently skipped
-    sources would itself be the silent failure mode.
+    Read errors propagate; the contract does not silently skip sources.
     """
     sources: dict[Path, str] = {}
     for py_path in _SRC_ROOT.rglob("*.py"):
@@ -65,8 +49,7 @@ _PRODUCTION_SOURCES: dict[Path, str] = _load_production_sources()
 def _walk_leaves(entry: dict[str, Any]) -> list[tuple[str, Any]]:
     """Recursively walk a family entry, yielding ``(dot_path, value)`` for every nested leaf.
 
-    ``None`` values are preserved as leaves — the only live leaf,
-    ``step_naming.prefix``, is ``null`` for arch-lens and exp-lens.
+    ``None`` values are preserved as leaves.
     """
     leaves: list[tuple[str, Any]] = []
 
@@ -147,26 +130,16 @@ def _ast_has_consumer(tree: ast.Module, segments: tuple[str, ...]) -> bool:
 def _has_consumer(leaf_path: str) -> bool:
     """True iff some production source reads the leaf via attribute or chained ``.get()`` access.
 
-    Common names like ``description`` or ``prefix`` cannot satisfy the
-    contract via incidental access: detection parses each production
-    ``.py`` file with ``ast`` and matches only genuine access chains.
-
-    Single-segment paths (no family-name prefix) are treated as having
-    no consumer: a 1-segment suffix match against ``attribute_chain``
-    cannot distinguish a true registry access from any incidental
-    attribute access of the same name. The registry schema
-    (``test_registry_has_only_step_naming``) enforces ≥2 segments per
-    leaf, so this branch is a defense-in-depth fallback rather than a
-    happy path.
+    Single-segment paths (no family-name prefix) cannot be distinguished
+    from incidental attribute access via suffix matching and are treated
+    as having no consumer. The registry schema enforces ≥2 segments per
+    leaf, so this branch is a defense-in-depth fallback.
     """
     segments = tuple(leaf_path.split("."))
     if not segments or not all(segments) or len(segments) < 2:
         return False
     for source in _PRODUCTION_SOURCES.values():
-        try:
-            tree = ast.parse(source)
-        except SyntaxError:
-            continue
+        tree = ast.parse(source)
         if _ast_has_consumer(tree, segments):
             return True
     return False
@@ -253,17 +226,11 @@ def test_rejected_accretion_canary(tmp_path: Path) -> None:
     Two scenarios are exercised against a ``tmp_path`` registry: a
     2-segment phantom with an obscure name (positive case for AST-based
     detection) and a 1-segment phantom with a common attribute name
-    (positive case for the single-segment guard). Both must fail the
-    contract; the test does not depend on live state.
+    (positive case for the single-segment guard).
     """
     base = "schema_version: 2\nfamilies:\n  arch-lens:\n    step_naming:\n      prefix: null\n"
     cases = [
         ("phantom_leaf", '    phantom_leaf: "retired metadata"\n'),
-        # Single-segment phantom: production code has many ".description"
-        # accesses that the AST would falsely match if the guard were
-        # absent. The path here is `arch-lens.description` (2 segments),
-        # but the scheme-level re-accretion simulated below makes the
-        # 1-segment guard hit by collapsing the leaf into the family name.
         ("description", '    description: "retired"\n'),
     ]
     for needle, leaf_line in cases:

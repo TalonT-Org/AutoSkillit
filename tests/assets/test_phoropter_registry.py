@@ -31,7 +31,7 @@ def test_registry_is_valid_yaml() -> None:
 
 
 def test_schema_version_is_two(registry_data: dict) -> None:
-    """schema_version must be the integer 2 after the #4894 retirement."""
+    """schema_version must be the integer 2."""
     assert registry_data.get("schema_version") == 2, (
         f"Expected schema_version=2, got {registry_data.get('schema_version')!r}"
     )
@@ -53,13 +53,11 @@ def test_all_families_have_required_fields(registry_data: dict) -> None:
 
 
 def test_registry_has_only_step_naming(registry_data: dict) -> None:
-    """After retirement, the registry must contain ONLY step_naming per family.
+    """The registry must contain ONLY step_naming per family.
 
     Re-accretion guard: any leaf other than ``step_naming`` under a family
     entry (or any leaf under step_naming other than ``prefix``) is a
-    regression. The companion contract at
-    ``tests/contracts/test_phoropter_registry_leaf_has_consumer.py`` enforces
-    the same invariant via ``inert-tracked:#NNNN`` annotation discipline.
+    regression.
     """
     allowed_top_level = {"schema_version", "families"}
     assert set(registry_data.keys()) == allowed_top_level, (
@@ -77,11 +75,7 @@ def test_registry_has_only_step_naming(registry_data: dict) -> None:
 
 
 def test_each_implemented_family_has_lenses() -> None:
-    """Each implemented family must have at least one lens directory.
-
-    Lens counts are derived from the filesystem; the registry no longer
-    stores them post-#4894.
-    """
+    """Each implemented family must have at least one lens directory."""
     skills_root = pkg_root() / "skills_extended"
     for family in IMPLEMENTED_FAMILIES:
         count = sum(

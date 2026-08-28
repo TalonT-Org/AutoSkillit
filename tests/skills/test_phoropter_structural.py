@@ -12,11 +12,6 @@ from tests._helpers import IMPLEMENTED_FAMILIES
 SKILLS_DIR = pkg_root() / "skills_extended"
 _REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
 
-# Lens families are filesystem-discovered. The registry carries only
-# ``step_naming.prefix`` and is read exclusively by
-# ``rules_phoropter_adjacency.py``; every other knob is derived from each
-# lens's SKILL.md content.
-
 _LENS_PAIRS: list[tuple[str, str]] = sorted(
     (family, child.name[len(family) + 1 :])
     for family in IMPLEMENTED_FAMILIES
@@ -26,12 +21,7 @@ _LENS_PAIRS: list[tuple[str, str]] = sorted(
 
 
 def _load_registry_prefixes() -> dict[str, str | None]:
-    """Read ``step_naming.prefix`` per family from the registry.
-
-    Mirrors ``_load_family_prefixes()`` in
-    ``recipe/rules/rules_phoropter_adjacency.py`` so tests assert against
-    the same source of truth production reads.
-    """
+    """Read ``step_naming.prefix`` per family from the registry."""
     registry = load_yaml(_REGISTRY_PATH)
     families = registry.get("families", {})
     return {
@@ -39,9 +29,8 @@ def _load_registry_prefixes() -> dict[str, str | None]:
     }
 
 
-# Maps below name the families each retired registry field described.
-# They are consumed by body-derived tests as the expected interface —
-# keep them in sync with the SKILL.md sources.
+# Test fixtures expressing the family-level expected interface; consumed by
+# body-derived tests as the comparison target.
 FAMILY_ARG_INTERFACE: dict[str, str] = {
     "arch-lens": "1-arg",
     "exp-lens": "2-arg",
@@ -52,17 +41,14 @@ _COMPOSITE_SLUGS: dict[tuple[str, str], list[str]] = {
     ("vis-lens", "always-on"): ["always-on"],
 }
 
-# ``arch-lens`` and ``exp-lens`` dial skills emit the same output tokens but
-# are PR-preparation skills, not lens-selection dial skills.
-_DIAL_SKILLS: dict[str, str | None] = {
+# vis-lens has a dedicated lens-selection dial skill; arch-lens and exp-lens
+# emit the same output tokens via PR-preparation skills and have no
+# lens-selection dial skill.
+_DIAL_SKILLS: dict[str, str] = {
     "vis-lens": "select-vis-lenses",
-    "arch-lens": None,
-    "exp-lens": None,
 }
 
-_DIAL_SKILL_PAIRS: list[tuple[str, str]] = sorted(
-    (family, skill) for family, skill in _DIAL_SKILLS.items() if skill is not None
-)
+_DIAL_SKILL_PAIRS: list[tuple[str, str]] = sorted(_DIAL_SKILLS.items())
 
 RESEARCH_RECIPE = load_recipe(builtin_recipes_dir() / "research.yaml")
 RESEARCH_DESIGN_RECIPE = load_recipe(builtin_recipes_dir() / "research-design.yaml")
@@ -91,6 +77,16 @@ def _extract_arguments_section(skill_md: str) -> str:
     """
     match = re.search(r"## Arguments\s*\n(.*?)(?=\n## |\Z)", skill_md, re.DOTALL)
     return match.group(1) if match else ""
+
+
+def _extract_methodology_section(skill_md: str) -> str:
+    """Extract the body for methodology-token scoping.
+
+    Searches the SKILL.md for ``## `` headings and returns the full body
+    minus any code-fenced regions, so substring matches for methodology
+    tokens are scoped to prose rather than incidental code examples.
+    """
+    return re.sub(r"```.*?```", "", skill_md, flags=re.DOTALL)
 
 
 def test_discovery_is_non_empty_and_covers_all_families() -> None:
@@ -159,6 +155,7 @@ def test_arg_interface_derived_from_skill_md(family: str, slug: str) -> None:
     """Body-derived arg-interface must match the family-level expected value."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
     args_section = _extract_arguments_section(skill_md)
+    assert args_section, f"{family}-{slug} is missing a non-empty ## Arguments section"
     has_experiment_plan = "experiment_plan_path" in args_section
     derived = "2-arg" if has_experiment_plan else "1-arg"
     assert derived == FAMILY_ARG_INTERFACE[family], (
@@ -188,24 +185,22 @@ def test_composite_slugs_from_body(family: str, slug: str) -> None:
     )
 
 
-@pytest.mark.parametrize("family,slug", _LENS_PAIRS)
+@pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])
 def test_output_prefix_from_body(family: str, slug: str) -> None:
     """Body-derived vis-lens prefix marker must agree with the family."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
-    if family == "vis-lens":
-        assert "vis_spec_" in skill_md, (
-            f"{family}-{slug} must reference the vis_spec_ output prefix"
-        )
+    assert "vis_spec_" in skill_md, f"{family}-{slug} must reference the vis_spec_ output prefix"
 
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_lens_metadata_special_assertions_from_body(family: str, slug: str) -> None:
     """vis-lens-methodology-norms must declare its two special assertions."""
     skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    sections = _extract_methodology_section(skill_md)
     assertions: list[str] = []
-    if "tradition_slug" in skill_md:
+    if "tradition_slug" in sections:
         assertions.append("tradition_slug")
-    if "Stage A" in skill_md or "two_stage_matching" in skill_md:
+    if "Stage A" in sections or "two_stage_matching" in sections:
         assertions.append("two_stage_matching")
     expected = (
         ["tradition_slug", "two_stage_matching"]

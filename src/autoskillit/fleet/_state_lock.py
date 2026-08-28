@@ -9,7 +9,9 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import IO
 
-from autoskillit.core import acquire_flock_with_timeout
+from autoskillit.core import acquire_flock_with_timeout, get_logger
+
+logger = get_logger(__name__)
 
 
 class CampaignStateMutatorOwnership:
@@ -39,8 +41,18 @@ class CampaignStateMutatorOwnership:
                     raise
                 lock_path.parent.mkdir(parents=True, exist_ok=True)
                 flock_handle = open(lock_path, "wb")
+
+                def close_flock_handle() -> None:
+                    try:
+                        flock_handle.close()
+                    except Exception:
+                        logger.debug(
+                            "CampaignStateMutatorOwnership.close: flock close failed",
+                            exc_info=True,
+                        )
+
                 try:
-                    self._cleanup.callback(flock_handle.close)
+                    self._cleanup.callback(close_flock_handle)
                 except BaseException:
                     flock_handle.close()
                     raise

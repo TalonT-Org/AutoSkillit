@@ -153,6 +153,56 @@ class TestCampaignStateMutatorBoundedLocking:
         assert lock.released
         assert mutator._ownership is None
 
+    def test_sidecar_close_failure_does_not_mask_body_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cleanup preserves the body error while still releasing the thread lock."""
+        import builtins
+
+        import autoskillit.fleet._state_lock as state_lock
+        import autoskillit.fleet.state as fleet_state
+
+        class TrackingLock:
+            def __init__(self) -> None:
+                self.released = False
+
+            def acquire(self, *, timeout: float) -> bool:
+                return True
+
+            def release(self) -> None:
+                self.released = True
+
+        class FailingCloseHandle:
+            def __init__(self) -> None:
+                self.close_attempted = False
+
+            def fileno(self) -> int:
+                return 17
+
+            def close(self) -> None:
+                self.close_attempted = True
+                raise OSError("close failed")
+
+        state_path = tmp_path / "state.json"
+        write_initial_state(state_path, "cid", "camp", "/m.yaml", [])
+        lock = TrackingLock()
+        handle = FailingCloseHandle()
+
+        monkeypatch.setattr(fleet_state, "_resume_lock", lock)
+        monkeypatch.setattr(
+            state_lock, "acquire_flock_with_timeout", lambda *_args, **_kwargs: None
+        )
+
+        with (
+            patch.object(builtins, "open", return_value=handle),
+            pytest.raises(ValueError, match="body failed"),
+        ):
+            with CampaignStateMutator(state_path):
+                raise ValueError("body failed")
+
+        assert handle.close_attempted
+        assert lock.released
+
     def test_flock_acquisition_uses_exclusive_timed_operation(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

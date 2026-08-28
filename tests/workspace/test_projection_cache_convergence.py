@@ -180,15 +180,38 @@ def test_reconcile_never_enqueues_protected_lease_or_staging_entries(
         not_before=datetime.now(UTC),
     )
 
-    expected = (
-        projection_cache.ProjectionReconcileDisposition.DEFERRED_IO_ERROR
-        if name.endswith("autoskillit-residue-0123456789abcdef")
-        else projection_cache.ProjectionReconcileDisposition.DEFERRED_UNMANAGED
-    )
-    assert disposition is expected
+    assert disposition is projection_cache.ProjectionReconcileDisposition.DEFERRED_UNMANAGED
     owner.lease_path.assert_not_called()
     owner.identity_for_path.assert_not_called()
     owner.enqueue_retirement.assert_not_called()
+
+
+@pytest.mark.parametrize("entry_case", ["active", "non-directory", "outside-owner"])
+def test_resume_projection_residue_classifies_shape_mismatches_as_unmanaged(
+    tmp_path: Path,
+    entry_case: str,
+) -> None:
+    root = tmp_path / "projections"
+    root.mkdir()
+    managed_path = root / (_ACTIVE_KEY if entry_case == "active" else _STALE_KEY)
+    entry = projection_cache.residue_staging_path(managed_path)
+    if entry_case == "non-directory":
+        entry.write_text("not a directory", encoding="utf-8")
+    else:
+        entry.mkdir()
+    owner = Mock()
+    owner._contains.return_value = entry_case != "outside-owner"
+
+    disposition = projection_cache._resume_projection_residue(
+        entry,
+        root=root,
+        home=object(),
+        owner=owner,
+        active_key=_ACTIVE_KEY,
+    )
+
+    assert disposition is projection_cache.ProjectionReconcileDisposition.DEFERRED_UNMANAGED
+    owner.lease_path.assert_not_called()
 
 
 def test_reconcile_unavailable_projection_identity_does_not_mutate(

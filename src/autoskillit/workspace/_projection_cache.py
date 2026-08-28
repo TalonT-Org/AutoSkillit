@@ -723,16 +723,16 @@ def _resume_projection_residue(
     """Resume teardown for a deterministic residue staging directory."""
     match = _RESIDUE_STAGING_ROOT_RE.fullmatch(entry.name)
     if match is None:
-        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+        return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
     managed_path = root / match.group("key")
     if entry != residue_staging_path(managed_path) or managed_path.name == active_key:
-        return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+        return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
     try:
         present = entry.exists() or entry.is_symlink()
         if not present:
             return ProjectionReconcileDisposition.ALREADY_ABSENT
         if entry.is_symlink() or not entry.is_dir() or not owner._contains(entry):
-            return ProjectionReconcileDisposition.DEFERRED_IO_ERROR
+            return ProjectionReconcileDisposition.DEFERRED_UNMANAGED
         writer = ArtifactLease.acquire_exclusive(
             owner.lease_path(managed_path),
             blocking=False,

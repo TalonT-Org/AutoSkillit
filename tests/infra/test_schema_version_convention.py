@@ -164,9 +164,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/smoke_utils/_eval.py", 321),
     ("src/autoskillit/smoke_utils/_eval.py", 486),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
-    ("src/autoskillit/planner/consolidation.py", 339),
+    ("src/autoskillit/planner/consolidation.py", 337),
     # planner/consolidation.py — broken_cycle_edges.json (list payload; AST scanner catches it)
-    ("src/autoskillit/planner/consolidation.py", 363),
+    ("src/autoskillit/planner/consolidation.py", 361),
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
     ("src/autoskillit/planner/manifests.py", 315),
     # _cmd_rpc_issues.py — emit_fallback_map: BEM fallback execution map (recipe-internal)

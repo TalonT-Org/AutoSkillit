@@ -9,7 +9,7 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import VANISHED_ERRORS, atomic_write, write_versioned_json
+from autoskillit.core import atomic_write, write_versioned_json
 from autoskillit.planner._dag_ops import break_cycles_greedy_fas, filter_self_references
 from autoskillit.planner._sort_utils import _natural_sort_key
 from autoskillit.planner.lifecycle import (
@@ -38,8 +38,6 @@ def _load_manifests(consolidation_dir: Path) -> list[dict[str, Any]]:
     for path in sorted(consolidation_dir.glob("*_consolidation.json")):
         try:
             manifests.append(json.loads(path.read_text()))
-        except VANISHED_ERRORS:
-            continue
         except (json.JSONDecodeError, OSError) as exc:
             raise ValueError(f"failed to load consolidation manifest {path}: {exc}") from exc
     return manifests

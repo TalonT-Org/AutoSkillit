@@ -75,14 +75,6 @@ _FORWARD_DECLARED: dict[str, TrackedDeferral] = {
 }
 
 
-def _forward_declared_node_ids() -> set[str]:
-    return {
-        "tests/arch/test_capability_consumption.py::"
-        f"test_forward_declared_capability_remains_present_and_unconsumed[{field}]"
-        for field in _FORWARD_DECLARED
-    }
-
-
 def _collect_attribute_reads(src_root: Path, field_names: frozenset[str]) -> dict[str, list[str]]:
     """Scan src/ for .field_name attribute access, excluding definition file."""
     reads: dict[str, list[str]] = {name: [] for name in field_names}
@@ -180,7 +172,9 @@ def test_forward_declared_capability_remains_present_and_unconsumed(field: str) 
     )
 
 
-def test_every_tracked_deferral_names_a_resolvable_regression_test() -> None:
+def test_every_tracked_deferral_names_a_resolvable_regression_test(
+    request: pytest.FixtureRequest,
+) -> None:
     from autoskillit.core import BackendCapabilities
 
     assert_entries_still_apply(
@@ -193,5 +187,5 @@ def test_every_tracked_deferral_names_a_resolvable_regression_test() -> None:
     assert_deferrals_have_regression_tests(
         _FORWARD_DECLARED,
         registry_name="_FORWARD_DECLARED",
-        collected_node_ids=_forward_declared_node_ids(),
+        collected_node_ids={item.nodeid for item in request.session.items},
     )

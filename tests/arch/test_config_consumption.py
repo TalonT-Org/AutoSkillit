@@ -206,7 +206,7 @@ def test_natural_exit_grace_seconds_is_consumed() -> None:
     assert sites, "natural_exit_grace_seconds must be read by production code"
 
 
-def test_forward_declared_contracts_are_shared() -> None:
+def test_forward_declared_contracts_are_shared(request: pytest.FixtureRequest) -> None:
     """Even the currently-empty registry must keep the shared deferral contract."""
     assert_entries_still_apply(
         _FORWARD_DECLARED,
@@ -218,5 +218,5 @@ def test_forward_declared_contracts_are_shared() -> None:
     assert_deferrals_have_regression_tests(
         _FORWARD_DECLARED,
         registry_name="_FORWARD_DECLARED",
-        collected_node_ids=set(),
+        collected_node_ids={item.nodeid for item in request.session.items},
     )

@@ -40,6 +40,7 @@ import pytest
 from autoskillit.core import VANISHED_ERRORS
 from tests.arch._deferred_debt import (
     TrackedDeferral,
+    assert_deferrals_have_regression_tests,
     assert_entries_still_apply,
     assert_not_stale,
     assert_rationale_present,
@@ -1838,6 +1839,28 @@ def _find_broad_swallow_violations(
             "        try:\n"
             "            p.stat()\n"
             "        except FileNotFoundError:\n"
+            "            continue\n"
+            "        except NotADirectoryError:\n"
+            "            continue\n",
+            [],
+            id="split_vanish_handlers_that_both_recover_are_not_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except (FileNotFoundError, NotADirectoryError):\n"
+            "            continue\n",
+            [],
+            id="vanished_error_tuple_handler_is_not_flagged",
+        ),
+        pytest.param(
+            "def f(d):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except FileNotFoundError:\n"
             "            raise\n"
             "        except OSError:\n"
             "            continue\n",
@@ -1855,6 +1878,28 @@ def _find_broad_swallow_violations(
             id="transformed_reraise_does_not_recover",
         ),
         pytest.param(
+            "def f(d, logger):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except OSError:\n"
+            "            logger.warning('gone')\n"
+            "            raise\n",
+            [4],
+            id="side_effect_then_reraise_handler_is_flagged",
+        ),
+        pytest.param(
+            "def f(d, metrics):\n"
+            "    for p in d.glob('*'):\n"
+            "        try:\n"
+            "            p.stat()\n"
+            "        except OSError:\n"
+            "            metrics.increment('gone')\n"
+            "            continue\n",
+            [],
+            id="side_effect_then_continue_handler_is_not_flagged",
+        ),
+        pytest.param(
             "def f(d, retry):\n"
             "    for p in d.glob('*'):\n"
             "        try:\n"
@@ -1869,7 +1914,7 @@ def _find_broad_swallow_violations(
         pytest.param(
             "def f(self, d):\n    self.entries = list(d.iterdir())\n    self.entries[0].stat()\n",
             [3],
-            id="attribute_and_subscript_taint_reaches_stat",
+            id="attribute_assignment_target_is_flagged",
         ),
         pytest.param(
             "def f(left, right):\n"
@@ -1892,6 +1937,11 @@ def _find_broad_swallow_violations(
             "def f(d):\n    entries = d.iterdir()\n    entries.iterdir()\n",
             [3],
             id="tainted_enumeration_receiver_is_a_sink",
+        ),
+        pytest.param(
+            "def f(d):\n    for entry in d.iterdir():\n        entry.iterdir()\n",
+            [3],
+            id="reenumeration_of_an_enumerated_entry_is_flagged",
         ),
         pytest.param(
             "def f(path):\n    path.iterdir()\n",
@@ -2367,6 +2417,16 @@ def test_enumeration_stat_allowlist_entries_still_apply() -> None:
         _ENUMERATION_STAT_ALLOWLIST,
         registry_name="_ENUMERATION_STAT_ALLOWLIST",
         live_keys=found,
+    )
+
+
+def test_enumeration_stat_allowlist_regression_tests_resolve(
+    request: pytest.FixtureRequest,
+) -> None:
+    assert_deferrals_have_regression_tests(
+        _ENUMERATION_STAT_ALLOWLIST,
+        registry_name="_ENUMERATION_STAT_ALLOWLIST",
+        collected_node_ids={item.nodeid for item in request.session.items},
     )
 
 

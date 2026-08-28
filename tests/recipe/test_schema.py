@@ -486,8 +486,6 @@ def test_recipe_has_continue_on_failure_field_defaulting_to_false() -> None:
 
 
 def test_recipe_has_blocks_field_defaulting_to_empty() -> None:
-    import dataclasses
-
     from autoskillit.recipe.schema import Recipe
 
     field_names = {f.name for f in dataclasses.fields(Recipe)}

@@ -359,16 +359,21 @@ name lists:
   Ledger edits ship in the SAME commit as the registry change they witness —
   a role change alters gate admission behavior, so the diff must be visible
   at review time, not discovered later.
-- **`tests/contracts/test_recipe_dataclass_field_ledger.py`** — a frozen
-  recipe-dataclass field-name → classification table covering
-  `Recipe`, `RecipeIngredient`, and `RecipeStep`
-  (`execution` / `composition` / `validation-only` / `inert-tracked:#NNNN`),
-  diffed bidirectionally against `dataclasses.fields(...)` for all three owners.
-  A new field without a conscious classification fails; an `inert-tracked`
-  entry without a live issue reference fails. Same same-commit rule: classify
-  a new field when you add it, and file a tracking issue immediately if it has
-  no runtime consumer yet rather than leaving a silently-inert field for
-  someone else to rediscover.
+- **`tests/contracts/test_recipe_dataclass_field_ledger.py`** — verifies two
+  invariant properties of the recipe-dataclass field registries that live in
+  `tests/arch/_recipe_field_ledger.py`: (1) sorted-key stability of both
+  `DECLARED_RECIPE_FIELDS` and `DEFERRED_RECIPE_FIELDS` so a diff isolates
+  exactly the changed declaration, and (2) the union of registries visibly
+  covers every declared owner (`Recipe`, `RecipeIngredient`, `RecipeStep`).
+  The bidirectional field-coverage proof and behavioral-anchor enforcement
+  live in `tests/arch/test_recipe_dataclass_consumption.py`; the contracts
+  layer adds the sorted-key and three-owner coverage invariants the arch
+  test does not. Classification entries (`execution` / `composition` /
+  `validation-only` / `inert-tracked:#NNNN`) and the deferred-debt
+  discipline are shared with the arch test via the helper module — same
+  same-commit rule: classify a new field when you add it, and file a
+  tracking issue immediately if it has no runtime consumer yet rather than
+  leaving a silently-inert field for someone else to rediscover.
 
 **`tool_ctx_ready_recipe`** (`tests/server/conftest.py`) is the required
 fixture entry point for attested-path server tests. `tool_ctx_kitchen_open`

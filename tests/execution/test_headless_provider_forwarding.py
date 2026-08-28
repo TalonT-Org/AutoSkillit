@@ -1135,7 +1135,7 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     recovery_result = SkillResult(
         success=False,
         result="",
-        session_id="recovery-session",
+        session_id="",
         subtype="contract_recovery",
         is_error=False,
         exit_code=1,
@@ -1177,5 +1177,5 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     expected_env = {**caller_env, **sink_env}
     assert built_envs == [expected_env]
     assert nudge_kwargs["provider_extras"] == expected_env
-    assert FakeSink.looked_up == ["recovery-session"]
+    assert FakeSink.looked_up == ["nudge-session"]
     assert os.environ == parent_environment

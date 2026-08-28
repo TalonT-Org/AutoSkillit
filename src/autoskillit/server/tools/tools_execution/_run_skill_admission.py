@@ -74,26 +74,27 @@ def _admit_step_guard(state: _RunSkillDispatchState) -> str | None:
     """Adjudicate an installed recipe's server-authoritative step guard."""
     if state._installed_execution is None:
         return None
+    step_context = f"step {state.step_name!r}: "
     guard = state._installed_execution.snapshot.step_guards.get(state.step_name)
     if guard is None:
         if state.step_guard_value is not None:
             return _recipe_execution_deny(
                 "recipe_step_guard_unexpected",
-                "step_guard_value was supplied for an unguarded recipe step",
+                f"{step_context}step_guard_value was supplied for an unguarded recipe step",
             )
         return None
     try:
         should_skip = normalize_declared_truth(state.step_guard_value)
     except DeclaredTruthUnresolved as exc:
-        return _recipe_execution_deny("recipe_step_guard_value_required", str(exc))
+        return _recipe_execution_deny("recipe_step_guard_value_required", f"{step_context}{exc}")
     except DeclaredTruthUnsupported as exc:
-        return _recipe_execution_deny("recipe_step_guard_value_invalid", str(exc))
+        return _recipe_execution_deny("recipe_step_guard_value_invalid", f"{step_context}{exc}")
     if not should_skip:
         return None
     if state._tracker_target is None or state._tracker_lease is None:
         return _recipe_execution_deny(
             "recipe_step_guard_tracker_unavailable",
-            "cannot record a skipped guarded step without tracker authority",
+            f"{step_context}cannot record a skipped guarded step without tracker authority",
         )
     marked = _te_pkg.mark_step_skipped(
         state._tracker_target, state._tracker_lease, state.step_name

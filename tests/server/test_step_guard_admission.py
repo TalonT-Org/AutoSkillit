@@ -211,6 +211,7 @@ async def test_guard_requires_a_present_valid_captured_value(
     assert "recipe_step_guard_value_required" in _deny_tokens(absent)
     assert "recipe_step_guard_value_required" in _deny_tokens(explicit_none)
     assert all("recipe_step_guard_value_invalid" in _deny_tokens(result) for result in invalid)
+    assert all("'apply'" in result for result in [absent, explicit_none, *invalid])
     assert backend.await_count == 0
 
 
@@ -248,6 +249,7 @@ async def test_guard_value_for_an_unguarded_attested_step_is_denied(
     )
 
     assert "recipe_step_guard_unexpected" in _deny_tokens(result)
+    assert "'apply'" in result
     assert backend.await_count == 0
 
 

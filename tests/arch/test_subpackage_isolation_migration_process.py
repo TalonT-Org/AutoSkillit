@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -108,10 +109,6 @@ class TestGroupCMigration:
         }  # REQ-SIG-008
 
     def test_race_signals_still_frozen(self):
-        import dataclasses
-
-        import pytest
-
         from autoskillit.execution.process import RaceSignals
 
         assert dataclasses.fields(RaceSignals)  # confirms it's a dataclass
@@ -128,8 +125,6 @@ class TestGroupCMigration:
 
 def test_pipeline_fidelity_module_deleted():
     """P2-F1: pipeline/fidelity.py must not exist after groupB."""
-    import pytest
-
     with pytest.raises(ModuleNotFoundError):
         import autoskillit.pipeline.fidelity  # noqa: F401
 

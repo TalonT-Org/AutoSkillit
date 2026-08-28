@@ -1289,7 +1289,7 @@ def _handler_matches_vanished_error(handler: ast.ExceptHandler, error_name: str)
 
 def _handler_recovers(handler: ast.ExceptHandler) -> bool:
     """A handler ending in an unconditional raise cannot recover the loop."""
-    return not handler.body or not isinstance(handler.body[-1], ast.Raise)
+    return not isinstance(handler.body[-1], ast.Raise)
 
 
 def _try_recovers_vanish(try_node: ast.Try) -> bool:

@@ -496,11 +496,30 @@ def test_ignored_bytes_accounting_originates_in_records_shard() -> None:
     """
     records_path = SRC_ROOT / "exploration" / "snapshot" / "_records.py"
     capture_path = SRC_ROOT / "exploration" / "snapshot" / "_capture.py"
-    records_text = records_path.read_text()
-    capture_text = capture_path.read_text()
-    assert "class _ObservedPath" in records_text, "_ObservedPath must live in _records.py"
-    assert "identity_content_digest" in records_text, "_records.py owns identity/published split"
-    assert "class _ObservedPath" not in capture_text, "_ObservedPath stays in _records.py"
-    assert "def _identity_state_payload" in capture_text, (
+    import ast as _ast
+
+    records_tree = _ast.parse(records_path.read_text())
+    capture_tree = _ast.parse(capture_path.read_text())
+    records_classes = {
+        node.name: node for node in records_tree.body if isinstance(node, _ast.ClassDef)
+    }
+    capture_definitions = {
+        node.name
+        for node in capture_tree.body
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef))
+    }
+
+    observed_path = records_classes.get("_ObservedPath")
+    assert observed_path is not None, "_ObservedPath must live in _records.py"
+    observed_fields = {
+        node.target.id
+        for node in observed_path.body
+        if isinstance(node, _ast.AnnAssign) and isinstance(node.target, _ast.Name)
+    }
+    assert "identity_content_digest" in observed_fields, (
+        "_records.py owns identity/published split"
+    )
+    assert "_ObservedPath" not in capture_definitions, "_ObservedPath stays in _records.py"
+    assert "_identity_state_payload" in capture_definitions, (
         "_identity_state_payload lives in _capture.py where _path_state threads the public digest"
     )

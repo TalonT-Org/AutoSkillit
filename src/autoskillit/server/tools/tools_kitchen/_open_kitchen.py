@@ -333,26 +333,19 @@ async def open_kitchen(
             with ``authority: config`` (base_branch, local_review_rounds,
             adversarial_review_level) cannot be set via overrides — they resolve from
             server config and caller values are rejected with a structured error envelope.
-            Typed ingredients (declared via ``type:``) are validated for value coercion;
-            mismatched values are rejected with a structured error envelope.
-            Config-default ingredients (pipeline_health) use config as the default
-            but an explicit override wins.
+            Typed ingredients are validated for value coercion; mismatched values are
+            rejected with a structured error envelope. Config-default ingredients
+            (pipeline_health) use config as the default but an explicit override wins.
         ingredients_only: When True and name is provided, return only the ingredient
             schema (ingredients_table, validity, suggestions) without the full recipe
             content, orchestration rules, or sous-chef discipline. Use for dispatch
-            workflows where the caller needs ingredient discovery but not pipeline
-            execution context.
+            workflows where the caller needs ingredient discovery but not pipeline execution.
 
     Never raises.
     """
     try:
-        # Tier 1 — Authority gate: explicitly reject caller overrides for
-        # SERVER_AUTHORITATIVE_INGREDIENTS keys. Runs at function entry, before
-        # _open_kitchen_handler, before serve_recipe, before any session_snapshot
-        # mutation. Matches lock_ingredients behavior.
         if overrides:
-            authority_overlap = set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
-            if authority_overlap:
+            if authority_overlap := set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS:
                 return json.dumps(build_authority_rejection_envelope(authority_overlap))
 
         # Headless guard — wrap denial in envelope shape
@@ -597,21 +590,12 @@ async def open_kitchen(
                             )
                         }
                     )
-            # Tier 2 — Type gate (deferred-recall): validate caller-supplied
-            # override values against declared ingredient types BEFORE
-            # serve_recipe runs. Failure here aborts the call before any side
-            # effect (recipe serving, projection caching, tool_ctx mutation).
-            # If the recipe object failed to load, the call cannot satisfy
-            # caller-supplied overrides safely — fail closed.
-            if overrides:
-                if _raw_recipe is None:
-                    return _kitchen_failure_envelope(
-                        RuntimeError("Cannot validate override types: recipe failed to load"),
-                        stage="ingredient_type_validation",
-                    )
-                _type_gate_err = _validate_override_types(overrides, _raw_recipe)
-                if _type_gate_err is not None:
-                    return _type_gate_err
+            if overrides and _raw_recipe is None:
+                return _kitchen_failure_envelope(
+                    RuntimeError("recipe failed to load"), stage="ingredient_type_validation"
+                )
+            if _t := _validate_override_types(overrides, _raw_recipe):
+                return _t
 
             if _is_deferred_recall:
                 try:
@@ -651,9 +635,7 @@ async def open_kitchen(
                     return _render_ingredients_only_response(
                         result,
                         declared_ingredients=(
-                            frozenset(_raw_recipe.ingredients)
-                            if _raw_recipe is not None
-                            else frozenset()
+                            frozenset(_raw_recipe.ingredients) if _raw_recipe else frozenset()
                         ),
                         overrides=overrides,
                         session_keys=set(_session_overrides),
@@ -791,9 +773,7 @@ async def open_kitchen(
                 return _render_ingredients_only_response(
                     result,
                     declared_ingredients=(
-                        frozenset(_raw_recipe.ingredients)
-                        if _raw_recipe is not None
-                        else frozenset()
+                        frozenset(_raw_recipe.ingredients) if _raw_recipe else frozenset()
                     ),
                     overrides=overrides,
                     session_keys=set(_session_overrides),

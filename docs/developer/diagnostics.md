@@ -25,6 +25,7 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 ```
 ~/.local/share/autoskillit/logs/
 ├── sessions.jsonl                    # Retained derived index (one row per committed session)
+├── sessions-archive.jsonl            # Append-only rows evicted from the retained index
 ├── otlp.jsonl                        # Current scrubbed vendor-native OTLP capture
 ├── otlp.jsonl.1                      # Single rotated generation
 └── sessions/
@@ -75,7 +76,7 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 2. **Flush**: After the session completes, `flush_session_log()` writes all per-session artifacts
 3. **Commit**: `summary.json` is published last and commits an eligible diagnostic session
 4. **Index**: One exclusive transaction upserts the committed session into the retained `sessions.jsonl` projection
-5. **Retain**: Automatic cleanup targets at most 2,000 committed directories; active-campaign protection may keep more
+5. **Retain and archive**: Automatic cleanup targets at most 2,000 committed directories; active-campaign protection may keep more, while evicted index rows are appended to `sessions-archive.jsonl`
 
 `sessions.jsonl` is a bounded derived index, not an append-only ledger. Its
 `timestamp` field remains the session `start_ts`, not completion or index-write
@@ -84,6 +85,13 @@ preserves that projection, while deterministic crash-recovery replay heals its
 current key. Historical inconsistencies for other keys remain doctor-visible.
 Publication is atomic for concurrent writers and process crashes, but does not
 promise strict power-loss durability or snapshot isolation for unlocked readers.
+
+`sessions-archive.jsonl` is an append-only historical record of complete rows
+evicted from that live projection. Its rows remain after their session artifact
+directories are pruned. Archive appends use at-least-once semantics after an
+uncertain failure, so historical readers must deduplicate by `dir_name`.
+Archive-only queries exclude the current live survivor window, and existing
+live-index tools do not automatically union the two files.
 
 Schema-v8 index rows store the validated managed-launch classification in
 `sessions.jsonl.session_type`, using the canonical headless values `skill`,

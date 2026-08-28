@@ -23,6 +23,7 @@ from autoskillit.core import (
     extract_skill_name,
     get_logger,
 )
+from autoskillit.execution.session._exit_classification import _CODEX_ERROR_CODE_API_STATUS
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
     _is_parent_assistant_record,
@@ -83,14 +84,6 @@ def _apply_budget_guard(
             retry_reason=RetryReason.BUDGET_EXHAUSTED,
         )
     return sr
-
-
-_CODEX_ERROR_CODE_API_STATUS: dict[str, int] = {
-    "rate_limit_exceeded": 429,
-    "server_error": 500,
-    "insufficient_quota": 429,
-    "model_not_found": 404,
-}
 
 
 def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult:

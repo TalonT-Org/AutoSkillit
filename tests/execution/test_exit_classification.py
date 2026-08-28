@@ -221,8 +221,8 @@ class TestClassifyInfraExit:
             classify_infra_exit(session, result, capabilities=_CAPS) == InfraExitCategory.COMPLETED
         )
 
-    def test_completed_logical_failure(self):
-        """Agent failure (success=false, explicit error) → COMPLETED (not infra)."""
+    def test_unclassified_logical_failure(self):
+        """An unrecognized failing session is visible as UNCLASSIFIED."""
         session = ClaudeSessionResult(
             subtype=CliSubtype.ERROR_DURING_EXECUTION,
             is_error=True,
@@ -231,7 +231,8 @@ class TestClassifyInfraExit:
         )
         result = _sr(returncode=1, stderr="")
         assert (
-            classify_infra_exit(session, result, capabilities=_CAPS) == InfraExitCategory.COMPLETED
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     def test_context_exhaustion_takes_precedence_over_api_error(self):
@@ -458,7 +459,7 @@ class TestModelCapacityClassification:
 
         assert (
             classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     def test_disabled_capability_ignores_error_and_stderr_evidence(self) -> None:
@@ -473,7 +474,7 @@ class TestModelCapacityClassification:
 
         assert (
             classify_infra_exit(session, result, capabilities=BackendCapabilities())
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     @pytest.mark.parametrize(
@@ -492,7 +493,7 @@ class TestModelCapacityClassification:
 
         assert (
             classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     @pytest.mark.parametrize(
@@ -530,7 +531,7 @@ class TestModelCapacityClassification:
                 _sr(returncode=1),
                 capabilities=CodexBackend().capabilities,
             )
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
 

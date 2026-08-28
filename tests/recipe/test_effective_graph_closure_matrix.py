@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ProcessPoolExecutor
 from itertools import product
 from pathlib import Path
 
@@ -34,8 +35,8 @@ def _guard_ingredients(recipe_name: str) -> tuple[str, ...]:
     )
 
 
-def _guard_cases() -> list[pytest.ParameterSet]:
-    cases: list[pytest.ParameterSet] = []
+def _guard_cases() -> list[tuple[str, dict[str, str]]]:
+    cases: list[tuple[str, dict[str, str]]] = []
     for recipe_name in tracked_recipe_names(_PROJECT_ROOT):
         ingredients = _guard_ingredients(recipe_name)
         for values in product((False, True), repeat=len(ingredients)):
@@ -43,12 +44,7 @@ def _guard_cases() -> list[pytest.ParameterSet]:
                 ingredient: str(value).lower()
                 for ingredient, value in zip(ingredients, values, strict=True)
             }
-            case_id = recipe_name
-            if overrides:
-                case_id = f"{recipe_name}-" + "-".join(
-                    f"{name}={value}" for name, value in overrides.items()
-                )
-            cases.append(pytest.param(recipe_name, overrides, id=case_id))
+            cases.append((recipe_name, overrides))
     return cases
 
 
@@ -71,25 +67,66 @@ def _reachable_steps(
     return reachable
 
 
-@pytest.mark.parametrize(("recipe_name", "ingredient_overrides"), _guard_cases())
-def test_effective_graph_is_closed_for_every_guard_configuration(
-    recipe_name: str,
-    ingredient_overrides: dict[str, str],
-    tmp_path: Path,
-) -> None:
-    """Every finalized graph is connected and contains only valid route targets."""
+def _validate_guard_case(
+    case: tuple[int, str, dict[str, str], str],
+) -> tuple[str, tuple[str, ...]]:
+    index, recipe_name, ingredient_overrides, temp_root = case
     result = load_and_validate(
         recipe_name,
         ingredient_overrides=ingredient_overrides,
         include_finalized_projection=True,
         project_dir=_PROJECT_ROOT,
-        temp_dir=tmp_path / recipe_name,
+        temp_dir=Path(temp_root) / f"{recipe_name}-{index}",
     )
 
-    assert result["valid"], result["errors"]
-    projection = result["_finalized_projection"]
+    case_name = recipe_name
+    if ingredient_overrides:
+        case_name += "-" + "-".join(
+            f"{name}={value}" for name, value in ingredient_overrides.items()
+        )
+    failures: list[str] = []
+    if not result["valid"]:
+        failures.append(f"invalid: {result['errors']!r}")
+    projection = result.get("_finalized_projection")
+    if not isinstance(projection, FinalizedRecipeProjection):
+        failures.append("missing finalized projection")
+        return case_name, tuple(failures)
     step_names = projection.ordered_step_names
     retained_targets = set(step_names) | RECIPE_TERMINAL_TARGETS
-    assert all(edge.target in retained_targets for edge in projection.ordered_flow_edges)
-    assert _reachable_steps(step_names, projection) == set(step_names)
-    assert result["post_prune_step_names"] == list(step_names)
+    dangling = tuple(
+        edge.target
+        for edge in projection.ordered_flow_edges
+        if edge.target not in retained_targets
+    )
+    if dangling:
+        failures.append(f"dangling targets: {dangling!r}")
+    missing = set(step_names) - _reachable_steps(step_names, projection)
+    if missing:
+        failures.append(f"unreachable steps: {sorted(missing)!r}")
+    if result["post_prune_step_names"] != list(step_names):
+        failures.append("post-prune names differ from the projection")
+    return case_name, tuple(failures)
+
+
+_ALL_GUARD_CASES = _guard_cases()
+_CASE_BATCHES = tuple(
+    tuple(
+        (index, name, overrides)
+        for index, (name, overrides) in enumerate(_ALL_GUARD_CASES)
+        if index % 4 == batch
+    )
+    for batch in range(4)
+)
+
+
+@pytest.mark.parametrize("case_batch", _CASE_BATCHES, ids=lambda batch: f"batch-{batch[0][0]}")
+def test_effective_graph_is_closed_for_every_guard_configuration(
+    case_batch: tuple[tuple[int, str, dict[str, str]], ...],
+    tmp_path: Path,
+) -> None:
+    """Every guard configuration produces a closed finalized graph."""
+    work = tuple((*case, str(tmp_path)) for case in case_batch)
+    with ProcessPoolExecutor(max_workers=2) as executor:
+        outcomes = tuple(executor.map(_validate_guard_case, work))
+    failures = {case_name: errors for case_name, errors in outcomes if errors}
+    assert not failures, failures

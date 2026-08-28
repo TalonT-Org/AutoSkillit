@@ -158,8 +158,8 @@ def test_singleton_exemption_comment_matches_both_windows() -> None:
 
     from autoskillit.cli.install._install_info import _DEV_DISMISS_WINDOW, _STABLE_DISMISS_WINDOW
 
-    this_file = Path(__file__)
-    content = this_file.read_text(encoding="utf-8")
+    singleton_guard_file = Path(__file__).with_name("test_subpackage_isolation_singleton_io.py")
+    content = singleton_guard_file.read_text(encoding="utf-8")
 
     def _fmt_td(td: object) -> str:
         import datetime

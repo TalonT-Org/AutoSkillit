@@ -49,7 +49,7 @@ The tradition manifest declares the family's metadata, lens list, and configurat
 - `failure_mode` — Enum: `continue`, `halt`
 - `lenses` — Array of `LensEntry` objects (each with `slug`, `analytical_mode`, `primary_question`, `tradition`)
 
-**Optional top-level fields:**
+**Schema-only top-level fields** (no hand-authored tradition manifest YAML currently populates these):
 
 - `synthesis_strategy` — Enum: `priority_hierarchy`, `electre_iii`, `dex`, `custom` (or null for null strategy)
 - `step_name_prefix` — `null`/absent → canonical names; set → prefixed names (e.g., `vis` → `vis_dial`, `vis_apply`, `vis_synthesize`)
@@ -57,6 +57,8 @@ The tradition manifest declares the family's metadata, lens list, and configurat
 - `output_prefix` — Prefix for output file names
 - `dialing` — `DialingConfig` with `selection_strategy` (`identity`/`property_set`), optional `min_lenses`, `max_lenses`, `always_run`, `synthesis_strategy`
 - `phase_skip` — `PhaseSkip` with required `skip_field` and `skip_semantics` (`skip_when_true`/`skip_when_false`); optional `applies_to`
+
+In practice, post-#4894 the values for `arg_interface`, `output_prefix`, `activate_deps`, and `dialing` are derived from each lens's SKILL.md (frontmatter + body) and asserted via `tests/skills/test_phoropter_structural.py`. `step_naming.prefix` lives on `phoropter-registry.yaml` (see §3). The fields above are documented here for schema reference.
 
 **File placement:** `src/autoskillit/recipes/methodology-traditions/{tradition-name}.yaml` (resolved by `BUNDLED_METHODOLOGY_TRADITIONS_DIR` in `src/autoskillit/recipe/methodology_tradition_registry.py`).
 
@@ -142,9 +144,9 @@ Each lens in the family needs a `SKILL.md` file following the template variable 
 - `{parent_skill}` — Parent skill for lens grouping
 
 > **Note:** The SKILL.md generator reads `{dial_skill}`, `{apply_skill}`,
-> `{synthesize_skill}`, and `{output_prefix}` from the tradition manifest
-> (§2) — not from the registry. The registry no longer carries these
-> fields (see §3).
+> `{synthesize_skill}`, and `{output_prefix}` from each lens's SKILL.md
+> body or recipe step (and `{output_prefix}` from the lens body) —
+> not from the registry, which no longer carries these fields (see §3).
 
 **Argument interface distinction:**
 
@@ -186,3 +188,4 @@ Before merging a new phoropter family, verify all seven touchpoints:
 5. **`docs/skills/subsets.md`** updated with new category row for the family's tool subset tag.
 6. **`docs/glossary.md`** updated with new family term (enforced by `tests/docs/test_glossary_spelling.py`).
 7. **`PACK_REGISTRY`** entry added to `src/autoskillit/core/types/_type_constants_registries.py` with `PackDef(default_enabled, description)`.
+8. **`tests/skills/test_phoropter_structural.py`** module-level maps (`FAMILY_ARG_INTERFACE`, `_DIAL_SKILLS`, `_COMPOSITE_SLUGS`) updated if any lens family's interface changes — these serve as the contract-expected values paired with body-derived tests.

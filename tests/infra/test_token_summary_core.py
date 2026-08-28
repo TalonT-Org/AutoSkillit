@@ -1158,6 +1158,13 @@ def test_non_anthropic_session_shows_provider_model_name(tmp_path: Path) -> None
     [
         ("resolved-first", "claude-sonnet-5[1m]", "opus[1m]", "", "claude-sonnet-5[1m]"),
         ("configured-only", None, "sonnet", "anthropic", "sonnet"),
+        (
+            "non-anthropic",
+            "MiniMax-M2.7-highspeed",
+            "sonnet",
+            "minimax",
+            "MiniMax-M2.7-highspeed",
+        ),
     ],
 )
 def test_reader_agreement_contract(
@@ -1201,6 +1208,8 @@ def test_reader_agreement_contract(
 
     assert disk_model == hook_model, f"readers disagree: disk={disk_model!r}, hook={hook_model!r}"
     assert disk_model == expected_model
+    if profile_name == "minimax":
+        assert not disk_model.startswith("claude-")
 
 
 def test_load_sessions_handles_null_cache_write(tmp_path: Path) -> None:

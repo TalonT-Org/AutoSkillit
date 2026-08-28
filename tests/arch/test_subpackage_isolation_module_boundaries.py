@@ -57,9 +57,7 @@ def test_skill_tools_defined_in_types():
 
 def test_no_yaml_safe_load_in_migration_engine() -> None:
     """P7-2: ContractMigrationAdapter.validate must use _load_yaml, not yaml.safe_load."""
-    src = (
-        Path(__file__).parent.parent.parent / "src/autoskillit/migration/adapters_contract.py"
-    ).read_text()
+    src = (SRC_ROOT / "migration" / "adapters_contract.py").read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):

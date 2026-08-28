@@ -148,10 +148,6 @@ def test_file_count_policies_are_disjoint_and_composed_without_copying() -> None
     assert "FILE_COUNT_LIMITS.get(rel_key, 10)" in scanner
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="coverage source map is regenerated after isolation guards move (#4886)",
-)
 def test_source_map_records_moved_behavioral_successors() -> None:
     data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
     source_map = data["map"]

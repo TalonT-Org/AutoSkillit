@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -38,35 +38,54 @@ def _load_result(*items: RecipeInfo) -> LoadResult[RecipeInfo]:
     return LoadResult(items=list(items))
 
 
+def _write_project_recipe(project_dir: Path, name: str) -> Path:
+    path = project_dir / ".autoskillit" / "recipes" / f"{name}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"name: {name}\ndescription: test\nsteps: {{}}\n", encoding="utf-8")
+    return path
+
+
+def _counting_list_recipes(calls: list[Path]) -> Callable[[Path], LoadResult[RecipeInfo]]:
+    def delegate(project_dir: Path) -> LoadResult[RecipeInfo]:
+        calls.append(project_dir)
+        return recipe_io.list_recipes(project_dir)
+
+    return delegate
+
+
 # ---------------------------------------------------------------------------
 # find
 # ---------------------------------------------------------------------------
 
 
-def test_find_returns_matching_recipe(tmp_path: Path) -> None:
+def test_find_returns_matching_recipe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """list_recipes returns a recipe named 'foo' → find('foo', ...) returns it."""
-    foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
-    mock_result = _load_result(foo)
+    recipe_path = _write_project_recipe(tmp_path, "foo")
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
+    )
 
-    with patch("autoskillit.recipe.repository.list_recipes", return_value=mock_result) as listing:
-        repo = DefaultRecipeRepository()
-        result = repo.find("foo", tmp_path)
+    result = DefaultRecipeRepository().find("foo", tmp_path)
 
-    assert result is foo
-    listing.assert_called_once_with(tmp_path)
+    assert result is not None
+    assert result.name == "foo"
+    assert result.path == recipe_path
+    assert calls == [tmp_path]
 
 
-def test_find_returns_none_when_no_match(tmp_path: Path) -> None:
+def test_find_returns_none_when_no_match(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No recipe named 'bar' → find('bar', ...) returns None."""
-    foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
-    mock_result = _load_result(foo)
+    _write_project_recipe(tmp_path, "foo")
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
+    )
 
-    with patch("autoskillit.recipe.repository.list_recipes", return_value=mock_result) as listing:
-        repo = DefaultRecipeRepository()
-        result = repo.find("bar", tmp_path)
+    result = DefaultRecipeRepository().find("bar", tmp_path)
 
     assert result is None
-    listing.assert_called_once_with(tmp_path)
+    assert calls == [tmp_path]
 
 
 # ---------------------------------------------------------------------------
@@ -74,14 +93,19 @@ def test_find_returns_none_when_no_match(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_list_delegates_to_central_list_recipes(tmp_path: Path) -> None:
-    expected = _load_result(_make_recipe_info("foo", tmp_path / "foo.yaml"))
+def test_list_delegates_to_central_list_recipes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_project_recipe(tmp_path, "foo")
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
+    )
 
-    with patch("autoskillit.recipe.repository.list_recipes", return_value=expected) as listing:
-        result = DefaultRecipeRepository().list(tmp_path)
+    result = DefaultRecipeRepository().list(tmp_path)
 
-    assert result is expected
-    listing.assert_called_once_with(tmp_path)
+    assert any(recipe.name == "foo" for recipe in result.items)
+    assert calls == [tmp_path]
 
 
 def test_repository_find_observes_in_place_recipe_edit(tmp_path: Path) -> None:
@@ -103,22 +127,28 @@ def test_repository_find_observes_in_place_recipe_edit(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_load_and_validate_delegates_to_api(tmp_path: Path) -> None:
+def test_load_and_validate_delegates_to_api(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """load_and_validate calls _api.load_and_validate with correct args."""
     expected = {"success": True, "recipe": "data"}
     mock_api = MagicMock(return_value=expected)
 
-    foo = _make_recipe_info("foo", tmp_path / "foo.yaml")
+    _write_project_recipe(tmp_path, "foo")
+    calls: list[Path] = []
+    monkeypatch.setattr(
+        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
+    )
     with patch("autoskillit.recipe._api.load_and_validate", mock_api):
-        with patch("autoskillit.recipe.repository.list_recipes", return_value=_load_result(foo)):
-            repo = DefaultRecipeRepository()
-            result = repo.load_and_validate("foo", tmp_path)
+        repo = DefaultRecipeRepository()
+        result = repo.load_and_validate("foo", tmp_path)
 
     assert result == expected
     mock_api.assert_called_once()
     call_kwargs = mock_api.call_args
     assert call_kwargs.args[0] == "foo"
     assert call_kwargs.kwargs["project_dir"] == tmp_path
+    assert calls == [tmp_path]
 
 
 def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:

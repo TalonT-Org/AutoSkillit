@@ -1846,11 +1846,9 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
 def test_lru_cache_helpers_cleared_on_process_staleness(
     isolated_recipe_discovery_cache, tmp_path, monkeypatch
 ):
-    """Staleness detection clears validation, discovery, and parser caches."""
+    """Staleness clearing forces every discovery stage to repopulate."""
     import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
     import autoskillit.recipe._io_loading as io_loading
-    from autoskillit.core import ProcessStaleError
     from autoskillit.recipe._api_cache import _MISSING
     from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE
     from autoskillit.recipe.contracts import load_bundled_manifest
@@ -1865,6 +1863,22 @@ def test_lru_cache_helpers_cleared_on_process_staleness(
     )
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+    monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
+
+    discovery_calls = {"enumerate": 0, "collect": 0}
+    enumerate_candidates = recipe_io._enumerate_recipe_candidates_uncached
+    collect_candidates = recipe_io.collect_recipes_from_candidates
+
+    def counting_enumeration(*args: Any, **kwargs: Any) -> Any:
+        discovery_calls["enumerate"] += 1
+        return enumerate_candidates(*args, **kwargs)
+
+    def counting_collection(*args: Any, **kwargs: Any) -> Any:
+        discovery_calls["collect"] += 1
+        return collect_candidates(*args, **kwargs)
+
+    monkeypatch.setattr(recipe_io, "_enumerate_recipe_candidates_uncached", counting_enumeration)
+    monkeypatch.setattr(recipe_io, "collect_recipes_from_candidates", counting_collection)
 
     _block_budgets()
     load_bundled_manifest()
@@ -1879,19 +1893,14 @@ def test_lru_cache_helpers_cleared_on_process_staleness(
     recipes_dir.mkdir(parents=True)
     (recipes_dir / "myrecipe.yaml").write_text(MINIMAL_RECIPE_YAML)
     recipe_io.list_recipes(tmp_path)
+    calls_before_clear = dict(discovery_calls)
+    parse_misses_before_clear = io_loading._parse_recipe_candidate.cache_info().misses
     assert recipe_io._cached_recipe_candidates.cache_info().currsize > 0
     assert recipe_io._cached_recipe_collection.cache_info().currsize > 0
     assert io_loading._parse_recipe_candidate.cache_info().currsize > 0
+    assert parse_misses_before_clear > 0
 
-    monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
-    monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
-    monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
-    monkeypatch.setattr(cache_mod, "_STALENESS_CACHES_CLEARED", False)
-    monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_baseline")
-    monkeypatch.setattr(cache_mod, "_compute_content_hash", lambda: "fakehash_changed")
-
-    with pytest.raises(ProcessStaleError):
-        orch.load_and_validate("myrecipe", tmp_path)
+    cache_mod._clear_stale_caches()
 
     assert _BUDGETS_CACHE._value is _MISSING
     assert _MANIFEST_CACHE._value is _MISSING
@@ -1900,6 +1909,18 @@ def test_lru_cache_helpers_cleared_on_process_staleness(
     assert recipe_io._cached_recipe_candidates.cache_info().currsize == 0
     assert recipe_io._cached_recipe_collection.cache_info().currsize == 0
     assert io_loading._parse_recipe_candidate.cache_info().currsize == 0
+    parse_misses_after_clear = io_loading._parse_recipe_candidate.cache_info().misses
+    assert parse_misses_after_clear == 0
+
+    recipe_io.list_recipes(tmp_path)
+
+    assert discovery_calls["enumerate"] == calls_before_clear["enumerate"] + 2
+    assert discovery_calls["collect"] == calls_before_clear["collect"] + 1
+    parse_misses_after_relist = io_loading._parse_recipe_candidate.cache_info().misses
+    assert parse_misses_after_relist > parse_misses_after_clear
+    assert parse_misses_after_relist == parse_misses_before_clear
+    assert recipe_io._cached_recipe_candidates.cache_info().currsize > 0
+    assert recipe_io._cached_recipe_collection.cache_info().currsize > 0
 
 
 def test_mid_process_yaml_only_update(tmp_path, monkeypatch):

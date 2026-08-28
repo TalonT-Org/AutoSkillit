@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from dataclasses import replace
 from types import SimpleNamespace
+from typing import get_type_hints
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -77,7 +77,7 @@ def _deny_tokens(result: str) -> str:
 def test_run_skill_declares_boolean_guard_values() -> None:
     from autoskillit.server.tools.tools_execution._run_skill_dispatch import run_skill
 
-    annotation = inspect.signature(run_skill).parameters["step_guard_value"].annotation
+    annotation = get_type_hints(run_skill)["step_guard_value"]
     assert annotation == str | bool | None
 
 

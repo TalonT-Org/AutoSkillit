@@ -579,3 +579,26 @@ def session_managed_scope(payload_cwd: str, session_id: str) -> tuple[str, str] 
     if not isinstance(parent, str) or not parent or not isinstance(leaf, str):
         return None
     return (parent, leaf)
+
+
+def session_managed_codex_route(
+    payload_cwd: str,
+    session_id: str,
+) -> tuple[str, frozenset[str], str] | None:
+    """Return the explicit managed Codex route carried by a valid binding."""
+    binding = read_session_binding(payload_cwd, session_id)
+    if binding is None or not binding.get("binding_valid"):
+        return None
+    route = binding.get("managed_route")
+    guards = binding.get("managed_guard_set")
+    config_digest = binding.get("managed_config_digest")
+    if (
+        route not in ("parent", "leaf")
+        or not isinstance(guards, list)
+        or any(not isinstance(guard, str) or not guard for guard in guards)
+        or len(set(guards)) != len(guards)
+        or not isinstance(config_digest, str)
+        or not config_digest
+    ):
+        return None
+    return str(route), frozenset(guards), config_digest

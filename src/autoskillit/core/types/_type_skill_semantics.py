@@ -143,6 +143,8 @@ class ManagedJoinAttestation:
     activation_epoch: int
     direct_tool_mode: bool
     resolved_model: str
+    resolved_reasoning_effort: str
+    codex_catalog_digest: str
     fixed_batch_tool_registry_digest: str
     hook_registry_digest: str
     skill_load_applies: bool
@@ -159,6 +161,7 @@ class ManagedJoinAttestation:
             ("managed-join launch context", self.launch_context),
             ("managed-join parent session", self.parent_session_id),
             ("managed-join resolved model", self.resolved_model),
+            ("managed-join resolved reasoning effort", self.resolved_reasoning_effort),
             ("managed-join provenance", self.provenance),
         ):
             _require_nonempty(value, field_name)
@@ -166,6 +169,10 @@ class ManagedJoinAttestation:
             raise SkillContractError(
                 "managed-join activation epoch must be a non-negative integer"
             )
+        _require_sha256(
+            self.codex_catalog_digest,
+            "managed-join Codex catalog digest",
+        )
         _require_sha256(
             self.fixed_batch_tool_registry_digest,
             "managed-join fixed-batch tool registry digest",
@@ -183,6 +190,8 @@ class ManagedJoinAttestation:
                 "activation_epoch": self.activation_epoch,
                 "direct_tool_mode": self.direct_tool_mode,
                 "resolved_model": self.resolved_model,
+                "resolved_reasoning_effort": self.resolved_reasoning_effort,
+                "codex_catalog_digest": self.codex_catalog_digest,
                 "fixed_batch_tool_registry_digest": self.fixed_batch_tool_registry_digest,
                 "hook_registry_digest": self.hook_registry_digest,
                 "skill_load_applies": self.skill_load_applies,

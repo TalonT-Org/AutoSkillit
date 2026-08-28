@@ -132,6 +132,7 @@ from autoskillit.execution.backends._codex_explorer_projection import (
     clear_explorer_binding_env,
     refresh_explorer_binding_env,
 )
+from autoskillit.execution.backends._codex_managed_route import project_managed_route
 from autoskillit.execution.backends._codex_parse import CodexResultParser, CodexStreamParser
 from autoskillit.execution.backends._codex_prelaunch import (
     _staged_error,
@@ -294,6 +295,7 @@ class CodexBackend(BackendCmdBuilderBase):
             recipe_delivery_budget=CODEX_RECIPE_DELIVERY_BUDGET,
             hook_trust_policy=HookTrustPolicy.REVIEW_EACH_SESSION,
             fixed_set_join_capable=False,
+            managed_fixed_batch_route_capable=True,
             native_model_ids=CODEX_VALID_MODEL_IDS,
         )
 
@@ -921,7 +923,6 @@ class CodexBackend(BackendCmdBuilderBase):
     ) -> list[str]:
         del project_dir
         errors: list[str] = []
-
         skills_dir = (
             session_dir
             / SESSION_ADD_DIR_SUBDIR
@@ -934,7 +935,6 @@ class CodexBackend(BackendCmdBuilderBase):
             discovery_skills_dir.is_dir() and any(discovery_skills_dir.iterdir())
         ):
             errors.append(f"skills directory is empty: {skills_dir}")
-
         config_path = session_dir / "config.toml"
         if not config_path.is_file():
             errors.append(f"config.toml does not exist: {config_path}")
@@ -942,7 +942,6 @@ class CodexBackend(BackendCmdBuilderBase):
             toml_content = config_path.read_text(encoding="utf-8")
             if "[mcp_servers.autoskillit]" not in toml_content:
                 errors.append("config.toml missing [mcp_servers.autoskillit] section")
-
         auth_path = session_dir / "auth.json"
         if auth_path.exists() and not auth_path.is_symlink():
             errors.append(f"auth.json must be a symlink, not a regular file: {auth_path}")
@@ -1117,6 +1116,8 @@ class CodexBackend(BackendCmdBuilderBase):
         )
         logger.debug("codex_agents_registered", count=registered)
         return _codex_cfg.effective_codex_agent_names(session_dir)
+
+    configure_managed_session_dir = project_managed_route
 
     def refresh_explorer_binding_env(
         self,

@@ -73,6 +73,8 @@ class ManagedJoinAttestationAuthority(Protocol):
         parent_session_id: str,
         direct_tool_mode: bool,
         resolved_model: str,
+        resolved_reasoning_effort: str,
+        codex_catalog_digest: str,
         fixed_batch_tool_registry_digest: str,
         hook_registry_digest: str,
         skill_load_applies: bool,
@@ -361,6 +363,9 @@ class SkillProjectionContextAuthority(Protocol):
 
     @property
     def adaptation_context(self) -> SemanticAdaptationContext | None: ...
+
+    @property
+    def managed_codex_route(self) -> str | None: ...
 
     @property
     def explorer_provisioning_eligible(self) -> bool | None: ...

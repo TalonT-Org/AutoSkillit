@@ -74,6 +74,20 @@ def _string_field(value: dict[str, object], field: str) -> str:
     return item
 
 
+def _managed_guard_set(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        raise SessionBindingError("managed_guard_set must be an array of non-empty strings")
+    if len(set(value)) != len(value):
+        raise SessionBindingError("managed_guard_set must not contain duplicates")
+    return tuple(sorted(value))
+
+
+def _managed_route(value: object) -> str:
+    if value not in ("", "parent", "leaf"):
+        raise SessionBindingError("managed_route must be empty, parent, or leaf")
+    return str(value)
+
+
 class LoadedSkillEntry(NamedTuple):
     skill_name: str
     ts: str
@@ -144,6 +158,9 @@ class SessionBinding(NamedTuple):
     loaded_skills: tuple[LoadedSkillEntry, ...]
     managed_parent_id: str = "top_level"
     managed_leaf_id: str = ""
+    managed_route: str = ""
+    managed_guard_set: tuple[str, ...] = ()
+    managed_config_digest: str = ""
 
     def to_json(self) -> str:
         return json.dumps(
@@ -156,6 +173,9 @@ class SessionBinding(NamedTuple):
                 "loaded_skills": [entry._as_json_object() for entry in self.loaded_skills],
                 "managed_parent_id": self.managed_parent_id,
                 "managed_leaf_id": self.managed_leaf_id,
+                "managed_route": self.managed_route,
+                "managed_guard_set": list(self.managed_guard_set),
+                "managed_config_digest": self.managed_config_digest,
             },
             sort_keys=True,
         )
@@ -184,6 +204,9 @@ class SessionBinding(NamedTuple):
                 loaded_skills=loaded,
                 managed_parent_id=_string_field(parsed, "managed_parent_id"),
                 managed_leaf_id=_string_field(parsed, "managed_leaf_id"),
+                managed_route=_managed_route(parsed.get("managed_route", "")),
+                managed_guard_set=_managed_guard_set(parsed.get("managed_guard_set", [])),
+                managed_config_digest=_string_field(parsed, "managed_config_digest"),
             )
         raise SessionBindingError(
             f"unsupported session-binding schema_version: {schema_version!r}"
@@ -340,6 +363,9 @@ def merge_binding(
     artifact_digest: str,
     managed_parent_id: str = "top_level",
     managed_leaf_id: str = "",
+    managed_route: str = "",
+    managed_guard_set: tuple[str, ...] = (),
+    managed_config_digest: str = "",
 ) -> SessionBinding:
     loaded = (*existing.loaded_skills, new_entry) if existing else (new_entry,)
     return SessionBinding(
@@ -357,6 +383,17 @@ def merge_binding(
             existing.managed_parent_id if existing is not None else managed_parent_id
         ),
         managed_leaf_id=existing.managed_leaf_id if existing is not None else managed_leaf_id,
+        managed_route=existing.managed_route
+        if existing is not None
+        else _managed_route(managed_route),
+        managed_guard_set=(
+            existing.managed_guard_set
+            if existing is not None
+            else _managed_guard_set(list(managed_guard_set))
+        ),
+        managed_config_digest=(
+            existing.managed_config_digest if existing is not None else managed_config_digest
+        ),
     )
 
 
@@ -407,6 +444,9 @@ def merge_and_write_binding(
     artifact_digest: str,
     managed_parent_id: str = "top_level",
     managed_leaf_id: str = "",
+    managed_route: str = "",
+    managed_guard_set: tuple[str, ...] = (),
+    managed_config_digest: str = "",
 ) -> SessionBinding:
     """Atomically merge one skill-load entry under the binding lock."""
     with binding_lock(path):
@@ -417,6 +457,9 @@ def merge_and_write_binding(
             artifact_digest=artifact_digest,
             managed_parent_id=managed_parent_id,
             managed_leaf_id=managed_leaf_id,
+            managed_route=managed_route,
+            managed_guard_set=managed_guard_set,
+            managed_config_digest=managed_config_digest,
         )
         write_binding(path, merged)
         return merged

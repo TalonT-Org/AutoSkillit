@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from autoskillit.core import (
     _AUTOSKILLIT_PLUGIN_KEY,
@@ -36,6 +37,88 @@ from autoskillit.hook_registry import (
 )
 
 logger = get_logger(__name__)
+
+ManagedCodexRoute = Literal["parent", "leaf"]
+
+MANAGED_CODEX_PARENT_MCP_TOOLS: tuple[str, ...] = (
+    "run_fixed_batch",
+    "read_fixed_batch_result",
+)
+"""The complete AutoSkillit MCP surface for a managed parent."""
+
+MANAGED_CODEX_LEAF_MCP_TOOLS: tuple[str, ...] = ("test_check",)
+"""The complete AutoSkillit MCP surface for an isolated managed leaf."""
+
+MANAGED_CODEX_PARENT_GUARD_SET: frozenset[str] = frozenset(
+    {
+        "skill_orchestration_guard",
+        "background_exec_guard",
+        "join_followup_guard",
+        "join_stop_guard",
+    }
+)
+MANAGED_CODEX_LEAF_GUARD_SET: frozenset[str] = frozenset(
+    {"skill_orchestration_guard", "background_exec_guard"}
+)
+
+
+def managed_codex_guard_set(route: ManagedCodexRoute) -> frozenset[str]:
+    """Return the hook scripts that are authoritative for one managed route."""
+    if route == "parent":
+        return MANAGED_CODEX_PARENT_GUARD_SET
+    if route == "leaf":
+        return MANAGED_CODEX_LEAF_GUARD_SET
+    raise ValueError(f"unsupported managed Codex route: {route!r}")
+
+
+def managed_codex_mcp_tools(route: ManagedCodexRoute) -> tuple[str, ...]:
+    """Return the explicit MCP allow-list projected into one generated home."""
+    if route == "parent":
+        return MANAGED_CODEX_PARENT_MCP_TOOLS
+    if route == "leaf":
+        return MANAGED_CODEX_LEAF_MCP_TOOLS
+    raise ValueError(f"unsupported managed Codex route: {route!r}")
+
+
+def _managed_route_hook_defs(route: ManagedCodexRoute) -> tuple[HookDef, ...]:
+    """Return route-only hooks without changing global Codex applicability."""
+    hooks = [
+        HookDef(
+            matcher=r"mcp__.*autoskillit.*__.*",
+            scripts=["guards/skill_orchestration_guard.py"],
+            session_scope="headless_only",
+            mechanism="deny",
+            enforcement_strength={"codex": "hard"},
+        ),
+        HookDef(
+            matcher=r"Agent|spawn_agent|code_mode|background",
+            scripts=["guards/background_exec_guard.py"],
+            session_scope="headless_only",
+            mechanism="deny",
+            enforcement_strength={"codex": "hard"},
+        ),
+    ]
+    if route == "parent":
+        hooks.extend(
+            (
+                HookDef(
+                    matcher="",
+                    scripts=["guards/join_followup_guard.py"],
+                    session_scope="headless_only",
+                    mechanism="deny",
+                    enforcement_strength={"codex": "hard"},
+                ),
+                HookDef(
+                    matcher="",
+                    event_type="Stop",
+                    scripts=["guards/join_stop_guard.py"],
+                    session_scope="headless_only",
+                    mechanism="deny",
+                    enforcement_strength={"codex": "hard"},
+                ),
+            )
+        )
+    return tuple(hooks)
 
 
 def find_broken_codex_hook_commands(config_path: Path | None = None) -> list[str]:
@@ -170,12 +253,20 @@ def generate_codex_hooks_config(
     registry: Sequence[HookDef] = HOOK_REGISTRY,
     lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
     plugin_dir: Path | None = None,
+    managed_route: ManagedCodexRoute | None = None,
 ) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
     Skips interactive_only and codex fix-required/not-applicable hooks.
     Returns dict keyed by event type for [[hooks.<EventType>]] TOML format.
     """
+    if registry is HOOK_REGISTRY and not HOOK_REGISTRY:
+        # ``hook_registry`` intentionally defers population to the hooks
+        # package to avoid an import cycle.  Direct generated-home setup is a
+        # legitimate first consumer, so establish that existing runtime
+        # registry before validating or rendering it.
+        import autoskillit.hooks  # noqa: PLC0415,F401
+
     validate_lifecycle_contracts(
         registry,
         lifecycle_contracts,
@@ -183,13 +274,18 @@ def generate_codex_hooks_config(
     )
     hooks_dir = _resolve_codex_hooks_dir(plugin_dir)
     groups: dict[str, dict[tuple[str, str], dict]] = {}
-    for hook_def in registry:
-        if not hook_applies_to_backend(
+    applicable = [
+        hook_def
+        for hook_def in registry
+        if hook_applies_to_backend(
             hook_def,
             backend="codex",
             session_scope="headless",
-        ):
-            continue
+        )
+    ]
+    if managed_route is not None:
+        applicable.extend(_managed_route_hook_defs(managed_route))
+    for hook_def in applicable:
         event = hook_def.event_type
         key = (event, hook_def.matcher)
         hook_commands = [
@@ -262,6 +358,7 @@ def _sync_hooks_to_codex_config_unlocked(
     *,
     hook_config_format: str = "",
     plugin_dir: Path | None = None,
+    managed_route: ManagedCodexRoute | None = None,
 ) -> bool:
     """Mutate hook entries while the caller owns the Codex config lock.
 
@@ -274,6 +371,7 @@ def _sync_hooks_to_codex_config_unlocked(
         fresh = generate_codex_hooks_config(
             hook_config_format=hook_config_format,
             plugin_dir=plugin_dir,
+            managed_route=managed_route,
         )
         _upsert_hooks_text(config_path, result.raw_bytes, fresh)
         return True
@@ -292,6 +390,7 @@ def _sync_hooks_to_codex_config_unlocked(
     fresh = generate_codex_hooks_config(
         hook_config_format=hook_config_format,
         plugin_dir=plugin_dir,
+        managed_route=managed_route,
     )
     merged: dict[str, list[dict]] = {}
     for event_type in set(list(foreign_hooks.keys()) + list(fresh.keys())):
@@ -320,4 +419,20 @@ def sync_hooks_to_codex_config(
             config_path=resolved_config_path,
             hook_config_format=hook_config_format,
             plugin_dir=plugin_dir,
+        )
+
+
+def sync_managed_codex_hooks_to_config(
+    config_path: Path,
+    *,
+    route: ManagedCodexRoute,
+    plugin_dir: Path | None = None,
+) -> bool:
+    """Install route-specific hooks in one generated Codex home."""
+    resolved_config_path = Path(config_path).expanduser().resolve(strict=False)
+    with CodexConfigLock(resolved_config_path):
+        return _sync_hooks_to_codex_config_unlocked(
+            config_path=resolved_config_path,
+            plugin_dir=plugin_dir,
+            managed_route=route,
         )

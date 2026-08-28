@@ -300,6 +300,20 @@ def _materialize_session(
                 explorer_binding_env,
             )
         finalized_native_roles = backend.setup_session_dir(generated_home, **setup_kwargs)
+        attestation = (
+            projection_context.adaptation_context.managed_join_attestation
+            if projection_context.adaptation_context is not None
+            else None
+        )
+        if backend.capabilities.managed_fixed_batch_route_capable and attestation is not None:
+            configure_managed_home = getattr(backend, "configure_managed_session_dir", None)
+            if not callable(configure_managed_home):
+                raise SkillContractError("managed-route backend cannot configure a generated home")
+            configure_managed_home(
+                generated_home,
+                attestation=attestation,
+                route=projection_context.managed_codex_route or "parent",
+            )
 
     if finalized_native_roles is not None and projection_context.invocation is not None:
         missing_invocation_roles = sorted(

@@ -31,6 +31,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
+    session_managed_codex_route,
     session_managed_scope,
     write_join_diagnostic,
 )
@@ -42,6 +43,9 @@ from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
 JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
+)
+_MANAGED_PARENT_ALLOWED_TOOLS: frozenset[str] = frozenset(
+    {"run_fixed_batch", "read_fixed_batch_result"}
 )
 
 
@@ -86,6 +90,27 @@ def main() -> None:
         sys.exit(0)
 
     tool_name = data.get("tool_name")
+    managed_route = session_managed_codex_route(payload_cwd, session_id)
+    if managed_route is not None:
+        route, guards, _config_digest = managed_route
+        if route == "leaf":
+            sys.exit(0)
+        if "join_followup_guard" not in guards:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "decision": "block",
+                        "reason": "managed Codex parent binding omits join_followup_guard.",
+                    }
+                )
+                + "\n"
+            )
+            sys.exit(2)
+        if (
+            isinstance(tool_name, str)
+            and tool_name.split("__")[-1] in _MANAGED_PARENT_ALLOWED_TOOLS
+        ):
+            sys.exit(0)
     if not isinstance(tool_name, str) or tool_name == "Agent":
         sys.exit(0)
 

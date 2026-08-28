@@ -22,6 +22,8 @@ from ._codex_config import (
 )
 from ._codex_execution_identity import extract_codex_execution_identity
 from ._codex_hooks import (
+    MANAGED_CODEX_LEAF_GUARD_SET,
+    MANAGED_CODEX_PARENT_GUARD_SET,
     _is_autoskillit_hook_entry,
     find_broken_codex_hook_commands,
     generate_codex_hooks_config,
@@ -92,6 +94,8 @@ __all__ = [
     "all_backends",
     "CODEX_EXEC_FLAGS",
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
+    "MANAGED_CODEX_LEAF_GUARD_SET",
+    "MANAGED_CODEX_PARENT_GUARD_SET",
     "CompositeSessionLocator",
     "_is_autoskillit_hook_entry",
     "find_broken_codex_hook_commands",

@@ -32,6 +32,7 @@ if _HOOKS_DIR not in sys.path:
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
+    session_managed_codex_route,
 )
 
 BACKGROUND_EXEC_DENY_TRIGGER: str = "run_in_background=true is prohibited in skill sessions"
@@ -39,6 +40,9 @@ SCHEDULE_WAKEUP_DENY_TRIGGER: str = "ScheduleWakeup is prohibited in skill sessi
 JOIN_DENY_TRIGGER: str = (
     "required-join session forbids named/teammate dispatch — declare a wave "
     "via declare_join_batch and use unnamed foreground Agent(...) calls"
+)
+MANAGED_CODEX_CHILD_DENY_TRIGGER: str = (
+    "managed Codex routes cannot launch native or background child work"
 )
 
 
@@ -83,12 +87,39 @@ def main() -> None:
         sys.exit(0)  # fail-open: missing or malformed tool_input
 
     tool_name = data.get("tool_name")
+    session_id = data.get("session_id")
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    managed_route = (
+        session_managed_codex_route(payload_cwd, session_id)
+        if os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip() == "codex"
+        and isinstance(session_id, str)
+        and session_id
+        and payload_cwd
+        else None
+    )
+    if managed_route is not None:
+        route, guards, _config_digest = managed_route
+        blocked_names = {"Agent", "spawn_agent", "code_mode", "background"}
+        if "background_exec_guard" not in guards:
+            blocked_names = {str(tool_name)}
+        if tool_name in blocked_names or tool_input.get("run_in_background"):
+            payload = json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"{MANAGED_CODEX_CHILD_DENY_TRIGGER} ({route} route)."
+                        ),
+                    }
+                }
+            )
+            sys.stdout.write(payload + "\n")
+            sys.exit(0)
 
     # --- Join-bound session enforcement (Claude, all session types) ---
     # Inside a claimed child's own subagent context, exempt join re-evaluation:
     # blocking them would self-lock every join.
-    session_id = data.get("session_id")
-    payload_cwd = normalize_payload_cwd(data.get("cwd"))
     join_required = (
         is_governed
         and not in_subagent_context

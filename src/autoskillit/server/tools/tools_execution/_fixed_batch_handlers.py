@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from string import ascii_letters, digits
 from typing import Any
@@ -30,14 +30,21 @@ from autoskillit.core import (
     get_logger,
     render_target_skill_command,
 )
+from autoskillit.execution import (
+    MANAGED_CODEX_LEAF_GUARD_SET,
+    MANAGED_CODEX_PARENT_GUARD_SET,
+)
 from autoskillit.hooks._hook_settings import validate_session_id
 from autoskillit.hooks._session_binding import (
+    SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,
     SessionBinding,
     SessionBindingError,
+    binding_lock,
     normalize_skill_name,
     read_binding,
     resolve_binding_path,
+    write_binding,
 )
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_enabled
@@ -177,6 +184,47 @@ def _validate_membership(
         )
 
 
+def _bind_managed_parent_route(
+    binding_path: Path,
+    *,
+    request_session_id: str,
+    attestation: object,
+) -> SessionBinding:
+    """Mint or verify the server-owned parent route under the binding lock."""
+    expected_guards = tuple(sorted(MANAGED_CODEX_PARENT_GUARD_SET))
+    config_digest = getattr(attestation, "hook_registry_digest", "")
+    if not isinstance(config_digest, str) or not config_digest:
+        raise SkillContractError("run_fixed_batch attestation lacks a managed config digest")
+    with binding_lock(binding_path):
+        current = read_binding(binding_path)
+        if (
+            current is None
+            or current.session_id != request_session_id
+            or not current.binding_valid
+        ):
+            raise SkillContractError(
+                "run_fixed_batch request binding changed during authorization"
+            )
+        if current.managed_leaf_id:
+            raise SkillContractError("run_fixed_batch is unavailable to managed leaf sessions")
+        if current.managed_route == "":
+            current = current._replace(
+                managed_route="parent",
+                managed_guard_set=expected_guards,
+                managed_config_digest=config_digest,
+            )
+            write_binding(binding_path, current)
+        if (
+            current.managed_route != "parent"
+            or current.managed_guard_set != expected_guards
+            or current.managed_config_digest != config_digest
+        ):
+            raise SkillContractError(
+                "run_fixed_batch binding does not match the managed parent route"
+            )
+        return current
+
+
 def _request_facts(
     *,
     skill_name: str,
@@ -234,6 +282,11 @@ def _request_facts(
     attestation = adaptation_context.managed_join_attestation
     if attestation is None or not service.recovery_ready:
         raise SkillContractError("run_fixed_batch is blocked by managed recovery")
+    binding = _bind_managed_parent_route(
+        binding_path,
+        request_session_id=request_session_id,
+        attestation=attestation,
+    )
     return _ManagedRequestFacts(
         launch=ManagedLaunchBinding(
             request_session_id=request_session_id,
@@ -261,6 +314,43 @@ class _ManagedLeafLaunchAdapter:
     write_behavior: WriteBehaviorSpec
     read_only: bool
 
+    def _write_leaf_binding(self, leaf_session_id: str, projection: object) -> None:
+        attestation = getattr(
+            getattr(self.projection_context, "adaptation_context", None),
+            "managed_join_attestation",
+            None,
+        )
+        config_digest = getattr(attestation, "hook_registry_digest", "")
+        if not isinstance(config_digest, str) or not config_digest:
+            raise SkillContractError("managed leaf launch lacks an attested config digest")
+        assignment = getattr(getattr(projection, "binding", None), "assignment", None)
+        assignment_id = getattr(assignment, "assignment_id", "")
+        if not isinstance(assignment_id, str) or not assignment_id:
+            raise SkillContractError("managed leaf launch lacks an assignment identity")
+        selected = self.launch.selected_source
+        if not isinstance(selected, LoadedSkillEntry):
+            raise SkillContractError("managed leaf launch lacks a typed selected source entry")
+        expected = SessionBinding(
+            schema_version=SESSION_BINDING_SCHEMA_VERSION,
+            session_id=leaf_session_id,
+            join_required=True,
+            binding_valid=True,
+            artifact_digest=selected.source_artifact_digest,
+            loaded_skills=(selected,),
+            managed_parent_id=self.launch.managed_parent_id,
+            managed_leaf_id=assignment_id,
+            managed_route="leaf",
+            managed_guard_set=tuple(sorted(MANAGED_CODEX_LEAF_GUARD_SET)),
+            managed_config_digest=config_digest,
+        )
+        path = resolve_binding_path(str(self.tool_ctx.project_dir), leaf_session_id)
+        with binding_lock(path):
+            existing = read_binding(path)
+            if existing is None:
+                write_binding(path, expected)
+            elif existing != expected:
+                raise SkillContractError("managed leaf binding conflicts with an existing route")
+
     async def __call__(self, projection, _permit) -> ManagedLeafLaunchResult:
         if projection.binding.workspace.requires_isolated_worktree:
             raise SkillContractError(
@@ -272,6 +362,8 @@ class _ManagedLeafLaunchAdapter:
         if manager is None or executor is None or backend is None:
             raise SkillContractError("managed leaf launch infrastructure is unavailable")
         leaf_session_id = projection.binding.assignment.generated_home_id
+        if backend.capabilities.managed_fixed_batch_route_capable:
+            self._write_leaf_binding(leaf_session_id, projection)
         add_dir = manager.materialize_invocation(
             leaf_session_id,
             self.invocation,
@@ -365,6 +457,8 @@ def _resolve_launch_binding(
             else "workspace-write"
         ),
     )
+    if backend.capabilities.managed_fixed_batch_route_capable:
+        projection_context = replace(projection_context, managed_codex_route="leaf")
     semantic_plan = invocation.root.semantic_plan
     if semantic_plan is None:
         raise SkillContractError("run_fixed_batch source lacks a semantic plan")

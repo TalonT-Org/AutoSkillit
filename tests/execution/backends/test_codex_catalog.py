@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 
 import pytest
 
@@ -145,6 +146,8 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
             activation_epoch=0,
             direct_tool_mode=True,
             resolved_model="gpt-5.6-sol",
+            resolved_reasoning_effort="high",
+            codex_catalog_digest="c" * 64,
             fixed_batch_tool_registry_digest="a" * 64,
             hook_registry_digest="b" * 64,
             skill_load_applies=True,
@@ -160,3 +163,56 @@ def test_codex_managed_join_adaptation_requires_context_without_native_capabilit
     assert adaptation.unsupported_operation is None
     assert adaptation.adaptation_context_digest == context.digest
     assert adaptation.instruction_fragments[-1].startswith("Use the server-owned managed")
+
+
+def test_managed_parent_home_projects_catalog_tools_and_stop_hook(tmp_path) -> None:
+    from autoskillit.core import MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION, ManagedJoinAttestation
+    from autoskillit.execution.backends import CodexBackend
+
+    source_home = tmp_path / "source"
+    session_home = tmp_path / "session"
+    source_home.mkdir()
+    session_home.mkdir()
+    raw_catalog = _catalog_bytes(_installed_catalog())
+    (source_home / "models_cache.json").write_bytes(raw_catalog)
+    (session_home / "config.toml").write_text(
+        '[mcp_servers.autoskillit]\ncommand = "autoskillit"\n',
+        encoding="utf-8",
+    )
+    projection = project_codex_catalog(
+        raw_catalog,
+        expected_model=_READER_MODEL,
+        expected_reasoning_effort=_READER_REASONING_EFFORT,
+    )
+    attestation = ManagedJoinAttestation(
+        schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        activation_epoch=0,
+        direct_tool_mode=True,
+        resolved_model=_READER_MODEL,
+        resolved_reasoning_effort=_READER_REASONING_EFFORT,
+        codex_catalog_digest=projection.projected_sha256.removeprefix("sha256:"),
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+        provenance="autoskillit-server",
+    )
+
+    CodexBackend(source_codex_home=source_home).configure_managed_session_dir(
+        session_home,
+        attestation=attestation,
+        route="parent",
+    )
+
+    config = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
+    assert config["mcp_servers"]["autoskillit"]["enabled_tools"] == [
+        "run_fixed_batch",
+        "read_fixed_batch_result",
+    ]
+    assert "Stop" in config["hooks"]
+    projected_model = json.loads((session_home / "models_cache.json").read_bytes())["models"][1]
+    assert projected_model["tool_mode"] == "direct"
+    assert projected_model["apply_patch_tool_type"] is None

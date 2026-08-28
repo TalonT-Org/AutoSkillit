@@ -729,6 +729,43 @@ def test_list_recipes_detects_add_remove_and_same_size_restored_mtime_edit(
     assert calls == {"enumerate": 4, "collect": 4}
 
 
+def test_list_recipes_invalidates_warm_cache_on_campaigns_subdir_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A write under campaigns/ must invalidate a cache warmed from the root scan dir.
+
+    Replaces the repository-level guard that was deleted when per-instance
+    caching moved into the central discovery caches. Every entry of
+    RECIPE_SCAN_DIRS contributes to the directory signature, so a non-root scan
+    dir must invalidate exactly like the root one does.
+    """
+    monkeypatch.setattr(recipe_io, "pkg_root", lambda: tmp_path / "empty-bundle")
+    _write_project_recipe(tmp_path, "alpha")
+
+    calls = count_discovery_calls(monkeypatch)
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
+    assert calls == {"enumerate": 2, "collect": 1}
+
+    campaigns_dir = tmp_path / ".autoskillit" / "recipes" / "campaigns"
+    campaigns_dir.mkdir()
+    (campaigns_dir / "my-campaign.yaml").write_text(
+        "name: my-campaign\ndescription: test\nkind: campaign\nsteps: {}\n",
+        encoding="utf-8",
+    )
+
+    assert {recipe.name for recipe in recipe_io.list_recipes(tmp_path).items} == {
+        "alpha",
+        "my-campaign",
+    }
+    assert calls == {"enumerate": 3, "collect": 2}
+
+    (campaigns_dir / "my-campaign.yaml").unlink()
+
+    assert [recipe.name for recipe in recipe_io.list_recipes(tmp_path).items] == ["alpha"]
+    assert calls == {"enumerate": 4, "collect": 3}
+
+
 def test_list_recipes_detects_json_sidecar_lifecycle_and_parse_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

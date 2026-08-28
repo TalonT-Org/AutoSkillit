@@ -17,6 +17,7 @@ from autoskillit.core import (
     QUOTA_POST_BUDGET_EXCEEDED_TRIGGER,
     QUOTA_POST_WARNING_TRIGGER,
     ROUTING_AUTHORITY_CLAUSE,
+    STEP_SKIP_SEMANTICS_CLAUSE,
     CaptureEntrySpec,
     get_logger,
     resolve_payload_field,
@@ -220,22 +221,16 @@ TWO FAILURE TIERS FOR PREDICATE-FORMAT STEPS:
   and reason="missing_on_failure".
 
 OPTIONAL STEP SEMANTICS:
-- optional: true means the step is SKIPPED (treated as bypassed) when its
-  skip_when_false ingredient resolves to false. It does NOT mean failures are tolerated.
-- skip_when_false ingredient references are resolved server-side before the recipe
-  is served. You may see literal "false" values (skip the step) or no skip_when_false
-  field at all (step is mandatory). Never evaluate inputs.* references yourself.
+- optional: true marks a configuration-guarded step. It does NOT mean failures are tolerated.
 - A running optional step that returns success: false MUST follow on_failure.
   Never route a running optional step's failure to done.
+
+{STEP_SKIP_SEMANTICS_CLAUSE}
 
 STEP EXECUTION IS NOT DISCRETIONARY:
 - You MUST execute every step the pipeline routes you to.
 - NEVER skip a step because the PR is small, the diff is trivial, the change
   looks simple, or you judge the step unnecessary.
-- skip_when_false ingredient references are resolved server-side before the recipe
-  is served. You may see literal "false" values (skip the step) or no
-  skip_when_false field at all (step is mandatory). Resolved steps also omit on_skip,
-  which is configuration-only and never a runtime result edge. The LLM never evaluates inputs.*.
 
 {ROUTING_AUTHORITY_CLAUSE}
 

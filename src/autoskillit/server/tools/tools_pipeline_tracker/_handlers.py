@@ -437,6 +437,62 @@ def mark_step_complete(
     return result
 
 
+def mark_step_skipped(
+    target: TrackerAuthorityTarget,
+    lease: ArtifactLease,
+    step_name: str,
+) -> dict:
+    """Mark a guarded step skipped without requiring a completion receipt."""
+    canonical = canonical_step_name(step_name)
+    outcome: dict[str, object] = {}
+
+    def _mark(tracker: dict[str, Any]) -> dict[str, Any]:
+        steps = tracker["steps"]
+        if canonical not in steps:
+            raise KeyError(
+                f"step '{canonical}' not found in tracker; known steps: {sorted(steps)}"
+            )
+        state = steps[canonical]
+        if not isinstance(state, dict):
+            raise ValueError(f"tracker step '{canonical}' must be a JSON object")
+        if state.get("status") != "skipped":
+            state["status"] = "skipped"
+            state["completed_at"] = datetime.now(UTC).isoformat()
+        tracker["steps"] = steps
+        outcome.update(
+            step=canonical,
+            order_id=target.target_order_id,
+            pipeline_id=tracker.get("pipeline_id", target.target_order_id),
+            done=sum(
+                1
+                for item in steps.values()
+                if isinstance(item, dict) and item.get("status") in ("complete", "skipped")
+            ),
+            total=len(steps),
+        )
+        return tracker
+
+    try:
+        authority = mutate_tracker(target, lease, _mark)
+    except (KeyError, ValueError) as exc:
+        return deny_envelope(
+            f"mark_step_skipped: {exc}", stage="mark_step_skipped", retriable=False
+        )
+    if authority.data is None:
+        return deny_envelope(
+            cast(str, authority.error), stage="mark_step_skipped", retriable=False
+        )
+    return {
+        "success": True,
+        "step": outcome["step"],
+        "order_id": outcome["order_id"],
+        "status": "skipped",
+        "pipeline_id": outcome["pipeline_id"],
+        "done": outcome["done"],
+        "total": outcome["total"],
+    }
+
+
 @mcp.tool(tags={"autoskillit", "kitchen", "kitchen-core"}, annotations={"readOnlyHint": True})
 @_cancellation_shield()
 @track_response_size("recover_run_skill_result")

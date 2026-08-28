@@ -1,179 +1,71 @@
-"""RecipeStep field-classification ledger — the forcing function for silent
-declared-but-inert fields (#4402).
+"""Reflective ledger for every declared recipe dataclass field.
 
-A frozen field-name -> classification mapping, diffed bidirectionally
-against ``dataclasses.fields(RecipeStep)``. A new field without a conscious
-classification fails; a removed field leaves a stale entry that fails.
-Mirrors the config-key-ledger pattern (#4303, ``test_config_key_ledger.py``)
-— an inline Python dict rather than an external ``.txt`` file, since these
-values carry structure (``inert-tracked:#NNNN`` is itself validated), unlike
-that ledger's flat name list.
-
-Classifications:
-  ``execution``          — read on a runtime code path (server fallback,
-                            composition dispatch, executor argument).
-  ``composition``         — consumed while composing/pruning the pipeline
-                            graph before dispatch.
-  ``validation-only``     — consumed exclusively by ``recipe/rules/`` lint
-                            rules or schema validation, never by
-                            execution/composition.
-  ``inert-tracked:#NNNN`` — zero consumer outside schema/parse code; the
-                            open tracking issue is part of the value, so an
-                            inert entry without a live ticket is visible at
-                            review time.
-
-Populated by reading actual consumer sites (not copied blindly from any
-plan) — where a description and the code disagree, the code wins and the
-ledger records reality.
+The architectural consumer guard owns the source-site proof. This contract
+keeps the two owner-qualified registries visibly complete and stable at review.
 """
 
 from __future__ import annotations
 
-import re
-from dataclasses import fields as dataclass_fields
+import dataclasses
 
 import pytest
 
-from autoskillit.recipe.schema import RecipeStep
+from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
+from tests.arch.test_recipe_dataclass_consumption import (
+    DECLARED_RECIPE_FIELDS,
+    DEFERRED_RECIPE_FIELDS,
+)
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
-_INERT_TRACKED_RE = re.compile(r"^inert-tracked:#[1-9]\d*$")
 _KNOWN_CLASSIFICATIONS = frozenset({"execution", "composition", "validation-only"})
 
-# Keys MUST stay sorted — enforced by test_ledger_is_sorted() below.
-RECIPE_STEP_FIELD_CLASSIFICATION: dict[str, str] = {
-    # tool/action select and shape what a step dispatches to; action's
-    # per-step stop semantics reach the orchestrating agent verbatim via
-    # _api.py's orchestration_rules payload.
-    "action": "execution",
-    # Lint-rule-only YAML routing hint (rules_bypass.py et al.); no runtime
-    # composition/dispatch consumer.
-    "block": "validation-only",
-    # capture/capture_list are read by validator.py and the dataflow
-    # analysis detectors (lint rules) — no execution-time consumer found.
-    "capture": "validation-only",
-    "capture_list": "validation-only",
-    # Discriminates a constant-value step at compile time; excluded from
-    # bind_step_invocation's compiler (only tool-having steps compile), so
-    # its only consumers are schema/lint validation.
-    "constant": "validation-only",
-    # The compile-time binding input record — bind_step_invocation reads it
-    # directly; the real dispatch call site (server/_recipe_execution.py)
-    # sets it explicitly on synthetic bound steps.
-    "declared_with_args": "execution",
-    # Decides sub-recipe merge vs. drop in _recipe_composition.py.
-    "gate": "composition",
-    # Server-side RecipeStep fallback (tools_execution/) — the #2969/#3377
-    # pattern.
-    "idle_output_timeout": "execution",
-    # Embedded verbatim into the runtime orchestration_rules/
-    # stop_step_semantics payload served to the orchestrating agent
-    # (_api_orchestration.py:_build_stop_step_semantics).
-    "message": "execution",
-    # Server-side RecipeStep fallback — the one EXECUTION_TUNING param this
-    # plan newly wires (previously parsed and lint-validated but read by
-    # zero runtime code).
-    "model": "execution",
-    # Read by rules_reachability.py/rules_blocks.py (lint rules) and the
-    # analysis-block extraction chain, which is itself lint-only.
-    "name": "validation-only",
-    # Lint-rule-only (rules_bypass.py, rules_note_shape_contradiction.py, …).
-    "note": "validation-only",
-    # Routing field — the pipeline composer reads it to build the flow
-    # graph and derive pipeline dependencies before dispatch.
-    "on_context_limit": "composition",
-    "on_exhausted": "composition",
-    "on_failure": "composition",
-    "on_rate_limit": "composition",
-    "on_result": "composition",
-    # Configuration-time continuation consumed by validation, composition,
-    # pruning, and raw/source parity; deliberately absent from runtime edges.
-    "on_skip": "composition",
-    "on_success": "composition",
-    # Schema/lint-only guard field.
-    "optional": "validation-only",
-    "optional_context_refs": "validation-only",
-    "pass_through": "validation-only",
-    "phoropter_family": "validation-only",
-    # step_provider's server-side RecipeStep fallback (pre-gate, profile
-    # resolution) — tools_execution/.
-    "provider": "execution",
-    # Discriminates a python-callable step; same "excluded from the
-    # compiler, lint/schema-only consumers" shape as constant.
-    "python": "validation-only",
-    # Validated by schema/validator only — the retry loop itself is
-    # agent-prompt-driven (cli/prompts/_prompts_orchestrator.py generic text), not a
-    # per-step Python read site.
-    "retries": "validation-only",
-    # Full execution chain: pipeline composition pruning
-    # (_recipe_composition.py) and lock enforcement (tools_kitchen.py).
-    "skip_when_false": "composition",
-    # #4497 — zero runtime skip effect (unlike its sibling skip_when_false).
-    "skip_when_true": "inert-tracked:#4497",
-    # Server-side RecipeStep fallback — the #2969/#3377 pattern this plan
-    # extends to model.
-    "stale_threshold": "execution",
-    # _recipe_composition.py's _build_active_recipe loads/merges the
-    # sub-recipe or drops the placeholder before dispatch.
-    "sub_recipe": "composition",
-    # Selects the ToolDef that compiles the actual dispatch
-    # (bind_step_invocation); read at the real dispatch call site too.
-    "tool": "execution",
-    # Server-side RecipeStep fallback reads with_args directly
-    # (tools_execution/'s output_dir resolution) in addition to compiling
-    # through bind_step_invocation.
-    "with_args": "execution",
-}
+
+def _key_name(key: tuple[type[object], str]) -> tuple[str, str]:
+    return (key[0].__name__, key[1])
 
 
-def _live_recipe_step_field_names() -> set[str]:
-    return {field.name for field in dataclass_fields(RecipeStep)}
+def _live_fields() -> set[tuple[type[object], str]]:
+    return {
+        (owner, field.name)
+        for owner in (RecipeIngredient, RecipeStep, Recipe)
+        for field in dataclasses.fields(owner)
+    }
 
 
-def test_ledger_is_sorted() -> None:
-    keys = list(RECIPE_STEP_FIELD_CLASSIFICATION)
-    assert keys == sorted(keys), (
-        "RECIPE_STEP_FIELD_CLASSIFICATION keys must stay sorted so a diff always "
-        "isolates exactly the entry that changed."
-    )
+def test_ledger_keys_are_sorted() -> None:
+    for registry_name, registry in (
+        ("DECLARED_RECIPE_FIELDS", DECLARED_RECIPE_FIELDS),
+        ("DEFERRED_RECIPE_FIELDS", DEFERRED_RECIPE_FIELDS),
+    ):
+        keys = list(registry)
+        assert keys == sorted(keys, key=_key_name), (
+            f"{registry_name} keys must be owner/name sorted so a diff isolates "
+            "exactly the changed declaration"
+        )
 
 
-def test_no_silent_field_additions() -> None:
-    """Every live RecipeStep field must have a conscious ledger classification."""
-    missing = sorted(_live_recipe_step_field_names() - set(RECIPE_STEP_FIELD_CLASSIFICATION))
-    assert not missing, (
-        f"RecipeStep has field(s) not present in RECIPE_STEP_FIELD_CLASSIFICATION: "
-        f"{missing}. Classify each as execution / composition / validation-only / "
-        "inert-tracked:#NNNN — file a tracking issue first if it has no consumer yet."
-    )
+def test_no_silent_recipe_dataclass_field_additions() -> None:
+    missing = _live_fields() - set(DECLARED_RECIPE_FIELDS) - set(DEFERRED_RECIPE_FIELDS)
+    assert not missing, f"unclassified recipe dataclass fields: {sorted(map(_key_name, missing))}"
 
 
-def test_no_silent_field_removals() -> None:
-    """Every ledger entry must name a live RecipeStep field."""
-    stale = sorted(set(RECIPE_STEP_FIELD_CLASSIFICATION) - _live_recipe_step_field_names())
+def test_no_silent_recipe_dataclass_field_removals() -> None:
+    stale = (set(DECLARED_RECIPE_FIELDS) | set(DEFERRED_RECIPE_FIELDS)) - _live_fields()
     assert not stale, (
-        f"RECIPE_STEP_FIELD_CLASSIFICATION has entries for field(s) RecipeStep no "
-        f"longer declares: {stale}. Remove these entries."
+        f"ledger entries for removed recipe dataclass fields: {sorted(map(_key_name, stale))}"
     )
 
 
-def test_inert_tracked_entries_have_a_valid_issue_reference() -> None:
-    """An inert-tracked entry without a valid issue reference is invisible at review time."""
-    malformed = sorted(
-        f"{name}={value!r}"
-        for name, value in RECIPE_STEP_FIELD_CLASSIFICATION.items()
-        if value.startswith("inert-tracked") and not _INERT_TRACKED_RE.match(value)
-    )
-    assert not malformed, (
-        f"inert-tracked entries must match 'inert-tracked:#NNNN' exactly: {malformed}"
-    )
+def test_classifications_are_known() -> None:
+    unknown = {
+        _key_name(key): definition.classification
+        for key, definition in DECLARED_RECIPE_FIELDS.items()
+        if definition.classification not in _KNOWN_CLASSIFICATIONS
+    }
+    assert not unknown, f"unrecognized recipe field classification(s): {unknown}"
 
 
-def test_classifications_are_known_values() -> None:
-    unknown = sorted(
-        f"{name}={value!r}"
-        for name, value in RECIPE_STEP_FIELD_CLASSIFICATION.items()
-        if value not in _KNOWN_CLASSIFICATIONS and not _INERT_TRACKED_RE.match(value)
-    )
-    assert not unknown, f"unrecognized classification value(s): {unknown}"
+def test_recipe_dataclass_registry_covers_all_three_owners() -> None:
+    owners = {key[0] for key in DECLARED_RECIPE_FIELDS | DEFERRED_RECIPE_FIELDS}
+    assert owners == {RecipeIngredient, RecipeStep, Recipe}

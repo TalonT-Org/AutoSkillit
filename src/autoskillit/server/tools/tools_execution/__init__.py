@@ -84,6 +84,7 @@ from autoskillit.server.tools._overlay_state import (
 from autoskillit.server.tools.tools_pipeline_tracker import (
     _release_context_tracker,  # noqa: F401 — re-exported for facade completeness
     _select_tracker_authority,  # noqa: F401 — re-exported for facade completeness
+    mark_step_skipped,  # noqa: F401
 )
 
 from ._audit_response import (  # noqa: F401
@@ -136,6 +137,7 @@ __all__ = [
     "_RunSkillContractLifecycle",
     "_RunSkillDispatchState",
     "_admit_recipe_execution",
+    "mark_step_skipped",
     "_audit_preflight_step_names",
     "_audit_response",
     "_begin_run_skill_completion",

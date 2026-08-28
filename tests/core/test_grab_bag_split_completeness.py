@@ -489,6 +489,7 @@ def test_no_unintended_new_test_files_under_tests_core() -> None:
             "test_context_admission_state_machine.py",
             "test_core.py",
             "test_core_terminal_table.py",
+            "test_declared_truth.py",
             "test_detect_body_marker.py",
             "test_directory_tree_digest.py",
             "test_ensure_project_temp_with_config.py",

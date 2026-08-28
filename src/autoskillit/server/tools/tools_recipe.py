@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from fastmcp import Context
@@ -16,6 +16,7 @@ from autoskillit.config import (
     resolve_ingredient_defaults,
 )
 from autoskillit.core import (
+    STEP_SKIP_SEMANTICS_CLAUSE,
     RecipeDeliveryRequest,
     RecipeLoadError,
     get_logger,
@@ -61,6 +62,14 @@ __all__ = [
     "migrate_recipe",
     "validate_recipe",
 ]
+
+
+def _document_step_skip_semantics(function: Any) -> Any:
+    """Resolve the shared skip clause before FastMCP reads the tool docstring."""
+    function.__doc__ = (function.__doc__ or "").replace(
+        "{STEP_SKIP_SEMANTICS}", STEP_SKIP_SEMANTICS_CLAUSE
+    )
+    return function
 
 
 @mcp.tool(
@@ -109,6 +118,7 @@ async def list_recipes() -> str:
     meta=response_backstop_tool_meta("load_recipe"),
 )
 @document_recipe_delivery_contract
+@_document_step_skip_semantics
 @_cancellation_shield()
 @track_response_size("load_recipe")
 async def load_recipe(
@@ -223,6 +233,8 @@ async def load_recipe(
       (mandatory). on_skip is never a runtime result edge.
     - NEVER skip a step for any other reason (PR size, diff triviality, etc.).
     - A running optional step that returns success: false MUST follow on_failure.
+
+    {STEP_SKIP_SEMANTICS}
 
     To CREATE a new recipe, use the /write-recipe skill.
     This tool is for loading and executing existing recipes.

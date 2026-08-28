@@ -30,7 +30,7 @@ top-level keys (defined in `recipe/schema.py:Recipe`):
 | `steps` | list[RecipeStep] | The sequenced step graph |
 
 `RecipeStep` adds: `name`, `tool`, `with_args`, `capture`, `on_result`,
-`skip_when_false`, `on_skip`, `retries`.
+`skip_when_false`, `skip_when_true`, `on_skip`, `retries`, and `phoropter_family`.
 
 Every step with `skip_when_false` must declare `on_skip` naming the surviving
 step where configuration-time absence continues. `on_skip` is not a runtime
@@ -61,7 +61,7 @@ The rule families live in `src/autoskillit/recipe/rules_*.py` (28 files):
 |------|-----------------|
 | `rules_actions.py` | Action-type semantic rules: `stop-step-has-no-routing`, `recipe-has-terminal-step`, `route-step-requires-on-result` |
 | `rules_blocks.py` | Block-level budget rules: per-block `run_cmd` and `run_skill` call-count budgets |
-| `rules_bypass.py` | `skip_when_false` bypass routing contracts; `hidden-input-ref-in-template` detection — warns when a step template field references a hidden ingredient via `${{ inputs.X }}` (safe because load_and_validate resolves these server-side) |
+| `rules_bypass.py` | `skip_when_false` bypass routing contracts; `skip-when-true-context-producible`; `skip-when-true-capture-consumers`; and `hidden-input-ref-in-template` detection — warns when a step template field references a hidden ingredient via `${{ inputs.X }}` (safe because load_and_validate resolves these server-side) |
 | `rules_campaign_capture.py` | Campaign capture validation: identifier keys, result refs, sentinel cross-checks |
 | `rules_campaign_deps.py` | Campaign dependency graph rules: valid refs, acyclic, sequential |
 | `rules_campaign_dispatch.py` | Campaign dispatch structure: kind, names, recipe refs, packs, task |

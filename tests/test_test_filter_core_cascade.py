@@ -174,7 +174,7 @@ class TestModuleCascadeCore:
             "_type_native_shell_capture",
             "_type_phoropter",
             "_type_token",
-            "_type_tradition_manifest",
+            "_type_truth",
             "_type_constants_env",
             "_type_constants_features",
             "_type_constants_registries",

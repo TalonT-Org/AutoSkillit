@@ -701,6 +701,7 @@ from .types import STANDALONE_AUDIT_EVIDENCE_KIND as STANDALONE_AUDIT_EVIDENCE_K
 from .types import (
     STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION as STANDALONE_AUDIT_EVIDENCE_SCHEMA_VERSION,
 )
+from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
@@ -885,11 +886,10 @@ from .types import CookSessionHandle as CookSessionHandle
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
 from .types import CoverageState as CoverageState
-from .types import CrossDomainAssessment as CrossDomainAssessment
-from .types import CrossDomainPrescription as CrossDomainPrescription
 from .types import DatabaseReader as DatabaseReader
+from .types import DeclaredTruthUnresolved as DeclaredTruthUnresolved
+from .types import DeclaredTruthUnsupported as DeclaredTruthUnsupported
 from .types import DeliveryOccurrenceId as DeliveryOccurrenceId
-from .types import DialingConfig as DialingConfig
 from .types import DirectInstall as DirectInstall
 from .types import DispatchGateType as DispatchGateType
 from .types import DispatchIdentity as DispatchIdentity
@@ -985,7 +985,6 @@ from .types import LaunchSurface as LaunchSurface
 from .types import LaunchValueSource as LaunchValueSource
 from .types import LaunchValueSourceKind as LaunchValueSourceKind
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
-from .types import LensEntry as LensEntry
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
@@ -1036,7 +1035,6 @@ from .types import PackDef as PackDef
 from .types import PersistedEnumDef as PersistedEnumDef
 from .types import PersistedEnumTolerance as PersistedEnumTolerance
 from .types import PersistedFormatDef as PersistedFormatDef
-from .types import PhoropterPhaseSkip as PhoropterPhaseSkip
 from .types import PhoropterPrescription as PhoropterPrescription
 from .types import PlanDispositionReport as PlanDispositionReport
 from .types import PlanDispositionRow as PlanDispositionRow
@@ -1102,6 +1100,7 @@ from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDe
 from .types import RecipeSectionDef as RecipeSectionDef
 from .types import RecipeSectionValidationFinding as RecipeSectionValidationFinding
 from .types import RecipeSource as RecipeSource
+from .types import RecipeStepGuard as RecipeStepGuard
 from .types import ReconcileGenerationEvent as ReconcileGenerationEvent
 from .types import (
     ReconciliationEscalationEffect as ReconciliationEscalationEffect,
@@ -1234,7 +1233,6 @@ from .types import ToolInitializationOperation as ToolInitializationOperation
 from .types import ToolParamDef as ToolParamDef
 from .types import ToolParamRole as ToolParamRole
 from .types import ToolWireType as ToolWireType
-from .types import TraditionManifest as TraditionManifest
 from .types import TurnId as TurnId
 from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
@@ -1307,6 +1305,7 @@ from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
 from .types import new_plugin_artifact_incarnation_id as new_plugin_artifact_incarnation_id
+from .types import normalize_declared_truth as normalize_declared_truth
 from .types import normalize_inherited_fds as normalize_inherited_fds
 from .types import normalize_parent_sandbox_mode as normalize_parent_sandbox_mode
 from .types import parse_plan_paths as parse_plan_paths

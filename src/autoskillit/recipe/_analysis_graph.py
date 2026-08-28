@@ -56,14 +56,14 @@ def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
     - ``action``: action identifier (str, empty string if None)
     - ``note``: step note for semantic gate checks (str)
     - ``retries``: retry count (int)
-    - ``skip_when_false``: optional condition (str, empty string if None)
+    - ``skip_when_false`` / ``skip_when_true``: optional conditions (str, empty if None)
     - ``is_infra``: whether the step is a hidden infrastructure step (bool)
     - ``is_terminal``: whether the step is a stop action (bool)
     - ``is_confirm``: whether the step is a confirm action (bool)
 
     Edges represent routing connections. Each edge carries:
     - ``edge_type``: one of ``"success"``, ``"failure"``, ``"context_limit"``,
-      ``"result_condition"``, ``"exhausted"``
+      ``"result_condition"``, and ``"exhausted"``
     - ``condition``: for ``on_result`` edges, the ``when`` expression; otherwise ``""``
 
     Args:
@@ -90,6 +90,7 @@ def build_recipe_graph(recipe: Recipe) -> nx.DiGraph:
                 "note": step.note or "",
                 "retries": step.retries,
                 "skip_when_false": step.skip_when_false or "",
+                "skip_when_true": step.skip_when_true or "",
                 "is_infra": _is_infrastructure_step(step),
                 "is_terminal": step.action == "stop",
                 "is_confirm": step.action == "confirm",
@@ -227,6 +228,10 @@ def _build_raw_step_edges(recipe: Recipe) -> dict[str, tuple[RouteEdge, ...]]:
         if step.skip_when_false and step.on_skip in step_names:
             edges_by_source[name].append(
                 RouteEdge(edge_type="configuration_skip", target=step.on_skip)
+            )
+        if step.skip_when_true and step.on_success in step_names:
+            edges_by_source[name].append(
+                RouteEdge(edge_type="runtime_skip_bypass", target=step.on_success)
             )
 
     predecessors: dict[str, list[tuple[str, RouteEdge]]] = {name: [] for name in step_names}

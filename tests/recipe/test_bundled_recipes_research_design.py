@@ -4,6 +4,7 @@ import re
 
 import pytest
 
+from autoskillit.recipe._api import load_and_validate
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import validate_recipe_structure
 
@@ -143,7 +144,13 @@ class TestResearchDesignRecipeStructure:
         assert recipe.steps["apply"].phoropter_family == "review-design"
 
     def test_apply_skip_when_true(self, recipe) -> None:
-        assert recipe.steps["apply"].skip_when_true == "context.is_silent_type"
+        result = load_and_validate("research-design", include_finalized_projection=True)
+        guards = result["_finalized_projection"].ordered_step_guards
+        assert [
+            (guard.step_name, guard.context_name, guard.bypass_target) for guard in guards
+        ] == [
+            ("apply", "is_silent_type", "synthesize"),
+        ]
 
     def test_apply_retries(self, recipe) -> None:
         assert recipe.steps["apply"].retries == 2

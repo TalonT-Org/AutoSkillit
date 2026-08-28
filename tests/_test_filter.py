@@ -501,7 +501,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "config", "core", "execution", "recipe", "server", "workspace"}
     ),
     "_type_phoropter": frozenset({"core"}),
-    "_type_tradition_manifest": frozenset({"core"}),
+    "_type_truth": frozenset({"core", "recipe", "server"}),
     "_step_context": frozenset({"core", "execution", "pipeline", "server"}),
     "_execution_marker": frozenset({"core", "execution", "fleet", "server"}),
     "bash_write_targets": frozenset({"core", "execution", "recipe", "server"}),
@@ -1158,6 +1158,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_tools_dispatch_validation.py",
             "server/test_tools_kitchen_gate_features.py",
             "server/test_tools_load_recipe.py",
+            "server/test_recipe_flow_guard_records.py",
             "server/test_tools_recipe_pull.py",
             "server/test_server_tool_registration.py",
             "server/test_mcp_overrides.py",

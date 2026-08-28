@@ -4,9 +4,97 @@ from __future__ import annotations
 
 from autoskillit.core import SKILL_TOOLS, Severity
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_detectors import _context_refs_in_value
 from autoskillit.recipe._contracts_types import INPUT_REF_RE
 from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
+from autoskillit.recipe.io import iter_steps_with_context
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+
+
+def _step_context_refs(step: object) -> set[str]:
+    """Return context names referenced by the recipe fields executed by a step."""
+    values = [
+        getattr(step, "model", None),
+        getattr(step, "note", None),
+        getattr(step, "message", None),
+        getattr(step, "with_args", {}) or {},
+    ]
+    return set().union(*(_context_refs_in_value(value) for value in values))
+
+
+@semantic_rule(
+    name="skip-when-true-context-producible",
+    description="skip_when_true must reference context captured by the recipe.",
+    severity=Severity.ERROR,
+)
+def _check_skip_when_true_context_producible(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    produced = {
+        context_name
+        for _, producer, _ in iter_steps_with_context(ctx.recipe)
+        for context_name in set(producer.capture).union(producer.capture_list)
+    }
+    for step_name, step in ctx.recipe.steps.items():
+        if step.skip_when_true is None or not step.skip_when_true.startswith("context."):
+            continue
+        context_name = step.skip_when_true.removeprefix("context.")
+        if context_name not in produced:
+            findings.append(
+                make_finding(
+                    rule_name="skip-when-true-context-producible",
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}': skip_when_true references context '{context_name}' "
+                        "that no recipe step captures."
+                    ),
+                )
+            )
+        elif context_name not in ctx.must_defined_context.get(step_name, frozenset()):
+            findings.append(
+                make_finding(
+                    rule_name="skip-when-true-context-producible",
+                    step_name=step_name,
+                    severity=Severity.WARNING,
+                    message=(
+                        f"Step '{step_name}': skip_when_true context '{context_name}' is only "
+                        "produced on some paths."
+                    ),
+                )
+            )
+    return findings
+
+
+@semantic_rule(
+    name="skip-when-true-capture-consumers",
+    description="Consumers of captures from a guarded step must mark them optional.",
+    severity=Severity.ERROR,
+)
+def _check_skip_when_true_capture_consumers(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    ordered_steps = list(ctx.recipe.steps.items())
+    for index, (step_name, step) in enumerate(ordered_steps):
+        if step.skip_when_true is None:
+            continue
+        captured = set(step.capture).union(step.capture_list)
+        if not captured:
+            continue
+        for consumer_name, consumer in ordered_steps[index + 1 :]:
+            unresolved = _step_context_refs(consumer).intersection(captured) - set(
+                consumer.optional_context_refs
+            )
+            for context_name in sorted(unresolved):
+                findings.append(
+                    make_finding(
+                        rule_name="skip-when-true-capture-consumers",
+                        step_name=consumer_name,
+                        message=(
+                            f"Step '{consumer_name}' references context '{context_name}' "
+                            f"captured by guarded step '{step_name}' without "
+                            "optional_context_refs declaration."
+                        ),
+                    )
+                )
+    return findings
 
 
 @semantic_rule(

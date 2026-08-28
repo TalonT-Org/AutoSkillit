@@ -1,6 +1,6 @@
 # Phoropter Family Authoring Guide
 
-Step-by-step guide for authoring a new phoropter lens family. This document walks through the seven touchpoints required to add a new family to the phoropter framework. For the formal contracts each step must satisfy, see [execution-contract.md](execution-contract.md).
+Step-by-step guide for authoring a new phoropter lens family. This document walks through the six touchpoints required to add a new family to the phoropter framework. For the formal contracts each step must satisfy, see [execution-contract.md](execution-contract.md).
 
 ## §1. Choose a Synthesis Strategy
 
@@ -15,67 +15,7 @@ Before creating any files, decide which synthesis strategy your family will use.
 
 The `SynthesisStrategy` enum and `PhoropterPrescription` types are defined in `src/autoskillit/core/types/_type_enums.py` and `src/autoskillit/core/types/_type_phoropter.py`.
 
-## §2. Create the Tradition Manifest
-
-The tradition manifest declares the family's metadata, lens list, and configuration. The schema is defined in `src/autoskillit/assets/tradition-manifest-schema/tradition-manifest.schema.json`.
-
-**Required top-level fields:**
-
-- `name` — Human-readable family name
-- `description` — One-line description
-- `output_type` — Enum: `mermaid_diagram`, `figure_spec`, `structured_markdown`
-- `step_count` — Number of lenses in the family
-- `mode_label` — Display label (e.g., "Architecture Impact", "Visualization Plan")
-- `context_file_schema` — Schema describing the context file structure
-- `default_enabled` — Boolean; whether the family is enabled by default
-- `failure_mode` — Enum: `continue`, `halt`
-- `lenses` — Array of `LensEntry` objects (each with `slug`, `analytical_mode`, `primary_question`, `tradition`)
-
-**Optional top-level fields:**
-
-- `synthesis_strategy` — Enum: `priority_hierarchy`, `electre_iii`, `dex`, `custom` (or null for null strategy)
-- `step_name_prefix` — `null`/absent → canonical names; set → prefixed names (e.g., `vis` → `vis_dial`, `vis_apply`, `vis_synthesize`)
-- `arg_interface` — Enum: `one_arg`, `two_arg` (mapped to `1-arg`/`2-arg` in `phoropter-registry.yaml`)
-- `output_prefix` — Prefix for output file names
-- `dialing` — `DialingConfig` with `selection_strategy` (`identity`/`property_set`), optional `min_lenses`, `max_lenses`, `always_run`, `synthesis_strategy`
-- `phase_skip` — `PhaseSkip` with required `skip_field` and `skip_semantics` (`skip_when_true`/`skip_when_false`); optional `applies_to`
-
-**File placement:** `src/autoskillit/recipes/methodology-traditions/{tradition-name}.yaml` (resolved by `BUNDLED_METHODOLOGY_TRADITIONS_DIR` in `src/autoskillit/recipe/methodology_tradition_registry.py`).
-
-**Minimal annotated example:**
-
-```yaml
-name: Example Lens Family
-description: Demonstrates the phoropter family configuration schema.
-output_type: structured_markdown
-step_count: 3
-mode_label: Example Analysis
-context_file_schema: example-context-v1
-default_enabled: true
-failure_mode: continue
-step_name_prefix: ex
-arg_interface: two_arg
-output_prefix: "ex_"
-lenses:
-  - slug: lens-alpha
-    analytical_mode: descriptive
-    primary_question: "What does the system do?"
-    tradition: example-tradition
-  - slug: lens-beta
-    analytical_mode: evaluative
-    primary_question: "How well does it do it?"
-    tradition: example-tradition
-  - slug: lens-gamma
-    analytical_mode: prescriptive
-    primary_question: "How could it improve?"
-    tradition: example-tradition
-phase_skip:
-  skip_field: context.is_silent_type
-  skip_semantics: skip_when_true
-  applies_to: apply
-```
-
-## §3. Register in phoropter-registry.yaml
+## §2. Register in phoropter-registry.yaml
 
 Add a family entry to `src/autoskillit/assets/phoropter-registry.yaml` under the `families` key.
 
@@ -97,7 +37,6 @@ Add a family entry to `src/autoskillit/assets/phoropter-registry.yaml` under the
 **Optional fields:**
 
 - `synthesis.skill` — Skill name for synthesis invocation
-- `phase_skip` — Conditional phase skipping configuration (see [execution-contract.md §4](execution-contract.md#4-configuration-knobs))
 - `lens_metadata` — Per-lens metadata overrides
 - `activate_deps` — Required dependency features (e.g., `[mermaid]`)
 - `output_prefix` — Prefix for output file names
@@ -124,7 +63,7 @@ families:
     status: designed
 ```
 
-## §4. Generate Lens SKILL.md Files
+## §3. Generate Lens SKILL.md Files
 
 Each lens in the family needs a `SKILL.md` file following the template variable conventions below.
 
@@ -154,7 +93,7 @@ Each lens in the family needs a `SKILL.md` file following the template variable 
 - **1-arg** (arch-lens): `{context_path}` only. The lens receives a single path to the PR context or codebase root.
 - **2-arg** (exp-lens, vis-lens): `{context_path} {experiment_plan_path}`. The lens receives both the context and the experiment plan.
 
-## §5. Select Step Naming Convention
+## §4. Select Step Naming Convention
 
 Driven by the `phoropter-phase-order` rule in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`:
 
@@ -163,7 +102,7 @@ Driven by the `phoropter-phase-order` rule in `src/autoskillit/recipe/rules/rule
 
 **Concrete example:** vis-lens coexisting with review-design in `research.yaml` uses `vis_dial`, `vis_apply`, `vis_synthesize` with no `phoropter_family`; review-design uses `dial`, `apply`, `synthesize` with `phoropter_family: review-design`. For full details on step naming, see [execution-contract.md §5](execution-contract.md#5-step-naming-conventions).
 
-## §6. Wire Recipe Steps
+## §5. Wire Recipe Steps
 
 Provide copy-pasteable YAML snippet patterns from [recipe-blocks/](recipe-blocks/README.md):
 
@@ -174,9 +113,9 @@ Provide copy-pasteable YAML snippet patterns from [recipe-blocks/](recipe-blocks
 
 **Routing chain:** The `on_success` routing follows `dial → apply → synthesize`. The `skip_when_true` bypass pattern means: when `skip_when_true` evaluates to truthy, the step is skipped and control passes to the step named in `on_success` (or `on_failure` if configured as fallthrough).
 
-## §7. Verification Checklist
+## §6. Verification Checklist
 
-Before merging a new phoropter family, verify all seven touchpoints:
+Before merging a new phoropter family, verify all six touchpoints:
 
 1. **Entry present in `src/autoskillit/assets/phoropter-registry.yaml`** with all required fields.
 2. **P5 family-generic structural test auto-discovers** the family via registry — no manual test update required.

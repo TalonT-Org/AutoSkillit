@@ -21,11 +21,14 @@ from autoskillit.core import (
     AuditMaterializationStatus,
     AuditOutcomeStatus,
     AuditReservationRequest,
+    DeclaredTruthUnresolved,
+    DeclaredTruthUnsupported,
     RecipeExecutionId,
     ReservationDecision,
     SkillContractError,
     compute_audit_slot_intent_digest,
     compute_runtime_binding_digest,
+    normalize_declared_truth,
     resolve_temp_dir,
 )
 from autoskillit.server._audit_authority_materializer import (
@@ -64,6 +67,48 @@ def _recipe_execution_deny(code: str, message: str) -> str:
             stage="preflight:recipe_execution",
             retriable=False,
         )
+    )
+
+
+def _admit_step_guard(state: _RunSkillDispatchState) -> str | None:
+    """Adjudicate an installed recipe's server-authoritative step guard."""
+    if state._installed_execution is None:
+        return None
+    step_context = f"step {state.step_name!r}: "
+    guard = state._installed_execution.snapshot.step_guards.get(state.step_name)
+    if guard is None:
+        if state.step_guard_value is not None:
+            return _recipe_execution_deny(
+                "recipe_step_guard_unexpected",
+                f"{step_context}step_guard_value was supplied for an unguarded recipe step",
+            )
+        return None
+    try:
+        should_skip = normalize_declared_truth(state.step_guard_value)
+    except DeclaredTruthUnresolved as exc:
+        return _recipe_execution_deny("recipe_step_guard_value_required", f"{step_context}{exc}")
+    except DeclaredTruthUnsupported as exc:
+        return _recipe_execution_deny("recipe_step_guard_value_invalid", f"{step_context}{exc}")
+    if not should_skip:
+        return None
+    if state._tracker_target is None or state._tracker_lease is None:
+        return _recipe_execution_deny(
+            "recipe_step_guard_tracker_unavailable",
+            f"{step_context}cannot record a skipped guarded step without tracker authority",
+        )
+    marked = _te_pkg.mark_step_skipped(
+        state._tracker_target, state._tracker_lease, state.step_name
+    )
+    if not marked.get("success"):
+        return json.dumps(marked)
+    return json.dumps(
+        {
+            "next_step": guard.bypass_target,
+            "reason": "skip_when_true",
+            "skipped": True,
+            "step_name": state.step_name,
+            "success": True,
+        }
     )
 
 
@@ -191,6 +236,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
         Path(state.cwd), state.tool_ctx.config.workspace.temp_dir
     )
     if state._dynamic_recipe_call:
+        if (terminal := _admit_step_guard(state)) is not None:
+            return terminal
         if state._claims_recipe_execution:
             return _recipe_execution_deny(
                 "recipe_execution_dynamic_attestation",
@@ -241,6 +288,7 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
                 "closure_base_sha": state.closure_base_sha,
                 "closure_diff_sha": state.closure_diff_sha,
                 "closure_target_sha": state.closure_target_sha,
+                "step_guard_value": state.step_guard_value,
                 "retry_after_audit_attempt_id": state.retry_after_audit_attempt_id,
                 "native_shell_capture_mode": state.native_shell_capture_mode,
             },
@@ -290,6 +338,8 @@ def _admit_recipe_execution(state: _RunSkillDispatchState) -> str | None:
             )
         except RecipeExecutionAdmissionError as exc:
             return _recipe_execution_deny(exc.code, str(exc))
+        if (terminal := _admit_step_guard(state)) is not None:
+            return terminal
         if state._audit_publication is not None:
             try:
                 state._slot_intent_digest = compute_audit_slot_intent_digest(

@@ -95,6 +95,7 @@ _PRE_SPLIT_CONSTANT_NAMES: frozenset[str] = frozenset(
         "SKILL_ACTIVATE_DEPS_REQUIRED",
         "SOUS_CHEF_MANDATORY_SECTIONS",
         "ROUTING_AUTHORITY_CLAUSE",
+        "STEP_SKIP_SEMANTICS_CLAUSE",
         "ADMIRAL_DISPATCH_SECTIONS",
         "PR_TELEMETRY_SECTIONS",
         "KNOWN_CI_EVENTS",
@@ -573,12 +574,12 @@ def test_types_hub_backward_compat():
 
 
 def test_types_hub_line_count_under_threshold():
-    """After split, core/types.py must be under 207 lines (re-export hub only)."""
+    """After split, core/types.py must be under 208 lines (re-export hub only)."""
     from autoskillit.core import paths
 
     types_path = paths.pkg_root() / "core" / "types" / "__init__.py"
     lines = types_path.read_text().splitlines()
-    assert len(lines) < 207, f"types.py has {len(lines)} lines; expected re-export hub only"
+    assert len(lines) < 208, f"types.py has {len(lines)} lines; expected re-export hub only"
 
 
 def test_launch_id_env_var_in_private_vars() -> None:
@@ -624,9 +625,6 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
 
     from autoskillit.core.types import (
         READING_TOKEN_PATTERN,
-        CrossDomainAssessment,
-        CrossDomainPrescription,
-        PhoropterPhaseSkip,
         PhoropterPrescription,
         ReadingToken,
         SynthesisStrategy,
@@ -636,20 +634,14 @@ def test_phoropter_symbols_importable_from_types_hub() -> None:
     assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
-    assert dataclasses.is_dataclass(PhoropterPhaseSkip)
-    assert dataclasses.is_dataclass(CrossDomainPrescription)
-    assert dataclasses.is_dataclass(CrossDomainAssessment)
 
 
 def test_phoropter_symbols_importable_from_core_gateway() -> None:
-    """All seven phoropter-related symbols must resolve via autoskillit.core (lazy stub)."""
+    """All phoropter-related symbols must resolve via autoskillit.core (lazy stub)."""
     import dataclasses
 
     from autoskillit.core import (
         READING_TOKEN_PATTERN,
-        CrossDomainAssessment,
-        CrossDomainPrescription,
-        PhoropterPhaseSkip,
         PhoropterPrescription,
         ReadingToken,
         SynthesisStrategy,
@@ -659,9 +651,6 @@ def test_phoropter_symbols_importable_from_core_gateway() -> None:
     assert issubclass(SynthesisStrategy, str)
     assert dataclasses.is_dataclass(PhoropterPrescription)
     assert dataclasses.is_dataclass(ReadingToken)
-    assert dataclasses.is_dataclass(PhoropterPhaseSkip)
-    assert dataclasses.is_dataclass(CrossDomainPrescription)
-    assert dataclasses.is_dataclass(CrossDomainAssessment)
 
 
 def test_phoropter_all_in_types_all() -> None:

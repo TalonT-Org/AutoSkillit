@@ -43,6 +43,7 @@ class TestSessionIndexRoundtrip:
             "model": "claude-sonnet-5",
             "final_model": "claude-sonnet-5",
             "model_swapped": False,
+            "agent_type": "general-purpose",
         }
         _flush(
             tmp_path,

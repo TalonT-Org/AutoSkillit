@@ -793,6 +793,7 @@ def test_resolved_model_and_subagent_outcomes_are_consistent_across_artifacts(tm
         "model": "claude-sonnet-5",
         "final_model": "claude-opus-5",
         "model_swapped": True,
+        "agent_type": "general-purpose",
     }
     _flush(
         tmp_path,

@@ -397,6 +397,7 @@ def test_native_fixture_projects_verbatim_parent_and_fixture_proven_outcome(
                 "model": "claude-child-model-sentinel",
                 "final_model": "claude-child-final-model-sentinel",
                 "model_swapped": True,
+                "agent_type": "general-purpose",
             },
         )
     assert configured_alias != resolved_model
@@ -628,6 +629,7 @@ def test_model_evidence_lookup_states_and_post_close_snapshot(tmp_path: Path) ->
                     "model": "claude-child-model-sentinel",
                     "final_model": "claude-child-final-model-sentinel",
                     "model_swapped": True,
+                    "agent_type": "general-purpose",
                 },
             ),
         )
@@ -702,8 +704,18 @@ def test_outcome_capacity_retains_earliest_accepted_completions(
         assert sink.model_evidence_for("claude-session-sentinel") == (
             "",
             (
-                {"model": "child-0", "final_model": "final-0", "model_swapped": True},
-                {"model": "child-1", "final_model": "final-1", "model_swapped": True},
+                {
+                    "model": "child-0",
+                    "final_model": "final-0",
+                    "model_swapped": True,
+                    "agent_type": "general-purpose",
+                },
+                {
+                    "model": "child-1",
+                    "final_model": "final-1",
+                    "model_swapped": True,
+                    "agent_type": "general-purpose",
+                },
             ),
         )
         assert len(_wait_for_records(tmp_path / "otlp.jsonl", 3)) == 3

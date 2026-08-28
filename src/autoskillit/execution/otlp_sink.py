@@ -231,6 +231,7 @@ def _model_observations(signal: str, payload: object) -> tuple[_ModelObservation
                                         "model": model,
                                         "final_model": final_model,
                                         "model_swapped": model_swapped,
+                                        "agent_type": child_key,
                                     },
                                 )
                             )
@@ -577,6 +578,7 @@ class LocalOtlpSink:
                     "model": outcome["model"],
                     "final_model": outcome["final_model"],
                     "model_swapped": outcome["model_swapped"],
+                    "agent_type": outcome.get("agent_type", ""),
                 }
                 for _ordinal, outcome in sorted(outcomes, key=lambda item: item[0])
             )

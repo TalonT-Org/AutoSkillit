@@ -12,7 +12,7 @@ Zero autoskillit imports outside this sub-package (IL-0).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from ._type_constants import KNOWN_CI_EVENTS
 from ._type_execution_identity import ExecutionIdentity
@@ -29,6 +29,7 @@ class SubagentModelOutcomeDict(TypedDict):
     model: str
     final_model: str
     model_swapped: bool
+    agent_type: NotRequired[str]
 
 
 @dataclass(frozen=True, slots=True)

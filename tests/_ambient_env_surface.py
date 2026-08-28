@@ -47,8 +47,11 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Literal
+
+_PRODUCTION_SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 
 _ENV_VAR_TARGET_RE = re.compile(r"(?i)(^|_)env_var$")
 _ENV_TARGET_RE = re.compile(r"(?i)(^|_)env$")
@@ -458,7 +461,7 @@ def _comprehension_exclusion_set(gen: ast.comprehension) -> str:
     return ""
 
 
-def production_env_read_surface(src_root: Path) -> ProductionEnvSurface:
+def _scan_production_env_read_surface_uncached(src_root: Path) -> ProductionEnvSurface:
     files = sorted(src_root.rglob("*.py"))
     trees: dict[Path, ast.Module] = {}
     unparseable: list[str] = []
@@ -572,6 +575,17 @@ def production_env_read_surface(src_root: Path) -> ProductionEnvSurface:
         forwarding_sites=tuple(forwarding),
         unparseable_files=tuple(unparseable),
     )
+
+
+@cache
+def _cached_production_env_read_surface() -> ProductionEnvSurface:
+    return _scan_production_env_read_surface_uncached(_PRODUCTION_SRC_ROOT)
+
+
+def production_env_read_surface(src_root: Path) -> ProductionEnvSurface:
+    if src_root == _PRODUCTION_SRC_ROOT:
+        return _cached_production_env_read_surface()
+    return _scan_production_env_read_surface_uncached(src_root)
 
 
 def _write_carrier(node: ast.expr) -> str | None:

@@ -14,12 +14,15 @@ subsumes the legacy ``_clear_private_env`` fixture's two source sets (V4).
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 
 from autoskillit.core.types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from tests import _ambient_env_surface as ambient_env_surface
 from tests._ambient_env_surface import (
     AMBIENT_ENV_DISPOSITIONS,
     DYNAMIC_READ_EXEMPTIONS,
@@ -30,6 +33,45 @@ from tests._ambient_env_surface import (
 from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.small]
+
+
+@pytest.fixture
+def cleared_ambient_env_scan_caches() -> Iterator[None]:
+    ambient_env_surface._cached_production_env_read_surface.cache_clear()
+    _cached_ambient_env_marker_names.cache_clear()
+    try:
+        yield
+    finally:
+        ambient_env_surface._cached_production_env_read_surface.cache_clear()
+        _cached_ambient_env_marker_names.cache_clear()
+
+
+def test_production_read_surface_caches_only_canonical_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleared_ambient_env_scan_caches: None,
+) -> None:
+    scanned_roots: list[Path] = []
+    original_scan = ambient_env_surface._scan_production_env_read_surface_uncached
+
+    def counted_scan(src_root: Path) -> ambient_env_surface.ProductionEnvSurface:
+        scanned_roots.append(src_root)
+        return original_scan(src_root)
+
+    monkeypatch.setattr(
+        ambient_env_surface, "_scan_production_env_read_surface_uncached", counted_scan
+    )
+
+    first = production_env_read_surface(SRC_ROOT)
+    second = production_env_read_surface(SRC_ROOT)
+    synthetic_root = tmp_path / "src"
+    synthetic_root.mkdir()
+    production_env_read_surface(synthetic_root)
+    production_env_read_surface(synthetic_root)
+
+    assert first == second
+    assert first is second
+    assert scanned_roots == [SRC_ROOT, synthetic_root, synthetic_root]
 
 
 def test_execpath_is_in_production_read_surface() -> None:
@@ -360,8 +402,10 @@ def test_justifications_are_substantive() -> None:
     assert not short_dynamic, f"DYNAMIC_READ_EXEMPTIONS justifications too short: {short_dynamic}"
 
 
-def _ambient_env_marker_names(tests_root: Path) -> tuple[set[str], list[str]]:
-    """Return (marker names, unparseable file paths) across every tests/**/*.py file."""
+@lru_cache(maxsize=1)
+def _cached_ambient_env_marker_names(
+    tests_root: Path,
+) -> tuple[frozenset[str], tuple[str, ...]]:
     names: set[str] = set()
     unparseable: list[str] = []
     for path in tests_root.rglob("*.py"):
@@ -386,7 +430,64 @@ def _ambient_env_marker_names(tests_root: Path) -> tuple[set[str], list[str]]:
             for arg in node.args:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                     names.add(arg.value)
-    return names, unparseable
+    return frozenset(names), tuple(unparseable)
+
+
+def _ambient_env_marker_names(tests_root: Path) -> tuple[set[str], list[str]]:
+    """Return (marker names, unparseable file paths) across every tests/**/*.py file."""
+    names, unparseable = _cached_ambient_env_marker_names(tests_root)
+    return set(names), list(unparseable)
+
+
+def test_ambient_env_marker_names_reuses_completed_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    cleared_ambient_env_scan_caches: None,
+) -> None:
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    (tests_root / "test_marker.py").write_text(
+        'import pytest\n\npytestmark = pytest.mark.ambient_env("SCANNED_ONCE")\n',
+        encoding="utf-8",
+    )
+    scan_count = 0
+    original_rglob = Path.rglob
+
+    def counted_rglob(path: Path, pattern: str) -> Iterator[Path]:
+        nonlocal scan_count
+        if path == tests_root and pattern == "*.py":
+            scan_count += 1
+        return original_rglob(path, pattern)
+
+    monkeypatch.setattr(Path, "rglob", counted_rglob)
+
+    first = _ambient_env_marker_names(tests_root)
+    second = _ambient_env_marker_names(tests_root)
+
+    assert first == ({"SCANNED_ONCE"}, [])
+    assert second == first
+    assert scan_count == 1
+
+
+def test_ambient_env_marker_names_returns_mutation_isolated_values(
+    tmp_path: Path,
+    cleared_ambient_env_scan_caches: None,
+) -> None:
+    tests_root = tmp_path / "tests"
+    tests_root.mkdir()
+    (tests_root / "test_marker.py").write_text(
+        'import pytest\n\npytestmark = pytest.mark.ambient_env("ORIGINAL_MARKER")\n',
+        encoding="utf-8",
+    )
+    (tests_root / "broken.py").write_text("def broken(:\n", encoding="utf-8")
+
+    names, unparseable = _ambient_env_marker_names(tests_root)
+    names.add("MUTATED_MARKER")
+    unparseable.append("tests/mutated.py")
+
+    later_names, later_unparseable = _ambient_env_marker_names(tests_root)
+    assert later_names == {"ORIGINAL_MARKER"}
+    assert later_unparseable == ["tests/broken.py"]
 
 
 def test_ambient_env_markers_reference_scrubbed_surface_vars() -> None:

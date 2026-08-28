@@ -3,6 +3,7 @@ compare the same stat field."""
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -33,10 +34,48 @@ def test_taskfile_sweep_routes_through_the_shared_constant() -> None:
 def test_cleanup_stale_default_is_the_shared_constant() -> None:
     import inspect
 
+    from autoskillit.core import SessionSkillManager
     from autoskillit.workspace.session_skills import DefaultSessionSkillManager
 
-    sig = inspect.signature(DefaultSessionSkillManager.cleanup_stale)
-    assert sig.parameters["max_age_seconds"].default == SESSION_STALE_SECONDS
+    for cleanup_stale in (
+        SessionSkillManager.cleanup_stale,
+        DefaultSessionSkillManager.cleanup_stale,
+    ):
+        sig = inspect.signature(cleanup_stale)
+        assert sig.parameters["max_age_seconds"].default == SESSION_STALE_SECONDS
+
+
+def test_cleanup_stale_call_sites_do_not_override_the_shared_ttl() -> None:
+    violations: list[str] = []
+    for source_path in sorted((REPO_ROOT / "src").rglob("*.py")):
+        tree = ast.parse(source_path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function_name = (
+                node.func.attr
+                if isinstance(node.func, ast.Attribute)
+                else node.func.id
+                if isinstance(node.func, ast.Name)
+                else None
+            )
+            if function_name != "cleanup_stale":
+                continue
+            max_age = next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "max_age_seconds"),
+                node.args[0] if node.args else None,
+            )
+            if max_age is not None and not (
+                isinstance(max_age, ast.Name) and max_age.id == "SESSION_STALE_SECONDS"
+            ):
+                violations.append(
+                    f"{source_path.relative_to(REPO_ROOT)}:{node.lineno} overrides "
+                    "max_age_seconds without SESSION_STALE_SECONDS"
+                )
+
+    assert not violations, (
+        "cleanup_stale must use SESSION_STALE_SECONDS by default:\n" + "\n".join(violations)
+    )
 
 
 def test_sweep_sessions_uses_st_mtime_not_st_atime(tmp_path: Path) -> None:

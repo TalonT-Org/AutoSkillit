@@ -241,6 +241,47 @@ def test_session_skill_manager_managed_session_is_context_manager_boundary():
     assert hints["return"] == AbstractContextManager[ManagedSessionHome]
 
 
+@pytest.mark.parametrize(
+    ("test_file", "class_name"),
+    [
+        pytest.param(
+            "tests/cli/test_session_launch.py",
+            "_LifecycleManager",
+            id="session-launch-lifecycle-manager",
+        ),
+        pytest.param(
+            "tests/cli/test_installed_plugin_selector_integration.py",
+            "_CookSessionManager",
+            id="installed-plugin-selector-cook-session-manager",
+        ),
+    ],
+)
+def test_session_skill_manager_fakes_return_cleanup_counts(
+    test_file: str, class_name: str
+) -> None:
+    """SessionSkillManager fakes must preserve cleanup_stale's integer result contract."""
+    source_path = Path(__file__).resolve().parents[2] / test_file
+    tree = ast.parse(source_path.read_text())
+    class_node = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    cleanup_stale = next(
+        node
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name == "cleanup_stale"
+    )
+    returned_values = [
+        node.value for node in ast.walk(cleanup_stale) if isinstance(node, ast.Return)
+    ]
+
+    assert len(returned_values) == 1
+    returned = returned_values[0]
+    assert isinstance(returned, ast.Constant)
+    assert type(returned.value) is int
+
+
 def test_default_database_reader_satisfies_database_reader():
     from autoskillit.core import DatabaseReader
     from autoskillit.execution.db import DefaultDatabaseReader

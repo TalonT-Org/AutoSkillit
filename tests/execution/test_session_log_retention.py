@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import time
 from datetime import UTC, datetime
@@ -12,12 +13,14 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
+import autoskillit.execution._session_retention as session_retention
 from autoskillit.core.types._type_results import ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
     SessionTelemetry,
 )
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
+from autoskillit.execution._session_retention import apply_session_retention
 from autoskillit.execution.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log import flush_session_log
@@ -1071,6 +1074,110 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
     assert not (sessions_dir / "session-0000").exists()
     assert not (sessions_dir / "session-0001").exists()
     assert warning_events.count("session_retention_meta_read_failed") == 2
+
+
+def test_retention_continues_when_a_session_directory_vanishes_during_the_sort(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_sessions(tmp_path, count=4)
+    sessions_dir = tmp_path / "sessions"
+    vanishing_dir = sessions_dir / "session-0001"
+    original_scan_observed = session_retention.scan_observed
+
+    def scan_with_vanishing_entry(path: Path):
+        for entry in original_scan_observed(path):
+            if entry.path == vanishing_dir:
+                shutil.rmtree(vanishing_dir)
+                continue
+            yield entry
+
+    monkeypatch.setattr(session_retention, "scan_observed", scan_with_vanishing_entry)
+
+    survivors = apply_session_retention(
+        sessions_dir,
+        max_sessions=2,
+        dir_name="current-session",
+        reuse_committed_recovery=False,
+        protected_ids=frozenset(),
+    )
+
+    assert survivors == {"session-0002", "session-0003"}
+    assert not (sessions_dir / "session-0000").exists()
+    assert not vanishing_dir.exists()
+    assert (sessions_dir / "session-0002").exists()
+    assert (sessions_dir / "session-0003").exists()
+
+
+def test_retention_treats_not_a_directory_meta_read_as_vanished(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _make_sessions(tmp_path, count=2, campaign_id="active-campaign")
+    sessions_dir = tmp_path / "sessions"
+    vanished_meta = sessions_dir / "session-0000" / "meta.json"
+    original_read_text = Path.read_text
+    warning_events: list[str] = []
+
+    def read_with_replaced_parent(path: Path, *args: object, **kwargs: object) -> str:
+        if path == vanished_meta:
+            raise NotADirectoryError("injected")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_with_replaced_parent)
+    monkeypatch.setattr(
+        session_retention.logger,
+        "warning",
+        lambda event, **_kwargs: warning_events.append(event),
+    )
+
+    survivors = apply_session_retention(
+        sessions_dir,
+        max_sessions=1,
+        dir_name="current-session",
+        reuse_committed_recovery=False,
+        protected_ids=frozenset({"active-campaign"}),
+    )
+
+    assert survivors == {"session-0001"}
+    assert "session_retention_meta_read_failed" not in warning_events
+
+
+def test_retention_orders_survivors_by_observed_mtime(tmp_path: Path) -> None:
+    _make_sessions(tmp_path, count=3)
+    sessions_dir = tmp_path / "sessions"
+    os.utime(sessions_dir / "session-0000", (1_000_000_003, 1_000_000_003))
+    os.utime(sessions_dir / "session-0001", (1_000_000_001, 1_000_000_001))
+    os.utime(sessions_dir / "session-0002", (1_000_000_002, 1_000_000_002))
+
+    survivors = apply_session_retention(
+        sessions_dir,
+        max_sessions=2,
+        dir_name="current-session",
+        reuse_committed_recovery=False,
+        protected_ids=frozenset(),
+    )
+
+    assert survivors == {"session-0000", "session-0002"}
+    assert not (sessions_dir / "session-0001").exists()
+
+
+def test_retention_still_requires_summary_json(tmp_path: Path) -> None:
+    _make_sessions(tmp_path, count=2)
+    sessions_dir = tmp_path / "sessions"
+    incomplete_dir = sessions_dir / "incomplete-session"
+    incomplete_dir.mkdir()
+    os.utime(incomplete_dir, (1_000_000_000, 1_000_000_000))
+
+    survivors = apply_session_retention(
+        sessions_dir,
+        max_sessions=1,
+        dir_name="current-session",
+        reuse_committed_recovery=False,
+        protected_ids=frozenset(),
+    )
+
+    assert survivors == {"session-0001"}
+    assert not (sessions_dir / "session-0000").exists()
+    assert incomplete_dir.is_dir()
 
 
 def test_session_log_removed_build_protected_function() -> None:

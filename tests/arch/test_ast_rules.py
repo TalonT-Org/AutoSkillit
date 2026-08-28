@@ -1079,7 +1079,13 @@ def test_no_detached_spawn_outside_owned_funnel() -> None:
 
 
 _ENUMERATION_ATTR_METHODS = {"glob", "rglob", "iterdir", "scandir"}
-_ENUMERATION_DOTTED_CALLS = {"os.walk", "os.scandir", "os.listdir"}
+_ENUMERATION_DOTTED_CALLS = {
+    "autoskillit.core.fs_observation.scan_observed",
+    "autoskillit.core.scan_observed",
+    "os.listdir",
+    "os.scandir",
+    "os.walk",
+}
 _GUARDED_STAT_ATTRS = {"stat", "lstat", "read_text", "read_bytes"}
 _GUARDED_STAT_DOTTED_CALLS = {"os.stat", "os.lstat", "os.path.getmtime", "os.path.getsize"}
 _OSERROR_FAMILY = {
@@ -1111,71 +1117,7 @@ _ENUMERATION_SORT_KEY_KIND = "sorted-key-lambda"
 # (path, rationale) exemption — so a deferred fix can't sit unaddressed forever
 # without someone actively re-affirming it. _doctor_fleet.py's entry (#4768) was
 # fixed directly (see _check_stale_fleet_state) rather than deferred here.
-_ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {
-    (
-        SRC_ROOT / "execution" / "_recording_skills.py",
-        "build_skills_manifest",
-        _ENUMERATION_READ_STAT_KIND,
-    ): TrackedDeferral(
-        issue=4785,
-        rationale="build_skills_manifest reads an iterdir()-enumerated skill_md with no "
-        "try/except; safe today only because its one caller passes a private post-copytree "
-        "directory, not a live shared one",
-        added_date=date(2026, 8, 25),
-    ),
-    (
-        SRC_ROOT / "execution" / "_session_retention.py",
-        "apply_session_retention",
-        _ENUMERATION_READ_STAT_KIND,
-    ): TrackedDeferral(
-        issue=4771,
-        rationale="apply_session_retention reads metadata from an iterdir()-enumerated "
-        "committed session directory without local OSError handling",
-        added_date=date(2026, 8, 24),
-    ),
-    (
-        SRC_ROOT / "execution" / "_session_retention.py",
-        "apply_session_retention",
-        _ENUMERATION_SORT_KEY_KIND,
-    ): TrackedDeferral(
-        issue=4771,
-        rationale="unguarded stat in an iterdir()-then-sort key= over committed session dirs; "
-        "moved out of session_log.py by the retention-block extraction",
-        added_date=date(2026, 8, 24),
-    ),
-    (
-        SRC_ROOT / "recipe" / "_cmd_rpc_issues.py",
-        "batch_create_issues",
-        _ENUMERATION_READ_STAT_KIND,
-    ): TrackedDeferral(
-        issue=4786,
-        rationale="batch_create_issues reads a glob()-enumerated ticket_body_*.md with no "
-        "try/except at all; no concurrent writer identified, but a hit would hard-fail "
-        "the whole ticket batch, not just the racing file",
-        added_date=date(2026, 8, 25),
-    ),
-    (
-        SRC_ROOT / "workspace" / "_projected_artifact" / "_publication.py",
-        "_render_agent_definitions",
-        _ENUMERATION_READ_STAT_KIND,
-    ): TrackedDeferral(
-        issue=4787,
-        rationale="_render_agent_definitions reads a glob()-enumerated agent .md file with "
-        "no try/except; agents_dir is a private, synchronously-populated tempdir with no "
-        "identified concurrent writer at all",
-        added_date=date(2026, 8, 25),
-    ),
-    (
-        SRC_ROOT / "workspace" / "session_skill_manager.py",
-        "cleanup_stale",
-        _ENUMERATION_READ_STAT_KIND,
-    ): TrackedDeferral(
-        issue=4774,
-        rationale="unguarded stat on an iterdir()-enumerated lease-sweep candidate, no "
-        "try/except nearby at all",
-        added_date=date(2026, 8, 24),
-    ),
-}
+_ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {}
 
 
 def _dotted_name(node: ast.expr, aliases: dict[str, tuple[str, str | None]]) -> str | None:
@@ -1929,6 +1871,11 @@ def test_no_unguarded_stat_on_enumeration_derived_path_outside_funnel() -> None:
             for (path, function, kind), entry in _ENUMERATION_STAT_ALLOWLIST.items()
         )
     )
+
+
+def test_enumeration_stat_allowlist_is_empty() -> None:
+    """Inherited enumeration/stat deferrals are prohibited; fix violations directly."""
+    assert _ENUMERATION_STAT_ALLOWLIST == {}
 
 
 def test_enumeration_stat_allowlist_entries_still_apply() -> None:

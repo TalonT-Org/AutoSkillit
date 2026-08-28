@@ -24,6 +24,7 @@ from pathlib import Path
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
     SESSION_STALE_SECONDS,
+    VANISHED_ERRORS,
     ClaudeDirectoryConventions,
     CompiledSessionSkillCatalogAuthority,
     EffectiveSkillCatalogAuthority,
@@ -36,6 +37,8 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    safe_mtime,
+    scan_observed,
     validate_skill_capability_roles,
 )
 from autoskillit.workspace.session_skill_catalog import (
@@ -495,17 +498,19 @@ class DefaultSessionSkillManager:
         """
         now = time.time()
         removed = 0
+        failures: list[BaseException] = []
         for root in self._candidate_roots():
-            if not root.exists():
-                continue
             resolved_root = root.resolve()
-            for entry in resolved_root.iterdir():
+            try:
+                entries = scan_observed(resolved_root)
+            except VANISHED_ERRORS:
+                continue
+            for entry in entries:
                 if entry.name == _SESSION_LEASES_SUBDIR:
                     continue
-                if not entry.is_dir():
+                if not entry.is_dir:
                     continue
-                last_modified = entry.stat().st_mtime
-                if now - last_modified > max_age_seconds:
+                if now - entry.mtime > max_age_seconds:
                     if entry.name in self._session_leases:
                         continue
                     lease = _SessionLease.acquire(
@@ -514,13 +519,12 @@ class DefaultSessionSkillManager:
                     )
                     if lease is None:
                         continue
-                    failures: list[BaseException] = []
                     did_remove = False
                     try:
-                        current_mtime = entry.stat().st_mtime
-                        if now - current_mtime > max_age_seconds:
-                            did_remove = _remove_and_verify(entry)
-                    except FileNotFoundError:
+                        current_mtime = safe_mtime(entry.path)
+                        if current_mtime is not None and now - current_mtime > max_age_seconds:
+                            did_remove = _remove_and_verify(entry.path)
+                    except VANISHED_ERRORS:
                         pass
                     except BaseException as exc:
                         logger.error("stale_session_cleanup_failed", exc_info=True)
@@ -530,15 +534,15 @@ class DefaultSessionSkillManager:
                     except BaseException as exc:
                         logger.error("stale_session_lease_release_failed", exc_info=True)
                         failures.append(exc)
-                    _raise_failures("Stale session cleanup failed", failures)
                     if not did_remove:
                         continue
                     logger.warning(
                         "cleanup_stale_removed",
-                        path=str(entry),
-                        age_seconds=round(now - last_modified),
+                        path=str(entry.path),
+                        age_seconds=round(now - entry.mtime),
                     )
                     removed += 1
+        _raise_failures("Stale session cleanup failed", failures)
         return removed
 
 

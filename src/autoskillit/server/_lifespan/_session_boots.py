@@ -22,6 +22,7 @@ from autoskillit.core import (
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     HEADLESS_AUTO_GATE_ENV_VAR,
     HEADLESS_ENV_VAR,
+    SESSION_STALE_SECONDS,
     SessionType,
     get_logger,
 )
@@ -59,9 +60,6 @@ from autoskillit.server._lifespan._startup_checks import (
 logger = get_logger(__name__)
 
 
-_CLEANUP_STALE_MAX_AGE = 86400
-
-
 def _reap_self_excluded_codex_and_daemon_orphans() -> None:
     """Manual-only reapers, promoted to an automatic chokepoint.
 
@@ -94,7 +92,7 @@ async def _cleanup_stale_loop(interval: float = 1800.0) -> None:
                 removed = await loop.run_in_executor(
                     None,
                     lambda: ctx.session_skill_manager.cleanup_stale(  # type: ignore[union-attr]
-                        max_age_seconds=_CLEANUP_STALE_MAX_AGE
+                        max_age_seconds=SESSION_STALE_SECONDS
                     ),
                 )
                 if removed:

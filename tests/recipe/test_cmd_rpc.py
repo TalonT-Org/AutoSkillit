@@ -518,6 +518,63 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
     assert result["issue_count"] == "3"
 
 
+@pytest.mark.parametrize("error_type", (FileNotFoundError, NotADirectoryError))
+def test_batch_create_issues_returns_empty_when_audit_root_vanishes(
+    tmp_path: Path, error_type: type[OSError]
+) -> None:
+    audit_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    audit_dir.mkdir(parents=True)
+
+    with (
+        patch(
+            "autoskillit.recipe._cmd_rpc_issues.scan_observed",
+            side_effect=error_type("injected"),
+        ),
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
+    ):
+        result = batch_create_issues(workspace=str(tmp_path))
+
+    assert result == {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
+    mock_run_gh.assert_not_called()
+
+
+def test_batch_create_issues_skips_body_that_vanishes_before_read(tmp_path, monkeypatch):
+    va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
+    va_dir.mkdir(parents=True)
+    vanished_body = va_dir / "ticket_body_tests_2_2026-01-01_120000.md"
+    for n in range(1, 4):
+        (va_dir / f"ticket_body_tests_{n}_2026-01-01_120000.md").write_text(
+            f"# Title {n}\n\nBody {n}."
+        )
+
+    original_read_text = Path.read_text
+    removed = False
+
+    def remove_body_before_read(path, *args, **kwargs):
+        nonlocal removed
+        if path == vanished_body and not removed:
+            removed = True
+            path.unlink()
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", remove_body_before_read)
+    with (
+        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+    ):
+        mock_run_gh.side_effect = _make_side_effect(
+            issue_data=[
+                {"number": 1, "url": "https://github.com/org/repo/issues/1"},
+                {"number": 2, "url": "https://github.com/org/repo/issues/2"},
+            ]
+        )
+        result = batch_create_issues(workspace=str(tmp_path))
+
+    assert result["issue_count"] == "2"
+    assert isinstance(result["skipped_bodies"], str)
+    assert result["skipped_bodies"] == vanished_body.name
+
+
 def test_batch_create_issues_strips_body_content(tmp_path):
     va_dir = tmp_path / ".autoskillit" / "temp" / "validate-audit"
     va_dir.mkdir(parents=True)
@@ -769,7 +826,7 @@ def test_batch_create_issues_handles_no_tickets(tmp_path):
     va_dir.mkdir(parents=True)
     # Leave directory empty
     result = batch_create_issues(workspace=str(tmp_path))
-    assert result == {"issue_urls": "", "issue_count": "0"}
+    assert result == {"issue_urls": "", "issue_count": "0", "skipped_bodies": ""}
 
 
 def test_batch_create_issues_handles_graphql_error(tmp_path):

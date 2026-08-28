@@ -165,8 +165,8 @@ class _CookSessionManager:
         self._generated_home = generated_home
         self._events = events
 
-    def cleanup_stale(self) -> None:
-        return None
+    def cleanup_stale(self, max_age_seconds: int = 86400) -> int:
+        return 0
 
     @contextmanager
     def managed_session(

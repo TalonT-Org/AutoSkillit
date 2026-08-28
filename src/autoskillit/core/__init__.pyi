@@ -220,8 +220,11 @@ from .context_admission import (
 )
 from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
 from .feature_flags import is_feature_enabled as is_feature_enabled
+from .fs_observation import VANISHED_ERRORS as VANISHED_ERRORS
+from .fs_observation import ObservedEntry as ObservedEntry
 from .fs_observation import observe_path_mode as observe_path_mode
 from .fs_observation import safe_mtime as safe_mtime
+from .fs_observation import scan_observed as scan_observed
 from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
 from .git_remote import GitHubRepositoryRef as GitHubRepositoryRef
 from .git_remote import RemoteIdentityProbe as RemoteIdentityProbe

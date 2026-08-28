@@ -13,7 +13,7 @@ import json
 import shutil
 from pathlib import Path
 
-from autoskillit.core import get_logger
+from autoskillit.core import VANISHED_ERRORS, get_logger, scan_observed
 
 logger = get_logger(__name__)
 
@@ -36,38 +36,38 @@ def apply_session_retention(
     """
     committed_dirs = sorted(
         (
-            candidate
-            for candidate in sessions_dir.iterdir()
-            if candidate.is_dir() and (candidate / "summary.json").is_file()
+            entry
+            for entry in scan_observed(sessions_dir)
+            if entry.is_dir and (entry.path / "summary.json").is_file()
         ),
-        key=lambda candidate: candidate.stat().st_mtime,
+        key=lambda entry: entry.mtime,
     )
     effective_max_sessions = max_sessions if max_sessions is not None else _MAX_SESSIONS
     expired = committed_dirs[: max(0, len(committed_dirs) - effective_max_sessions)]
-    surviving_names = {candidate.name for candidate in committed_dirs[len(expired) :]}
-    for candidate in expired:
-        if reuse_committed_recovery and candidate.name == dir_name:
-            surviving_names.add(candidate.name)
+    surviving_names = {entry.name for entry in committed_dirs[len(expired) :]}
+    for entry in expired:
+        if reuse_committed_recovery and entry.name == dir_name:
+            surviving_names.add(entry.name)
             continue
         if protected_ids:
             try:
-                meta = json.loads((candidate / "meta.json").read_text(encoding="utf-8"))
-            except FileNotFoundError:
+                meta = json.loads((entry.path / "meta.json").read_text(encoding="utf-8"))
+            except VANISHED_ERRORS:
                 meta = {}
             except (json.JSONDecodeError, OSError) as exc:
                 logger.warning(
                     "session_retention_meta_read_failed",
-                    path=candidate,
+                    path=entry.path,
                     error=str(exc),
                     exc_info=True,
                 )
                 meta = {}
             if meta.get("campaign_id") in protected_ids:
-                surviving_names.add(candidate.name)
+                surviving_names.add(entry.name)
                 continue
         try:
-            shutil.rmtree(candidate)
+            shutil.rmtree(entry.path)
         except OSError:
-            logger.warning("session_retention_delete_failed", path=candidate, exc_info=True)
-            surviving_names.add(candidate.name)
+            logger.warning("session_retention_delete_failed", path=entry.path, exc_info=True)
+            surviving_names.add(entry.name)
     return surviving_names

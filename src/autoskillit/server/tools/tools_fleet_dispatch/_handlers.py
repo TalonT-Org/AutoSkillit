@@ -16,6 +16,7 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import (
     CodingAgentBackend,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     FleetErrorCode,
     NativeShellCaptureMode,
     SessionCheckpoint,
@@ -74,6 +75,12 @@ from autoskillit.server.tools.tools_fleet_dispatch._provenance import (
 logger = get_logger(__name__)
 
 _MAX_CALLER_INSTRUCTIONS_LEN = 2000
+
+
+def _finalized_recipe_steps(
+    projection: FinalizedRecipeProjection,
+) -> dict[str, FinalizedRecipeStep]:
+    return {step.name: step for step in projection.ordered_steps}
 
 
 @mcp.tool(
@@ -365,7 +372,7 @@ async def dispatch_food_truck(
                 logger.warning("dispatch_food_truck_preflight_load_failed", exc_info=True)
 
         _active_recipe_steps = (
-            {step.name: step for step in _fleet_finalized_projection.ordered_steps}
+            _finalized_recipe_steps(_fleet_finalized_projection)
             if _fleet_finalized_projection is not None
             else None
         )

@@ -14,6 +14,7 @@ import pytest
 from autoskillit.core import (
     RECIPE_SECTION_PAGINATION_VERSION,
     RECIPE_SECTION_REGISTRY_DIGEST,
+    RECIPE_TERMINAL_TARGETS,
     FinalizedRecipeProjection,
     FinalizedRecipeStep,
     RecipeBindingProjection,
@@ -450,7 +451,8 @@ def _make_finalized_projection_from_recipe_steps(
         ("on_failure", "failure"),
         ("on_skip", "skip"),
     )
-    edges = tuple(
+    allowed_targets = set(steps) | RECIPE_TERMINAL_TARGETS
+    edges = [
         RecipeFlowEdge(
             source=name,
             edge_type=edge_type,
@@ -461,10 +463,38 @@ def _make_finalized_projection_from_recipe_steps(
         for name, step in steps.items()
         for attribute, edge_type in edge_types
         if isinstance(target := getattr(step, attribute, None), str) and target
-    )
+        if target in allowed_targets
+    ]
+    ordered_names = tuple(steps)
+    if ordered_names:
+        reachable = {ordered_names[0]}
+        changed = True
+        while changed:
+            changed = False
+            for edge in edges:
+                if (
+                    edge.source in reachable
+                    and edge.target in steps
+                    and edge.target not in reachable
+                ):
+                    reachable.add(edge.target)
+                    changed = True
+        for index, name in enumerate(ordered_names[1:], start=1):
+            if name in reachable:
+                continue
+            edges.append(
+                RecipeFlowEdge(
+                    source=ordered_names[index - 1],
+                    edge_type="success",
+                    target=name,
+                    condition=None,
+                    result_field=None,
+                )
+            )
+            reachable.add(name)
     return _make_finalized_projection(
         steps=finalized_steps,
-        edges=edges,
+        edges=tuple(edges),
         ingredient_names=ingredient_names,
         binding_projection=binding_projection,
     )

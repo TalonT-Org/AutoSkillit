@@ -12,10 +12,11 @@ steps:
       step_name: guarded
     skip_when_false: inputs.enabled
     on_success: Z
+    on_failure: escalate
     on_skip: Y
   Y:
     action: stop
-    message: Skipped.
+    message: Emit the L3 sentinel block with success=true and reason=Skipped.
   Z:
     action: stop
-    message: Completed.
+    message: Emit the L3 sentinel block with success=true and reason=Completed.

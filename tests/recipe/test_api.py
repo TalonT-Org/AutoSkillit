@@ -165,7 +165,7 @@ steps:
 def test_load_recipe_result_has_post_prune_step_names(tmp_path):
     """LoadRecipeResult includes post_prune_step_names reflecting surviving steps.
 
-    step_b is pruned (enable_step_b defaults to "false"); step_a and step_c survive.
+    step_b is guard-pruned and step_c is unreachable from the true step_a route.
     """
     from autoskillit.recipe._api import load_and_validate
 
@@ -174,8 +174,9 @@ def test_load_recipe_result_has_post_prune_step_names(tmp_path):
     assert "post_prune_step_names" in result, "post_prune_step_names must be in LoadRecipeResult"
     post_prune = set(result["post_prune_step_names"])
     assert "step_a" in post_prune
-    assert "step_c" in post_prune
     assert "step_b" not in post_prune, "step_b should be pruned (enable_step_b=false)"
+    assert "step_c" not in post_prune
+    assert result["unreachable_step_names"] == ["step_c"]
 
 
 # ---------------------------------------------------------------------------
@@ -255,14 +256,16 @@ def test_finalized_projection_preserves_ordered_steps_entrypoint_and_routes(tmp_
         ("step_a", "exhausted", "escalate", None, None),
         ("step_a", "result_condition", "step_b", "ok", "status"),
         ("step_a", "result_condition", "step_c", "retry", "status"),
-        ("step_b", "exhausted", "escalate", None, None),
-        ("step_c", "exhausted", "escalate", None, None),
     )
     assert tuple(projection.binding_projection.invocations) == ("step_a",)
 
 
 def test_finalized_projection_rejects_an_empty_entrypoint() -> None:
-    from autoskillit.core import FinalizedRecipeProjection, RecipeBindingProjection
+    from autoskillit.core import (
+        FinalizedRecipeProjection,
+        FinalizedRecipeStep,
+        RecipeBindingProjection,
+    )
 
     with pytest.raises(ValueError, match="entrypoint must be a non-empty string"):
         FinalizedRecipeProjection(
@@ -271,6 +274,7 @@ def test_finalized_projection_rejects_an_empty_entrypoint() -> None:
             ordered_step_names=("step",),
             entrypoint="",
             ordered_flow_edges=(),
+            ordered_steps=(FinalizedRecipeStep(name="step"),),
         )
 
 

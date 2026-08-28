@@ -1,5 +1,7 @@
 name: composed-projection-child
 description: Child recipe used to verify composed effective projections.
+kitchen_rules:
+  - Follow the child route.
 ingredients:
   child_only:
     description: Ingredient declared only by the child recipe.
@@ -10,3 +12,4 @@ steps:
     with:
       step_name: child_step
     on_success: done
+    on_failure: escalate

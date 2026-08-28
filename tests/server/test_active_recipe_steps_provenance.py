@@ -14,6 +14,7 @@ from autoskillit.server.tools.tools_kitchen import lock_ingredients, open_kitche
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _RECIPE_NAME = "composed-projection-parent"
+_COMPOSED_CHILD_STEP = "composed_projection_child_child_step"
 
 
 def _request_context() -> MagicMock:
@@ -30,7 +31,7 @@ def _install_composed_recipe(tmp_path: Path) -> None:
     recipe_dir.mkdir(parents=True)
     shutil.copy2(
         fixture_dir / "composed_projection_parent.yaml",
-        recipe_dir / "composed_projection_parent.yaml",
+        recipe_dir / "composed-projection-parent.yaml",
     )
     sub_recipe_dir = recipe_dir / "sub-recipes"
     sub_recipe_dir.mkdir()
@@ -83,7 +84,7 @@ async def test_composed_recipe_installs_child_step_and_ingredient(
     result = json.loads(await open_kitchen(name=_RECIPE_NAME, ctx=_request_context()))
 
     assert result["success"] is True, result
-    assert "child_step" in tool_ctx_kitchen_open.active_recipe_steps
+    assert _COMPOSED_CHILD_STEP in tool_ctx_kitchen_open.active_recipe_steps
     assert "child_only" in tool_ctx_kitchen_open.active_recipe_ingredients
 
     lock_result = json.loads(

@@ -34,8 +34,15 @@ def test_deferred_guard_preserves_skip_only_route_in_finalized_projection(tmp_pa
     assert result["valid"], result["errors"]
     projection = result["_finalized_projection"]
     assert isinstance(projection, FinalizedRecipeProjection)
-    assert RecipeFlowEdge(source="guarded", edge_type="skip", target="Y") in (
-        projection.ordered_flow_edges
+    assert (
+        RecipeFlowEdge(
+            source="guarded",
+            edge_type="skip",
+            target="Y",
+            condition="inputs.enabled",
+            result_field=None,
+        )
+        in projection.ordered_flow_edges
     )
     assert "Y" in projection.ordered_step_names
 

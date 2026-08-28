@@ -205,11 +205,12 @@ async def test_deferred_recall_installs_active_recipe_projection():
 
 
 @pytest.mark.anyio
-async def test_deferred_recall_clears_recipe_cache_when_cache_load_fails():
+async def test_deferred_recall_does_not_reload_recipe_after_validation():
     """A non-authoritative cache failure does not retain stale recipe data."""
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     mock_ctx = _make_deferred_recall_ctx("test-recipe")
+    served_projection = _make_finalized_projection()
     mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
         {
             "content": "name: test-recipe\nsteps: {}\n",
@@ -223,7 +224,7 @@ async def test_deferred_recall_clears_recipe_cache_when_cache_load_fails():
             "suggestions": [],
             "post_prune_step_names": [],
         },
-        projection=_make_finalized_projection(),
+        projection=served_projection,
     )
     _configure_admitted_recipe(mock_ctx, Path("/fake/.autoskillit/recipes/test-recipe.yaml"))
     admitted_recipe = mock_ctx.recipes.load.return_value
@@ -240,9 +241,12 @@ async def test_deferred_recall_clears_recipe_cache_when_cache_load_fails():
         result = await open_kitchen(name="test-recipe", ctx=mock_ctx)
 
     assert json.loads(result)["success"] is True
-    assert mock_ctx.recipes.load.call_count == 2
-    assert mock_ctx.active_recipe_steps is None
-    assert mock_ctx.active_recipe_ingredients is None
+    assert mock_ctx.recipes.load.call_count == 1
+    assert mock_ctx.active_recipe_projection is served_projection
+    assert mock_ctx.active_recipe_steps == {
+        step.name: step for step in served_projection.ordered_steps
+    }
+    assert mock_ctx.active_recipe_ingredients == frozenset()
 
 
 @pytest.mark.anyio

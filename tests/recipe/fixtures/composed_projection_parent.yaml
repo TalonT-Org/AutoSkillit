@@ -1,9 +1,15 @@
 name: composed-projection-parent
 description: Parent recipe used to verify composed effective projections.
-sub_recipe: composed-projection-child
+kitchen_rules:
+  - Follow the declared routes.
 steps:
   parent_step:
     tool: run_python
     with:
       step_name: parent_step
+    on_success: child_placeholder
+    on_failure: escalate
+  child_placeholder:
+    sub_recipe: composed-projection-child
     on_success: done
+    on_failure: escalate

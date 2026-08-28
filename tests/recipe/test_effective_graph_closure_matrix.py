@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import RECIPE_TERMINAL_TARGETS, FinalizedRecipeProjection
-from autoskillit.recipe._api import load_and_validate
-from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
+from autoskillit.recipe import list_recipes, load_and_validate
+from autoskillit.recipe.io import load_recipe
 from tests._tracked_recipes import tracked_recipe_names
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
@@ -18,10 +18,11 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.medium]
 
 _PROJECT_ROOT = Path(__file__).parents[2]
 _GUARD_REFERENCE = re.compile(r"inputs\.([A-Za-z_][A-Za-z0-9_]*)")
+_RECIPE_PATHS = {info.name: info.path for info in list_recipes(_PROJECT_ROOT).items}
 
 
 def _guard_ingredients(recipe_name: str) -> tuple[str, ...]:
-    recipe = load_recipe(builtin_recipes_dir() / f"{recipe_name}.yaml")
+    recipe = load_recipe(_RECIPE_PATHS[recipe_name])
     return tuple(
         sorted(
             {

@@ -208,9 +208,7 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     assert projection is not None
     assert projection.plan_set_id == authority.plan_set_id
 
-    active_steps = tool_ctx_kitchen_open.active_recipe_steps
-    assert active_steps is not None
-    captured = _extract_captures(active_steps[_STEP].capture, published)
+    captured = _extract_captures(step["capture"], published)
     assert captured["audit_cycle_path"] == published["audit_cycle_path"]
     assert captured["audit_status"] == "PUBLISHED"
     assert captured["audit_verdict"] == "GO"

@@ -466,7 +466,7 @@ def edge_routes_success(
     """Return whether one finalized tool edge selects the success carrier."""
     if not automatic and recovery:
         return False
-    if edge.edge_type == "success":
+    if edge.edge_type in {"success", "skip"}:
         return True
     if edge.edge_type != "result_condition":
         return False

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import FinalizedRecipeProjection, RecipeBindingProjection, RecipeFlowEdge
+from autoskillit.core import (
+    FinalizedRecipeProjection,
+    FinalizedRecipeStep,
+    RecipeBindingProjection,
+    RecipeFlowEdge,
+)
 from autoskillit.recipe._recipe_composition import _prune_skipped_steps
 from autoskillit.recipe.io import _parse_recipe, builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import Recipe, RecipeDeliverySegment, RecipeIngredient, RecipeStep
@@ -149,6 +154,7 @@ def test_finalization_uses_only_post_prune_edges_and_removes_empty_segments() ->
         ordered_step_names=tuple(pruned.steps),
         entrypoint="start",
         ordered_flow_edges=edges,
+        ordered_steps=tuple(FinalizedRecipeStep(name=name) for name in pruned.steps),
         delivery_segments=segments,
     )
     assert projection.delivery_segments == segments
@@ -164,25 +170,28 @@ def test_finalization_drops_segments_emptied_by_unreachable_sweep(tmp_path) -> N
         """\
 name: swept-segments
 description: Delivery segments after reachability sweeping.
+kitchen_rules:
+  - Follow the declared routes.
 steps:
   start:
     tool: run_python
     with:
       step_name: start
     on_success: finish
+    on_failure: escalate
   finish:
     action: stop
-    message: Finished.
+    message: Emit the L3 sentinel block with success=true and reason=Finished.
   stranded:
     action: stop
-    message: Stranded.
+    message: Emit the L3 sentinel block with success=true and reason=Stranded.
 delivery_segments:
   - name: initial
     steps: [start]
-  - name: removed
-    steps: [stranded]
   - name: finish
     steps: [finish]
+  - name: removed
+    steps: [stranded]
 """
     )
 

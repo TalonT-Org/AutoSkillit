@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from functools import cache
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Protocol
 
 from autoskillit.core import (
     LoadReport,
@@ -42,6 +42,17 @@ NON_RECIPE_DIRS: frozenset[str] = frozenset(
         "sub-recipes",
     }
 )
+
+
+class _RecipeParser(Protocol):
+    def __hash__(self) -> int: ...
+
+    def __call__(
+        self,
+        data: dict[str, Any],
+        *,
+        declared_data: dict[str, Any] | None = None,
+    ) -> Recipe: ...
 
 
 def is_recipe_scan_path(rel_to_root: PurePosixPath) -> bool:
@@ -176,7 +187,7 @@ def _parse_recipe_candidate(
     _json_mtime_ns: int | None,
     _json_ctime_ns: int | None,
     _json_size: int | None,
-    parse_recipe: Callable[..., Recipe],
+    parse_recipe: _RecipeParser,
 ) -> tuple[Recipe, str]:
     """Parse one recipe for a metadata fingerprint supplied by its enumerator."""
     raw = path.read_text(encoding="utf-8")
@@ -190,7 +201,7 @@ def _collect_recipes_from_candidates(
     builtin_base: Path,
     builtin_files: Iterable[Path],
     *,
-    parse_recipe: Callable[..., Recipe],
+    parse_recipe: _RecipeParser,
 ) -> LoadResult[RecipeInfo]:
     """Parse, deduplicate, and report collisions for recipe candidates by tier."""
     items: list[RecipeInfo] = []

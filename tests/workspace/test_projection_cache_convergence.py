@@ -751,6 +751,29 @@ def test_prune_contains_classifier_value_errors_and_reports_the_disposition(
     )
 
 
+def test_unavailable_projection_identity_is_warning_logged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entry = tmp_path / _STALE_KEY
+    logger = Mock()
+    monkeypatch.setattr(projection_cache, "logger", logger)
+
+    projection_cache._log_projection_reconcile(
+        entry,
+        active_key=_ACTIVE_KEY,
+        disposition=projection_cache.ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE,
+    )
+
+    logger.warning.assert_called_once_with(
+        "projected_plugin_reconcile",
+        path=str(entry),
+        entry_class="projection_root",
+        disposition="deferred_unavailable",
+    )
+    logger.debug.assert_not_called()
+
+
 def test_prune_enumerates_every_direct_child_and_counts_only_new_queue_entries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

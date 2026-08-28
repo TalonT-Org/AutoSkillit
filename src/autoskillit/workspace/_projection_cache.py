@@ -775,6 +775,7 @@ def _log_projection_reconcile(
         ProjectionReconcileDisposition.DEFERRED_UNCLASSIFIED,
         ProjectionReconcileDisposition.DEFERRED_INVALID_IDENTITY,
         ProjectionReconcileDisposition.DEFERRED_IO_ERROR,
+        ProjectionReconcileDisposition.DEFERRED_UNAVAILABLE,
         ProjectionReconcileDisposition.DEFERRED_QUEUE_UNREADABLE,
     }:
         logger.warning(event, **fields)

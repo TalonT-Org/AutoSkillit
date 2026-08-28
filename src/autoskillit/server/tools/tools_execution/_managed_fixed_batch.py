@@ -43,6 +43,9 @@ from autoskillit.hooks import (
     reconcile_batch,
     settle_assignment,
 )
+from autoskillit.hooks._join_ledger import (  # noqa: PLC0415  # terminal outcomes are intentionally centralized
+    _TERMINAL_OUTCOMES,
+)
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
     ManagedLeafPreparedLaunch,
@@ -54,16 +57,6 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 
 logger = get_logger(__name__)
 
-_TERMINAL_OUTCOMES = frozenset(
-    {
-        OUTCOME_CANCELLED,
-        OUTCOME_COMPLETED,
-        OUTCOME_FAILED,
-        OUTCOME_INTERRUPTED,
-        OUTCOME_LAUNCH_FAILED,
-        OUTCOME_REAPED,
-    }
-)
 _RECOVERY_SCHEMA_VERSION = 1
 _RESULT_SCHEMA_VERSION = 1
 _RESULT_REFERENCE_PREFIX = "fixed-batch-result-"
@@ -611,10 +604,20 @@ class ManagedFixedBatchService:
                 )
             elif permit is not None:
                 # Projection/preparation failed after a permit but before admission.
-                cancel_batch(
+                # Settle only this assignment as launch-failed so peer assignments in
+                # the same batch can still complete their own lifecycle.
+                settle_assignment(
                     binding.flag_dir,
+                    session_id=binding.launch.request_session_id,
+                    top_level_parent=binding.launch.managed_parent_id,
+                    tool_use_id=ledger_assignment_id,
+                    outcome=OUTCOME_LAUNCH_FAILED,
                     batch_id=batch_id,
+                    assignment_id=ledger_assignment_id,
+                    attempt_id=attempt_id,
+                    run_id=identity.first_run_id,
                     terminal_event_id=f"launch-failed:{identity.first_run_id}",
+                    terminal_payload_digest=_digest({"outcome": OUTCOME_LAUNCH_FAILED}),
                 )
         except BaseException:
             if admitted:

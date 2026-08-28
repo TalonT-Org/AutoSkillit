@@ -179,10 +179,7 @@ def _scan_module_level_io(path: Path) -> list[tuple[int, int, str]]:
     into nested function or class definitions.
     """
     source = path.read_text(encoding="utf-8")
-    try:
-        tree = ast.parse(source, filename=str(path))
-    except SyntaxError:
-        return []
+    tree = ast.parse(source, filename=str(path))
 
     violations: list[tuple[int, int, str]] = []
     for stmt in tree.body:
@@ -327,3 +324,11 @@ def test_no_module_level_io_detects_yaml_load(tmp_path: Path) -> None:
     f = tmp_path / "fake.py"
     f.write_text("import yaml\n_data = yaml.safe_load(open('x'))\n")
     assert _scan_module_level_io(f)
+
+
+def test_no_module_level_io_rejects_unparseable_source(tmp_path: Path) -> None:
+    f = tmp_path / "invalid.py"
+    f.write_text("if True\n")
+
+    with pytest.raises(SyntaxError):
+        _scan_module_level_io(f)

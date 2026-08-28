@@ -217,11 +217,11 @@ def test_hook_registry_package_needs_no_line_limit_exemption() -> None:
         "the flat hook_registry.py module reappeared; the E21 retirement rationale "
         "in tests assumes the package decomposition from #4853"
     )
-    offenders = [
-        f"{path.relative_to(SRC_ROOT)}: {len(path.read_text(encoding='utf-8').splitlines())} lines"
-        for path in sorted(package_root.rglob("*.py"))
-        if len(path.read_text(encoding="utf-8").splitlines()) > 1000
-    ]
+    offenders = []
+    for path in sorted(package_root.rglob("*.py")):
+        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        if line_count > 1000:
+            offenders.append(f"{path.relative_to(SRC_ROOT)}: {line_count} lines")
     assert not offenders, (
         "hook_registry shards exceed the 1000-line default ceiling:\n  " + "\n  ".join(offenders)
     )
@@ -231,13 +231,36 @@ def test_recipe_binding_e24_exemption_is_retired() -> None:
     """REQ-CNST-010-E24 was retired by #4854 when input parsing moved to _binding_input.py.
 
     PR #4898 reintroduced the entry. ``recipe/_binding.py`` is under the 1000-line
-    default ceiling, so no exemption is warranted.
+    default ceiling, so no exemption is warranted. Mirrors the two-function E21
+    decomposition above so sibling retirements follow the same shape.
     """
     assert "recipe/_binding.py" not in _LINE_LIMIT_EXEMPTIONS, (
         "REQ-CNST-010-E24 was retired by issue #4854; the recipe/_binding.py exemption "
         "must not be reintroduced"
     )
+    basename_offenders = sorted(
+        key for key in _LINE_LIMIT_EXEMPTIONS if key.rsplit("/", 1)[-1] == "_binding.py"
+    )
+    assert not basename_offenders, (
+        "REQ-CNST-010-E24 reintroduced under a path-form key: " + ", ".join(basename_offenders)
+    )
+
+
+def test_recipe_binding_module_under_1000_lines() -> None:
+    """The pre-condition for E24 retirement: ``recipe/_binding.py`` stays under 1000 lines.
+
+    Mirrors ``test_hook_registry_package_needs_no_line_limit_exemption``: the absence
+    assertion above is actively harmful rather than merely correct only if the
+    pre-condition (sub-1000 module) still holds. If #4854 follow-ups move this
+    module or extract more, the assertion fails with a clear message instead of
+    crashing with ``FileNotFoundError`` deeper in the call stack.
+    """
     binding = SRC_ROOT / "recipe" / "_binding.py"
+    assert binding.exists(), (
+        f"recipe/_binding.py must exist at {binding} (the E24 retirement assumes "
+        "the post-#4854 module shape; further extraction should keep _binding.py "
+        "in place or update this guard)"
+    )
     line_count = len(binding.read_text(encoding="utf-8").splitlines())
     assert line_count <= 1000, (
         f"recipe/_binding.py is {line_count} lines; the E24 retirement assumed it stays "

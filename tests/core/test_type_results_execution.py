@@ -83,6 +83,8 @@ class TestExecutionTypesNotInResults:
             "RecipeIdentity",
             "CIRunScope",
             "SubagentModelOutcomeDict",
+            "ApiFailureOutcome",
+            "RateLimitWindow",
         }
         assert expected == set(exec_all)
 

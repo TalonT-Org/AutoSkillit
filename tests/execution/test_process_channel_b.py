@@ -204,11 +204,11 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir), "0.15"],
             cwd=tmp_path,
-            timeout=300,
+            timeout=60,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=5.0,
-            _phase1_timeout=400,
+            _phase1_timeout=120,
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _heartbeat_poll=0.05,
@@ -317,7 +317,7 @@ class TestChannelBDrainWait:
         result = await run_managed_async(
             [sys.executable, str(script), str(session_dir)],
             cwd=tmp_path,
-            timeout=60,
+            timeout=300,
             session_log_dir=session_dir,
             completion_marker="%%ORDER_UP%%",
             completion_drain_timeout=2.0,
@@ -325,7 +325,7 @@ class TestChannelBDrainWait:
             _phase1_poll=0.01,
             _phase2_poll=0.05,
             _session_id_timeout=0.01,
-            _phase1_timeout=120,
+            _phase1_timeout=400,
         )
 
         assert result.termination == TerminationReason.TIMED_OUT

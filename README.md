@@ -33,7 +33,7 @@ autoskillit order implementation
 ## What it does
 
 Each bundled recipe is a sequenced graph of skill invocations. The orchestrator
-holds a kitchen of 51 kitchen-tagged MCP tools within a 74-tool server, launches
+holds a kitchen of 53 kitchen-tagged MCP tools within a 77-tool server, launches
 headless sessions for the heavy work, and
 routes verdicts through retry, merge, and review gates. The 5 bundled recipes
 are `implementation`, `implementation-groups`, `merge-prs`, `remediation`, and

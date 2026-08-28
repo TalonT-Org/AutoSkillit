@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import cast
+
 import pytest
 
 from autoskillit.core import (
+    SessionSkillManager,
     SkillContractError,
     SkillSemanticAdaptationResult,
     SkillSource,
@@ -14,11 +18,13 @@ from autoskillit.core import (
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
+    _ChildResourceOwnerRequest,
     bind_managed_leaf,
     classify_managed_leaf_workspace,
     may_retry_managed_leaf,
     plan_managed_leaf_identities,
     project_managed_leaf,
+    scoped_child_resource_owner,
 )
 from autoskillit.workspace import AgentSkillDocument
 
@@ -133,3 +139,103 @@ def test_managed_leaf_workspace_classification_is_safe_for_effect_retries() -> N
     assert not may_retry_managed_leaf(unknown, launched=False, verified_non_execution=False)
     with pytest.raises(SkillContractError, match="requires a declared write_behavior"):
         classify_managed_leaf_workspace(read_only=False, write_behavior=WriteBehaviorSpec())
+
+
+class _CleanupManager:
+    def __init__(self, events: list[str], *, fail: bool = False) -> None:
+        self.events = events
+        self.fail = fail
+
+    def cleanup_session(self, session_id: str) -> bool:
+        self.events.append(f"cleanup:{session_id}")
+        if self.fail:
+            raise RuntimeError("manager cleanup failed")
+        return True
+
+
+@pytest.mark.anyio
+async def test_child_resource_owner_prepares_before_yield_and_cleans_after_body(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    materialized = False
+
+    async def prepare(owned_cwd: Path) -> str:
+        nonlocal materialized
+        assert owned_cwd == tmp_path.resolve()
+        events.append("prepare")
+        materialized = True
+        return "prepared"
+
+    request = _ChildResourceOwnerRequest(
+        source_cwd=tmp_path,
+        prepare=prepare,
+        session_manager=cast(SessionSkillManager, _CleanupManager(events)),
+        generated_home_id="headless-owner",
+        generated_home_materialized=lambda: materialized,
+        copied_snapshot_path=lambda: None,
+    )
+
+    async with scoped_child_resource_owner(request) as prepared:
+        assert prepared.value == "prepared"
+        events.append("execute-and-finalize")
+
+    assert events == ["prepare", "execute-and-finalize", "cleanup:headless-owner"]
+
+
+@pytest.mark.anyio
+async def test_child_resource_owner_attempts_snapshot_cleanup_after_manager_failure(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    copied_snapshot = tmp_path / "copied-snapshot"
+    copied_snapshot.mkdir()
+    materialized = False
+
+    async def prepare(_: Path) -> None:
+        nonlocal materialized
+        materialized = True
+
+    request = _ChildResourceOwnerRequest(
+        source_cwd=tmp_path,
+        prepare=prepare,
+        session_manager=cast(SessionSkillManager, _CleanupManager(events, fail=True)),
+        generated_home_id="headless-owner",
+        generated_home_materialized=lambda: materialized,
+        copied_snapshot_path=lambda: copied_snapshot,
+    )
+
+    with pytest.raises(BaseExceptionGroup, match="Child resource cleanup failed"):
+        async with scoped_child_resource_owner(request):
+            events.append("execute-and-finalize")
+
+    assert events == ["execute-and-finalize", "cleanup:headless-owner"]
+    assert not copied_snapshot.exists()
+
+
+@pytest.mark.anyio
+async def test_child_resource_owner_cleans_materialized_home_after_preparation_failure(
+    tmp_path: Path,
+) -> None:
+    events: list[str] = []
+    materialized = False
+
+    async def prepare(_: Path) -> None:
+        nonlocal materialized
+        materialized = True
+        raise RuntimeError("projection failed after materialization")
+
+    request = _ChildResourceOwnerRequest(
+        source_cwd=tmp_path,
+        prepare=prepare,
+        session_manager=cast(SessionSkillManager, _CleanupManager(events)),
+        generated_home_id="headless-owner",
+        generated_home_materialized=lambda: materialized,
+        copied_snapshot_path=lambda: None,
+    )
+
+    with pytest.raises(RuntimeError, match="projection failed"):
+        async with scoped_child_resource_owner(request):
+            pytest.fail("owner yielded after failed preparation")
+
+    assert events == ["cleanup:headless-owner"]

@@ -516,10 +516,6 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_cleanup_resume_gate_state",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/server/tools/tools_execution/_managed_leaf.py",
-        "_cleanup_generated_home",
-    ): _SEPARATE_LIFECYCLE_REASON,
-    (
         "src/autoskillit/smoke_utils/_review_design.py",
         "pre_iteration_cleanup",
     ): _SEPARATE_LIFECYCLE_REASON,

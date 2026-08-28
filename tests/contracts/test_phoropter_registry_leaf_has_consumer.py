@@ -48,13 +48,10 @@ _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 
 _INERT_TRACKED_RE = re.compile(r"inert-tracked:#[1-9]\d*")
 
-# Scan paths — mirrors ``test_config_field_has_consumer.py:111-117``. We
-# include production ``.py`` (excluding the registry's own directory and
-# SKILL.md frontmatter) plus the production ``.yaml`` files that could
-# legitimately reference the registry. The ``assets/`` directory contains
-# only the registry itself, so excluding it isolates the registry from the
-# consumer scan. The ``skills_extended/`` directory contains SKILL.md
-# frontmatter which is documentation, not consumption.
+# Scan roots mirror ``test_config_field_has_consumer.py:111-117``: production
+# ``.py`` (excluding ``assets/`` which holds the registry itself and
+# ``skills_extended/`` whose SKILL.md frontmatter is documentation, not
+# consumption) plus the production YAML files that could reference leaves.
 _SCAN_PY_ROOTS: tuple[Path, ...] = (_SRC_ROOT,)
 
 _SCAN_YAML_PATHS: tuple[Path, ...] = (
@@ -81,8 +78,6 @@ def _load_production_sources() -> dict[Path, str]:
             try:
                 sources[py_path] = py_path.read_text(encoding="utf-8")
             except OSError:
-                # Mirror the config contract: propagate OSError silently as
-                # "no text" — the regex scan treats absent files as no hits.
                 continue
     for yaml_path in _SCAN_YAML_PATHS:
         if yaml_path.exists():
@@ -99,7 +94,6 @@ _PRODUCTION_SOURCES: dict[Path, str] = _load_production_sources()
 def _walk_leaves(entry: dict[str, Any]) -> list[tuple[str, Any]]:
     """Recursively walk a family entry, yielding ``(dot_path, value)`` for every nested leaf.
 
-    Lists are not recursed into (no list-typed leaves currently exist).
     ``None`` values are preserved as leaves — the only live leaf,
     ``step_naming.prefix``, is ``null`` for arch-lens and exp-lens.
     """
@@ -150,8 +144,12 @@ def _has_consumer(leaf_path: str) -> bool:
 
     first, second = segments[0], segments[1]
     dotted = re.compile(rf"\.{re.escape(first)}\.{re.escape(second)}\b")
+    # Allow default values between the key and the closing paren — e.g.
+    # ``.get("step_naming", {}).get("prefix")`` — which is the actual
+    # production pattern in ``rules_phoropter_adjacency.py``.
     chained = re.compile(
-        rf"\.get\(\s*[\"']{re.escape(first)}[\"']\s*\).*\.get\(\s*[\"']{re.escape(second)}[\"']\s*\)",
+        rf"\.get\(\s*[\"']{re.escape(first)}[\"'][^)]*\)[^.]*\.get\(\s*[\"']"
+        rf"{re.escape(second)}[\"'][^)]*\)",
         re.DOTALL,
     )
     return any(
@@ -164,16 +162,16 @@ def _is_inert_tracked(
     family_name: str,
     leaf_path: str,
 ) -> bool:
-    """True iff the YAML comment block immediately preceding the leaf's
+    """True iff the YAML comment block immediately preceding the family's
     declaration carries an ``inert-tracked:#NNNN`` annotation.
 
-    Walks backward from the leaf-key line collecting contiguous
-    ``#``-prefixed comment lines, scoped to the leaf's indent level so a
-    same-named leaf on a different family cannot be misattributed.
+    The annotation marks the whole family entry as inert (rather than per-leaf),
+    so we walk back from the family line collecting contiguous comment lines.
+    ``leaf_path`` is accepted for API symmetry with ``_check_registry_leaves``
+    but is not consulted here.
     """
+    del leaf_path  # intentionally unused — annotation is family-scoped
     lines = registry_text.splitlines()
-    # Find the leaf-key line by anchor: the family name's `:` line, then the
-    # leaf-key's `:` line at the right indent.
     family_idx = next(
         (
             i
@@ -184,31 +182,9 @@ def _is_inert_tracked(
     )
     if family_idx is None:
         return False
-    leaf_segments = leaf_path.split(".")
-    target_key = leaf_segments[-1]
-    # Compute the expected indent for the leaf key (one level below family).
-    family_indent = len(lines[family_idx]) - len(lines[family_idx].lstrip())
-    leaf_indent = family_indent + 2
-
-    leaf_idx: int | None = None
-    for i in range(family_idx + 1, len(lines)):
-        line = lines[i]
-        if line and not line.startswith(" ") and not line.startswith("\t"):
-            # Left the family block.
-            break
-        if line.lstrip().startswith("#"):
-            continue
-        if line.startswith(" " * leaf_indent) and re.match(
-            rf"^{' ' * leaf_indent}{re.escape(target_key)}\s*:", line
-        ):
-            leaf_idx = i
-            break
-
-    if leaf_idx is None:
-        return False
 
     comment_lines: list[str] = []
-    j = leaf_idx - 1
+    j = family_idx - 1
     while j >= 0 and lines[j].strip().startswith("#"):
         comment_lines.append(lines[j])
         j -= 1

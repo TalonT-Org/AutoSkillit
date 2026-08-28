@@ -109,10 +109,16 @@ class _ObservedScan(Iterator[ObservedEntry]):
             except StopIteration:
                 self.close()
                 raise
+            except BaseException:
+                self.close()
+                raise
             try:
                 status = entry.stat(follow_symlinks=False)
             except VANISHED_ERRORS:
                 continue
+            except BaseException:
+                self.close()
+                raise
             return ObservedEntry(path=Path(entry.path), status=status)
 
     def close(self) -> None:

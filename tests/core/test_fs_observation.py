@@ -174,21 +174,17 @@ def test_scan_observed_propagates_permission_error_from_an_entry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    target = tmp_path / "entry.txt"
-    target.write_text("hello")
+    class DeniedEntry(_FakeDirEntry):
+        def stat(self, *, follow_symlinks: bool = True) -> os.stat_result:
+            del follow_symlinks
+            raise PermissionError("injected")
 
-    def raise_permission_error(
-        _entry: os.DirEntry[str],
-        *,
-        follow_symlinks: bool = True,
-    ) -> os.stat_result:
-        del follow_symlinks
-        raise PermissionError("injected")
-
-    monkeypatch.setattr(os.DirEntry, "stat", raise_permission_error)
+    scanner = _FakeScandir([DeniedEntry(tmp_path / "entry.txt", _regular_file_status())])
+    monkeypatch.setattr(fs_observation, "os", SimpleNamespace(scandir=lambda _root: scanner))
 
     with pytest.raises(PermissionError, match="injected"):
         list(scan_observed(tmp_path))
+    assert scanner.closed is True
 
 
 def test_scan_observed_raises_for_a_missing_root_at_call_time(tmp_path: Path) -> None:

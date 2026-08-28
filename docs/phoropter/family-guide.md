@@ -188,4 +188,4 @@ Before merging a new phoropter family, verify all seven touchpoints:
 5. **`docs/skills/subsets.md`** updated with new category row for the family's tool subset tag.
 6. **`docs/glossary.md`** updated with new family term (enforced by `tests/docs/test_glossary_spelling.py`).
 7. **`PACK_REGISTRY`** entry added to `src/autoskillit/core/types/_type_constants_registries.py` with `PackDef(default_enabled, description)`.
-8. **`tests/skills/test_phoropter_structural.py`** module-level maps (`FAMILY_ARG_INTERFACE`, `_DIAL_SKILLS`, `_COMPOSITE_SLUGS`) updated if any lens family's interface changes — these serve as the contract-expected values paired with body-derived tests.
+8. **`tests/skills/test_phoropter_structural.py`** module-level maps (`FAMILY_ARG_INTERFACE`, `DIAL_SKILLS`) updated if any lens family's interface changes — these serve as the contract-expected values paired with body-derived tests.

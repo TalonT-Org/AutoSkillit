@@ -63,6 +63,7 @@ CAPABILITY_CLASSIFICATION: dict[str, Literal["REQUIRED", "OPTIONAL"]] = {
     "hook_trust_policy": "REQUIRED",
     "inspector_capable": "OPTIONAL",
     "fixed_set_join_capable": "OPTIONAL",
+    "managed_fixed_batch_route_capable": "OPTIONAL",
     "mcp_config_capable": "OPTIONAL",
     "mcp_env_forward_vars": "OPTIONAL",
     "min_version": "OPTIONAL",
@@ -477,6 +478,10 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def test_protected_recipe_delivery_capable_is_bool(self) -> None:
         """BackendCapabilities.protected_recipe_delivery_capable — protected host gate is bool."""
         assert isinstance(self.backend.capabilities.protected_recipe_delivery_capable, bool)
+
+    def test_managed_fixed_batch_route_capable_is_bool(self) -> None:
+        """BackendCapabilities.managed_fixed_batch_route_capable is bool-typed."""
+        assert isinstance(self.backend.capabilities.managed_fixed_batch_route_capable, bool)
 
     def test_terminal_explorer_capable_is_bool(self) -> None:
         """BackendCapabilities.terminal_explorer_capable — explorer support is bool-typed."""

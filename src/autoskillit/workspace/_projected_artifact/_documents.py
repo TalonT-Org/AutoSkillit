@@ -118,6 +118,7 @@ class SkillProjectionContext:
     )
     parent_sandbox_mode: str = "workspace-write"
     adaptation_context: SemanticAdaptationContext | None = None
+    managed_codex_route: str | None = None
     explorer_provisioning_eligible: bool | None = None
     projection_version: int = SKILL_PROJECTION_VERSION
 
@@ -129,6 +130,8 @@ class SkillProjectionContext:
             "parent_sandbox_mode",
             normalize_parent_sandbox_mode(self.parent_sandbox_mode),
         )
+        if self.managed_codex_route not in (None, "parent", "leaf"):
+            raise SkillContractError("managed Codex route must be parent, leaf, or absent")
         if (self.catalog is None) == (self.invocation is None):
             raise SkillContractError(
                 "projection context must bind exactly one effective catalog or invocation"

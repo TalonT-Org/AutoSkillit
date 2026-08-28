@@ -6,7 +6,10 @@ import dataclasses
 
 import pytest
 
-from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
+from autoskillit.execution.backends._codex_hooks import (
+    generate_codex_hooks_config,
+    managed_codex_guard_set,
+)
 from autoskillit.hook_registry import (
     HOOK_REGISTRY_HASH,
     LIFECYCLE_CONTRACTS,
@@ -57,6 +60,23 @@ class TestHookDefCodexStatus:
                     f"not-applicable hook with matcher={entry.get('matcher')!r} "
                     "must not appear in Codex config"
                 )
+
+    def test_managed_routes_project_only_their_required_guard_sets(self):
+        parent = generate_codex_hooks_config(managed_route="parent")
+        leaf = generate_codex_hooks_config(managed_route="leaf")
+
+        def scripts(config):
+            return {
+                command["command"].rsplit(" ", 1)[-1].removeprefix("guards/")
+                for entries in config.values()
+                for entry in entries
+                for command in entry["hooks"]
+            }
+
+        assert managed_codex_guard_set("parent") <= scripts(parent)
+        assert managed_codex_guard_set("leaf") <= scripts(leaf)
+        assert "Stop" in parent
+        assert "Stop" not in leaf
 
     def test_hookdef_has_mechanism_field(self):
         field_names = {f.name for f in dataclasses.fields(HookDef)}

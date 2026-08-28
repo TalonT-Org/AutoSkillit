@@ -93,6 +93,7 @@ def test_backend_capabilities_field_count():
         "supports_thinking_blocks",
         "supports_claude_format_stdout",
         "fixed_set_join_capable",
+        "managed_fixed_batch_route_capable",
         "exit_code_is_terminal",
         "mcp_config_capable",
         "food_truck_capable",
@@ -201,6 +202,7 @@ def test_backend_capabilities_field_names_locked():
         "recipe_delivery_budget",
         "hook_trust_policy",
         "fixed_set_join_capable",
+        "managed_fixed_batch_route_capable",
         "native_model_ids",
     }
     actual = {f.name for f in dataclasses.fields(BackendCapabilities)}
@@ -220,6 +222,7 @@ def test_claude_code_capabilities_field_values():
     assert CLAUDE_CODE_CAPABILITIES.supports_claude_format_stdout is True
     assert CLAUDE_CODE_CAPABILITIES.exit_code_is_terminal is False
     assert CLAUDE_CODE_CAPABILITIES.mcp_config_capable is False
+    assert CLAUDE_CODE_CAPABILITIES.managed_fixed_batch_route_capable is False
     assert CLAUDE_CODE_CAPABILITIES.claude_marketplace_tool_prefix_capable is True
     assert CLAUDE_CODE_CAPABILITIES.explicit_path_env_var == "CLAUDE_CODE_EXECPATH"
     assert CLAUDE_CODE_CAPABILITIES.cook_exact_binding_probe_required is True

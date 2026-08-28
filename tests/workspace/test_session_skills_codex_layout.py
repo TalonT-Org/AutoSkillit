@@ -149,6 +149,8 @@ def test_codex_projects_join_skill_only_with_managed_adaptation_context(
                 activation_epoch=0,
                 direct_tool_mode=True,
                 resolved_model="gpt-5.6-sol",
+                resolved_reasoning_effort="high",
+                codex_catalog_digest="c" * 64,
                 fixed_batch_tool_registry_digest="a" * 64,
                 hook_registry_digest="b" * 64,
                 skill_load_applies=True,

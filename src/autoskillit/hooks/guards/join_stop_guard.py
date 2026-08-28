@@ -37,6 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     read_session_binding,
+    session_managed_codex_route,
     write_join_diagnostic,
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
@@ -85,6 +86,17 @@ def main() -> None:
     binding = read_session_binding(payload_cwd, sid)
     if not binding or not binding.get("join_required"):
         sys.exit(0)
+
+    managed_route = session_managed_codex_route(payload_cwd, sid)
+    if managed_route is not None:
+        route, guards, _config_digest = managed_route
+        if route == "leaf":
+            sys.exit(0)
+        if "join_stop_guard" not in guards:
+            _block_stop(
+                reason="Managed Codex parent binding omits the Stop guard.",
+                denial_reason="missing_managed_stop_guard",
+            )
 
     top_level_parent = binding.get("managed_parent_id")
     if not isinstance(top_level_parent, str) or not top_level_parent:

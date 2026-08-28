@@ -57,18 +57,18 @@ Reads all per-lens outputs from the capture directory and produces a unified res
 
 ## §4. Configuration Knobs
 
-Four knobs control phoropter family behavior. The first three are configured per-family in `src/autoskillit/assets/phoropter-registry.yaml`; the fourth is a step-level field.
+Four knobs control phoropter family behavior. The first three are configured per-family via the tradition manifest at `src/autoskillit/recipes/methodology-traditions/{tradition-name}.yaml` (flat-file convention per `src/autoskillit/recipe/methodology_tradition_registry.py:19`; e.g., `animal_preclinical.yaml`, `controlled_intervention.yaml`), expressed as `synthesis_strategy` and `phase_skip` fields; the fourth is a step-level field.
 
 | Knob | Values | Description |
 |------|--------|-------------|
-| `apply_mode` | `eager` (default), `lazy` | Controls whether the apply phase runs all selected lenses (`eager`) or stops at the first decisive result (`lazy`). Currently all families use `eager`. |
-| `synthesis.strategy` | `null`, `priority_hierarchy`, `electre_iii`, `dex` | Selects the synthesis strategy for the synthesize phase. See §6 for the full catalog. Configured per-family in `phoropter-registry.yaml`. |
-| `optional_phases` | List of phase names | Phases that may be skipped via `PhoropterPhaseSkip` configuration. Currently only `apply` is skippable. Configured per-family in `phoropter-registry.yaml` under `phase_skip`. |
+| `apply_mode` | `eager` (default), `lazy` | Controls whether the apply phase runs all selected lenses (`eager`) or stops at the first decisive result (`lazy`). Currently all families use `eager`. Source of truth: the family's `apply_mode` field in the tradition manifest (§2). |
+| `synthesis.strategy` | `null`, `priority_hierarchy`, `electre_iii`, `dex` | Selects the synthesis strategy for the synthesize phase. See §6 for the full catalog. Configured per-family via the tradition manifest's `synthesis_strategy` field. |
+| `optional_phases` | List of phase names | Phases that may be skipped via `PhoropterPhaseSkip` configuration. Currently only `apply` is skippable. Configured per-family via the tradition manifest's `phase_skip` field. |
 | `PhoropterPhaseSkip` | `skip_when_true` / `skip_when_false` | Conditional phase skipping. The `skip_field` names a context variable; `skip_semantics` determines whether the phase is skipped when the field is truthy or falsy. |
 
 **PhoropterPhaseSkip in detail:**
 
-- `skip_when_true` — The phase is skipped when the named context variable is truthy. Canonical example: vis-lens skips the `apply` phase when `context.is_silent_type` is true (configured in `phoropter-registry.yaml` as `phase_skip.skip_field: context.is_silent_type`, `phase_skip.skip_semantics: skip_when_true`). In recipe YAML, this maps to `skip_when_true: context.is_silent_type` on the apply step.
+- `skip_when_true` — The phase is skipped when the named context variable is truthy. Canonical example: vis-lens skips the `apply` phase when `context.is_silent_type` is true (configured in the vis-lens tradition manifest under `phase_skip.skip_field: context.is_silent_type`, `phase_skip.skip_semantics: skip_when_true`). In recipe YAML, this maps to `skip_when_true: context.is_silent_type` on the apply step.
 - `skip_when_false` — The phase runs only when the named context variable is truthy. E.g., `skip_when_false: inputs.review_design` on the `dial` step skips the entire review-design family when the `review_design` input is not provided.
 
 **RecipeStep fields (from `src/autoskillit/recipe/schema.py`):**
@@ -81,18 +81,18 @@ skip_when_false: str | None = None    # Context variable; step skipped when fals
 
 ## §5. Step Naming Conventions
 
-The phoropter framework supports two step-naming cases, driven by the `step_naming.prefix` field in `phoropter-registry.yaml`.
+The phoropter framework supports two step-naming cases, driven by the family's `step_naming.prefix` loaded by `_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`.
 
 | Aspect | Sole-Family (Case A) | Coexisting Families (Case B) |
 |--------|---------------------|------------------------------|
 | Step keys | `dial`, `apply`, `synthesize` (bare canonical) | Primary family: `dial`, `apply`, `synthesize`; Additional families: `{prefix}_dial`, `{prefix}_apply`, `{prefix}_synthesize` |
 | `phoropter_family` annotation | Required on each step — associates the step with the family | Required on primary family steps; **omitted** on prefixed family steps |
-| Phase resolution | `_canonical_phase_for_step()` matches step name directly against `_PHOROPTER_PHASES` | `_canonical_phase_for_step()` strips the family prefix (from `phoropter-registry.yaml` `step_naming.prefix`) and matches the suffix |
+| Phase resolution | `_canonical_phase_for_step()` matches step name directly against `_PHOROPTER_PHASES` | `_canonical_phase_for_step()` strips the family prefix (loaded from `step_naming.prefix` by `_load_family_prefixes()`) and matches the suffix |
 | When to use | Recipe contains a single phoropter family | Recipe contains two or more families that must coexist |
 
 **Concrete example:**
 
-In `research-design.yaml` and `research.yaml`, the `review-design` family uses canonical step keys (`dial`, `apply`, `synthesize`) with `phoropter_family: review-design` on each. The `vis-lens` family uses prefixed step keys (`vis_dial`, `vis_apply`, `vis_synthesize`) without `phoropter_family` annotation. The `vis` prefix is configured in `phoropter-registry.yaml` under `families.vis-lens.step_naming.prefix: vis`.
+In `research-design.yaml` and `research.yaml`, the `review-design` family uses canonical step keys (`dial`, `apply`, `synthesize`) with `phoropter_family: review-design` on each. The `vis-lens` family uses prefixed step keys (`vis_dial`, `vis_apply`, `vis_synthesize`) without `phoropter_family` annotation. The `vis` prefix is loaded from `step_naming.prefix` in `_load_family_prefixes()` (registry entry under `families.vis-lens.step_naming.prefix: vis`).
 
 **Why `phoropter_family` is omitted on prefixed steps:**
 

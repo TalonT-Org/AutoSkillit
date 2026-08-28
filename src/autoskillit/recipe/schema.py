@@ -12,7 +12,6 @@ from typing import Any, Final
 import regex as re
 
 from autoskillit.core import (
-    ALLOWED_INGREDIENT_TYPES,
     FEATURE_REGISTRY,
     RECIPE_PACK_TAGS,
     CaptureEntrySpec,
@@ -34,6 +33,22 @@ class RecipeKind(StrEnum):
 
 NON_INTERACTIVE_KINDS: Final[frozenset[RecipeKind]] = frozenset(
     {RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}
+)
+
+# Canonical set of values allowed for RecipeIngredient.type. Defined beside the
+# dataclass it validates — RecipeIngredient is the only consumer.
+ALLOWED_INGREDIENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "string",
+        "integer",
+        "boolean",
+        "path",
+        "optional_string",
+        "list",
+        "dict",
+        "absolute_path",  # absolute filesystem path; non-empty required
+        "worktree_relative_path",  # worktree-relative path; empty allowed
+    }
 )
 
 

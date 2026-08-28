@@ -8,7 +8,7 @@ import pathlib
 
 import pytest
 
-from autoskillit.core.types._type_constants import ALLOWED_INGREDIENT_TYPES
+from autoskillit.recipe.schema import ALLOWED_INGREDIENT_TYPES
 
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 

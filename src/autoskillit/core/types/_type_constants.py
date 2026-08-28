@@ -43,7 +43,6 @@ __all__ = [
     "ROUTING_AUTHORITY_CLAUSE",
     "STEP_SKIP_SEMANTICS_CLAUSE",
     "ADMIRAL_DISPATCH_SECTIONS",
-    "ALLOWED_INGREDIENT_TYPES",
     "PR_TELEMETRY_SECTIONS",
     "KNOWN_CI_EVENTS",
     "DATA_MANIFEST_SOURCE_TYPES",
@@ -339,22 +338,6 @@ CONFIG_AUTHORITY_KEYS: frozenset[str] = frozenset(
 CALLER_SOVEREIGN_INGREDIENTS: frozenset[str] = frozenset(
     {
         "source_dir",
-    }
-)
-
-# Canonical set of values allowed for RecipeIngredient.type. Co-located with
-# CALLER_SOVEREIGN_INGREDIENTS so the governance surface stays together.
-ALLOWED_INGREDIENT_TYPES: frozenset[str] = frozenset(
-    {
-        "string",
-        "integer",
-        "boolean",
-        "path",
-        "optional_string",
-        "list",
-        "dict",
-        "absolute_path",  # absolute filesystem path; non-empty required
-        "worktree_relative_path",  # worktree-relative path; empty allowed
     }
 )
 

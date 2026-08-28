@@ -67,7 +67,7 @@ class TestTestGateBypassRefusal:
     @pytest.mark.anyio
     @pytest.mark.parametrize(
         "tool_ctx_ready_recipe",
-        [("smoke-test", "run_tests", {"source_dir": ".", "base_branch": "main"})],
+        [("smoke-test", "run_tests", {"source_dir": "."})],
         indirect=True,
     )
     async def test_trusted_smoke_test_run_tests_step_may_launch_configured_gate(

@@ -227,7 +227,7 @@ class TestListRecipes:
         assert r.requires_packs == []
 
     def test_requires_packs_forwarded_to_recipe_info(self, tmp_path: Path) -> None:
-        """_collect_recipes must populate RecipeInfo.requires_packs from YAML."""
+        """Recipe collection must populate RecipeInfo.requires_packs from YAML."""
         recipe_dir = tmp_path / ".autoskillit" / "recipes"
         recipe_dir.mkdir(parents=True)
         (recipe_dir / "custom.yaml").write_text(

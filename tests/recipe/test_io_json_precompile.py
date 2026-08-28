@@ -33,6 +33,14 @@ def _write_yaml(path: Path, data: dict) -> None:
 
 
 def _tracked_builtin_recipe_paths() -> list[Path]:
+    """Return every tracked builtin YAML, including non-discoverable artifacts.
+
+    These roundtrip/freshness tests intentionally cover the recursive tree that
+    the former ``builtin_recipes_dir().rglob("*.yaml")`` covered: contract cards,
+    examples, methodology files, and sub-recipes as well as discoverable recipes.
+    ``tracked_recipe_paths`` cannot preserve that scope because it intentionally
+    filters candidates through ``RECIPE_SCAN_DIRS``.
+    """
     return sorted(
         _PROJECT_ROOT / path
         for path in git_ls_files(_PROJECT_ROOT, _BUILTIN_RECIPES_PATHSPEC)

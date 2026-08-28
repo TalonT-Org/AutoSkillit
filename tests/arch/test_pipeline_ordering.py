@@ -17,7 +17,7 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-_API_PATH = SRC_ROOT / "recipe" / "_api_orchestration.py"
+_API_PATH = SRC_ROOT / "recipe" / "_api_orchestration_validate.py"
 
 
 def _find_function_node(tree: ast.Module, func_name: str) -> ast.FunctionDef:
@@ -30,13 +30,21 @@ def _find_function_node(tree: ast.Module, func_name: str) -> ast.FunctionDef:
 def _find_call_line(func_body: list[ast.stmt], func_name: str, *, last: bool = False) -> int:
     """Find the line number of a call to a function with the given name.
 
-    When *last* is True, return the last occurrence instead of the first.
+    Accepts both bare ``foo()`` calls (post-decomposition these resolve via
+    ``_orch.foo(...)`` for monkeypatch reachability — the trailing attribute
+    access is part of the same call site).
     """
     found = -1
     for node in ast.walk(ast.Module(body=func_body, type_ignores=[])):
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Name) and func.id == func_name:
+                if not last:
+                    return node.lineno
+                found = node.lineno
+            elif isinstance(func, ast.Attribute) and func.attr == func_name:
+                # Allow ``_orch.<name>()`` form — the orchestrator module
+                # attribute is the canonical resolution site for monkeypatch.
                 if not last:
                     return node.lineno
                 found = node.lineno

@@ -44,6 +44,18 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _PRODUCTION_MODULES = (
     "autoskillit.recipe._analysis",
     "autoskillit.recipe._api_orchestration",
+    # Issue #4905: composite_hash/content_hash attribute loads moved from the
+    # public-driver facade into the assemble and parse shards during the
+    # _api_orchestration decomposition. The remaining shards are tracked for
+    # symmetry with the new module surface so future field moves are visible
+    # to the ledger.
+    "autoskillit.recipe._api_orchestration_assemble",
+    "autoskillit.recipe._api_orchestration_cache",
+    "autoskillit.recipe._api_orchestration_match",
+    "autoskillit.recipe._api_orchestration_parse",
+    "autoskillit.recipe._api_orchestration_text",
+    "autoskillit.recipe._api_orchestration_types",
+    "autoskillit.recipe._api_orchestration_validate",
     "autoskillit.recipe._io_loading",
     "autoskillit.recipe._recipe_composition",
     "autoskillit.recipe.io",

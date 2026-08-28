@@ -14,7 +14,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/types": 76,
     "core/runtime": 11,
     "config": 20,
-    "recipe": 45,
+    "recipe": 53,  # +7 shards added by issue #4905 decomposition of _api_orchestration.py
     "recipe/rules": 66,
     "server": 28,
     "execution": 23,

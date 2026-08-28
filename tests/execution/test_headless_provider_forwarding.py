@@ -1110,15 +1110,18 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
 
     class FakeSink:
         env = sink_env
+        looked_up: list[str] = []
 
         @classmethod
         def start(cls, _log_dir: str) -> FakeSink:
+            cls.looked_up = []
             return cls()
 
         def close(self) -> None:
             return None
 
-        def model_evidence_for(self, _session_id: str):
+        def model_evidence_for(self, session_id: str):
+            type(self).looked_up.append(session_id)
             return "", ()
 
     async def fake_runner(_cmd, **_kwargs):
@@ -1174,5 +1177,5 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     expected_env = {**caller_env, **sink_env}
     assert built_envs == [expected_env]
     assert nudge_kwargs["provider_extras"] == expected_env
-    assert callable(nudge_kwargs["on_session_id_resolved"])
+    assert FakeSink.looked_up == ["recovery-session"]
     assert os.environ == parent_environment

@@ -44,7 +44,7 @@ def _collect_all_route_targets(step: RecipeStep) -> set[str]:
         targets.add(step.on_context_limit)
     if step.on_rate_limit:
         targets.add(step.on_rate_limit)
-    if step.on_exhausted:
+    if step.on_exhausted and step.action is None:
         targets.add(step.on_exhausted)
     if step.on_skip:
         targets.add(step.on_skip)

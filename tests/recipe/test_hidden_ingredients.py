@@ -892,6 +892,26 @@ def test_post_prune_dangling_route_returns_errors() -> None:
     assert any("upstream" in e for e in errors)
 
 
+def test_post_prune_dangling_routes_ignore_action_exhausted_target() -> None:
+    from autoskillit.recipe._recipe_composition import _validate_no_dangling_routes
+
+    recipe = Recipe(
+        name="test",
+        description="test",
+        ingredients={},
+        steps={
+            "done": RecipeStep(
+                action="stop",
+                message="done",
+                on_exhausted="swept_step",
+            ),
+        },
+        kitchen_rules=["test"],
+    )
+
+    assert _validate_no_dangling_routes(recipe) == []
+
+
 def test_route_consistency_rejects_source_swapped_edges() -> None:
     from autoskillit.recipe._recipe_composition import _validate_route_consistency
 

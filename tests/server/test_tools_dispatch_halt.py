@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import DefaultManagedWorkerCapacity
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
     _make_recipe_info,
@@ -207,7 +207,7 @@ class TestDispatchFoodTruckHaltEnforcement:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
         _patch_dispatch_quota_no_sleep(monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -259,7 +259,7 @@ class TestPostDispatchHaltOnFailure:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a standard dispatch."""
         _patch_dispatch_quota_no_sleep(monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -343,7 +343,7 @@ class TestDispatchFoodTruckRetryOnFailure:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
         _patch_dispatch_quota_no_sleep(monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -463,7 +463,7 @@ class TestDispatchFoodTruckSkipWhen:
     def _setup_standard_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a successful standard dispatch."""
         _patch_dispatch_quota_no_sleep(monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)

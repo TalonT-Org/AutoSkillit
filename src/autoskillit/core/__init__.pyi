@@ -51,6 +51,9 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
+from ._managed_worker_capacity import DefaultManagedWorkerCapacity as DefaultManagedWorkerCapacity
+from ._managed_worker_capacity import ManagedWorkerCapacityError as ManagedWorkerCapacityError
+from ._managed_worker_capacity import ManagedWorkerPermit as ManagedWorkerPermit
 from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
 )
@@ -922,7 +925,6 @@ from .types import FigureSpec as FigureSpec
 from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
 from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
 from .types import FleetErrorCode as FleetErrorCode
-from .types import FleetLock as FleetLock
 from .types import FleetSessionEnv as FleetSessionEnv
 from .types import ForkOccurrenceId as ForkOccurrenceId
 from .types import GateState as GateState
@@ -987,6 +989,7 @@ from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
+from .types import ManagedFixedBatchSupervisor as ManagedFixedBatchSupervisor
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
 from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef
@@ -1003,6 +1006,7 @@ from .types import ManagedHome as ManagedHome
 from .types import ManagedJoinAttestation as ManagedJoinAttestation
 from .types import ManagedJoinAttestationAuthority as ManagedJoinAttestationAuthority
 from .types import ManagedSessionHome as ManagedSessionHome
+from .types import ManagedWorkerCapacity as ManagedWorkerCapacity
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog

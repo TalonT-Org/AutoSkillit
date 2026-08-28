@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import DefaultManagedWorkerCapacity
 from tests.fakes import (
     InMemoryHeadlessExecutor,
     InMemoryRecipeRepository,
@@ -32,7 +32,7 @@ async def test_dispatch_food_truck_missing_lineage_does_not_pass_resume_session_
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     _patch_dispatch_quota_no_sleep(monkeypatch)
-    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx_kitchen_open.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
@@ -67,7 +67,7 @@ async def test_dispatch_food_truck_missing_lineage_drops_resume_message(
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     _patch_dispatch_quota_no_sleep(monkeypatch)
-    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx_kitchen_open.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
@@ -103,7 +103,7 @@ async def test_dispatch_food_truck_tool_passes_caller_instructions_into_prompt(
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     _patch_dispatch_quota_no_sleep(monkeypatch)
-    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx_kitchen_open.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
@@ -128,7 +128,7 @@ class TestDispatchFoodTruckNativeShellCaptureMode:
     def _setup(tool_ctx, monkeypatch) -> None:
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
         _patch_dispatch_quota_no_sleep(monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=2)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -221,7 +221,7 @@ async def test_dispatch_food_truck_no_caller_instructions_section_when_not_speci
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     _patch_dispatch_quota_no_sleep(monkeypatch)
-    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx_kitchen_open.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
@@ -249,7 +249,7 @@ class TestDispatchFoodTruckIdleTimeout:
     def _setup_dispatch(self, tool_ctx, monkeypatch):
         """Wire tool_ctx for a standard dispatch with InMemoryHeadlessExecutor."""
         _patch_dispatch_quota_no_sleep(monkeypatch)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -354,7 +354,7 @@ async def test_dispatch_food_truck_preserves_inner_timeout_semantics(
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     _patch_dispatch_quota_no_sleep(monkeypatch)
-    tool_ctx_kitchen_open.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx_kitchen_open.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)

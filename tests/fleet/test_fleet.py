@@ -17,21 +17,22 @@ def test_fleet_package_importable() -> None:
     from autoskillit.fleet import CampaignState, DispatchRecord, read_state  # noqa: F401
 
 
-def test_fleet_semaphore_satisfies_fleet_lock() -> None:
-    """FleetSemaphore is a structural match for FleetLock at runtime."""
-    from autoskillit.core import FleetLock
-    from autoskillit.fleet import FleetSemaphore
+def test_managed_worker_capacity_satisfies_protocol() -> None:
+    """The process-wide capacity implementation is a structural protocol match."""
+    from autoskillit.core import DefaultManagedWorkerCapacity, ManagedWorkerCapacity
 
-    s = FleetSemaphore(max_concurrent=1)
-    assert isinstance(s, FleetLock)
+    s = DefaultManagedWorkerCapacity(max_concurrent=1)
+    assert isinstance(s, ManagedWorkerCapacity)
     assert inspect.iscoroutinefunction(s.acquire)
 
 
-def test_fleet_lock_protocol_has_required_methods() -> None:
-    """FleetLock exposes at_capacity, acquire, release, active_count, max_concurrent."""
-    from autoskillit.core import FleetLock
+def test_managed_worker_capacity_protocol_has_required_methods() -> None:
+    """ManagedWorkerCapacity exposes owner-bound acquisition and release."""
+    from autoskillit.core import ManagedWorkerCapacity
 
-    members = {name for name, _ in inspect.getmembers(FleetLock) if not name.startswith("_")}
+    members = {
+        name for name, _ in inspect.getmembers(ManagedWorkerCapacity) if not name.startswith("_")
+    }
     assert "at_capacity" in members
     assert "acquire" in members
     assert "release" in members
@@ -40,11 +41,11 @@ def test_fleet_lock_protocol_has_required_methods() -> None:
     assert "locked" not in members
 
 
-def test_fleet_lock_acquire_is_coroutine() -> None:
-    """acquire() must be async — verifies FleetSemaphore.acquire is a coroutine."""
-    from autoskillit.fleet import FleetSemaphore
+def test_managed_worker_capacity_acquire_is_coroutine() -> None:
+    """acquire() is async on the concrete managed capacity implementation."""
+    from autoskillit.core import DefaultManagedWorkerCapacity
 
-    assert inspect.iscoroutinefunction(FleetSemaphore(max_concurrent=1).acquire)
+    assert inspect.iscoroutinefunction(DefaultManagedWorkerCapacity(max_concurrent=1).acquire)
 
 
 def test_headless_executor_protocol_has_dispatch_food_truck() -> None:

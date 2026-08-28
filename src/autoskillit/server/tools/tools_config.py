@@ -8,8 +8,7 @@ from dataclasses import fields as dc_fields
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from autoskillit.core import get_logger
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import ManagedWorkerCapacity, get_logger
 from autoskillit.server import mcp
 from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import _hook_config_path
@@ -24,7 +23,6 @@ from autoskillit.server.tools._overlay_state import (
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core import FleetLock
     from autoskillit.pipeline import ToolContext
 
 logger = get_logger(__name__)
@@ -34,14 +32,14 @@ def _build_config_snapshot(
     config: AutomationConfig,
     domain: str,
     *,
-    fleet_lock: FleetLock | None = None,
+    worker_capacity: ManagedWorkerCapacity | None = None,
 ) -> dict[str, dict[str, object]]:
     """Serialize a snapshot from the effective runtime configuration."""
     section = config.fleet if domain == "fleet" else config.run_skill
     snapshot_domain = {item.name: getattr(section, item.name) for item in dc_fields(section)}
-    if domain == "fleet" and fleet_lock is not None:
-        snapshot_domain["max_concurrent_dispatches"] = fleet_lock.max_concurrent
-        snapshot_domain["acquire_timeout_sec"] = fleet_lock.timeout
+    if domain == "fleet" and worker_capacity is not None:
+        snapshot_domain["max_concurrent_dispatches"] = worker_capacity.max_concurrent
+        snapshot_domain["acquire_timeout_sec"] = worker_capacity.timeout
     return {
         domain: snapshot_domain,
         "core": {item.name: getattr(config.model, item.name) for item in dc_fields(config.model)},
@@ -105,7 +103,7 @@ def _stage_effective_config(
     domain: str,
     params: dict[str, object],
     core_params: dict[str, object],
-) -> tuple[dict[str, dict[str, object]], AutomationConfig, FleetLock | None]:
+) -> tuple[dict[str, dict[str, object]], AutomationConfig, bool]:
     staged_overrides = deepcopy(ctx._session_config_overrides)
     staged_overrides.setdefault(domain, {}).update(params)
     staged_overrides.setdefault("core", {}).update(core_params)
@@ -120,7 +118,7 @@ def _stage_effective_config(
     )
     candidate.fleet.validate(feature_enabled=True)
 
-    candidate_lock: FleetLock | None = None
+    should_reconfigure_capacity = False
     if (
         domain == "fleet"
         and {
@@ -129,11 +127,8 @@ def _stage_effective_config(
         }
         & params.keys()
     ):
-        candidate_lock = FleetSemaphore(
-            max_concurrent=candidate.fleet.max_concurrent_dispatches,
-            timeout=candidate.fleet.acquire_timeout_sec,
-        )
-    return staged_overrides, candidate, candidate_lock
+        should_reconfigure_capacity = True
+    return staged_overrides, candidate, should_reconfigure_capacity
 
 
 def _commit_effective_config(
@@ -145,7 +140,7 @@ def _commit_effective_config(
     with locked_overlay(ctx.project_dir) as (overlay_path, overlay):
         if not ctx.gate.enabled or not _hook_config_path(ctx.project_dir).exists():
             raise OverlayStateError("Kitchen is not open — hook config file absent.")
-        staged_overrides, candidate, candidate_lock = _stage_effective_config(
+        staged_overrides, candidate, should_reconfigure_capacity = _stage_effective_config(
             ctx,
             domain,
             params,
@@ -160,10 +155,15 @@ def _commit_effective_config(
         # the persisted overlay is synchronized persistence, not a runtime read source.
         ctx._session_config_overrides = staged_overrides
         ctx.config = candidate
-        if candidate_lock is not None:
-            ctx.fleet_lock = candidate_lock
+        if should_reconfigure_capacity:
+            if ctx.worker_capacity is None:
+                raise OverlayStateError("Managed worker capacity is not initialized.")
+            ctx.worker_capacity.reconfigure(
+                max_concurrent=candidate.fleet.max_concurrent_dispatches,
+                timeout=candidate.fleet.acquire_timeout_sec,
+            )
 
-    return _build_config_snapshot(ctx.config, domain, fleet_lock=ctx.fleet_lock)
+    return _build_config_snapshot(ctx.config, domain, worker_capacity=ctx.worker_capacity)
 
 
 def _configuration_error(exc: Exception) -> str:

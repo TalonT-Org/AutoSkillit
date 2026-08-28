@@ -215,11 +215,11 @@ class TestExecuteDispatchCancelledErrorLockRelease:
         from tests.fleet._helpers import _setup_dispatch
 
         _setup_dispatch(tool_ctx, monkeypatch)
-        fleet_lock = tool_ctx.fleet_lock
+        worker_capacity = tool_ctx.worker_capacity
         active_count_at_cancel: list[int] = []
 
         async def _raise_cancelled(**_kwargs):
-            active_count_at_cancel.append(fleet_lock.active_count)
+            active_count_at_cancel.append(worker_capacity.active_count)
             raise asyncio.CancelledError
 
         monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _raise_cancelled)
@@ -239,8 +239,8 @@ class TestExecuteDispatchCancelledErrorLockRelease:
                 quota_refresher=lambda *a, **kw: None,
             )
 
-        assert active_count_at_cancel == [1], "lock must be held when _run_dispatch is called"
-        assert fleet_lock.active_count == 0
+        assert active_count_at_cancel == [0], "capacity must wait for a durable dispatch id"
+        assert worker_capacity.active_count == 0
 
     @pytest.mark.anyio
     async def test_execute_dispatch_passes_resume_session_id_to_run_dispatch(
@@ -922,7 +922,7 @@ class TestCancelledErrorRecordsInterruptedState:
             if effect["name"] == "process_spawn"
         )
         assert spawn_effect["phase"] == "started"
-        assert tool_ctx.fleet_lock.active_count == 0
+        assert tool_ctx.worker_capacity.active_count == 0
 
 
 class TestSessionIdEagerPersistence:

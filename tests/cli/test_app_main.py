@@ -301,7 +301,7 @@ def test_serve_activity_check_uses_backend_derived_marker_dir(
     mock_ctx = MagicMock()
     mock_ctx.project_dir = tmp_path
     mock_ctx.backend = mock_backend
-    mock_ctx.fleet_lock = None
+    mock_ctx.worker_capacity = None
 
     mock_cfg = MagicMock()
     mock_cfg.logging.level = "INFO"

@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-from autoskillit.core import FleetErrorCode
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import DefaultManagedWorkerCapacity, FleetErrorCode
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import _make_recipe_info, _make_standard_recipe
 
@@ -39,7 +38,7 @@ class TestStalenessErrorPropagation:
         from autoskillit.fleet._api import execute_dispatch
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)

@@ -196,9 +196,8 @@ class TestAllResumeCombinationsProduceValidHandle:
 class TestCaptureChainAcrossResumeBoundary:
     @pytest.mark.anyio
     async def test_capture_chain_across_resume_boundary(self, tool_ctx, monkeypatch):
-        from autoskillit.core import FleetErrorCode
+        from autoskillit.core import DefaultManagedWorkerCapacity, FleetErrorCode
         from autoskillit.fleet import (
-            FleetSemaphore,
             upsert_dispatch_record_by_name,
             write_captured_values,
         )
@@ -212,7 +211,7 @@ class TestCaptureChainAcrossResumeBoundary:
             _noop_quota_refresher,
         )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
 
         recipe_name = "capture-recipe"
         repo = InMemoryRecipeRepository()
@@ -394,7 +393,7 @@ class TestDispatchedSessionLogDirPopulated:
     @pytest.mark.anyio
     async def test_dispatched_session_log_dir_populated(self, tool_ctx, monkeypatch):
         """dispatched_session_log_dir is populated after _run_dispatch completes."""
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity
         from autoskillit.fleet._api import _run_dispatch
         from autoskillit.fleet.state import read_state
         from autoskillit.recipe.schema import Recipe, RecipeKind
@@ -405,7 +404,7 @@ class TestDispatchedSessionLogDirPopulated:
             _noop_quota_refresher,
         )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         recipe_name = "test-recipe-logdir"
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info(recipe_name)
@@ -476,8 +475,7 @@ class TestProcessIdentityPreservation:
         """Final DispatchRecord carries starttime_ticks/boot_id/create_time from _on_spawn."""
         from collections.abc import Callable
 
-        from autoskillit.core import RetryReason, SkillResult
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity, RetryReason, SkillResult
         from autoskillit.fleet._api import _run_dispatch
         from autoskillit.fleet.state import read_state
         from autoskillit.fleet.state_outcomes import DispatchRejected
@@ -532,7 +530,7 @@ class TestProcessIdentityPreservation:
                     stderr="",
                 )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         recipe_name = "id-test-recipe"
         from tests.fakes import InMemoryRecipeRepository
 

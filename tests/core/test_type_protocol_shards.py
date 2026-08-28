@@ -159,7 +159,8 @@ def test_infra_shard_all():
     assert set(__all__) == {
         "GateState",
         "BackgroundSupervisor",
-        "FleetLock",
+        "ManagedFixedBatchSupervisor",
+        "ManagedWorkerCapacity",
         "KitchenTransitionLock",
         "QuotaRefreshTask",
         "TokenFactory",

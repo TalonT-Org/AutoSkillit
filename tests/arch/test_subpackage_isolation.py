@@ -1062,11 +1062,10 @@ def test_no_subpackage_exceeds_10_files() -> None:
             context_admission_ledger.py adds crash-safe shadow accounting, and
             recipe_initialization.py adds the pure named-recipe lifecycle reducer.
             Exempt at 14 files.
-          fleet/ — REQ-CNST-003-E8: fleet/ added _semaphore.py for FleetSemaphore, the
-            configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
-            Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
-            narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
-            server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
+          core/ — REQ-CNST-003-E8: core added _managed_worker_capacity.py for the shared,
+            owner-bound managed worker capacity authority. Placed in core so fleet dispatch
+            and managed fixed batches share one IL-0 implementation. state.py was decomposed
+            into state_types.py, state_gates.py, and
             state_recovery.py to reduce the 757-line monolith and centralize deserialization
             logic on DispatchRecord.from_dict. Startup warming lives here so its
             execution/fleet imports remain layer-correct. state_types.py was then further
@@ -1121,7 +1120,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
         # +context_admission_helpers + 6 dispatch-category shards (Issue #4742): the
         # context-admission reducer is split into helpers plus per-category co-located
         # siblings. Cap moves from 41 to 48 to absorb the 7 new files.
-        "core": 48,
+        "core": 49,  # +_managed_worker_capacity shared fleet/fixed-batch authority
         # +_type_retirement_backstops: Phase 1's explicit reclaim-safety ledger.
         # +_type_persisted_formats: persisted enum/version tolerance ledger.
         # +_type_enums_context_admission: context-admission enums shard (#4735).
@@ -2362,6 +2361,7 @@ def test_tools_execution_decomposition_has_expected_siblings() -> None:
         "__init__",
         "_audit_response",
         "_gates",
+        "_managed_fixed_batch",
         "_managed_leaf",
         "_run_cmd",
         "_run_python",

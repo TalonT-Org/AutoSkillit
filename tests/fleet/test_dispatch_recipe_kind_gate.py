@@ -14,11 +14,11 @@ class TestRecipeKindDispatchGate:
 
     def _setup_food_truck_recipe(self, tool_ctx):
         """Wire tool_ctx with a food-truck kind recipe."""
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity
         from autoskillit.recipe.schema import Recipe, RecipeKind
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -37,11 +37,11 @@ class TestRecipeKindDispatchGate:
 
     def _setup_campaign_recipe(self, tool_ctx):
         """Wire tool_ctx with a campaign kind recipe."""
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity
         from autoskillit.recipe.schema import Recipe, RecipeKind
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)

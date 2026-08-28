@@ -12,8 +12,7 @@ from threading import Barrier, Event
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.core import get_tool_def
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import DefaultManagedWorkerCapacity, get_tool_def
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -26,7 +25,7 @@ def _open_context(tmp_path, config: AutomationConfig | None = None):
     baseline = config or AutomationConfig()
     ctx = _make_mock_ctx(config=baseline)
     ctx.project_dir = tmp_path
-    ctx.fleet_lock = FleetSemaphore(
+    ctx.worker_capacity = DefaultManagedWorkerCapacity(
         max_concurrent=baseline.fleet.max_concurrent_dispatches,
         timeout=baseline.fleet.acquire_timeout_sec,
     )
@@ -58,9 +57,9 @@ _BEHAVIOR_CASES = (
 
 def _observed_value(ctx, section: str, field: str):
     if field == "max_concurrent_dispatches":
-        return ctx.fleet_lock.max_concurrent
+        return ctx.worker_capacity.max_concurrent
     if field == "acquire_timeout_sec":
-        return ctx.fleet_lock.timeout
+        return ctx.worker_capacity.timeout
     target = (
         ctx.config.model
         if section == "core"
@@ -231,13 +230,13 @@ async def test_configured_fleet_semaphore_enforces_capacity_and_timeout(
     )
     assert payload["success"] is True
 
-    await ctx.fleet_lock.acquire()
+    permit = await ctx.worker_capacity.acquire("configuration-test")
     try:
-        assert ctx.fleet_lock.at_capacity() is True
+        assert ctx.worker_capacity.at_capacity() is True
         with pytest.raises(TimeoutError):
-            await ctx.fleet_lock.acquire()
+            await ctx.worker_capacity.acquire("configuration-waiter")
     finally:
-        ctx.fleet_lock.release()
+        ctx.worker_capacity.release(permit)
 
 
 @pytest.mark.anyio

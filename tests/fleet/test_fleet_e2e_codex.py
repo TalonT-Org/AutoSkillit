@@ -21,11 +21,10 @@ from uuid import uuid4
 import psutil
 import pytest
 
-from autoskillit.core import atomic_write
+from autoskillit.core import DefaultManagedWorkerCapacity, atomic_write
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.execution.headless import DefaultHeadlessExecutor
 from autoskillit.fleet._api import execute_dispatch
-from autoskillit.fleet._semaphore import FleetSemaphore
 from tests.fakes import InMemoryRecipeRepository
 from tests.fleet.test_fleet_e2e import FleetTestRunner
 
@@ -133,7 +132,7 @@ class TestCodexFleetE2E:
         runner = FleetTestRunner()
         tool_ctx.runner = runner
         tool_ctx.executor = DefaultHeadlessExecutor(tool_ctx)
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         recipes = InMemoryRecipeRepository()
         tool_ctx.recipes = recipes
         tool_ctx.kitchen_id = uuid4().hex[:16]

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.fleet import FleetSemaphore
+from autoskillit.core import DefaultManagedWorkerCapacity
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
     _make_recipe_info,
@@ -59,12 +59,12 @@ class TestDispatchFoodTruckGates:
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_parallel_refused_when_locked(self, tool_ctx, monkeypatch):
-        """fleet_lock.at_capacity() == True → fleet_parallel_refused error."""
+        """A full worker capacity authority returns fleet_parallel_refused."""
         from autoskillit.fleet._api import execute_dispatch
 
-        lock = FleetSemaphore(max_concurrent=1)
-        await lock.acquire()  # lock it
-        tool_ctx.fleet_lock = lock
+        capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
+        await capacity.acquire("held-dispatch")
+        tool_ctx.worker_capacity = capacity
 
         _dispatch_result = await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -110,7 +110,7 @@ class TestDispatchFoodTruckValidation:
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.recipe.schema import Recipe, RecipeKind
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("campaign-recipe")
         repo.add_recipe("campaign-recipe", recipe_info)
@@ -140,7 +140,7 @@ class TestDispatchFoodTruckValidation:
         """Keys not in recipe.ingredients → fleet_unknown_ingredient error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -169,8 +169,8 @@ class TestDispatchFoodTruckValidation:
         """Non-string ingredient values rejected before lock acquisition."""
         from autoskillit.fleet._api import execute_dispatch
 
-        lock = FleetSemaphore(max_concurrent=1)
-        tool_ctx.fleet_lock = lock
+        capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
+        tool_ctx.worker_capacity = capacity
 
         _dispatch_result = await execute_dispatch(
             tool_ctx=tool_ctx,
@@ -187,14 +187,14 @@ class TestDispatchFoodTruckValidation:
         assert result["success"] is False
         assert result["error"] == "fleet_unknown_ingredient"
         # Lock must not have been acquired
-        assert not lock.at_capacity()
+        assert not capacity.at_capacity()
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_no_recipes_configured(self, tool_ctx, monkeypatch):
         """recipes=None → fleet_manifest_missing error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         tool_ctx.recipes = None
 
         _dispatch_result = await execute_dispatch(
@@ -217,7 +217,7 @@ class TestDispatchFoodTruckValidation:
         """executor=None → fleet_manifest_missing error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -252,7 +252,7 @@ class TestDispatchFoodTruckValidation:
         from autoskillit.fleet._api import execute_dispatch
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeKind, RecipeSource
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         tool_ctx.executor = None
         repo = InMemoryRecipeRepository()
         recipe_info = RecipeInfo(
@@ -303,7 +303,7 @@ class TestDispatchFoodTruckValidation:
             RecipeSource,
         )
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         tool_ctx.executor = None
         repo = InMemoryRecipeRepository()
         recipe_info = RecipeInfo(
@@ -355,7 +355,7 @@ class TestDispatchFoodTruckSemanticValidation:
         """
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -407,7 +407,7 @@ class TestDispatchFoodTruckSemanticValidation:
         from autoskillit.fleet._api import execute_dispatch
         from tests.fakes import _DEFAULT_SKILL_RESULT
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_info = _make_recipe_info("test-recipe")
         repo.add_recipe("test-recipe", recipe_info)
@@ -439,7 +439,7 @@ class TestDispatchFoodTruckSemanticValidation:
         """load_and_validate raising an exception → fleet_recipe_invalid error."""
         from autoskillit.fleet._api import execute_dispatch
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
 
         class RaisingRepo(InMemoryRecipeRepository):
             def load_and_validate(self, *args, **kwargs):
@@ -485,7 +485,7 @@ async def test_dispatch_food_truck_plugin_authority_succeeds(tool_ctx, monkeypat
         ),
     )
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)

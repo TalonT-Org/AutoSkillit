@@ -17,7 +17,7 @@ from autoskillit.fleet import (
     resume_campaign_from_state,
     write_initial_state,
 )
-from tests.fleet.conftest import fleet_lock_from_ctx
+from tests.fleet.conftest import worker_capacity_from_ctx
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -643,7 +643,7 @@ class TestValidationFailureCampaignState:
         """T1: execute_dispatch writes REFUSED to campaign state on type validation error."""
 
         sp = _init_state(tmp_path, "step1")
-        fleet_lock_from_ctx(tool_ctx)
+        worker_capacity_from_ctx(tool_ctx)
 
         from autoskillit.fleet import execute_dispatch
 
@@ -676,12 +676,11 @@ class TestValidationFailureCampaignState:
         self, tool_ctx, tmp_path
     ):
         """T2: _run_dispatch creates per-dispatch state file on missing required ingredient."""
-        from autoskillit.core import RecipeSource
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity, RecipeSource
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeIngredient, RecipeKind
         from tests.fakes import InMemoryRecipeRepository
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_path = tmp_path / "test-recipe.yaml"
         repo.add_recipe(
@@ -732,12 +731,11 @@ class TestValidationFailureCampaignState:
     @pytest.mark.anyio
     async def test_campaign_state_write_for_unknown_ingredient_rejection(self, tool_ctx, tmp_path):
         """T3: _run_dispatch writes REFUSED to campaign state on unknown ingredient."""
-        from autoskillit.core import RecipeSource
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity, RecipeSource
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeIngredient, RecipeKind
         from tests.fakes import InMemoryRecipeRepository
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         sp = _init_state(tmp_path, "step1")
 
         repo = InMemoryRecipeRepository()
@@ -845,12 +843,11 @@ class TestValidationFailureCampaignState:
     @pytest.mark.anyio
     async def test_post_allocation_refusal_carries_dispatch_id(self, tool_ctx, tmp_path):
         """T6: Post-allocation refusal is completed with its durable dispatch identity."""
-        from autoskillit.core import RecipeSource
-        from autoskillit.fleet import FleetSemaphore
+        from autoskillit.core import DefaultManagedWorkerCapacity, RecipeSource
         from autoskillit.recipe.schema import Recipe, RecipeInfo, RecipeIngredient, RecipeKind
         from tests.fakes import InMemoryRecipeRepository
 
-        tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+        tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
         repo = InMemoryRecipeRepository()
         recipe_path = tmp_path / "test-recipe.yaml"
         repo.add_recipe(

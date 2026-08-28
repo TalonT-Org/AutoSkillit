@@ -282,7 +282,7 @@ The following manifest defines all dispatches for this campaign:
 ## CAMPAIGN DISCIPLINE
 
 Execute static manifest dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck.
-Static manifest dispatches use the fleet_lock semaphore and are SEQUENTIAL — do NOT issue
+Static manifest dispatches use the worker_capacity authority and are SEQUENTIAL — do NOT issue
 static manifest calls in parallel, regardless of the fleet semaphore's
 max_concurrent_dispatches setting.
 

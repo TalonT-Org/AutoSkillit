@@ -51,7 +51,9 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
     "cli": 3,
 }
 # Root-level isolated modules are exempt from sub-package layer enforcement.
-# Their import constraints are tested by test_isolated_modules_do_not_import_server_or_cli.
+# Their import constraints are tested by
+# tests/arch/test_subpackage_isolation_module_boundaries.py::
+# test_isolated_modules_do_not_import_server_or_cli.
 _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
     {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
 )

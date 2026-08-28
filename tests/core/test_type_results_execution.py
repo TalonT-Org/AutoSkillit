@@ -56,7 +56,13 @@ class TestExecutionTypesNotInResults:
             __all__ as exec_all,
         )
 
-        expected = {"SessionTelemetry", "RecipeIdentity", "CIRunScope"}
+        expected = {
+            "ApiFailureOutcome",
+            "RateLimitWindow",
+            "SessionTelemetry",
+            "RecipeIdentity",
+            "CIRunScope",
+        }
         assert expected == set(exec_all)
 
     def test_skill_result_still_uses_provider_outcome(self):

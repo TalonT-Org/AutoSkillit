@@ -1,8 +1,7 @@
 """Core result dataclasses — universal types.
-Execution-scoped types (SessionTelemetry, RecipeIdentity, CIRunScope) live in
-_type_results_execution.py for narrower test cascade. ProviderOutcome stays here
-because SkillResult.provider references it, and SkillResult is consumed by 13+
-directories — a cross-import would undermine the cascade narrowing.
+Execution-scoped types (ApiFailureOutcome, RateLimitWindow, SessionTelemetry,
+RecipeIdentity, CIRunScope) live in _type_results_execution.py for narrower test
+cascade. ProviderOutcome stays here because SkillResult.provider is universal.
 """
 
 from __future__ import annotations
@@ -20,6 +19,7 @@ from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle_authority import AuditVerdict
 from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
 from ._type_execution_identity import ExecutionIdentity
+from ._type_results_execution import ApiFailureOutcome
 from ._type_results_records import (
     CapturedStream,
     CleanupResult,
@@ -520,6 +520,8 @@ class SkillResult:
     """Infrastructure exit classification bundle."""
     api_retry: ApiRetryOutcome = field(default_factory=ApiRetryOutcome)
     """API retry event accumulation bundle."""
+    api_failure: ApiFailureOutcome = field(default_factory=ApiFailureOutcome)
+    """Structured provider-failure evidence bundle."""
     contamination: ContaminationOutcome = field(default_factory=ContaminationOutcome)
     """Pre-contamination context bundle — populated only when clone_guard fires."""
     ndjson_drift: NdjsonDriftOutcome = field(default_factory=NdjsonDriftOutcome)
@@ -566,6 +568,13 @@ class SkillResult:
             "api_retry_last_error": self.api_retry.last_error,
             "api_retry_last_status": self.api_retry.last_status,
             "api_retry_exhausted": self.api_retry.exhausted,
+            "api_error_status": self.api_failure.status,
+            "api_terminal_reason": self.api_failure.terminal_reason,
+            "api_error_code": self.api_failure.error_code,
+            "api_error_message_seen": self.api_failure.api_error_message_seen,
+            "rate_limit_status": self.api_failure.rate_limit.status,
+            "rate_limit_type": self.api_failure.rate_limit.limit_type,
+            "rate_limit_resets_at_epoch": self.api_failure.rate_limit.resets_at_epoch,
             "pre_contamination_retry_reason": self.contamination.retry_reason,
             "pre_contamination_subtype": self.contamination.subtype,
             "ndjson_unknown_event_count": self.ndjson_drift.unknown_event_count,

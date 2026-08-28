@@ -201,6 +201,9 @@ tests/fixtures/codex/*.ndjson:
 tests/fixtures/codex/*.jsonl:
   - hooks/
 
+tests/fixtures/claude_code/*.jsonl:
+  - execution/
+
 tests/hooks/fixtures/session_replays/*.jsonl:
   - hooks/
 

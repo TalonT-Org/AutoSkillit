@@ -98,8 +98,10 @@ class InfraExitCategory(StrEnum):
     COMPLETED = "completed"
     CONTEXT_EXHAUSTED = "context_exhausted"
     API_ERROR = "api_error"
+    API_ERROR_TERMINAL = "api_error_terminal"
     PROCESS_KILLED = "process_killed"
     RATE_LIMITED = "rate_limited"
+    UNCLASSIFIED = "unclassified"
 
 
 class FaultDomain(StrEnum):

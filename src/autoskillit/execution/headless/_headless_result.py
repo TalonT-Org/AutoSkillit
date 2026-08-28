@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
     ChannelConfirmation,
@@ -27,6 +27,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.headless._headless_adjudication import (
     _apply_post_session_adjudication,
+    _build_api_failure_outcome,
     _build_api_retry_outcome,
     _has_out_of_cwd_file_change,
     _make_terminated_result,
@@ -60,10 +61,7 @@ from autoskillit.execution.process import (
     fold_lifecycle_evidence,
     fold_lifecycle_evidence_path,
 )
-from autoskillit.execution.session._exit_classification import (
-    classify_infra_exit,
-    has_rate_limit_signal,
-)
+from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
@@ -82,6 +80,47 @@ logger = get_logger(__name__)
 _EVIDENCE_RECOVERABLE_SUBTYPES: frozenset[str] = frozenset({"adjudicated_failure", "unparseable"})
 
 __all__ = ["_build_skill_result"]
+
+
+def _apply_infra_retry_policy(
+    category: InfraExitCategory,
+    *,
+    outcome: SessionOutcome,
+    success: bool,
+    needs_retry: bool,
+    retry_reason: RetryReason,
+    kill_reason: KillReason,
+    termination: TerminationReason,
+) -> tuple[SessionOutcome, bool, RetryReason]:
+    """Apply the single retry decision authority for an infra exit category."""
+    match category:
+        case InfraExitCategory.RATE_LIMITED:
+            if not success:
+                return outcome, True, RetryReason.RATE_LIMITED
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.API_ERROR:
+            if not success:
+                return outcome, True, RetryReason.RESUME
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.API_ERROR_TERMINAL:
+            if not success:
+                return SessionOutcome.FAILED, False, RetryReason.NONE
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.UNCLASSIFIED | InfraExitCategory.CONTEXT_EXHAUSTED:
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.PROCESS_KILLED:
+            if (
+                not success
+                and not needs_retry
+                and kill_reason == KillReason.NATURAL_EXIT
+                and termination != TerminationReason.TIMED_OUT
+            ):
+                return SessionOutcome.RETRIABLE, True, RetryReason.RESUME
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.COMPLETED:
+            return outcome, needs_retry, retry_reason
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _build_skill_result(
@@ -245,28 +284,27 @@ def _build_skill_result(
                 )
                 return _stale_success_sr
         # No valid result in stdout — fall through to original stale response
-        _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
-        _stale_is_api_error = stale_session.api_retry_exhausted or (
-            stale_session.api_error_status is not None and stale_session.api_error_status >= 400
+        stale_category = classify_infra_exit(
+            stale_session, result, capabilities=backend.capabilities
         )
-        _stale_retry_reason = (
-            RetryReason.RATE_LIMITED if _stale_is_rate_limited else RetryReason.STALE
+        _stale_outcome, stale_needs_retry, stale_retry_reason = _apply_infra_retry_policy(
+            stale_category,
+            outcome=SessionOutcome.RETRIABLE,
+            success=False,
+            needs_retry=True,
+            retry_reason=RetryReason.STALE,
+            kill_reason=result.kill_reason,
+            termination=result.termination,
         )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="stale",
-            needs_retry=True,
-            retry_reason=_stale_retry_reason,
+            needs_retry=stale_needs_retry,
+            retry_reason=stale_retry_reason,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
-        if _stale_is_rate_limited:
-            stale_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
-        elif _stale_is_api_error:
-            stale_infra = InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-        else:
-            stale_infra = InfraOutcome()
         stale_sr = _make_terminated_result(
             result=result,
             session=stale_session,
@@ -276,11 +314,11 @@ def _build_skill_result(
                 "Partial progress may have been made. Retry to continue."
             ),
             subtype="stale",
-            needs_retry=True,
-            retry_reason=_stale_retry_reason,
+            needs_retry=stale_needs_retry,
+            retry_reason=stale_retry_reason,
             evidence=stale_evidence,
             provider_used=provider_used,
-            infra=stale_infra,
+            infra=InfraOutcome(exit_category=stale_category.value),
             api_retry=stale_api_retry,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
@@ -334,31 +372,30 @@ def _build_skill_result(
                     _idle_success_sr, idle_evidence, write_behavior, skill_contract, cwd
                 )
                 return _idle_success_sr
-        _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
-        _idle_is_api_error = idle_session.api_retry_exhausted or (
-            idle_session.api_error_status is not None and idle_session.api_error_status >= 400
+        idle_category = classify_infra_exit(
+            idle_session, result, capabilities=backend.capabilities
         )
-        _idle_retry_reason = (
-            RetryReason.RATE_LIMITED if _idle_is_rate_limited else RetryReason.IDLE_STALL
+        _idle_outcome, idle_needs_retry, idle_retry_reason = _apply_infra_retry_policy(
+            idle_category,
+            outcome=SessionOutcome.RETRIABLE,
+            success=False,
+            needs_retry=True,
+            retry_reason=RetryReason.IDLE_STALL,
+            kill_reason=result.kill_reason,
+            termination=result.termination,
         )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="idle_stall",
-            needs_retry=True,
-            retry_reason=_idle_retry_reason,
+            needs_retry=idle_needs_retry,
+            retry_reason=idle_retry_reason,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
         )
-        if _idle_is_rate_limited:
-            idle_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
-        elif _idle_is_api_error:
-            idle_infra = InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-        else:
-            idle_infra = InfraOutcome()
         idle_sr = _make_terminated_result(
             result=result,
             session=idle_session,
@@ -368,11 +405,11 @@ def _build_skill_result(
                 "Partial progress may have been made. Retry to continue."
             ),
             subtype="idle_stall",
-            needs_retry=True,
-            retry_reason=_idle_retry_reason,
+            needs_retry=idle_needs_retry,
+            retry_reason=idle_retry_reason,
             evidence=idle_evidence,
             provider_used=provider_used,
-            infra=idle_infra,
+            infra=InfraOutcome(exit_category=idle_category.value),
             api_retry=idle_api_retry,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
@@ -516,43 +553,15 @@ def _build_skill_result(
     infra_category = classify_infra_exit(session, result, capabilities=backend.capabilities)
     api_retry = _build_api_retry_outcome(session)
 
-    # API error override: when the session failed due to an API infrastructure error
-    # (overload, 529, ECONNRESET), promote to RESUME so the orchestrator routes to
-    # on_context_limit instead of on_failure (partial progress may exist).
-    if not success and infra_category == InfraExitCategory.API_ERROR:
-        logger.info(
-            "api_error_override",
-            original_retry_reason=retry_reason.value,
-            promoted_to="resume",
-        )
-        retry_reason = RetryReason.RESUME
-        needs_retry = True
-
-    # Rate-limit override: HTTP 429 is a transient rate limit, not structural context
-    # exhaustion. Produce RATE_LIMITED so the orchestrator can route to on_rate_limit
-    # instead of on_context_limit, enabling wait-and-retry rather than escalation.
-    if not success and infra_category == InfraExitCategory.RATE_LIMITED:
-        logger.info(
-            "rate_limit_override",
-            original_retry_reason=retry_reason.value,
-            promoted_to="rate_limited",
-        )
-        retry_reason = RetryReason.RATE_LIMITED
-        needs_retry = True
-
-    # Process kill override: external kills (SIGKILL/OOM, not autoskillit-initiated)
-    # route to RESUME so the orchestrator can attempt recovery.
-    # TIMED_OUT uses a synthetic returncode=-1 but is a wall-clock timeout (non-recoverable).
-    if (
-        not success
-        and not needs_retry
-        and infra_category == InfraExitCategory.PROCESS_KILLED
-        and result.kill_reason == KillReason.NATURAL_EXIT
-        and result.termination != TerminationReason.TIMED_OUT
-    ):
-        retry_reason = RetryReason.RESUME
-        needs_retry = True
-        outcome = SessionOutcome.RETRIABLE
+    outcome, needs_retry, retry_reason = _apply_infra_retry_policy(
+        infra_category,
+        outcome=outcome,
+        success=success,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        kill_reason=result.kill_reason,
+        termination=result.termination,
+    )
 
     normalized_subtype = session.normalize_subtype(
         outcome, completion_marker, prior_completion_markers
@@ -719,6 +728,7 @@ def _build_skill_result(
             exit_category=infra_category.value, cleanup_incomplete=_cleanup_incomplete
         ),
         api_retry=api_retry,
+        api_failure=_build_api_failure_outcome(session),
         ndjson_drift=NdjsonDriftOutcome(
             unknown_event_count=session.seen_ndjson_unknown_event_count,
             unknown_item_count=session.seen_ndjson_unknown_item_count,

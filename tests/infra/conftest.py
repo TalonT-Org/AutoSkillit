@@ -18,6 +18,12 @@ class FormatterCoverageDef(NamedTuple):
     json_producer: Callable[[], dict] | None = None
 
 
+_RUN_SKILL_API_FAILURE_FIELDS = frozenset(
+    "api_error_status api_terminal_reason api_error_code api_error_message_seen "
+    "rate_limit_status rate_limit_type rate_limit_resets_at_epoch".split()
+)
+
+
 def _run_skill_json_producer() -> dict:
     """Return union of all JSON keys from SkillResult.to_json() outputs."""
     import dataclasses
@@ -150,7 +156,7 @@ def _build_registry() -> dict[str, FormatterCoverageDef]:
         "run_skill": FormatterCoverageDef(
             typed_dict=RunSkillResult,
             rendered=_FMT_RUN_SKILL_RENDERED,
-            suppressed=_FMT_RUN_SKILL_SUPPRESSED,
+            suppressed=_FMT_RUN_SKILL_SUPPRESSED | _RUN_SKILL_API_FAILURE_FIELDS,
             json_producer=_run_skill_json_producer,
         ),
         "run_cmd": FormatterCoverageDef(

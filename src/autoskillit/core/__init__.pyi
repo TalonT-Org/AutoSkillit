@@ -737,6 +737,7 @@ from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
+from .types import ApiFailureOutcome as ApiFailureOutcome
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
 from .types import (
@@ -1070,6 +1071,7 @@ from .types import QuarantinedRetiringRecord as QuarantinedRetiringRecord
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
+from .types import RateLimitWindow as RateLimitWindow
 from .types import ReadinessProbe as ReadinessProbe
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver

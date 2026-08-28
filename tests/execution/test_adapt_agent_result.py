@@ -377,14 +377,14 @@ def test_api_error_status_from_rate_limit_code() -> None:
     assert result.api_error_status == 429
 
 
-def test_api_error_status_none_for_non_rate_limit_code() -> None:
+def test_api_error_status_for_retriable_server_error_code() -> None:
     result = _adapt_agent_result(
         _make_agent_result(
             raw={"subtype": "error_during_execution", "error_code": "server_error"},
             error="Internal server error",
         )
     )
-    assert result.api_error_status is None
+    assert result.api_error_status == 500
 
 
 def test_classify_infra_exit_rate_limited_via_adapted_error_code() -> None:

@@ -19,14 +19,6 @@ from autoskillit.core import (
     mapping_entry_byte_ranges_from_yaml,
     pkg_root,
 )
-from autoskillit.recipe._io_discovery import (
-    _cached_recipe_candidates,
-    _cached_recipe_collection,
-    _discover_recipe_collection,
-)
-from autoskillit.recipe._io_discovery import (
-    _enumerate_recipe_candidates_uncached as _enumerate_candidates,
-)
 from autoskillit.recipe._io_loading import (
     _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
 )
@@ -37,8 +29,14 @@ from autoskillit.recipe._io_loading import (
     RECIPE_SCAN_DIRS as RECIPE_SCAN_DIRS,
 )
 from autoskillit.recipe._io_loading import (
+    _cached_recipe_candidates,
+    _cached_recipe_collection,
     _collect_recipes_from_candidates,
+    _discover_recipe_collection,
     load_recipe_dict_with_declarations,
+)
+from autoskillit.recipe._io_loading import (
+    _enumerate_recipe_candidates_uncached as _enumerate_candidates,
 )
 from autoskillit.recipe._io_loading import (
     is_recipe_scan_path as is_recipe_scan_path,

@@ -1135,7 +1135,7 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     recovery_result = SkillResult(
         success=False,
         result="",
-        session_id="",
+        session_id="recovery-session",
         subtype="contract_recovery",
         is_error=False,
         exit_code=1,
@@ -1177,5 +1177,10 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     expected_env = {**caller_env, **sink_env}
     assert built_envs == [expected_env]
     assert nudge_kwargs["provider_extras"] == expected_env
-    assert FakeSink.looked_up == ["nudge-session"]
+    # Verify the contract nudge plumbing reaches the OTLP sink's evidence lookup.
+    # The capture-vs-terminal fallback (no-op callback detection) is covered by
+    # test_drain_model_evidence_falls_back_to_captured_session_id in
+    # test_headless_execute.py; this assertion proves the wiring reaches _drain_model_evidence
+    # (terminal session id is truthy here, so it wins the or-fallback).
+    assert FakeSink.looked_up == ["recovery-session"]
     assert os.environ == parent_environment

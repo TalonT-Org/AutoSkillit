@@ -46,7 +46,8 @@ def _entry(
         adaptation_digest="adaptation",
         projected_digest="projected",
         canonical_digest="canonical",
-        artifact_incarnation="incarnation",
+        source_artifact_digest="artifact-digest",
+        source_artifact_incarnation_id="incarnation",
         binding_valid=True,
         binding_error=None,
     )

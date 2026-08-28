@@ -63,8 +63,6 @@ def write_projection_manifest(
                         "adaptation_digest": adaptation_digest,
                         "projected_digest": projected_digest,
                         "canonical_digest": canonical_digest,
-                        "artifact_digest": "",
-                        "artifact_incarnation": "",
                     }
                 },
             }

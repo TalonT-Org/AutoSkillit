@@ -86,7 +86,12 @@ def main() -> None:
     if not binding or not binding.get("join_required"):
         sys.exit(0)
 
-    top_level_parent = "top_level"
+    top_level_parent = binding.get("managed_parent_id")
+    if not isinstance(top_level_parent, str) or not top_level_parent:
+        _block_stop(
+            reason="Stop cannot verify the required-join binding scope.",
+            denial_reason="invalid_managed_scope",
+        )
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     allow_stop, reason = can_release_stop(
         flag_dir,

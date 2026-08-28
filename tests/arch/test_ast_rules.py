@@ -2906,6 +2906,7 @@ def test_fcntl_import_allowlist() -> None:
         "execution/_quota_observed.py",
         "hooks/guards/open_kitchen_guard.py",
         "hooks/_join_ledger.py",
+        "hooks/_session_binding.py",
         "cli/session/_session_reload.py",
     }
     violations: list[str] = []

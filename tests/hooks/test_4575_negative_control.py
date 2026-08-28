@@ -69,7 +69,7 @@ def _set_session_join_required(
     write_binding(
         resolve_binding_path(str(worktree), session_id),
         SessionBinding(
-            schema_version=2,
+            schema_version=3,
             session_id=session_id,
             join_required=join_required,
             binding_valid=True,

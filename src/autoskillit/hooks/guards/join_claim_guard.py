@@ -38,6 +38,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
+    session_managed_scope,
     write_join_diagnostic,
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
@@ -74,6 +75,22 @@ def main() -> None:
         sys.exit(0)
     if not session_join_required(payload_cwd, session_id):
         sys.exit(0)
+    scope = session_managed_scope(payload_cwd, session_id)
+    if scope is None:
+        denial_reason = f"{JOIN_CLAIM_DENY_TRIGGER}: binding has no valid managed scope."
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": denial_reason,
+                    }
+                }
+            )
+            + "\n"
+        )
+        sys.exit(0)
 
     tool_name = data.get("tool_name")
     if tool_name != "Agent":
@@ -101,7 +118,7 @@ def main() -> None:
         sys.exit(0)
 
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
-    top_level_parent = "top_level"
+    top_level_parent, _managed_leaf_id = scope
     try:
         claimed = claim_assignment(
             flag_dir,

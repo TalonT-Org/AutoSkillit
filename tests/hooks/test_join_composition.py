@@ -245,7 +245,7 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     write_binding(
         resolve_binding_path(str(worktree), "s1"),
         SessionBinding(
-            schema_version=2,
+            schema_version=3,
             session_id="s1",
             join_required=True,
             binding_valid=True,
@@ -337,9 +337,10 @@ def test_denied_pre_tool_use_creates_no_result_record(tmp_path: Path) -> None:
     ledger = json.loads(raw)
     sessions = ledger["sessions"]
     assert "s1" in sessions
-    parents = sessions["s1"]["top_level_parents"]
+    parents = sessions["s1"]["managed_parents"]
     assert "p1" in parents
-    batch = parents["p1"]["active_batch"]
+    batch_id = parents["p1"]["active_batch_id"]
+    batch = ledger["batches"][batch_id]
     assert batch["wave_outcome"] == "pending"
     assert all(a["tool_use_id"] is None for a in batch["assignments"])
     assert all(a["outcome"] == "pending" for a in batch["assignments"])

@@ -188,7 +188,7 @@ def _run_validation_pipeline(
         # Stage: semantic rules
         from autoskillit.recipe.io import builtin_sub_recipes_dir
 
-recipe_infos = (
+        recipe_infos = (
             _recipe_list if _recipe_list is not None else _orch.list_recipes(_pdir).items
         )
         known = frozenset(r.name for r in recipe_infos)

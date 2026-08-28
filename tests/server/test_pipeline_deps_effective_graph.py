@@ -105,7 +105,7 @@ def test_deferred_guard_reports_missing_skip_target_before_sweeping(
         ({"audit_impl": "false", "review_approach": "false"}, False),
         (None, True),
     ],
-    ids=["audit-impl-skipped", "audit-and-review-skipped", "review-deferred"],
+    ids=["audit-impl-skipped", "audit-and-review-skipped", "audit-impl-defaulted"],
 )
 async def test_remediation_uses_only_effective_projection_predecessors(
     tool_ctx_kitchen_open,

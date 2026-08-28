@@ -245,6 +245,7 @@ def _clear_stale_caches() -> None:
         _SKILL_CATEGORY_CACHE,
         _SKILL_NAMES_CACHE,
     )
+    from autoskillit.recipe.io import _clear_recipe_discovery_caches  # noqa: PLC0415
     from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
         _ML_SUB_AREA_CACHE,
     )
@@ -259,5 +260,6 @@ def _clear_stale_caches() -> None:
     _ML_SUB_AREA_CACHE.clear()
     _SKILL_NAMES_CACHE.clear()
     _SKILL_CATEGORY_CACHE.clear()
+    _clear_recipe_discovery_caches()
     _LOAD_CACHE.clear()
     _STALENESS_CACHES_CLEARED = True

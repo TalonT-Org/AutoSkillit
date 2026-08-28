@@ -58,6 +58,15 @@ def test_build_recipe_flow_generation_records_guard_and_preserves_unguarded_shap
             "name": "apply",
         },
         {"index": 1, "kind": "step", "name": "synthesize"},
+        {
+            "condition": None,
+            "edge_type": "success",
+            "index": 0,
+            "kind": "edge",
+            "result_field": None,
+            "source": "apply",
+            "target": "synthesize",
+        },
     ]
     assert unguarded.records[1] == '{"index":0,"kind":"step","name":"apply"}'
     assert unguarded.records[2] == '{"index":1,"kind":"step","name":"synthesize"}'

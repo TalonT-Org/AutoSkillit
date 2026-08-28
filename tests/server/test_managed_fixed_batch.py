@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.core import (
     DefaultManagedWorkerCapacity,
+    SkillContractError,
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceIdentity,
@@ -139,7 +140,7 @@ async def test_unresolved_recovery_debt_keeps_managed_route_closed(tmp_path) -> 
         return _prepared_leaf(projection, ManagedLeafLaunchResult())
 
     binding = _binding(tmp_path, launch_leaf)
-    with pytest.raises(Exception, match="recovery"):
+    with pytest.raises(SkillContractError, match="recovery"):
         await service.run(binding)
 
 

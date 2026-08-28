@@ -363,7 +363,7 @@ def test_registry_bridge_lock_contention_stops_at_its_fake_deadline(
     """The permit-path registry bridge never waits indefinitely for its flock."""
     from autoskillit.hooks.guards import open_kitchen_guard as guard_module  # noqa: PLC0415
 
-    timestamps = iter((0.0, 0.1, 0.25))
+    timestamps = iter((0.0, 1.0, 2.0))
     sleeps: list[float] = []
     attempts = 0
 

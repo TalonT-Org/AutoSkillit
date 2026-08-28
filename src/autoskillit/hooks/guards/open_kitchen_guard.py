@@ -27,7 +27,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 
 OPEN_KITCHEN_DENY_TRIGGER: str = "open_kitchen cannot be called"
-_REGISTRY_LOCK_TIMEOUT_SECONDS = 0.25
+_REGISTRY_LOCK_TIMEOUT_SECONDS = 2.0
 _LOCK_RETRY_INTERVAL_SECONDS = 0.01
 
 

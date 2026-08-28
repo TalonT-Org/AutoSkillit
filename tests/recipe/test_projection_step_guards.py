@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import (
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     RecipeBindingProjection,
     RecipeStepGuard,
 )
@@ -23,6 +24,8 @@ def _projection(*, guards: tuple[RecipeStepGuard, ...] = ()) -> FinalizedRecipeP
         ordered_step_names=("apply", "synthesize"),
         entrypoint="apply",
         ordered_flow_edges=(),
+        ordered_steps=tuple(FinalizedRecipeStep(name=name) for name in ("apply", "synthesize")),
+        ingredient_names=frozenset(),
         ordered_step_guards=guards,
     )
 

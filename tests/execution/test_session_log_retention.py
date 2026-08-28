@@ -1160,6 +1160,30 @@ def test_retention_orders_survivors_by_observed_mtime(tmp_path: Path) -> None:
     assert not (sessions_dir / "session-0001").exists()
 
 
+def test_retention_preserves_nanosecond_ordering(tmp_path: Path) -> None:
+    _make_sessions(tmp_path, count=2)
+    sessions_dir = tmp_path / "sessions"
+    older = sessions_dir / "session-0000"
+    newer = sessions_dir / "session-0001"
+    base_ns = 1_700_000_000_000_000_000
+    os.utime(older, ns=(base_ns, base_ns))
+    os.utime(newer, ns=(base_ns + 1, base_ns + 1))
+
+    assert older.stat().st_mtime == newer.stat().st_mtime
+    assert older.stat().st_mtime_ns < newer.stat().st_mtime_ns
+
+    survivors = apply_session_retention(
+        sessions_dir,
+        max_sessions=1,
+        dir_name="current-session",
+        reuse_committed_recovery=False,
+        protected_ids=frozenset(),
+    )
+
+    assert survivors == {"session-0001"}
+    assert not older.exists()
+
+
 def test_retention_still_requires_summary_json(tmp_path: Path) -> None:
     _make_sessions(tmp_path, count=2)
     sessions_dir = tmp_path / "sessions"

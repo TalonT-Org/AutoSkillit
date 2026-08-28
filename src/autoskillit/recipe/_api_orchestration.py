@@ -634,10 +634,8 @@ def _run_validation_pipeline(
         t0 = _t("prune_skipped_steps", t0, name)
 
         # Stage: semantic rules
-        known = frozenset(
-            r.name
-            for r in (_recipe_list if _recipe_list is not None else list_recipes(_pdir).items)
-        )
+        recipe_infos = _recipe_list if _recipe_list is not None else list_recipes(_pdir).items
+        known = frozenset(r.name for r in recipe_infos)
         known_skills = frozenset(s.name for s in lister.list_all())
         sub_recipes_dir = builtin_sub_recipes_dir()
         known_sub_recipes: frozenset[str] = (
@@ -669,11 +667,7 @@ def _run_validation_pipeline(
                 ingredient_names=frozenset(active_recipe.ingredients),
                 delivery_segments=_delivery_segments,
                 ordered_step_guards=tuple(
-                    RecipeStepGuard(
-                        step_name=step_name,
-                        context_name=step.skip_when_true.removeprefix("context."),
-                        bypass_target=step.on_success,
-                    )
+                    RecipeStepGuard(step_name, step.skip_when_true[8:], step.on_success)
                     for step_name, step in active_recipe.steps.items()
                     if step.skip_when_true is not None and step.on_success is not None
                 ),

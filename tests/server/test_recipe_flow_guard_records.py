@@ -10,6 +10,7 @@ import pytest
 from autoskillit.core import (
     RECIPE_FLOW_SCHEMA_VERSION,
     FinalizedRecipeProjection,
+    FinalizedRecipeStep,
     RecipeBindingProjection,
     RecipeFlowGeneration,
     RecipeStepGuard,
@@ -27,6 +28,8 @@ def _projection(*, guarded: bool) -> FinalizedRecipeProjection:
         ordered_step_names=("apply", "synthesize"),
         entrypoint="apply",
         ordered_flow_edges=(),
+        ordered_steps=tuple(FinalizedRecipeStep(name=name) for name in ("apply", "synthesize")),
+        ingredient_names=frozenset(),
         ordered_step_guards=(
             (RecipeStepGuard("apply", "is_silent_type", "synthesize"),) if guarded else ()
         ),

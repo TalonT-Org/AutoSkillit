@@ -195,13 +195,14 @@ _CORPUS_SKILL_NAMES = {
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("fixture_name", _CORPUS_FIXTURES)
-async def test_corpus_is_valid_or_deterministically_migratable(
+async def test_corpus_is_valid_advisory_or_deterministically_migratable(
     fixture_name: str, tmp_path: Path
 ) -> None:
-    """Each fixture either validates cleanly today, or SkillMigrationAdapter
-    transforms it so revalidation passes. Any future contract tightening
-    that strands the corpus fails CI unless a remediation is registered
-    and implemented."""
+    """Each fixture validates, has actionable advisory guidance, or migrates cleanly.
+
+    Any future contract tightening that strands the corpus fails CI unless a
+    remediation is registered and implemented.
+    """
     source = _CORPUS_DIR / fixture_name
     assert source.is_file(), f"missing corpus fixture: {source}"
     skill_name = _CORPUS_SKILL_NAMES[fixture_name]

@@ -34,10 +34,12 @@ import os
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from autoskillit.core import VANISHED_ERRORS
+from autoskillit.planner.consolidation import _load_manifests
 from tests.arch._deferred_debt import (
     TrackedDeferral,
     assert_deferrals_have_regression_tests,
@@ -1135,8 +1137,8 @@ _ENUMERATION_STAT_ALLOWLIST: dict[tuple[Path, str, str], TrackedDeferral] = {
         ),
         added_date=date(2026, 8, 28),
         regression_test=(
-            "tests/planner/test_consolidation.py::"
-            "test_load_manifests_fails_closed_when_manifest_vanishes_before_read"
+            "tests/arch/test_ast_rules.py::"
+            "test_consolidation_fail_closed_deferral_has_runtime_race_coverage"
         ),
     )
 }
@@ -2436,6 +2438,28 @@ def test_enumeration_stat_allowlist_entries_still_apply() -> None:
         registry_name="_ENUMERATION_STAT_ALLOWLIST",
         live_keys=found,
     )
+
+
+def test_consolidation_fail_closed_deferral_has_runtime_race_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every runtime vanished-path error aborts consolidation of partial evidence."""
+    manifest_path = tmp_path / "P1_consolidation.json"
+    manifest_path.write_text('{"phase_id": "P1", "groups": []}', encoding="utf-8")
+    original_read_text = Path.read_text
+    injected_error: type[OSError] = VANISHED_ERRORS[0]
+
+    def raise_vanished_error(path: Path, *args: Any, **kwargs: Any) -> str:
+        if path == manifest_path:
+            raise injected_error
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", raise_vanished_error)
+    for vanished_error in VANISHED_ERRORS:
+        injected_error = vanished_error
+        with pytest.raises(ValueError, match="failed to load consolidation manifest"):
+            _load_manifests(tmp_path)
 
 
 def test_enumeration_stat_allowlist_regression_tests_resolve(

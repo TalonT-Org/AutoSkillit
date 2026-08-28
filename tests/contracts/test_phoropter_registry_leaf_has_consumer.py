@@ -178,7 +178,7 @@ def _check_registry_leaves(path: Path) -> None:
     registry_text = path.read_text(encoding="utf-8")
     registry = load_yaml(path)
     violations: list[str] = []
-    for family_name, family_entry in registry["families"].items():
+    for family_name, family_entry in registry.get("families", {}).items():
         if _is_inert_tracked(registry_text, family_name):
             continue
         for leaf_path, _ in _walk_leaves(family_entry):

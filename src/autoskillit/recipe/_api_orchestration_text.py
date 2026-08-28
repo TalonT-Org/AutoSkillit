@@ -1,11 +1,8 @@
 """Instruction-text builders used by the orchestrator's load pipeline.
 
 Pure functions; no cache, no monkeypatch surface, no pipeline state.
-Moved 2026-08-28 from ``_api_orchestration.py`` under issue #4905 so the
-producer registered at
-``core/types/_type_orchestrator_instruction_surfaces.py`` points at the
-true module that owns the implementation.
 """
+
 from __future__ import annotations
 
 import json

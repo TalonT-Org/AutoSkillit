@@ -1,15 +1,16 @@
 """Parse the recipe YAML and compose sub-recipes into the active recipe.
 
 Called by Phase 3 (validate) at the start of the pipeline to avoid a
-duplicate parse later. Moved 2026-08-28 from ``_api_orchestration.py``
-under issue #4905.
+duplicate parse later.
 
-Monkeypatch contract: ``_parse_recipe``, ``pkg_root``,
-``validate_recipe_structure``, and ``load_recipe_dict_with_declarations`` are
-read through ``_orch.{name}`` so the existing test monkeypatches at
-``tests/recipe/test_api.py`` (lines 381, 443, 470, 497, 854, 990, 1787,
-1915, 2091) continue to reach this shard.
+Routing rule: ``_parse_recipe``, ``pkg_root``, ``validate_recipe_structure``,
+and ``load_recipe_dict_with_declarations`` are in the hub's 13-name
+monkeypatch block (``tests/recipe/test_api_split.py::_ALL_MONKEYPATCH_TARGETS``),
+so they route through ``_orch.{name}``. All other collaborators are imported
+directly from their source modules — direct imports are function-local and
+resolve at call time, so patch the source module, not ``_orch``, for those.
 """
+
 from __future__ import annotations
 
 import dataclasses

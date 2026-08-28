@@ -1,13 +1,14 @@
 """Phase 2 of the load pipeline: locate the recipe and read its raw YAML.
 
-Moved 2026-08-28 from ``_api_orchestration.py`` under issue #4905.
+Raises ``RecipeNotFoundError`` when no recipe matches.
 
-Monkeypatch contract: ``_t`` and ``pkg_root`` are read through
-``_orch._t(...)`` and ``_orch.pkg_root()`` so the existing
-``monkeypatch.setattr(orch, "_t", capturing_t)`` test at
-``tests/recipe/test_api.py:1027`` and ``monkeypatch.setattr(orch, "pkg_root", ...)``
-at ``tests/recipe/test_api.py:1915`` continue to reach this shard's call sites.
+Routing rule: ``_t`` and ``pkg_root`` are in the hub's 13-name monkeypatch
+block (``tests/recipe/test_api_split.py::_ALL_MONKEYPATCH_TARGETS``), so
+they route through ``_orch.{name}``. All other collaborators are imported
+directly from their source modules — direct imports are function-local and
+resolve at call time, so patch the source module, not ``_orch``, for those.
 """
+
 from __future__ import annotations
 
 import autoskillit.recipe._api_orchestration as _orch

@@ -2,13 +2,13 @@
 
 Pure given inputs; reads staleness probes and registry hashes from ``_api_cache``.
 
-Moved 2026-08-28 from ``_api_orchestration.py`` under issue #4905.
-
-Monkeypatch contract: every call site that originally read ``pkg_root()``
-directly now goes through ``_orch.pkg_root()`` so the existing
-``monkeypatch.setattr(orch, "pkg_root", ...)`` test at
-``tests/recipe/test_api.py:1915`` reaches the cache shard.
+Routing rule: ``pkg_root`` is in the hub's 13-name monkeypatch block
+(``tests/recipe/test_api_split.py::_ALL_MONKEYPATCH_TARGETS``), so it
+routes through ``_orch.pkg_root()``. All other collaborators are imported
+directly from their source modules — direct imports are function-local and
+resolve at call time, so patch the source module, not ``_orch``, for those.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -105,15 +105,9 @@ def _resolve_cache_inputs(
     _manifest_mtime = _api_cache._path_mtime_ns(
         _orch.pkg_root() / "recipe" / "skill_contracts.yaml"
     )
-    _manifest_size = _api_cache._file_size(
-        _orch.pkg_root() / "recipe" / "skill_contracts.yaml"
-    )
-    _budgets_mtime = _api_cache._path_mtime_ns(
-        _orch.pkg_root() / "recipe" / "block_budgets.yaml"
-    )
-    _budgets_size = _api_cache._file_size(
-        _orch.pkg_root() / "recipe" / "block_budgets.yaml"
-    )
+    _manifest_size = _api_cache._file_size(_orch.pkg_root() / "recipe" / "skill_contracts.yaml")
+    _budgets_mtime = _api_cache._path_mtime_ns(_orch.pkg_root() / "recipe" / "block_budgets.yaml")
+    _budgets_size = _api_cache._file_size(_orch.pkg_root() / "recipe" / "block_budgets.yaml")
     _ml_sub_area_mtime = _api_cache._path_mtime_ns(_ml_sub_area_path)
     _ml_sub_area_size = _api_cache._file_size(_ml_sub_area_path)
     cache_key = (

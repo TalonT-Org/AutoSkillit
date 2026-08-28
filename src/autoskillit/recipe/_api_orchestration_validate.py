@@ -8,12 +8,15 @@ diagram staleness, validity computation) MUST keep their exact statement
 order — the order is the contract enforced by
 ``tests/arch/test_pipeline_ordering.py``.
 
-Moved 2026-08-28 from ``_api_orchestration.py`` under issue #4905.
-
-Monkeypatch contract: every monkeypatchable call site is redirected through
-``_orch.{name}`` so the existing 13-name test monkeypatch suite continues
-to work after decomposition.
+Routing rule: collaborators in the hub's 13-name monkeypatch block
+(``tests/recipe/test_api_split.py::_ALL_MONKEYPATCH_TARGETS``) route
+through ``_orch.{name}``. All other collaborators (``builtin_sub_recipes_dir``,
+``_finalize_delivery_segments``, ``filter_version_rule``, ``stale_to_suggestions``,
+``check_diagram_staleness``, ``diagram_stale_to_suggestions``) are imported
+directly from their source modules as function-local imports that resolve
+at call time — patch the source module, not ``_orch``, for those.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,6 +24,7 @@ from typing import Any
 import autoskillit.recipe._api_orchestration as _orch
 from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge, RecipeStepGuard, YAMLError
 from autoskillit.recipe._analysis import make_validation_context
+from autoskillit.recipe._api_orchestration_assemble import _finalize_recipe_steps
 from autoskillit.recipe._api_orchestration_parse import _parse_and_compose
 from autoskillit.recipe._api_orchestration_types import _LoadPipelineInputs, _ValidationResult
 from autoskillit.recipe._binding import bind_recipe
@@ -184,7 +188,7 @@ def _run_validation_pipeline(
         # Stage: semantic rules
         from autoskillit.recipe.io import builtin_sub_recipes_dir
 
-        recipe_infos = (
+recipe_infos = (
             _recipe_list if _recipe_list is not None else _orch.list_recipes(_pdir).items
         )
         known = frozenset(r.name for r in recipe_infos)
@@ -217,7 +221,7 @@ def _run_validation_pipeline(
                 ordered_step_names=_ordered_step_names,
                 entrypoint=next(iter(_ordered_step_names), ""),
                 ordered_flow_edges=_effective_flow_edges,
-                ordered_steps=_orch._finalize_recipe_steps(active_recipe, _deferred_guard_state),
+                ordered_steps=_finalize_recipe_steps(active_recipe, _deferred_guard_state),
                 ingredient_names=frozenset(active_recipe.ingredients),
                 delivery_segments=_delivery_segments,
                 ordered_step_guards=tuple(

@@ -51,6 +51,14 @@ if any(n != n.lower() for n in RETIRED_SKILL_NAMES):
         "RETIRED_SKILL_NAMES entries must be lowercase. "
         f"Offending: {sorted(n for n in RETIRED_SKILL_NAMES if n != n.lower())}"
     )
+_non_lowercase_retired_resource_ids = sorted(
+    resource_id for resource_id in RETIRED_SKILL_RESOURCE_IDS if resource_id != resource_id.lower()
+)
+if _non_lowercase_retired_resource_ids:
+    raise AssertionError(
+        "RETIRED_SKILL_RESOURCE_IDS entries must be lowercase. "
+        f"Offending: {_non_lowercase_retired_resource_ids}"
+    )
 
 # UNAFFECTED-skill registry for issue #4684 AC6 ("No new failure mode is
 # introduced for the unaffected skills"). A skill is UNAFFECTED iff its

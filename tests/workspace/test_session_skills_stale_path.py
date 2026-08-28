@@ -226,12 +226,6 @@ def test_cleanup_stale_continues_past_a_candidate_that_vanishes_during_observati
         def close(self) -> None:
             self._scanner.close()
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc_value, traceback) -> None:
-            self.close()
-
     def vanish_during_observation(path):
         scanner = original_scandir(path)
         if path == root or path == str(root):

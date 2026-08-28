@@ -14,7 +14,6 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Protocol, runtime_checkable
 
 from autoskillit.core import (
     BackgroundSupervisor,
@@ -105,13 +104,6 @@ class ManagedLaunchBinding:
             raise SkillContractError("managed launch binding requires selected source evidence")
 
 
-@runtime_checkable
-class ManagedLaunchResolver(Protocol):
-    """Resolve caller input into server-owned immutable managed launch evidence."""
-
-    def resolve(self, request: object) -> ManagedLaunchBinding: ...
-
-
 @dataclass(frozen=True, slots=True)
 class ManagedLeafLaunchResult:
     """Bounded terminal facts produced by the leaf launch adapter."""
@@ -159,13 +151,6 @@ class ManagedFixedBatchLaunchBinding:
             raise SkillContractError("managed fixed batch requires at least one assignment")
         if not isinstance(self.default_model, str) or not self.default_model:
             raise SkillContractError("managed fixed batch default_model must be non-empty")
-
-
-@runtime_checkable
-class ManagedFixedBatchLaunchResolver(Protocol):
-    """Only a resolver may transform a request into a launchable batch binding."""
-
-    def resolve(self, request: object) -> ManagedFixedBatchLaunchBinding: ...
 
 
 @dataclass(frozen=True, slots=True)

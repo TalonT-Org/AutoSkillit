@@ -30,6 +30,7 @@ section banner over each group when the boundary is unclear.
 
 from __future__ import annotations
 
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -139,6 +140,7 @@ class _RunSkillDispatchState:
     _tracker_key: TrackerParticipantKey | None = None
     _tracker_lease: ArtifactLease | None = None
     _cleanup_session_id: str | None = None
+    _child_resource_owner: AbstractAsyncContextManager[None] | None = None
     _explorer_parent_identity: tuple[Path, str] | None = None
     _explorer_launch_lease: _ExplorerLaunchLease | None = None
 

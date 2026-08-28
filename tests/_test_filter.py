@@ -1112,6 +1112,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_declare_join_batch_handler.py",
             "server/test_explicit_backend_override.py",
             "server/test_factory_context_construction.py",
+            "server/test_managed_leaf.py",
             "server/test_tools_agents.py",
             "server/test_tools_issue_lifecycle_handlers.py",
             "server/test_tools_issue_lifecycle_helpers.py",
@@ -1293,6 +1294,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_enable_exploration_failure_codes.py",
             "server/test_declare_join_batch.py",
             "server/test_declare_join_batch_handler.py",
+            "server/test_managed_leaf.py",
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4

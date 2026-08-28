@@ -102,6 +102,7 @@ from ._gates import (  # noqa: F401
     _finalize_run_skill_completion,
     _has_active_locks,
 )
+from ._managed_leaf import scoped_child_resource_owner  # noqa: F401
 from ._run_cmd import _PURE_SLEEP_RE, run_cmd  # noqa: F401
 from ._run_python import run_python  # noqa: F401
 from ._run_skill_admission import (  # noqa: F401
@@ -167,6 +168,7 @@ __all__ = [
     "_resolve_step_name_from_recipe",
     "_run_subprocess_captured",
     "_select_tracker_authority",
+    "scoped_child_resource_owner",
     "execution_marker",
     "find_caller_session_id",
     "get_tool_def",

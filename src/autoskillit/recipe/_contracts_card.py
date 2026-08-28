@@ -177,6 +177,8 @@ def generate_recipe_card(
                         skill_entry["write_behavior"] = contract.write_behavior
                     if contract.write_expected_when:
                         skill_entry["write_expected_when"] = contract.write_expected_when
+                    if contract.external_effect != "none":
+                        skill_entry["external_effect"] = contract.external_effect
                     if contract.read_only:
                         skill_entry["read_only"] = True
                     skills[skill_name] = skill_entry

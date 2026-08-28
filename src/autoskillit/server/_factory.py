@@ -482,6 +482,7 @@ def make_context(
         return WriteBehaviorSpec(
             mode=contract.write_behavior,
             expected_when=tuple(contract.write_expected_when),
+            external_effect=contract.external_effect,
         )
 
     def _resolve_read_only(skill_command: str) -> bool:

@@ -2362,6 +2362,7 @@ def test_tools_execution_decomposition_has_expected_siblings() -> None:
         "__init__",
         "_audit_response",
         "_gates",
+        "_managed_leaf",
         "_run_cmd",
         "_run_python",
         "_run_skill_admission",

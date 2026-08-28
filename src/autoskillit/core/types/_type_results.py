@@ -230,10 +230,25 @@ class WriteBehaviorSpec:
     expected_when:
         Regex patterns matched against session output. Only meaningful when
         mode="conditional". If any pattern matches, writes are expected.
+    external_effect:
+        ``none``, ``serialized-idempotent``, or
+        ``serialized-unknown-completion`` for effects outside the workspace.
     """
 
     mode: str | None = None
     expected_when: tuple[str, ...] = ()
+    external_effect: str = "none"
+
+    def __post_init__(self) -> None:
+        if self.external_effect not in {
+            "none",
+            "serialized-idempotent",
+            "serialized-unknown-completion",
+        }:
+            raise ValueError(
+                "external_effect must be 'none', 'serialized-idempotent', or "
+                "'serialized-unknown-completion'"
+            )
 
 
 @dataclass(frozen=True, slots=True)

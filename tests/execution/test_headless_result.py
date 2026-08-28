@@ -1647,8 +1647,8 @@ class TestStaleApiRetryExhaustion:
         assert sr.api_retry.exhausted is True
         assert sr.api_retry.count == 1
 
-    def test_stale_without_api_retry_has_empty_infra(self):
-        """Stale with no api_retry → infra_exit_category='', count=0."""
+    def test_stale_without_api_retry_retains_completed_infra_category(self):
+        """Stale with no provider evidence retains the shared completed classification."""
         ndjson = json.dumps(
             {
                 "type": "result",
@@ -1661,7 +1661,7 @@ class TestStaleApiRetryExhaustion:
         result = _sr(0, ndjson, "", TerminationReason.STALE)
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is False
-        assert sr.infra.exit_category == ""
+        assert sr.infra.exit_category == "completed"
         assert sr.api_retry.count == 0
 
     def test_stale_recovery_with_api_retry_does_not_set_infra_error(self):

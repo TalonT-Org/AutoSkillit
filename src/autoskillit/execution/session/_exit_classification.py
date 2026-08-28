@@ -51,6 +51,7 @@ _CODEX_CONTEXT_EXHAUSTION_PATTERN: re.Pattern[str] = re.compile(
     CODEX_CONTEXT_EXHAUSTION_MARKER, re.IGNORECASE
 )
 _MODEL_CAPACITY_ERROR: str = "Selected model is at capacity. Please try a different model."
+_RETRIABLE_API_STATUSES: frozenset[int] = frozenset({408, 409})
 
 
 def _has_model_capacity_error(
@@ -94,6 +95,15 @@ def has_rate_limit_signal(
     )
 
 
+def classify_api_status(status: int) -> InfraExitCategory:
+    """Classify a provider HTTP status with an explicit retriable allowlist."""
+    if status == 429:
+        return InfraExitCategory.RATE_LIMITED
+    if status in _RETRIABLE_API_STATUSES or status >= 500:
+        return InfraExitCategory.API_ERROR
+    return InfraExitCategory.API_ERROR_TERMINAL
+
+
 _SHELL_SIGNAL_MAX = 192  # 128 + SIGRTMAX (64 on Linux)
 
 
@@ -114,11 +124,10 @@ def classify_infra_exit(
 ) -> InfraExitCategory:
     """Classify why a headless session exited at the infrastructure level.
 
-    Priority order: context exhaustion > rate limit > API error > process kill > completed.
-    Context exhaustion takes precedence because it is more specific. Rate limit
-    (HTTP 429) is checked before other API errors so transient rate limits are
-    distinguished from structural failures and routed to on_rate_limit instead of
-    on_context_limit.
+    Context exhaustion takes precedence. Structured provider status and error-code
+    evidence follow, then rate-limit and API text patterns, process death, and the
+    failed-session tail. This keeps terminal numeric evidence from being shadowed by
+    broad substring matches.
 
     Context-exhaustion detection is gated by ``capabilities.supports_context_exhaustion_detection``
     so backends that do not implement it fall through to downstream classification.
@@ -128,11 +137,11 @@ def classify_infra_exit(
             return InfraExitCategory.CONTEXT_EXHAUSTED
         if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
             return InfraExitCategory.CONTEXT_EXHAUSTED
-    # Rate limit detection — must precede all API_ERROR checks (including
-    # api_retry_exhausted) so 429s are classified as RATE_LIMITED even
-    # when retries are exhausted.
-    if session.api_error_status == 429:
-        return InfraExitCategory.RATE_LIMITED
+    if session.api_error_status is not None and session.api_error_status >= 400:
+        return classify_api_status(session.api_error_status)
+    if session.provider_error_code:
+        return InfraExitCategory.API_ERROR_TERMINAL
+    # Rate limit text remains useful when structured provider evidence is absent.
     if any(
         p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _all_text_sources(session, result)
     ):
@@ -146,8 +155,8 @@ def classify_infra_exit(
     # In that case _has_api_error() returns False while api_retry_exhausted is still True.
     if session.api_retry_exhausted:
         return InfraExitCategory.API_ERROR
-    if session.api_error_status is not None and session.api_error_status >= 400:
-        return InfraExitCategory.API_ERROR
     if result.returncode is not None and is_signal_death_code(result.returncode):
         return InfraExitCategory.PROCESS_KILLED
+    if session.is_error:
+        return InfraExitCategory.UNCLASSIFIED
     return InfraExitCategory.COMPLETED

@@ -87,6 +87,9 @@ def _apply_budget_guard(
 
 _CODEX_ERROR_CODE_API_STATUS: dict[str, int] = {
     "rate_limit_exceeded": 429,
+    "server_error": 500,
+    "insufficient_quota": 429,
+    "model_not_found": 404,
 }
 
 
@@ -99,7 +102,8 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     subtype = CliSubtype.from_cli(raw.get("subtype", "unknown"))
     stop_reasons: list[str] = raw.get("stop_reasons", [])
 
-    error_code: str = raw.get("error_code", "")
+    raw_error_code = raw.get("error_code", "")
+    error_code = raw_error_code if isinstance(raw_error_code, str) else ""
 
     error_subtypes = {
         CliSubtype.ERROR_DURING_EXECUTION,
@@ -146,6 +150,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         has_thinking_only_turn=False,
         seen_block_types=frozenset(),
         api_error_status=api_error_status,
+        provider_error_code=error_code,
         seen_ndjson_unknown_event_count=seen_ndjson_unknown_event_count,
         seen_ndjson_unknown_item_count=seen_ndjson_unknown_item_count,
     )

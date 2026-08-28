@@ -738,6 +738,7 @@ from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
 from .types import ApiRetryOutcome as ApiRetryOutcome
+from .types import ApiFailureOutcome as ApiFailureOutcome
 from .types import ArtifactRef as ArtifactRef
 from .types import (
     AuditAdmissionAuthorityMismatchError as AuditAdmissionAuthorityMismatchError,
@@ -1144,6 +1145,7 @@ from .types import RetiringCacheReadResult as RetiringCacheReadResult
 from .types import RetiringCacheRepairResult as RetiringCacheRepairResult
 from .types import RetiringCacheState as RetiringCacheState
 from .types import RetryReason as RetryReason
+from .types import RateLimitWindow as RateLimitWindow
 from .types import ReviewFindingDispositionKind as ReviewFindingDispositionKind
 from .types import ReviewOperationState as ReviewOperationState
 from .types import ReviewReconciliationResult as ReviewReconciliationResult

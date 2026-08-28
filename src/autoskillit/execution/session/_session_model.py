@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, assert_never
@@ -41,6 +41,17 @@ FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
         CliSubtype.IDLE_STALL,
     }
 )
+_HANDLED_RECORD_TYPES: frozenset[str] = frozenset(
+    {"assistant", "rate_limit_event", "result", "system", "user"}
+)
+
+
+def _provider_field(obj: Mapping[str, Any], *names: str) -> Any:
+    """Return the first retained provider field across its observed spellings."""
+    for name in names:
+        if name in obj:
+            return obj[name]
+    return None
 
 
 class ContentState(StrEnum):
@@ -74,6 +85,12 @@ class ClaudeSessionResult:
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
     api_error_status: int | None = None
+    rate_limit_status: str = ""
+    rate_limit_type: str = ""
+    rate_limit_resets_at_epoch: int | None = None
+    terminal_reason: str = ""
+    provider_error_code: str = ""
+    api_error_message_seen: bool = False
     seen_ndjson_unknown_event_count: int = 0
     seen_ndjson_unknown_item_count: int = 0
     denied_tool_use_ids: frozenset[str] = field(default_factory=frozenset)
@@ -330,6 +347,12 @@ class _ParseAccumulator:
     api_retry_last_status: int | None = None
     api_retry_exhausted: bool = False
     api_error_status: int | None = None
+    rate_limit_status: str = ""
+    rate_limit_type: str = ""
+    rate_limit_resets_at_epoch: int | None = None
+    terminal_reason: str = ""
+    provider_error_code: str = ""
+    api_error_message_seen: bool = False
     denied_tool_use_ids: set[str] = field(default_factory=set)
 
 
@@ -361,10 +384,17 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             if not isinstance(obj, dict):
                 continue
             record_type = obj.get("type")
+            if record_type is None:
+                raw_error = _provider_field(obj, "error")
+                if isinstance(raw_error, str):
+                    acc.provider_error_code = raw_error
+                continue
+            if record_type not in _HANDLED_RECORD_TYPES:
+                continue
 
             if record_type == "system" and obj.get("subtype") == "api_retry":
                 acc.api_retry_count += 1
-                acc.api_retry_last_error = str(obj.get("error", ""))
+                acc.api_retry_last_error = str(_provider_field(obj, "error") or "")
                 raw_status = obj.get("error_status")
                 acc.api_retry_last_status = raw_status if isinstance(raw_status, int) else None
                 attempt = obj.get("attempt", 0)
@@ -379,17 +409,35 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
                 continue
 
             if record_type == "rate_limit_event":
-                info = obj.get("rate_limit_info") or obj
-                if isinstance(info, dict) and info.get("status") == "rejected":
-                    acc.api_retry_exhausted = True
+                info = _provider_field(obj, "rate_limit_info") or obj
+                if isinstance(info, Mapping):
+                    raw_limit_status = _provider_field(info, "status")
+                    if isinstance(raw_limit_status, str):
+                        acc.rate_limit_status = raw_limit_status
+                        if raw_limit_status == "rejected":
+                            acc.api_retry_exhausted = True
+                    raw_limit_type = _provider_field(info, "rateLimitType", "rate_limit_type")
+                    if isinstance(raw_limit_type, str):
+                        acc.rate_limit_type = raw_limit_type
+                    raw_resets_at = _provider_field(info, "resetsAt", "resets_at")
+                    if isinstance(raw_resets_at, int):
+                        acc.rate_limit_resets_at_epoch = raw_resets_at
                 continue
 
             if record_type == "result":
                 acc.result_obj = obj
-                raw_status = obj.get("api_error_status")
+                raw_status = _provider_field(obj, "api_error_status")
                 if isinstance(raw_status, int):
                     acc.api_error_status = raw_status
+                raw_terminal_reason = _provider_field(obj, "terminal_reason", "terminalReason")
+                if isinstance(raw_terminal_reason, str):
+                    acc.terminal_reason = raw_terminal_reason
             elif record_type == "assistant" and not obj.get("subagent_type"):
+                raw_api_error_message_seen = _provider_field(
+                    obj, "is_api_error_message", "isApiErrorMessage"
+                )
+                if isinstance(raw_api_error_message_seen, bool):
+                    acc.api_error_message_seen = raw_api_error_message_seen
                 msg = obj.get("message")
                 if isinstance(msg, dict):
                     content = msg.get("content", "")
@@ -484,9 +532,14 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             fallback = json.loads(stdout)
             if isinstance(fallback, dict) and fallback.get("type") == "result":
                 acc.result_obj = fallback
-                raw_status = fallback.get("api_error_status")
+                raw_status = _provider_field(fallback, "api_error_status")
                 if isinstance(raw_status, int):
                     acc.api_error_status = raw_status
+                raw_terminal_reason = _provider_field(
+                    fallback, "terminal_reason", "terminalReason"
+                )
+                if isinstance(raw_terminal_reason, str):
+                    acc.terminal_reason = raw_terminal_reason
         except json.JSONDecodeError:
             pass
 
@@ -529,5 +582,11 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
         api_retry_last_status=acc.api_retry_last_status,
         api_retry_exhausted=acc.api_retry_exhausted,
         api_error_status=acc.api_error_status,
+        rate_limit_status=acc.rate_limit_status,
+        rate_limit_type=acc.rate_limit_type,
+        rate_limit_resets_at_epoch=acc.rate_limit_resets_at_epoch,
+        terminal_reason=acc.terminal_reason,
+        provider_error_code=acc.provider_error_code,
+        api_error_message_seen=acc.api_error_message_seen,
         denied_tool_use_ids=frozenset(acc.denied_tool_use_ids),
     )

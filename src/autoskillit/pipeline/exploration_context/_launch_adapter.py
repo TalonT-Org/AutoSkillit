@@ -1,11 +1,6 @@
 """Adapt durable launch authority to Store-owned exploration operations.
 
-This private shard recovers durable authority, executes service operations
-through Store APIs, and converts submit failures to bounded diagnostics. The
-Store remains the sole owner of exploration state: ``reopen_launch_environment``
-mutates that state while holding ``store._lock``, while the public-method
-workflows coordinate separately locking Store APIs without owning state or a
-separate lock.
+State mutation occurs only while ``reopen_launch_environment`` holds the Store lock.
 """
 
 from __future__ import annotations

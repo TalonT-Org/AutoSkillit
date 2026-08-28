@@ -1,9 +1,4 @@
-"""``OwnerBoundExplorationContextStore`` — sole production aggregate lease-state owner.
-
-Every in-process lease-state mutator remains here. The :mod:`._launch_adapter`
-reopen helper mutates Store-owned state under this Store's lock; public launch
-methods delegate to workflows that coordinate separately locking Store APIs.
-"""
+"""``OwnerBoundExplorationContextStore`` — sole production aggregate lease-state owner."""
 
 from __future__ import annotations
 

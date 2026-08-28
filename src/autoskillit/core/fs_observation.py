@@ -18,7 +18,7 @@ import stat
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Protocol
 
 __all__ = ["ObservedEntry", "VANISHED_ERRORS", "observe_path_mode", "safe_mtime", "scan_observed"]
 
@@ -97,8 +97,14 @@ def scan_observed(root: Path) -> Iterator[ObservedEntry]:
     return _ObservedScan(os.scandir(root))
 
 
+class _ScandirHandle(Protocol):
+    def __next__(self) -> os.DirEntry[str]: ...
+
+    def close(self) -> None: ...
+
+
 class _ObservedScan(Iterator[ObservedEntry]):
-    def __init__(self, scanner: Any) -> None:
+    def __init__(self, scanner: _ScandirHandle) -> None:
         self._scanner = scanner
         self._closed = False
 

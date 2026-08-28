@@ -159,21 +159,28 @@ DECLARED_RECIPE_FIELDS: dict[FieldKey, DeclaredFieldDef] = (
 # These fields are deliberately declared but have no effective consumer.  The
 # issue bodies describe the missing authority/type/dispatch semantics; do not
 # turn a deferral into a classification merely because a parser happens to see it.
+_DEFERRED_RECIPE_REGRESSION_TEST = (
+    "tests/arch/test_recipe_dataclass_consumption.py::"
+    "test_deferred_recipe_fields_are_current_and_explained"
+)
 DEFERRED_RECIPE_FIELDS: dict[FieldKey, TrackedDeferral] = {
     (RecipeIngredient, "authority"): TrackedDeferral(
         issue=4891,
         rationale="Kitchen opening accepts config authority but leaves its no-op path unenforced.",
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
     (RecipeIngredient, "type"): TrackedDeferral(
         issue=4892,
         rationale="Declared ingredient types have no value-level validation at input resolution.",
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
     (Recipe, "allowed_recipes"): TrackedDeferral(
         issue=4893,
         rationale="Recipe allowlists are parsed but not enforced by recipe dispatch.",
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
     (Recipe, "blocks"): TrackedDeferral(
         issue=4893,
@@ -181,6 +188,7 @@ DEFERRED_RECIPE_FIELDS: dict[FieldKey, TrackedDeferral] = {
             "Parsed recipe blocks are assigned but have no external validation or runtime reader."
         ),
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
     (Recipe, "continue_on_failure"): TrackedDeferral(
         issue=4893,
@@ -188,11 +196,13 @@ DEFERRED_RECIPE_FIELDS: dict[FieldKey, TrackedDeferral] = {
             "The recipe failure-continuation declaration has no composition or execution consumer."
         ),
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
     (Recipe, "requires_recipe_packs"): TrackedDeferral(
         issue=4893,
         rationale="Required recipe packs are parsed but not enforced by recipe dispatch.",
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
     (RecipeStep, "declared_with_args"): TrackedDeferral(
         issue=4893,
@@ -201,6 +211,7 @@ DEFERRED_RECIPE_FIELDS: dict[FieldKey, TrackedDeferral] = {
             "behavior consumer."
         ),
         added_date=date(2026, 8, 27),
+        regression_test=_DEFERRED_RECIPE_REGRESSION_TEST,
     ),
 }
 

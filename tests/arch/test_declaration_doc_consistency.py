@@ -73,6 +73,10 @@ def test_deferred_skip_when_true_claim_is_rejected_without_global_mutation() -> 
             issue=4891,
             rationale="Synthetic guard input proves a deferred runtime claim is rejected.",
             added_date=DEFERRED_RECIPE_FIELDS[next(iter(DEFERRED_RECIPE_FIELDS))].added_date,
+            regression_test=(
+                "tests/arch/test_declaration_doc_consistency.py::"
+                "test_deferred_skip_when_true_claim_is_rejected_without_global_mutation"
+            ),
         )
     }
     claims = _deferred_runtime_claims(

@@ -12,6 +12,7 @@ import pytest
 from autoskillit.core import load_yaml, pkg_root
 from tests.arch._deferred_debt import (
     TrackedDeferral,
+    assert_deferrals_have_regression_tests,
     assert_entries_still_apply,
     assert_not_stale,
     assert_rationale_present,
@@ -86,6 +87,10 @@ PHOROPTER_LEAF_DEFERRALS = {
         issue=4894,
         rationale="This declarative phoropter leaf has no production semantic reader yet.",
         added_date=date(2026, 8, 27),
+        regression_test=(
+            "tests/arch/test_declarative_asset_consumption.py::"
+            "test_unread_leaf_deferrals_are_current_and_explained"
+        ),
     )
     for path in _UNREAD_LEAF_PATHS
 }
@@ -128,7 +133,9 @@ def test_prefix_reader_is_real_and_leaf_specific() -> None:
     assert _function_exists(_PREFIX_READER)
 
 
-def test_unread_leaf_deferrals_are_current_and_explained() -> None:
+def test_unread_leaf_deferrals_are_current_and_explained(
+    request: pytest.FixtureRequest,
+) -> None:
     data = load_yaml(_REGISTRY_PATH)
     unread = _leaf_paths(data["families"], "families") - set(PRODUCTION_LEAF_READERS)
     assert_entries_still_apply(
@@ -138,3 +145,8 @@ def test_unread_leaf_deferrals_are_current_and_explained() -> None:
     )
     assert_not_stale(PHOROPTER_LEAF_DEFERRALS, registry_name="PHOROPTER_LEAF_DEFERRALS")
     assert_rationale_present(PHOROPTER_LEAF_DEFERRALS, registry_name="PHOROPTER_LEAF_DEFERRALS")
+    assert_deferrals_have_regression_tests(
+        PHOROPTER_LEAF_DEFERRALS,
+        registry_name="PHOROPTER_LEAF_DEFERRALS",
+        collected_node_ids={item.nodeid for item in request.session.items},
+    )

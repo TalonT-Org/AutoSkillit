@@ -25,6 +25,7 @@ import pytest
 
 from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeStep
 from tests.arch._deferred_debt import (
+    assert_deferrals_have_regression_tests,
     assert_entries_still_apply,
     assert_not_stale,
     assert_rationale_present,
@@ -196,7 +197,9 @@ def test_declared_recipe_field_consumers_are_real() -> None:
     )
 
 
-def test_deferred_recipe_fields_are_current_and_explained() -> None:
+def test_deferred_recipe_fields_are_current_and_explained(
+    request: pytest.FixtureRequest,
+) -> None:
     unconsumed = {key for key in live_fields() if key not in DECLARED_RECIPE_FIELDS}
     assert_entries_still_apply(
         DEFERRED_RECIPE_FIELDS,
@@ -205,6 +208,11 @@ def test_deferred_recipe_fields_are_current_and_explained() -> None:
     )
     assert_not_stale(DEFERRED_RECIPE_FIELDS, registry_name="DEFERRED_RECIPE_FIELDS")
     assert_rationale_present(DEFERRED_RECIPE_FIELDS, registry_name="DEFERRED_RECIPE_FIELDS")
+    assert_deferrals_have_regression_tests(
+        DEFERRED_RECIPE_FIELDS,
+        registry_name="DEFERRED_RECIPE_FIELDS",
+        collected_node_ids={item.nodeid for item in request.session.items},
+    )
 
 
 def test_fabricated_consumer_site_is_rejected() -> None:

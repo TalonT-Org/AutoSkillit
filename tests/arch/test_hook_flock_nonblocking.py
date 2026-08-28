@@ -557,6 +557,10 @@ def test_backdated_lock_deferral_is_rejected() -> None:
                     issue=4511,
                     rationale="Synthetic proof that stale entries are rejected.",
                     added_date=date(2000, 1, 1),
+                    regression_test=(
+                        "tests/arch/test_hook_flock_nonblocking.py::"
+                        "test_backdated_lock_deferral_is_rejected"
+                    ),
                 )
             },
             registry_name="bounded lock deferrals",

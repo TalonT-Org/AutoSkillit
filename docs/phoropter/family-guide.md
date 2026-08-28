@@ -53,12 +53,12 @@ The tradition manifest declares the family's metadata, lens list, and configurat
 
 - `synthesis_strategy` — Enum: `priority_hierarchy`, `electre_iii`, `dex`, `custom` (or null for null strategy)
 - `step_name_prefix` — `null`/absent → canonical names; set → prefixed names (e.g., `vis` → `vis_dial`, `vis_apply`, `vis_synthesize`)
-- `arg_interface` — Enum: `one_arg`, `two_arg`. Use `1-arg` for lenses requiring only a context path; use `2-arg` for lenses requiring both a context path and an experiment plan path.
+- `arg_interface` — Schema enum: `one_arg` / `two_arg`. Body-derived tests in `tests/skills/test_phoropter_structural.py` use the hyphenated short forms `1-arg` / `2-arg` (derived from the SKILL.md `## Arguments` shape). Use `1-arg` for lenses requiring only a context path; use `2-arg` for lenses requiring both a context path and an experiment plan path.
 - `output_prefix` — Prefix for output file names
 - `dialing` — `DialingConfig` with `selection_strategy` (`identity`/`property_set`), optional `min_lenses`, `max_lenses`, `always_run`, `synthesis_strategy`
 - `phase_skip` — `PhaseSkip` with required `skip_field` and `skip_semantics` (`skip_when_true`/`skip_when_false`); optional `applies_to`
 
-In practice, post-#4894 the values for `arg_interface`, `output_prefix`, `activate_deps`, and `dialing` are derived from each lens's SKILL.md (frontmatter + body) and asserted via `tests/skills/test_phoropter_structural.py`. `step_naming.prefix` lives on `phoropter-registry.yaml` (see §3). The fields above are documented here for schema reference.
+In practice, post-#4894 the values for `arg_interface`, `output_prefix`, and `activate_deps` are derived from each lens's SKILL.md (frontmatter + body) and asserted via `tests/skills/test_phoropter_structural.py`. `dialing` is not currently asserted by tests — it remains a schema-only field for future activation. `step_naming.prefix` lives on `phoropter-registry.yaml` (see §3). The fields above are documented here for schema reference.
 
 **File placement:** `src/autoskillit/recipes/methodology-traditions/{tradition-name}.yaml` (resolved by `BUNDLED_METHODOLOGY_TRADITIONS_DIR` in `src/autoskillit/recipe/methodology_tradition_registry.py`).
 

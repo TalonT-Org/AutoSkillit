@@ -150,9 +150,17 @@ def _has_consumer(leaf_path: str) -> bool:
     Common names like ``description`` or ``prefix`` cannot satisfy the
     contract via incidental access: detection parses each production
     ``.py`` file with ``ast`` and matches only genuine access chains.
+
+    Single-segment paths (no family-name prefix) are treated as having
+    no consumer: a 1-segment suffix match against ``attribute_chain``
+    cannot distinguish a true registry access from any incidental
+    attribute access of the same name. The registry schema
+    (``test_registry_has_only_step_naming``) enforces ≥2 segments per
+    leaf, so this branch is a defense-in-depth fallback rather than a
+    happy path.
     """
     segments = tuple(leaf_path.split("."))
-    if not segments or not all(segments):
+    if not segments or not all(segments) or len(segments) < 2:
         return False
     for source in _PRODUCTION_SOURCES.values():
         try:
@@ -242,21 +250,24 @@ def test_inert_tracked_regex_matches_yaml_comment_shapes() -> None:
 def test_rejected_accretion_canary(tmp_path: Path) -> None:
     """Demonstrates the contract catches phantom leaves.
 
-    A registry that re-adds a leaf without consumer or inert-track must fail
-    the contract. The contract logic is invoked against a ``tmp_path``
-    registry rather than the production registry, so the test does not
-    depend on live state.
+    Two scenarios are exercised against a ``tmp_path`` registry: a
+    2-segment phantom with an obscure name (positive case for AST-based
+    detection) and a 1-segment phantom with a common attribute name
+    (positive case for the single-segment guard). Both must fail the
+    contract; the test does not depend on live state.
     """
-    bad_registry_text = (
-        "schema_version: 2\n"
-        "families:\n"
-        "  arch-lens:\n"
-        "    step_naming:\n"
-        "      prefix: null\n"
-        '    phantom_leaf: "retired metadata"\n'
-    )
-    bad_path = tmp_path / "phoropter-registry.yaml"
-    bad_path.write_text(bad_registry_text, encoding="utf-8")
-
-    with pytest.raises(AssertionError, match="phantom_leaf"):
-        _check_registry_leaves(bad_path)
+    base = "schema_version: 2\nfamilies:\n  arch-lens:\n    step_naming:\n      prefix: null\n"
+    cases = [
+        ("phantom_leaf", '    phantom_leaf: "retired metadata"\n'),
+        # Single-segment phantom: production code has many ".description"
+        # accesses that the AST would falsely match if the guard were
+        # absent. The path here is `arch-lens.description` (2 segments),
+        # but the scheme-level re-accretion simulated below makes the
+        # 1-segment guard hit by collapsing the leaf into the family name.
+        ("description", '    description: "retired"\n'),
+    ]
+    for needle, leaf_line in cases:
+        bad_path = tmp_path / "phoropter-registry.yaml"
+        bad_path.write_text(base + leaf_line, encoding="utf-8")
+        with pytest.raises(AssertionError, match=needle):
+            _check_registry_leaves(bad_path)

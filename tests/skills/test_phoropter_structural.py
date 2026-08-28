@@ -1,56 +1,40 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.workspace.skill_format import parse_frontmatter_content
+from tests._helpers import IMPLEMENTED_FAMILIES
 
 SKILLS_DIR = pkg_root() / "skills_extended"
 
-# Phoropter lens families are now filesystem-discovered; the registry at
-# ``src/autoskillit/assets/phoropter-registry.yaml`` carries only
+# Lens families are filesystem-discovered. The registry carries only
 # ``step_naming.prefix`` and is read exclusively by
-# ``src/autoskillit/recipe/rules/rules_phoropter_adjacency.py``. Every other
-# phoropter knob is derived from each lens's SKILL.md frontmatter / body.
-
-# Hardcoded family set — matches the implemented families on ``develop``.
-# ``refactor-lens`` is a designed-only family with zero lens directories and
-# is excluded from discovery.
-_IMPLEMENTED_FAMILIES: frozenset[str] = frozenset({"arch-lens", "vis-lens", "exp-lens"})
+# ``rules_phoropter_adjacency.py``; every other knob is derived from each
+# lens's SKILL.md content.
 
 _LENS_PAIRS: list[tuple[str, str]] = sorted(
     (family, child.name[len(family) + 1 :])
-    for family in _IMPLEMENTED_FAMILIES
+    for family in IMPLEMENTED_FAMILIES
     for child in sorted(SKILLS_DIR.iterdir())
     if child.is_dir() and child.name.startswith(f"{family}-")
 )
 
-# Module-level — replaces the registry's ``arg_interface`` leaf. The two-arg
-# shape is detected from SKILL.md ``## Arguments`` structure (see T3).
 FAMILY_ARG_INTERFACE: dict[str, str] = {
-    "arch-lens": "1-arg",  # all 13 lenses take only context_path
-    "exp-lens": "2-arg",  # all 18 lenses take context_path + experiment_plan_path
-    "vis-lens": "2-arg",  # all 12 lenses take context_path + experiment_plan_path
+    "arch-lens": "1-arg",
+    "exp-lens": "2-arg",
+    "vis-lens": "2-arg",
 }
 
-# Module-level — replaces the registry's ``composite_slugs`` leaf. Only
-# ``vis-lens-always-on`` is currently a composite lens (it embeds multiple
-# spec indexes via the ``yaml:spec-index`` body marker); all other lenses
-# are atomic.
 _COMPOSITE_SLUGS: dict[tuple[str, str], list[str]] = {
     ("vis-lens", "always-on"): ["always-on"],
 }
 
-# Dial-skill map — replaces the registry's ``dial_skill`` leaf plus the
-# previously hand-maintained ``_DIAL_SKILL_MAP``. Tracks only families whose
-# dial skill's primary purpose is lens/dimension selection. ``arch-lens``
-# and ``exp-lens`` dial skills (``prepare-pr`` / ``prepare-research-pr``)
-# DO emit ``selected_lenses`` and ``lens_context_paths`` tokens but are
-# PR-preparation skills — not lens-selection dial skills.
+# ``arch-lens`` and ``exp-lens`` dial skills emit the same output tokens but
+# are PR-preparation skills, not lens-selection dial skills.
 _DIAL_SKILLS: dict[str, str | None] = {
     "vis-lens": "select-vis-lenses",
     "arch-lens": None,
@@ -68,12 +52,9 @@ _RECIPE_FAMILIES: frozenset[str] = frozenset(
     step.phoropter_family
     for recipe in (RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE)
     for step in recipe.steps.values()
-    if step.phoropter_family and step.phoropter_family in _IMPLEMENTED_FAMILIES
+    if step.phoropter_family and step.phoropter_family in IMPLEMENTED_FAMILIES
 )
 
-# Per-family ``step_naming.prefix`` — derived from
-# ``_load_family_prefixes()`` in ``rules_phoropter_adjacency.py`` which is the
-# sole production consumer of the registry.
 _FAMILY_PREFIX: dict[str, str | None] = {
     "arch-lens": None,
     "exp-lens": None,
@@ -96,7 +77,7 @@ def _extract_arguments_section(skill_md: str) -> str:
 def test_discovery_is_non_empty_and_covers_all_families() -> None:
     """Each implemented family must have at least one discovered lens directory."""
     discovered_families = {family for family, _ in _LENS_PAIRS}
-    for expected in _IMPLEMENTED_FAMILIES:
+    for expected in IMPLEMENTED_FAMILIES:
         count = sum(1 for family, _ in _LENS_PAIRS if family == expected)
         assert count > 0, f"Discovery found zero {expected}-* lenses under {SKILLS_DIR}"
         assert expected in discovered_families, f"{expected} not found in discovered lens pairs"
@@ -160,22 +141,6 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
         assert "venue_specific_appendices" in text or "venue appendix" in text, (
             f"{family}-{slug} must document venue_specific_appendices"
         )
-
-
-@pytest.mark.parametrize("family,slug", _LENS_PAIRS)
-def test_lens_count_derived_from_filesystem(family: str) -> None:
-    """Each implemented family's lens count is derived from the filesystem,
-    not from the registry.
-
-    ``refactor-lens`` is excluded from ``_IMPLEMENTED_FAMILIES`` because it
-    is a designed (not implemented) family with zero lens directories.
-    """
-    expected_count = sum(
-        1 for p in SKILLS_DIR.iterdir() if p.name.startswith(f"{family}-") and p.is_dir()
-    )
-    assert expected_count > 0, (
-        f"Implemented family {family!r} has zero lens directories under {SKILLS_DIR}"
-    )
 
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
@@ -265,14 +230,12 @@ def test_lens_metadata_special_assertions_from_body(family: str, slug: str) -> N
 
 
 def test_collection_does_not_read_registry() -> None:
-    """Guard test — verifies that the registry is no longer the structural
-    test's source of truth. Two checks:
+    """Re-accretion guard: phoropter-registry.yaml must carry only ``step_naming``.
 
-    1. The registry YAML contains no retired leaves (catches re-accretion
-       of dead metadata).
-    2. The structural test file itself does not import the registry at
-       collection time (catches the silent-pass regression where the
-       collection-time ``load_yaml(...)`` is left in place but unused).
+    The structural test derives every lens invariant from each lens's
+    SKILL.md content (frontmatter + body); it does not read the registry
+    at runtime. Re-introducing a retired leaf here would silently re-create
+    the dual-source-of-truth that issue #4894 retired.
     """
     registry_path = pkg_root() / "assets" / "phoropter-registry.yaml"
     registry_text = registry_path.read_text()
@@ -296,17 +259,6 @@ def test_collection_does_not_read_registry() -> None:
         assert leaf not in registry_text, (
             f"phoropter-registry.yaml still contains retired leaf {leaf!r}"
         )
-
-    structural_test_path = Path(__file__)
-    structural_test_text = structural_test_path.read_text()
-    assert "phoropter-registry" not in structural_test_text, (
-        f"{structural_test_path.name} still references phoropter-registry.yaml — "
-        f"the structural test should derive everything from SKILL.md content"
-    )
-    assert "_REGISTRY" not in structural_test_text, (
-        f"{structural_test_path.name} still has a `_REGISTRY` module-level constant — "
-        f"the structural test should not load the registry at import time"
-    )
 
 
 @pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)

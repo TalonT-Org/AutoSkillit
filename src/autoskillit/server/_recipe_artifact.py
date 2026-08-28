@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_MAX_BLOB_BYTES,
     RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES,
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
 
 
-_RECIPE_ARTIFACT_LOCK_TIMEOUT_SECONDS = 2.0
+_RECIPE_ARTIFACT_LOCK_TIMEOUT_SECONDS = ARTIFACT_LEASE_TIMEOUT_SECONDS
 
 
 class RecipeArtifactError(RuntimeError):

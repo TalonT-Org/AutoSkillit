@@ -100,6 +100,18 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
+    external_effect = skill_data.get("external_effect", "none")
+    if not isinstance(external_effect, str):
+        raise ValueError(f"external_effect for skill '{skill_name}' must be a string")
+    if external_effect not in {
+        "none",
+        "serialized-idempotent",
+        "serialized-unknown-completion",
+    }:
+        raise ValueError(
+            f"external_effect for skill '{skill_name}' must be 'none', "
+            "'serialized-idempotent', or 'serialized-unknown-completion'"
+        )
     read_only = bool(skill_data.get("read_only", False))
     scope_discipline = skill_data.get("scope_discipline", False)
     if not isinstance(scope_discipline, bool):
@@ -234,6 +246,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         pattern_examples=examples,
         write_behavior=write_behavior,
         write_expected_when=write_expected_when,
+        external_effect=external_effect,
         read_only=read_only,
         scope_discipline=scope_discipline,
         completion_required=completion_required,

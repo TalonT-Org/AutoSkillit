@@ -111,6 +111,7 @@ class SkillContract:
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
+    external_effect: str = "none"
     read_only: bool = False
     scope_discipline: bool = False
     completion_required: bool = False
@@ -125,6 +126,15 @@ class SkillContract:
     audit_output_mode: AuditOutputMode | None = None
 
     def __post_init__(self) -> None:
+        if self.external_effect not in {
+            "none",
+            "serialized-idempotent",
+            "serialized-unknown-completion",
+        }:
+            raise ValueError(
+                "external_effect must be 'none', 'serialized-idempotent', or "
+                "'serialized-unknown-completion'"
+            )
         if self.input_preflight is None:
             return
         try:

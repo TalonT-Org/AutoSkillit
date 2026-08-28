@@ -255,6 +255,11 @@ def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]
 
 
 _VALID_WRITE_BEHAVIORS = {"always", "conditional"}
+_VALID_EXTERNAL_EFFECTS = {
+    "none",
+    "serialized-idempotent",
+    "serialized-unknown-completion",
+}
 
 
 @semantic_rule(
@@ -281,6 +286,7 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
 
         wb = contract.write_behavior
         wew = contract.write_expected_when
+        external_effect = contract.external_effect
 
         if wb is not None and wb not in _VALID_WRITE_BEHAVIORS:
             findings.append(
@@ -311,6 +317,17 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                         "write_expected_when (contradictory)."
                     ),
                     severity=Severity.WARNING,
+                )
+            )
+        if external_effect not in _VALID_EXTERNAL_EFFECTS:
+            findings.append(
+                make_finding(
+                    rule_name="write-behavior-consistency",
+                    step_name=step_name,
+                    message=(
+                        f"Invalid external_effect '{external_effect}'. Must be 'none', "
+                        "'serialized-idempotent', or 'serialized-unknown-completion'."
+                    ),
                 )
             )
         for pattern in wew:

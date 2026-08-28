@@ -18,6 +18,7 @@ from autoskillit.core import (
     ExplorationVectorApplicabilityId,
     FinalizedRecipeStep,
     RepositoryProfileId,
+    SemanticAdaptationContext,
     SkillContractError,
     ValidatedAddDir,
     WriteBehaviorSpec,
@@ -122,6 +123,8 @@ def invocation_member_names(
 def build_fresh_projection_context(
     cwd: str,
     invocation: EffectiveSkillInvocationAuthority,
+    *,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> SkillProjectionContext:
     """Bind a fresh invocation to normalized backend-neutral projection authority."""
     normalized_cwd = Path(cwd).resolve()
@@ -130,6 +133,7 @@ def build_fresh_projection_context(
         invocation=invocation,
         substitutions={"{{AUTOSKILLIT_TEMP}}": str(normalized_cwd / ".autoskillit" / "temp")},
         gating=False,
+        adaptation_context=adaptation_context,
     )
 
 

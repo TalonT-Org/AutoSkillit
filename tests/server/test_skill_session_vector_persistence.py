@@ -88,7 +88,7 @@ Inspect consumers.
         invocation=invocation,
         backend=backend,  # type: ignore[arg-type]
         conventions=conventions,
-        parent_sandbox_mode="read-only",
+        parent_sandbox_mode="workspace-write",
     )
     session_root = tmp_path / "session"
     projected_path = session_root / conventions.skills_subdir / "root/SKILL.md"
@@ -115,8 +115,10 @@ Inspect consumers.
         member_names=("root",),
         resolved_command="/root",
         expected_output_patterns=(),
-        write_behavior=WriteBehaviorSpec(),
-        read_only=True,
+        write_behavior=WriteBehaviorSpec(
+            external_effect="serialized-idempotent",
+        ),
+        read_only=False,
         scope_discipline=False,
         completion_required=False,
         skill_contract_json="",
@@ -141,6 +143,7 @@ Inspect consumers.
 
     assert resumed.root.exploration_vectors == (vector,)
     assert loaded.execution_identity == identity
+    assert loaded.write_behavior.external_effect == "serialized-idempotent"
 
 
 def test_fresh_contract_and_resume_retain_only_admitted_invocation_members(

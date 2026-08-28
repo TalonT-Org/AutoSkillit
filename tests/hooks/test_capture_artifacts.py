@@ -7,6 +7,7 @@ import concurrent.futures
 import errno
 import json
 import os
+import select
 import shlex
 import stat
 import subprocess
@@ -117,6 +118,15 @@ def _start_capture_lock_holder(lock_path: Path) -> subprocess.Popen[str]:
         text=True,
     )
     assert holder.stdout is not None
+    readable, _, _ = select.select([holder.stdout], [], [], 5.0)
+    if not readable:
+        holder.terminate()
+        try:
+            _, stderr = holder.communicate(timeout=1)
+        except subprocess.TimeoutExpired:
+            holder.kill()
+            _, stderr = holder.communicate(timeout=1)
+        raise AssertionError(f"capture lock-holder subprocess did not become ready: {stderr}")
     assert holder.stdout.readline() == "ready\n"
     return holder
 
@@ -134,6 +144,15 @@ def _release_capture_lock_holder(holder: subprocess.Popen[str]) -> None:
         pytest.fail("capture lock-holder subprocess did not stop")
     assert holder.stderr is not None
     assert holder.returncode == 0, holder.stderr.read()
+
+
+def test_capture_lock_holder_readiness_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(select, "select", lambda *_args, **_kwargs: ([], [], []))
+
+    with pytest.raises(AssertionError, match="did not become ready"):
+        _start_capture_lock_holder(tmp_path / "capture.lock")
 
 
 def _single_v2_marker(output: str) -> CaptureV2Fields:

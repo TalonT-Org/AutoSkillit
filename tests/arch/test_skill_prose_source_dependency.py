@@ -21,7 +21,7 @@ _DIRECT_READ_VERB = re.compile(r"\b(?:read|consult|inspect)\b", re.IGNORECASE)
 # a new occurrence needs an explicit rationale or a declared dependency.
 _ALLOWED_SKILL_MD_MENTIONS: dict[tuple[str, int], str] = {
     (
-        "src/autoskillit/skills/sous-chef/SKILL.md",
+        "skills/sous-chef/SKILL.md",
         1093,
     ): "States the direct-read prohibition that this guard enforces.",
     (

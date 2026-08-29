@@ -70,6 +70,7 @@ from autoskillit.hooks._join_ledger import (
     open_or_replay,
     reconcile_batch,
     settle_assignment,
+    settle_unadmitted_assignment,
 )
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.hooks.guards.branch_protection_guard import BRANCH_PROTECTION_DENY_TRIGGER
@@ -130,4 +131,5 @@ __all__ = [
     "reconcile_batch",
     "reconcile_capture_store",
     "settle_assignment",
+    "settle_unadmitted_assignment",
 ]

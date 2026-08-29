@@ -42,6 +42,7 @@ from autoskillit.hooks import (
     open_or_replay,
     reconcile_batch,
     settle_assignment,
+    settle_unadmitted_assignment,
 )
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
@@ -615,18 +616,16 @@ class ManagedFixedBatchService:
                 )
             elif permit is not None:
                 # Projection/preparation failed after a permit but before admission.
-                # Settle only this assignment as launch-failed so peer assignments in
-                # the same batch can still complete their own lifecycle.
-                settle_assignment(
+                # Mark only this assignment as launch-failed so peer assignments in
+                # the same batch can still complete their own lifecycle. We use
+                # settle_unadmitted_assignment (not settle_assignment) because the
+                # entry has no current_attempt_id/current_run_id yet — admit_assignment
+                # never ran for this run, so the attempt/run guard in settle_assignment
+                # would always raise.
+                settle_unadmitted_assignment(
                     binding.flag_dir,
-                    session_id=binding.launch.request_session_id,
-                    top_level_parent=binding.launch.managed_parent_id,
-                    tool_use_id=ledger_assignment_id,
-                    outcome=OUTCOME_LAUNCH_FAILED,
                     batch_id=batch_id,
                     assignment_id=ledger_assignment_id,
-                    attempt_id=attempt_id,
-                    run_id=identity.first_run_id,
                     terminal_event_id=f"launch-failed:{identity.first_run_id}",
                     terminal_payload_digest=_digest({"outcome": OUTCOME_LAUNCH_FAILED}),
                 )

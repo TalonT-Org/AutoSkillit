@@ -839,6 +839,78 @@ def settle_assignment(
         raise JoinLedgerError(f"join ledger IO error during settle: {exc}") from exc
 
 
+def settle_unadmitted_assignment(
+    flag_dir: Path,
+    *,
+    batch_id: str,
+    assignment_id: str,
+    terminal_event_id: str,
+    terminal_payload_digest: str | None = None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Mark a single pre-admission assignment terminal without touching peers.
+
+    Unlike :func:`settle_assignment`, this helper does not require
+    ``current_attempt_id``/``current_run_id`` on the target entry — the
+    assignment never advanced through ``admit_assignment``, so those fields
+    are intentionally absent. The helper also confines its update to the
+    single named entry, leaving peer assignments in their PENDING state so
+    they can continue through their own lifecycle.
+
+    Use this only for assignments whose lifecycle terminated before the
+    supervisor ever recorded an attempt (e.g. a projection-time failure
+    after permit acquisition). For post-admission failures, prefer
+    :func:`settle_assignment` because it enforces the attempt/run guard.
+    """
+    if not terminal_event_id:
+        raise JoinLedgerError("terminal_event_id must be non-empty")
+    ledger_path, lock_path = ledger_paths(flag_dir)
+    ts = time.time() if now is None else now
+    payload_digest = terminal_payload_digest or _digest({"assignment_id": assignment_id})
+    try:
+        with _flock(lock_path):
+            payload = _read_locked(ledger_path)
+            batch = payload["batches"].get(batch_id)
+            if not isinstance(batch, dict):
+                raise JoinLedgerError(f"unknown join batch {batch_id!r}")
+            assignments = batch.get("assignments")
+            if not isinstance(assignments, list):
+                raise JoinLedgerError("batch assignments are malformed")
+            target: dict[str, Any] | None = None
+            for entry in assignments:
+                if isinstance(entry, dict) and entry.get("assignment_id") == assignment_id:
+                    target = entry
+                    break
+            if target is None:
+                raise JoinLedgerError(
+                    f"assignment {assignment_id!r} is not a member of batch {batch_id!r}"
+                )
+            if target.get("terminal_event_id") is not None:
+                if (
+                    target.get("terminal_event_id") == terminal_event_id
+                    and target.get("terminal_payload_digest") == payload_digest
+                ):
+                    return batch
+                raise JoinLedgerError(
+                    "conflicting terminal event or payload for un-admitted assignment"
+                )
+            target["outcome"] = OUTCOME_LAUNCH_FAILED
+            target["terminal_event_id"] = terminal_event_id
+            target["terminal_payload_digest"] = payload_digest
+            target["lifecycle_state"] = "terminal"
+            target["updated_at"] = ts
+            batch["wave_outcome"] = _aggregate_wave_outcome(assignments)
+            if batch["wave_outcome"] != WAVE_PENDING:
+                batch["lifecycle_state"] = "terminal"
+                batch["settled_at"] = ts
+            write_join_ledger(ledger_path, payload)
+            return batch
+    except _CorruptedLedger as exc:
+        raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
+    except OSError as exc:
+        raise JoinLedgerError(f"join ledger IO error during un-admitted settle: {exc}") from exc
+
+
 def cancel_batch(
     flag_dir: Path,
     *,
@@ -989,5 +1061,6 @@ WAVE_CANCELLED WAVE_COMPLETE WAVE_FAILURE WAVE_INTERRUPTION WAVE_LAUNCH_FAILED
 WAVE_MISSING_CHILD WAVE_PARTIAL WAVE_PARTIAL_TIMEOUT WAVE_PENDING WAVE_REAPED
 active_batch admit_assignment aggregate_batch append_retry_attempt can_release_stop
 cancel_batch claim_assignment declare_batch ledger_paths mark_assignment_running
-open_or_replay reconcile_batch resolve_flag_dir settle_assignment write_join_ledger
+open_or_replay reconcile_batch resolve_flag_dir settle_assignment
+settle_unadmitted_assignment write_join_ledger
 """.split()

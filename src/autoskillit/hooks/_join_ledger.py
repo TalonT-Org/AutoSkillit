@@ -684,9 +684,9 @@ def claim_assignment(
                 if not isinstance(entry, dict) or entry.get("tool_use_id") is not None:
                     continue
                 entry["tool_use_id"] = tool_use_id
-                # Provisional run_id derived from the tool_use_id namespace;
-                # mark_assignment_running overwrites it with the confirmed
-                # run_id once the backend session is known.
+                # Provisional namespaced run_id; admit_assignment overwrites
+                # it via _append_attempt before mark_assignment_running
+                # verifies the match against current_run_id.
                 _append_attempt(
                     entry,
                     attempt_id=tool_use_id,

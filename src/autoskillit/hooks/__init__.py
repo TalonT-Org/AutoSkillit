@@ -61,6 +61,7 @@ from autoskillit.hooks._join_ledger import (
     OUTCOME_INTERRUPTED,
     OUTCOME_LAUNCH_FAILED,
     OUTCOME_REAPED,
+    TERMINAL_OUTCOMES,
     JoinLedgerError,
     active_batch,
     admit_assignment,
@@ -132,4 +133,5 @@ __all__ = [
     "reconcile_capture_store",
     "settle_assignment",
     "settle_unadmitted_assignment",
+    "TERMINAL_OUTCOMES",
 ]

@@ -79,6 +79,10 @@ _TERMINAL_OUTCOMES: frozenset[str] = frozenset(
         OUTCOME_REAPED,
     }
 )
+# Public alias so package-level consumers can import TERMINAL_OUTCOMES without
+# crossing into the underscore-prefixed submodule. Mirrors the canonical set
+# above; downstream validators should prefer this name over the underscore form.
+TERMINAL_OUTCOMES = _TERMINAL_OUTCOMES
 _COMPLETED_OUTCOMES: frozenset[str] = frozenset({OUTCOME_SUCCESS, OUTCOME_COMPLETED})
 _BATCH_ID_ALPHABET = string.ascii_lowercase + string.digits
 

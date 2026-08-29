@@ -33,6 +33,7 @@ from autoskillit.hooks import (
     OUTCOME_INTERRUPTED,
     OUTCOME_LAUNCH_FAILED,
     OUTCOME_REAPED,
+    TERMINAL_OUTCOMES,
     JoinLedgerError,
     active_batch,
     admit_assignment,
@@ -55,20 +56,11 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 
 logger = get_logger(__name__)
 
-# Mirror the canonical _TERMINAL_OUTCOMES frozenset from hooks._join_ledger.
-# Kept private to this module to honor the cross-package submodule import
-# guard; the validator in ManagedLeafLaunchResult continues to enforce the
-# same canonical set as the ledger.
-_TERMINAL_OUTCOMES = frozenset(
-    {
-        OUTCOME_CANCELLED,
-        OUTCOME_COMPLETED,
-        OUTCOME_FAILED,
-        OUTCOME_INTERRUPTED,
-        OUTCOME_LAUNCH_FAILED,
-        OUTCOME_REAPED,
-    }
-)
+# Use the canonical terminal-outcome set re-exported by autoskillit.hooks.
+# The validator in ManagedLeafLaunchResult and any sibling helpers share the
+# same set, so adding a new OUTCOME_* value in hooks is automatically reflected
+# here.
+_TERMINAL_OUTCOMES = TERMINAL_OUTCOMES
 _RECOVERY_SCHEMA_VERSION = 1
 _RESULT_SCHEMA_VERSION = 1
 _RESULT_REFERENCE_PREFIX = "fixed-batch-result-"

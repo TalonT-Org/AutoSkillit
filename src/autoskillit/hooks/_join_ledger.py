@@ -29,15 +29,11 @@ JOIN_LEDGER_SCHEMA_VERSION = 2
 
 OUTCOME_PENDING = "pending"
 OUTCOME_SUCCESS = "success"
-OUTCOME_COMPLETED = "completed"
 OUTCOME_FAILURE = "failure"
-OUTCOME_FAILED = "failed"
 OUTCOME_LAUNCH_FAILED = "launch-failed"
 OUTCOME_TIMEOUT = "timeout"
-OUTCOME_TIMED_OUT = "timed-out"
 OUTCOME_CANCELLED = "cancelled"
 OUTCOME_INTERRUPTION = "interruption"
-OUTCOME_INTERRUPTED = "interrupted"
 OUTCOME_MISSING = "missing"
 OUTCOME_REAPED = "reaped"
 
@@ -67,24 +63,16 @@ _NON_SUCCESS_WAVE_OUTCOMES: frozenset[str] = frozenset(
 _TERMINAL_OUTCOMES: frozenset[str] = frozenset(
     {
         OUTCOME_SUCCESS,
-        OUTCOME_COMPLETED,
         OUTCOME_FAILURE,
-        OUTCOME_FAILED,
         OUTCOME_LAUNCH_FAILED,
         OUTCOME_TIMEOUT,
-        OUTCOME_TIMED_OUT,
         OUTCOME_CANCELLED,
         OUTCOME_INTERRUPTION,
-        OUTCOME_INTERRUPTED,
         OUTCOME_MISSING,
         OUTCOME_REAPED,
     }
 )
-# Public alias so package-level consumers can import TERMINAL_OUTCOMES without
-# crossing into the underscore-prefixed submodule. Mirrors the canonical set
-# above; downstream validators should prefer this name over the underscore form.
-TERMINAL_OUTCOMES = _TERMINAL_OUTCOMES
-_COMPLETED_OUTCOMES: frozenset[str] = frozenset({OUTCOME_SUCCESS, OUTCOME_COMPLETED})
+_COMPLETED_OUTCOMES: frozenset[str] = frozenset({OUTCOME_SUCCESS})
 _BATCH_ID_ALPHABET = string.ascii_lowercase + string.digits
 
 
@@ -696,10 +684,13 @@ def claim_assignment(
                 if not isinstance(entry, dict) or entry.get("tool_use_id") is not None:
                     continue
                 entry["tool_use_id"] = tool_use_id
+                # Provisional run_id derived from the tool_use_id namespace;
+                # mark_assignment_running overwrites it with the confirmed
+                # run_id once the backend session is known.
                 _append_attempt(
                     entry,
                     attempt_id=tool_use_id,
-                    run_id=tool_use_id,
+                    run_id=f"claim:{tool_use_id}",
                     evidence={},
                     ts=time.time(),
                 )
@@ -729,18 +720,16 @@ def _aggregate_wave_outcome(assignments: list[object]) -> str:
         return WAVE_COMPLETE
     if any(outcome == OUTCOME_LAUNCH_FAILED for outcome in outcomes):
         return WAVE_LAUNCH_FAILED
-    if any(outcome in {OUTCOME_INTERRUPTION, OUTCOME_INTERRUPTED} for outcome in outcomes):
+    if any(outcome == OUTCOME_INTERRUPTION for outcome in outcomes):
         return WAVE_INTERRUPTION
     if any(outcome == OUTCOME_CANCELLED for outcome in outcomes):
         return WAVE_CANCELLED
-    if any(outcome in {OUTCOME_TIMEOUT, OUTCOME_TIMED_OUT} for outcome in outcomes):
+    if any(outcome == OUTCOME_TIMEOUT for outcome in outcomes):
         return WAVE_PARTIAL_TIMEOUT
-    if any(outcome in {OUTCOME_FAILURE, OUTCOME_FAILED} for outcome in outcomes):
+    if any(outcome == OUTCOME_FAILURE for outcome in outcomes):
         return WAVE_FAILURE
     if all(outcome == OUTCOME_MISSING for outcome in outcomes):
         return WAVE_MISSING_CHILD
-    if any(outcome == OUTCOME_REAPED for outcome in outcomes):
-        return WAVE_REAPED
     return WAVE_PARTIAL
 
 
@@ -1085,9 +1074,8 @@ def can_release_stop(
 
 __all__ = """
 JOIN_LEDGER_SCHEMA_VERSION JoinLedgerError LEDGER_FILENAME LOCK_FILENAME
-OUTCOME_CANCELLED OUTCOME_COMPLETED OUTCOME_FAILED OUTCOME_FAILURE
-OUTCOME_INTERRUPTED OUTCOME_INTERRUPTION OUTCOME_LAUNCH_FAILED OUTCOME_MISSING
-OUTCOME_PENDING OUTCOME_REAPED OUTCOME_SUCCESS OUTCOME_TIMED_OUT OUTCOME_TIMEOUT
+OUTCOME_CANCELLED OUTCOME_FAILURE OUTCOME_INTERRUPTION OUTCOME_LAUNCH_FAILED
+OUTCOME_MISSING OUTCOME_PENDING OUTCOME_REAPED OUTCOME_SUCCESS OUTCOME_TIMEOUT
 WAVE_CANCELLED WAVE_COMPLETE WAVE_FAILURE WAVE_INTERRUPTION WAVE_LAUNCH_FAILED
 WAVE_MISSING_CHILD WAVE_PARTIAL WAVE_PARTIAL_TIMEOUT WAVE_PENDING WAVE_REAPED
 active_batch admit_assignment aggregate_batch append_retry_attempt can_release_stop

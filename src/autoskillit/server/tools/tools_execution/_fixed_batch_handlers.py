@@ -36,7 +36,7 @@ from autoskillit.execution import (
     MANAGED_CODEX_LEAF_GUARD_SET,
     MANAGED_CODEX_PARENT_GUARD_SET,
 )
-from autoskillit.hooks import OUTCOME_COMPLETED, OUTCOME_FAILED
+from autoskillit.hooks import OUTCOME_FAILURE, OUTCOME_SUCCESS
 from autoskillit.hooks._hook_settings import validate_session_id
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
@@ -102,18 +102,19 @@ def _deny(message: str) -> dict[str, object]:
 def _text(
     value: object,
     *,
+    operation: str,
     field: str,
     maximum: int,
     required: bool = True,
     preserve_content: bool = False,
 ) -> str:
     if not isinstance(value, str):
-        raise SkillContractError(f"run_fixed_batch {field} must be text")
+        raise SkillContractError(f"{operation} {field} must be text")
     candidate = value if preserve_content else " ".join(value.split())
     if required and not candidate.strip():
-        raise SkillContractError(f"run_fixed_batch {field} must be non-empty")
+        raise SkillContractError(f"{operation} {field} must be non-empty")
     if len(candidate) > maximum:
-        raise SkillContractError(f"run_fixed_batch {field} exceeds the {maximum}-character bound")
+        raise SkillContractError(f"{operation} {field} exceeds the {maximum}-character bound")
     return candidate
 
 
@@ -133,16 +134,28 @@ def _normalize_assignments(raw: object) -> tuple[ManagedLeafAssignmentInput, ...
             )
         assignments.append(
             ManagedLeafAssignmentInput(
-                role=_text(item.get("role"), field="role", maximum=_MAX_ROLE_CHARS),
-                label=_text(item.get("label"), field="label", maximum=_MAX_LABEL_CHARS),
+                role=_text(
+                    item.get("role"),
+                    operation="run_fixed_batch",
+                    field="role",
+                    maximum=_MAX_ROLE_CHARS,
+                ),
+                label=_text(
+                    item.get("label"),
+                    operation="run_fixed_batch",
+                    field="label",
+                    maximum=_MAX_LABEL_CHARS,
+                ),
                 task_prompt=_text(
                     item.get("task_prompt"),
+                    operation="run_fixed_batch",
                     field="task_prompt",
                     maximum=_MAX_TASK_PROMPT_CHARS,
                     preserve_content=True,
                 ),
                 runtime_key=_text(
                     item.get("runtime_key", ""),
+                    operation="run_fixed_batch",
                     field="runtime_key",
                     maximum=_MAX_RUNTIME_KEY_CHARS,
                     required=False,
@@ -486,7 +499,7 @@ class _ManagedLeafLaunchAdapter:
                     caller_session_id=self.launch.parent_session_id,
                 )
                 return ManagedLeafLaunchResult(
-                    outcome=OUTCOME_COMPLETED if result.success else OUTCOME_FAILED,
+                    outcome=OUTCOME_SUCCESS if result.success else OUTCOME_FAILURE,
                     backend_session_id=result.session_id,
                     result_payload=result.to_json(),
                 )
@@ -518,6 +531,7 @@ def _resolve_launch_binding(
     )
     caller_key = _text(
         idempotency_key,
+        operation="run_fixed_batch",
         field="idempotency_key",
         maximum=_MAX_IDEMPOTENCY_KEY_CHARS,
     )
@@ -709,13 +723,20 @@ def _read_fixed_batch_result_handler(
         payload = service.read_result(
             reference=_text(
                 result_reference,
+                operation="read_fixed_batch_result",
                 field="result_reference",
                 maximum=512,
             ),
             launch=facts.launch,
-            batch_id=_text(batch_id, field="batch_id", maximum=512),
+            batch_id=_text(
+                batch_id,
+                operation="read_fixed_batch_result",
+                field="batch_id",
+                maximum=512,
+            ),
             assignment_id=_text(
                 assignment_id,
+                operation="read_fixed_batch_result",
                 field="assignment_id",
                 maximum=512,
                 required=False,

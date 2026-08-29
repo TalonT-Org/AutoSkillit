@@ -453,26 +453,24 @@ def make_context(
         ephemeral_root=ephemeral_root,
         quota_refresh_task=None,
         session_serve_overrides=None,
-        worker_capacity=(
-            worker_capacity
-            if worker_capacity is not None
-            else DefaultManagedWorkerCapacity(
-                max_concurrent=config.fleet.max_concurrent_dispatches,
-                timeout=config.fleet.acquire_timeout_sec,
-            )
-        ),
     )
     from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # noqa: PLC0415  # circular-break: compose after ToolContext exists
         ManagedFixedBatchSupervisor,
     )
 
-    # ctx.worker_capacity is unconditionally set by the make_context kwargs
-    # above; the explicit guard here documents the invariant for the supervisor
-    # construction that immediately follows.
-    if ctx.worker_capacity is None:
-        raise RuntimeError("managed worker capacity must be initialized before supervisor compose")
+    # Resolve once so the supervisor receives a non-Optional binding; the
+    # make_context kwargs above guarantee a non-None capacity on both arms.
+    capacity = (
+        worker_capacity
+        if worker_capacity is not None
+        else DefaultManagedWorkerCapacity(
+            max_concurrent=config.fleet.max_concurrent_dispatches,
+            timeout=config.fleet.acquire_timeout_sec,
+        )
+    )
+    ctx.worker_capacity = capacity
     ctx.managed_fixed_batch_supervisor = ManagedFixedBatchSupervisor(
-        capacity=ctx.worker_capacity,
+        capacity=capacity,
         background=background,
         state_root=ctx.temp_dir / "managed-fixed-batches",
     )

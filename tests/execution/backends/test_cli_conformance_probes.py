@@ -104,8 +104,8 @@ from autoskillit.execution.process import (
 from autoskillit.hook_registry import generate_hooks_json
 from autoskillit.hooks import (
     OUTCOME_CANCELLED,
-    OUTCOME_COMPLETED,
-    OUTCOME_FAILED,
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
     JoinLedgerError,
     active_batch,
     settle_assignment,
@@ -1845,9 +1845,9 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
             assignment = projection.binding.assignment
             backend_session_id = f"stock-codex-{assignment.assignment_id}"
             outcome = {
-                "dynamic-failure": OUTCOME_FAILED,
+                "dynamic-failure": OUTCOME_FAILURE,
                 "dynamic-cancelled": OUTCOME_CANCELLED,
-            }.get(assignment.label, OUTCOME_COMPLETED)
+            }.get(assignment.label, OUTCOME_SUCCESS)
 
             async def execute() -> ManagedLeafLaunchResult:
                 observed.append((assignment.generated_home_id, backend_session_id))
@@ -1936,8 +1936,8 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
                 == dynamic_source.source_artifact_incarnation_id
             )
             assert [item["outcome"] for item in dynamic_batch["assignments"]] == [
-                OUTCOME_COMPLETED,
-                OUTCOME_FAILED,
+                OUTCOME_SUCCESS,
+                OUTCOME_FAILURE,
                 OUTCOME_CANCELLED,
             ]
             assert all(len(item["attempts"]) == 1 for item in dynamic_batch["assignments"])

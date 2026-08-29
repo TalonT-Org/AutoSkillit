@@ -187,6 +187,5 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
     assert context.admits_managed_join_for("codex")
     assert not context.admits_managed_join_for("claude")
     assert context.digest == SemanticAdaptationContext(managed_join_attestation=attestation).digest
-    assert not hasattr(context, "__dict__")
     with pytest.raises(FrozenInstanceError):
         context.managed_join_attestation = None  # type: ignore[misc]

@@ -287,7 +287,7 @@ def _build_skill_result(
         stale_category = classify_infra_exit(
             stale_session, result, capabilities=backend.capabilities
         )
-        _stale_outcome, stale_needs_retry, stale_retry_reason = _apply_infra_retry_policy(
+        _, stale_needs_retry, stale_retry_reason = _apply_infra_retry_policy(
             stale_category,
             outcome=SessionOutcome.RETRIABLE,
             success=False,
@@ -375,7 +375,7 @@ def _build_skill_result(
         idle_category = classify_infra_exit(
             idle_session, result, capabilities=backend.capabilities
         )
-        _idle_outcome, idle_needs_retry, idle_retry_reason = _apply_infra_retry_policy(
+        _, idle_needs_retry, idle_retry_reason = _apply_infra_retry_policy(
             idle_category,
             outcome=SessionOutcome.RETRIABLE,
             success=False,

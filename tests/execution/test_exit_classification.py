@@ -22,6 +22,7 @@ from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import (
     _RATE_LIMIT_PATTERNS,
+    classify_api_status,
     classify_infra_exit,
     is_signal_death_code,
 )
@@ -884,3 +885,23 @@ class TestStructuredProviderFailurePrecedence:
             classify_infra_exit(session, _sr(returncode=1), capabilities=_CAPS)
             is InfraExitCategory.COMPLETED
         )
+
+
+class TestClassifyApiStatusGuard:
+    """classify_api_status treats sub-400 input as a precondition violation."""
+
+    @pytest.mark.parametrize("status", [0, -1, 200, 301, 399])
+    def test_sub_400_status_is_terminal(self, status: int) -> None:
+        assert classify_api_status(status) is InfraExitCategory.API_ERROR_TERMINAL
+
+    @pytest.mark.parametrize("status,expected", [(429, InfraExitCategory.RATE_LIMITED)])
+    def test_rate_limit_status_routes_to_rate_limited(self, status, expected) -> None:
+        assert classify_api_status(status) is expected
+
+    @pytest.mark.parametrize("status", [408, 409, 500, 502, 503, 529])
+    def test_retriable_server_status_is_api_error(self, status: int) -> None:
+        assert classify_api_status(status) is InfraExitCategory.API_ERROR
+
+    @pytest.mark.parametrize("status", [400, 401, 403, 404, 410])
+    def test_terminal_client_status_is_terminal(self, status: int) -> None:
+        assert classify_api_status(status) is InfraExitCategory.API_ERROR_TERMINAL

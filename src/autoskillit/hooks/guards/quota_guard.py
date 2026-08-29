@@ -41,8 +41,7 @@ from _hook_settings import (  # noqa: E402
 )  # type: ignore[import-not-found]
 from quota_constraints import (  # noqa: E402
     QuotaConstraint,
-    effective_quota_block,
-    fold_poll_and_observed_constraints,
+    decide_quota_block,
 )  # type: ignore[import-not-found]
 
 # Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
@@ -58,19 +57,13 @@ def quota_guard_decision(
     settings: QuotaHookSettings, *, now_epoch: int
 ) -> tuple[QuotaConstraint | None, dict]:
     """Return the cumulative quota blocker and poll display metadata."""
-    constraints, metadata = fold_poll_and_observed_constraints(
+    return decide_quota_block(
         settings.cache_path,
         account_scope=settings.quota_account_scope,
         read_cache=read_quota_cache,
         cache_max_age=settings.cache_max_age,
         now_epoch=now_epoch,
     )
-    winner = effective_quota_block(
-        constraints,
-        account_scope=settings.quota_account_scope,
-        now_epoch=now_epoch,
-    )
-    return winner, metadata
 
 
 def main(*, cache_path_override: str | None = None) -> None:

@@ -466,7 +466,11 @@ def make_context(
         ManagedFixedBatchSupervisor,
     )
 
-    assert ctx.worker_capacity is not None
+    # ctx.worker_capacity is unconditionally set by the make_context kwargs
+    # above; the explicit guard here documents the invariant for the supervisor
+    # construction that immediately follows.
+    if ctx.worker_capacity is None:
+        raise RuntimeError("managed worker capacity must be initialized before supervisor compose")
     ctx.managed_fixed_batch_service = ManagedFixedBatchSupervisor(
         capacity=ctx.worker_capacity,
         background=background,

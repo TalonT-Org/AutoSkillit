@@ -42,24 +42,20 @@ def test_no_src_module_exceeds_line_limit() -> None:
 
 
 def test_basename_fallback_dead_exemptions_are_retired() -> None:
-    """REQ-CNST-010 basename-fallback fix (#4662): these six keys are removed.
+    """REQ-CNST-010 basename-fallback fix (#4662): two rubber-stamp entries stay removed.
 
-    `types.py`, `session.py`, and `_doctor.py` were bare-basename entries that
-    matched no file anywhere in src/autoskillit/ -- the basename fallback in
-    _collect_line_limit_violations let them sit dead in the table because a dead
-    entry can never fail the guard it's entered for. `tools_recipe.py` was also
-    a bare-basename key (the real file, server/tools/tools_recipe.py, is 566
-    lines and needs no exemption at all). `server/_recipe_delivery.py`'s 750/750
-    exemption was a rubber-stamp ceiling equal to its own line count (see
+    The four bare-basename keys removed by #4662 (`types.py`, `session.py`,
+    `_doctor.py`, `tools_recipe.py`) matched no file anywhere in
+    src/autoskillit/ and are already covered by
+    test_every_exemption_key_matches_an_existing_file, which fails on any key
+    that does not resolve to a real file -- reintroducing them needs no
+    dedicated assertion here. `server/_recipe_delivery.py`'s 750/750 exemption
+    was a rubber-stamp ceiling equal to its own line count (see
     test_no_exemption_ceiling_equals_current_line_count) and, like
     `server/_recipe_section_pagination.py` (465 lines, limit 750), is redundant
     now that 750 is the universal default under REQ-CNST-010's diff-scoped gate.
     """
     retired = {
-        "types.py",
-        "session.py",
-        "_doctor.py",
-        "tools_recipe.py",
         "server/_recipe_delivery.py",
         "server/_recipe_section_pagination.py",
     }

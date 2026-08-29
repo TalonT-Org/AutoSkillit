@@ -283,7 +283,7 @@ MAX_TRANSITIONS_PER_SWEEP_ITEM = 4
 
 
 class OrphanAdoptionOutcome(NamedTuple):
-    """Directory scan state that must participate in sweep convergence."""
+    """Directory scan + adoption outcome consumed by the outer sweep's convergence test."""
 
     examined: int
     adopted: int

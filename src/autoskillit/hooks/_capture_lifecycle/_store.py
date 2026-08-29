@@ -1156,7 +1156,6 @@ class CaptureLifecycleStore:
         return _admission._admit_new_record(self, record, records, compaction_epoch, size, now)
 
     def _scan_and_adopt_orphans(self) -> _capture_orphan_scan.OrphanAdoptionOutcome:
-        """Thin wrapper — delegates to ``_admission._scan_and_adopt_orphans``."""
         return _admission._scan_and_adopt_orphans(self, lifecycle_error=CaptureLifecycleError)
 
     def sweep(

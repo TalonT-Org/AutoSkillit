@@ -17,6 +17,7 @@ import pytest
 
 import autoskillit.hooks._capture._snapshot as capture_snapshot
 from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
+from autoskillit.hooks._capture._replay import render_degraded_capture
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureFinalManifest,
@@ -779,5 +780,78 @@ def test_reference_matches_validates_issued_reference_through_snapshot(tmp_path:
         assert capture_snapshot._reference_matches(token, finalized.snapshot.manifest)
         assert not capture_snapshot._reference_matches("bogus-token", finalized.snapshot.manifest)
         assert not capture_snapshot._reference_matches(token, snapshot.manifest)
+    finally:
+        os.close(fd)
+
+
+def test_render_degraded_capture_returns_inline_when_within_cap(tmp_path: Path) -> None:
+    """render_degraded_capture returns measurement.inline when total_bytes <= inline_bytes."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"within cap")
+    try:
+        assert snapshot.measurement.total_bytes <= snapshot.measurement.inline_bytes
+        rendered = render_degraded_capture(snapshot, reason_code="TEST_REASON")
+        assert rendered == snapshot.measurement.inline
+    finally:
+        os.close(fd)
+
+
+def test_render_degraded_capture_renders_oversized_via_reference_factory(
+    tmp_path: Path,
+) -> None:
+    """render_degraded_capture takes the oversized branch via the renamed reference factory.
+
+    Exercises the renamed `_capture_reference._make_unavailable_reference` import at
+    `_replay.py:230` end-to-end by constructing a verified snapshot whose total_bytes
+    strictly exceeds inline_bytes, then verifying the rendered output is the bounded
+    head + V2 unavailable marker + tail shape (not the raw inline bytes).
+    """
+
+    payload = b"oversized capture payload that exceeds the inline cap"
+    inline_bytes = 4
+    path = tmp_path / "capture"
+    path.write_bytes(payload)
+    path.chmod(0o600)
+    fd = os.open(path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
+    value = os.fstat(fd)
+    measurement = CaptureMeasurement.from_bytes(payload, inline_bytes=inline_bytes)
+    snapshot = verify_capture_snapshot(
+        fd=fd,
+        capture_id=_CAPTURE_ID,
+        incarnation=_INCARNATION,
+        project_identity=(101, 202),
+        root_identity=(303, 404),
+        carrier_name=f"shell_{_CAPTURE_ID}.log",
+        carrier_identity=(value.st_dev, value.st_ino),
+        measurement=measurement,
+        command_outcome=CommandOutcome.exited(0),
+        expected_revision=3,
+        finalized_at=1_000.0,
+        retention_deadline=2_000.0,
+    )
+    try:
+        assert snapshot.measurement.total_bytes > snapshot.measurement.inline_bytes
+        rendered = render_degraded_capture(
+            snapshot,
+            reason_code="TEST_OVERSIZED",
+        )
+        head = snapshot.measurement.head
+        tail = snapshot.measurement.tail
+        assert rendered.startswith(head)
+        assert rendered.endswith(tail)
+        assert b"TEST_OVERSIZED" in rendered
+        assert b"unavailable" in rendered
+    finally:
+        os.close(fd)
+
+
+def test_render_degraded_capture_rejects_non_verified_snapshot(tmp_path: Path) -> None:
+    """render_degraded_capture must reject inputs that are not VerifiedCaptureSnapshot."""
+
+    payload = b"guard the degraded path"
+    fd, snapshot = _verify(tmp_path / "capture", payload)
+    try:
+        with pytest.raises(Exception, match="verified snapshot"):
+            render_degraded_capture(snapshot.manifest, reason_code="TEST_GUARD")  # type: ignore[arg-type]
     finally:
         os.close(fd)

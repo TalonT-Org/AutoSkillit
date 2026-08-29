@@ -146,6 +146,18 @@ def _commit_effective_config(
             params,
             core_params,
         )
+
+        # Reconfigure capacity BEFORE committing the new ctx.config / overlay so
+        # that a reconfigure failure cannot leave the kitchen in a half-committed
+        # state (overlay written, ctx.config overwritten, but capacity unchanged).
+        if should_reconfigure_capacity:
+            if ctx.worker_capacity is None:
+                raise OverlayStateError("Managed worker capacity is not initialized.")
+            ctx.worker_capacity.reconfigure(
+                max_concurrent=candidate.fleet.max_concurrent_dispatches,
+                timeout=candidate.fleet.acquire_timeout_sec,
+            )
+
         overlay.setdefault(domain, {}).update(params)
         if core_params:
             overlay.setdefault("core", {}).update(core_params)
@@ -155,13 +167,6 @@ def _commit_effective_config(
         # the persisted overlay is synchronized persistence, not a runtime read source.
         ctx._session_config_overrides = staged_overrides
         ctx.config = candidate
-        if should_reconfigure_capacity:
-            if ctx.worker_capacity is None:
-                raise OverlayStateError("Managed worker capacity is not initialized.")
-            ctx.worker_capacity.reconfigure(
-                max_concurrent=candidate.fleet.max_concurrent_dispatches,
-                timeout=candidate.fleet.acquire_timeout_sec,
-            )
 
     return _build_config_snapshot(ctx.config, domain, worker_capacity=ctx.worker_capacity)
 

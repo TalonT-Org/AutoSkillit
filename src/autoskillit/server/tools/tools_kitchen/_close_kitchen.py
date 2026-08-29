@@ -65,11 +65,16 @@ def _close_kitchen_handler() -> None:
             logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
         ctx._session_config_overrides.clear()
         ctx.config = baseline_config
-        if ctx.worker_capacity is not None:
-            ctx.worker_capacity.reconfigure(
-                max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
-                timeout=baseline_config.fleet.acquire_timeout_sec,
-            )
+        # ctx.worker_capacity is unconditionally set by the factory; the
+        # guard here is structurally unreachable in production. Kept as a
+        # defensive invariant check for direct ToolContext construction in
+        # tests that bypass the factory.
+        if ctx.worker_capacity is None:
+            raise RuntimeError("managed worker capacity must be initialized before close_kitchen")
+        ctx.worker_capacity.reconfigure(
+            max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
+            timeout=baseline_config.fleet.acquire_timeout_sec,
+        )
     try:
         _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:

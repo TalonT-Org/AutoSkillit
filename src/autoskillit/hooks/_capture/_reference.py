@@ -12,10 +12,7 @@ from ._module_identity import register_module_aliases
 from ._syntax import REFERENCE_RE
 
 if TYPE_CHECKING:
-    from ._snapshot import (
-        IssuedCaptureReference,
-        VerifiedCaptureSnapshot,
-    )
+    pass
 
 register_module_aliases(__name__)
 
@@ -141,6 +138,7 @@ def _bind_finalized_snapshot(
         CaptureAuthorityError,
         FinalizedCapture,
         IssuedCaptureReference,
+        VerifiedCaptureSnapshot,
         _make_manifest,
         _make_snapshot,
     )
@@ -203,6 +201,7 @@ def _make_published_reference(
     )
     from ._snapshot import (
         CaptureAuthorityError,
+        IssuedCaptureReference,
         PublishedCaptureReference,
     )
 

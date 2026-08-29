@@ -15,8 +15,15 @@ from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
 from . import _descriptor, _failure_policy, _lifecycle_policy, _reference, _syntax
 from ._module_identity import register_module_aliases
-from ._reference import (
+from ._reference import (  # noqa: F401 — facade re-export
+    MAX_REFERENCE_TOKEN_BYTES,
     CaptureReferenceHint,
+    _bind_finalized_snapshot,
+    _issue_capture_reference,
+    _make_published_reference,
+    _make_unavailable_reference,
+    _reference_context,
+    _reference_hash,
     parse_capture_reference,
 )
 

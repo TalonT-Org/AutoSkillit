@@ -129,7 +129,11 @@ class DefaultManagedWorkerCapacity:
         try:
             if timeout is None:
                 return await waiter.future
-            return await asyncio.wait_for(asyncio.shield(waiter.future), timeout=timeout)
+            # Do not shield: timeout must cancel the inner future so the
+            # scheduled `_deliver` callback observes ``future.cancelled() is
+            # True`` and runs the ``self.release(token)`` recovery branch,
+            # rather than leaking the permit when a grant races the timeout.
+            return await asyncio.wait_for(waiter.future, timeout=timeout)
         except BaseException:
             with self._lock:
                 self._remove_waiter_locked(waiter)

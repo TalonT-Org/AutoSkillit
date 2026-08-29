@@ -102,11 +102,11 @@ def _bind_finalized_snapshot(
     reference_expiry: float | None,
 ):
     from ._snapshot import (
+        _AUTHORITY_FACTORY_TOKEN,
         CaptureAuthorityError,
         FinalizedCapture,
         IssuedCaptureReference,
         VerifiedCaptureSnapshot,
-        _AUTHORITY_FACTORY_TOKEN,
         _make_manifest,
         _make_snapshot,
     )
@@ -165,10 +165,10 @@ def _make_published_reference(
     issuance,  # IssuedCaptureReference
 ):
     from ._snapshot import (
+        _AUTHORITY_FACTORY_TOKEN,
         CaptureAuthorityError,
         IssuedCaptureReference,
         PublishedCaptureReference,
-        _AUTHORITY_FACTORY_TOKEN,
     )
 
     if type(issuance) is not IssuedCaptureReference:
@@ -185,8 +185,8 @@ def _make_unavailable_reference(
     reason_code: str,
 ):
     from ._snapshot import (
-        UnavailableCaptureReference,
         _AUTHORITY_FACTORY_TOKEN,
+        UnavailableCaptureReference,
     )
 
     return UnavailableCaptureReference(

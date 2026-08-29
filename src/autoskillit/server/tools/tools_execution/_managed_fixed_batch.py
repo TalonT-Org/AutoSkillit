@@ -636,8 +636,19 @@ class ManagedFixedBatchService:
         finally:
             if permit is not None:
                 self._debt.pop(permit.permit_id, None)
-                self._write_debt()
+                # Release the permit FIRST, before persisting debt removal.
+                # If _write_debt() raises (ENOSPC, EIO, transient FS error),
+                # a previous ordering leaked the capacity slot for the process
+                # lifetime and replaced the propagating exception.
                 self._capacity.release(permit)
+                try:
+                    self._write_debt()
+                except OSError:
+                    logger.warning(
+                        "managed_fixed_batch_debt_persist_failed",
+                        permit_id=permit.permit_id,
+                        exc_info=True,
+                    )
 
     def _settle(self, binding, batch_id, assignment_id, attempt_id, run_id, result) -> None:
         if result.result_payload is not None:

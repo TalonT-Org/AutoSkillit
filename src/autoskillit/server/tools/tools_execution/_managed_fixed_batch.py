@@ -605,14 +605,24 @@ class ManagedFixedBatchSupervisor:
             )
         except asyncio.CancelledError:
             if admitted:
-                self._settle(
-                    binding,
-                    batch_id,
-                    ledger_assignment_id,
-                    attempt_id,
-                    identity.first_run_id,
-                    ManagedLeafLaunchResult(outcome=OUTCOME_CANCELLED),
-                )
+                # _settle must not replace the original CancelledError. Wrap
+                # it so a JoinLedgerError / SkillContractError from the
+                # ledger path is logged but does not mask cancellation.
+                try:
+                    self._settle(
+                        binding,
+                        batch_id,
+                        ledger_assignment_id,
+                        attempt_id,
+                        identity.first_run_id,
+                        ManagedLeafLaunchResult(outcome=OUTCOME_CANCELLED),
+                    )
+                except (OSError, JoinLedgerError, SkillContractError):
+                    logger.warning(
+                        "managed_fixed_batch_cancellation_settle_failed",
+                        assignment_id=ledger_assignment_id,
+                        exc_info=True,
+                    )
             raise
         except Exception:
             logger.warning(

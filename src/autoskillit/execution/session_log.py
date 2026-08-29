@@ -43,12 +43,9 @@ from autoskillit.core import (
 from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.execution._session_retention import (
     apply_session_retention,
+    read_telemetry_clear_marker,
+    write_telemetry_clear_marker,
 )
-
-# Re-exports for backwards compatibility — these symbols moved to
-# ``_session_retention.py`` but tests and external callers import them via
-# ``autoskillit.execution.session_log``. Kept here as a thin re-export rather
-# than a redundant ``as`` rename.
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
@@ -56,6 +53,12 @@ from autoskillit.execution.anomaly_detection import (
     detect_outcome_anomalies,
 )
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
+
+__all__ = [
+    "apply_session_retention",
+    "read_telemetry_clear_marker",
+    "write_telemetry_clear_marker",
+]
 
 logger = get_logger(__name__)
 

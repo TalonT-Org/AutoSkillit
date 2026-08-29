@@ -281,7 +281,7 @@ def _request_facts(
         )
     backend = tool_ctx.backend
     authority = tool_ctx.managed_join_attestation_authority
-    service = tool_ctx.managed_fixed_batch_service
+    service = tool_ctx.managed_fixed_batch_supervisor
     if backend is None or authority is None or service is None:
         raise SkillContractError("run_fixed_batch managed authority is unavailable")
     adaptation_context = authority.find_verified_context(
@@ -625,7 +625,7 @@ async def _run_fixed_batch_handler(
             request_context=request_context,
             tool_ctx=tool_ctx,
         )
-        service = tool_ctx.managed_fixed_batch_service
+        service = tool_ctx.managed_fixed_batch_supervisor
         if service is None:
             raise SkillContractError("run_fixed_batch supervisor is unavailable")
         result = await service.run(binding)
@@ -703,7 +703,7 @@ def _read_fixed_batch_result_handler(
             request_context=request_context,
             tool_ctx=tool_ctx,
         )
-        service = tool_ctx.managed_fixed_batch_service
+        service = tool_ctx.managed_fixed_batch_supervisor
         if service is None:
             raise SkillContractError("read_fixed_batch_result supervisor is unavailable")
         payload = service.read_result(

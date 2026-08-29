@@ -834,8 +834,6 @@ class ManagedFixedBatchSupervisor:
         )
 
 
-# This leading-underscore module deliberately exposes a small public surface
-# for sibling modules under ``tools_execution`` and the server factory. The
-# leading-underscore convention would normally pair with ``__all__ = ()``;
-# callers import the names explicitly. The public names are not re-exported
-# via star imports.
+# Leading-underscore module: deliberate public surface for sibling modules
+# under tools_execution and the server factory. Callers import names
+# explicitly; public names are not re-exported via star imports.

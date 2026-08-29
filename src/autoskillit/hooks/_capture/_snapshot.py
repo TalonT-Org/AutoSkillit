@@ -13,7 +13,7 @@ from dataclasses import InitVar, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, NoReturn, SupportsIndex
 
-from . import _descriptor, _failure_policy, _lifecycle_policy, _reference, _syntax
+from . import _descriptor, _failure_policy, _lifecycle_policy, _syntax
 from ._module_identity import register_module_aliases
 from ._reference import (  # noqa: F401 — facade re-export
     MAX_REFERENCE_TOKEN_BYTES,
@@ -810,7 +810,7 @@ def _reference_matches(token: str, manifest: CaptureFinalManifest) -> bool:
     if manifest.reference_hash is None:
         return False
     try:
-        actual = _reference._reference_hash(token, manifest)
+        actual = _reference_hash(token, manifest)
     except CaptureAuthorityError:
         return False
     return hmac.compare_digest(actual, manifest.reference_hash)

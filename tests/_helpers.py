@@ -392,3 +392,7 @@ def extract_always_block(skill_text: str) -> str:
     block = skill_text[start:end]
     lines = [line for line in block.splitlines() if line.strip().startswith("- ")]
     return "\n".join(lines)
+
+
+# Phoropter lens families with at least one ``skills_extended/{family}-*`` directory.
+IMPLEMENTED_FAMILIES: frozenset[str] = frozenset({"arch-lens", "exp-lens", "vis-lens"})

@@ -1,42 +1,50 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from autoskillit.core import load_yaml, pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.workspace.skill_format import parse_frontmatter_content
+from tests._helpers import IMPLEMENTED_FAMILIES
 
 SKILLS_DIR = pkg_root() / "skills_extended"
-
-_REGISTRY = load_yaml(pkg_root() / "assets" / "phoropter-registry.yaml")
+_REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
 
 _LENS_PAIRS: list[tuple[str, str]] = sorted(
     (family, child.name[len(family) + 1 :])
-    for family in _REGISTRY["families"]
+    for family in IMPLEMENTED_FAMILIES
     for child in sorted(SKILLS_DIR.iterdir())
     if child.is_dir() and child.name.startswith(f"{family}-")
 )
 
-_IMPLEMENTED_FAMILIES = frozenset({"vis-lens", "arch-lens", "exp-lens"})
 
-_EXPECTED_LENS_COUNT = sum(meta["lens_count"] for meta in _REGISTRY["families"].values())
+def _load_registry_prefixes() -> dict[str, str | None]:
+    """Read ``step_naming.prefix`` per family from the registry."""
+    registry = load_yaml(_REGISTRY_PATH)
+    families = registry.get("families", {})
+    return {
+        family: entry.get("step_naming", {}).get("prefix") for family, entry in families.items()
+    }
 
-# TODO: load from src/autoskillit/assets/phoropter-registry.yaml (T2-P1-A5)
-# once that file provides a machine-readable dial_skill → output_tokens mapping.
-_DIAL_SKILL_MAP: dict[str, str | None] = {
-    "vis-lens": "select-vis-lenses",
-    "review-design": "classify-experiment-type",
-    # arch-lens and exp-lens dial skills (prepare-pr, prepare-research-pr) DO emit
-    # selected_lenses and lens_context_paths tokens, but they are PR-preparation
-    # skills — not lens-selection dial skills.  This map tracks only families whose
-    # dial skill's primary purpose is lens/dimension selection.
-    "arch-lens": None,
-    "exp-lens": None,
+
+# Test fixtures expressing the family-level expected interface; consumed by
+# body-derived tests as the comparison target.
+FAMILY_ARG_INTERFACE: dict[str, str] = {
+    "arch-lens": "1-arg",
+    "exp-lens": "2-arg",
+    "vis-lens": "2-arg",
 }
 
-_DIAL_SKILL_PAIRS: list[tuple[str, str]] = [
-    (family, skill) for family, skill in _DIAL_SKILL_MAP.items() if skill is not None
-]
+# vis-lens has a dedicated lens-selection dial skill; arch-lens and exp-lens
+# emit the same output tokens via PR-preparation skills and have no
+# lens-selection dial skill.
+DIAL_SKILLS: dict[str, str] = {
+    "vis-lens": "select-vis-lenses",
+}
+
+DIAL_SKILL_PAIRS: list[tuple[str, str]] = sorted(DIAL_SKILLS.items())
 
 RESEARCH_RECIPE = load_recipe(builtin_recipes_dir() / "research.yaml")
 RESEARCH_DESIGN_RECIPE = load_recipe(builtin_recipes_dir() / "research-design.yaml")
@@ -45,23 +53,54 @@ _RECIPE_FAMILIES: frozenset[str] = frozenset(
     step.phoropter_family
     for recipe in (RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE)
     for step in recipe.steps.values()
-    if step.phoropter_family and step.phoropter_family in _REGISTRY["families"]
+    if step.phoropter_family and step.phoropter_family in IMPLEMENTED_FAMILIES
 )
+
+_FAMILY_PREFIX: dict[str, str | None] = {
+    family: prefix
+    for family, prefix in _load_registry_prefixes().items()
+    if family in _RECIPE_FAMILIES
+}
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 
 
+def _extract_arguments_section(skill_md: str) -> str:
+    """Extract the content of the SKILL.md ``## Arguments`` section.
+
+    The section is delimited by ``## Arguments`` and the next ``## ``
+    heading. Returns the empty string if the section is missing.
+    """
+    match = re.search(r"## Arguments\s*\n(.*?)(?=\n## |\Z)", skill_md, re.DOTALL)
+    return match.group(1) if match else ""
+
+
+def _extract_methodology_section(skill_md: str) -> str:
+    """Extract the body for methodology-token scoping.
+
+    Searches the SKILL.md for ``## `` headings and returns the full body
+    minus any code-fenced regions, so substring matches for methodology
+    tokens are scoped to prose rather than incidental code examples.
+    """
+    return re.sub(r"```.*?```", "", skill_md, flags=re.DOTALL)
+
+
 def test_discovery_is_non_empty_and_covers_all_families() -> None:
-    assert len(_LENS_PAIRS) >= _EXPECTED_LENS_COUNT
+    """Each implemented family must have at least one discovered lens directory."""
     discovered_families = {family for family, _ in _LENS_PAIRS}
-    for expected in _IMPLEMENTED_FAMILIES:
+    for expected in IMPLEMENTED_FAMILIES:
+        count = sum(1 for family, _ in _LENS_PAIRS if family == expected)
+        assert count > 0, f"Discovery found zero {expected}-* lenses under {SKILLS_DIR}"
         assert expected in discovered_families, f"{expected} not found in discovered lens pairs"
 
 
 @pytest.mark.parametrize("family,slug", _LENS_PAIRS)
 def test_phoropter_lens_structure(family: str, slug: str) -> None:
-    family_meta = _REGISTRY["families"][family]
+    """SKILL.md content contract for every discovered lens.
 
+    All checks derive from the SKILL.md file (body + frontmatter). The
+    registry only contributes ``step_naming.prefix`` (see ``_FAMILY_PREFIX``).
+    """
     path = SKILLS_DIR / f"{family}-{slug}" / "SKILL.md"
     assert path.exists(), f"{family}-{slug}/SKILL.md is missing"
 
@@ -80,32 +119,20 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
     assert fm.get("categories") == [family], (
         f"{family}-{slug} frontmatter categories must be [{family}], got {fm.get('categories')}"
     )
-    assert fm.get("activate_deps") == family_meta["activate_deps"], (
-        f"{family}-{slug} frontmatter activate_deps must be {family_meta['activate_deps']}, "
+    assert fm.get("activate_deps") == ["mermaid"], (
+        f"{family}-{slug} frontmatter activate_deps must be ['mermaid'], "
         f"got {fm.get('activate_deps')}"
     )
 
-    if family_meta["arg_interface"] == "2-arg":
+    if FAMILY_ARG_INTERFACE[family] == "2-arg":
         assert "experiment_plan_path" in text, (
             f"{family}-{slug} (2-arg) must document experiment_plan_path"
         )
 
-    if family == "vis-lens":
-        if slug in family_meta.get("composite_slugs", []):
-            assert "yaml:spec-index" in text, (
-                f"{family}-{slug} (composite) must contain yaml:spec-index"
-            )
-        else:
-            assert "yaml:figure-spec" in text, f"{family}-{slug} must contain yaml:figure-spec"
+    if family == "vis-lens" and "yaml:spec-index" not in text:
+        assert "yaml:figure-spec" in text, f"{family}-{slug} must contain yaml:figure-spec"
 
-    if family_meta.get("output_prefix"):
-        assert family_meta["output_prefix"] in text, (
-            f"{family}-{slug} output path must use {family_meta['output_prefix']} prefix"
-        )
-
-    entry = family_meta.get("lens_metadata", {}).get(slug, {})
-    special = entry.get("special_assertions", [])
-    if "tradition_slug" in special and "two_stage_matching" in special:
+    if (family, slug) == ("vis-lens", "methodology-norms"):
         assert "tradition_slug" in text, f"{family}-{slug} must document tradition_slug"
         assert "Stage A" in text or "stage A" in text, f"{family}-{slug} must document Stage A"
         assert "Stage B" in text or "stage B" in text, f"{family}-{slug} must document Stage B"
@@ -114,14 +141,97 @@ def test_phoropter_lens_structure(family: str, slug: str) -> None:
         )
 
 
-@pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)
+@pytest.mark.parametrize("family,slug", _LENS_PAIRS)
+def test_arg_interface_derived_from_skill_md(family: str, slug: str) -> None:
+    """Body-derived arg-interface must match the family-level expected value."""
+    skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    args_section = _extract_arguments_section(skill_md)
+    assert args_section, f"{family}-{slug} is missing a non-empty ## Arguments section"
+    has_experiment_plan = "experiment_plan_path" in args_section
+    derived = "2-arg" if has_experiment_plan else "1-arg"
+    assert derived == FAMILY_ARG_INTERFACE[family], (
+        f"{family}-{slug}: SKILL.md ## Arguments shape implies {derived}, "
+        f"but FAMILY_ARG_INTERFACE[{family!r}] = {FAMILY_ARG_INTERFACE[family]!r}"
+    )
+
+
+@pytest.mark.parametrize("family,slug", _LENS_PAIRS)
+def test_activate_deps_from_frontmatter(family: str, slug: str) -> None:
+    """Every lens declares ``activate_deps: ['mermaid']`` in its frontmatter."""
+    skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    frontmatter = parse_frontmatter_content(skill_md).data
+    deps = (frontmatter or {}).get("activate_deps", [])
+    assert deps == ["mermaid"], f"{family}-{slug} activate_deps = {deps}, expected ['mermaid']"
+
+
+@pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])
+def test_composite_slugs_from_body(family: str, slug: str) -> None:
+    """Body-derived composite classification: spec-index marks composite.
+
+    Non-composite lenses must reference yaml:figure-spec. Composite lenses may
+    reference figure-spec as an exclusion note; spec-index is the discriminator.
+    """
+    skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    is_composite = "yaml:spec-index" in skill_md
+    if not is_composite:
+        assert "yaml:figure-spec" in skill_md, (
+            f"{family}-{slug}: non-composite lens must reference yaml:figure-spec"
+        )
+
+
+def test_vis_lens_composite_discriminator_present() -> None:
+    """Tripwire: at least one vis-lens lens must declare yaml:spec-index.
+
+    Ensures the composite-vs-non-composite classification is non-empty across
+    the family — guards against silent regression if all lenses lose the
+    discriminator marker.
+    """
+    composite_count = sum(
+        1
+        for family, slug in _LENS_PAIRS
+        if family == "vis-lens"
+        and "yaml:spec-index" in (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    )
+    assert composite_count >= 1, (
+        "No vis-lens lens declares yaml:spec-index (composite marker lost across family)"
+    )
+
+
+@pytest.mark.parametrize("family,slug", [pair for pair in _LENS_PAIRS if pair[0] == "vis-lens"])
+def test_output_prefix_from_body(family: str, slug: str) -> None:
+    """Body-derived vis-lens prefix marker must agree with the family."""
+    skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    assert "vis_spec_" in skill_md, f"{family}-{slug} must reference the vis_spec_ output prefix"
+
+
+@pytest.mark.parametrize("family,slug", _LENS_PAIRS)
+def test_lens_metadata_special_assertions_from_body(family: str, slug: str) -> None:
+    """vis-lens-methodology-norms must declare its two special assertions."""
+    skill_md = (SKILLS_DIR / f"{family}-{slug}" / "SKILL.md").read_text()
+    sections = _extract_methodology_section(skill_md)
+    assertions: list[str] = []
+    if "tradition_slug" in sections:
+        assertions.append("tradition_slug")
+    if "Stage A" in sections or "two_stage_matching" in sections:
+        assertions.append("two_stage_matching")
+    expected = (
+        ["tradition_slug", "two_stage_matching"]
+        if (family == "vis-lens" and slug == "methodology-norms")
+        else []
+    )
+    assert assertions == expected, (
+        f"{family}-{slug}: derived assertions {assertions} != expected {expected}"
+    )
+
+
+@pytest.mark.parametrize("family,dial_skill", DIAL_SKILL_PAIRS)
 def test_dial_skill_skill_md_exists(family: str, dial_skill: str) -> None:
     assert (SKILLS_DIR / dial_skill / "SKILL.md").exists(), (
         f"{family} dial skill {dial_skill}/SKILL.md is missing"
     )
 
 
-@pytest.mark.parametrize("family,dial_skill", _DIAL_SKILL_PAIRS)
+@pytest.mark.parametrize("family,dial_skill", DIAL_SKILL_PAIRS)
 def test_dial_skill_emits_output_tokens(family: str, dial_skill: str) -> None:
     text = (SKILLS_DIR / dial_skill / "SKILL.md").read_text()
     assert "selected_lenses" in text, f"{family} dial skill {dial_skill} must emit selected_lenses"
@@ -132,10 +242,7 @@ def test_dial_skill_emits_output_tokens(family: str, dial_skill: str) -> None:
 
 def test_prefixed_step_naming_convention() -> None:
     recipes = [RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE]
-    for family_name, meta in _REGISTRY["families"].items():
-        if family_name not in _RECIPE_FAMILIES:
-            continue
-        prefix = meta.get("step_naming", {}).get("prefix")
+    for family_name, prefix in _FAMILY_PREFIX.items():
         if not prefix:
             continue
         expected = [f"{prefix}_dial", f"{prefix}_apply", f"{prefix}_synthesize"]
@@ -148,10 +255,7 @@ def test_prefixed_step_naming_convention() -> None:
 def test_canonical_step_naming_convention() -> None:
     recipes = [RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE]
     canonical_names = ["dial", "apply", "synthesize"]
-    for family_name, meta in _REGISTRY["families"].items():
-        if family_name not in _RECIPE_FAMILIES:
-            continue
-        prefix = meta.get("step_naming", {}).get("prefix")
+    for family_name, prefix in _FAMILY_PREFIX.items():
         if prefix is not None:
             continue
         assert any(
@@ -169,8 +273,8 @@ def test_canonical_step_naming_convention() -> None:
 
 def test_vis_lens_phoropter_family_annotation() -> None:
     """Verify vis-lens steps carry phoropter_family == 'vis-lens' (post-P3 state)."""
-    vis_meta = _REGISTRY["families"]["vis-lens"]
-    prefix = vis_meta["step_naming"]["prefix"]
+    prefix = _FAMILY_PREFIX["vis-lens"]
+    assert prefix is not None, "vis-lens must have a non-null step_naming.prefix"
     step_names = [f"{prefix}_dial", f"{prefix}_apply", f"{prefix}_synthesize"]
     for recipe in (RESEARCH_RECIPE, RESEARCH_DESIGN_RECIPE):
         for step_name in step_names:

@@ -59,12 +59,12 @@ Reads all per-lens outputs from the capture directory and produces a unified res
 
 ## §4. Configuration Knobs
 
-Two currently implemented knobs control phoropter family behavior. Both are configured per-family in `src/autoskillit/assets/phoropter-registry.yaml`.
+Single knob controls phoropter family behavior at the registry level. Post-#4894 the registry retains only `step_naming.prefix` per family (the sole field with a live production reader); all other family-level configuration is derived from each lens's `SKILL.md` content (frontmatter + body), the recipe YAML, or step-level fields.
 
 | Knob | Values | Description |
 |------|--------|-------------|
-| `apply_mode` | `eager` (default), `lazy` | Controls whether the apply phase runs all selected lenses (`eager`) or stops at the first decisive result (`lazy`). Currently all families use `eager`. |
-| `synthesis.strategy` | `null`, `priority_hierarchy`, `electre_iii`, `dex` | Selects the synthesis strategy for the synthesize phase. See §6 for the full catalog. Configured per-family in `phoropter-registry.yaml`. |
+| `step_naming.prefix` | `null` (canonical) or kebab-case token (prefixed) | Loaded by `_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py` to enforce the `phoropter-phase-order` rule. See §5 for the case-A/case-B naming decision. |
+
 **RecipeStep fields (from `src/autoskillit/recipe/schema.py`):**
 
 ```python
@@ -75,18 +75,18 @@ skip_when_false: str | None = None    # Context variable; step skipped when fals
 
 ## §5. Step Naming Conventions
 
-The phoropter framework supports two step-naming cases, driven by the `step_naming.prefix` field in `phoropter-registry.yaml`.
+The phoropter framework supports two step-naming cases, driven by the family's `step_naming.prefix` loaded by `_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`.
 
 | Aspect | Sole-Family (Case A) | Coexisting Families (Case B) |
 |--------|---------------------|------------------------------|
 | Step keys | `dial`, `apply`, `synthesize` (bare canonical) | Primary family: `dial`, `apply`, `synthesize`; Additional families: `{prefix}_dial`, `{prefix}_apply`, `{prefix}_synthesize` |
 | `phoropter_family` annotation | Required on each step — associates the step with the family | Required on primary family steps; **omitted** on prefixed family steps |
-| Phase resolution | `_canonical_phase_for_step()` matches step name directly against `_PHOROPTER_PHASES` | `_canonical_phase_for_step()` strips the family prefix (from `phoropter-registry.yaml` `step_naming.prefix`) and matches the suffix |
+| Phase resolution | `_canonical_phase_for_step()` matches step name directly against `_PHOROPTER_PHASES` | `_canonical_phase_for_step()` strips the family prefix (loaded from `step_naming.prefix` by `_load_family_prefixes()`) and matches the suffix |
 | When to use | Recipe contains a single phoropter family | Recipe contains two or more families that must coexist |
 
 **Concrete example:**
 
-In `research-design.yaml` and `research.yaml`, the `review-design` family uses canonical step keys (`dial`, `apply`, `synthesize`) with `phoropter_family: review-design` on each. The `vis-lens` family uses prefixed step keys (`vis_dial`, `vis_apply`, `vis_synthesize`) without `phoropter_family` annotation. The `vis` prefix is configured in `phoropter-registry.yaml` under `families.vis-lens.step_naming.prefix: vis`.
+In `research-design.yaml` and `research.yaml`, the `review-design` family uses canonical step keys (`dial`, `apply`, `synthesize`) with `phoropter_family: review-design` on each. The `vis-lens` family uses prefixed step keys (`vis_dial`, `vis_apply`, `vis_synthesize`) without `phoropter_family` annotation. The `vis` prefix is loaded from `step_naming.prefix` in `_load_family_prefixes()` (registry entry under `families.vis-lens.step_naming.prefix: vis`).
 
 **Why `phoropter_family` is omitted on prefixed steps:**
 

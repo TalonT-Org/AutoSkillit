@@ -1858,13 +1858,9 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
                     result_payload={"label": assignment.label, "outcome": outcome},
                 )
 
-            async def finalize(_result: ManagedLeafLaunchResult) -> None:
-                return None
-
             yield ManagedLeafPreparedLaunch(
                 ledger_attempt_evidence=projection.ledger_attempt_evidence,
                 execute=execute,
-                finalize=finalize,
             )
 
         static_binding = _managed_fixed_batch_smoke_binding(
@@ -2020,13 +2016,9 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
                     await release.wait()
                     return ManagedLeafLaunchResult(result_payload={"label": "blocked"})
 
-                async def finalize(_result: ManagedLeafLaunchResult) -> None:
-                    return None
-
                 yield ManagedLeafPreparedLaunch(
                     ledger_attempt_evidence=projection.ledger_attempt_evidence,
                     execute=execute,
-                    finalize=finalize,
                 )
 
             pending_binding = _managed_fixed_batch_smoke_binding(

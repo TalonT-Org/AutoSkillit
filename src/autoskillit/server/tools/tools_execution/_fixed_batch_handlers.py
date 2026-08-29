@@ -491,17 +491,15 @@ class _ManagedLeafLaunchAdapter:
                     result_payload=result.to_json(),
                 )
 
-            async def finalize(_result: ManagedLeafLaunchResult) -> None:
-                # The leaf binding has no durable state to release after execute().
-                # ``scoped_child_resource_owner`` owns all session/worktree cleanup,
-                # and the executor publishes the result inside execute(). The
-                # callable exists only because ManagedLeafPreparedLaunch requires one.
-                return None
+            # finalize is None: the leaf binding has no durable state to
+            # release after execute(). scoped_child_resource_owner owns all
+            # session/worktree cleanup, and the executor publishes the
+            # result inside execute(). ManagedLeafPreparedLaunch.finalize
+            # is Optional; the supervisor skips the call when None.
 
             yield ManagedLeafPreparedLaunch(
                 ledger_attempt_evidence=leaf_projection.ledger_attempt_evidence,
                 execute=execute,
-                finalize=finalize,
             )
 
 

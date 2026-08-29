@@ -6,26 +6,22 @@ import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from ._module_identity import register_module_aliases
 from ._syntax import REFERENCE_RE
-
-if TYPE_CHECKING:
-    pass
 
 register_module_aliases(__name__)
 
 __all__ = [
     "CaptureReferenceHint",
     "MAX_REFERENCE_TOKEN_BYTES",
+    "parse_capture_reference",
     "_bind_finalized_snapshot",
     "_issue_capture_reference",
     "_make_published_reference",
     "_make_unavailable_reference",
     "_reference_context",
     "_reference_hash",
-    "parse_capture_reference",
 ]
 
 MAX_REFERENCE_TOKEN_BYTES = 192
@@ -65,36 +61,10 @@ def _reference_context(
     reference_expiry: float | None = None,
 ) -> bytes:
     from ._descriptor import canonical_json
+    from ._snapshot import _manifest_primitive
 
-    # Mirror _snapshot._manifest_primitive exactly. All 22 keys must
-    # appear in the literal; the conditional overwrite below only
-    # adjusts `reference_expiry`. Dropping the key when called without
-    # the kwarg silently changes the canonical JSON (interface-mapper
-    # finding) and breaks every reader-side _reference_matches call.
-    primitive = {
-        "schema_version": manifest.schema_version,
-        "producer": manifest.producer,
-        "capture_id": manifest.capture_id,
-        "incarnation": manifest.incarnation,
-        "finalized_at_revision": manifest.finalized_at_revision,
-        "project_identity": list(manifest.project_identity),
-        "root_identity": list(manifest.root_identity),
-        "carrier_name": manifest.carrier_name,
-        "carrier_identity": list(manifest.carrier_identity),
-        "stream_domain": manifest.stream_domain,
-        "total_bytes": manifest.total_bytes,
-        "sha256": manifest.sha256,
-        "inline_length": manifest.inline_length,
-        "head_length": manifest.head_length,
-        "tail_length": manifest.tail_length,
-        "capture_status": manifest.capture_status.value,
-        "command_outcome_kind": manifest.command_outcome.kind.value,
-        "command_outcome_value": manifest.command_outcome.value,
-        "finalized_at": manifest.finalized_at,
-        "reference_hash": None,
-        "reference_expiry": manifest.reference_expiry,
-        "retention_deadline": manifest.retention_deadline,
-    }
+    primitive = _manifest_primitive(manifest)
+    primitive["reference_hash"] = None
     if reference_expiry is not None:
         primitive["reference_expiry"] = reference_expiry
     return b"autoskillit:capture-reference:v2\0" + canonical_json(primitive)
@@ -132,13 +102,11 @@ def _bind_finalized_snapshot(
     reference_expiry: float | None,
 ):
     from ._snapshot import (
-        _AUTHORITY_FACTORY_TOKEN as _SNAPSHOT_FACTORY_TOKEN,
-    )
-    from ._snapshot import (
         CaptureAuthorityError,
         FinalizedCapture,
         IssuedCaptureReference,
         VerifiedCaptureSnapshot,
+        _AUTHORITY_FACTORY_TOKEN,
         _make_manifest,
         _make_snapshot,
     )
@@ -182,14 +150,14 @@ def _bind_finalized_snapshot(
         else IssuedCaptureReference(
             snapshot=snapshot,
             token=reference_token,
-            _factory_token=_SNAPSHOT_FACTORY_TOKEN,
+            _factory_token=_AUTHORITY_FACTORY_TOKEN,
         )
     )
     return FinalizedCapture(
         snapshot=snapshot,
         finalized_at_revision=manifest.finalized_at_revision,
         issuance=issuance,
-        _factory_token=_SNAPSHOT_FACTORY_TOKEN,
+        _factory_token=_AUTHORITY_FACTORY_TOKEN,
     )
 
 
@@ -197,12 +165,10 @@ def _make_published_reference(
     issuance,  # IssuedCaptureReference
 ):
     from ._snapshot import (
-        _AUTHORITY_FACTORY_TOKEN as _SNAPSHOT_FACTORY_TOKEN,
-    )
-    from ._snapshot import (
         CaptureAuthorityError,
         IssuedCaptureReference,
         PublishedCaptureReference,
+        _AUTHORITY_FACTORY_TOKEN,
     )
 
     if type(issuance) is not IssuedCaptureReference:
@@ -210,7 +176,7 @@ def _make_published_reference(
     return PublishedCaptureReference(
         snapshot=issuance.snapshot,
         token=issuance.token,
-        _factory_token=_SNAPSHOT_FACTORY_TOKEN,
+        _factory_token=_AUTHORITY_FACTORY_TOKEN,
     )
 
 
@@ -219,14 +185,12 @@ def _make_unavailable_reference(
     reason_code: str,
 ):
     from ._snapshot import (
-        _AUTHORITY_FACTORY_TOKEN as _SNAPSHOT_FACTORY_TOKEN,
-    )
-    from ._snapshot import (
         UnavailableCaptureReference,
+        _AUTHORITY_FACTORY_TOKEN,
     )
 
     return UnavailableCaptureReference(
         snapshot=snapshot,
         reason_code=reason_code,
-        _factory_token=_SNAPSHOT_FACTORY_TOKEN,
+        _factory_token=_AUTHORITY_FACTORY_TOKEN,
     )

@@ -157,8 +157,8 @@ async def execute_dispatch(
         return _reject(
             error_code=FleetErrorCode.FLEET_PARALLEL_REFUSED,
             message=(
-                f"Fleet at capacity ({capacity.active_count}/{capacity.max_concurrent}"
-                " dispatches running)."
+                f"Managed worker capacity exhausted "
+                f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
             ),
         )
 

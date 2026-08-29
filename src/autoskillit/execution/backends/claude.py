@@ -1066,7 +1066,7 @@ class ClaudeCodeBackend(BackendCmdBuilderBase):
         adaptation_context: SemanticAdaptationContext | None = None,
     ) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Claude Code instructions."""
-        if required_join_is_unsupported(plan, self.capabilities):
+        if required_join_is_unsupported(plan, self.capabilities, adaptation_context):
             return SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
                 diagnostic=(

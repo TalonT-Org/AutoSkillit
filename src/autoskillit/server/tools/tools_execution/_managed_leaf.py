@@ -99,9 +99,6 @@ class ManagedLeafPreparedLaunch(Generic[_PreparedValue]):
 
 
 def _canonical(value: object) -> str:
-    # ensure_ascii=True matches hooks/_join_ledger._canonical so digests
-    # generated here (batch_id, assignment_id, first_run_id,
-    # generated_home_id) compare equal across module boundaries.
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
@@ -566,8 +563,3 @@ async def scoped_child_resource_owner(
                         cleanup_errors.append(failure)
         if body_error is None and cleanup_errors and request.cleanup_errors_are_terminal:
             raise BaseExceptionGroup("Child resource cleanup failed", cleanup_errors)
-
-
-# Leading-underscore module: deliberate public surface for sibling modules
-# under tools_execution and the server factory. Callers import names
-# explicitly; public names are not re-exported via star imports.

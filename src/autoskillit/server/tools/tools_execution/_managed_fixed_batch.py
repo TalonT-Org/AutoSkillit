@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import asdict, dataclass, replace
@@ -18,6 +17,7 @@ from pathlib import Path
 from autoskillit.core import (
     BackgroundSupervisor,
     ManagedWorkerCapacity,
+    ManagedWorkerCapacityError,
     ManagedWorkerPermit,
     SkillContractError,
     WriteBehaviorSpec,
@@ -28,11 +28,11 @@ from autoskillit.core import (
 )
 from autoskillit.hooks import (
     OUTCOME_CANCELLED,
-    OUTCOME_COMPLETED,
-    OUTCOME_FAILED,
-    OUTCOME_INTERRUPTED,
+    OUTCOME_FAILURE,
+    OUTCOME_INTERRUPTION,
     OUTCOME_LAUNCH_FAILED,
     OUTCOME_REAPED,
+    OUTCOME_SUCCESS,
     JoinLedgerError,
     active_batch,
     admit_assignment,
@@ -44,34 +44,36 @@ from autoskillit.hooks import (
     settle_assignment,
     settle_unadmitted_assignment,
 )
-from autoskillit.hooks import (
-    TERMINAL_OUTCOMES as _TERMINAL_OUTCOMES,
-)
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
     ManagedLeafPreparedLaunch,
     ManagedLeafProjection,
+    _canonical,
+    _digest,
     bind_managed_leaf,
     plan_managed_leaf_identities,
     project_managed_leaf,
 )
 
+# Local copy of the canonical terminal-outcome set to avoid cross-package
+# submodule imports; mirrors the set declared in autoskillit.hooks._join_ledger
+# and any new OUTCOME_* value added there must be appended here as well.
+_TERMINAL_OUTCOMES: frozenset[str] = frozenset(
+    {
+        OUTCOME_SUCCESS,
+        OUTCOME_FAILURE,
+        OUTCOME_LAUNCH_FAILED,
+        OUTCOME_CANCELLED,
+        OUTCOME_INTERRUPTION,
+        OUTCOME_REAPED,
+    }
+)
+
 logger = get_logger(__name__)
 
-# Use the canonical terminal-outcome set re-exported by autoskillit.hooks,
-# imported under the leading-underscore alias above so adding a new OUTCOME_*
-# value in hooks is automatically reflected here.
 _RECOVERY_SCHEMA_VERSION = 1
 _RESULT_SCHEMA_VERSION = 1
 _RESULT_REFERENCE_PREFIX = "fixed-batch-result-"
-
-
-def _canonical(payload: object) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _digest(payload: object) -> str:
-    return hashlib.sha256(_canonical(payload).encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +107,7 @@ class ManagedLaunchBinding:
 class ManagedLeafLaunchResult:
     """Bounded terminal facts produced by the leaf launch adapter."""
 
-    outcome: str = OUTCOME_COMPLETED
+    outcome: str = OUTCOME_SUCCESS
     backend_session_id: str = ""
     result_reference: str | None = None
     result_digest: str | None = None
@@ -332,6 +334,9 @@ class ManagedFixedBatchSupervisor:
                         permit_id=permit_id,
                         exc_info=True,
                     )
+                    for restored_id, restored_permit in recovered.items():
+                        self._capacity.release(restored_permit)
+                    recovered.clear()
                     self._recovery_ready = False
                     self._recovery_diagnostic = f"managed capacity debt restore failed: {exc}"
                     return False
@@ -463,6 +468,9 @@ class ManagedFixedBatchSupervisor:
             except TimeoutError:
                 self._recovery_ready = False
                 self._recovery_diagnostic = "managed batch close timed out; recovery is required"
+                # Persist outstanding debt for the next startup rather than
+                # orphaning permits on already-gone owners.
+                self._write_debt()
 
     async def _supervise(self, binding, plan, batch) -> ManagedFixedBatchResult:
         batch_id = str(batch["join_batch_id"])
@@ -631,16 +639,23 @@ class ManagedFixedBatchSupervisor:
                 exc_info=True,
             )
             if admitted:
-                self._settle(
-                    binding,
-                    batch_id,
-                    ledger_assignment_id,
-                    attempt_id,
-                    identity.first_run_id,
-                    ManagedLeafLaunchResult(
-                        outcome=OUTCOME_FAILED if running else OUTCOME_LAUNCH_FAILED
-                    ),
-                )
+                try:
+                    self._settle(
+                        binding,
+                        batch_id,
+                        ledger_assignment_id,
+                        attempt_id,
+                        identity.first_run_id,
+                        ManagedLeafLaunchResult(
+                            outcome=OUTCOME_FAILURE if running else OUTCOME_LAUNCH_FAILED
+                        ),
+                    )
+                except (OSError, JoinLedgerError, SkillContractError):
+                    logger.warning(
+                        "managed_fixed_batch_failure_settle_failed",
+                        assignment_id=ledger_assignment_id,
+                        exc_info=True,
+                    )
             elif permit is not None:
                 # Projection/preparation failed after a permit but before admission.
                 # Mark only this assignment as launch-failed so peer assignments in
@@ -664,7 +679,7 @@ class ManagedFixedBatchSupervisor:
                     ledger_assignment_id,
                     attempt_id,
                     identity.first_run_id,
-                    ManagedLeafLaunchResult(outcome=OUTCOME_INTERRUPTED),
+                    ManagedLeafLaunchResult(outcome=OUTCOME_INTERRUPTION),
                 )
             raise
         finally:
@@ -674,7 +689,14 @@ class ManagedFixedBatchSupervisor:
                 # If _write_debt() raises (ENOSPC, EIO, transient FS error),
                 # a previous ordering leaked the capacity slot for the process
                 # lifetime and replaced the propagating exception.
-                self._capacity.release(permit)
+                try:
+                    self._capacity.release(permit)
+                except ManagedWorkerCapacityError:
+                    logger.warning(
+                        "managed_fixed_batch_permit_release_failed",
+                        permit_id=permit.permit_id,
+                        exc_info=True,
+                    )
                 try:
                     self._write_debt()
                 except OSError:
@@ -832,8 +854,3 @@ class ManagedFixedBatchSupervisor:
             {"debt": [asdict(item) for item in self._debt.values()]},
             _RECOVERY_SCHEMA_VERSION,
         )
-
-
-# Leading-underscore module: deliberate public surface for sibling modules
-# under tools_execution and the server factory. Callers import names
-# explicitly; public names are not re-exported via star imports.

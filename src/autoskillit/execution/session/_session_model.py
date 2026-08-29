@@ -17,7 +17,7 @@ from autoskillit.core import (
     SessionOutcome,
     get_logger,
 )
-from autoskillit.execution.session._exit_classification import _parse_provider_records
+from autoskillit.execution.session._provider_parse import _parse_provider_records
 
 logger = get_logger(__name__)
 

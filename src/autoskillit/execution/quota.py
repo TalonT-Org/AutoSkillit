@@ -30,10 +30,10 @@ from autoskillit.quota_constraints import (
     OBSERVED_CONSTRAINT_SCHEMA_VERSION,
     QuotaConstraint,
     QuotaEvidenceSource,
-    decode_observed_constraints,
     effective_quota_block,
     observed_constraint_path,
     quota_scope,
+    safe_decode_observed_constraints,
 )
 
 logger = get_logger(__name__)
@@ -273,6 +273,7 @@ def record_observed_rate_limit(
     fd = os.open(lock_path, flags, 0o600)
     # Atomic replacement prevents partial files; this lease serializes the
     # read-modify-write so concurrent observations are not lost.
+    lock_acquired = False
     try:
         acquire_flock_with_timeout(
             fd,
@@ -280,9 +281,10 @@ def record_observed_rate_limit(
             timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
             path=lock_path,
         )
+        lock_acquired = True
         constraints = [
             constraint
-            for constraint in decode_observed_constraints(path)
+            for constraint in safe_decode_observed_constraints(path)
             if constraint.blocked_until_epoch > now_epoch
         ]
         constraints.append(
@@ -300,7 +302,18 @@ def record_observed_rate_limit(
             schema_version=OBSERVED_CONSTRAINT_SCHEMA_VERSION,
         )
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        # Only release the flock when we actually acquired it. Calling LOCK_UN
+        # on an unlocked fd can mask the upstream TimeoutError by blocking
+        # indefinitely waiting for a non-existent lock to unlock.
+        if lock_acquired:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError as exc:
+                logger.warning(
+                    "quota_observed_lock_release_failed",
+                    path=str(lock_path),
+                    error=str(exc),
+                )
         os.close(fd)
 
 
@@ -311,21 +324,79 @@ def record_skill_result_rate_limit(
     *,
     now_epoch: int | None = None,
 ) -> None:
-    """Project structured terminal reset evidence into the observed store."""
+    """Project structured terminal reset evidence into the observed store.
+
+    When the boundary checks below fail (no config, quota checks unsupported by
+    backend, infra exit not classified as RATE_LIMITED, or missing rate_limit
+    fields) this is a meaningful decision — the PR's goal is "retain provider
+    failure evidence", so silent drops undermine it. Each no-op path logs at
+    ``debug`` with the suppressed fields so an operator investigating why a
+    429 did not project into the observed store can find the reason without
+    rerunning the session.
+    """
     rate_limit = skill_result.api_failure.rate_limit
-    if (
-        config is not None
-        and supports_quota_check
-        and skill_result.infra.exit_category == InfraExitCategory.RATE_LIMITED.value
-        and rate_limit.resets_at_epoch is not None
-        and rate_limit.limit_type
-    ):
+    if config is None:
+        logger.debug(
+            "quota_observed_evidence_skipped",
+            skip_reason="no_quota_guard_config",
+            exit_category=skill_result.infra.exit_category,
+            supports_quota_check=supports_quota_check,
+            resets_at_epoch=rate_limit.resets_at_epoch,
+            limit_type=rate_limit.limit_type,
+        )
+        return
+    if not supports_quota_check:
+        logger.debug(
+            "quota_observed_evidence_skipped",
+            skip_reason="backend_does_not_support_quota_check",
+            exit_category=skill_result.infra.exit_category,
+            resets_at_epoch=rate_limit.resets_at_epoch,
+            limit_type=rate_limit.limit_type,
+        )
+        return
+    if skill_result.infra.exit_category != InfraExitCategory.RATE_LIMITED.value:
+        logger.debug(
+            "quota_observed_evidence_skipped",
+            skip_reason=(f"exit_category={skill_result.infra.exit_category!r} (not RATE_LIMITED)"),
+            supports_quota_check=supports_quota_check,
+            resets_at_epoch=rate_limit.resets_at_epoch,
+            limit_type=rate_limit.limit_type,
+        )
+        return
+    if rate_limit.resets_at_epoch is None:
+        logger.debug(
+            "quota_observed_evidence_skipped",
+            skip_reason="rate_limit_resets_at_epoch is None",
+            exit_category=skill_result.infra.exit_category,
+            supports_quota_check=supports_quota_check,
+            limit_type=rate_limit.limit_type,
+        )
+        return
+    if not rate_limit.limit_type:
+        logger.debug(
+            "quota_observed_evidence_skipped",
+            skip_reason="rate_limit.limit_type is empty",
+            exit_category=skill_result.infra.exit_category,
+            supports_quota_check=supports_quota_check,
+            resets_at_epoch=rate_limit.resets_at_epoch,
+        )
+        return
+    try:
         record_observed_rate_limit(
             config,
             scope=quota_scope("anthropic", Path(config.credentials_path).expanduser()),
             resets_at_epoch=rate_limit.resets_at_epoch,
             limit_type=rate_limit.limit_type,
             now_epoch=now_epoch if now_epoch is not None else int(time.time()),
+        )
+    except Exception as exc:
+        # Quota evidence is a side-channel; failure must never abort the headless
+        # execution path that already classified this run as RATE_LIMITED.
+        logger.warning(
+            "quota_observed_evidence_persist_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
         )
 
 
@@ -449,7 +520,11 @@ def _render_constraint(
     return {
         "should_sleep": True,
         "sleep_seconds": sleep_seconds,
-        "utilization": status.utilization if status is not None else None,
+        "utilization": (
+            status.utilization
+            if status is not None and getattr(status, "utilization", None) is not None
+            else 0.0
+        ),
         "resets_at": datetime.fromtimestamp(constraint.blocked_until_epoch, tz=UTC).isoformat(),
         "window_name": constraint.limit_type
         or (status.window_name if status is not None else "unknown"),
@@ -480,7 +555,7 @@ async def check_and_sleep_if_needed(
         provider: Provider name. Non-anthropic providers bypass all quota I/O.
 
     Returns:
-        {"should_sleep": bool, "sleep_seconds": int, "utilization": float | None,
+        {"should_sleep": bool, "sleep_seconds": int, "utilization": float,
          "resets_at": str | None, "window_name": str | None}
         On error: adds "error" key, sets should_sleep=False.
         On provider bypass: adds "provider_bypass": True key.
@@ -516,14 +591,18 @@ async def check_and_sleep_if_needed(
 
     now_epoch = int(time.time())
     account_scope = quota_scope(provider.casefold(), Path(config.credentials_path).expanduser())
-    observations = decode_observed_constraints(observed_constraint_path(config.cache_path))
-    observed_winner = effective_quota_block(
-        observations, account_scope=account_scope, now_epoch=now_epoch
-    )
     status: QuotaStatus | None = None
     refetched = False
+    observations: list = []
+    observed_winner: QuotaConstraint | None = None
 
     try:
+        observations = safe_decode_observed_constraints(
+            observed_constraint_path(config.cache_path)
+        )
+        observed_winner = effective_quota_block(
+            observations, account_scope=account_scope, now_epoch=now_epoch
+        )
         status = _read_cache(config.cache_path, config.cache_max_age)
         if status is None:
             if observed_winner is not None:

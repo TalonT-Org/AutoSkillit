@@ -27,62 +27,15 @@ PRODUCTION_LEAF_READERS = {
     for family in ("arch-lens", "exp-lens", "vis-lens", "refactor-lens")
 }
 
-_UNREAD_LEAF_PATHS = (
-    "families.arch-lens.activate_deps",
-    "families.arch-lens.arg_interface",
-    "families.arch-lens.default_enabled",
-    "families.arch-lens.description",
-    "families.arch-lens.dial_skill",
-    "families.arch-lens.failure_mode",
-    "families.arch-lens.lens_count",
-    "families.arch-lens.mode_label",
-    "families.arch-lens.output_prefix",
-    "families.arch-lens.output_type",
-    "families.arch-lens.status",
-    "families.arch-lens.synthesis.strategy",
-    "families.exp-lens.activate_deps",
-    "families.exp-lens.arg_interface",
-    "families.exp-lens.default_enabled",
-    "families.exp-lens.description",
-    "families.exp-lens.dial_skill",
-    "families.exp-lens.failure_mode",
-    "families.exp-lens.lens_count",
-    "families.exp-lens.mode_label",
-    "families.exp-lens.output_prefix",
-    "families.exp-lens.output_type",
-    "families.exp-lens.status",
-    "families.exp-lens.synthesis.strategy",
-    "families.refactor-lens.arg_interface",
-    "families.refactor-lens.default_enabled",
-    "families.refactor-lens.description",
-    "families.refactor-lens.dial_skill",
-    "families.refactor-lens.failure_mode",
-    "families.refactor-lens.lens_count",
-    "families.refactor-lens.mode_label",
-    "families.refactor-lens.output_type",
-    "families.refactor-lens.status",
-    "families.refactor-lens.synthesis.strategy",
-    "families.vis-lens.activate_deps",
-    "families.vis-lens.arg_interface",
-    "families.vis-lens.composite_slugs",
-    "families.vis-lens.default_enabled",
-    "families.vis-lens.description",
-    "families.vis-lens.dial_skill",
-    "families.vis-lens.failure_mode",
-    "families.vis-lens.lens_count",
-    "families.vis-lens.lens_metadata.methodology-norms.special_assertions",
-    "families.vis-lens.mode_label",
-    "families.vis-lens.output_prefix",
-    "families.vis-lens.output_type",
-    "families.vis-lens.phase_skip.applies_to",
-    "families.vis-lens.phase_skip.skip_field",
-    "families.vis-lens.phase_skip.skip_semantics",
-    "families.vis-lens.status",
-    "families.vis-lens.synthesis.skill",
-    "families.vis-lens.synthesis.strategy",
-)
+# Post-#4894: the phoropter-registry contains only ``step_naming.prefix`` per
+# family — every other historically-unread leaf was retired (see #4894 for the
+# tracking issue and ``tests/contracts/test_phoropter_registry_leaf_has_consumer.py``
+# for the re-accretion guard). The deferral ledger remains in place as a forward
+# mechanism for any future declarative phoropter leaf that needs to be tracked
+# before its reader lands.
+_UNREAD_LEAF_PATHS: tuple[str, ...] = ()
 
-PHOROPTER_LEAF_DEFERRALS = {
+PHOROPTER_LEAF_DEFERRALS: dict[str, TrackedDeferral] = {
     path: TrackedDeferral(
         issue=4894,
         rationale="This declarative phoropter leaf has no production semantic reader yet.",

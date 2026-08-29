@@ -569,7 +569,7 @@ def test_reference_parser_rejects_non_string(bad_input: object) -> None:
 def test_reference_hash_is_stable_and_expiry_overwrite_changes_digest(
     tmp_path: Path,
 ) -> None:
-    """_reference_hash must be stable across the move and respect reference_expiry."""
+    """_reference_hash must produce a 64-char hex digest that depends on reference_expiry."""
 
     fd, snapshot = _verify(tmp_path / "capture", b"hash stable bytes")
     try:
@@ -590,7 +590,7 @@ def test_reference_hash_is_stable_and_expiry_overwrite_changes_digest(
 
 
 def test_reference_hash_rejects_malformed_token(tmp_path: Path) -> None:
-    """_reference_hash must re-enter parse_capture_reference and raise on bad tokens."""
+    """_reference_hash must reject tokens that fail parse_capture_reference."""
 
     fd, snapshot = _verify(tmp_path / "capture", b"hash bad token bytes")
     try:
@@ -655,11 +655,10 @@ def test_bind_finalized_snapshot_rejects_mismatched_hash(tmp_path: Path) -> None
 
     fd, snapshot = _verify(tmp_path / "capture", b"bind hash mismatch bytes")
     try:
-        token, _reference_hash = capture_snapshot._issue_capture_reference(
+        token, _ = capture_snapshot._issue_capture_reference(
             snapshot,
             expiry=1_500.0,
         )
-        assert _reference_hash  # only the token is needed below
         with pytest.raises(CaptureAuthorityError, match="hash does not match"):
             capture_snapshot._bind_finalized_snapshot(
                 snapshot,
@@ -763,7 +762,7 @@ def test_make_unavailable_reference_constructs_with_factory_token(tmp_path: Path
 
 
 def test_reference_matches_validates_issued_reference_through_snapshot(tmp_path: Path) -> None:
-    """Reader-side _reference_matches must accept the same digest across the module split."""
+    """Reader-side _reference_matches must accept issued digests and reject mismatches."""
 
     fd, snapshot = _verify(tmp_path / "capture", b"reader match bytes")
     try:
@@ -799,13 +798,7 @@ def test_render_degraded_capture_returns_inline_when_within_cap(tmp_path: Path) 
 def test_render_degraded_capture_renders_oversized_via_reference_factory(
     tmp_path: Path,
 ) -> None:
-    """render_degraded_capture takes the oversized branch via the renamed reference factory.
-
-    Exercises the renamed `_capture_reference._make_unavailable_reference` import at
-    `_replay.py:230` end-to-end by constructing a verified snapshot whose total_bytes
-    strictly exceeds inline_bytes, then verifying the rendered output is the bounded
-    head + V2 unavailable marker + tail shape (not the raw inline bytes).
-    """
+    """render_degraded_capture returns head+V2 unavailable marker+tail when total exceeds cap."""
 
     payload = b"oversized capture payload that exceeds the inline cap"
     inline_bytes = 4

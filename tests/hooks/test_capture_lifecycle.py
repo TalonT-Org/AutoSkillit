@@ -3903,13 +3903,13 @@ def test_orphan_adoption_rechecks_age_under_lock(
         os.close(fd)
         old = clock.wall() - orphan_scan.ADOPTION_AGE_SECONDS - 10
         os.utime(name, (old, old), dir_fd=root.fd)
-        real_adopt = capture_sweep.adopt_orphan
+        real_adopt = orphan_scan.adopt_orphan
 
         def refresh_before_adoption(*args, **kwargs) -> bool:
             os.utime(name, (clock.wall(), clock.wall()), dir_fd=root.fd)
             return real_adopt(*args, **kwargs)
 
-        monkeypatch.setattr(capture_sweep, "adopt_orphan", refresh_before_adoption)
+        monkeypatch.setattr(orphan_scan, "adopt_orphan", refresh_before_adoption)
 
         outcome = store.sweep(
             SweepBudgetSpec(max_directory_entries_scanned=8, max_duration_seconds=5.0)

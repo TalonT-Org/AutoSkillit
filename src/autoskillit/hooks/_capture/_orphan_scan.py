@@ -20,8 +20,10 @@ import os
 import stat
 from collections.abc import Collection
 from dataclasses import dataclass
+from typing import NamedTuple
 
-from . import _control_file, _ledger, _syntax
+from . import _control_file, _ledger, _store_port, _syntax
+from ._ledger import CaptureRetentionPhase, LedgerCodecError, adopted_orphan_record
 from ._module_identity import register_module_aliases
 from ._types import SweepBudgetSpec
 
@@ -30,11 +32,15 @@ register_module_aliases(__name__)
 __all__ = [
     "ADOPTION_AGE_SECONDS",
     "CURSOR_NAME",
+    "OrphanAdoptionOutcome",
     "OrphanScanAuthorityError",
     "OrphanScanResult",
+    "adopt_orphan",
     "clear_cursor",
     "load_cursor",
+    "scan_and_adopt_orphans",
     "scan_for_orphans",
+    "sweep_work_counters",
     "write_cursor",
 ]
 
@@ -264,4 +270,119 @@ def scan_for_orphans(
         candidates=candidates,
         examined=len(window),
         directory_complete=directory_complete,
+    )
+
+
+# A sweep attempt can expire a reference, mark the record abandoned, enter
+# deletion, and finally mark it deleted. Orphan admissions reserve the same
+# per-item ceiling because they share the sweep transition budget.
+_MAX_TRANSITIONS_PER_SWEEP_ITEM = 4
+
+
+class OrphanAdoptionOutcome(NamedTuple):
+    """Directory scan state that must participate in sweep convergence."""
+
+    examined: int
+    adopted: int
+    directory_complete: bool
+    pending_candidates: int
+
+
+def sweep_work_counters(
+    store: _store_port.SweepStorePort,
+) -> tuple[int, int, int, int]:
+    return (
+        store._sweep_records_inspected,
+        store._sweep_replay_bytes,
+        store._sweep_transitions,
+        store._sweep_cursor_writes,
+    )
+
+
+def adopt_orphan(
+    store: _store_port.SweepStorePort,
+    public_name: str,
+    *,
+    lifecycle_error: type[RuntimeError],
+) -> bool:
+    """Adopt one directory-reconciliation orphan candidate under lock.
+
+    Re-verifies every gate the unlocked scan already checked — tracked-name
+    exclusion, regular-file-with-no-symlink-traversal (:issue:`4319`) — so a
+    race between the scan and this locked adoption can never admit a
+    duplicate record for a name a real reservation or an earlier adoption
+    claimed in between. Capacity-exhausted candidates are silently skipped
+    (see ``CaptureLifecycleStore._admit_new_record``), not errored.
+    """
+    with store._locked():
+        records, compaction_epoch, size = store._load_locked()
+        now = store._wall_clock()
+        tracked = {
+            record.public_name
+            for record in records.values()
+            if record.retention_phase is not CaptureRetentionPhase.DELETED
+        }
+        if public_name in tracked:
+            return False
+        try:
+            value = os.stat(public_name, dir_fd=store._root_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        except OSError as exc:
+            raise lifecycle_error("cannot inspect orphan-adoption candidate") from exc
+        if not stat.S_ISREG(value.st_mode):
+            return False
+        if now - value.st_mtime < ADOPTION_AGE_SECONDS:
+            return False
+        try:
+            candidate = adopted_orphan_record(
+                public_name=public_name,
+                project_identity=store._project_identity,
+                root_identity=store._root_identity,
+                artifact_identity=(value.st_dev, value.st_ino),
+                observed_size=value.st_size,
+                now=now,
+            )
+        except LedgerCodecError:
+            return False
+        return store._admit_new_record(candidate, records, compaction_epoch, size, now)
+
+
+def scan_and_adopt_orphans(
+    store: _store_port.SweepStorePort,
+    *,
+    lifecycle_error: type[RuntimeError],
+) -> OrphanAdoptionOutcome:
+    """Scan for unledgered capture files and adopt eligible orphans.
+
+    Returns scan/adoption state used by the outer sweep's convergence test. A
+    zero-cost no-op — no lock taken, no
+    directory listed — when the active sweep budget disables the phase
+    (``max_directory_entries_scanned == 0``, the ``RUNNER_TAIL_BUDGET``
+    default), so per-command runner-tail latency is unaffected.
+    """
+    budget = store._sweep_budget
+    if budget is None or budget.max_directory_entries_scanned <= 0:
+        return OrphanAdoptionOutcome(0, 0, True, 0)
+    now = store._wall_clock()
+    with store._locked():
+        records, _compaction_epoch, _size = store._load_locked()
+        tracked = frozenset(
+            record.public_name
+            for record in records.values()
+            if record.retention_phase is not CaptureRetentionPhase.DELETED
+        )
+    scan = scan_for_orphans(store._root_fd, tracked, budget, now=now)
+    adopted = 0
+    for name in scan.candidates:
+        _inspected, _replay, transitions, _cursor_writes = sweep_work_counters(store)
+        if transitions + _MAX_TRANSITIONS_PER_SWEEP_ITEM > budget.max_transitions:
+            break
+        if adopt_orphan(store, name, lifecycle_error=lifecycle_error):
+            adopted += 1
+    return OrphanAdoptionOutcome(
+        examined=scan.examined,
+        adopted=adopted,
+        directory_complete=scan.directory_complete,
+        pending_candidates=len(scan.candidates) - adopted,
     )

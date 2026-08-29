@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
     from autoskillit.hooks._capture import _lifecycle_policy as _capture_lifecycle_policy
     from autoskillit.hooks._capture import _migration as _capture_migration
+    from autoskillit.hooks._capture import _orphan_scan as _capture_orphan_scan
     from autoskillit.hooks._capture import _reader as _capture_reader
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
@@ -69,6 +70,7 @@ else:
     _capture_ledger_view = importlib.import_module("_capture._ledger_view")
     _capture_lifecycle_policy = importlib.import_module("_capture._lifecycle_policy")
     _capture_migration = importlib.import_module("_capture._migration")
+    _capture_orphan_scan = importlib.import_module("_capture._orphan_scan")
     _capture_reader = importlib.import_module("_capture._reader")
     _capture_resolver = importlib.import_module("_capture._resolver")
     _capture_snapshot = importlib.import_module("_capture._snapshot")
@@ -1153,7 +1155,7 @@ class CaptureLifecycleStore:
         """
         return _admission._admit_new_record(self, record, records, compaction_epoch, size, now)
 
-    def _scan_and_adopt_orphans(self) -> _capture_sweep.OrphanAdoptionOutcome:
+    def _scan_and_adopt_orphans(self) -> _capture_orphan_scan.OrphanAdoptionOutcome:
         """Thin wrapper — delegates to ``_admission._scan_and_adopt_orphans``."""
         return _admission._scan_and_adopt_orphans(self, lifecycle_error=CaptureLifecycleError)
 
@@ -1175,7 +1177,7 @@ class CaptureLifecycleStore:
                 due_keys=self._due_keys,
                 before_attempt=self._advance_sweep_cursor,
                 sweep_one=self._sweep_one,
-                work_counters=lambda: _capture_sweep.sweep_work_counters(self),
+                work_counters=lambda: _capture_orphan_scan.sweep_work_counters(self),
                 scan_and_adopt_orphans=self._scan_and_adopt_orphans,
             )
         finally:

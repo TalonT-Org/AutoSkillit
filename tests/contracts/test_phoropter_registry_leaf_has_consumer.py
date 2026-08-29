@@ -178,7 +178,11 @@ def _check_registry_leaves(path: Path) -> None:
     registry_text = path.read_text(encoding="utf-8")
     registry = load_yaml(path)
     violations: list[str] = []
-    for family_name, family_entry in registry.get("families", {}).items():
+    families = registry.get("families") if isinstance(registry, dict) else None
+    if not isinstance(families, dict):
+        violations.append("registry: missing or malformed 'families' section")
+        families = {}
+    for family_name, family_entry in families.items():
         if _is_inert_tracked(registry_text, family_name):
             continue
         for leaf_path, _ in _walk_leaves(family_entry):

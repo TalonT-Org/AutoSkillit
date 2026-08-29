@@ -31,8 +31,10 @@ from autoskillit.hooks import (
     OUTCOME_FAILURE,
     OUTCOME_INTERRUPTION,
     OUTCOME_LAUNCH_FAILED,
+    OUTCOME_MISSING,
     OUTCOME_REAPED,
     OUTCOME_SUCCESS,
+    OUTCOME_TIMEOUT,
     JoinLedgerError,
     active_batch,
     admit_assignment,
@@ -63,8 +65,10 @@ _TERMINAL_OUTCOMES: frozenset[str] = frozenset(
         OUTCOME_SUCCESS,
         OUTCOME_FAILURE,
         OUTCOME_LAUNCH_FAILED,
+        OUTCOME_TIMEOUT,
         OUTCOME_CANCELLED,
         OUTCOME_INTERRUPTION,
+        OUTCOME_MISSING,
         OUTCOME_REAPED,
     }
 )
@@ -334,9 +338,14 @@ class ManagedFixedBatchSupervisor:
                         permit_id=permit_id,
                         exc_info=True,
                     )
-                    for restored_id, restored_permit in recovered.items():
-                        self._capacity.release(restored_permit)
-                    recovered.clear()
+                    for restored_permit in recovered.values():
+                        try:
+                            self._capacity.release(restored_permit)
+                        except ManagedWorkerCapacityError:
+                            logger.warning(
+                                "managed_capacity_permit_release_failed",
+                                exc_info=True,
+                            )
                     self._recovery_ready = False
                     self._recovery_diagnostic = f"managed capacity debt restore failed: {exc}"
                     return False
@@ -469,8 +478,15 @@ class ManagedFixedBatchSupervisor:
                 self._recovery_ready = False
                 self._recovery_diagnostic = "managed batch close timed out; recovery is required"
                 # Persist outstanding debt for the next startup rather than
-                # orphaning permits on already-gone owners.
-                self._write_debt()
+                # orphaning permits on already-gone owners; swallow OSError so
+                # close() never aborts the caller's teardown path.
+                try:
+                    self._write_debt()
+                except OSError:
+                    logger.warning(
+                        "managed_fixed_batch_close_debt_persist_failed",
+                        exc_info=True,
+                    )
 
     async def _supervise(self, binding, plan, batch) -> ManagedFixedBatchResult:
         batch_id = str(batch["join_batch_id"])
@@ -673,14 +689,21 @@ class ManagedFixedBatchSupervisor:
                 )
         except BaseException:
             if admitted:
-                self._settle(
-                    binding,
-                    batch_id,
-                    ledger_assignment_id,
-                    attempt_id,
-                    identity.first_run_id,
-                    ManagedLeafLaunchResult(outcome=OUTCOME_INTERRUPTION),
-                )
+                try:
+                    self._settle(
+                        binding,
+                        batch_id,
+                        ledger_assignment_id,
+                        attempt_id,
+                        identity.first_run_id,
+                        ManagedLeafLaunchResult(outcome=OUTCOME_INTERRUPTION),
+                    )
+                except (OSError, JoinLedgerError, SkillContractError):
+                    logger.warning(
+                        "managed_fixed_batch_interruption_settle_failed",
+                        assignment_id=ledger_assignment_id,
+                        exc_info=True,
+                    )
             raise
         finally:
             if permit is not None:

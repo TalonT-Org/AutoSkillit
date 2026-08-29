@@ -668,7 +668,15 @@ def _page_payload(payload: object, *, offset: int, page_size: int) -> dict[str, 
         except UnicodeDecodeError:
             end -= 1
     else:
-        content = ""
+        # No forward progress possible: a multi-byte UTF-8 sequence at
+        # `offset` is longer than `page_size`. Surface a contract error
+        # instead of returning next_offset == offset, which would cause
+        # the client to loop indefinitely on the same byte position.
+        raise SkillContractError(
+            f"read_fixed_batch_result page_size={page_size} cannot advance "
+            f"past a multi-byte UTF-8 sequence at offset={offset}; "
+            f"increase page_size to at least {_MAX_RESULT_PAGE_BYTES}"
+        )
     return {
         "content": content,
         "offset": offset,

@@ -11,7 +11,6 @@ from autoskillit.core import (
     InfraExitCategory,
     get_logger,
 )
-from autoskillit.execution.session._provider_parse import _parse_provider_records
 
 if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, SubprocessResult
@@ -20,40 +19,21 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-# Re-export the parser primitives so existing callers (and tests) that import
-# them from _exit_classification still resolve. The authoritative home is
-# _provider_parse; the classification module only consumes the parser output.
 __all__ = [
-    "_ABS_PATH_RE",
     "_CODEX_API_ERROR_PATTERNS",
     "_CODEX_CONTEXT_EXHAUSTION_PATTERN",
     "_CODEX_ERROR_CODE_API_STATUS",
-    "_HANDLED_RECORD_TYPES",
     "_KNOWN_API_ERROR_PATTERNS",
-    "_ProviderParseAccumulator",
     "_RATE_LIMIT_PATTERNS",
     "_RETRIABLE_API_STATUSES",
     "_API_ERROR_PATTERNS",
-    "_capture_assistant_record",
-    "_capture_tool_use",
     "_has_model_capacity_error",
     "_all_text_sources",
-    "_parse_provider_records",
-    "_provider_field",
     "classify_api_status",
     "classify_infra_exit",
     "has_rate_limit_signal",
     "is_signal_death_code",
 ]
-
-from autoskillit.execution.session._provider_parse import (  # noqa: E402,F401
-    _ABS_PATH_RE,
-    _HANDLED_RECORD_TYPES,
-    _capture_assistant_record,
-    _capture_tool_use,
-    _provider_field,
-    _ProviderParseAccumulator,
-)
 
 _API_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"overloaded", re.IGNORECASE),

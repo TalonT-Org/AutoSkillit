@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import TypeAlias
 
 from . import _cleanup, _ledger, _snapshot, _store_port
+from . import _reference as _capture_reference
 from ._module_identity import register_module_aliases
 
 register_module_aliases(__name__)
@@ -64,7 +65,7 @@ def publish_reference(
             lifecycle_error=lifecycle_error,
         ),
     )
-    return _snapshot._make_published_reference(issuance)
+    return _capture_reference._make_published_reference(issuance)
 
 
 def _reference_transition_for_manifest(
@@ -96,7 +97,7 @@ def mark_reference_unavailable(
         raise lifecycle_error("unavailable transition requires issued finalized capture")
     snapshot = finalized.snapshot
     manifest = snapshot.manifest
-    unavailable = _snapshot._make_unavailable_reference(snapshot, reason_code)
+    unavailable = _capture_reference._make_unavailable_reference(snapshot, reason_code)
 
     def transform(
         current: _ledger.CaptureLifecycleRecord,
@@ -202,9 +203,9 @@ def reference_result(
     ):
         raise lifecycle_error("capture reference state cannot be reconciled")
     if record.reference_status == _ledger.CaptureReferenceStatus.PUBLISHED:
-        return _snapshot._make_published_reference(finalized.issuance)
+        return _capture_reference._make_published_reference(finalized.issuance)
     if record.reference_status == _ledger.CaptureReferenceStatus.UNAVAILABLE:
-        return _snapshot._make_unavailable_reference(
+        return _capture_reference._make_unavailable_reference(
             finalized.snapshot,
             unavailable_reason,
         )

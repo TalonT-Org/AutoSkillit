@@ -17,6 +17,7 @@ import pytest
 
 import autoskillit.hooks._capture._snapshot as capture_snapshot
 from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
+from autoskillit.hooks._capture._replay import render_degraded_capture
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureFinalManifest,
@@ -486,6 +487,7 @@ def test_package_and_isolated_import_orders_share_authority_modules(
         "_authority",
         "_descriptor",
         "_snapshot",
+        "_reference",
         "_reader",
         "_ledger",
         "_ledger_view",
@@ -531,3 +533,318 @@ def test_package_and_isolated_import_orders_share_authority_modules(
 def test_reference_parser_rejects_non_ascii_and_oversized_input(token: str) -> None:
     with pytest.raises(CaptureAuthorityError, match="invalid capture reference"):
         parse_capture_reference(token)
+
+
+def test_reference_parser_accepts_well_formed_token() -> None:
+    token = f"ascr2:{_CAPTURE_ID}:{_INCARNATION}:{'a' * 64}"
+    hint = parse_capture_reference(token)
+    assert hint.capture_id == _CAPTURE_ID
+    assert hint.incarnation == _INCARNATION
+    assert hint.token == token
+
+
+@pytest.mark.parametrize(
+    "token",
+    (
+        "ascr2:not-hex:0123456789abcdef0123456789abcdef:" + "a" * 64,
+        "ascr2:0123456789abcdef:not-hex:" + "a" * 64,
+        "ascr2:0123456789abcdef:0123456789abcdef0123456789abcdef:" + "z" * 64,
+        "ascr2:0123456789abcdef:0123456789abcdef0123456789abcdef:" + "a" * 63,
+        "ascr2:0123456789abcdef:0123456789abcdef0123456789abcdef:" + "a" * 65,
+        "wrong:0123456789abcdef:0123456789abcdef0123456789abcdef:" + "a" * 64,
+        "ascr2:0123456789abcdef:" + "a" * 64,
+    ),
+)
+def test_reference_parser_rejects_malformed_tokens(token: str) -> None:
+    with pytest.raises(CaptureAuthorityError, match="invalid capture reference"):
+        parse_capture_reference(token)
+
+
+@pytest.mark.parametrize("bad_input", (None, 123, b"ascr2:00:00:00", [], {"x": 1}))
+def test_reference_parser_rejects_non_string(bad_input: object) -> None:
+    with pytest.raises(CaptureAuthorityError, match="invalid capture reference"):
+        parse_capture_reference(bad_input)  # type: ignore[arg-type]
+
+
+def test_reference_hash_is_stable_and_expiry_overwrite_changes_digest(
+    tmp_path: Path,
+) -> None:
+    """_reference_hash must produce a 64-char hex digest that depends on reference_expiry."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"hash stable bytes")
+    try:
+        token = f"ascr2:{_CAPTURE_ID}:{_INCARNATION}:{'a' * 64}"
+        hash_default = capture_snapshot._reference_hash(token, snapshot.manifest)
+        hash_with_expiry = capture_snapshot._reference_hash(
+            token,
+            snapshot.manifest,
+            reference_expiry=1_500.0,
+        )
+        assert isinstance(hash_default, str) and len(hash_default) == 64
+        assert isinstance(hash_with_expiry, str) and len(hash_with_expiry) == 64
+        assert hash_default != hash_with_expiry
+        repeated = capture_snapshot._reference_hash(token, snapshot.manifest)
+        assert repeated == hash_default
+    finally:
+        os.close(fd)
+
+
+def test_reference_hash_rejects_malformed_token(tmp_path: Path) -> None:
+    """_reference_hash must reject tokens that fail parse_capture_reference."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"hash bad token bytes")
+    try:
+        with pytest.raises(CaptureAuthorityError, match="invalid capture reference"):
+            capture_snapshot._reference_hash("not-a-real-token", snapshot.manifest)
+    finally:
+        os.close(fd)
+
+
+def test_bind_finalized_snapshot_rejects_non_verified_snapshot(tmp_path: Path) -> None:
+    """_bind_finalized_snapshot must enforce the type guard on its snapshot argument."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"bind guard bytes")
+    try:
+        with pytest.raises(CaptureAuthorityError, match="verified snapshot"):
+            capture_snapshot._bind_finalized_snapshot(
+                object(),  # type: ignore[arg-type]
+                reference_token=None,
+                reference_hash=None,
+                reference_expiry=None,
+            )
+        with pytest.raises(CaptureAuthorityError, match="verified snapshot"):
+            capture_snapshot._bind_finalized_snapshot(
+                snapshot.manifest,  # type: ignore[arg-type]
+                reference_token=None,
+                reference_hash=None,
+                reference_expiry=None,
+            )
+    finally:
+        os.close(fd)
+
+
+@pytest.mark.parametrize(
+    ("token", "digest"),
+    (
+        (None, "a" * 64),
+        ("ascr2:0123456789abcdef:0123456789abcdef0123456789abcdef:" + "a" * 64, None),
+    ),
+)
+def test_bind_finalized_snapshot_rejects_incomplete_reference(
+    tmp_path: Path,
+    token: str | None,
+    digest: str | None,
+) -> None:
+    """XOR check: exactly one of (reference_token, reference_hash) must be None."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"bind incomplete bytes")
+    try:
+        with pytest.raises(CaptureAuthorityError, match="incomplete issued reference"):
+            capture_snapshot._bind_finalized_snapshot(
+                snapshot,
+                reference_token=token,
+                reference_hash=digest,
+                reference_expiry=1_500.0,
+            )
+    finally:
+        os.close(fd)
+
+
+def test_bind_finalized_snapshot_rejects_mismatched_hash(tmp_path: Path) -> None:
+    """Hash mismatch must raise CaptureAuthorityError via hmac.compare_digest path."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"bind hash mismatch bytes")
+    try:
+        token, _ = capture_snapshot._issue_capture_reference(
+            snapshot,
+            expiry=1_500.0,
+        )
+        with pytest.raises(CaptureAuthorityError, match="hash does not match"):
+            capture_snapshot._bind_finalized_snapshot(
+                snapshot,
+                reference_token=token,
+                reference_hash="0" * 64,
+                reference_expiry=1_500.0,
+            )
+    finally:
+        os.close(fd)
+
+
+def test_bind_finalized_snapshot_binds_without_reference(tmp_path: Path) -> None:
+    """Success: issuance=None when reference_token is None."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"bind unreferenced bytes")
+    try:
+        finalized = capture_snapshot._bind_finalized_snapshot(
+            snapshot,
+            reference_token=None,
+            reference_hash=None,
+            reference_expiry=None,
+        )
+        assert finalized.issuance is None
+        assert finalized.snapshot.manifest.capture_id == snapshot.manifest.capture_id
+        assert finalized.snapshot.manifest.reference_hash is None
+    finally:
+        os.close(fd)
+
+
+def test_bind_finalized_snapshot_binds_with_reference(tmp_path: Path) -> None:
+    """Success: issuance is populated when reference_token + reference_hash are valid."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"bind referenced bytes")
+    try:
+        token, reference_hash = capture_snapshot._issue_capture_reference(
+            snapshot,
+            expiry=1_500.0,
+        )
+        finalized = capture_snapshot._bind_finalized_snapshot(
+            snapshot,
+            reference_token=token,
+            reference_hash=reference_hash,
+            reference_expiry=1_500.0,
+        )
+        assert finalized.issuance is not None
+        assert finalized.issuance.token == token
+    finally:
+        os.close(fd)
+
+
+def test_make_published_reference_rejects_non_issued(tmp_path: Path) -> None:
+    """_make_published_reference must enforce the type guard on issuance."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"published guard bytes")
+    try:
+        with pytest.raises(CaptureAuthorityError, match="issued reference"):
+            capture_snapshot._make_published_reference(object())  # type: ignore[arg-type]
+        with pytest.raises(CaptureAuthorityError, match="issued reference"):
+            capture_snapshot._make_published_reference(snapshot)  # type: ignore[arg-type]
+    finally:
+        os.close(fd)
+
+
+def test_make_published_reference_constructs_with_factory_token(tmp_path: Path) -> None:
+    """_make_published_reference must propagate the factory token to the published type."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"published factory bytes")
+    try:
+        token, reference_hash = capture_snapshot._issue_capture_reference(
+            snapshot,
+            expiry=1_500.0,
+        )
+        finalized = capture_snapshot._bind_finalized_snapshot(
+            snapshot,
+            reference_token=token,
+            reference_hash=reference_hash,
+            reference_expiry=1_500.0,
+        )
+        assert finalized.issuance is not None
+        published = capture_snapshot._make_published_reference(finalized.issuance)
+        assert published.token == token
+        assert published.snapshot.manifest.capture_id == snapshot.manifest.capture_id
+        assert published.snapshot.manifest.reference_hash == reference_hash
+    finally:
+        os.close(fd)
+
+
+def test_make_unavailable_reference_constructs_with_factory_token(tmp_path: Path) -> None:
+    """_make_unavailable_reference must propagate the factory token to the unavailable type."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"unavailable factory bytes")
+    try:
+        unavailable = capture_snapshot._make_unavailable_reference(
+            snapshot,
+            "TEST_UNAVAILABLE",
+        )
+        assert unavailable.reason_code == "TEST_UNAVAILABLE"
+        assert unavailable.snapshot is snapshot
+    finally:
+        os.close(fd)
+
+
+def test_reference_matches_validates_issued_reference_through_snapshot(tmp_path: Path) -> None:
+    """Reader-side _reference_matches must accept issued digests and reject mismatches."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"reader match bytes")
+    try:
+        token, reference_hash = capture_snapshot._issue_capture_reference(
+            snapshot,
+            expiry=1_500.0,
+        )
+        finalized = capture_snapshot._bind_finalized_snapshot(
+            snapshot,
+            reference_token=token,
+            reference_hash=reference_hash,
+            reference_expiry=1_500.0,
+        )
+        assert capture_snapshot._reference_matches(token, finalized.snapshot.manifest)
+        assert not capture_snapshot._reference_matches("bogus-token", finalized.snapshot.manifest)
+        assert not capture_snapshot._reference_matches(token, snapshot.manifest)
+    finally:
+        os.close(fd)
+
+
+def test_render_degraded_capture_returns_inline_when_within_cap(tmp_path: Path) -> None:
+    """render_degraded_capture returns measurement.inline when total_bytes <= inline_bytes."""
+
+    fd, snapshot = _verify(tmp_path / "capture", b"within cap")
+    try:
+        assert snapshot.measurement.total_bytes <= snapshot.measurement.inline_bytes
+        rendered = render_degraded_capture(snapshot, reason_code="TEST_REASON")
+        assert rendered == snapshot.measurement.inline
+    finally:
+        os.close(fd)
+
+
+def test_render_degraded_capture_renders_oversized_via_reference_factory(
+    tmp_path: Path,
+) -> None:
+    """render_degraded_capture returns head+V2 unavailable marker+tail when total exceeds cap."""
+
+    payload = b"oversized capture payload that exceeds the inline cap"
+    inline_bytes = 4
+    path = tmp_path / "capture"
+    path.write_bytes(payload)
+    path.chmod(0o600)
+    fd = os.open(path, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
+    value = os.fstat(fd)
+    measurement = CaptureMeasurement.from_bytes(payload, inline_bytes=inline_bytes)
+    snapshot = verify_capture_snapshot(
+        fd=fd,
+        capture_id=_CAPTURE_ID,
+        incarnation=_INCARNATION,
+        project_identity=(101, 202),
+        root_identity=(303, 404),
+        carrier_name=f"shell_{_CAPTURE_ID}.log",
+        carrier_identity=(value.st_dev, value.st_ino),
+        measurement=measurement,
+        command_outcome=CommandOutcome.exited(0),
+        expected_revision=3,
+        finalized_at=1_000.0,
+        retention_deadline=2_000.0,
+    )
+    try:
+        assert snapshot.measurement.total_bytes > snapshot.measurement.inline_bytes
+        rendered = render_degraded_capture(
+            snapshot,
+            reason_code="TEST_OVERSIZED",
+        )
+        head = snapshot.measurement.head
+        tail = snapshot.measurement.tail
+        assert rendered.startswith(head)
+        assert rendered.endswith(tail)
+        assert b"TEST_OVERSIZED" in rendered
+        assert b"unavailable" in rendered
+    finally:
+        os.close(fd)
+
+
+def test_render_degraded_capture_rejects_non_verified_snapshot(tmp_path: Path) -> None:
+    """render_degraded_capture must reject inputs that are not VerifiedCaptureSnapshot."""
+
+    payload = b"guard the degraded path"
+    fd, snapshot = _verify(tmp_path / "capture", payload)
+    try:
+        with pytest.raises(Exception, match="verified snapshot"):
+            render_degraded_capture(snapshot.manifest, reason_code="TEST_GUARD")  # type: ignore[arg-type]
+    finally:
+        os.close(fd)

@@ -25,8 +25,12 @@ _WIRE_FIELDS = frozenset(
         "terminal_reason",
     }
 )
+# The parser authority now lives in its own module so the classifier file is no
+# longer the reader of last resort for raw provider wire fields. The contract
+# is unchanged: exactly one module is allowed to read each declared wire field.
+_READER_AUTHORITY_MODULE = "execution/session/_provider_parse.py"
 _EXPECTED_READERS = frozenset(
-    ("execution/session/_exit_classification.py", field_name) for field_name in _WIRE_FIELDS
+    (_READER_AUTHORITY_MODULE, field_name) for field_name in _WIRE_FIELDS
 )
 
 
@@ -81,14 +85,25 @@ def _read_fields(source: str) -> set[str]:
 
 
 def test_declared_provider_wire_fields_have_one_reader_authority() -> None:
-    source_path = SRC_ROOT / "execution/session/_exit_classification.py"
+    source_path = SRC_ROOT / _READER_AUTHORITY_MODULE
 
     actual = frozenset(
-        ("execution/session/_exit_classification.py", field_name)
+        (_READER_AUTHORITY_MODULE, field_name)
         for field_name in _read_fields(source_path.read_text())
     )
 
     assert actual == _EXPECTED_READERS
+
+    # No other module is permitted to read raw provider wire fields directly —
+    # the parser authority is the sole reader so the read vocabulary and the
+    # classification cascade cannot drift independently.
+    wire_readers_in_classifier = _read_fields(
+        (SRC_ROOT / "execution/session/_exit_classification.py").read_text()
+    )
+    assert wire_readers_in_classifier == set(), (
+        "_exit_classification must not read raw provider wire fields directly; "
+        "delegate to _provider_parse. Found: " + ", ".join(sorted(wire_readers_in_classifier))
+    )
 
 
 def test_raw_provider_record_reader_outside_authority_is_detected() -> None:

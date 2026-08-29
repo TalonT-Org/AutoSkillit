@@ -130,9 +130,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/_overlay_state.py", 132),
     # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
     # unversioned tracker file schema.
-    ("src/autoskillit/core/pipeline_tracker.py", 295),
-    ("src/autoskillit/core/pipeline_tracker.py", 317),
-    ("src/autoskillit/core/pipeline_tracker.py", 335),
+    ("src/autoskillit/core/pipeline_tracker.py", 298),
+    ("src/autoskillit/core/pipeline_tracker.py", 320),
+    ("src/autoskillit/core/pipeline_tracker.py", 338),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 587),
     # tools_github.py — bug report dict (non-blocking report-bug status file)

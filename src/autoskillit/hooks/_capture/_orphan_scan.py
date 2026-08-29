@@ -1,14 +1,19 @@
-"""Budget-bounded, stdlib-only directory-reconciliation scan for shell-capture orphans.
+"""Budget-bounded, stdlib-only directory reconciliation for shell-capture orphans.
 
 Every deletion path in this package (`_sweep.py`) only ever acts on records the
 ledger already knows about — a `shell_[0-9a-f]{16}.log` file written before a
 crash, a ledger reset, or a legacy pre-ledger run has no record and is
-permanently invisible to cleanup. This module performs the read-only half of
-reconciling that gap: it walks the capture directory, in budget-bounded
-batches resumed via a persisted cursor, and returns the names of files that
-look like abandoned capture artifacts. It never touches the ledger and never
-deletes anything — adoption (turning a candidate name into a ledger record so
-the existing quarantine-deletion path can retire it) is the sweep layer's job.
+permanently invisible to cleanup. This module closes that gap in two stages:
+
+1. ``scan_for_orphans`` walks the capture directory in budget-bounded batches
+   resumed via a persisted cursor and returns the names of files that look
+   like abandoned capture artifacts. The scan is read-only — no ledger
+   writes, no deletes.
+2. ``adopt_orphan`` and ``scan_and_adopt_orphans`` re-verify each candidate
+   under the capture-store lock and admit eligible names into the ledger so
+   the existing quarantine-deletion path can retire them on a subsequent
+   sweep attempt. Adoption still never deletes; it only bridges the gap
+   between scan and sweep.
 """
 
 from __future__ import annotations

@@ -6,23 +6,11 @@ that translates one record to or from a JSON-serialisable dict
 that gates every frame (``validate_record``, ``validate_successor``),
 the legacy v1 -> v2 migration decoder (``legacy_record_from_dict``),
 the directory-reconciliation adoption helper (``adopted_orphan_record``),
-the canonical-JSON encoder (``canonical_json``) plus its structural
-primitives (``_validate_shape``, ``_object_without_duplicates``,
-``_reject_constant``, ``_decode_json``), and the exception classes
-(``LedgerCodecError``; ``CaptureTransitionCommittedError``).
-``UnsupportedLedgerVersionError`` lives in the sibling ``_ledger.py``
-because it surfaces from ``decode_ledger`` (a framing concern).
-
-The framed-binary codec (``encode_frame``, ``decode_ledger``,
-``write_all``, ``LedgerFrame``, ``DecodedLedger``,
-``UnsupportedLedgerVersionError``) lives in the sibling ``_ledger.py`` and
-imports ``canonical_json`` and ``LedgerCodecError`` from this module.
-The dependency direction is strictly ``_ledger -> _lifecycle_record``
-(one-way), so there is no circular-import risk at module load time.
-
-Stdlib-only at runtime -- three-way discriminator is not required because
-every import is a sibling within ``_capture/`` (no cross-``hooks/``
-boundary that would need flattening in standalone hook-script mode).
+the canonical-JSON encoder (``canonical_json``) and its canonical
+decoder (``decode_json``), the shared structural primitives
+(``_validate_shape``, ``_object_without_duplicates``, ``_reject_constant``),
+and the exception classes (``LedgerCodecError``;
+``CaptureTransitionCommittedError``).
 """
 
 from __future__ import annotations
@@ -89,10 +77,16 @@ __all__ = [
     "LedgerCodecError",
     "adopted_orphan_record",
     "canonical_json",
+    "decode_json",
+    "is_delivery_successor",
+    "is_reference_successor",
+    "is_retention_successor",
+    "is_state_successor",
     "legacy_record_from_dict",
     "record_from_dict",
     "record_to_dict",
     "same_record",
+    "validate_observed_size",
     "validate_record",
     "validate_successor",
 ]
@@ -178,6 +172,11 @@ def same_record(
 
 def _plain_int(value: object, *, minimum: int = 0) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
+
+
+def validate_observed_size(value: object) -> bool:
+    """Return whether *value* is a plain non-negative integer acceptable as observed size."""
+    return _plain_int(value)
 
 
 def _pair(value: object, field: str) -> tuple[int, int]:
@@ -351,6 +350,8 @@ def record_from_dict(value: object) -> CaptureLifecycleRecord:
             deletion_nonce=value["deletion_nonce"],
             quarantine_name=value["quarantine_name"],
         )
+    except LedgerCodecError:
+        raise
     except (KeyError, TypeError, ValueError, RuntimeError) as exc:
         raise LedgerCodecError("invalid lifecycle record fields") from exc
     validate_record(record)
@@ -795,7 +796,7 @@ def canonical_json(value: object) -> bytes:
         raise LedgerCodecError("lifecycle frame is not canonically encodable") from exc
 
 
-def _decode_json(payload: bytes) -> dict[str, object]:
+def decode_json(payload: bytes) -> dict[str, object]:
     try:
         decoded = json.loads(
             payload.decode("utf-8", errors="strict"),

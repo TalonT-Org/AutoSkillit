@@ -10,6 +10,7 @@ import inspect
 import json
 import math
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -678,6 +679,12 @@ def test_cleanup_outcome_field_types_are_publicly_exported() -> None:
     assert {"CleanupBlocker", "CleanupProgress"} <= set(capture_lifecycle.__all__)
 
 
+def test_ledger_facade_re_exports_every_name_in_dunder_all() -> None:
+    facade = capture_lifecycle._capture_ledger
+    missing = [name for name in facade.__all__ if not hasattr(facade, name)]
+    assert missing == [], f"_ledger facade is missing re-exports: {missing}"
+
+
 @pytest.mark.parametrize(
     "error_type",
     (
@@ -823,9 +830,20 @@ def test_store_factory_requires_an_explicit_lock_wait_policy() -> None:
     assert lock_wait.default is inspect.Parameter.empty
 
 
-@pytest.mark.parametrize("field_name", ("created_at", "next_attempt_at", "retention_at"))
+@pytest.mark.parametrize(
+    ("field_name", "expected_message"),
+    (
+        ("created_at", "invalid created timestamp"),
+        ("next_attempt_at", "invalid next-attempt timestamp"),
+        ("retention_at", "invalid retention timestamp"),
+    ),
+)
 @pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
-def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> None:
+def test_ledger_rejects_nonfinite_timestamps(
+    field_name: str,
+    expected_message: str,
+    value: float,
+) -> None:
     record = CaptureLifecycleRecord(
         capture_id=_CAPTURE_ID,
         state=CaptureState.RESERVED,
@@ -841,7 +859,7 @@ def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> N
     serialized = capture_lifecycle._record_to_dict(record)
     serialized[field_name] = value
 
-    with pytest.raises(CaptureLedgerError, match="invalid lifecycle record fields"):
+    with pytest.raises(CaptureLedgerError, match=re.escape(expected_message)):
         capture_lifecycle._record_from_dict(serialized)
 
 

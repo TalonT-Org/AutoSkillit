@@ -127,3 +127,17 @@ def test_every_registered_decoder_module_exists() -> None:
         "fleet/state_records.py",
         "hooks/_capture/_lifecycle_record.py",
     }
+
+
+def test_every_registered_decoder_module_references_its_enums() -> None:
+    """Assert each decoder module actually contains the registered enum decoders."""
+    for module, enum_names in PERSISTED_ENUM_DECODERS.items():
+        path = _SRC_ROOT / module
+        source = path.read_text(encoding="utf-8")
+        # Every enum name must be referenced by name (defensively guards against
+        # a decoder-module rebind that points at a file with no decoders for
+        # the registered enums).
+        missing = [name for name in enum_names if name not in source]
+        assert not missing, (
+            f"decoder module {module} does not reference registered enums: {missing}"
+        )

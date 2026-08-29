@@ -55,37 +55,37 @@ _QUARANTINE_CONSTRUCTOR_ALLOWLIST: Mapping[tuple[str, str, str], str] = {
         "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureState",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "the lifecycle record decoder quarantines the complete framed lifecycle record",
     (
         "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "the lifecycle record decoder quarantines the complete framed lifecycle record",
     (
         "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureSnapshotStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "the lifecycle record decoder quarantines the complete framed lifecycle record",
     (
         "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureReferenceStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "the lifecycle record decoder quarantines the complete framed lifecycle record",
     (
         "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureDeliveryStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "the lifecycle record decoder quarantines the complete framed lifecycle record",
     (
         "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureRetentionPhase",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "the lifecycle record decoder quarantines the complete framed lifecycle record",
     (
         "hooks/_capture/_lifecycle_record.py",
         "legacy_record_from_dict",
         "CaptureState",
-    ): "the ledger view quarantines the complete framed legacy record",
+    ): "the lifecycle record decoder quarantines the complete framed legacy record",
 }
 
 _TOLERANT_METHODS = frozenset({"from_persisted"})

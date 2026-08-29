@@ -159,12 +159,12 @@ class CaptureCapacityError(CaptureLedgerError):
         super().__init__(_capture_capacity.reason_detail(reason))
 
 
-CaptureState = _capture_ledger.CaptureState
-CaptureReferenceStatus = _capture_ledger.CaptureReferenceStatus
-CaptureDeliveryStatus = _capture_ledger.CaptureDeliveryStatus
-CaptureRetentionPhase = _capture_ledger.CaptureRetentionPhase
-CaptureSnapshotStatus = _capture_ledger.CaptureSnapshotStatus
-CaptureStatus = _capture_ledger.CaptureStatus
+CaptureState = _capture_lifecycle_record.CaptureState
+CaptureReferenceStatus = _capture_lifecycle_record.CaptureReferenceStatus
+CaptureDeliveryStatus = _capture_lifecycle_record.CaptureDeliveryStatus
+CaptureRetentionPhase = _capture_lifecycle_record.CaptureRetentionPhase
+CaptureSnapshotStatus = _capture_lifecycle_record.CaptureSnapshotStatus
+CaptureStatus = _capture_lifecycle_record.CaptureStatus
 CaptureLifecycleRecord = _capture_lifecycle_record.CaptureLifecycleRecord
 CaptureTransitionCommittedError = _capture_lifecycle_record.CaptureTransitionCommittedError
 
@@ -787,7 +787,7 @@ class CaptureLifecycleStore:
     ) -> CaptureLifecycleRecord:
         if type(evidence) is not CaptureFailureEvidence:
             raise CaptureLifecycleError("failure transition requires typed evidence")
-        if not _capture_lifecycle_record._plain_int(observed_size):
+        if not _capture_lifecycle_record.validate_observed_size(observed_size):
             raise CaptureLifecycleError("invalid observed capture size")
         now = self._wall_clock()
         # Capacity-caused failure records get zero grace — a record

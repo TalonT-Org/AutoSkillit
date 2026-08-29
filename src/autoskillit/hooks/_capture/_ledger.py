@@ -1,6 +1,6 @@
 """Framed-binary-codec facade for shell-capture lifecycle state.
 
-Lifecycle-record types, the canonical-JSON encoder, and the
+Lifecycle-record types, the canonical-JSON encoder/decoder, and the
 ``LedgerCodecError`` / ``CaptureTransitionCommittedError`` exception classes
 live in the sibling module ``_lifecycle_record.py``. This facade owns the
 framed-binary codec (``encode_frame``, ``decode_ledger``, ``write_all``),
@@ -28,46 +28,31 @@ import struct
 from dataclasses import dataclass
 from typing import cast
 
-from ._lifecycle_record import (
-    CaptureDeliveryStatus as _CaptureDeliveryStatus,
-)
-
-# Lifecycle-record types, canonical-JSON encoder, and exception class
-# live in the sibling module. The facade imports them here so the
-# framed-binary codec can call canonical_json and raise LedgerCodecError
-# without circular import risk (one-way: _ledger -> _lifecycle_record).
-from ._lifecycle_record import (
-    CaptureLifecycleRecord,
-    CaptureTransitionCommittedError,
-    LedgerCodecError,
-    _decode_json,
-    adopted_orphan_record,
-    canonical_json,
+from ._lifecycle_policy import (
     is_delivery_successor,
     is_reference_successor,
     is_retention_successor,
     is_state_successor,
+)
+from ._lifecycle_record import (
+    CaptureDeliveryStatus,
+    CaptureLifecycleRecord,
+    CaptureReferenceStatus,
+    CaptureRetentionPhase,
+    CaptureSnapshotStatus,
+    CaptureState,
+    CaptureStatus,
+    CaptureTransitionCommittedError,
+    LedgerCodecError,
+    adopted_orphan_record,
+    canonical_json,
+    decode_json,
     legacy_record_from_dict,
     record_from_dict,
     record_to_dict,
     same_record,
     validate_record,
     validate_successor,
-)
-from ._lifecycle_record import (
-    CaptureReferenceStatus as _CaptureReferenceStatus,
-)
-from ._lifecycle_record import (
-    CaptureRetentionPhase as _CaptureRetentionPhase,
-)
-from ._lifecycle_record import (
-    CaptureSnapshotStatus as _CaptureSnapshotStatus,
-)
-from ._lifecycle_record import (
-    CaptureState as _CaptureState,
-)
-from ._lifecycle_record import (
-    CaptureStatus as _CaptureStatus,
 )
 from ._module_identity import register_module_aliases
 
@@ -83,8 +68,8 @@ __all__ = [
     "CaptureReferenceStatus",
     "CaptureRetentionPhase",
     "CaptureSnapshotStatus",
-    "CaptureState",
     "CaptureStatus",
+    "CaptureState",
     "CaptureTransitionCommittedError",
     "DecodedLedger",
     "LedgerCodecError",
@@ -106,14 +91,6 @@ __all__ = [
     "validate_successor",
     "write_all",
 ]
-
-
-CaptureState = _CaptureState
-CaptureReferenceStatus = _CaptureReferenceStatus
-CaptureDeliveryStatus = _CaptureDeliveryStatus
-CaptureRetentionPhase = _CaptureRetentionPhase
-CaptureSnapshotStatus = _CaptureSnapshotStatus
-CaptureStatus = _CaptureStatus
 
 
 FRAME_MAGIC = b"ASCL"
@@ -204,7 +181,7 @@ def decode_ledger(data: bytes) -> DecodedLedger:
         checksum = data[payload_start + declared : frame_end]
         if not hashlib.sha256(payload).digest() == checksum:
             raise LedgerCodecError("lifecycle frame checksum mismatch")
-        decoded = _decode_json(payload)
+        decoded = decode_json(payload)
         if set(decoded) == {"format_version", "generation", "record"}:
             version = decoded["format_version"]
             epoch = decoded["generation"]

@@ -188,7 +188,7 @@ class _TrackerLock:
         fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
         try:
             os.fchmod(fd, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BaseException:
             os.close(fd)
             raise

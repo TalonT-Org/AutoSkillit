@@ -26,6 +26,7 @@ from autoskillit.core import (
     RecipeBindingProjection,
     RecipeExecutionId,
     RecipeExecutionSnapshot,
+    RecipeStepGuard,
     VerifiedInputPreflightRequest,
     VerifiedInputPreflightResult,
     compute_invocation_template_digest,
@@ -254,6 +255,7 @@ def build_recipe_execution_snapshot(
     content_hash: str,
     composite_hash: str,
     projection: RecipeBindingProjection,
+    step_guards: Mapping[str, RecipeStepGuard] = MappingProxyType({}),
     execution_id: str | None = None,
 ) -> RecipeExecutionSnapshot:
     """Create a fresh attested snapshot from the exact post-prune projection."""
@@ -298,6 +300,7 @@ def build_recipe_execution_snapshot(
         composite_hash=composite_hash,
         templates=templates,
         dynamic_skill_step_names=frozenset(dynamic_skill_step_names),
+        step_guards=step_guards,
     )
     return RecipeExecutionSnapshot(
         execution_id=active_execution_id,
@@ -307,6 +310,7 @@ def build_recipe_execution_snapshot(
         templates=templates,
         snapshot_digest=snapshot_digest,
         dynamic_skill_step_names=frozenset(dynamic_skill_step_names),
+        step_guards=step_guards,
     )
 
 

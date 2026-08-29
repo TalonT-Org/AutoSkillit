@@ -9,6 +9,7 @@ import regex as re
 
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    VANISHED_ERRORS,
     acquire_flock_with_timeout,
     get_logger,
     write_versioned_json,
@@ -51,6 +52,8 @@ def merge_files(
     out = Path(output_path)
     errors: list[str] = []
     skipped: int = 0
+    skipped_result_files: list[str] = []
+    skip_vanished_results = bool(kwargs.get("_skip_vanished_results"))
     existing_items: list[dict[str, Any]] = []
 
     with open(out, "a+b") as fh:
@@ -73,14 +76,17 @@ def merge_files(
 
             for fp in file_paths:
                 p = Path(fp)
-                if not p.exists():
-                    msg = f"File not found: {fp}"
-                    if strict:
-                        raise ValueError(msg)
-                    errors.append(msg)
-                    continue
                 try:
                     item = json.loads(p.read_text())
+                except VANISHED_ERRORS as exc:
+                    msg = f"File not found: {fp}"
+                    if skip_vanished_results:
+                        skipped_result_files.append(p.name)
+                        continue
+                    if strict:
+                        raise ValueError(msg) from exc
+                    errors.append(msg)
+                    continue
                 except json.JSONDecodeError as exc:
                     msg = f"Invalid JSON in {fp}: {exc}"
                     if strict:
@@ -119,6 +125,8 @@ def merge_files(
     }
     if skipped:
         result["skipped_count"] = str(skipped)
+    if skipped_result_files:
+        result["skipped_result_files"] = skipped_result_files
     if errors:
         result["errors"] = errors
     return result
@@ -324,10 +332,12 @@ def merge_tier_results(
     tier_re = _TIER_FILE_RE.get(key)
     if tier_re is not None:
         paths = collect_tier_result_files(Path(results_dir), tier_re)
+        merge_kwargs = {"_skip_vanished_results": True}
     else:
         # No canonical regex defined for this key — accept all *_result.json files without
         # tier validation. This is intentional: unknown key types have no naming constraint.
         paths = sorted(Path(results_dir).glob("*_result.json"))
+        merge_kwargs = {}
     if not paths:
         raise ValueError(f"No *_result.json files found in {results_dir}")
     result = merge_files(
@@ -336,6 +346,7 @@ def merge_tier_results(
         key=key,
         task_file_path=task_file_path,
         source_dir=source_dir,
+        **merge_kwargs,
     )
     if key == "assignments":
         merged_data = json.loads(Path(output_path).read_text(encoding="utf-8"))
@@ -415,11 +426,15 @@ def merge_refined_assignments(
         )
 
     all_assignments: list[dict[str, Any]] = []
+    skipped_result_files: list[str] = []
     for path in result_files:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             logger.warning("Skipping malformed result file %s: %s", path, exc)
+            continue
+        except VANISHED_ERRORS:
+            skipped_result_files.append(path.name)
             continue
         except OSError:
             raise
@@ -478,11 +493,14 @@ def merge_refined_assignments(
     output_path = Path(planner_dir) / "refined_assignments.json"
     write_versioned_json(output_path, {"assignments": all_assignments}, schema_version=1)
 
-    return {
+    result: dict[str, Any] = {
         "refined_assignments_path": str(output_path),
         "item_count": str(len(all_assignments)),
         "conflict_count": str(conflict_count),
     }
+    if skipped_result_files:
+        result["skipped_result_files"] = skipped_result_files
+    return result
 
 
 def merge_refined_wps(
@@ -498,11 +516,15 @@ def merge_refined_wps(
         )
 
     all_wps: list[dict[str, Any]] = []
+    skipped_result_files: list[str] = []
     for path in result_files:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             logger.warning("Skipping malformed result file %s: %s", path, exc)
+            continue
+        except VANISHED_ERRORS:
+            skipped_result_files.append(path.name)
             continue
         except OSError:
             raise
@@ -552,11 +574,14 @@ def merge_refined_wps(
     output_path = Path(planner_dir) / "refined_wps.json"
     write_versioned_json(output_path, {"work_packages": all_wps}, schema_version=1)
 
-    return {
+    result: dict[str, Any] = {
         "refined_wps_path": str(output_path),
         "item_count": str(len(all_wps)),
         "conflict_count": str(conflict_count),
     }
+    if skipped_result_files:
+        result["skipped_result_files"] = skipped_result_files
+    return result
 
 
 def build_plan_snapshot(
@@ -576,6 +601,8 @@ def build_plan_snapshot(
         try:
             raw = json.loads(p.read_text())
             validated = validate_phase_result(raw)
+        except VANISHED_ERRORS:
+            continue
         except (ValueError, json.JSONDecodeError) as exc:
             logger.warning("Skipping malformed phase file %s: %s", p, exc)
             continue

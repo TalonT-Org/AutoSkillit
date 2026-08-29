@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from autoskillit.config import load_config
-from autoskillit.core import safe_mtime
+from autoskillit.core import VANISHED_ERRORS, safe_mtime, scan_observed
 from autoskillit.execution import DefaultSubprocessRunner
 from autoskillit.workspace import (
     RUNS_DIR,
@@ -117,27 +117,27 @@ async def run_workspace_clean(
     runner = DefaultSubprocessRunner()
     git_worktrees = set(await list_git_worktrees(project_root, worktrees_dir, runner))
     try:
-        fs_worktrees = {p for p in worktrees_dir.iterdir() if p.is_dir()}
-    except FileNotFoundError:
+        fs_worktrees = {entry.path for entry in scan_observed(worktrees_dir) if entry.is_dir}
+    except VANISHED_ERRORS:
         fs_worktrees = set()
     all_worktrees = git_worktrees | fs_worktrees
 
     # Filter out stale git-registered paths that no longer exist on disk.
-    stale_wts: list[Path] = []
-    recent_wts: list[Path] = []
+    stale_wts: list[tuple[Path, float]] = []
+    recent_wts: list[tuple[Path, float]] = []
     for p in sorted(all_worktrees):
         mtime = safe_mtime(p)
         if mtime is None:
             continue
         if now - mtime >= threshold:
-            stale_wts.append(p)
+            stale_wts.append((p, mtime))
         else:
-            recent_wts.append(p)
+            recent_wts.append((p, mtime))
 
     if recent_wts:
         print("Skipped worktrees (modified < 5h ago):")
-        for wt in recent_wts:
-            print(f"  {wt.name}  ({_format_age(now - wt.stat().st_mtime)})")
+        for wt, wt_mtime in recent_wts:
+            print(f"  {wt.name}  ({_format_age(now - wt_mtime)})")
         print()
 
     if not stale_wts:
@@ -145,8 +145,8 @@ async def run_workspace_clean(
         return
 
     print("Will remove worktrees:")
-    for wt in stale_wts:
-        print(f"  {wt.name}  ({_format_age(now - wt.stat().st_mtime)})")
+    for wt, wt_mtime in stale_wts:
+        print(f"  {wt.name}  ({_format_age(now - wt_mtime)})")
     print()
 
     if not force:
@@ -163,7 +163,7 @@ async def run_workspace_clean(
             print("Aborted.")
             return
 
-    for wt in stale_wts:
+    for wt, _ in stale_wts:
         wt_result = await remove_git_worktree(wt, project_root, runner)
         sidecar_result = remove_worktree_sidecar(project_root, wt.name)
         if not wt_result.success:

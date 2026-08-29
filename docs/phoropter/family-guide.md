@@ -1,21 +1,21 @@
 # Phoropter Family Authoring Guide
 
-Step-by-step guide for authoring a new phoropter lens family. This document walks through the seven touchpoints required to add a new family to the phoropter framework. For the formal contracts each step must satisfy, see [execution-contract.md](execution-contract.md).
+Step-by-step guide for authoring a new phoropter lens family. This document walks through the six touchpoints required to add a new family to the phoropter framework. For the formal contracts each step must satisfy, see [execution-contract.md](execution-contract.md).
 
-> **If you have not yet decided §5 (Step Naming Convention), do so before
+> **If you have not yet decided §4 (Step Naming Convention), do so before
 > touching the registry** — the registry's only remaining knob per family is
-> `step_naming.prefix`, and that decision is owned by §5.
+> `step_naming.prefix`, and that decision is owned by §4.
 
-> **Note: the field names below are tradition-manifest fields, not
-> phoropter-registry fields.** The phoropter-registry at
+> **Post-#4894 source-of-truth:** The phoropter-registry at
 > `src/autoskillit/assets/phoropter-registry.yaml` contains only
 > `step_naming.prefix` per family (one knob per family — the sole production
 > consumer is `_load_family_prefixes()` in
-> `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`). Everything
-> else in this guide — synthesis strategy, dial skill, lens metadata, arg
+> `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`). Every other
+> family knob — synthesis strategy, dial skill, lens metadata, arg
 > interface, activate_deps, output_prefix, composite_slugs, lens_count —
-> lives on the tradition manifest (§2), the recipe YAML, or the
-> SKILL.md frontmatter. The companion contract
+> is derived from each lens's `SKILL.md` (frontmatter + body), the recipe
+> YAML, or asserted by `tests/skills/test_phoropter_structural.py`. The
+> companion contract
 > `tests/contracts/test_phoropter_registry_leaf_has_consumer.py` enforces
 > that no leaf re-accumulates in the registry without a real consumer or an
 > `inert-tracked:#NNNN` annotation.
@@ -33,84 +33,27 @@ Before creating any files, decide which synthesis strategy your family will use.
 
 The `SynthesisStrategy` enum and `PhoropterPrescription` types are defined in `src/autoskillit/core/types/_type_enums.py` and `src/autoskillit/core/types/_type_phoropter.py`.
 
-## §2. Create the Tradition Manifest
+## §2. Register in phoropter-registry.yaml
 
-The tradition manifest declares the family's metadata, lens list, and configuration. The schema is defined in `src/autoskillit/assets/tradition-manifest-schema/tradition-manifest.schema.json`.
+Add a family entry to `src/autoskillit/assets/phoropter-registry.yaml` under the `families` key.
 
-**Required top-level fields:**
+**Required fields (post-#4894):**
 
-- `name` — Human-readable family name
-- `description` — One-line description
-- `output_type` — Enum: `mermaid_diagram`, `figure_spec`, `structured_markdown`
-- `step_count` — Number of lenses in the family
-- `mode_label` — Display label (e.g., "Architecture Impact", "Visualization Plan")
-- `context_file_schema` — Schema describing the context file structure
-- `default_enabled` — Boolean; whether the family is enabled by default
-- `failure_mode` — Enum: `continue`, `halt`
-- `lenses` — Array of `LensEntry` objects (each with `slug`, `analytical_mode`, `primary_question`, `tradition`)
+- `family_id` (top-level key) — kebab-case identifier (e.g., `vis-lens`, `arch-lens`)
+- `step_naming.prefix` — `null` for canonical step names, string for prefixed names. This is the only field with a live production reader (`_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`).
 
-**Schema-only top-level fields** (no hand-authored tradition manifest YAML currently populates these):
+All other fields that historically lived here (`description`, `output_type`, `mode_label`, `lens_count`, `default_enabled`, `failure_mode`, `arg_interface`, `dial_skill`, `synthesis.strategy`, `activate_deps`, `output_prefix`, `composite_slugs`, `lens_metadata`, `phase_skip`, `status`) are either:
+- Derived from each lens's `SKILL.md` content (frontmatter + body) and asserted by `tests/skills/test_phoropter_structural.py`, or
+- Tracked for retirement under issue #4894 via the deferral ledger at `tests/arch/test_declarative_asset_consumption.py`.
 
-- `synthesis_strategy` — Enum: `priority_hierarchy`, `electre_iii`, `dex`, `custom` (or null for null strategy)
-- `step_name_prefix` — `null`/absent → canonical names; set → prefixed names (e.g., `vis` → `vis_dial`, `vis_apply`, `vis_synthesize`)
-- `arg_interface` — Schema enum: `one_arg` / `two_arg`. Body-derived tests in `tests/skills/test_phoropter_structural.py` use the hyphenated short forms `1-arg` / `2-arg` (derived from the SKILL.md `## Arguments` shape). Use `1-arg` for lenses requiring only a context path; use `2-arg` for lenses requiring both a context path and an experiment plan path.
-- `output_prefix` — Prefix for output file names
-- `dialing` — `DialingConfig` with `selection_strategy` (`identity`/`property_set`), optional `min_lenses`, `max_lenses`, `always_run`, `synthesis_strategy`
-- `phase_skip` — `PhaseSkip` with required `skip_field` and `skip_semantics` (`skip_when_true`/`skip_when_false`); optional `applies_to`
-
-In practice, post-#4894 the values for `arg_interface`, `output_prefix`, and `activate_deps` are derived from each lens's SKILL.md (frontmatter + body) and asserted via `tests/skills/test_phoropter_structural.py`. `dialing` is not currently asserted by tests — it remains a schema-only field for future activation. `step_naming.prefix` lives on `phoropter-registry.yaml` (see §3). The fields above are documented here for schema reference.
-
-**File placement:** `src/autoskillit/recipes/methodology-traditions/{tradition-name}.yaml` (resolved by `BUNDLED_METHODOLOGY_TRADITIONS_DIR` in `src/autoskillit/recipe/methodology_tradition_registry.py`).
-
-**Minimal annotated example:**
-
-```yaml
-name: Example Lens Family
-description: Demonstrates the phoropter family configuration schema.
-output_type: structured_markdown
-step_count: 3
-mode_label: Example Analysis
-context_file_schema: example-context-v1
-default_enabled: true
-failure_mode: continue
-step_name_prefix: ex
-arg_interface: two_arg
-output_prefix: "ex_"
-lenses:
-  - slug: lens-alpha
-    analytical_mode: descriptive
-    primary_question: "What does the system do?"
-    tradition: example-tradition
-  - slug: lens-beta
-    analytical_mode: evaluative
-    primary_question: "How well does it do it?"
-    tradition: example-tradition
-  - slug: lens-gamma
-    analytical_mode: prescriptive
-    primary_question: "How could it improve?"
-    tradition: example-tradition
-phase_skip:
-  skip_field: context.is_silent_type
-  skip_semantics: skip_when_true
-  applies_to: apply
-```
-
-## §3. Register in phoropter-registry.yaml
-
-The phoropter-registry at `src/autoskillit/assets/phoropter-registry.yaml` carries **only** `step_naming.prefix` per family. That single knob is loaded exclusively by `_load_family_prefixes()` in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py` to enforce the `phoropter-phase-order` rule; every other family knob lives on the tradition manifest (§2), the recipe YAML, or each lens's SKILL.md frontmatter.
-
-**Required fields (per family entry):**
-
-- `step_naming.prefix` — `null` for canonical step names (Case A in §5); set to a kebab-case token (e.g., `vis`, `ex`) for prefixed names (Case B). This is the only knob the registry owns.
-
-> **§5 forward-reference.** Decide your step-naming convention in §5
+> **§4 forward-reference.** Decide your step-naming convention in §4
 > before writing the registry entry — `step_naming.prefix` value is
 > derived from that decision. If you set `prefix: null` you will use
 > canonical `dial` / `apply` / `synthesize` keys with
 > `phoropter_family: {family-id}` annotations; if you set `prefix: ex`
 > you will use `ex_dial` / `ex_apply` / `ex_synthesize` keys.
 
-**Minimal annotated example entry:**
+**Annotated example entry:**
 
 ```yaml
 families:
@@ -119,10 +62,9 @@ families:
       prefix: ex   # or null for canonical names (Case A)
 ```
 
-If you set `prefix: null`, omit `step_naming` entirely — the registry
-loader treats a missing key as a canonical-naming family.
+If you set `prefix: null`, omit `step_naming` entirely — the registry loader treats a missing key as a canonical-naming family.
 
-## §4. Generate Lens SKILL.md Files
+## §3. Generate Lens SKILL.md Files
 
 Each lens in the family needs a `SKILL.md` file following the template variable conventions below.
 
@@ -130,6 +72,9 @@ Each lens in the family needs a `SKILL.md` file following the template variable 
 
 - `{name}` — Human-readable lens name
 - `{categories}` — Comma-separated category tags
+- `{dial_skill}` — Dial phase skill name
+- `{apply_skill}` — Apply phase skill name (usually the lens itself)
+- `{synthesize_skill}` — Synthesize phase skill name
 - `{family}` — Family identifier
 - `{slug}` — Lens slug suffix
 - `{mode_label}` — Display mode label
@@ -141,32 +86,33 @@ Each lens in the family needs a `SKILL.md` file following the template variable 
 - `{arg_count}` — Number of positional arguments
 - `{step_count}` — Number of steps in the lens workflow
 - `{output_type}` — Output format
+- `{output_prefix}` — Output file prefix
 - `{parent_skill}` — Parent skill for lens grouping
 
 > **Note:** The SKILL.md generator reads `{dial_skill}`, `{apply_skill}`,
 > `{synthesize_skill}`, and `{output_prefix}` from each lens's SKILL.md
 > body or recipe step (and `{output_prefix}` from the lens body) —
-> not from the registry, which no longer carries these fields (see §3).
+> not from the registry, which no longer carries these fields (see §2).
 
 **Argument interface distinction:**
 
 - **1-arg** (arch-lens): `{context_path}` only. The lens receives a single path to the PR context or codebase root.
 - **2-arg** (exp-lens, vis-lens): `{context_path} {experiment_plan_path}`. The lens receives both the context and the experiment plan.
 
-## §5. Select Step Naming Convention
+## §4. Select Step Naming Convention
 
 Driven by the `phoropter-phase-order` rule in `src/autoskillit/recipe/rules/rules_phoropter_adjacency.py`:
 
-- **Case A (sole family):** Use canonical step keys (`dial`, `apply`, `synthesize`) and add `phoropter_family: {family-id}` annotation on each step. The rule's `_PHOROPTER_PHASES` tuple `("dial", "apply", "synthesize")` matches these names directly. Set `step_naming.prefix: null` in §3.
-- **Case B (coexisting families):** Use prefixed step keys (`{prefix}_dial`, `{prefix}_apply`, `{prefix}_synthesize`) without `phoropter_family` annotation. Omitting the annotation avoids `phoropter-step-interleaving` false errors when recipe-level routing steps separate family steps. Set `step_naming.prefix: {prefix}` in §3.
+- **Case A (sole family):** Use canonical step keys (`dial`, `apply`, `synthesize`) and add `phoropter_family: {family-id}` annotation on each step. The rule's `_PHOROPTER_PHASES` tuple `("dial", "apply", "synthesize")` matches these names directly.
+- **Case B (coexisting families):** Use prefixed step keys (`{prefix}_dial`, `{prefix}_apply`, `{prefix}_synthesize`) without `phoropter_family` annotation. Omitting the annotation avoids `phoropter-step-interleaving` false errors when recipe-level routing steps separate family steps.
 
 **Concrete example:** vis-lens coexisting with review-design in `research.yaml` uses `vis_dial`, `vis_apply`, `vis_synthesize` with no `phoropter_family`; review-design uses `dial`, `apply`, `synthesize` with `phoropter_family: review-design`. For full details on step naming, see [execution-contract.md §5](execution-contract.md#5-step-naming-conventions).
 
-> **Re-anchor the registry entry (§3):** Set `step_naming.prefix` in §3
+> **Re-anchor the registry entry (§2):** Set `step_naming.prefix` in §2
 > based on this decision — `null` for Case A, the prefix token (e.g.,
 > `vis`, `ex`) for Case B.
 
-## §6. Wire Recipe Steps
+## §5. Wire Recipe Steps
 
 Provide copy-pasteable YAML snippet patterns from [recipe-blocks/](recipe-blocks/README.md):
 
@@ -177,12 +123,12 @@ Provide copy-pasteable YAML snippet patterns from [recipe-blocks/](recipe-blocks
 
 **Routing chain:** The `on_success` routing follows `dial → apply → synthesize`. The `skip_when_true` bypass pattern means: when `skip_when_true` evaluates to truthy, the step is skipped and control passes to the step named in `on_success` (or `on_failure` if configured as fallthrough).
 
-## §7. Verification Checklist
+## §6. Verification Checklist
 
-Before merging a new phoropter family, verify all seven touchpoints:
+Before merging a new phoropter family, verify all six touchpoints:
 
-1. **Registry entry present at `src/autoskillit/assets/phoropter-registry.yaml`** with `step_naming.prefix` set per §5 (or omitted if canonical naming). Run `task test-filtered` with `AUTOSKILLIT_TEST_FILTER=conservative` scoped to `tests/contracts/test_phoropter_registry_leaf_has_consumer.py` to confirm no leaves have accreted.
-2. **P5 family-generic structural test auto-discovers** the family via filesystem scan of `src/autoskillit/skills_extended/{family}-*` directories — no manual test update required.
+1. **Entry present in `src/autoskillit/assets/phoropter-registry.yaml`** with `step_naming.prefix` set per §4 (or omitted if canonical naming). Run `task test-filtered` with `AUTOSKILLIT_TEST_FILTER=conservative` scoped to `tests/contracts/test_phoropter_registry_leaf_has_consumer.py` to confirm no leaves have accreted.
+2. **P5 family-generic structural test auto-discovers** the family via registry — no manual test update required.
 3. **`src/autoskillit/recipe/skill_contracts.yaml`** entries for each new lens skill and the family's dial/synthesize skills.
 4. **`docs/skills/catalog.md`** updated with new family section listing all lenses.
 5. **`docs/skills/subsets.md`** updated with new category row for the family's tool subset tag.

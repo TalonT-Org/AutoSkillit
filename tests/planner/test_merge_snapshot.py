@@ -6,8 +6,13 @@ import json
 
 import pytest
 
+import autoskillit.planner.merge as merge_module
 from autoskillit.planner.merge import build_plan_snapshot
-from tests.planner.conftest import make_phase_result, write_task_file
+from tests.planner.conftest import (
+    make_phase_result,
+    unlink_second_accepted_result,
+    write_task_file,
+)
 
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
@@ -110,6 +115,20 @@ def test_build_plan_snapshot_happy_path_two_phases_sorted(tmp_path) -> None:
     assert data["phases"][1]["ordering"] == 2
     assert "P1" in result["phase_ids"]
     assert "P2" in result["phase_ids"]
+
+
+def test_build_plan_snapshot_skips_a_vanished_phase_result(tmp_path, monkeypatch) -> None:
+    phases_dir = tmp_path / "phases"
+    phases_dir.mkdir()
+    (phases_dir / "P1_result.json").write_text(json.dumps(make_phase_result(1)))
+    (phases_dir / "P2_result.json").write_text(json.dumps(make_phase_result(2)))
+    out = tmp_path / "snapshot.json"
+    unlink_second_accepted_result(monkeypatch, merge_module)
+
+    result = build_plan_snapshot(str(phases_dir), str(out))
+
+    assert result["phase_ids"] == "P1"
+    assert [phase["id"] for phase in json.loads(out.read_text())["phases"]] == ["P1"]
 
 
 def test_build_plan_snapshot_warns_on_unrecognized_result_filename(tmp_path) -> None:

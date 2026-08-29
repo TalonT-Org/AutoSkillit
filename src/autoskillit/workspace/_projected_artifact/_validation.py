@@ -78,6 +78,8 @@ def validate_sanitized_plugin_artifact(
 
     public_skills = public_root / "skills"
     actual_names: set[str] = set()
+    public_skill_tree_entries: list[tuple[str, str]] = []
+    public_tree_complete = False
     if (public_root / "skills_extended").exists():
         errors.append("public plugin must not contain a canonical skills_extended tree")
     if public_root.is_dir():
@@ -88,24 +90,42 @@ def validate_sanitized_plugin_artifact(
                         "public plugin asset is a symlink: "
                         f"{public_root / tree_entry.relative_path}"
                     )
+                if tree_entry.relative_path.startswith("skills/"):
+                    public_skill_tree_entries.append(
+                        (tree_entry.relative_path.removeprefix("skills/"), tree_entry.kind)
+                    )
+            public_tree_complete = True
         except TreeVanishedError as exc:
             errors.append(f"public plugin tree enumeration raced with a mutation: {exc}")
         except OSError as exc:
             errors.append(f"public plugin tree cannot be read during validation: {exc}")
     if not public_skills.is_dir() or public_skills.is_symlink():
         errors.append("public plugin skills root is missing or is a symlink")
-    else:
-        for entry in public_skills.iterdir():
-            if entry.is_symlink():
-                errors.append(f"public skill entry is a symlink: {entry.name}")
+    elif public_tree_complete:
+        children_by_skill: dict[str, set[str]] = {}
+        regular_skill_markdown: set[str] = set()
+        for relative_path, kind in public_skill_tree_entries:
+            entry_name, separator, child_path = relative_path.partition("/")
+            if not separator:
+                if kind == "l":
+                    errors.append(f"public skill entry is a symlink: {entry_name}")
+                elif kind != "d":
+                    errors.append(
+                        f"public skills root contains a non-directory entry: {entry_name}"
+                    )
+                else:
+                    actual_names.add(entry_name)
                 continue
-            if not entry.is_dir():
-                errors.append(f"public skills root contains a non-directory entry: {entry.name}")
-                continue
-            actual_names.add(entry.name)
-            children = {child.name for child in entry.iterdir()}
-            if children != {"SKILL.md"} or not (entry / "SKILL.md").is_file():
-                errors.append(f"public skill directory must contain only SKILL.md: {entry.name}")
+            child_name = child_path.split("/", maxsplit=1)[0]
+            children_by_skill.setdefault(entry_name, set()).add(child_name)
+            if child_path == "SKILL.md" and kind == "f":
+                regular_skill_markdown.add(entry_name)
+        for entry_name in actual_names:
+            if (
+                children_by_skill.get(entry_name) != {"SKILL.md"}
+                or entry_name not in regular_skill_markdown
+            ):
+                errors.append(f"public skill directory must contain only SKILL.md: {entry_name}")
 
     expected_names = set(expected)
     manifest_names = {str(name) for name in manifest_skills}

@@ -115,7 +115,12 @@ class TestSessionIndexExecutionIdentitySchema:
     def test_child_executions_uses_typed_persistence_shape(self) -> None:
         from typing import get_type_hints
 
-        from autoskillit.core.types import ChildExecutionIdentityDict, SessionIndexEntry
+        from autoskillit.core.types import (
+            ChildExecutionIdentityDict,
+            SessionIndexEntry,
+            SubagentModelOutcomeDict,
+        )
 
         hints = get_type_hints(SessionIndexEntry)
         assert hints["child_executions"] == list[ChildExecutionIdentityDict]
+        assert hints["subagent_model_outcomes"] == list[SubagentModelOutcomeDict]

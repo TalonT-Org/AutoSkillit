@@ -1,7 +1,7 @@
 """Shared authority-violation feedback helpers for open_kitchen, load_recipe, and lock_ingredients.
 
 Single source of truth for authority feedback text — all three tool surfaces
-route through this module to guarantee consistency across warning and rejection paths.
+route through this module to guarantee consistency across rejection paths.
 """
 
 from __future__ import annotations
@@ -10,37 +10,8 @@ from typing import Any
 
 from autoskillit.config import (
     SERVER_AUTHORITATIVE_CONFIG_PATHS,
-    SERVER_AUTHORITATIVE_INGREDIENTS,
     SERVER_AUTHORITATIVE_KEY_HINTS,
 )
-
-
-def build_authority_clobber_warnings(
-    overrides: dict[str, str],
-    config_layer: dict[str, str],
-    *,
-    caller_tool: str = "open_kitchen",
-) -> list[str]:
-    """Return warnings for overrides clobbered by server-authoritative layer."""
-    warnings: list[str] = []
-    for key in sorted(set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS):
-        config_path = SERVER_AUTHORITATIVE_CONFIG_PATHS.get(key)
-        server_value = config_layer.get(key, "")
-        if config_path:
-            warnings.append(
-                f"Override for server-authoritative ingredient '{key}' ignored — "
-                f"server value '{server_value}' (from config {config_path}) wins; "
-                f"set the config key and re-call {caller_tool} to change it"
-            )
-        else:
-            warnings.append(
-                f"Override for server-authoritative ingredient '{key}' ignored — "
-                f"set by the dispatch runtime at session launch, not user-configurable"
-            )
-        hint = SERVER_AUTHORITATIVE_KEY_HINTS.get(key)
-        if hint:
-            warnings.append(hint)
-    return warnings
 
 
 def build_authority_rejection_envelope(rejected_keys: set[str]) -> dict[str, Any]:

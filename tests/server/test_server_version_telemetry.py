@@ -198,6 +198,7 @@ class TestInitializeClearMarker:
                 github_api_requests=0,
                 loc_insertions=0,
                 loc_deletions=0,
+                subagent_model_outcomes=(),
             ),
             provider_outcome=ProviderOutcome.none_used(),
             recipe_identity=RecipeIdentity.empty(),

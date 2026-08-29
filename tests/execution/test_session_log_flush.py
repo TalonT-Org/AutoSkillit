@@ -947,12 +947,12 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["cache_read_tokens"] == 80
 
 
-def test_flush_index_includes_schema_version_8(tmp_path):
-    """sessions.jsonl entry must contain schema_version: 8."""
+def test_flush_index_includes_schema_version_9(tmp_path):
+    """sessions.jsonl entry must contain schema_version: 9."""
     _flush(tmp_path)
     index_path = tmp_path / "sessions.jsonl"
     entry = json.loads(index_path.read_text().strip().split("\n")[-1])
-    assert entry["schema_version"] == 8
+    assert entry["schema_version"] == 9
 
 
 def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):
@@ -1223,6 +1223,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     assert telemetry.github_api_usage is None
     assert telemetry.loc_insertions == 0
     assert telemetry.loc_deletions == 0
+    assert telemetry.subagent_model_outcomes == ()
 
 
 def test_flush_writes_token_usage_with_dispatch_label(tmp_path):

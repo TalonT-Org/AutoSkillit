@@ -217,6 +217,9 @@ tests/fixtures/context_admission_journals/*.json:
 tests/execution/backends/fixtures/codex_ndjson/*.json:
   - execution/
 
+tests/execution/fixtures/*.json:
+  - execution/
+
 tests/config/golden_configs/*.yaml:
   - config/
 

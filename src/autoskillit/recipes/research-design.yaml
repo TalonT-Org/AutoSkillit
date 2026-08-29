@@ -283,7 +283,7 @@ steps:
       cwd: "${{ inputs.source_dir }}"
       step_name: resolve_design_review
       output_dir: "{{AUTOSKILLIT_TEMP}}/resolve-design-review/iter_${{ context.design_review_count }}"
-    optional_context_refs: [revision_guidance, findings_manifest_path]
+    optional_context_refs: [evaluation_dashboard, revision_guidance, findings_manifest_path]
     capture:
       revision_guidance: "${{ result.revision_guidance }}"
     retries: 1

@@ -164,7 +164,11 @@ def find_call_sites(func_name: str, defining_module_relpath: str) -> list[str]:
     parsed: dict[str, tuple[ast.Module, dict[ast.AST, ast.AST], _ImportMap]] = {}
     for path in py_files:
         relpath = str(path.relative_to(SRC_ROOT))
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        tree = ast.parse(source, filename=str(path))
         parsed[relpath] = (tree, _build_parent_map(tree), _ImportMap(tree))
 
     # Equivalence class of names that resolve to the policy: start with the

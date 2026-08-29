@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
+from autoskillit.core import VANISHED_ERRORS
 from autoskillit.recipe._cmd_rpc import (
     batch_create_issues,
     check_dropped_healthy_loop,
@@ -518,7 +519,7 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
     assert result["issue_count"] == "3"
 
 
-@pytest.mark.parametrize("error_type", (FileNotFoundError, NotADirectoryError))
+@pytest.mark.parametrize("error_type", VANISHED_ERRORS, ids=lambda error: error.__name__)
 def test_batch_create_issues_returns_empty_when_audit_root_vanishes(
     tmp_path: Path, error_type: type[OSError]
 ) -> None:

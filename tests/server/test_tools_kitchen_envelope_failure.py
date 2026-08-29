@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -308,21 +307,14 @@ async def test_open_kitchen_smoke_test_renders_resolved_base_branch(monkeypatch)
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypatch):
-    """_config_layer overrides caller-supplied overrides for config-authoritative keys."""
+async def test_open_kitchen_rejects_config_authority_override(tmp_path, monkeypatch):
+    """open_kitchen rejects caller-supplied overrides for server-authoritative
+    keys with a structured envelope — the config-layer silent-overwrite behavior
+    is replaced by explicit rejection (authority gate at function entry)."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
-    mock_ctx.recipes.load_and_validate.return_value = {
-        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-        "valid": True,
-        "suggestions": [],
-        "diagram": None,
-        "ingredients_table": (
-            "--- INGREDIENTS TABLE ---\n  base_branch  develop\n--- END TABLE ---"
-        ),
-    }
     _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
@@ -349,42 +341,31 @@ async def test_open_kitchen_config_authority_overrides_caller(tmp_path, monkeypa
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-                            await open_kitchen(
+                            result_str = await open_kitchen(
                                 name="demo",
                                 overrides={"base_branch": "main"},
                                 ctx=mock_ctx,
                             )
 
-    call_kwargs = mock_ctx.recipes.load_and_validate.call_args.kwargs
-    overrides = call_kwargs["ingredient_overrides"]
-    assert overrides["base_branch"] == "develop"
+    parsed = json.loads(result_str)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "ingredient_authority_validation"
+    assert parsed["retriable"] is False
+    assert "base_branch" in parsed["error"]
+    # Authority gate runs at function entry, before recipes.load / serve_recipe.
+    mock_ctx.recipes.load.assert_not_called()
+    mock_ctx.recipes.load_and_validate.assert_not_called()
 
 
 @pytest.mark.anyio
-async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatch):
-    """open_kitchen must emit a warning naming the clobbered key and its config path."""
+async def test_open_kitchen_rejects_authority_override_with_envelope(tmp_path, monkeypatch):
+    """open_kitchen rejects base_branch override and returns a structured envelope
+    naming the clobbered key and its config path."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
     mock_ctx.recipes = MagicMock()
-    mock_recipe_obj = MagicMock()
-    mock_recipe_obj.steps = {"do": MagicMock()}
-    mock_recipe_obj.ingredients = {"base_branch": MagicMock()}
-    mock_ctx.recipes.load.return_value = mock_recipe_obj
-    mock_ctx.recipes.load_and_validate.return_value = {
-        "content": "name: demo\nsteps:\n  do:\n    tool: run_cmd\n",
-        "valid": True,
-        "suggestions": [],
-        "diagram": None,
-        "ingredients_table": "--- TABLE ---",
-    }
-    mock_ctx.recipes.load_and_validate.return_value = _with_finalized_projection(
-        mock_ctx.recipes.load_and_validate.return_value,
-        projection=_make_finalized_projection(),
-    )
-    mock_recipe_info = MagicMock()
-    mock_recipe_info.path = Path("/fake/recipe.yaml")
-    mock_ctx.recipes.find.return_value = mock_recipe_info
+    _configure_admitted_recipe(mock_ctx, tmp_path / "demo.yaml")
     mock_ctx.config.migration.suppressed = []
     mock_ctx.kitchen_id = "test-kitchen-abc"
     mock_ctx.config.linux_tracing.log_dir = ""
@@ -416,18 +397,21 @@ async def test_open_kitchen_emits_authority_clobber_warning(tmp_path, monkeypatc
                             )
 
     parsed = json.loads(result_str)
-    warnings = parsed.get("warnings") or []
-    matching = [w for w in warnings if "base_branch" in w]
-    assert matching, f"Expected a warning naming base_branch; got warnings={warnings}"
-    assert any("branching.default_base_branch" in w for w in warnings), (
-        f"Expected the warning to name the config path branching.default_base_branch; "
-        f"got warnings={warnings}"
+    assert parsed["success"] is False
+    assert parsed["stage"] == "ingredient_authority_validation"
+    assert parsed["retriable"] is False
+    assert "base_branch" in parsed["error"]
+    # user_visible_message should mention the config path for actionable feedback.
+    assert "branching.default_base_branch" in parsed["user_visible_message"], (
+        f"Expected user_visible_message to name the config path "
+        f"branching.default_base_branch; got {parsed['user_visible_message']!r}"
     )
 
 
 @pytest.mark.anyio
 async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
-    """Full open_kitchen path: config value wins over caller override in rendered output."""
+    """Full open_kitchen path: caller-supplied base_branch override is rejected
+    at function entry — no recipe load, no projection, no session mutation."""
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     import autoskillit.recipe._api_cache as cache_mod
     from autoskillit.core import pkg_root
@@ -473,15 +457,9 @@ async def test_open_kitchen_with_config_authority_ingredient(monkeypatch):
                         )
 
     parsed = json.loads(result_str)
-    assert parsed["success"] is True, parsed
-    ing_table = parsed.get("ingredients_table") or ""
-    assert ing_table, "ingredients_table must be present and non-empty"
-    base_branch_rows = [line for line in ing_table.splitlines() if "base_branch" in line]
-    assert base_branch_rows, "base_branch row must appear in ingredients_table"
-    assert all("develop" in row for row in base_branch_rows), (
-        "base_branch should show 'develop' (config value), not the caller's 'main'"
-    )
-    assert all("main" not in row for row in base_branch_rows)
+    assert parsed["success"] is False
+    assert parsed["stage"] == "ingredient_authority_validation"
+    assert "base_branch" in parsed["error"]
 
 
 @pytest.mark.anyio

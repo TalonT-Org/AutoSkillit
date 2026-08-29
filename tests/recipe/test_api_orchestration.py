@@ -367,3 +367,44 @@ def test_assemble_load_result_handles_recipe_none_in_error_path(tmp_path: Path) 
     assert result["valid"] is False and "YAML parse error" in json.dumps(
         result.get("suggestions", [])
     )
+
+
+def test_validation_pipeline_uses_orch_module_for_monkeypatch_targets(
+    monkeypatch,
+):
+    """Issue #4905: every monkeypatchable symbol in the validate/match/parse
+    shards must be looked up through _api_orchestration.{name} so
+    monkeypatch.setattr(orch, NAME, mock) reaches the call sites.
+
+    Drives load_and_validate through the public surface with a patched
+    ``run_semantic_rules``; the patched version appends a sentinel to a
+    captured calls list. If the validate shard bypasses the orchestrator
+    attribute lookup, the patched function never runs and the test fails.
+    """
+    from autoskillit.recipe import _api_orchestration as _orch
+    from autoskillit.recipe._api_cache import _LOAD_CACHE
+    from autoskillit.recipe._api_orchestration import load_and_validate
+
+    # Clear the load cache so the patched run_semantic_rules is exercised.
+    _LOAD_CACHE.clear()
+
+    calls: list[str] = []
+
+    def fake_run_semantic_rules(val_ctx):
+        calls.append("run_semantic_rules")
+        return []
+
+    monkeypatch.setattr(_orch, "run_semantic_rules", fake_run_semantic_rules)
+
+    # Drive the test through the bundled "implementation" recipe so the
+    # pipeline reaches the post-prune semantic-rules stage without needing
+    # a hand-written recipe on disk.
+    load_and_validate(
+        name="implementation",
+        project_dir=None,
+        resolved_defaults=None,
+    )
+    assert "run_semantic_rules" in calls, (
+        "monkeypatched run_semantic_rules was never called — the validate "
+        "shard is bypassing the _api_orchestration module attribute lookup"
+    )

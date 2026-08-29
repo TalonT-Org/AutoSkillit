@@ -240,7 +240,11 @@ def find_discarded_total_result_violations(src_root: Path = SRC_ROOT) -> list[st
     violations: list[str] = []
     for path in sorted(src_root.rglob("*.py")):
         module = path.relative_to(src_root).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        try:
+            source = path.read_text(encoding="utf-8")
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        tree = ast.parse(source, filename=str(path))
         imports = _ImportMap(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Expr) or not isinstance(node.value, ast.Call):

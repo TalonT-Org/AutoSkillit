@@ -230,6 +230,91 @@ def test_dispatch_recipe_in_declared_packs_warns(tmp_path: Path):
     assert found[0].severity == Severity.WARNING
 
 
+def test_dispatch_recipe_in_declared_packs_allow_list_suppresses_warning(
+    tmp_path: Path,
+) -> None:
+    """An allowed_recipes entry must suppress the warning for the matching dispatch.
+
+    Regression coverage for the allow-list branch at
+    src/autoskillit/recipe/rules/campaign/rules_campaign_dispatch.py:174.
+    Without the real on-disk target recipe, _load_dispatch_target returns
+    None and the rule silently produces zero findings — which would make
+    this test vacuously pass even if line 174 were deleted.
+    """
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "allowed-recipe.yaml",
+        {
+            "name": "allowed-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "categories": ["research-family"],  # valid tag; does NOT overlap requires_recipe_packs
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        requires_recipe_packs=["implementation-family"],
+        allowed_recipes=["allowed-recipe"],
+        dispatches=[
+            CampaignDispatch(name="phase-one", recipe="allowed-recipe", task="do it"),
+        ],
+    )
+    found = _findings(
+        recipe,
+        "dispatch-recipe-in-declared-packs",
+        project_dir=tmp_path,
+    )
+    assert found == [], (
+        f"Allow-list entry should suppress the warning, but got: {[f.message for f in found]}"
+    )
+
+
+def test_dispatch_recipe_in_declared_packs_no_allow_list_warns_with_real_target(
+    tmp_path: Path,
+) -> None:
+    """Without allowed_recipes, the warning must fire — proving the suppression above
+    came from the allow-list branch, not from a missing target.
+
+    Pair with `test_dispatch_recipe_in_declared_packs_allow_list_suppresses_warning`
+    so deleting line 174 of rules_campaign_dispatch.py causes both tests to fail
+    (one flips from zero findings to one finding, the other stays at one).
+    """
+    recipes_dir = tmp_path / ".autoskillit" / "recipes"
+    recipes_dir.mkdir(parents=True)
+    _write_recipe_yaml(
+        recipes_dir / "allowed-recipe.yaml",
+        {
+            "name": "allowed-recipe",
+            "description": "target",
+            "kind": "standard",
+            "kitchen_rules": ["NEVER"],
+            "categories": ["research-family"],
+            "steps": {"stop": {"action": "stop", "message": "done"}},
+        },
+    )
+    recipe = _campaign(
+        requires_recipe_packs=["implementation-family"],
+        dispatches=[
+            CampaignDispatch(name="phase-one", recipe="allowed-recipe", task="do it"),
+        ],
+    )
+    found = _findings(
+        recipe,
+        "dispatch-recipe-in-declared-packs",
+        project_dir=tmp_path,
+    )
+    assert len(found) == 1, (
+        "Without allowed_recipes, the warning should fire exactly once; got: "
+        f"{[f.message for f in found]}"
+    )
+    assert found[0].severity == Severity.WARNING
+    assert found[0].rule == "dispatch-recipe-in-declared-packs"
+    assert found[0].step_name == "(top-level)"
+    assert "allowed-recipe" in found[0].message
+
+
 # ---------------------------------------------------------------------------
 # T22: campaign-requires-recipe-packs-exist
 # ---------------------------------------------------------------------------

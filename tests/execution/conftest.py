@@ -477,6 +477,7 @@ def _flush(
         "audit_record": None,
         "loc_insertions": 0,
         "loc_deletions": 0,
+        "subagent_model_outcomes": (),
         "model_identity": ModelIdentity.unknown(),
         "execution_identity": ExecutionIdentity.empty(),
     }
@@ -509,6 +510,7 @@ def _flush(
         github_api_requests=_api_usage.get("total_requests", 0) if _api_usage else 0,
         loc_insertions=defaults.pop("loc_insertions"),
         loc_deletions=defaults.pop("loc_deletions"),
+        subagent_model_outcomes=defaults.pop("subagent_model_outcomes"),
         execution_identity=defaults.pop("execution_identity"),
     )
 

@@ -6,6 +6,7 @@ REQ-ARCH-007: DefaultMigrationService observable behavior.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -13,8 +14,16 @@ import pytest
 import yaml
 
 import autoskillit
+import autoskillit.recipe.io as recipe_io
+from tests.recipe._testing import count_discovery_calls, isolate_recipe_discovery_cache
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
+
+
+@pytest.fixture(autouse=True)
+def isolated_recipe_discovery_cache() -> Iterator[None]:
+    """Keep the centralized discovery counters local to one wrapper regression."""
+    yield from isolate_recipe_discovery_cache()
 
 
 class TestDefaultRecipeRepository:
@@ -387,55 +396,64 @@ def test_load_and_validate_skips_file_read_when_content_in_recipe_info(
     assert "content" in result
 
 
-# SW-B2: DefaultRecipeRepository.list() returns cached object on second call
-def test_default_recipe_repository_caches_list_between_calls(tmp_path: Path) -> None:
-    """Second call to list() returns the same object (no re-scan)."""
-    from autoskillit.recipe.repository import DefaultRecipeRepository
-
+# SW-B2: recipe discovery work is centrally cached, while callers get fresh results
+def test_list_recipes_reuses_discovery_cache_with_fresh_containers(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Warm discovery avoids uncached work without sharing result containers."""
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     _write_valid_recipe(recipes_dir / "my-recipe.yaml")
 
-    repo = DefaultRecipeRepository()
-    r1 = repo.list(tmp_path)
-    r2 = repo.list(tmp_path)
-    assert r1 is r2  # same object — no re-scan
+    calls = count_discovery_calls(monkeypatch)
+
+    first = recipe_io.list_recipes(tmp_path)
+    warm = recipe_io.list_recipes(tmp_path)
+
+    assert calls == {"enumerate": 2, "collect": 1}
+    assert first is not warm
+    assert first.items is not warm.items
+    assert first.errors is not warm.errors
+    assert first.items == warm.items
+    assert first.errors == warm.errors
 
 
-# SW-B3: Cache invalidated when recipe directory mtime changes
-def test_default_recipe_repository_invalidates_cache_on_new_file(tmp_path: Path) -> None:
-    """Adding a file triggers mtime change and cache invalidation."""
-    import time
-
-    from autoskillit.recipe.repository import DefaultRecipeRepository
-
+# SW-B3: project updates invalidate only the affected discovery tier
+def test_list_recipes_reenumerates_only_project_candidates_after_recipe_added(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Adding a project recipe re-enumerates and recollects without rescanning bundled recipes."""
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)
     _write_valid_recipe(recipes_dir / "r1.yaml")
 
-    repo = DefaultRecipeRepository()
-    r1 = repo.list(tmp_path)
+    calls = count_discovery_calls(monkeypatch)
 
-    time.sleep(0.01)  # ensure mtime advances
+    recipe_io.list_recipes(tmp_path)
     _write_valid_recipe(recipes_dir / "r2.yaml")
+    updated = recipe_io.list_recipes(tmp_path)
 
-    r2 = repo.list(tmp_path)
-    assert r1 is not r2  # new scan triggered
+    assert calls == {"enumerate": 3, "collect": 2}
+    assert {recipe.name for recipe in updated.items} >= {"r1", "r2"}
 
 
-# SW-B4: DefaultRecipeRepository.find() uses in-memory index (no double list_recipes call)
-def test_default_recipe_repository_find_uses_index(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+# SW-B4: DefaultRecipeRepository delegates discovery to the public list_recipes API
+def test_default_recipe_repository_find_delegates_to_list_recipes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    """find() after list() must not call list_recipes() again."""
-    from autoskillit.recipe.io import list_recipes as _original_list_recipes
+    """list() and find() both delegate so discovery cache ownership stays in recipe I/O."""
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
-    call_count: dict[str, int] = {"n": 0}
+    call_count = 0
+    discovery_calls = count_discovery_calls(monkeypatch)
 
     def counting_list(project_dir: Path) -> object:
-        call_count["n"] += 1
-        return _original_list_recipes(project_dir)
+        nonlocal call_count
+        call_count += 1
+        return recipe_io.list_recipes(project_dir)
 
     monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", counting_list)
 
@@ -444,6 +462,7 @@ def test_default_recipe_repository_find_uses_index(
     _write_valid_recipe(recipes_dir / "r.yaml")
 
     repo = DefaultRecipeRepository()
-    repo.list(tmp_path)  # populates index (count=1)
-    repo.find("r", tmp_path)  # should use index (count still 1)
-    assert call_count["n"] == 1
+    repo.list(tmp_path)
+    assert repo.find("r", tmp_path) is not None
+    assert call_count == 2
+    assert discovery_calls == {"enumerate": 2, "collect": 1}

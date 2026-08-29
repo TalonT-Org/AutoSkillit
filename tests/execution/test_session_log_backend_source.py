@@ -97,7 +97,8 @@ class TestBackendAuthorityInSessionsJsonl:
             "outcome_qualifier": None,
             "native_shell_capture": None,
             "session_type": None,
-            "schema_version": 8,
+            "subagent_model_outcomes": [],
+            "schema_version": 9,
         }
         assert entry["backend_authority"] is None
         assert entry["launch_contract_digest"] == ""

@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX
+from autoskillit.core import DIRECT_PREFIX, MARKETPLACE_PREFIX, STEP_SKIP_SEMANTICS_CLAUSE
 from autoskillit.core.types import PIPELINE_FORBIDDEN_TOOLS
 from tests.contracts._anti_fab_helpers import FABRICATION_GUARD_RE
 
@@ -383,6 +383,7 @@ class TestSourceIsolationContract:
 def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
     from autoskillit.cli.prompts._prompts_campaign import _build_fleet_campaign_prompt
     from autoskillit.fleet._prompts import _build_food_truck_prompt
+    from autoskillit.recipe._api_orchestration import _build_orchestration_rules
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
@@ -441,10 +442,50 @@ def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
                 campaign_id="c1",
             ),
         ),
+        ("_build_orchestration_rules", _build_orchestration_rules, {}),
     ]
 
 
 _ANTI_FAB_BUILDERS = _anti_fab_prompt_builders()
+
+_SKIP_SEMANTICS_BUILDERS = [
+    item
+    for item in _ANTI_FAB_BUILDERS
+    if item[0]
+    in {
+        "_build_food_truck_prompt",
+        "_build_orchestrator_prompt",
+        "_build_open_kitchen_prompt",
+        "_build_orchestration_rules",
+    }
+]
+
+_SKIP_SEMANTICS_MODULES = {
+    "_build_food_truck_prompt": "autoskillit.fleet._prompts",
+    "_build_orchestrator_prompt": "autoskillit.cli.prompts._prompts_orchestrator",
+    "_build_open_kitchen_prompt": "autoskillit.cli.prompts._prompts_kitchen",
+    # Issue #4905: _build_orchestration_rules lives in the text shard, not the
+    # public-driver facade. STEP_SKIP_SEMANTICS_CLAUSE is imported there at
+    # module load time, so monkeypatching the facade module does not reach the
+    # function's lexical scope.
+    "_build_orchestration_rules": "autoskillit.recipe._api_orchestration_text",
+}
+
+
+def _load_recipe_docstring_text() -> str:
+    from autoskillit.server.tools.tools_recipe import load_recipe
+
+    return load_recipe.__doc__ or ""
+
+
+def _sous_chef_text() -> str:
+    return (
+        _project_root() / "src" / "autoskillit" / "skills" / "sous-chef" / "SKILL.md"
+    ).read_text()
+
+
+def _normalized_instruction_text(text: str) -> str:
+    return " ".join(text.split())
 
 
 class TestAntiFabricationSurfaceContract:
@@ -471,7 +512,7 @@ class TestAntiFabricationSurfaceContract:
         )
 
     def test_prompt_builder_discovery_guard(self):
-        """Auto-discover all _build_*_prompt functions in _prompts*.py and assert coverage."""
+        """Discover prompt/rules builders so instruction surfaces stay registered."""
         import ast
 
         from autoskillit.core import pkg_root
@@ -480,10 +521,17 @@ class TestAntiFabricationSurfaceContract:
         src_pkg = project_root / "src" / "autoskillit"
         if not src_pkg.is_dir():
             src_pkg = project_root
-        prompt_files = sorted(src_pkg.rglob("_prompts*.py"))
+        prompt_files = sorted(
+            [
+                *src_pkg.rglob("_prompts*.py"),
+                src_pkg / "recipe" / "_api_orchestration.py",
+                # Issue #4905: _build_orchestration_rules moved to the text shard.
+                src_pkg / "recipe" / "_api_orchestration_text.py",
+            ]
+        )
 
         assert prompt_files, (
-            "No _prompts*.py files discovered — "
+            "No instruction-source files discovered — "
             f"pkg_root()={project_root} may not resolve to the source tree."
         )
 
@@ -497,12 +545,12 @@ class TestAntiFabricationSurfaceContract:
                 if (
                     isinstance(node, ast.FunctionDef)
                     and node.name.startswith("_build_")
-                    and node.name.endswith("_prompt")
+                    and (node.name.endswith("_prompt") or node.name.endswith("_rules"))
                 ):
                     discovered[node.name] = str(fpath)
 
         assert discovered, (
-            f"No _build_*_prompt functions discovered in {len(prompt_files)} _prompts*.py files."
+            f"No _build_*_prompt/_build_*_rules functions discovered in {len(prompt_files)} files."
         )
         registered = {name for name, *_ in _ANTI_FAB_BUILDERS}
         for fname in sorted(discovered):
@@ -516,6 +564,37 @@ class TestAntiFabricationSurfaceContract:
                 f"Registered builder '{rname}' was not discovered in any "
                 f"_prompts*.py file — source may have been renamed or deleted."
             )
+
+    @pytest.mark.parametrize(
+        "name,builder,kwargs",
+        _SKIP_SEMANTICS_BUILDERS,
+    )
+    def test_instruction_surface_mentions_skip_when_true(self, name, builder, kwargs):
+        assert "skip_when_true" in builder(**kwargs), f"{name} omits skip_when_true semantics"
+
+    @pytest.mark.parametrize(
+        "name,builder,kwargs",
+        _SKIP_SEMANTICS_BUILDERS,
+    )
+    def test_importable_skip_semantics_surfaces_use_shared_constant(
+        self, monkeypatch, name, builder, kwargs
+    ):
+        marker = f"canonical-skip-semantics-marker:{name}"
+        module = importlib.import_module(_SKIP_SEMANTICS_MODULES[name])
+        monkeypatch.setattr(module, "STEP_SKIP_SEMANTICS_CLAUSE", marker)
+        assert marker in builder(**kwargs)
+
+    @pytest.mark.parametrize(
+        "name,text_loader",
+        [
+            ("load_recipe docstring", _load_recipe_docstring_text),
+            ("sous-chef SKILL.md", _sous_chef_text),
+        ],
+    )
+    def test_text_skip_semantics_surfaces_match_canonical_clause(self, name, text_loader):
+        expected = _normalized_instruction_text(STEP_SKIP_SEMANTICS_CLAUSE.strip())
+        actual = _normalized_instruction_text(text_loader())
+        assert expected in actual, f"{name} drifted from STEP_SKIP_SEMANTICS_CLAUSE"
 
 
 class TestSousChefMergePhaseContract:

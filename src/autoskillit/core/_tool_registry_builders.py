@@ -188,6 +188,7 @@ _RUN_SKILL_PARAM_ROLES: Mapping[str, ToolParamRole] = MappingProxyType(
         "closure_base_sha": ToolParamRole.SESSION_FLOW,
         "closure_diff_sha": ToolParamRole.SESSION_FLOW,
         "closure_target_sha": ToolParamRole.SESSION_FLOW,
+        "step_guard_value": ToolParamRole.PROTOCOL,
         "dispatch_items": ToolParamRole.SESSION_FLOW,
         "skill_inputs": ToolParamRole.CHILD_INPUT,
     }
@@ -214,6 +215,7 @@ def _run_skill() -> ToolDef:
         "closure_base_sha",
         "closure_diff_sha",
         "closure_target_sha",
+        "step_guard_value",
     )
     params = [
         ToolParamDef(

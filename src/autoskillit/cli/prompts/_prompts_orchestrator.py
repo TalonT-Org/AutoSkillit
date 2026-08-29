@@ -16,6 +16,7 @@ from autoskillit.core import (
     QUOTA_GUARD_DENY_TRIGGER,
     QUOTA_POST_WARNING_TRIGGER,
     ROUTING_AUTHORITY_CLAUSE,
+    STEP_SKIP_SEMANTICS_CLAUSE,
     get_logger,
 )
 from autoskillit.execution import codex_recipe_delivery_calling_contract
@@ -335,6 +336,8 @@ STEP EXECUTION IS NOT DISCRETIONARY:
   quality gates.
 
 {ROUTING_AUTHORITY_CLAUSE}
+
+{STEP_SKIP_SEMANTICS_CLAUSE}
 
 ACTION: CONFIRM STEP SEMANTICS:
 - When you reach a step with action: "confirm", call AskUserQuestion with the

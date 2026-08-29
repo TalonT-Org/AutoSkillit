@@ -89,7 +89,7 @@ class TestCoreSubpackages:
             "_type_skill_semantics",
             "_type_subprocess",
             "_type_token",
-            "_type_tradition_manifest",
+            "_type_truth",
         }
         actual = {p.stem for p in (SRC / "core" / "types").glob("_type_*.py")}
         assert actual == expected
@@ -126,8 +126,8 @@ class TestCoreSubpackages:
             + len(retirements)
             + len(skill_contract)
         ), "Duplicate symbols across split modules"
-        assert len(combined) == 163, (
-            f"Expected 163 symbols total, got {len(combined)} "
+        assert len(combined) == 164, (
+            f"Expected 164 symbols total, got {len(combined)} "
             f"(remaining={len(remaining)}, durable_writers={len(durable_writers)}, "
             f"env={len(env)}, features={len(features)}, "
             f"registries={len(registries)}, retirements={len(retirements)}, "
@@ -183,6 +183,7 @@ class TestExecutionSubpackages:
             "_headless_git",
             "_headless_helpers",
             "_headless_launch",
+            "_headless_model_evidence",
             "_headless_outcome",
             "_headless_path_tokens",
             "_headless_recovery",

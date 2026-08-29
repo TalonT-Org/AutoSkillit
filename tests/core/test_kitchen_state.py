@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._helpers import delete_once_then_delegate
+
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
@@ -283,15 +285,19 @@ def test_find_caller_session_id_survives_a_marker_swept_during_the_scan(tmp_path
     real_safe_mtime = kitchen_state_module.safe_mtime
     swept = False
 
-    def unlink_a_different_marker_on_first_call(p):
+    def unlink_doomed_marker() -> None:
         nonlocal swept
-        if not swept and p != doomed_path:
-            swept = True
-            doomed_path.unlink()
-        return real_safe_mtime(p)
+        swept = True
+        doomed_path.unlink()
 
     monkeypatch.setattr(
-        kitchen_state_module, "safe_mtime", unlink_a_different_marker_on_first_call
+        kitchen_state_module,
+        "safe_mtime",
+        delete_once_then_delegate(
+            real_safe_mtime,
+            delete=unlink_doomed_marker,
+            when=lambda path: path != doomed_path,
+        ),
     )
 
     result = find_caller_session_id()

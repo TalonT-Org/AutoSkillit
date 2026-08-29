@@ -11,6 +11,18 @@ from autoskillit.planner.schema import (
 )
 
 
+def unlink_second_accepted_result(monkeypatch: Any, module: Any) -> None:
+    """Remove the second accepted result after a planner discovery call."""
+    original_discover = module.discover_tier_files
+
+    def discover_then_unlink(*args: Any, **kwargs: Any) -> Any:
+        discovery = original_discover(*args, **kwargs)
+        discovery.accepted[1].unlink()
+        return discovery
+
+    monkeypatch.setattr(module, "discover_tier_files", discover_then_unlink)
+
+
 def make_phase_result(
     phase_number: int, *, name: str = "Test Phase", **overrides: Any
 ) -> dict[str, Any]:

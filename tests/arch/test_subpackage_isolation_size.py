@@ -176,3 +176,93 @@ def test_stale_workspace_skill_line_limit_exemptions_are_retired() -> None:
         "Retired workspace skill line-limit exemptions remain registered: "
         + ", ".join(sorted(stale_exemptions))
     )
+
+
+def test_hook_registry_e21_exemption_is_retired() -> None:
+    """REQ-CNST-010-E21 was retired by #4853 when hook_registry.py became a package.
+
+    PR #4898 reintroduced the entry while decomposing the exemption registry out of
+    test_subpackage_isolation.py. No ``hook_registry.py`` source file exists; every
+    shard of the ``hook_registry/`` package is under the 1000-line default ceiling,
+    so no exemption — under any key form — is warranted.
+
+    The basename check mirrors the lookup in ``_collect_line_limit_violations``
+    (``exemptions.get(rel, exemptions.get(py_file.name, ...))``): a path-keyed entry
+    ending in ``hook_registry.py`` would be an equivalent reintroduction.
+    """
+    assert "hook_registry.py" not in _LINE_LIMIT_EXEMPTIONS, (
+        "REQ-CNST-010-E21 was retired by issue #4853; the hook_registry.py exemption "
+        "must not be reintroduced (no such source file exists)"
+    )
+    basename_offenders = sorted(
+        key for key in _LINE_LIMIT_EXEMPTIONS if key.rsplit("/", 1)[-1] == "hook_registry.py"
+    )
+    assert not basename_offenders, (
+        "REQ-CNST-010-E21 reintroduced under a path-form key: " + ", ".join(basename_offenders)
+    )
+
+
+def test_hook_registry_package_needs_no_line_limit_exemption() -> None:
+    """Every hook_registry/ shard stays under the 1000-line default, proving E21 is dead.
+
+    This is the substantive claim behind the retirement: if a shard ever exceeded the
+    default ceiling, ``test_no_src_module_exceeds_line_limit`` would fail and the
+    absence assertion above would be actively harmful rather than merely correct.
+    """
+    package_root = SRC_ROOT / "hook_registry"
+    assert package_root.is_dir(), (
+        f"expected the hook_registry package at {package_root} (issue #4853)"
+    )
+    assert not (SRC_ROOT / "hook_registry.py").exists(), (
+        "the flat hook_registry.py module reappeared; the E21 retirement rationale "
+        "in tests assumes the package decomposition from #4853"
+    )
+    offenders = []
+    for path in sorted(package_root.rglob("*.py")):
+        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        if line_count > 1000:
+            offenders.append(f"{path.relative_to(SRC_ROOT)}: {line_count} lines")
+    assert not offenders, (
+        "hook_registry shards exceed the 1000-line default ceiling:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_recipe_binding_e24_exemption_is_retired() -> None:
+    """REQ-CNST-010-E24 was retired by #4854 when input parsing moved to _binding_input.py.
+
+    PR #4898 reintroduced the entry. ``recipe/_binding.py`` is under the 1000-line
+    default ceiling, so no exemption is warranted. Mirrors the two-function E21
+    decomposition above so sibling retirements follow the same shape.
+    """
+    assert "recipe/_binding.py" not in _LINE_LIMIT_EXEMPTIONS, (
+        "REQ-CNST-010-E24 was retired by issue #4854; the recipe/_binding.py exemption "
+        "must not be reintroduced"
+    )
+    basename_offenders = sorted(
+        key for key in _LINE_LIMIT_EXEMPTIONS if key.rsplit("/", 1)[-1] == "_binding.py"
+    )
+    assert not basename_offenders, (
+        "REQ-CNST-010-E24 reintroduced under a path-form key: " + ", ".join(basename_offenders)
+    )
+
+
+def test_recipe_binding_module_under_1000_lines() -> None:
+    """The pre-condition for E24 retirement: ``recipe/_binding.py`` stays under 1000 lines.
+
+    Mirrors ``test_hook_registry_package_needs_no_line_limit_exemption``: the absence
+    assertion above is actively harmful rather than merely correct only if the
+    pre-condition (sub-1000 module) still holds. If #4854 follow-ups move this
+    module or extract more, the assertion fails with a clear message instead of
+    crashing with ``FileNotFoundError`` deeper in the call stack.
+    """
+    binding = SRC_ROOT / "recipe" / "_binding.py"
+    assert binding.exists(), (
+        f"recipe/_binding.py must exist at {binding} (the E24 retirement assumes "
+        "the post-#4854 module shape; further extraction should keep _binding.py "
+        "in place or update this guard)"
+    )
+    line_count = len(binding.read_text(encoding="utf-8").splitlines())
+    assert line_count <= 1000, (
+        f"recipe/_binding.py is {line_count} lines; the E24 retirement assumed it stays "
+        "under the 1000-line default ceiling (issue #4854 extracted _binding_input.py)"
+    )

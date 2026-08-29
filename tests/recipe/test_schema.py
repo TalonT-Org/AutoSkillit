@@ -8,6 +8,8 @@ import pathlib
 
 import pytest
 
+from autoskillit.recipe.schema import ALLOWED_INGREDIENT_TYPES
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
@@ -485,6 +487,45 @@ def test_recipe_has_continue_on_failure_field_defaulting_to_false() -> None:
     assert r.continue_on_failure is False
 
 
+def test_recipe_has_blocks_field_defaulting_to_empty() -> None:
+    from autoskillit.recipe.schema import Recipe
+
+    field_names = {f.name for f in dataclasses.fields(Recipe)}
+    assert "blocks" in field_names, (
+        "Recipe.blocks is in DEFERRED_RECIPE_FIELDS; removing it without updating the "
+        "deferral registry would silently drop a tracked tracking issue (#4893)."
+    )
+    r = Recipe(name="x", description="y")
+    assert r.blocks == ()
+
+
+def test_recipe_step_declared_with_args_subset_validation() -> None:
+    from autoskillit.recipe.schema import RecipeStep
+
+    # Auto-coerce when caller passes None
+    step = RecipeStep(action="stop", with_args={"k": "v"})
+    assert step.declared_with_args == {"k": "v"}
+
+    # Proper subset succeeds
+    step = RecipeStep(
+        action="stop",
+        with_args={"k": "v", "extra": 1},
+        declared_with_args={"k": "v"},
+    )
+    assert step.declared_with_args == {"k": "v"}
+
+    # Keys not a subset of with_args raises ValueError
+    with pytest.raises(
+        ValueError,
+        match="declared with mapping cannot contain keys absent from the effective mapping",
+    ):
+        RecipeStep(
+            action="stop",
+            with_args={"different": 1},
+            declared_with_args={"k": "v"},
+        )
+
+
 def test_existing_recipe_construction_unchanged() -> None:
     """All pre-existing Recipe construction patterns still work."""
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
@@ -656,6 +697,41 @@ def test_recipe_ingredient_type_can_be_explicitly_none() -> None:
 
     ing = RecipeIngredient(description="d", type=None)
     assert ing.type is None
+
+
+def test_recipe_ingredient_type_rejects_unknown_value() -> None:
+    """RecipeIngredient must raise ValueError for unknown type values."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    with pytest.raises(ValueError, match="RecipeIngredient.type must be one of"):
+        RecipeIngredient(description="d", type="foobar")
+
+
+@pytest.mark.parametrize("allowed_type", sorted(ALLOWED_INGREDIENT_TYPES))
+def test_recipe_ingredient_type_accepts_each_allowed_value(allowed_type: str) -> None:
+    """Every value in ALLOWED_INGREDIENT_TYPES must be accepted by RecipeIngredient."""
+    from autoskillit.recipe.schema import RecipeIngredient
+
+    ing = RecipeIngredient(description="d", type=allowed_type)
+    assert ing.type == allowed_type
+
+
+def test_allowed_ingredient_types_membership_pinned() -> None:
+    """Pin the exact set of allowed ingredient types so additions/drops surface
+    as a test failure rather than a silent vocabulary drift."""
+    assert ALLOWED_INGREDIENT_TYPES == frozenset(
+        {
+            "absolute_path",
+            "boolean",
+            "dict",
+            "integer",
+            "list",
+            "optional_string",
+            "path",
+            "string",
+            "worktree_relative_path",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

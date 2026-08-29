@@ -178,18 +178,18 @@ def test_delivery_mode_is_pinned(
 # Update when a recipe grows/shrinks past these thresholds.
 _EXPECTED_MAX_SERIALIZED_CHARS: dict[tuple[str, str], int] = {
     ("bem-wrapper", "claude-code"): 24_000,
-    ("consolidate-health-reports", "claude-code"): 12_000,
+    ("consolidate-health-reports", "claude-code"): 13_000,
     ("consolidate-health-reports", "codex"): 12_000,
     ("full-audit", "claude-code"): 37_000,
     ("implement-findings", "claude-code"): 34_000,
     ("implementation", "claude-code"): 11_600,
     ("implementation", "codex"): 11_600,
     ("planner", "claude-code"): 80_000,
-    ("promote-to-main-wrapper", "claude-code"): 19_000,
+    ("promote-to-main-wrapper", "claude-code"): 20_000,
     ("remediation", "claude-code"): 10_000,
     ("remediation", "codex"): 10_000,
     ("research-archive", "claude-code"): 31_000,
-    ("research-design", "claude-code"): 67_000,
+    ("research-design", "claude-code"): 68_000,
     ("research-implement", "claude-code"): 108_000,
     ("research-review", "claude-code"): 77_000,
 }

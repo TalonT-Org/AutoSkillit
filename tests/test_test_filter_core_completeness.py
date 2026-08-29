@@ -25,7 +25,7 @@ def test_all_core_stems_classified() -> None:
 
 def test_fs_observation_inherits_paths_cascade() -> None:
     assert MODULE_CASCADE_CORE["fs_observation"] == (
-        MODULE_CASCADE_CORE["paths"] | {"exploration"}
+        MODULE_CASCADE_CORE["paths"] | {"exploration", "planner"}
     )
 
 

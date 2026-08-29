@@ -35,6 +35,22 @@ NON_INTERACTIVE_KINDS: Final[frozenset[RecipeKind]] = frozenset(
     {RecipeKind.CAMPAIGN, RecipeKind.FOOD_TRUCK}
 )
 
+# Canonical set of values allowed for RecipeIngredient.type. Defined beside the
+# dataclass it validates — RecipeIngredient is the only consumer.
+ALLOWED_INGREDIENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "string",
+        "integer",
+        "boolean",
+        "path",
+        "optional_string",
+        "list",
+        "dict",
+        "absolute_path",  # absolute filesystem path; non-empty required
+        "worktree_relative_path",  # worktree-relative path; empty allowed
+    }
+)
+
 
 @dataclass
 class RecipeIngredient:
@@ -52,6 +68,11 @@ class RecipeIngredient:
         if self.authority is not None and self.authority != "config":
             raise ValueError(
                 f"RecipeIngredient.authority must be None or 'config', got {self.authority!r}"
+            )
+        if self.type is not None and self.type not in ALLOWED_INGREDIENT_TYPES:
+            raise ValueError(
+                f"RecipeIngredient.type must be one of {sorted(ALLOWED_INGREDIENT_TYPES)} "
+                f"or None, got {self.type!r}"
             )
 
 
@@ -139,7 +160,7 @@ class RecipeStep:
     block: str | None = None  # Named block anchor this step belongs to (e.g. "pre_queue_gate")
     pass_through: list[str] = field(
         default_factory=list
-    )  # Captured output names used for informational propagation, not flow control
+    )  # Captured output names checked by graph-output and graph-review validation rules
     phoropter_family: str | None = None
     skip_when_true: str | None = None
 

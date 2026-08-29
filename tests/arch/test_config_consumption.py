@@ -22,26 +22,22 @@ from __future__ import annotations
 import ast
 import dataclasses
 import inspect
-from datetime import date
 from pathlib import Path
 
 import pytest
 
+from tests.arch._deferred_debt import (
+    TrackedDeferral,
+    assert_deferrals_have_regression_tests,
+    assert_entries_still_apply,
+    assert_not_stale,
+    assert_rationale_present,
+)
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-@dataclasses.dataclass(frozen=True)
-class ForwardDeclaredField:
-    """Structured forward-declaration for a config field without a consumer."""
-
-    issue: int
-    rationale: str
-    added_date: date
-
-
-_STALENESS_THRESHOLD_DAYS = 180
-
-_FORWARD_DECLARED: dict[str, ForwardDeclaredField] = {}
+_FORWARD_DECLARED: dict[str, TrackedDeferral] = {}
 
 
 def _config_dataclasses() -> list[type]:
@@ -183,7 +179,7 @@ def test_all_config_fields_have_production_consumers() -> None:
     assert not unconsumed, (
         f"Config fields with zero production read sites "
         f"(add a consumer, retire the key via RETIRED_CONFIG_KEYS, or add to "
-        f"_FORWARD_DECLARED as ForwardDeclaredField(issue=NNNN, rationale='...', "
+        f"_FORWARD_DECLARED as TrackedDeferral(issue=NNNN, rationale='...', "
         f"added_date=date(YYYY, M, D))): {sorted(unconsumed)}"
     )
 
@@ -210,44 +206,17 @@ def test_natural_exit_grace_seconds_is_consumed() -> None:
     assert sites, "natural_exit_grace_seconds must be read by production code"
 
 
-def test_forward_declared_has_linked_issues() -> None:
-    invalid = {
-        field: entry.issue for field, entry in _FORWARD_DECLARED.items() if entry.issue <= 0
-    }
-    assert not invalid, (
-        f"_FORWARD_DECLARED entries with invalid issue number (need positive int): {invalid}"
+def test_forward_declared_contracts_are_shared(request: pytest.FixtureRequest) -> None:
+    """Even the currently-empty registry must keep the shared deferral contract."""
+    assert_entries_still_apply(
+        _FORWARD_DECLARED,
+        registry_name="_FORWARD_DECLARED",
+        live_keys=_config_field_names(),
     )
-
-
-def test_forward_declared_fields_have_no_consumers() -> None:
-    """A forward-declared field that gained a consumer must lose its exemption."""
-    from autoskillit.core import paths
-
-    reads = _collect_attribute_reads(paths.pkg_root(), _config_field_names())
-
-    stale = {name: sites for name, sites in reads.items() if name in _FORWARD_DECLARED and sites}
-    assert not stale, (
-        f"_FORWARD_DECLARED entries that now have production consumers "
-        f"(remove from _FORWARD_DECLARED and close the tracking issue): {stale}"
-    )
-
-
-def test_forward_declared_fields_exist_on_a_config_dataclass() -> None:
-    unknown = frozenset(_FORWARD_DECLARED.keys()) - _config_field_names()
-    assert not unknown, f"_FORWARD_DECLARED keys that are not config fields: {sorted(unknown)}"
-
-
-def test_forward_declared_entries_not_stale() -> None:
-    """Time-bomb: a forward declaration older than 180 days needs re-justification."""
-    today = date.today()
-    stale = [
-        f"{name} (added={entry.added_date}, age={(today - entry.added_date).days}d, "
-        f"issue=#{entry.issue})"
-        for name, entry in _FORWARD_DECLARED.items()
-        if (today - entry.added_date).days > _STALENESS_THRESHOLD_DAYS
-    ]
-    assert not stale, (
-        f"_FORWARD_DECLARED entries older than {_STALENESS_THRESHOLD_DAYS} days "
-        f"(wire a consumer, retire the key, or update added_date with a fresh "
-        f"tracking issue): {stale}"
+    assert_not_stale(_FORWARD_DECLARED, registry_name="_FORWARD_DECLARED")
+    assert_rationale_present(_FORWARD_DECLARED, registry_name="_FORWARD_DECLARED")
+    assert_deferrals_have_regression_tests(
+        _FORWARD_DECLARED,
+        registry_name="_FORWARD_DECLARED",
+        collected_node_ids={item.nodeid for item in request.session.items},
     )

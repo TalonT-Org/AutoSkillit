@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
@@ -25,6 +25,7 @@ from ._type_recipe_binding import (
     BoundScalar,
     BoundStepInvocation,
     BoundValue,
+    RecipeStepGuard,
 )
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "RecipeExecutionFactory",
     "RecipeExecutionLock",
     "RecipeExecutionSnapshot",
+    "RecipeStepGuard",
     "VerifiedInputPreflightRequest",
     "VerifiedInputPreflightResult",
     "build_recipe_execution_credential",
@@ -127,6 +129,7 @@ def compute_recipe_execution_snapshot_digest(
     composite_hash: str,
     templates: Mapping[str, InvocationTemplate],
     dynamic_skill_step_names: frozenset[str] = frozenset(),
+    step_guards: Mapping[str, RecipeStepGuard] = MappingProxyType({}),
 ) -> str:
     """Hash the compiled execution snapshot without any delivery hash."""
     payload = {
@@ -135,6 +138,14 @@ def compute_recipe_execution_snapshot_digest(
         "dynamic_skill_step_names": sorted(dynamic_skill_step_names),
         "execution_id": execution_id,
         "recipe_name": recipe_name,
+        "step_guards": [
+            {
+                "bypass_target": guard.bypass_target,
+                "context_name": guard.context_name,
+                "step_name": guard.step_name,
+            }
+            for _, guard in sorted(step_guards.items())
+        ],
         "templates": [
             {
                 "digest": template.template_digest,
@@ -157,6 +168,7 @@ class RecipeExecutionSnapshot:
     templates: Mapping[str, InvocationTemplate]
     snapshot_digest: str
     dynamic_skill_step_names: frozenset[str] = frozenset()
+    step_guards: Mapping[str, RecipeStepGuard] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.execution_id or not self.recipe_name:
@@ -165,12 +177,19 @@ class RecipeExecutionSnapshot:
             raise ValueError("recipe execution hashes must be canonical sha256 identities")
         copied = dict(self.templates)
         dynamic_skill_step_names = frozenset(self.dynamic_skill_step_names)
+        step_guards = dict(self.step_guards)
         if any(name != template.invocation.step_name for name, template in copied.items()):
             raise ValueError("recipe execution template keys must match step names")
         if any(not name for name in dynamic_skill_step_names):
             raise ValueError("dynamic recipe skill step names must be non-empty")
         if dynamic_skill_step_names.intersection(copied):
             raise ValueError("recipe skill steps cannot be both dynamic and attested")
+        executable_steps = set(copied).union(dynamic_skill_step_names)
+        if any(
+            step_name != guard.step_name or step_name not in executable_steps
+            for step_name, guard in step_guards.items()
+        ):
+            raise ValueError("recipe execution guards must name executable steps")
         for template in copied.values():
             expected_template_digest = compute_invocation_template_digest(
                 execution_id=self.execution_id,
@@ -185,6 +204,7 @@ class RecipeExecutionSnapshot:
                 raise ValueError("recipe execution invocation template digest mismatch")
         object.__setattr__(self, "templates", MappingProxyType(copied))
         object.__setattr__(self, "dynamic_skill_step_names", dynamic_skill_step_names)
+        object.__setattr__(self, "step_guards", MappingProxyType(step_guards))
         expected = compute_recipe_execution_snapshot_digest(
             execution_id=self.execution_id,
             recipe_name=self.recipe_name,
@@ -192,6 +212,7 @@ class RecipeExecutionSnapshot:
             composite_hash=self.composite_hash,
             templates=copied,
             dynamic_skill_step_names=dynamic_skill_step_names,
+            step_guards=step_guards,
         )
         if self.snapshot_digest != expected:
             raise ValueError("recipe execution snapshot digest does not match content")

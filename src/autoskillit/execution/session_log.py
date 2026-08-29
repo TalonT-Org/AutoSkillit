@@ -417,17 +417,16 @@ def flush_session_log(
                 }
             )
 
-        effective_model_id = model_identity.effective_model or _primary_model_identifier(
-            token_usage
-        )
-        _observed = _primary_model_identifier(token_usage) if token_usage else ""
+        observed_token_model = _primary_model_identifier(token_usage) if token_usage else ""
+        # Drift compares launch provenance with token evidence, never the OTLP-resolved identity.
         anomalies.extend(
             detect_model_drift(
                 model_identity.configured_model,
-                _observed,
+                observed_token_model,
                 profile_name=model_identity.profile_name,
             )
         )
+        effective_model_id = model_identity.effective_model or observed_token_model
         if model_identity.profile_name and model_identity.profile_name != "anthropic":
             if effective_model_id.startswith("claude-") or effective_model_id in (
                 "sonnet",
@@ -463,7 +462,6 @@ def flush_session_log(
             except ValueError:
                 pass
 
-        # Write github_api_usage.json from pre-computed telemetry bundle
         github_api_requests = telemetry.github_api_requests
         execution_identity = telemetry.execution_identity
         if telemetry.github_api_usage is not None and publish_artifacts:
@@ -566,7 +564,6 @@ def flush_session_log(
         if exception_text and publish_artifacts:
             atomic_write(session_dir / "crash_exception.txt", exception_text)
 
-        # Write per-session telemetry files; gate on data presence, not session identity
         label = _resolve_session_label(step_name, dispatch_id)
         if token_usage is not None and publish_artifacts:
             _cw_raw = token_usage.get("cache_write_tokens")
@@ -692,10 +689,11 @@ def flush_session_log(
             "outcome_qualifier": outcome_qualifier,
             "native_shell_capture": native_shell_capture_projection,
             "session_type": session_type_value,
+            "subagent_model_outcomes": list(telemetry.subagent_model_outcomes),
             "model_identifier": effective_model_id,
             "configured_model": model_identity.configured_model,
             "profile_name": model_identity.profile_name,
-            "schema_version": 8,
+            "schema_version": 9,
         }
         index_path = log_root / "sessions.jsonl"
         archive_path = log_root / "sessions-archive.jsonl"

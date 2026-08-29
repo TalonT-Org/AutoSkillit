@@ -47,6 +47,20 @@ def _make_assignment(aid: str, phase_id: str, files: list[str]) -> dict:
     }
 
 
+def _unlink_before_read(victim: Path, monkeypatch) -> None:
+    original_read_text = Path.read_text
+    removed = False
+
+    def read_text(path: Path, *args, **kwargs):
+        nonlocal removed
+        if path == victim and not removed:
+            removed = True
+            path.unlink()
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", read_text)
+
+
 def _write_phase_result(dir_: Path, phase_id: str, assignments: list[dict]) -> None:
     write_json(
         dir_ / f"{phase_id}_result.json",
@@ -363,6 +377,22 @@ def test_merge_refined_wps_basic(tmp_path):
     assert result["item_count"] == "4"
 
 
+def test_merge_refined_wps_skips_a_vanished_context_result(tmp_path, monkeypatch):
+    contexts_dir = tmp_path / "wp_refine_contexts"
+    contexts_dir.mkdir()
+    _write_wp_phase_result(contexts_dir, "P1", [_make_wp("P1-A1-WP1", "P1")])
+    victim = contexts_dir / "P2_result.json"
+    _write_wp_phase_result(contexts_dir, "P2", [_make_wp("P2-A1-WP1", "P2")])
+    _unlink_before_read(victim, monkeypatch)
+
+    result = merge_refined_wps(planner_dir=str(tmp_path))
+
+    assert result["skipped_result_files"] == [victim.name]
+    assert json.loads(Path(result["refined_wps_path"]).read_text())["work_packages"] == [
+        _make_wp("P1-A1-WP1", "P1")
+    ]
+
+
 # --- Step 2b ---
 def test_merge_refined_wps_deliverable_conflict_earlier_wins(tmp_path):
     ctx_dir = tmp_path / "wp_refine_contexts"
@@ -436,6 +466,25 @@ def test_merge_refined_assignments_basic(tmp_path):
     data = json.loads(out_path.read_text())
     assert len(data["assignments"]) == 4
     assert result["item_count"] == "4"
+
+
+def test_merge_refined_assignments_skips_a_vanished_context_result(tmp_path, monkeypatch):
+    contexts_dir = tmp_path / "refine_contexts"
+    contexts_dir.mkdir()
+    _write_phase_result(contexts_dir, "P1", [_make_assignment("P1-A1", "P1", ["src/a.py"])])
+    victim = contexts_dir / "P2_result.json"
+    _write_phase_result(contexts_dir, "P2", [_make_assignment("P2-A1", "P2", ["src/b.py"])])
+    _unlink_before_read(victim, monkeypatch)
+
+    result = merge_refined_assignments(planner_dir=str(tmp_path))
+
+    assert result["skipped_result_files"] == [victim.name]
+    assert [
+        assignment["id"]
+        for assignment in json.loads(Path(result["refined_assignments_path"]).read_text())[
+            "assignments"
+        ]
+    ] == ["P1-A1"]
 
 
 def test_merge_refined_assignments_wp_conflict_earlier_wins(tmp_path):

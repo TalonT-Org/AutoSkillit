@@ -40,7 +40,7 @@ def apply_session_retention(
             for entry in scan_observed(sessions_dir)
             if entry.is_dir and (entry.path / "summary.json").is_file()
         ),
-        key=lambda entry: entry.mtime,
+        key=lambda entry: entry.status.st_mtime_ns,
     )
     effective_max_sessions = max_sessions if max_sessions is not None else _MAX_SESSIONS
     expired = committed_dirs[: max(0, len(committed_dirs) - effective_max_sessions)]

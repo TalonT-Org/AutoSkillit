@@ -31,7 +31,9 @@ RECIPE_ARTIFACT_DESCRIPTOR_VERSION = 2
 RECIPE_ARTIFACT_SCHEMA_VERSION = 2
 RECIPE_ARTIFACT_MAX_BLOB_BYTES = 1_000_000
 RECIPE_ARTIFACT_MAX_DESCRIPTOR_BYTES = 16_384
-RECIPE_FLOW_SCHEMA_VERSION = 1
+# The schema version and digest namespace move together: the namespace invalidates
+# content identity when an additive record field changes what a client must honor.
+RECIPE_FLOW_SCHEMA_VERSION = 2
 
 
 class RecipeDeliveryMode(StrEnum):
@@ -97,7 +99,7 @@ class RecipeFlowGeneration:
             if not isinstance(parsed, dict) or canonical != record:
                 raise ValueError("recipe flow record is not canonical")
         generated = _flow_generation_bytes(records)
-        expected_digest = _qualified_sha256(b"autoskillit.recipe-flow.v1\0" + generated)
+        expected_digest = _qualified_sha256(b"autoskillit.recipe-flow.v2\0" + generated)
         expected_size = len(generated)
         expected_count = len(records)
         for supplied, expected, label in (

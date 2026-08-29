@@ -6,9 +6,20 @@ import hashlib
 import hmac
 import secrets
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from ._module_identity import register_module_aliases
 from ._syntax import REFERENCE_RE
+
+if TYPE_CHECKING:
+    from ._snapshot import (
+        CaptureFinalManifest,
+        FinalizedCapture,
+        IssuedCaptureReference,
+        PublishedCaptureReference,
+        UnavailableCaptureReference,
+        VerifiedCaptureSnapshot,
+    )
 
 register_module_aliases(__name__)
 
@@ -56,7 +67,7 @@ def parse_capture_reference(token: str) -> CaptureReferenceHint:
 
 
 def _reference_context(
-    manifest,  # CaptureFinalManifest
+    manifest: CaptureFinalManifest,
     *,
     reference_expiry: float | None = None,
 ) -> bytes:
@@ -72,7 +83,7 @@ def _reference_context(
 
 def _reference_hash(
     token: str,
-    manifest,  # CaptureFinalManifest
+    manifest: CaptureFinalManifest,
     *,
     reference_expiry: float | None = None,
 ) -> str:
@@ -85,7 +96,7 @@ def _reference_hash(
 
 
 def _issue_capture_reference(
-    snapshot,  # VerifiedCaptureSnapshot
+    snapshot: VerifiedCaptureSnapshot,
     *,
     expiry: float,
 ) -> tuple[str, str]:
@@ -95,12 +106,12 @@ def _issue_capture_reference(
 
 
 def _bind_finalized_snapshot(
-    verified,  # VerifiedCaptureSnapshot
+    verified: VerifiedCaptureSnapshot,
     *,
     reference_token: str | None,
     reference_hash: str | None,
     reference_expiry: float | None,
-):
+) -> FinalizedCapture:
     from ._snapshot import (
         _AUTHORITY_FACTORY_TOKEN,
         CaptureAuthorityError,
@@ -117,8 +128,7 @@ def _bind_finalized_snapshot(
         raise CaptureAuthorityError("incomplete issued reference")
     base = verified.manifest
     if reference_token is not None:
-        if reference_hash is None:
-            raise CaptureAuthorityError("incomplete issued reference")
+        assert reference_hash is not None  # guaranteed by XOR check above
         if not hmac.compare_digest(
             _reference_hash(
                 reference_token,
@@ -162,8 +172,8 @@ def _bind_finalized_snapshot(
 
 
 def _make_published_reference(
-    issuance,  # IssuedCaptureReference
-):
+    issuance: IssuedCaptureReference,
+) -> PublishedCaptureReference:
     from ._snapshot import (
         _AUTHORITY_FACTORY_TOKEN,
         CaptureAuthorityError,
@@ -181,9 +191,9 @@ def _make_published_reference(
 
 
 def _make_unavailable_reference(
-    snapshot,  # VerifiedCaptureSnapshot
+    snapshot: VerifiedCaptureSnapshot,
     reason_code: str,
-):
+) -> UnavailableCaptureReference:
     from ._snapshot import (
         _AUTHORITY_FACTORY_TOKEN,
         UnavailableCaptureReference,

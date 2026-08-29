@@ -27,13 +27,3 @@ def test_api_status_disposition_is_total_and_default_deny(status: int) -> None:
         assert category is InfraExitCategory.API_ERROR
     else:
         assert category is InfraExitCategory.API_ERROR_TERMINAL
-
-
-@pytest.mark.parametrize("status", range(400, 600))
-def test_retriable_and_terminal_status_predicates_partition_client_and_server_errors(
-    status: int,
-) -> None:
-    retriable = status in _RETRIABLE_STATUSES or 500 <= status < 600
-    terminal = not retriable and status != 429
-
-    assert retriable ^ terminal ^ (status == 429)

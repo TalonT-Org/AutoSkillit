@@ -1,13 +1,36 @@
 from __future__ import annotations
 
-_LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
-    "hooks/_capture/_runner.py": (
+import dataclasses
+from collections.abc import Callable
+
+
+@dataclasses.dataclass(frozen=True)
+class LineLimitExemption:
+    """A REQ-CNST-010-EN-NN entry permitting one src module to exceed the 750-line
+    hard cap, up to `limit` (never more than 1000, REQ-CNST-010's absolute ceiling).
+
+    `predicate`, when present, is a zero-argument callable that re-verifies the
+    rationale's factual claim at check time. An exemption with `predicate=None`
+    is honored by the full-tree test_no_src_module_exceeds_line_limit guard
+    (legacy rationale-only contract, unchanged) but will be voided by the
+    diff-scoped REQ-CNST-010 gate a follow-on part adds -- touching that file in
+    a future diff will force either decomposition or a real, verifiable
+    predicate.
+    """
+
+    limit: int
+    rationale: str
+    predicate: Callable[[], bool] | None = None
+
+
+_LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
+    "hooks/_capture/_runner.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E31: #4511 requires a dedicated setup failure boundary before "
         "the command-body handler because the latter assumes an initialized artifact; "
         "keeping both stages in the runner preserves one owner for capture settlement",
     ),
-    "core/types/_type_constants.py": (
+    "core/types/_type_constants.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "
         "for the pre-immutable-roots shared uv tool root and two DURABLE_ARTIFACT_WRITERS "
@@ -16,12 +39,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "out of this module would separate them from the frozensets and validation "
         "functions their own docstrings and tests reference by exact module path.",
     ),
-    "execution/evidence_reader.py": (
+    "execution/evidence_reader.py": LineLimitExemption(
         1500,
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
         "lifecycle, and strict result validation behind one evidence-reader launch interface",
     ),
-    "execution/process/__init__.py": (
+    "execution/process/__init__.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E27: #4678 rectify threads ceiling_seconds through run_managed_async/"
         "run_managed_sync/DefaultSubprocessRunner and adds the PTY-wrapper workload-identity "
@@ -29,15 +52,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the single composition point for both spawn paths and must stay adjacent to the "
         "spawn call sites it wires the tether into.",
     ),
-    # REQ-CNST-010-E1: core/types.py is the canonical type registry for the entire
-    # package. It defines all StrEnums, protocols, constants, and shared type aliases
-    # in one place to prevent circular imports across sub-packages. Exempt at 1200 lines.
-    "types.py": (
-        1200,
-        "REQ-CNST-010-E1: canonical type registry — wide surface required to prevent "
-        "circular imports; all enums/protocols/constants consolidated here",
-    ),
-    "hooks/_capture_artifacts.py": (
+    "hooks/_capture_artifacts.py": LineLimitExemption(
         1200,
         "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "
         "re-exports capture_store_stats, reconcile_capture_store, CaptureStoreStats, "
@@ -48,7 +63,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "of sys.modules['_capture']. Bumped for ADR-0009's failure-disposition routing "
         "(bookkeeping vs. integrity) and the capacity injection seam (issue #4479).",
     ),
-    "hooks/_capture_lifecycle/_store.py": (
+    "hooks/_capture_lifecycle/_store.py": LineLimitExemption(
         1250,
         "REQ-CNST-010-E28: post-split capture-lifecycle store (#4727) — the "
         "4 admission helpers (_acquire_flock, _admission_reason, _admit_new_record, "
@@ -63,7 +78,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "_capture_lifecycle/_store.py until the class body is further decomposed "
         "(issue #4727).",
     ),
-    "hooks/_capture_contract.py": (
+    "hooks/_capture_contract.py": LineLimitExemption(
         1100,
         "REQ-CNST-010-E23: CaptureFailureV3 envelope framing — carries the full "
         "CaptureFailureReason wire vocabulary and its (V2 marker) rendering; ADR-0009 "
@@ -71,7 +86,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "which must stay co-located with the rest of the envelope schema they extend "
         "(issue #4479).",
     ),
-    "hooks/_command_classification.py": (
+    "hooks/_command_classification.py": LineLimitExemption(
         1600,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
@@ -92,7 +107,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "duplicating it), so they stay adjacent to the tokenizer they extend rather "
         "than the gh-specific consumer module the split already separated them from.",
     ),
-    "hooks/_github_mutation_analysis.py": (
+    "hooks/_github_mutation_analysis.py": LineLimitExemption(
         1600,
         "REQ-CNST-010-E26: #4665 decomposes the GitHub mutation cardinality/route "
         "analysis out of _command_classification.py into this sibling module — the "
@@ -113,7 +128,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "documents and flag values shell-inert from quote provenance rather than "
         "content alone -- must stay adjacent to the mutation authority they feed.",
     ),
-    "hooks/guards/git_ops_guard.py": (
+    "hooks/guards/git_ops_guard.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E28: Issue #4655's rectify moves this guard's checked-out-ref "
         "dynamic-value check onto the shared _DYNAMIC_SHELL_TOKEN_RE regex, which "
@@ -124,40 +139,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "this guard's own destructive-op/fetch/checked-out-ref classification room "
         "without re-tripping the limit on the next small addition.",
     ),
-    "session.py": (
-        1060,
-        "REQ-CNST-010-E3: session adjudication pipeline — exhaustive match arms "
-        "for TerminationReason require explicit IDLE_STALL arms in _compute_success, "
-        "_compute_retry, and ClaudeSessionResult.normalize_subtype; "
-        "lifespan_started heuristic added",
-    ),
-    "_doctor.py": (
-        1300,
-        "REQ-CNST-010-E4: doctor check registry — 28 sequential checks require inline logic; "
-        "splitting into sub-modules would obscure the check sequence and break the test "
-        "filter cascade",
-    ),
-    "server/_recipe_delivery.py": (
-        750,
-        "REQ-CNST-010-E12: #4557 decomposes recipe delivery into _recipe_delivery.py "
-        "(finalization orchestrator) and _recipe_artifact.py (persistence, attestation, "
-        "helper types).",
-    ),
-    "server/_recipe_section_pagination.py": (
-        750,
-        "REQ-CNST-010-E23: #4414 binds terminal completion receipts to the finalized page "
-        "content digest inside the existing immutable page renderer so pagination and receipt "
-        "identity cannot drift across separate serialization authorities. "
-        "#4557 decomposes pagination into sibling modules (_recipe_section_planning, "
-        "_recipe_section_rendering) with char-ceiling plumbing and dual-domain page fitting.",
-    ),
-    "tools_recipe.py": (
-        750,
-        "REQ-CNST-010-E25: #4557 decomposes get_recipe_section handler into "
-        "tools_recipe.py (tool entry points) and tools/_recipe_section_handler.py "
-        "(bounded-delivery pull handler and counter injection).",
-    ),
-    "execution/backends/codex.py": (
+    "execution/backends/codex.py": LineLimitExemption(
         1300,
         "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
         "(cmd/cmd-spec grammar with build_skill_session_cmd/"
@@ -173,7 +155,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "the decomposition could not cross without breaking the backend "
         "dataclass invariant.",
     ),
-    "execution/backends/claude.py": (
+    "execution/backends/claude.py": LineLimitExemption(
         1600,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
@@ -199,7 +181,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
         "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
     ),
-    "execution/headless/_headless_result.py": (
+    "execution/headless/_headless_result.py": LineLimitExemption(
         900,
         "REQ-CNST-010-E25-narrowed: #4233 keeps the async-obligation success gate adjacent to "
         "the existing stale, idle, timeout, and content adjudication order it must preempt. "
@@ -209,7 +191,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
         "headless orchestration authority. The 827-line residual is dominated by that "
         "single 741-line function, which owns the success-gate adjacency rule.",
     ),
-    "execution/backends/_codex_session_storage.py": (
+    "execution/backends/_codex_session_storage.py": LineLimitExemption(
         1500,
         "REQ-CNST-010-E13-narrowed: CodexSessionStore + CodexInteractiveSessionLease + "
         "_FileLease transaction-boundary core only; stateless FS primitives extracted to "

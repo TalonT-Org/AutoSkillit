@@ -226,7 +226,7 @@ def render_degraded_capture(
     measurement = verified.measurement
     if measurement.total_bytes <= measurement.inline_bytes:
         return measurement.inline
-    from ._snapshot import _make_unavailable_reference
+    from ._reference import _make_unavailable_reference
 
     reference = _make_unavailable_reference(verified, reason_code)
     return render_oversized_capture(reference)

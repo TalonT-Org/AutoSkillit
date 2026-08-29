@@ -8,6 +8,7 @@ import os
 from collections.abc import Callable
 
 from . import _cleanup, _descriptor, _ledger, _reader, _snapshot, _store_port
+from . import _reference as _capture_reference
 from ._module_identity import register_module_aliases
 
 register_module_aliases(__name__)
@@ -202,7 +203,7 @@ def open_verified_capture(
 ) -> _reader.VerifiedCaptureReader:
     """Resolve a published reference under a retained shared carrier lease."""
 
-    hint = _snapshot.parse_capture_reference(token)
+    hint = _capture_reference.parse_capture_reference(token)
 
     def resolve_manifest(
         record: _ledger.CaptureLifecycleRecord | None,

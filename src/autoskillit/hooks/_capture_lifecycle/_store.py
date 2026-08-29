@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _lifecycle_policy as _capture_lifecycle_policy
     from autoskillit.hooks._capture import _migration as _capture_migration
     from autoskillit.hooks._capture import _reader as _capture_reader
+    from autoskillit.hooks._capture import _reference as _capture_reference
     from autoskillit.hooks._capture import _resolver as _capture_resolver
     from autoskillit.hooks._capture import _snapshot as _capture_snapshot
     from autoskillit.hooks._capture import _sweep as _capture_sweep
@@ -70,6 +71,7 @@ else:
     _capture_lifecycle_policy = importlib.import_module("_capture._lifecycle_policy")
     _capture_migration = importlib.import_module("_capture._migration")
     _capture_reader = importlib.import_module("_capture._reader")
+    _capture_reference = importlib.import_module("_capture._reference")
     _capture_resolver = importlib.import_module("_capture._resolver")
     _capture_snapshot = importlib.import_module("_capture._snapshot")
     _capture_sweep = importlib.import_module("_capture._sweep")
@@ -856,11 +858,11 @@ class CaptureLifecycleStore:
                         base.finalized_at + _REFERENCE_LIFETIME_SECONDS,
                         base.retention_deadline,
                     )
-                    token, reference_hash = _capture_snapshot._issue_capture_reference(
+                    token, reference_hash = _capture_reference._issue_capture_reference(
                         verified,
                         expiry=reference_expiry,
                     )
-                finalized = _capture_snapshot._bind_finalized_snapshot(
+                finalized = _capture_reference._bind_finalized_snapshot(
                     verified,
                     reference_token=token,
                     reference_hash=reference_hash,

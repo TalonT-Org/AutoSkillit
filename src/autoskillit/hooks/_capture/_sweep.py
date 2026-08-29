@@ -795,7 +795,7 @@ def run_bounded_sweep(
                 blocker = CleanupBlocker.ATTEMPT_BUDGET
             break
         _records, _bytes, transitions, _cursor_writes = work_counters()
-        if transitions + _orphan_scan._MAX_TRANSITIONS_PER_SWEEP_ITEM > budget.max_transitions:
+        if transitions + _orphan_scan.MAX_TRANSITIONS_PER_SWEEP_ITEM > budget.max_transitions:
             if blocker is CleanupBlocker.NONE:
                 blocker = CleanupBlocker.TRANSITION_BUDGET
             break

@@ -46,7 +46,7 @@ def _collect_line_limit_violations(
     """
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
-        line_count = len(py_file.read_text().splitlines())
+        line_count = len(py_file.read_text(encoding="utf-8").splitlines())
         rel = str(py_file.relative_to(SRC_ROOT))
         exemption = exemptions.get(rel)
         limit = exemption.limit if exemption is not None else 1000

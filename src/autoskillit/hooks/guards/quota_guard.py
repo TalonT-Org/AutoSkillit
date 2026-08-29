@@ -27,6 +27,9 @@ from pathlib import Path
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_PACKAGE_DIR = str(Path(__file__).resolve().parents[2])
+if _PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, _PACKAGE_DIR)
 
 from _hook_settings import (  # noqa: E402
     is_quota_guard_disabled_for_session,
@@ -34,6 +37,13 @@ from _hook_settings import (  # noqa: E402
     resolve_quota_log_dir,
     resolve_quota_settings,
     write_quota_log_event,
+)  # type: ignore[import-not-found]
+from quota_constraints import (  # noqa: E402
+    QuotaConstraint,
+    QuotaEvidenceSource,
+    decode_observed_constraints,
+    effective_quota_block,
+    observed_constraint_path,
 )  # type: ignore[import-not-found]
 
 # Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
@@ -43,6 +53,56 @@ QUOTA_GUARD_DENY_TRIGGER: str = "QUOTA WAIT REQUIRED"
 # Emitted when required sleep exceeds remaining session wall-clock budget.
 # Instructs the session to emit a clean sentinel and exit, rather than sleep-and-retry.
 QUOTA_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
+
+
+def quota_guard_decision(settings, *, now_epoch: int) -> tuple[QuotaConstraint | None, dict]:
+    """Return the cumulative quota blocker and poll display metadata."""
+    constraints = decode_observed_constraints(observed_constraint_path(settings.cache_path))
+    metadata = {
+        "utilization": 0.0,
+        "effective_threshold": 0.0,
+        "window_name": "unknown",
+        "unknown_reset_block": False,
+        "cache_state": "miss",
+    }
+    cache = read_quota_cache(settings.cache_path, settings.cache_max_age)
+    if cache is not None:
+        binding = cache.get("binding")
+        if isinstance(binding, dict):
+            try:
+                metadata = {
+                    "utilization": float(binding["utilization"]),
+                    "effective_threshold": float(binding.get("effective_threshold", 0.0)),
+                    "window_name": str(binding.get("window_name", "unknown")),
+                    "unknown_reset_block": False,
+                    "cache_state": "valid",
+                }
+                resets_at = binding.get("resets_at")
+                if bool(binding.get("should_block", False)):
+                    if resets_at:
+                        constraints.append(
+                            QuotaConstraint(
+                                source=QuotaEvidenceSource.PROVIDER_POLL,
+                                scope=settings.quota_account_scope,
+                                blocked_until_epoch=int(
+                                    datetime.fromisoformat(str(resets_at)).timestamp()
+                                ),
+                                observed_at_epoch=now_epoch,
+                                limit_type=metadata["window_name"],
+                            )
+                        )
+                    else:
+                        metadata["unknown_reset_block"] = True
+            except (KeyError, TypeError, ValueError):
+                metadata["cache_state"] = "parse_error"
+        else:
+            metadata["cache_state"] = "parse_error"
+    winner = effective_quota_block(
+        constraints,
+        account_scope=settings.quota_account_scope,
+        now_epoch=now_epoch,
+    )
+    return winner, metadata
 
 
 def main(*, cache_path_override: str | None = None) -> None:
@@ -70,7 +130,6 @@ def main(*, cache_path_override: str | None = None) -> None:
     if event_session_id and is_quota_guard_disabled_for_session(event_session_id):
         sys.exit(0)  # session-scoped disable marker present
     cache_path_str = settings.cache_path
-    cache_max_age = settings.cache_max_age
     log_dir = resolve_quota_log_dir(caller="quota_guard")
     ts = datetime.now(UTC).isoformat()
 
@@ -102,52 +161,35 @@ def main(*, cache_path_override: str | None = None) -> None:
         )
         sys.exit(0)
 
-    cache = read_quota_cache(cache_path_str, cache_max_age)
-    if cache is None:
-        write_quota_log_event(
-            {
-                "ts": ts,
-                "event": "cache_miss",
-                "cache_path": cache_path_str,
-            },
-            log_dir,
-            caller="quota_guard",
-        )
-        sys.exit(0)  # no fresh cache — fail open
+    now_epoch = int(time.time())
+    winner, metadata = quota_guard_decision(settings, now_epoch=now_epoch)
+    utilization = float(metadata["utilization"])
+    effective_threshold = float(metadata["effective_threshold"])
+    window_name = str(metadata["window_name"])
+    should_block = winner is not None or bool(metadata["unknown_reset_block"])
 
-    try:
-        binding = cache.get("binding")
-        if not binding or not isinstance(binding, dict):
-            raise KeyError("binding")
-        utilization = float(binding["utilization"])
-        should_block = bool(binding.get("should_block", False))
-        effective_threshold = float(binding.get("effective_threshold", 0.0))
-        window_name = str(binding.get("window_name", "unknown"))
-    except (KeyError, ValueError, TypeError):
+    if not should_block and metadata["cache_state"] in {"miss", "parse_error"}:
         write_quota_log_event(
             {
                 "ts": ts,
-                "event": "parse_error",
+                "event": ("cache_miss" if metadata["cache_state"] == "miss" else "parse_error"),
                 "cache_path": cache_path_str,
             },
             log_dir,
             caller="quota_guard",
         )
-        sys.exit(0)  # malformed cache — fail open
+        sys.exit(0)
 
     if should_block:
-        resets_at_str = binding.get("resets_at")
-        if resets_at_str:
-            try:
-                resets_at = datetime.fromisoformat(resets_at_str)
-                now = datetime.now(UTC)
-                n = max(
-                    0,
-                    int((resets_at - now).total_seconds()) + settings.buffer_seconds,
-                )
-            except (ValueError, TypeError):
-                n = settings.buffer_seconds
+        if winner is not None:
+            resets_at_str = datetime.fromtimestamp(winner.blocked_until_epoch, tz=UTC).isoformat()
+            n = max(
+                0,
+                winner.blocked_until_epoch - now_epoch + settings.buffer_seconds,
+            )
+            window_name = winner.limit_type or window_name
         else:
+            resets_at_str = None
             n = settings.buffer_seconds
 
         session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")

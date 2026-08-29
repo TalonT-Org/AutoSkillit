@@ -763,6 +763,13 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
 
     # Flush a 9th session: four are expired, including two unprotected sessions
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
@@ -840,6 +847,13 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
     _make_state_file(project_dir, "done-campaign", "released")
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
@@ -898,6 +912,13 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
     _make_state_file(project_dir, "live-campaign", "pending")
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
@@ -946,6 +967,13 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
@@ -997,6 +1025,13 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
 
     # Must not crash even though project_dir exists but has no dispatches dir
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
@@ -1053,6 +1088,13 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),
@@ -1246,6 +1288,13 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/project",
         project_dir=str(project_dir),

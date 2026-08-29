@@ -858,8 +858,14 @@ class TestRunHeadlessCore:
     """Integration test for run_headless_core via the injected mock runner."""
 
     @pytest.mark.anyio
-    async def test_run_headless_core_returns_success_result(self, tool_ctx, tmp_path):
+    async def test_run_headless_core_returns_success_result(self, monkeypatch, tool_ctx, tmp_path):
+        import autoskillit.execution.session_log as session_log
         from autoskillit.execution.headless import run_headless_core
+
+        flushed: list[dict] = []
+        monkeypatch.setattr(
+            session_log, "flush_session_log", lambda **kwargs: flushed.append(dict(kwargs))
+        )
 
         marker = tool_ctx.config.run_skill.completion_marker
         payload = json.dumps(
@@ -874,10 +880,15 @@ class TestRunHeadlessCore:
         tool_ctx.runner.push(
             SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
         )
-        result = await run_headless_core("/investigate foo", cwd=str(tmp_path), ctx=tool_ctx)
+        result = await run_headless_core(
+            "/investigate foo", cwd=str(tmp_path), ctx=tool_ctx, step_name="normal-flush"
+        )
         assert result.success is True
         assert result.needs_retry is False
         assert result.result == "Task completed."
+        assert flushed[-1]["needs_retry"] is False
+        assert flushed[-1]["retry_reason"] == "none"
+        assert flushed[-1]["infra_exit_category"] == "completed"
         # Assert the runner was called exactly once with a command containing the skill
         assert len(tool_ctx.runner.call_args_list) == 1
         cmd, _cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[0]
@@ -2757,6 +2768,9 @@ class TestCrashSessionLog:
         crash_calls = [f for f in flushed if f.get("termination_reason") == "CRASHED"]
         assert len(crash_calls) >= 1
         assert crash_calls[0]["success"] is False
+        assert crash_calls[0]["needs_retry"] is False
+        assert crash_calls[0]["retry_reason"] == "none"
+        assert crash_calls[0]["infra_exit_category"] == ""
 
     @pytest.mark.anyio
     async def test_crash_exception_text_passed_to_flush(self, monkeypatch, tool_ctx, tmp_path):

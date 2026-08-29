@@ -153,6 +153,7 @@ def test_req_imp_003_tools_import_namespace(path: Path) -> None:
             "autoskillit.fleet",
             "autoskillit.hook_registry",
             "autoskillit.hooks",  # declare_join_batch handler calls into the join ledger
+            "autoskillit.quota_constraints",
         }
     )
     violations: list[str] = []

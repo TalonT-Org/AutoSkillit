@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -221,6 +222,24 @@ def _stat_snapshot(directory: Path) -> dict[str, tuple[int, int]]:
             except OSError:
                 logger.debug("stat_snapshot_skipped", path=full)
     return result
+
+
+def _detect_fs_writes(
+    watch_dirs: Sequence[Path],
+    before: dict[Path, dict[str, tuple[int, int]] | None],
+) -> bool:
+    for watch_dir in watch_dirs:
+        if not watch_dir.is_dir():
+            continue
+        try:
+            after = _stat_snapshot(watch_dir)
+        except OSError:
+            logger.warning("watch_dir_post_scan_failed", watch_dir=str(watch_dir), exc_info=True)
+            continue
+        previous = before.get(watch_dir)
+        if previous is not None and previous != after:
+            return True
+    return False
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

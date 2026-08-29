@@ -98,6 +98,11 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/otlp_sink.py", "_persist_line", "ArtifactLease.acquire_exclusive"),
     (
+        "execution/quota.py",
+        "record_observed_rate_limit",
+        "acquire_flock_with_timeout",
+    ),
+    (
         "execution/session/_managed_headless_session_lineage_records.py",
         "_store_lock",
         "acquire_flock_with_timeout",

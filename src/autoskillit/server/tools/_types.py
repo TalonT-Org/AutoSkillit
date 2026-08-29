@@ -94,6 +94,7 @@ class RunSkillResult(_RunSkillResultBase, total=False):
     last_stop_reason: str
     lifespan_started: bool
     worktree_path: str
+    branch_name: str
     order_id: str
     infra_exit_category: str
     infra_cleanup_incomplete: bool

@@ -20,7 +20,7 @@ class FormatterCoverageDef(NamedTuple):
 
 _RUN_SKILL_API_FAILURE_FIELDS = frozenset(
     "api_error_status api_terminal_reason api_error_code api_error_message_seen "
-    "rate_limit_status rate_limit_type rate_limit_resets_at_epoch".split()
+    "rate_limit_status rate_limit_type rate_limit_resets_at_epoch branch_name".split()
 )
 
 

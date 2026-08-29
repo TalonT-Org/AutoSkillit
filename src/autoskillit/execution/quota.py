@@ -6,16 +6,35 @@ Does NOT sleep. Returns metadata; the orchestrator sleeps via run_cmd.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
+from autoskillit.core import (
+    ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    InfraExitCategory,
+    SkillResult,
+    acquire_flock_with_timeout,
+    get_logger,
+    read_versioned_json,
+    write_versioned_json,
+)
+from autoskillit.quota_constraints import (
+    OBSERVED_CONSTRAINT_SCHEMA_VERSION,
+    QuotaConstraint,
+    QuotaEvidenceSource,
+    decode_observed_constraints,
+    effective_quota_block,
+    observed_constraint_path,
+    quota_scope,
+)
 
 logger = get_logger(__name__)
 
@@ -236,6 +255,80 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
         logger.warning("quota cache write failed", path=cache_path, error=str(exc))
 
 
+def record_observed_rate_limit(
+    config: Any,
+    *,
+    scope: str,
+    resets_at_epoch: int,
+    limit_type: str,
+    now_epoch: int,
+) -> None:
+    """Record terminal rate-limit evidence without touching the poll cache."""
+    path = observed_constraint_path(config.cache_path)
+    lock_path = path.with_name(f"{path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_CREAT | os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(lock_path, flags, 0o600)
+    # Atomic replacement prevents partial files; this lease serializes the
+    # read-modify-write so concurrent observations are not lost.
+    try:
+        acquire_flock_with_timeout(
+            fd,
+            operation=fcntl.LOCK_EX,
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+            path=lock_path,
+        )
+        constraints = [
+            constraint
+            for constraint in decode_observed_constraints(path)
+            if constraint.blocked_until_epoch > now_epoch
+        ]
+        constraints.append(
+            QuotaConstraint(
+                source=QuotaEvidenceSource.OBSERVED_TERMINAL,
+                scope=scope,
+                blocked_until_epoch=resets_at_epoch,
+                observed_at_epoch=now_epoch,
+                limit_type=limit_type,
+            )
+        )
+        write_versioned_json(
+            path,
+            {"constraints": [constraint.to_dict() for constraint in constraints]},
+            schema_version=OBSERVED_CONSTRAINT_SCHEMA_VERSION,
+        )
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def record_skill_result_rate_limit(
+    skill_result: SkillResult,
+    supports_quota_check: bool,
+    config: Any | None,
+    *,
+    now_epoch: int | None = None,
+) -> None:
+    """Project structured terminal reset evidence into the observed store."""
+    rate_limit = skill_result.api_failure.rate_limit
+    if (
+        config is not None
+        and supports_quota_check
+        and skill_result.infra.exit_category == InfraExitCategory.RATE_LIMITED.value
+        and rate_limit.resets_at_epoch is not None
+        and rate_limit.limit_type
+    ):
+        record_observed_rate_limit(
+            config,
+            scope=quota_scope("anthropic", Path(config.credentials_path).expanduser()),
+            resets_at_epoch=rate_limit.resets_at_epoch,
+            limit_type=rate_limit.limit_type,
+            now_epoch=now_epoch if now_epoch is not None else int(time.time()),
+        )
+
+
 def invalidate_cache(cache_path: str) -> None:
     """Remove the quota cache file so the next read triggers a live fetch.
 
@@ -333,6 +426,38 @@ async def _refresh_quota_cache(
     _write_cache(config.cache_path, fetch_result)
 
 
+def _poll_constraint(status: QuotaStatus, *, scope: str, now_epoch: int) -> QuotaConstraint | None:
+    if not status.should_block or status.resets_at is None:
+        return None
+    return QuotaConstraint(
+        source=QuotaEvidenceSource.PROVIDER_POLL,
+        scope=scope,
+        blocked_until_epoch=int(status.resets_at.timestamp()),
+        observed_at_epoch=now_epoch,
+        limit_type=status.window_name,
+    )
+
+
+def _render_constraint(
+    constraint: QuotaConstraint,
+    *,
+    status: QuotaStatus | None,
+    buffer_seconds: int,
+    now_epoch: int,
+) -> dict[str, object]:
+    sleep_seconds = max(0, constraint.blocked_until_epoch + buffer_seconds - now_epoch)
+    return {
+        "should_sleep": True,
+        "sleep_seconds": sleep_seconds,
+        "utilization": status.utilization if status is not None else None,
+        "resets_at": datetime.fromtimestamp(constraint.blocked_until_epoch, tz=UTC).isoformat(),
+        "window_name": constraint.limit_type
+        or (status.window_name if status is not None else "unknown"),
+        "effective_threshold": (status.effective_threshold if status is not None else 0.0),
+        "block_source": constraint.source.value,
+    }
+
+
 async def check_and_sleep_if_needed(
     config: Any,
     *,
@@ -389,79 +514,82 @@ async def check_and_sleep_if_needed(
         "_httpx_timeout": _httpx_timeout,
     }
 
+    now_epoch = int(time.time())
+    account_scope = quota_scope(provider.casefold(), Path(config.credentials_path).expanduser())
+    observations = decode_observed_constraints(observed_constraint_path(config.cache_path))
+    observed_winner = effective_quota_block(
+        observations, account_scope=account_scope, now_epoch=now_epoch
+    )
+    status: QuotaStatus | None = None
+    refetched = False
+
     try:
         status = _read_cache(config.cache_path, config.cache_max_age)
         if status is None:
+            if observed_winner is not None:
+                return _render_constraint(
+                    observed_winner,
+                    status=None,
+                    buffer_seconds=config.buffer_seconds,
+                    now_epoch=now_epoch,
+                )
+            fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
+            _write_cache(config.cache_path, fetch_result)
+            status = fetch_result.binding
+            if status.should_block and status.resets_at is not None:
+                refetched = True
+                fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
+                _write_cache(config.cache_path, fetch_result)
+                status = fetch_result.binding
+        elif status.should_block and status.resets_at is not None:
+            # Preserve the existing accuracy re-fetch for a cached blocker.
+            refetched = True
             fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
             _write_cache(config.cache_path, fetch_result)
             status = fetch_result.binding
 
-        if not status.should_block:
-            return {
-                "should_sleep": False,
-                "sleep_seconds": 0,
-                "utilization": status.utilization,
-                "resets_at": status.resets_at.isoformat() if status.resets_at else None,
-                "window_name": status.window_name,
-                "effective_threshold": status.effective_threshold,
-            }
-
-        if status.resets_at is None:
-            fallback_seconds = max(config.buffer_seconds, 60)
-            logger.warning(
-                "quota above threshold but resets_at is None — blocking with fallback",
-                utilization=status.utilization,
-                fallback_sleep_seconds=fallback_seconds,
-            )
-            return {
-                "should_sleep": True,
-                "sleep_seconds": fallback_seconds,
-                "utilization": status.utilization,
-                "resets_at": None,
-                "window_name": status.window_name,
-                "effective_threshold": status.effective_threshold,
-                "reason": "unknown_reset",
-            }
-
-        # Re-fetch for accurate resets_at before returning sleep metadata
-        fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
-        _write_cache(config.cache_path, fetch_result)
-        status = fetch_result.binding
-
-        if status.resets_at is None:
-            fallback_seconds = max(config.buffer_seconds, 60)
-            logger.warning(
-                "quota above threshold but resets_at is None after re-fetch"
-                " — blocking with fallback",
-                utilization=status.utilization,
-                fallback_sleep_seconds=fallback_seconds,
-            )
-            return {
-                "should_sleep": True,
-                "sleep_seconds": fallback_seconds,
-                "utilization": status.utilization,
-                "resets_at": None,
-                "window_name": status.window_name,
-                "effective_threshold": status.effective_threshold,
-                "reason": "unknown_reset",
-            }
-
-        now = datetime.now(UTC)
-        wake_at = status.resets_at + timedelta(seconds=config.buffer_seconds)
-        sleep_secs = max(0, int((wake_at - now).total_seconds()))
-        logger.info(
-            "quota threshold exceeded — caller should sleep",
-            utilization=status.utilization,
-            effective_threshold=status.effective_threshold,
-            window_name=status.window_name,
-            sleep_seconds=sleep_secs,
-            resets_at=status.resets_at.isoformat(),
+        constraints = list(observations)
+        poll_constraint = _poll_constraint(status, scope=account_scope, now_epoch=now_epoch)
+        if poll_constraint is not None:
+            constraints.append(poll_constraint)
+        winner = effective_quota_block(
+            constraints, account_scope=account_scope, now_epoch=now_epoch
         )
+        if winner is not None:
+            return _render_constraint(
+                winner,
+                status=status,
+                buffer_seconds=config.buffer_seconds,
+                now_epoch=now_epoch,
+            )
+
+        if status.should_block and status.resets_at is None:
+            fallback_seconds = max(config.buffer_seconds, 60)
+            logger.warning(
+                (
+                    "quota above threshold but resets_at is None after re-fetch"
+                    " — blocking with fallback"
+                    if refetched
+                    else "quota above threshold but resets_at is None — blocking with fallback"
+                ),
+                utilization=status.utilization,
+                fallback_sleep_seconds=fallback_seconds,
+            )
+            return {
+                "should_sleep": True,
+                "sleep_seconds": fallback_seconds,
+                "utilization": status.utilization,
+                "resets_at": None,
+                "window_name": status.window_name,
+                "effective_threshold": status.effective_threshold,
+                "reason": "unknown_reset",
+            }
+
         return {
-            "should_sleep": True,
-            "sleep_seconds": sleep_secs,
+            "should_sleep": False,
+            "sleep_seconds": 0,
             "utilization": status.utilization,
-            "resets_at": status.resets_at.isoformat(),
+            "resets_at": status.resets_at.isoformat() if status.resets_at else None,
             "window_name": status.window_name,
             "effective_threshold": status.effective_threshold,
         }
@@ -493,6 +621,13 @@ async def check_and_sleep_if_needed(
                 error=str(exc),
                 error_type=type(exc).__name__,
                 exc_info=True,
+            )
+        if observed_winner is not None:
+            return _render_constraint(
+                observed_winner,
+                status=status,
+                buffer_seconds=config.buffer_seconds,
+                now_epoch=now_epoch,
             )
         return {
             "should_sleep": False,

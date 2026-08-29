@@ -40,6 +40,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.medium]
 _DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
 _HOOK_SETTINGS_SCRIPT = HOOKS_DIR / "_hook_settings.py"
 _QUOTA_GUARD_SCRIPT = HOOKS_DIR / "guards" / "quota_guard.py"
+_QUOTA_CONSTRAINTS_SCRIPT = HOOKS_DIR.parent / "quota_constraints.py"
 
 
 def _build_hooks_tree(dest_root: Path) -> Path:
@@ -58,6 +59,7 @@ def _build_hooks_tree(dest_root: Path) -> Path:
     (hooks_dir / "_dispatch.py").write_text(_DISPATCH_SCRIPT.read_text())
     (hooks_dir / "_hook_settings.py").write_text(_HOOK_SETTINGS_SCRIPT.read_text())
     (guards_dir / "quota_guard.py").write_text(_QUOTA_GUARD_SCRIPT.read_text())
+    (dest_root / "quota_constraints.py").write_text(_QUOTA_CONSTRAINTS_SCRIPT.read_text())
 
     return hooks_dir
 

@@ -48,18 +48,18 @@ _module_identity.register_module_aliases(__name__)
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture._capacity import admission_reason as _capacity_admission_reason
-    from autoskillit.hooks._capture._sweep import OrphanAdoptionOutcome
-    from autoskillit.hooks._capture._sweep import (
-        scan_and_adopt_orphans as _sweep_scan_and_adopt_orphans,
+    from autoskillit.hooks._capture._orphan_scan import OrphanAdoptionOutcome
+    from autoskillit.hooks._capture._orphan_scan import (
+        scan_and_adopt_orphans as _orphan_scan_scan_and_adopt_orphans,
     )
     from autoskillit.hooks._capture._types import LockContended
 else:
     _capture_capacity = importlib.import_module("_capture._capacity")
-    _capture_sweep = importlib.import_module("_capture._sweep")
+    _capture_orphan_scan = importlib.import_module("_capture._orphan_scan")
     _capture_types = importlib.import_module("_capture._types")
     _capacity_admission_reason = _capture_capacity.admission_reason
-    OrphanAdoptionOutcome = _capture_sweep.OrphanAdoptionOutcome
-    _sweep_scan_and_adopt_orphans = _capture_sweep.scan_and_adopt_orphans
+    OrphanAdoptionOutcome = _capture_orphan_scan.OrphanAdoptionOutcome
+    _orphan_scan_scan_and_adopt_orphans = _capture_orphan_scan.scan_and_adopt_orphans
     LockContended = _capture_types.LockContended
 
 # Re-exported as ``_capture_lifecycle.MAX_ACTIVE_RECORDS`` via ``__init__.py``.
@@ -181,7 +181,7 @@ def _scan_and_adopt_orphans(
     without ``_admission`` needing to import from ``_store`` (which would
     create a circular import at module load time).
     """
-    return _sweep_scan_and_adopt_orphans(
+    return _orphan_scan_scan_and_adopt_orphans(
         store,
         lifecycle_error=lifecycle_error,
     )

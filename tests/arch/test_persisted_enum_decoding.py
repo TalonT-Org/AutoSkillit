@@ -8,6 +8,7 @@ import pytest
 
 from scripts.check_persisted_enum_decoding import (
     PERSISTED_ENUM_DECODERS,
+    discover_persisted_enum_references,
     find_bare_enum_constructions,
     find_missing_registered_modules,
 )
@@ -125,5 +126,26 @@ def test_every_registered_decoder_module_exists() -> None:
         "core/_retiring_cache.py",
         "execution/session/_skill_session_contract_codec.py",
         "fleet/state_records.py",
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
     }
+
+
+def test_every_registered_decoder_module_references_its_enums() -> None:
+    """Assert each decoder module actually decodes the registered enums.
+
+    Uses the AST-walking resolver from ``scripts/check_persisted_enum_decoding``
+    so the assertion tracks *resolved* enum references (imports + local aliases),
+    not raw substring matches. This guards against a rebind that points
+    ``decoder_module`` at a stub file whose only mention of the enum is in a
+    comment.
+    """
+    discovered = discover_persisted_enum_references(_SRC_ROOT)
+    discovered_by_module: dict[str, set[str]] = {}
+    for module, enum_name in discovered:
+        discovered_by_module.setdefault(module, set()).add(enum_name)
+    for module, enum_names in PERSISTED_ENUM_DECODERS.items():
+        referenced = discovered_by_module.get(module, set())
+        missing = sorted(enum_names - referenced)
+        assert not missing, (
+            f"decoder module {module} does not reference registered enums: {missing}"
+        )

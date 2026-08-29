@@ -42,7 +42,9 @@ class PersistedFormatDef:
 
     format_id: str
     version_constant: str
+    """Dotted path to the current schema version int (framing concern)."""
     decoder_module: str
+    """Path of the module that constructs the enumerated members (record concern)."""
     enums: tuple[PersistedEnumDef, ...]
     rationale: str
 
@@ -109,7 +111,7 @@ PERSISTED_FORMAT_LEDGER: Mapping[str, PersistedFormatDef] = MappingProxyType(
         "capture_lifecycle_ledger": PersistedFormatDef(
             format_id="capture_lifecycle_ledger",
             version_constant="autoskillit.hooks._capture._ledger.CURRENT_FORMAT_VERSION",
-            decoder_module="hooks/_capture/_ledger.py",
+            decoder_module="hooks/_capture/_lifecycle_record.py",
             enums=tuple(
                 PersistedEnumDef(
                     enum_qualname=("autoskillit.hooks._capture._lifecycle_policy." + enum_name),

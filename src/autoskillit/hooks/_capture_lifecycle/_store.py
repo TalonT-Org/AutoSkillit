@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._capture import _ledger as _capture_ledger
     from autoskillit.hooks._capture import _ledger_view as _capture_ledger_view
     from autoskillit.hooks._capture import _lifecycle_policy as _capture_lifecycle_policy
+    from autoskillit.hooks._capture import _lifecycle_record as _capture_lifecycle_record
     from autoskillit.hooks._capture import _migration as _capture_migration
     from autoskillit.hooks._capture import _orphan_scan as _capture_orphan_scan
     from autoskillit.hooks._capture import _reader as _capture_reader
@@ -69,6 +70,7 @@ else:
     _capture_ledger = importlib.import_module("_capture._ledger")
     _capture_ledger_view = importlib.import_module("_capture._ledger_view")
     _capture_lifecycle_policy = importlib.import_module("_capture._lifecycle_policy")
+    _capture_lifecycle_record = importlib.import_module("_capture._lifecycle_record")
     _capture_migration = importlib.import_module("_capture._migration")
     _capture_orphan_scan = importlib.import_module("_capture._orphan_scan")
     _capture_reader = importlib.import_module("_capture._reader")
@@ -159,27 +161,27 @@ class CaptureCapacityError(CaptureLedgerError):
         super().__init__(_capture_capacity.reason_detail(reason))
 
 
-CaptureState = _capture_ledger.CaptureState
-CaptureReferenceStatus = _capture_ledger.CaptureReferenceStatus
-CaptureDeliveryStatus = _capture_ledger.CaptureDeliveryStatus
-CaptureRetentionPhase = _capture_ledger.CaptureRetentionPhase
-CaptureSnapshotStatus = _capture_ledger.CaptureSnapshotStatus
-CaptureStatus = _capture_ledger.CaptureStatus
-CaptureLifecycleRecord = _capture_ledger.CaptureLifecycleRecord
-CaptureTransitionCommittedError = _capture_ledger.CaptureTransitionCommittedError
+CaptureState = _capture_lifecycle_record.CaptureState
+CaptureReferenceStatus = _capture_lifecycle_record.CaptureReferenceStatus
+CaptureDeliveryStatus = _capture_lifecycle_record.CaptureDeliveryStatus
+CaptureRetentionPhase = _capture_lifecycle_record.CaptureRetentionPhase
+CaptureSnapshotStatus = _capture_lifecycle_record.CaptureSnapshotStatus
+CaptureStatus = _capture_lifecycle_record.CaptureStatus
+CaptureLifecycleRecord = _capture_lifecycle_record.CaptureLifecycleRecord
+CaptureTransitionCommittedError = _capture_lifecycle_record.CaptureTransitionCommittedError
 
 
 def _record_to_dict(record: CaptureLifecycleRecord) -> dict[str, object]:
     try:
-        return _capture_ledger.record_to_dict(record)
-    except _capture_ledger.LedgerCodecError as exc:
+        return _capture_lifecycle_record.record_to_dict(record)
+    except _capture_lifecycle_record.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
 
 
 def _record_from_dict(value: object) -> CaptureLifecycleRecord:
     try:
-        return _capture_ledger.record_from_dict(value)
-    except _capture_ledger.LedgerCodecError as exc:
+        return _capture_lifecycle_record.record_from_dict(value)
+    except _capture_lifecycle_record.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
 
 
@@ -188,8 +190,8 @@ def _validate_successor(
     candidate: CaptureLifecycleRecord,
 ) -> None:
     try:
-        _capture_ledger.validate_successor(previous, candidate)
-    except _capture_ledger.LedgerCodecError as exc:
+        _capture_lifecycle_record.validate_successor(previous, candidate)
+    except _capture_lifecycle_record.LedgerCodecError as exc:
         raise CaptureLedgerError(str(exc)) from exc
 
 
@@ -327,7 +329,7 @@ class CaptureLifecycleStore:
                 )
             except _capture_ledger_view.LegacyCompacted:
                 return self._load_locked()
-            except _capture_ledger.LedgerCodecError as exc:
+            except _capture_lifecycle_record.LedgerCodecError as exc:
                 error = CaptureLedgerError(str(exc))
                 error.reason = exc.reason
                 error.observed_version = exc.observed_version
@@ -356,7 +358,7 @@ class CaptureLifecycleStore:
                 _record_to_dict(record),
                 compaction_epoch=compaction_epoch,
             )
-        except _capture_ledger.LedgerCodecError as exc:
+        except _capture_lifecycle_record.LedgerCodecError as exc:
             raise CaptureLedgerError(str(exc)) from exc
         if size + len(frame) > min(
             _COMPACTION_THRESHOLD_BYTES,
@@ -379,7 +381,7 @@ class CaptureLifecycleStore:
                     "ledger descriptor cleanup also failed: "
                     f"{type(cleanup_error).__name__}: {cleanup_error}"
                 )
-            if isinstance(primary_error, _capture_ledger.LedgerCodecError):
+            if isinstance(primary_error, _capture_lifecycle_record.LedgerCodecError):
                 raise CaptureLedgerError(str(primary_error)) from primary_error
             raise
         try:
@@ -405,7 +407,7 @@ class CaptureLifecycleStore:
                 )
                 for record in compacted
             }
-        except _capture_ledger.LedgerCodecError as exc:
+        except _capture_lifecycle_record.LedgerCodecError as exc:
             raise CaptureLedgerError(str(exc)) from exc
         frames = [*self._ledger_view.opaque_frames, *actionable_frames.values()]
         compacted_bound = min(
@@ -787,7 +789,7 @@ class CaptureLifecycleStore:
     ) -> CaptureLifecycleRecord:
         if type(evidence) is not CaptureFailureEvidence:
             raise CaptureLifecycleError("failure transition requires typed evidence")
-        if not _capture_ledger._plain_int(observed_size):
+        if not _capture_lifecycle_record.validate_observed_size(observed_size):
             raise CaptureLifecycleError("invalid observed capture size")
         now = self._wall_clock()
         # Capacity-caused failure records get zero grace — a record

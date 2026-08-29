@@ -10,6 +10,7 @@ import inspect
 import json
 import math
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -501,7 +502,7 @@ def test_hydrated_frame_sizes_match_reencode(tmp_path: Path) -> None:
             )
             reencoded = len(
                 capture_lifecycle._capture_ledger.encode_frame(
-                    capture_lifecycle._capture_ledger.record_to_dict(record),
+                    capture_lifecycle._capture_lifecycle_record.record_to_dict(record),
                     compaction_epoch=compaction_epoch,
                 )
             )
@@ -527,7 +528,7 @@ def test_mutation_then_boundary_admission_matches_uncached_decision(
             )
         before = len(
             capture_lifecycle._capture_ledger.encode_frame(
-                capture_lifecycle._capture_ledger.record_to_dict(current),
+                capture_lifecycle._capture_lifecycle_record.record_to_dict(current),
                 compaction_epoch=current.compaction_epoch,
             )
         )
@@ -538,7 +539,7 @@ def test_mutation_then_boundary_admission_matches_uncached_decision(
         )
         after = len(
             capture_lifecycle._capture_ledger.encode_frame(
-                capture_lifecycle._capture_ledger.record_to_dict(current),
+                capture_lifecycle._capture_lifecycle_record.record_to_dict(current),
                 compaction_epoch=current.compaction_epoch,
             )
         )
@@ -678,13 +679,30 @@ def test_cleanup_outcome_field_types_are_publicly_exported() -> None:
     assert {"CleanupBlocker", "CleanupProgress"} <= set(capture_lifecycle.__all__)
 
 
+def test_ledger_facade_re_exports_every_name_in_dunder_all() -> None:
+    facade = capture_lifecycle._capture_ledger
+    sibling = capture_lifecycle._capture_lifecycle_record
+    missing = [name for name in facade.__all__ if not hasattr(facade, name)]
+    assert missing == [], f"_ledger facade ({facade.__name__}) is missing re-exports: {missing}"
+    # Names that originate in the sibling must be the SAME OBJECT as the
+    # canonical definition -- a stub rebind would pass hasattr but break the
+    # facade contract.
+    for name in facade.__all__:
+        if not hasattr(sibling, name):
+            continue
+        assert getattr(facade, name) is getattr(sibling, name), (
+            f"_ledger.{name} is not the same object as "
+            f"_lifecycle_record.{name} -- facade rebind diverged"
+        )
+
+
 @pytest.mark.parametrize(
     "error_type",
     (
         CaptureLifecycleError,
         CaptureLedgerError,
-        capture_lifecycle._capture_ledger.LedgerCodecError,
-        capture_lifecycle._capture_ledger.CaptureTransitionCommittedError,
+        capture_lifecycle._capture_lifecycle_record.LedgerCodecError,
+        capture_lifecycle._capture_lifecycle_record.CaptureTransitionCommittedError,
         capture_lifecycle._capture_migration.MigrationIntegrityError,
         CaptureContractError,
     ),
@@ -772,7 +790,7 @@ def test_migration_authority_error_preserves_wrapped_os_errno(
 
 def test_lifecycle_record_rejects_invalid_identity_at_construction() -> None:
     with pytest.raises(
-        capture_lifecycle._capture_ledger.LedgerCodecError,
+        capture_lifecycle._capture_lifecycle_record.LedgerCodecError,
         match="invalid lifecycle record fields",
     ):
         CaptureLifecycleRecord(
@@ -823,9 +841,20 @@ def test_store_factory_requires_an_explicit_lock_wait_policy() -> None:
     assert lock_wait.default is inspect.Parameter.empty
 
 
-@pytest.mark.parametrize("field_name", ("created_at", "next_attempt_at", "retention_at"))
+@pytest.mark.parametrize(
+    ("field_name", "expected_message"),
+    (
+        ("created_at", "invalid created timestamp"),
+        ("next_attempt_at", "invalid next-attempt timestamp"),
+        ("retention_at", "invalid retention timestamp"),
+    ),
+)
 @pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
-def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> None:
+def test_ledger_rejects_nonfinite_timestamps(
+    field_name: str,
+    expected_message: str,
+    value: float,
+) -> None:
     record = CaptureLifecycleRecord(
         capture_id=_CAPTURE_ID,
         state=CaptureState.RESERVED,
@@ -841,7 +870,7 @@ def test_ledger_rejects_nonfinite_timestamps(field_name: str, value: float) -> N
     serialized = capture_lifecycle._record_to_dict(record)
     serialized[field_name] = value
 
-    with pytest.raises(CaptureLedgerError, match="invalid lifecycle record fields"):
+    with pytest.raises(CaptureLedgerError, match=re.escape(expected_message)):
         capture_lifecycle._record_from_dict(serialized)
 
 
@@ -872,7 +901,7 @@ def test_ledger_rejects_invalid_outcome_projection_combinations(
     )
 
     with pytest.raises(
-        capture_lifecycle._capture_ledger.LedgerCodecError,
+        capture_lifecycle._capture_lifecycle_record.LedgerCodecError,
         match=message,
     ):
         replace(record, **changes)
@@ -917,7 +946,7 @@ def _frame_from_payload(payload: bytes) -> bytes:
 
 
 def _legacy_frame(record: dict[str, object], *, generation: int = 1) -> bytes:
-    payload = capture_lifecycle._capture_ledger.canonical_json(
+    payload = capture_lifecycle._capture_lifecycle_record.canonical_json(
         {
             "format_version": 1,
             "generation": generation,
@@ -964,12 +993,12 @@ def test_legacy_and_opaque_frames_do_not_hydrate_sizes() -> None:
         artifact_identity=None,
         observed_size=0,
     )
-    current = capture_lifecycle._capture_ledger.legacy_record_from_dict(
+    current = capture_lifecycle._capture_lifecycle_record.legacy_record_from_dict(
         legacy,
         revision=1,
         compaction_epoch=1,
     )
-    opaque_record = capture_lifecycle._capture_ledger.record_to_dict(current)
+    opaque_record = capture_lifecycle._capture_lifecycle_record.record_to_dict(current)
     opaque_record["state"] = "future-state"
     opaque = capture_lifecycle._capture_ledger.encode_frame(
         opaque_record,
@@ -1030,7 +1059,7 @@ def test_legacy_tampered_record_receives_forensic_hold_before_migration() -> Non
         observed_size=len(b"captured"),
     )
 
-    record = capture_lifecycle._capture_ledger.legacy_record_from_dict(
+    record = capture_lifecycle._capture_lifecycle_record.legacy_record_from_dict(
         legacy,
         revision=1,
         compaction_epoch=2,
@@ -1271,7 +1300,7 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
         )
         frames.append(_legacy_frame(legacy))
         normalized.append(
-            capture_lifecycle._capture_ledger.legacy_record_from_dict(
+            capture_lifecycle._capture_lifecycle_record.legacy_record_from_dict(
                 legacy,
                 revision=1,
                 compaction_epoch=2,
@@ -1280,7 +1309,7 @@ def test_legacy_migration_retires_until_reduced_publication_capacity_fits(
     frame_bytes = max(
         len(
             capture_lifecycle._capture_ledger.encode_frame(
-                capture_lifecycle._capture_ledger.record_to_dict(record),
+                capture_lifecycle._capture_lifecycle_record.record_to_dict(record),
                 compaction_epoch=2,
             )
         )
@@ -1378,7 +1407,7 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
             observed_size=0,
         )
         frames.append(_legacy_frame(legacy))
-        normalized = capture_lifecycle._capture_ledger.legacy_record_from_dict(
+        normalized = capture_lifecycle._capture_lifecycle_record.legacy_record_from_dict(
             legacy,
             revision=1,
             compaction_epoch=2,
@@ -1386,7 +1415,7 @@ def test_legacy_migration_does_not_reencode_retained_frames_per_candidate(
     assert normalized is not None
     frame_bytes = len(
         capture_lifecycle._capture_ledger.encode_frame(
-            capture_lifecycle._capture_ledger.record_to_dict(normalized),
+            capture_lifecycle._capture_lifecycle_record.record_to_dict(normalized),
             compaction_epoch=2,
         )
     )
@@ -2462,7 +2491,7 @@ def test_foreign_ledger_authority_preserves_artifact_as_tampered(
 
     try:
         with pytest.raises(
-            capture_lifecycle._capture_ledger.LedgerCodecError,
+            capture_lifecycle._capture_lifecycle_record.LedgerCodecError,
             match="FINAL manifest",
         ):
             store._transition(
@@ -4765,14 +4794,18 @@ def test_unknown_lifecycle_enum_frames_survive_incremental_load_and_compaction(
     anchor, root, store = _open_store(project, _Clock())
     try:
         record = store.reserve_capture(_CAPTURE_ID)
-        future = capture_lifecycle._capture_ledger.record_to_dict(replace(record, revision=2))
+        future = capture_lifecycle._capture_lifecycle_record.record_to_dict(
+            replace(record, revision=2)
+        )
         future["state"] = "future-state"
         opaque = capture_lifecycle._capture_ledger.encode_frame(
             future,
             compaction_epoch=record.compaction_epoch,
         )
         later = capture_lifecycle._capture_ledger.encode_frame(
-            capture_lifecycle._capture_ledger.record_to_dict(replace(record, revision=3)),
+            capture_lifecycle._capture_lifecycle_record.record_to_dict(
+                replace(record, revision=3)
+            ),
             compaction_epoch=record.compaction_epoch,
         )
         ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
@@ -4808,11 +4841,11 @@ def test_future_ledger_format_reports_observed_and_current_versions(
     anchor, root, store = _open_store(project, _Clock())
     try:
         record = store.reserve_capture(_CAPTURE_ID)
-        payload = capture_lifecycle._capture_ledger.canonical_json(
+        payload = capture_lifecycle._capture_lifecycle_record.canonical_json(
             {
                 "compaction_epoch": record.compaction_epoch,
                 "format_version": capture_lifecycle._capture_ledger.CURRENT_FORMAT_VERSION + 1,
-                "record": capture_lifecycle._capture_ledger.record_to_dict(record),
+                "record": capture_lifecycle._capture_lifecycle_record.record_to_dict(record),
             }
         )
         ledger = _capture_dir(project) / capture_lifecycle.LEDGER_NAME
@@ -4867,7 +4900,7 @@ def test_ledger_decoder_rejects_strict_json_and_version_violations() -> None:
     )
     for payload, message in cases:
         with pytest.raises(
-            capture_lifecycle._capture_ledger.LedgerCodecError,
+            capture_lifecycle._capture_lifecycle_record.LedgerCodecError,
             match=message,
         ):
             capture_lifecycle._capture_ledger.decode_ledger(_frame_from_payload(payload))
@@ -4894,7 +4927,7 @@ def test_invalid_complete_middle_frame_is_not_treated_as_a_crash_tail() -> None:
     invalid[-1] ^= 0x01
 
     with pytest.raises(
-        capture_lifecycle._capture_ledger.LedgerCodecError,
+        capture_lifecycle._capture_lifecycle_record.LedgerCodecError,
         match="checksum",
     ):
         capture_lifecycle._capture_ledger.decode_ledger(valid + bytes(invalid) + valid)
@@ -4930,7 +4963,7 @@ def test_ledger_reload_rejects_conflicting_final_manifest(tmp_path: Path) -> Non
         assert record is not None and record.manifest is not None
         primitive = json.loads(record.manifest_bytes)
         primitive["sha256"] = "f" * 64
-        conflicting_bytes = capture_lifecycle._capture_ledger.canonical_json(primitive)
+        conflicting_bytes = capture_lifecycle._capture_lifecycle_record.canonical_json(primitive)
         wire = capture_lifecycle._capture_snapshot.decode_capture_manifest_wire(conflicting_bytes)
         conflicting = capture_lifecycle._capture_snapshot._restore_capture_final_manifest(wire)
         forged = replace(

@@ -11,7 +11,7 @@ from typing import Protocol
 
 from . import _lifecycle_policy, _orphan_scan, _store_port, _sweep_cursor
 from ._cleanup import close_preserving_primary
-from ._ledger import (
+from ._lifecycle_record import (
     CaptureLifecycleRecord,
     CaptureReferenceStatus,
     CaptureRetentionPhase,

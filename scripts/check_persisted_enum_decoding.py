@@ -18,7 +18,7 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 PERSISTED_ENUM_DECODERS: Mapping[str, frozenset[str]] = {
     "core/_retiring_cache.py": frozenset({"PluginArtifactKind"}),
     "fleet/state_records.py": frozenset({"DispatchStatus"}),
-    "hooks/_capture/_ledger.py": frozenset(
+    "hooks/_capture/_lifecycle_record.py": frozenset(
         {
             "CaptureDeliveryStatus",
             "CaptureReferenceStatus",
@@ -52,40 +52,40 @@ _QUARANTINE_CONSTRUCTOR_ALLOWLIST: Mapping[tuple[str, str, str], str] = {
         "PluginArtifactKind",
     ): "the caller quarantines the complete legacy-evidence record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureState",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "record_from_dict quarantines the complete framed lifecycle record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "record_from_dict quarantines the complete framed lifecycle record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureSnapshotStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "record_from_dict quarantines the complete framed lifecycle record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureReferenceStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "record_from_dict quarantines the complete framed lifecycle record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureDeliveryStatus",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "record_from_dict quarantines the complete framed lifecycle record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "record_from_dict",
         "CaptureRetentionPhase",
-    ): "the ledger view quarantines the complete framed lifecycle record",
+    ): "record_from_dict quarantines the complete framed lifecycle record",
     (
-        "hooks/_capture/_ledger.py",
+        "hooks/_capture/_lifecycle_record.py",
         "legacy_record_from_dict",
         "CaptureState",
-    ): "the ledger view quarantines the complete framed legacy record",
+    ): "legacy_record_from_dict quarantines the complete framed legacy record",
 }
 
 _TOLERANT_METHODS = frozenset({"from_persisted"})

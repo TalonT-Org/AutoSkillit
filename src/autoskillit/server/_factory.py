@@ -463,11 +463,11 @@ def make_context(
         ),
     )
     from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # noqa: PLC0415  # circular-break: compose after ToolContext exists
-        ManagedFixedBatchService,
+        ManagedFixedBatchSupervisor,
     )
 
     assert ctx.worker_capacity is not None
-    ctx.managed_fixed_batch_service = ManagedFixedBatchService(
+    ctx.managed_fixed_batch_service = ManagedFixedBatchSupervisor(
         capacity=ctx.worker_capacity,
         background=background,
         state_root=ctx.temp_dir / "managed-fixed-batches",

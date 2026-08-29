@@ -128,7 +128,7 @@ from autoskillit.pipeline import DefaultBackgroundSupervisor
 from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
     ManagedFixedBatchLaunchBinding,
-    ManagedFixedBatchService,
+    ManagedFixedBatchSupervisor,
     ManagedLaunchBinding,
     ManagedLeafLaunchResult,
 )
@@ -1832,7 +1832,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
         assert "join_stop_guard" not in MANAGED_CODEX_LEAF_GUARD_SET
 
         capacity = DefaultManagedWorkerCapacity(max_concurrent=3)
-        service = ManagedFixedBatchService(
+        service = ManagedFixedBatchSupervisor(
             capacity=capacity,
             background=DefaultBackgroundSupervisor(),
             state_root=tmp_path / "state",

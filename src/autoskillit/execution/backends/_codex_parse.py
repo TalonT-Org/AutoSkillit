@@ -311,15 +311,20 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
         elif event_type == CodexEventType.ERROR:
             error_message = obj.get("message")
             error_code = obj.get("code")
+            # Snapshot this event's own code rather than reading ``acc.error_code``
+            # later: the latter would otherwise leak a previous ERROR event's code
+            # onto a later ERROR event that carries its own (different or absent)
+            # code, producing a mismatched annotation.
+            this_event_code = error_code if isinstance(error_code, str) else ""
             if isinstance(error_code, str):
                 acc.error_code = error_code
             if isinstance(error_message, str):
-                if acc.error_code and acc.error_code not in error_message:
-                    acc.error_message = f"{error_message} [{acc.error_code}]"
+                if this_event_code and this_event_code not in error_message:
+                    acc.error_message = f"{error_message} [{this_event_code}]"
                 else:
                     acc.error_message = error_message
-            elif acc.error_code:
-                acc.error_message = acc.error_code
+            elif this_event_code:
+                acc.error_message = this_event_code
             if acc.error_message:
                 acc.saw_failure = True
                 acc.success = False

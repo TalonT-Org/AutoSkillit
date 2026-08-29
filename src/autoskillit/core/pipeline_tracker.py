@@ -36,7 +36,6 @@ TrackerMutation = Callable[[TrackerData], TrackerData]
 
 _TRACKER_DIR_COMPONENTS = (".autoskillit", "temp", "pipeline_tracker")
 
-
 def pipeline_tracker_directory(project_dir: Path) -> Path:
     """Return the single tracker directory for *project_dir*."""
     return Path(project_dir).joinpath(*_TRACKER_DIR_COMPONENTS)
@@ -210,6 +209,10 @@ class _TrackerLock:
         fd = self._fd
         self._fd = None
         if fd is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
             os.close(fd)
 
 

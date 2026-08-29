@@ -486,6 +486,7 @@ def test_package_and_isolated_import_orders_share_authority_modules(
         "_authority",
         "_descriptor",
         "_snapshot",
+        "_reference",
         "_reader",
         "_ledger",
         "_ledger_view",

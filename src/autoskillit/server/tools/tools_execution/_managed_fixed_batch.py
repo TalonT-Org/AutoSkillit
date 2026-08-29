@@ -485,27 +485,51 @@ class ManagedFixedBatchSupervisor:
                         )
                     )
         except asyncio.CancelledError:
-            cancel_batch(
-                binding.flag_dir,
-                batch_id=batch_id,
-                terminal_event_id=f"cancelled:{batch_id}",
-            )
+            # Ledger I/O here is raise-on-error — wrap so a JoinLedgerError
+            # never replaces the propagating CancelledError, breaking the
+            # caller's compensating _cancel_and_join.
+            try:
+                cancel_batch(
+                    binding.flag_dir,
+                    batch_id=batch_id,
+                    terminal_event_id=f"cancelled:{batch_id}",
+                )
+            except (OSError, JoinLedgerError):
+                logger.warning(
+                    "managed_fixed_batch_cancel_failed",
+                    batch_id=batch_id,
+                    exc_info=True,
+                )
             raise
         except BaseException:
-            reconcile_batch(
-                binding.flag_dir,
-                batch_id=batch_id,
-                terminal_event_id=f"interrupted:{batch_id}",
-            )
+            try:
+                reconcile_batch(
+                    binding.flag_dir,
+                    batch_id=batch_id,
+                    terminal_event_id=f"interrupted:{batch_id}",
+                )
+            except (OSError, JoinLedgerError):
+                logger.warning(
+                    "managed_fixed_batch_reconcile_failed",
+                    batch_id=batch_id,
+                    exc_info=True,
+                )
             raise
         finally:
             # A cancelled task that never entered has no finally block or permit.
             if len(entered) != len(plan.assignments):
-                cancel_batch(
-                    binding.flag_dir,
-                    batch_id=batch_id,
-                    terminal_event_id=f"unlaunched:{batch_id}",
-                )
+                try:
+                    cancel_batch(
+                        binding.flag_dir,
+                        batch_id=batch_id,
+                        terminal_event_id=f"unlaunched:{batch_id}",
+                    )
+                except (OSError, JoinLedgerError):
+                    logger.warning(
+                        "managed_fixed_batch_unlaunched_cancel_failed",
+                        batch_id=batch_id,
+                        exc_info=True,
+                    )
         wave_outcome = aggregate_batch(binding.flag_dir, batch_id=batch_id)
         return ManagedFixedBatchResult(batch_id, wave_outcome, False)
 

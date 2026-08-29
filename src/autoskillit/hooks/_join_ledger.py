@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import fcntl
 import hashlib
 import json
@@ -125,12 +126,31 @@ def resolve_flag_dir(project_root: Path) -> Path:
     return _resolve_channel_dir(project_root)
 
 
+_FLOCK_TIMEOUT_S = 5.0
+_FLOCK_POLL_INTERVAL_S = 0.05
+
+
 @contextlib.contextmanager
 def _flock(lock_path: Path) -> Generator[int, None, None]:
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Bounded deadline retry on LOCK_NB contention. Mirrors the canonical
+        # pattern in src/autoskillit/execution/backends/_codex_config_lock.py.
+        deadline = time.monotonic() + _FLOCK_TIMEOUT_S
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as exc:
+                if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                    raise
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"timed out acquiring flock on {lock_path} after {_FLOCK_TIMEOUT_S:.3f}s"
+                    ) from exc
+                time.sleep(min(_FLOCK_POLL_INTERVAL_S, remaining))
         yield fd
     finally:
         try:

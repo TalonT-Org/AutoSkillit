@@ -109,7 +109,15 @@ def _parse_provider_records(stdout: str) -> _ProviderParseAccumulator:
                         acc.rate_limit_type = raw_limit_type
                     raw_resets_at = _provider_field(info, "resetsAt", "resets_at")
                     if isinstance(raw_resets_at, int):
-                        acc.rate_limit_resets_at_epoch = raw_resets_at
+                        # Preserve the most restrictive reset observed across
+                        # multiple rate_limit_event records; a later event with
+                        # an earlier reset would otherwise overwrite the
+                        # longest-known block.
+                        acc.rate_limit_resets_at_epoch = (
+                            raw_resets_at
+                            if acc.rate_limit_resets_at_epoch is None
+                            else max(acc.rate_limit_resets_at_epoch, raw_resets_at)
+                        )
                 continue
             if record_type == "result":
                 acc.result_obj = obj

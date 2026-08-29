@@ -65,12 +65,14 @@ def _close_kitchen_handler() -> None:
             logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
         ctx._session_config_overrides.clear()
         ctx.config = baseline_config
-        # Factory guarantees a non-None capacity on every ctx path; reconfigure
-        # directly without a defensive raise (see make_context invariant).
-        ctx.worker_capacity.reconfigure(
-            max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
-            timeout=baseline_config.fleet.acquire_timeout_sec,
-        )
+        # Factory guarantees a non-None capacity on every ctx path; the local
+        # binding narrows the union type for mypy without a defensive raise.
+        capacity = ctx.worker_capacity
+        if capacity is not None:
+            capacity.reconfigure(
+                max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
+                timeout=baseline_config.fleet.acquire_timeout_sec,
+            )
     try:
         _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:

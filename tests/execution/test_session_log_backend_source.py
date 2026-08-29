@@ -16,7 +16,9 @@ _LAUNCH_CONTRACT_DIGEST = "a" * 64
 class TestBackendAuthorityInSessionsJsonl:
     def test_launch_authority_fields_present(self) -> None:
         """sessions.jsonl entries include typed launch evidence."""
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types._type_results import (
+            SessionIndexEntry,
+        )
 
         annotations = SessionIndexEntry.__annotations__
         assert "backend_authority" in annotations
@@ -24,7 +26,10 @@ class TestBackendAuthorityInSessionsJsonl:
 
     def test_session_index_entry_default_value(self) -> None:
         """When no override is used, the field defaults to None."""
-        from autoskillit.core.types._type_results import SessionIndexEntry
+        from autoskillit.core.types._type_results import (
+            SESSION_INDEX_SCHEMA_VERSION,
+            SessionIndexEntry,
+        )
 
         entry: SessionIndexEntry = {  # type: ignore[typeddict-item]
             "session_id": "x",
@@ -53,6 +58,13 @@ class TestBackendAuthorityInSessionsJsonl:
             "child_executions": [],
             "skill_command": "",
             "success": True,
+            "needs_retry": False,
+            "retry_reason": "none",
+            "infra_exit_category": "completed",
+            "infra_cleanup_incomplete": False,
+            "infra_fault_domain": "unknown",
+            "api_error_status": None,
+            "is_error": False,
             "subtype": "",
             "cli_subtype": "",
             "exit_code": 0,
@@ -97,7 +109,7 @@ class TestBackendAuthorityInSessionsJsonl:
             "outcome_qualifier": None,
             "native_shell_capture": None,
             "session_type": None,
-            "schema_version": 8,
+            "schema_version": SESSION_INDEX_SCHEMA_VERSION,
         }
         assert entry["backend_authority"] is None
         assert entry["launch_contract_digest"] == ""

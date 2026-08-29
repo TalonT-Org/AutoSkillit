@@ -19,6 +19,7 @@ ROOT_PUBLIC_NAMES = (
     "CloneGateUnpublished",
     "CloneResult",
     "ModelTotalEntry",
+    "SESSION_INDEX_SCHEMA_VERSION",
 )
 INTERNAL_INDEX_NAMES = (
     "TokenUsageFileEntry",
@@ -26,7 +27,9 @@ INTERNAL_INDEX_NAMES = (
 )
 MOVED_NAMES = ROOT_PUBLIC_NAMES + INTERNAL_INDEX_NAMES
 
-RUNTIME_TYPE_NAMES = tuple(name for name in MOVED_NAMES if name != "CloneResult")
+RUNTIME_TYPE_NAMES = tuple(
+    name for name in MOVED_NAMES if name not in {"CloneResult", "SESSION_INDEX_SCHEMA_VERSION"}
+)
 
 
 def test_record_shard_owns_exact_public_surface() -> None:

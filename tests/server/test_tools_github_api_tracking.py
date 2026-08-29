@@ -125,6 +125,13 @@ async def test_flush_session_log_writes_github_api_usage(tmp_path):
 
     _usage = log.drain("test-session")
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="test-session",

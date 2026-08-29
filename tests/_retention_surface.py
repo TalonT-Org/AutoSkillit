@@ -719,12 +719,12 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
     # -- execution._session_retention::apply_session_retention --
-    f"{_SL}::L51": _self_limiting(
+    f"{_SL}::L72": _self_limiting(
         "The just-recommitted crash-recovery directory for this same dir_name is protected "
         "from being counted as expired in the same flush that created it, the session-log "
         "equivalent of a reaper excluding the generation it is currently claiming."
     ),
-    f"{_SL}::L67": RetentionDecision(
+    f"{_SL}::L88": RetentionDecision(
         Revocability.REVOCABLE,
         "A caller-declared protected campaign id is honoured unconditionally, retaining "
         "the session directory regardless of its age, the same self-exclusion family as "
@@ -1100,7 +1100,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     f"{_SR}::L140": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SR}::L171": _retries_after_input_changes(
+    f"{_SR}::L178": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

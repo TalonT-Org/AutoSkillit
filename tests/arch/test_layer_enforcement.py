@@ -55,7 +55,14 @@ SUBPACKAGE_LAYERS: dict[str, int] = {
 # tests/arch/test_subpackage_isolation_module_boundaries.py::
 # test_isolated_modules_do_not_import_server_or_cli.
 _LAYER_EXEMPT_STEMS: frozenset[str] = frozenset(
-    {"version", "smoke_utils", "_llm_triage", "__init__", "__main__"}
+    {
+        "version",
+        "smoke_utils",
+        "quota_constraints",
+        "_llm_triage",
+        "__init__",
+        "__main__",
+    }
 )
 
 _CORE_SRC = SRC_ROOT / "core"
@@ -1713,10 +1720,16 @@ _TESTS_ROOT = Path(__file__).parent.parent  # = tests/
 # Allowed autoskillit top-level packages per test layer directory.
 # IL-3 dirs (server, cli) use wildcard "autoskillit" meaning any sub-package is allowed.
 _TEST_LAYER_ALLOWED: dict[str, frozenset[str]] = {
-    "tests/core": frozenset({"autoskillit.core"}),
+    "tests/core": frozenset({"autoskillit.core", "autoskillit.quota_constraints"}),
     "tests/config": frozenset({"autoskillit.core", "autoskillit.config"}),
     "tests/pipeline": frozenset({"autoskillit.core", "autoskillit.pipeline"}),
-    "tests/execution": frozenset({"autoskillit.core", "autoskillit.execution"}),
+    "tests/execution": frozenset(
+        {
+            "autoskillit.core",
+            "autoskillit.execution",
+            "autoskillit.quota_constraints",
+        }
+    ),
     "tests/workspace": frozenset({"autoskillit.core", "autoskillit.workspace"}),
     "tests/planner": frozenset({"autoskillit.core", "autoskillit.planner"}),
     "tests/recipe": frozenset({"autoskillit.core", "autoskillit.recipe"}),

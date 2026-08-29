@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ChildExecutionIdentity, ExecutionIdentity, SessionType
+from autoskillit.core import (
+    SESSION_INDEX_SCHEMA_VERSION,
+    ChildExecutionIdentity,
+    ExecutionIdentity,
+    SessionType,
+)
 from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
 from autoskillit.core.types._type_results_execution import (
     RecipeIdentity,
@@ -48,7 +53,7 @@ class _FakeLocator:
         return ()
 
 
-def test_execution_identity_reaches_summary_and_schema_8_index(tmp_path):
+def test_execution_identity_reaches_summary_and_current_schema_index(tmp_path):
     identity = ExecutionIdentity(
         requested_parent_backend="codex",
         effective_parent_backend="codex",
@@ -85,7 +90,7 @@ def test_execution_identity_reaches_summary_and_schema_8_index(tmp_path):
 
     assert summary["execution_identity"] == identity.to_dict()
     assert summary["session_type"] == "skill"
-    assert entry["schema_version"] == 8
+    assert entry["schema_version"] == SESSION_INDEX_SCHEMA_VERSION
     assert entry["session_type"] == "skill"
     assert entry["child_executions"] == [identity.children[0].to_dict()]
     assert entry["backend_override_tier"] == "recipe_step"
@@ -142,6 +147,13 @@ def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
 def test_flush_session_log_writes_kitchen_id(tmp_path):
     """kitchen_id parameter is written to sessions.jsonl index entry."""
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/worktree",
         kitchen_id="my-pipeline-123",
@@ -166,6 +178,13 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
 def test_flush_session_log_writes_order_id_to_index(tmp_path):
     """order_id is written to sessions.jsonl index entry when provided."""
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/worktree",
         kitchen_id="kitchen-abc",
@@ -190,6 +209,13 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
 def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
     """order_id defaults to empty string when not supplied."""
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/some/worktree",
         kitchen_id="kitchen-abc",
@@ -214,6 +240,13 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
 def test_flush_writes_crash_exception_file(tmp_path):
     """When exception_text is provided, flush_session_log writes crash_exception.txt."""
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="test-session",
@@ -244,6 +277,13 @@ def test_flush_writes_crash_exception_file(tmp_path):
 def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
     raw = '{"type": "assistant"}\n{"type": "result"}\n'
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="test-session",
@@ -266,6 +306,13 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
 
 def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="ok-session",
@@ -298,6 +345,13 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -336,6 +390,13 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -384,6 +445,13 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -435,6 +503,13 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
         loc_deletions=0,
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -490,6 +565,13 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -550,6 +632,13 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -583,6 +672,13 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -616,6 +712,13 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -649,6 +752,13 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path):
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text("\n".join(records) + "\n")
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -1014,6 +1124,13 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -1050,6 +1167,13 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
@@ -1225,6 +1349,13 @@ class TestCodexLogFields:
         codex_log.parent.mkdir(parents=True)
         codex_log.write_text(event_line)
         flush_session_log(
+            needs_retry=False,
+            retry_reason="none",
+            infra_exit_category="completed",
+            infra_cleanup_incomplete=False,
+            infra_fault_domain="unknown",
+            api_error_status=None,
+            is_error=False,
             log_dir=str(tmp_path),
             backend="codex",
             channel_b_capable=False,
@@ -1249,6 +1380,13 @@ class TestCodexLogFields:
 
     def test_flush_codex_log_null_when_not_provided(self, tmp_path):
         flush_session_log(
+            needs_retry=False,
+            retry_reason="none",
+            infra_exit_category="completed",
+            infra_cleanup_incomplete=False,
+            infra_fault_domain="unknown",
+            api_error_status=None,
+            is_error=False,
             log_dir=str(tmp_path),
             session_locator=_FakeLocator(None),
             cwd="/some/worktree",
@@ -1281,6 +1419,13 @@ class TestCodexLogFields:
         codex_log = tmp_path / "rollout.jsonl"
         codex_log.write_text(event_line)
         flush_session_log(
+            needs_retry=False,
+            retry_reason="none",
+            infra_exit_category="completed",
+            infra_cleanup_incomplete=False,
+            infra_fault_domain="unknown",
+            api_error_status=None,
+            is_error=False,
             log_dir=str(tmp_path),
             backend="codex",
             channel_b_capable=False,
@@ -1302,6 +1447,13 @@ class TestCodexLogFields:
 
     def test_backend_codex_skips_channel_b_parsing(self, tmp_path):
         flush_session_log(
+            needs_retry=False,
+            retry_reason="none",
+            infra_exit_category="completed",
+            infra_cleanup_incomplete=False,
+            infra_fault_domain="unknown",
+            api_error_status=None,
+            is_error=False,
             log_dir=str(tmp_path),
             cwd="/some/worktree",
             session_id="codex-session-003",
@@ -1760,6 +1912,13 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
         + "\n"
     )
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="minimax-dedup-001",

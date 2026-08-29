@@ -11,13 +11,34 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import VANISHED_ERRORS, get_logger, scan_observed
+from autoskillit.core import VANISHED_ERRORS, atomic_write, get_logger, scan_observed
 
 logger = get_logger(__name__)
 
 _MAX_SESSIONS = 2000
+_CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
+
+
+def write_telemetry_clear_marker(log_root: Path) -> None:
+    """Write the current UTC timestamp as a telemetry-clear fence."""
+    try:
+        log_root = Path(log_root)
+        log_root.mkdir(parents=True, exist_ok=True)
+        atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
+    except Exception:
+        logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+
+
+def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
+    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt."""
+    try:
+        text = (Path(log_root) / _CLEAR_MARKER_FILENAME).read_text(encoding="utf-8").strip()
+        return datetime.fromisoformat(text)
+    except (OSError, ValueError):
+        return None
 
 
 def apply_session_retention(

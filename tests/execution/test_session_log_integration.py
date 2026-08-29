@@ -50,6 +50,13 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     snap_dicts = [asdict(s) for s in snaps]
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="integration-test-001",
@@ -111,6 +118,13 @@ def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
     from autoskillit.execution.session_log import flush_session_log
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id=session_id,
@@ -192,6 +206,13 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
     assert result.proc_snapshots is not None, "Snapshots must be present"
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path / "logs"),
         cwd=str(tmp_path),
         session_id="sanity-floor-001",

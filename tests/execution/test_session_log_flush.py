@@ -511,6 +511,13 @@ def test_resumed_session_uses_distinct_log_directory(tmp_path):
         pid=12345,
         skill_command="/autoskillit:investigate foo",
         success=True,
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         subtype="completed",
         exit_code=0,
         proc_snapshots=None,
@@ -735,6 +742,13 @@ def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_pat
     start_ts = "2026-01-01T12:05:00+00:00"  # later
     end_ts = "2026-01-01T12:00:00+00:00"  # earlier — backward clock
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="backward-clock-test",
@@ -764,6 +778,13 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
     start_ts = "2026-01-01T12:00:00+00:00"
     end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="elapsed-seconds-test",
@@ -797,6 +818,13 @@ def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
     start_ts = "2026-01-01T12:00:00+00:00"
     end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="zero-elapsed-test",
@@ -947,12 +975,14 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["cache_read_tokens"] == 80
 
 
-def test_flush_index_includes_schema_version_8(tmp_path):
-    """sessions.jsonl entry must contain schema_version: 8."""
+def test_flush_index_includes_current_schema_version(tmp_path):
+    """sessions.jsonl entry must contain the current schema version."""
+    from autoskillit.core import SESSION_INDEX_SCHEMA_VERSION
+
     _flush(tmp_path)
     index_path = tmp_path / "sessions.jsonl"
     entry = json.loads(index_path.read_text().strip().split("\n")[-1])
-    assert entry["schema_version"] == 8
+    assert entry["schema_version"] == SESSION_INDEX_SCHEMA_VERSION
 
 
 def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):

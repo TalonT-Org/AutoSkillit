@@ -269,6 +269,13 @@ class TestCodexSmokeRecipeComposition:
                 return ()
 
         flush_session_log(
+            needs_retry=False,
+            retry_reason="none",
+            infra_exit_category="completed",
+            infra_cleanup_incomplete=False,
+            infra_fault_domain="unknown",
+            api_error_status=None,
+            is_error=False,
             log_dir=str(tmp_path),
             backend="codex",
             channel_b_capable=False,

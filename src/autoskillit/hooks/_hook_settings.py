@@ -43,7 +43,13 @@ ENV_DISABLED = "AUTOSKILLIT_QUOTA_GUARD__DISABLED"
 # The bridge contract test asserts equality between this set and the
 # serializer's payload keys — update both together.
 QUOTA_GUARD_HOOK_PAYLOAD_KEYS: frozenset[str] = frozenset(
-    {"cache_path", "cache_max_age", "buffer_seconds", "disabled"}
+    {
+        "cache_path",
+        "cache_max_age",
+        "buffer_seconds",
+        "disabled",
+        "quota_account_scope",
+    }
 )
 
 # The exact keys the descriptor-anchored shell capture runner reads from
@@ -110,6 +116,7 @@ class QuotaHookSettings:
     cache_path: str
     cache_max_age: int
     buffer_seconds: int
+    quota_account_scope: str = ""
     disabled: bool = False
 
 
@@ -364,6 +371,7 @@ def resolve_quota_settings(*, cache_path_override: str | None = None) -> QuotaHo
         cache_path=cache_path,
         cache_max_age=cache_max_age,
         buffer_seconds=buffer_seconds,
+        quota_account_scope=str(hook_config.get("quota_account_scope", "")),
         disabled=disabled,
     )
 

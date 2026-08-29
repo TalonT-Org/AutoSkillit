@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 from autoskillit.core import atomic_write
+from autoskillit.quota_constraints import quota_scope
 from autoskillit.server._misc import _hook_config_path
 from autoskillit.server.tools._overlay_state import OverlayStateError, read_overlay
 
@@ -27,6 +28,7 @@ class QuotaGuardHookPayload(TypedDict):
     cache_path: str
     buffer_seconds: int
     disabled: bool
+    quota_account_scope: str
 
 
 class OutputBudgetPolicyHookPayload(TypedDict):
@@ -49,6 +51,7 @@ def _quota_guard_hook_payload(cfg: QuotaGuardConfig) -> QuotaGuardHookPayload:
         "cache_path": cfg.cache_path,
         "buffer_seconds": cfg.buffer_seconds,
         "disabled": not cfg.enabled,
+        "quota_account_scope": quota_scope("anthropic", Path(cfg.credentials_path).expanduser()),
     }
 
 

@@ -21,6 +21,7 @@ from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome
 from ._type_execution_identity import ExecutionIdentity
 from ._type_results_execution import ApiFailureOutcome
 from ._type_results_records import (
+    SESSION_INDEX_SCHEMA_VERSION,
     CapturedStream,
     CleanupResult,
     CloneGateUncommitted,
@@ -75,6 +76,7 @@ __all__ = [
     "ModelTotalEntry",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
+    "SESSION_INDEX_SCHEMA_VERSION",
     "parse_plan_paths",
 ]
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Final, Literal, TypedDict
 
 from ._type_execution_identity import ChildExecutionIdentityDict
 
@@ -19,9 +19,12 @@ __all__ = [
     "CloneGateUnpublished",
     "CloneResult",
     "ModelTotalEntry",
+    "SESSION_INDEX_SCHEMA_VERSION",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
 ]
+
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 9
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,6 +247,13 @@ class SessionIndexEntry(TypedDict):
     child_executions: list[ChildExecutionIdentityDict]
     skill_command: str
     success: bool
+    needs_retry: bool
+    retry_reason: str
+    infra_exit_category: str
+    infra_cleanup_incomplete: bool
+    infra_fault_domain: str
+    api_error_status: int | None
+    is_error: bool
     subtype: str
     cli_subtype: str
     exit_code: int

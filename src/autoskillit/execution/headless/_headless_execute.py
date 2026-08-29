@@ -64,6 +64,7 @@ from autoskillit.execution.headless._headless_git import (
 )
 from autoskillit.execution.headless._headless_helpers import (
     _compute_post_session_metrics,
+    _detect_fs_writes,
     _stat_snapshot,
 )
 from autoskillit.execution.headless._headless_launch import (
@@ -79,6 +80,7 @@ from autoskillit.execution.headless._managed import (
 )
 from autoskillit.execution.otlp_sink import LocalOtlpSink
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
+from autoskillit.execution.quota import record_skill_result_rate_limit
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -159,8 +161,7 @@ async def _execute_claude_headless(
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
 
     cfg = ctx.config.run_skill
-    # Read from the same authority the spec builders use, so adapter_digest and
-    # CmdSpec.force_inactive_agent_teams cannot disagree.
+    # Share the spec-builder authority for adapter digest and inactive-team policy.
     force_inactive_agent_teams = ctx.config.agent_backend.force_inactive_agent_teams
     if idle_output_timeout is not None:
         _raw_idle = idle_output_timeout
@@ -386,20 +387,7 @@ async def _execute_claude_headless(
                 _result, start_ts=_start_ts, end_ts=_end_ts, elapsed_seconds=_elapsed
             )
 
-            _fs_writes_detected = False
-            for _wd in _watch_dirs:
-                if _wd.is_dir():
-                    try:
-                        _post = _stat_snapshot(_wd)
-                    except OSError:
-                        logger.warning(
-                            "watch_dir_post_scan_failed", watch_dir=str(_wd), exc_info=True
-                        )
-                        continue
-                    _pre = _temp_snapshots_pre.get(_wd)
-                    if _pre is not None and _post != _pre:
-                        _fs_writes_detected = True
-                        break
+            _fs_writes_detected = _detect_fs_writes(_watch_dirs, _temp_snapshots_pre)
 
             _git_writes_detected = False
             if is_in_git_repo(Path(cwd)):
@@ -427,6 +415,11 @@ async def _execute_claude_headless(
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
                 skill_contract=skill_contract,
+            )
+            record_skill_result_rate_limit(
+                skill_result,
+                _step_backend.capabilities.anthropic_provider_capable,
+                getattr(ctx.config, "quota_guard", None),
             )
 
             if (
@@ -599,6 +592,13 @@ async def _execute_claude_headless(
                 "pid": result.pid if result is not None else 0,
                 "skill_command": skill_command,
                 "success": skill_result.success,
+                "needs_retry": skill_result.needs_retry,
+                "retry_reason": skill_result.retry_reason.value,
+                "infra_exit_category": skill_result.infra.exit_category,
+                "infra_cleanup_incomplete": skill_result.infra.cleanup_incomplete,
+                "infra_fault_domain": skill_result.infra.fault_domain.value,
+                "api_error_status": skill_result.api_failure.status,
+                "is_error": skill_result.is_error,
                 "subtype": skill_result.subtype,
                 "exit_code": skill_result.exit_code,
                 "start_ts": result.start_ts if result is not None else _start_ts,

@@ -121,6 +121,13 @@ async def test_pty_wrapped_tracing_produces_no_script_snapshots_in_proc_trace_js
     assert result.proc_snapshots is not None
 
     flush_session_log(
+        needs_retry=False,
+        retry_reason="none",
+        infra_exit_category="completed",
+        infra_cleanup_incomplete=False,
+        infra_fault_domain="unknown",
+        api_error_status=None,
+        is_error=False,
         log_dir=str(tmp_path / "logs"),
         cwd=str(tmp_path),
         session_id="pty-trace-test-001",

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
+    SESSION_INDEX_SCHEMA_VERSION,
     ArtifactLease,
     ArtifactLeaseContention,
     ModelIdentity,
@@ -40,7 +41,15 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
-from autoskillit.execution._session_retention import apply_session_retention
+from autoskillit.execution._session_retention import (
+    apply_session_retention,
+)
+from autoskillit.execution._session_retention import (
+    read_telemetry_clear_marker as read_telemetry_clear_marker,
+)
+from autoskillit.execution._session_retention import (
+    write_telemetry_clear_marker as write_telemetry_clear_marker,
+)
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
@@ -53,19 +62,13 @@ logger = get_logger(__name__)
 
 
 def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
-    """Return the model name with the most output tokens from model_breakdown.
-
-    Returns "" when token_usage is absent or model_breakdown is empty.
-    """
+    """Return the model with most output tokens, or empty when unavailable."""
     if not token_usage:
         return ""
     mb = token_usage.get("model_breakdown", {})
     if not isinstance(mb, dict) or not mb:
         return ""
     return max(mb, key=lambda m: mb[m].get("output_tokens", 0) if isinstance(mb[m], dict) else 0)
-
-
-_CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
 
 
 def resolve_log_dir(log_dir: str) -> Path:
@@ -97,32 +100,6 @@ def _append_session_archive_rows(archive_path: Path, rows: list[dict[str, Any]])
         fsync_directory(archive_path.parent)
 
 
-def write_telemetry_clear_marker(log_root: Path) -> None:
-    """Write the current UTC timestamp as a telemetry-clear fence.
-
-    Called when any pipeline log is cleared via clear=True. On the next server
-    startup, _state._initialize reads this marker and excludes sessions that
-    predate it from load_from_log_dir replay, preventing double-counting.
-
-    Silently no-ops on any error — never raises.
-    """
-    try:
-        log_root = Path(log_root)
-        log_root.mkdir(parents=True, exist_ok=True)
-        atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
-    except Exception:
-        logger.debug("write_telemetry_clear_marker failed", exc_info=True)
-
-
-def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
-    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt."""
-    try:
-        text = (Path(log_root) / _CLEAR_MARKER_FILENAME).read_text(encoding="utf-8").strip()
-        return datetime.fromisoformat(text)
-    except (OSError, ValueError):
-        return None
-
-
 def _resolve_session_label(step_name: str, dispatch_id: str) -> str:
     """Derive a non-empty session label for telemetry file identification.
 
@@ -151,6 +128,13 @@ def flush_session_log(
     pid: int,
     skill_command: str,
     success: bool,
+    needs_retry: bool,
+    retry_reason: str,
+    infra_exit_category: str,
+    infra_cleanup_incomplete: bool,
+    infra_fault_domain: str,
+    api_error_status: int | None,
+    is_error: bool,
     subtype: str,
     exit_code: int,
     start_ts: str,
@@ -487,6 +471,13 @@ def flush_session_log(
             "codex_log": _codex_log_str,
             "skill_command": skill_command,
             "success": success,
+            "needs_retry": needs_retry,
+            "retry_reason": retry_reason,
+            "infra_exit_category": infra_exit_category,
+            "infra_cleanup_incomplete": infra_cleanup_incomplete,
+            "infra_fault_domain": infra_fault_domain,
+            "api_error_status": api_error_status,
+            "is_error": is_error,
             "subtype": subtype,
             "cli_subtype": cli_subtype,
             "exit_code": exit_code,
@@ -633,6 +624,13 @@ def flush_session_log(
             "codex_log": _codex_log_str,
             "skill_command": skill_command,
             "success": success,
+            "needs_retry": needs_retry,
+            "retry_reason": retry_reason,
+            "infra_exit_category": infra_exit_category,
+            "infra_cleanup_incomplete": infra_cleanup_incomplete,
+            "infra_fault_domain": infra_fault_domain,
+            "api_error_status": api_error_status,
+            "is_error": is_error,
             "subtype": subtype,
             "cli_subtype": cli_subtype,
             "exit_code": exit_code,
@@ -695,7 +693,7 @@ def flush_session_log(
             "model_identifier": effective_model_id,
             "configured_model": model_identity.configured_model,
             "profile_name": model_identity.profile_name,
-            "schema_version": 8,
+            "schema_version": SESSION_INDEX_SCHEMA_VERSION,
         }
         index_path = log_root / "sessions.jsonl"
         archive_path = log_root / "sessions-archive.jsonl"

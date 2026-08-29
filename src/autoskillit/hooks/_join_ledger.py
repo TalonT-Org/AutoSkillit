@@ -986,9 +986,11 @@ def _terminalize_unsettled(
             assignments = batch.get("assignments")
             if not isinstance(assignments, list):
                 raise JoinLedgerError("batch assignments are malformed")
+            any_updated = False
             for entry in assignments:
                 if not isinstance(entry, dict) or entry.get("outcome") != OUTCOME_PENDING:
                     continue
+                any_updated = True
                 assignment_event_id = f"{terminal_event_id}:{entry.get('assignment_id', '')}"
                 entry.update(
                     {
@@ -1009,6 +1011,11 @@ def _terminalize_unsettled(
                             "outcome": outcome,
                         }
                     )
+            if not any_updated:
+                # Already-terminal batch — return without rewriting the
+                # ledger so we don't overwrite the original `settled_at`
+                # timestamp or churn the file with identical contents.
+                return batch
             batch["wave_outcome"] = _aggregate_wave_outcome(assignments)
             batch["lifecycle_state"] = "terminal"
             batch["settled_at"] = ts

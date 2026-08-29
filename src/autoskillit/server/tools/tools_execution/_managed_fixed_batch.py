@@ -568,7 +568,8 @@ class ManagedFixedBatchService:
                 )
                 running = True
                 result = await prepared.execute()
-                await prepared.finalize(result)
+                if prepared.finalize is not None:
+                    await prepared.finalize(result)
             # Resource cleanup has completed before result settlement and permit release.
             self._settle(
                 binding,

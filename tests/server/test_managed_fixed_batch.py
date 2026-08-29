@@ -37,13 +37,9 @@ async def _prepared_leaf(projection, result: ManagedLeafLaunchResult):
     async def execute() -> ManagedLeafLaunchResult:
         return result
 
-    async def finalize(_result: ManagedLeafLaunchResult) -> None:
-        return None
-
     yield ManagedLeafPreparedLaunch(
         ledger_attempt_evidence=projection.ledger_attempt_evidence,
         execute=execute,
-        finalize=finalize,
     )
 
 

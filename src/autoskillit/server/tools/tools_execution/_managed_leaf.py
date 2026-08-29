@@ -87,11 +87,15 @@ class ManagedLeafPreparedLaunch(Generic[_PreparedValue]):
 
     ``execute`` deliberately delegates physical process ownership to the
     executor.  The fixed-batch supervisor owns only its ledger and permit.
+    ``finalize`` is optional: adapters that have no post-execute cleanup
+    (because ``scoped_child_resource_owner`` already owns session and
+    worktree cleanup and the executor already publishes the result) can
+    pass ``None``. The supervisor will skip the call when ``None``.
     """
 
     ledger_attempt_evidence: Mapping[str, str]
     execute: Callable[[], Awaitable[_PreparedValue]]
-    finalize: Callable[[_PreparedValue], Awaitable[None]]
+    finalize: Callable[[_PreparedValue], Awaitable[None]] | None = None
 
 
 def _canonical(value: object) -> str:

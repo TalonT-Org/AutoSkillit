@@ -630,7 +630,11 @@ async def _run_fixed_batch_handler(
             raise SkillContractError("run_fixed_batch supervisor is unavailable")
         result = await service.run(binding)
     except (OSError, ValueError, SkillContractError) as exc:
-        return _deny(str(exc))
+        logger.warning(
+            "run_fixed_batch_rejected",
+            exc_info=True,
+        )
+        return _deny(f"{type(exc).__name__}: {exc}")
     return {
         "success": True,
         "batch_id": result.batch_id,
@@ -711,7 +715,11 @@ def _read_fixed_batch_result_handler(
         )
         return {"success": True, **_page_payload(payload, offset=offset, page_size=page_size)}
     except (OSError, ValueError, SkillContractError) as exc:
-        return _deny(str(exc))
+        logger.warning(
+            "read_fixed_batch_result_rejected",
+            exc_info=True,
+        )
+        return _deny(f"{type(exc).__name__}: {exc}")
 
 
 @mcp.tool(

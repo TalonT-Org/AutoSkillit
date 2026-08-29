@@ -5,26 +5,12 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import load_yaml, pkg_root
+from tests._helpers import IMPLEMENTED_FAMILIES
 
 pytestmark = [pytest.mark.medium]
 
 REGISTRY_PATH = pkg_root() / "assets" / "phoropter-registry.yaml"
-EXPECTED_FAMILIES = {"arch-lens", "exp-lens", "vis-lens", "refactor-lens"}
-REQUIRED_FIELDS = frozenset(
-    {
-        "description",
-        "output_type",
-        "mode_label",
-        "lens_count",
-        "default_enabled",
-        "failure_mode",
-        "arg_interface",
-        "dial_skill",
-        "synthesis",
-        "step_naming",
-        "status",
-    }
-)
+REQUIRED_FIELDS = frozenset({"step_naming"})
 
 
 @pytest.fixture(scope="module")
@@ -44,19 +30,18 @@ def test_registry_is_valid_yaml() -> None:
     assert isinstance(data, dict), f"Expected dict, got {type(data).__name__}"
 
 
-def test_schema_version_is_one(registry_data: dict) -> None:
-    """schema_version must be the integer 1 (not the string '1')."""
-    assert registry_data.get("schema_version") == 1, (
-        f"Expected schema_version=1, got {registry_data.get('schema_version')!r}"
+def test_schema_version_is_two(registry_data: dict) -> None:
+    """schema_version must be the integer 2."""
+    assert registry_data.get("schema_version") == 2, (
+        f"Expected schema_version=2, got {registry_data.get('schema_version')!r}"
     )
 
 
-def test_families_keys_match_expected_set(registry_data: dict) -> None:
-    """families must contain exactly the four expected phoropter lens families."""
+def test_implemented_families_are_present(registry_data: dict) -> None:
+    """Every implemented family must have an entry in the registry."""
     families = registry_data.get("families", {})
-    assert set(families.keys()) == EXPECTED_FAMILIES, (
-        f"Expected families={EXPECTED_FAMILIES}, got {set(families.keys())}"
-    )
+    missing = IMPLEMENTED_FAMILIES - set(families.keys())
+    assert not missing, f"Implemented families missing from registry: {sorted(missing)}"
 
 
 def test_all_families_have_required_fields(registry_data: dict) -> None:
@@ -67,91 +52,35 @@ def test_all_families_have_required_fields(registry_data: dict) -> None:
         assert not missing, f"Family {name!r} missing required fields: {sorted(missing)}"
 
 
-def test_arch_lens_fields(registry_data: dict) -> None:
-    """arch-lens entry must match the documented field values."""
-    entry = registry_data["families"]["arch-lens"]
-    assert entry["output_type"] == "diagram"
-    assert entry["lens_count"] == 13
-    assert entry["arg_interface"] == "1-arg"
-    assert entry["dial_skill"] == "prepare-pr"
-    assert entry["synthesis"]["strategy"] is None
-    assert entry["step_naming"]["prefix"] is None
-    assert entry["status"] == "implemented"
-    assert entry["default_enabled"] is True
-    assert entry["failure_mode"] == "continue"
-    assert entry["activate_deps"] == ["mermaid"]
-    assert entry["output_prefix"] == ""
-    assert "phase_skip" not in entry
+def test_registry_has_only_step_naming(registry_data: dict) -> None:
+    """The registry must contain ONLY step_naming per family.
 
+    Re-accretion guard: any leaf other than ``step_naming`` under a family
+    entry (or any leaf under step_naming other than ``prefix``) is a
+    regression.
+    """
+    allowed_top_level = {"schema_version", "families"}
+    assert set(registry_data.keys()) == allowed_top_level, (
+        f"Registry has unexpected top-level keys: {set(registry_data.keys()) - allowed_top_level}"
+    )
 
-def test_exp_lens_fields(registry_data: dict) -> None:
-    """exp-lens entry must match the documented field values."""
-    entry = registry_data["families"]["exp-lens"]
-    assert entry["output_type"] == "assessment"
-    assert entry["lens_count"] == 18
-    assert entry["arg_interface"] == "2-arg"
-    assert entry["dial_skill"] == "prepare-research-pr"
-    assert entry["synthesis"]["strategy"] == "priority_hierarchy"
-    assert "skill" not in entry["synthesis"]
-    assert entry["step_naming"]["prefix"] is None
-    assert entry["status"] == "implemented"
-    assert entry["activate_deps"] == ["mermaid"]
-    assert entry["output_prefix"] == ""
-    assert "phase_skip" not in entry
-
-
-def test_vis_lens_fields(registry_data: dict) -> None:
-    """vis-lens entry must match the documented field values."""
-    entry = registry_data["families"]["vis-lens"]
-    assert entry["output_type"] == "figure_spec"
-    assert entry["lens_count"] == 12
-    assert entry["arg_interface"] == "2-arg"
-    assert entry["dial_skill"] == "select-vis-lenses"
-    assert entry["synthesis"]["strategy"] == "priority_hierarchy"
-    assert entry["synthesis"]["skill"] == "synthesize-vis-plan"
-    assert entry["step_naming"]["prefix"] == "vis"
-    assert entry["status"] == "implemented"
-    assert entry["phase_skip"]["skip_field"] == "context.is_silent_type"
-    assert entry["phase_skip"]["skip_semantics"] == "skip_when_true"
-    assert entry["phase_skip"]["applies_to"] == "apply"
-    assert "lens_metadata" in entry
-    assert isinstance(entry["lens_metadata"], dict)
-    assert entry["activate_deps"] == ["mermaid"]
-    assert entry["output_prefix"] == "vis_spec_"
-    assert entry["composite_slugs"] == ["always-on"]
-    assert entry["lens_metadata"]["methodology-norms"]["special_assertions"] == [
-        "tradition_slug",
-        "two_stage_matching",
-    ]
-
-
-def test_refactor_lens_fields(registry_data: dict) -> None:
-    """refactor-lens entry must match the documented field values."""
-    entry = registry_data["families"]["refactor-lens"]
-    assert entry["lens_count"] == 0
-    assert entry["default_enabled"] is False
-    assert entry["synthesis"]["strategy"] == "electre_iii"
-    assert entry["step_naming"]["prefix"] == "refactor"
-    assert entry["status"] == "designed"
-    assert entry["dial_skill"] is None
-    assert "phase_skip" not in entry
-
-
-def test_dial_skill_present_on_every_family(registry_data: dict) -> None:
-    """Every family must declare dial_skill (value may be None for unimplemented families)."""
     families = registry_data["families"]
-    for name, entry in families.items():
-        assert "dial_skill" in entry, f"Family {name!r} missing dial_skill key"
+    for family_name, family_entry in families.items():
+        extra = set(family_entry.keys()) - {"step_naming"}
+        assert not extra, f"{family_name} has retired leaves: {sorted(extra)}"
+        assert set(family_entry["step_naming"].keys()) == {"prefix"}, (
+            f"{family_name}.step_naming has unexpected leaves: "
+            f"{sorted(set(family_entry['step_naming'].keys()) - {'prefix'})}"
+        )
 
 
-def test_lens_counts_match_actual_directories(registry_data: dict) -> None:
-    """For implemented families, the directory glob count must equal the registry's lens_count."""
-    families = registry_data["families"]
+def test_each_implemented_family_has_lenses() -> None:
+    """Each implemented family must have at least one lens directory."""
     skills_root = pkg_root() / "skills_extended"
-    for slug in ("arch-lens", "exp-lens", "vis-lens"):
-        entry = families[slug]
-        matches = list(skills_root.glob(f"{slug}-*"))
-        assert len(matches) == entry["lens_count"], (
-            f"{slug}: registry claims {entry['lens_count']} lenses but "
-            f"{skills_root} contains {len(matches)} matching directories"
+    for family in IMPLEMENTED_FAMILIES:
+        count = sum(
+            1 for p in skills_root.iterdir() if p.name.startswith(f"{family}-") and p.is_dir()
+        )
+        assert count > 0, (
+            f"Implemented family {family!r} has zero lens directories under {skills_root}"
         )

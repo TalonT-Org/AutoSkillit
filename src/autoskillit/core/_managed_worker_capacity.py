@@ -137,6 +137,19 @@ class DefaultManagedWorkerCapacity:
         except BaseException:
             with self._lock:
                 self._remove_waiter_locked(waiter)
+                # Python 3.12+ asyncio.wait_for uses timeouts.timeout; if
+                # _deliver landed in the same loop batch as the timeout
+                # handle, set_result completed the future BEFORE the
+                # cancel, leaving a permit in _permits/_owner_permits with
+                # no owner. Reclaim it explicitly. (3.11 used a different
+                # implementation that returned the result without raising,
+                # so this branch is 3.12+-only in practice.)
+                if (
+                    waiter.future.done()
+                    and not waiter.future.cancelled()
+                    and waiter.future.exception() is None
+                ):
+                    self.release(waiter.future.result())
             raise
 
     def release(self, permit: ManagedWorkerPermit) -> None:

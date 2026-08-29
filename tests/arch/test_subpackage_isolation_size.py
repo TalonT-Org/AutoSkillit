@@ -77,10 +77,14 @@ def test_every_exemption_key_matches_an_existing_file() -> None:
 def test_no_exemption_ceiling_equals_current_line_count() -> None:
     """An exemption ceiling equal to the file's real size is a rubber stamp.
 
-    Cross-cutting finding from issue #4662: codex.py 2444/2444 and fleet/_api.py
-    1590/1590 were both ceilings set to the line count *at the moment they were
-    written*, guaranteeing the very next line added trips the guard the ceiling
-    was supposed to satisfy. Ceilings must carry real headroom.
+    Cross-cutting finding from issue #4662: at the time the issue was filed,
+    codex.py's ceiling (2444) and fleet/_api.py's ceiling (1590) each equaled
+    the line count *at the moment they were written*, guaranteeing the very
+    next line added trips the guard the ceiling was supposed to satisfy.
+    Both have since been corrected -- codex.py's exemption is narrower than
+    its original rubber-stamp value and fleet/_api.py carries no exemption at
+    all -- this test guards against the pattern recurring for any entry.
+    Ceilings must carry real headroom.
     """
     offenders = [
         f"{rel}: limit {exemption.limit} equals current line count"

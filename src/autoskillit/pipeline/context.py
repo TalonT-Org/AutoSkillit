@@ -297,7 +297,7 @@ class ToolContext:
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
     worker_capacity: ManagedWorkerCapacity | None = field(default=None)
-    managed_fixed_batch_service: ManagedFixedBatchSupervisor | None = field(
+    managed_fixed_batch_supervisor: ManagedFixedBatchSupervisor | None = field(
         default=None, repr=False
     )
     build_protected_campaign_ids: CampaignProtector | None = field(default=None)

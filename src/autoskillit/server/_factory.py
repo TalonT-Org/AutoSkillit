@@ -471,15 +471,15 @@ def make_context(
     # construction that immediately follows.
     if ctx.worker_capacity is None:
         raise RuntimeError("managed worker capacity must be initialized before supervisor compose")
-    ctx.managed_fixed_batch_service = ManagedFixedBatchSupervisor(
+    ctx.managed_fixed_batch_supervisor = ManagedFixedBatchSupervisor(
         capacity=ctx.worker_capacity,
         background=background,
         state_root=ctx.temp_dir / "managed-fixed-batches",
     )
     managed_join_attestation_authority.set_recovery_gate(
         lambda: (
-            ctx.managed_fixed_batch_service is not None
-            and ctx.managed_fixed_batch_service.recovery_ready
+            ctx.managed_fixed_batch_supervisor is not None
+            and ctx.managed_fixed_batch_supervisor.recovery_ready
         )
     )
     ctx.host_client_attestation = initialize_host_client_attestation()

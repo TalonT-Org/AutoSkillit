@@ -162,7 +162,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
             return h
         from autoskillit.server import _get_ctx  # circular-break: server lifecycle owner
 
-        service = _get_ctx().managed_fixed_batch_service
+        service = _get_ctx().managed_fixed_batch_supervisor
         if service is not None:
             close_result = service.close()
             if isawaitable(close_result):

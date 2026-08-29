@@ -99,7 +99,10 @@ class ManagedLeafPreparedLaunch(Generic[_PreparedValue]):
 
 
 def _canonical(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    # ensure_ascii=True matches hooks/_join_ledger._canonical so digests
+    # generated here (batch_id, assignment_id, first_run_id,
+    # generated_home_id) compare equal across module boundaries.
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
 def _digest(value: object) -> str:
@@ -565,7 +568,6 @@ async def scoped_child_resource_owner(
             raise BaseExceptionGroup("Child resource cleanup failed", cleanup_errors)
 
 
-# Note: this leading-underscore module deliberately exposes a small public surface
-# for sibling modules under ``tools_execution``. The leading-underscore
-# convention would normally pair with ``__all__ = ()``; callers import the
-# names explicitly. The public names are not re-exported via star imports.
+# Leading-underscore module: deliberate public surface for sibling modules
+# under tools_execution and the server factory. Callers import names
+# explicitly; public names are not re-exported via star imports.

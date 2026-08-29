@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
@@ -145,13 +145,20 @@ def fold_poll_and_observed_constraints(
         resets_at = binding.get("resets_at")
         if bool(binding.get("should_block", False)):
             if resets_at:
+                # ``datetime.fromisoformat`` returns a naive datetime when the
+                # input has no timezone — calling ``.timestamp()`` on it then
+                # interprets the value in the local timezone, which would
+                # shift the computed ``blocked_until_epoch`` by the local UTC
+                # offset. Treat naive values as UTC explicitly so the deadline
+                # is interpreted consistently regardless of the host timezone.
+                parsed_reset = datetime.fromisoformat(str(resets_at))
+                if parsed_reset.tzinfo is None:
+                    parsed_reset = parsed_reset.replace(tzinfo=UTC)
                 constraints.append(
                     QuotaConstraint(
                         source=QuotaEvidenceSource.PROVIDER_POLL,
                         scope=account_scope,
-                        blocked_until_epoch=int(
-                            datetime.fromisoformat(str(resets_at)).timestamp()
-                        ),
+                        blocked_until_epoch=int(parsed_reset.timestamp()),
                         observed_at_epoch=now_epoch,
                         limit_type=str(metadata["window_name"]),
                     )
@@ -173,3 +180,33 @@ def effective_quota_block(
         if constraint.scope == account_scope and constraint.blocked_until_epoch > now_epoch
     )
     return max(live, key=lambda constraint: constraint.blocked_until_epoch, default=None)
+
+
+def decide_quota_block(
+    cache_path: str | Path,
+    *,
+    account_scope: str,
+    read_cache: Callable[[str, int], dict | None],
+    cache_max_age: int,
+    now_epoch: int,
+) -> tuple[QuotaConstraint | None, dict[str, object]]:
+    """Shared decision body for the pre-tool and post-tool quota hooks.
+
+    Both ``hooks/guards/quota_guard.py`` and ``hooks/quota_post_hook.py`` wrap
+    this function so the call site only differs in its deny / warning message
+    formatting. ``read_cache`` and the lifetime / scope settings come from the
+    caller so the helper stays decoupled from the hook-settings module.
+    """
+    constraints, metadata = fold_poll_and_observed_constraints(
+        cache_path,
+        account_scope=account_scope,
+        read_cache=read_cache,
+        cache_max_age=cache_max_age,
+        now_epoch=now_epoch,
+    )
+    winner = effective_quota_block(
+        constraints,
+        account_scope=account_scope,
+        now_epoch=now_epoch,
+    )
+    return winner, metadata

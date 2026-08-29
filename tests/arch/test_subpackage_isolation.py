@@ -1291,6 +1291,19 @@ def test_data_directories_are_not_python_packages() -> None:
 # original single-responsibility scope (REQ-CNST-010-NOTE-1).
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, tuple[int, str]] = {
+    # REQ-CNST-010-E30: hooks/_join_ledger.py is the canonical authority for the
+    # entire managed join ledger (constants, outcomes, waves, lifecycle helpers,
+    # terminalization, settle, cancel, reconcile, plus the pre-admission
+    # settle_unadmitted_assignment). Splitting this file would force every
+    # helper to re-import from a sibling module and would split the
+    # `_aggregate_wave_outcome` cascade across files. Keep the facade whole.
+    "hooks/_join_ledger.py": (
+        1100,
+        "REQ-CNST-010-E30: managed-join ledger facade — constants, outcomes, "
+        "waves, terminalization, settle, cancel, reconcile, and "
+        "settle_unadmitted_assignment all live behind one module boundary; "
+        "splitting would scatter the _aggregate_wave_outcome cascade.",
+    ),
     "core/types/_type_constants.py": (
         1050,
         "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "

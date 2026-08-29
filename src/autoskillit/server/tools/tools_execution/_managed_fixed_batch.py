@@ -33,7 +33,6 @@ from autoskillit.hooks import (
     OUTCOME_INTERRUPTED,
     OUTCOME_LAUNCH_FAILED,
     OUTCOME_REAPED,
-    TERMINAL_OUTCOMES,
     JoinLedgerError,
     active_batch,
     admit_assignment,
@@ -44,6 +43,9 @@ from autoskillit.hooks import (
     reconcile_batch,
     settle_assignment,
     settle_unadmitted_assignment,
+)
+from autoskillit.hooks import (
+    TERMINAL_OUTCOMES as _TERMINAL_OUTCOMES,
 )
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
@@ -56,11 +58,9 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 
 logger = get_logger(__name__)
 
-# Use the canonical terminal-outcome set re-exported by autoskillit.hooks.
-# The validator in ManagedLeafLaunchResult and any sibling helpers share the
-# same set, so adding a new OUTCOME_* value in hooks is automatically reflected
-# here.
-_TERMINAL_OUTCOMES = TERMINAL_OUTCOMES
+# Use the canonical terminal-outcome set re-exported by autoskillit.hooks,
+# imported under the leading-underscore alias above so adding a new OUTCOME_*
+# value in hooks is automatically reflected here.
 _RECOVERY_SCHEMA_VERSION = 1
 _RESULT_SCHEMA_VERSION = 1
 _RESULT_REFERENCE_PREFIX = "fixed-batch-result-"

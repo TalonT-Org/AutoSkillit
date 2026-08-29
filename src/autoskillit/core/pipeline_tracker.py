@@ -7,9 +7,11 @@ The lease sidecar is stable process-lifetime evidence and is never unlinked.
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import json
 import os
+import time
 from collections.abc import Callable, Mapping, MutableMapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -31,6 +33,9 @@ TrackerData = dict[str, Any]
 TrackerMutation = Callable[[TrackerData], TrackerData]
 
 _TRACKER_DIR_COMPONENTS = (".autoskillit", "temp", "pipeline_tracker")
+
+_FLOCK_TIMEOUT_S = 5.0
+_FLOCK_POLL_INTERVAL_S = 0.05
 
 
 def pipeline_tracker_directory(project_dir: Path) -> Path:
@@ -188,7 +193,24 @@ class _TrackerLock:
         fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o600)
         try:
             os.fchmod(fd, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Bounded deadline retry on LOCK_NB contention — mirrors
+            # src/autoskillit/execution/backends/_codex_config_lock.py:120-138
+            # and the _join_ledger._flock / binding_lock helpers.
+            deadline = time.monotonic() + _FLOCK_TIMEOUT_S
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as exc:
+                    if exc.errno not in {errno.EACCES, errno.EAGAIN}:
+                        raise
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError(
+                            f"timed out acquiring pipeline tracker lock on "
+                            f"{self._lock_path} after {_FLOCK_TIMEOUT_S:.3f}s"
+                        ) from exc
+                    time.sleep(min(_FLOCK_POLL_INTERVAL_S, remaining))
         except BaseException:
             os.close(fd)
             raise
@@ -198,6 +220,10 @@ class _TrackerLock:
         fd = self._fd
         self._fd = None
         if fd is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
             os.close(fd)
 
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.headless._headless_evidence import _CODEX_ERROR_CODE_API_STATUS
-from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
+from autoskillit.execution.session._exit_classification import (
+    _CODEX_API_ERROR_PATTERNS,
+    _CODEX_ERROR_CODE_API_STATUS,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

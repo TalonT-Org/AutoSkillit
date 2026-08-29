@@ -4,14 +4,19 @@ Package root — entry points, hook registry, and cross-cutting utilities.
 
 ## Architecture Notes
 
-Root-level `.py` modules are stdlib-only cross-cutting authorities safe for hook
-subprocesses; placement is enforced by `_LAYER_EXEMPT_STEMS`
-(`tests/arch/test_layer_enforcement.py:57`) and the `test_root_module_allowlist`
-allowlist (`tests/contracts/test_package_gateways.py:400`). Add a new module here
-only when it has zero internal autoskillit imports and must run under a hook
-subprocess outside the package venv.
+Two distinct root-level patterns exist; placement is governed by
+`_LAYER_EXEMPT_STEMS` (`tests/arch/test_layer_enforcement.py:57:62`) and
+`test_root_module_allowlist` (`tests/contracts/test_package_gateways.py:400:435`):
 
-`hook_registry.py` and `quota_constraints.py` follow this pattern. `_test_filter.py`
-drives `task test-filtered` — it maps changed-file globs to test directory subsets.
-`_llm_triage.py` and `smoke_utils/` are callable by headless recipe steps via
-`run_python`.
+- **Stdlib-only hook-callable authorities** — `_recipe_delivery_framing.py` and
+  `quota_constraints.py` are safe for hook subprocesses running outside the
+  package venv. They have zero internal autoskillit imports and are loaded via
+  bare-name sys.path bootstrap (`hooks/guards/quota_guard.py:42`,
+  `hooks/quota_post_hook.py:39`). Add a new module here only when both
+  properties hold.
+- **Headless run_python utilities** — `_llm_triage.py`, `_probe_canary.py`, and
+  `_test_filter.py` import autoskillit modules and run inside the package venv
+  via the headless `run_python` tool. They are NOT safe for hook subprocesses.
+
+`hook_registry/` lives as a sub-package, not at root, and is governed by the
+regular IL-1 import-linter contracts.

@@ -6,10 +6,8 @@ import json
 
 import pytest
 
-from autoskillit.execution.session._session_model import (
-    _HANDLED_RECORD_TYPES,
-    parse_session_result,
-)
+from autoskillit.execution.session._exit_classification import _HANDLED_RECORD_TYPES
+from autoskillit.execution.session._session_model import parse_session_result
 from tests.fixtures.claude_code import (
     ALL_FIXTURE_NAMES,
     API_ERROR_404_TERMINAL_V1,

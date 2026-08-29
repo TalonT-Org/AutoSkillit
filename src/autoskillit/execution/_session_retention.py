@@ -28,8 +28,16 @@ def write_telemetry_clear_marker(log_root: Path) -> None:
         log_root = Path(log_root)
         log_root.mkdir(parents=True, exist_ok=True)
         atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
-    except Exception:
-        logger.debug("write_telemetry_clear_marker failed", exc_info=True)
+    except (OSError, ValueError, TypeError) as exc:
+        # Narrow catch for filesystem ops and atomic_write's known exception set;
+        # broader ``Exception`` would mask programmatic bugs (AttributeError, KeyError)
+        # as routine retention failures.
+        logger.debug(
+            "write_telemetry_clear_marker failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
 
 
 def read_telemetry_clear_marker(log_root: Path) -> datetime | None:

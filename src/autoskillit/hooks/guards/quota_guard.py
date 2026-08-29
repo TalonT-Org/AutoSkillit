@@ -32,6 +32,7 @@ if _PACKAGE_DIR not in sys.path:
     sys.path.insert(0, _PACKAGE_DIR)
 
 from _hook_settings import (  # noqa: E402
+    QuotaHookSettings,
     is_quota_guard_disabled_for_session,
     read_quota_cache,
     resolve_quota_log_dir,
@@ -40,10 +41,8 @@ from _hook_settings import (  # noqa: E402
 )  # type: ignore[import-not-found]
 from quota_constraints import (  # noqa: E402
     QuotaConstraint,
-    QuotaEvidenceSource,
-    decode_observed_constraints,
     effective_quota_block,
-    observed_constraint_path,
+    fold_poll_and_observed_constraints,
 )  # type: ignore[import-not-found]
 
 # Emitted in deny messages; also referenced by orchestrator prompt QUOTA DENIAL ROUTING.
@@ -55,48 +54,17 @@ QUOTA_GUARD_DENY_TRIGGER: str = "QUOTA WAIT REQUIRED"
 QUOTA_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 
 
-def quota_guard_decision(settings, *, now_epoch: int) -> tuple[QuotaConstraint | None, dict]:
+def quota_guard_decision(
+    settings: QuotaHookSettings, *, now_epoch: int
+) -> tuple[QuotaConstraint | None, dict]:
     """Return the cumulative quota blocker and poll display metadata."""
-    constraints = decode_observed_constraints(observed_constraint_path(settings.cache_path))
-    metadata = {
-        "utilization": 0.0,
-        "effective_threshold": 0.0,
-        "window_name": "unknown",
-        "unknown_reset_block": False,
-        "cache_state": "miss",
-    }
-    cache = read_quota_cache(settings.cache_path, settings.cache_max_age)
-    if cache is not None:
-        binding = cache.get("binding")
-        if isinstance(binding, dict):
-            try:
-                metadata = {
-                    "utilization": float(binding["utilization"]),
-                    "effective_threshold": float(binding.get("effective_threshold", 0.0)),
-                    "window_name": str(binding.get("window_name", "unknown")),
-                    "unknown_reset_block": False,
-                    "cache_state": "valid",
-                }
-                resets_at = binding.get("resets_at")
-                if bool(binding.get("should_block", False)):
-                    if resets_at:
-                        constraints.append(
-                            QuotaConstraint(
-                                source=QuotaEvidenceSource.PROVIDER_POLL,
-                                scope=settings.quota_account_scope,
-                                blocked_until_epoch=int(
-                                    datetime.fromisoformat(str(resets_at)).timestamp()
-                                ),
-                                observed_at_epoch=now_epoch,
-                                limit_type=metadata["window_name"],
-                            )
-                        )
-                    else:
-                        metadata["unknown_reset_block"] = True
-            except (KeyError, TypeError, ValueError):
-                metadata["cache_state"] = "parse_error"
-        else:
-            metadata["cache_state"] = "parse_error"
+    constraints, metadata = fold_poll_and_observed_constraints(
+        settings.cache_path,
+        account_scope=settings.quota_account_scope,
+        read_cache=read_quota_cache,
+        cache_max_age=settings.cache_max_age,
+        now_epoch=now_epoch,
+    )
     winner = effective_quota_block(
         constraints,
         account_scope=settings.quota_account_scope,
@@ -194,6 +162,7 @@ def main(*, cache_path_override: str | None = None) -> None:
 
         session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")
         budget_exceeded = False
+        remaining_budget = float("inf")
         if session_deadline_str:
             try:
                 session_deadline = float(session_deadline_str)

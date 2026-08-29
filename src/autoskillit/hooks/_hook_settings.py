@@ -109,9 +109,17 @@ _MAPPING_OVERLAY_DOMAINS: frozenset[str] = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class QuotaHookSettings:
-    """Resolved settings for quota guard hooks."""
+    """Resolved settings for quota guard hooks.
+
+    Marked ``kw_only`` to defend against positional construction silently
+    re-enabling the ``disabled`` flag when callers insert fields before it.
+    The previous field order (cache_path, cache_max_age, buffer_seconds,
+    quota_account_scope, disabled) led to ``disabled`` being bindable by
+    positional arguments whose type truthiness was unintended — e.g. a test
+    passing a scope string positionally would set ``disabled=True``.
+    """
 
     cache_path: str
     cache_max_age: int

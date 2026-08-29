@@ -34,7 +34,12 @@ def test_hooks_fold_observed_and_poll_constraints(tmp_path) -> None:
         limit_type="seven_day",
         now_epoch=now,
     )
-    settings = QuotaHookSettings(str(cache), 300, 60, scope)
+    settings = QuotaHookSettings(
+        cache_path=str(cache),
+        cache_max_age=300,
+        buffer_seconds=60,
+        quota_account_scope=scope,
+    )
 
     guard_winner, _ = quota_guard_decision(settings, now_epoch=now)
     post_winner, _ = quota_post_decision(settings, now_epoch=now)

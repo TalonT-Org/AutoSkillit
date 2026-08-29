@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
@@ -46,15 +47,27 @@ def observed_constraint_path(cache_path: str | Path) -> Path:
 
 
 def decode_observed_constraints(path: Path) -> list[QuotaConstraint]:
+    """Read and validate the observed-constraints JSON store.
+
+    Returns ``[]`` when the file is absent or unreadable (this is a normal
+    first-run / cache-miss state, not an error). Schema mismatches, malformed
+    entries, and other integrity problems raise ``ValueError`` so callers can
+    distinguish "no data" from "data we cannot trust". Use
+    :func:`safe_decode_observed_constraints` in hook and fail-open paths.
+    """
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return []
-    if not isinstance(raw, dict):
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(decoded, dict):
         raise ValueError("observed quota constraint store must be a JSON object")
-    if raw.get("schema_version") != OBSERVED_CONSTRAINT_SCHEMA_VERSION:
+    if decoded.get("schema_version") != OBSERVED_CONSTRAINT_SCHEMA_VERSION:
         raise ValueError("observed quota constraint store schema mismatch")
-    items = raw.get("constraints")
+    items = decoded.get("constraints")
     if not isinstance(items, list):
         raise ValueError("observed quota constraint store requires constraints list")
     constraints: list[QuotaConstraint] = []
@@ -73,6 +86,81 @@ def decode_observed_constraints(path: Path) -> list[QuotaConstraint]:
             raise ValueError("invalid observed quota constraint entry") from exc
         constraints.append(constraint)
     return constraints
+
+
+def safe_decode_observed_constraints(path: Path) -> list[QuotaConstraint]:
+    """Variant of :func:`decode_observed_constraints` that fails-open to ``[]``.
+
+    Treats any schema mismatch, malformed entry, or unexpected exception as an
+    empty store. Used by hook paths (which must not crash on a corrupt cache)
+    and by the live quota path (which must continue past a stale observed store).
+    """
+    try:
+        return decode_observed_constraints(path)
+    except (ValueError, OSError):
+        return []
+
+
+def fold_poll_and_observed_constraints(
+    cache_path: str | Path,
+    *,
+    account_scope: str,
+    read_cache: Callable[[str, int], dict | None],
+    cache_max_age: int,
+    now_epoch: int,
+) -> tuple[list[QuotaConstraint], dict[str, object]]:
+    """Compute observed constraints plus poll-display metadata.
+
+    Shared between the pre-tool (quota_guard) and post-tool (quota_post_hook)
+    hook decision functions, which previously duplicated this 40-line block
+    verbatim. Returns ``(constraints, metadata)`` where ``constraints`` is the
+    list that should be passed to :func:`effective_quota_block` and
+    ``metadata`` carries the poll-cache display fields (utilization, threshold,
+    window name, unknown_reset_block flag, cache_state).
+    """
+    path = observed_constraint_path(cache_path)
+    constraints = safe_decode_observed_constraints(path)
+    metadata: dict[str, object] = {
+        "utilization": 0.0,
+        "effective_threshold": 0.0,
+        "window_name": "unknown",
+        "unknown_reset_block": False,
+        "cache_state": "miss",
+    }
+    cache = read_cache(str(Path(cache_path).expanduser()), cache_max_age)
+    if cache is None:
+        return constraints, metadata
+    binding = cache.get("binding")
+    if not isinstance(binding, dict):
+        metadata["cache_state"] = "parse_error"
+        return constraints, metadata
+    try:
+        metadata = {
+            "utilization": float(binding["utilization"]),
+            "effective_threshold": float(binding.get("effective_threshold", 0.0)),
+            "window_name": str(binding.get("window_name", "unknown")),
+            "unknown_reset_block": False,
+            "cache_state": "valid",
+        }
+        resets_at = binding.get("resets_at")
+        if bool(binding.get("should_block", False)):
+            if resets_at:
+                constraints.append(
+                    QuotaConstraint(
+                        source=QuotaEvidenceSource.PROVIDER_POLL,
+                        scope=account_scope,
+                        blocked_until_epoch=int(
+                            datetime.fromisoformat(str(resets_at)).timestamp()
+                        ),
+                        observed_at_epoch=now_epoch,
+                        limit_type=str(metadata["window_name"]),
+                    )
+                )
+            else:
+                metadata["unknown_reset_block"] = True
+    except (KeyError, TypeError, ValueError):
+        metadata["cache_state"] = "parse_error"
+    return constraints, metadata
 
 
 def effective_quota_block(

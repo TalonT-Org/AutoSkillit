@@ -29,6 +29,7 @@ if _PACKAGE_DIR not in sys.path:
     sys.path.insert(0, _PACKAGE_DIR)
 
 from _hook_settings import (  # noqa: E402
+    QuotaHookSettings,
     is_quota_guard_disabled_for_session,
     read_quota_cache,
     resolve_quota_log_dir,
@@ -37,10 +38,8 @@ from _hook_settings import (  # noqa: E402
 )  # type: ignore[import-not-found]
 from quota_constraints import (  # noqa: E402
     QuotaConstraint,
-    QuotaEvidenceSource,
-    decode_observed_constraints,
     effective_quota_block,
-    observed_constraint_path,
+    fold_poll_and_observed_constraints,
 )  # type: ignore[import-not-found]
 
 # Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
@@ -48,44 +47,17 @@ QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
 QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
 
 
-def quota_post_decision(settings, *, now_epoch: int) -> tuple[QuotaConstraint | None, dict]:
+def quota_post_decision(
+    settings: QuotaHookSettings, *, now_epoch: int
+) -> tuple[QuotaConstraint | None, dict]:
     """Return the cumulative quota blocker and poll display metadata."""
-    constraints = decode_observed_constraints(observed_constraint_path(settings.cache_path))
-    metadata = {
-        "utilization": 0.0,
-        "effective_threshold": 0.0,
-        "window_name": "unknown",
-        "unknown_reset_block": False,
-    }
-    cache = read_quota_cache(settings.cache_path, settings.cache_max_age)
-    if cache is not None:
-        binding = cache.get("binding")
-        if isinstance(binding, dict):
-            try:
-                metadata = {
-                    "utilization": float(binding["utilization"]),
-                    "effective_threshold": float(binding.get("effective_threshold", 0.0)),
-                    "window_name": str(binding.get("window_name", "unknown")),
-                    "unknown_reset_block": False,
-                }
-                resets_at = binding.get("resets_at")
-                if bool(binding.get("should_block", False)):
-                    if resets_at:
-                        constraints.append(
-                            QuotaConstraint(
-                                source=QuotaEvidenceSource.PROVIDER_POLL,
-                                scope=settings.quota_account_scope,
-                                blocked_until_epoch=int(
-                                    datetime.fromisoformat(str(resets_at)).timestamp()
-                                ),
-                                observed_at_epoch=now_epoch,
-                                limit_type=metadata["window_name"],
-                            )
-                        )
-                    else:
-                        metadata["unknown_reset_block"] = True
-            except (KeyError, TypeError, ValueError):
-                pass
+    constraints, metadata = fold_poll_and_observed_constraints(
+        settings.cache_path,
+        account_scope=settings.quota_account_scope,
+        read_cache=read_quota_cache,
+        cache_max_age=settings.cache_max_age,
+        now_epoch=now_epoch,
+    )
     winner = effective_quota_block(
         constraints,
         account_scope=settings.quota_account_scope,

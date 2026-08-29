@@ -29,10 +29,10 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CaptureEntrySpec,
     FleetErrorCode,
+    ManagedWorkerCapacityError,
     get_logger,
     release_tracker_lease,
 )
-from autoskillit.core._managed_worker_capacity import ManagedWorkerCapacityError
 from autoskillit.fleet import state as _fleet_state
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,

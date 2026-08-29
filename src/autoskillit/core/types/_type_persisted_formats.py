@@ -42,7 +42,9 @@ class PersistedFormatDef:
 
     format_id: str
     version_constant: str
+    """Dotted path to the current schema version int (framing concern)."""
     decoder_module: str
+    """Path of the module that constructs the enumerated members (record concern)."""
     enums: tuple[PersistedEnumDef, ...]
     rationale: str
 

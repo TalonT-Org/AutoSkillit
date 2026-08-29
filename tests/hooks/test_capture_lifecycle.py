@@ -681,8 +681,19 @@ def test_cleanup_outcome_field_types_are_publicly_exported() -> None:
 
 def test_ledger_facade_re_exports_every_name_in_dunder_all() -> None:
     facade = capture_lifecycle._capture_ledger
+    sibling = capture_lifecycle._capture_lifecycle_record
     missing = [name for name in facade.__all__ if not hasattr(facade, name)]
-    assert missing == [], f"_ledger facade is missing re-exports: {missing}"
+    assert missing == [], f"_ledger facade ({facade.__name__}) is missing re-exports: {missing}"
+    # Names that originate in the sibling must be the SAME OBJECT as the
+    # canonical definition -- a stub rebind would pass hasattr but break the
+    # facade contract.
+    for name in facade.__all__:
+        if not hasattr(sibling, name):
+            continue
+        assert getattr(facade, name) is getattr(sibling, name), (
+            f"_ledger.{name} is not the same object as "
+            f"_lifecycle_record.{name} -- facade rebind diverged"
+        )
 
 
 @pytest.mark.parametrize(

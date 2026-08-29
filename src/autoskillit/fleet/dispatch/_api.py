@@ -32,6 +32,7 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
 )
+from autoskillit.core._managed_worker_capacity import ManagedWorkerCapacityError
 from autoskillit.fleet import state as _fleet_state
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
@@ -412,6 +413,22 @@ async def _run_dispatch(
             effective_name=recipe_ctx.effective_name,
             tool_ctx=tool_ctx,
         )
+    except ManagedWorkerCapacityError as exc:
+        # New failure mode introduced when FleetSemaphore was replaced by
+        # ManagedWorkerCapacity: foreign/duplicate owner and owner-already-holds
+        # permits surface as ManagedWorkerCapacityError rather than TimeoutError.
+        return complete_failure_with_state(
+            error_code=FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
+            message=str(exc),
+            dispatch_id=ready.dispatch_id,
+            managed_lineage_ref=ready.managed_lineage_ref,
+            provenance=provenance,
+            state_path=ready.state_path,
+            effective_name=recipe_ctx.effective_name,
+            tool_ctx=tool_ctx,
+        )
+    except asyncio.CancelledError:
+        raise
 
     # --- Phase C + Phase D + Phase E in outer try/except/finally ---
     # ``execution`` is bound to ``None`` before the try block so the finally

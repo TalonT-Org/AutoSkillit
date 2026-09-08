@@ -78,6 +78,11 @@ _COMPLETED_OUTCOMES: frozenset[str] = frozenset({OUTCOME_SUCCESS})
 _BATCH_ID_ALPHABET = string.ascii_lowercase + string.digits
 
 
+def is_terminal_outcome(outcome: object) -> bool:
+    """Return whether ``outcome`` is a terminal assignment outcome."""
+    return outcome in _TERMINAL_OUTCOMES
+
+
 class _CorruptedLedger(Exception):
     """Raised when the on-disk ledger cannot be parsed safely."""
 
@@ -549,7 +554,7 @@ def _mutate_attempt(
             if retry:
                 if assignment.get("current_attempt_id") != prior_attempt_id:
                     raise JoinLedgerError("retry does not name the current prior attempt")
-                if assignment.get("outcome") not in _TERMINAL_OUTCOMES:
+                if not is_terminal_outcome(assignment.get("outcome")):
                     raise JoinLedgerError("retry requires a terminal prior attempt")
                 assignment["current_attempt_id"] = None
                 assignment["current_run_id"] = None
@@ -689,9 +694,8 @@ def claim_assignment(
                 if not isinstance(entry, dict) or entry.get("tool_use_id") is not None:
                     continue
                 entry["tool_use_id"] = tool_use_id
-                # Provisional namespaced run_id; admit_assignment overwrites
-                # it via _append_attempt before mark_assignment_running
-                # verifies the match against current_run_id.
+                # Direct Agent calls have no server admission phase, so the
+                # claim itself records their namespaced attempt and run identity.
                 _append_attempt(
                     entry,
                     attempt_id=tool_use_id,
@@ -756,7 +760,7 @@ def settle_assignment(
     cleanup_outcome: str | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
-    if outcome not in _TERMINAL_OUTCOMES:
+    if not is_terminal_outcome(outcome):
         raise JoinLedgerError(f"invalid outcome {outcome!r}")
     if cleanup_outcome is not None and cleanup_outcome != OUTCOME_REAPED:
         raise JoinLedgerError(f"invalid cleanup outcome {cleanup_outcome!r}")

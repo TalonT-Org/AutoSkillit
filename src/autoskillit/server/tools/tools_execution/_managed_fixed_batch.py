@@ -13,6 +13,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from autoskillit.core import (
     BackgroundSupervisor,
@@ -20,6 +21,7 @@ from autoskillit.core import (
     ManagedWorkerCapacityError,
     ManagedWorkerPermit,
     SkillContractError,
+    SkillSemanticAdaptationResult,
     WriteBehaviorSpec,
     get_logger,
     read_versioned_json,
@@ -31,23 +33,25 @@ from autoskillit.hooks import (
     OUTCOME_FAILURE,
     OUTCOME_INTERRUPTION,
     OUTCOME_LAUNCH_FAILED,
-    OUTCOME_MISSING,
     OUTCOME_REAPED,
     OUTCOME_SUCCESS,
-    OUTCOME_TIMEOUT,
     JoinLedgerError,
     active_batch,
     admit_assignment,
     aggregate_batch,
     cancel_batch,
+    is_terminal_outcome,
     mark_assignment_running,
     open_or_replay,
     reconcile_batch,
     settle_assignment,
     settle_unadmitted_assignment,
 )
+from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.server.tools.tools_execution._managed_leaf import (
+    ManagedLeafAssignmentIdentity,
     ManagedLeafAssignmentInput,
+    ManagedLeafIdentityPlan,
     ManagedLeafPreparedLaunch,
     ManagedLeafProjection,
     _canonical,
@@ -56,22 +60,7 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
     plan_managed_leaf_identities,
     project_managed_leaf,
 )
-
-# Local copy of the canonical terminal-outcome set to avoid cross-package
-# submodule imports; mirrors the set declared in autoskillit.hooks._join_ledger
-# and any new OUTCOME_* value added there must be appended here as well.
-_TERMINAL_OUTCOMES: frozenset[str] = frozenset(
-    {
-        OUTCOME_SUCCESS,
-        OUTCOME_FAILURE,
-        OUTCOME_LAUNCH_FAILED,
-        OUTCOME_TIMEOUT,
-        OUTCOME_CANCELLED,
-        OUTCOME_INTERRUPTION,
-        OUTCOME_MISSING,
-        OUTCOME_REAPED,
-    }
-)
+from autoskillit.workspace import AgentSkillDocument
 
 logger = get_logger(__name__)
 
@@ -90,7 +79,7 @@ class ManagedLaunchBinding:
     caller_key: str
     attestation_epoch: int
     recovery_ready: bool
-    selected_source: object
+    selected_source: LoadedSkillEntry
 
     def __post_init__(self) -> None:
         for name in (
@@ -103,7 +92,7 @@ class ManagedLaunchBinding:
                 raise SkillContractError(f"managed launch binding {name} must be non-empty")
         if type(self.attestation_epoch) is not int or self.attestation_epoch < 0:
             raise SkillContractError("managed launch binding attestation_epoch is invalid")
-        if self.selected_source is None:
+        if not isinstance(self.selected_source, LoadedSkillEntry):
             raise SkillContractError("managed launch binding requires selected source evidence")
 
 
@@ -119,7 +108,7 @@ class ManagedLeafLaunchResult:
     cleanup_outcome: str | None = None
 
     def __post_init__(self) -> None:
-        if self.outcome not in _TERMINAL_OUTCOMES:
+        if not is_terminal_outcome(self.outcome):
             raise ValueError(f"unsupported managed leaf terminal outcome {self.outcome!r}")
         if self.cleanup_outcome not in {None, OUTCOME_REAPED}:
             raise ValueError("managed leaf cleanup outcome must be reaped or absent")
@@ -137,8 +126,8 @@ class ManagedFixedBatchLaunchBinding:
 
     launch: ManagedLaunchBinding
     flag_dir: Path
-    source_document: object
-    adaptation: object
+    source_document: AgentSkillDocument
+    adaptation: SkillSemanticAdaptationResult
     assignments: tuple[ManagedLeafAssignmentInput, ...]
     default_model: str
     write_behavior: WriteBehaviorSpec
@@ -150,6 +139,10 @@ class ManagedFixedBatchLaunchBinding:
             raise SkillContractError("managed launch binding is blocked by recovery")
         if not isinstance(self.flag_dir, Path):
             raise SkillContractError("managed fixed batch requires a channel directory")
+        if not isinstance(self.source_document, AgentSkillDocument):
+            raise SkillContractError("managed fixed batch requires a projected source document")
+        if not isinstance(self.adaptation, SkillSemanticAdaptationResult):
+            raise SkillContractError("managed fixed batch requires a semantic adaptation result")
         if not self.assignments:
             raise SkillContractError("managed fixed batch requires at least one assignment")
         if not isinstance(self.default_model, str) or not self.default_model:
@@ -204,11 +197,9 @@ class ManagedFixedBatchResultStore:
             "result_digest": digest,
             "request_session_id": launch.request_session_id,
             "managed_parent_id": launch.managed_parent_id,
-            "source_artifact_digest": getattr(
-                launch.selected_source, "source_artifact_digest", ""
-            ),
-            "source_artifact_incarnation_id": getattr(
-                launch.selected_source, "source_artifact_incarnation_id", ""
+            "source_artifact_digest": launch.selected_source.source_artifact_digest,
+            "source_artifact_incarnation_id": (
+                launch.selected_source.source_artifact_incarnation_id
             ),
             "batch_id": batch_id,
             "assignment_id": assignment_id,
@@ -240,11 +231,9 @@ class ManagedFixedBatchResultStore:
             "result_reference": reference,
             "request_session_id": launch.request_session_id,
             "managed_parent_id": launch.managed_parent_id,
-            "source_artifact_digest": getattr(
-                launch.selected_source, "source_artifact_digest", ""
-            ),
-            "source_artifact_incarnation_id": getattr(
-                launch.selected_source, "source_artifact_incarnation_id", ""
+            "source_artifact_digest": launch.selected_source.source_artifact_digest,
+            "source_artifact_incarnation_id": (
+                launch.selected_source.source_artifact_incarnation_id
             ),
             "batch_id": batch_id,
             "assignment_id": assignment_id,
@@ -281,6 +270,12 @@ class _RecoveryDebt:
     assignment_id: str
     attempt_id: str
     run_id: str
+
+    def __post_init__(self) -> None:
+        if len(self.owner) != 3 or any(
+            not isinstance(component, str) or not component for component in self.owner
+        ):
+            raise ValueError("managed recovery owner must contain three non-empty strings")
 
 
 RecoveryVerifier = Callable[[_RecoveryDebt], Awaitable[bool | None]]
@@ -435,7 +430,7 @@ class ManagedFixedBatchSupervisor:
         try:
             result = await asyncio.shield(task)
         except asyncio.CancelledError:
-            await self._cancel_and_join(batch_id, binding, batch)
+            await self._cancel_and_join(batch_id, binding)
             raise
         finally:
             if task.done():
@@ -488,7 +483,12 @@ class ManagedFixedBatchSupervisor:
                         exc_info=True,
                     )
 
-    async def _supervise(self, binding, plan, batch) -> ManagedFixedBatchResult:
+    async def _supervise(
+        self,
+        binding: ManagedFixedBatchLaunchBinding,
+        plan: ManagedLeafIdentityPlan,
+        batch: dict[str, Any],
+    ) -> ManagedFixedBatchResult:
         batch_id = str(batch["join_batch_id"])
         entered: set[str] = set()
         ledger_assignments = {
@@ -558,7 +558,12 @@ class ManagedFixedBatchSupervisor:
         return ManagedFixedBatchResult(batch_id, wave_outcome, False)
 
     async def _run_assignment(
-        self, binding, batch_id, ledger_assignment_id, identity, entered
+        self,
+        binding: ManagedFixedBatchLaunchBinding,
+        batch_id: str,
+        ledger_assignment_id: str,
+        identity: ManagedLeafAssignmentIdentity,
+        entered: set[str],
     ) -> None:
         entered.add(ledger_assignment_id)
         attempt_id = f"{identity.first_run_id}:attempt-0"
@@ -729,7 +734,15 @@ class ManagedFixedBatchSupervisor:
                         exc_info=True,
                     )
 
-    def _settle(self, binding, batch_id, assignment_id, attempt_id, run_id, result) -> None:
+    def _settle(
+        self,
+        binding: ManagedFixedBatchLaunchBinding,
+        batch_id: str,
+        assignment_id: str,
+        attempt_id: str,
+        run_id: str,
+        result: ManagedLeafLaunchResult,
+    ) -> None:
         if result.result_payload is not None:
             reference, digest = self._result_store.publish(
                 launch=binding.launch,
@@ -815,19 +828,24 @@ class ManagedFixedBatchSupervisor:
             result_digest=digest,
         )
 
-    async def _cancel_and_join(self, batch_id, binding, batch) -> None:
+    async def _cancel_and_join(
+        self,
+        batch_id: str,
+        binding: ManagedFixedBatchLaunchBinding,
+    ) -> None:
         async with self._lock:
             task = self._tasks.get(batch_id)
-        if task is not None:
-            task.cancel()
-            try:
-                await asyncio.wait_for(asyncio.shield(task), timeout=self._cancel_timeout)
-            except TimeoutError:
-                # A live owner still holds durable recovery debt; do not terminalize
-                # the batch before its shielded owner cleanup and settlement finish.
-                return
-            except asyncio.CancelledError:
-                pass
+        if task is None:
+            return
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=self._cancel_timeout)
+        except TimeoutError:
+            # A live owner still holds durable recovery debt; do not terminalize
+            # the batch before its shielded owner cleanup and settlement finish.
+            return
+        except asyncio.CancelledError:
+            pass
         cancel_batch(
             binding.flag_dir,
             batch_id=batch_id,

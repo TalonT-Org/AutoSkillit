@@ -109,6 +109,13 @@ def _apply_infra_retry_policy(
         case InfraExitCategory.UNCLASSIFIED | InfraExitCategory.CONTEXT_EXHAUSTED:
             return outcome, needs_retry, retry_reason
         case InfraExitCategory.PROCESS_KILLED:
+            # `not needs_retry` is reachable only from the main call site (where
+            # needs_retry is computed dynamically). The stale and idle call
+            # sites always pass needs_retry=True, so from those two paths this
+            # guard never matches and execution falls through to the
+            # unconditional return below, which already yields needs_retry=True
+            # (retaining the caller's STALE/IDLE_STALL retry_reason instead of
+            # switching to RESUME).
             if (
                 not success
                 and not needs_retry

@@ -315,9 +315,11 @@ def _scan_codex_ndjson(stdout: str) -> _CodexParseAccumulator:
             # later: the latter would otherwise leak a previous ERROR event's code
             # onto a later ERROR event that carries its own (different or absent)
             # code, producing a mismatched annotation.
-            this_event_code = error_code if isinstance(error_code, str) else ""
             if isinstance(error_code, str):
+                this_event_code = error_code
                 acc.error_code = error_code
+            else:
+                this_event_code = ""
             if isinstance(error_message, str):
                 if this_event_code and this_event_code not in error_message:
                     acc.error_message = f"{error_message} [{this_event_code}]"

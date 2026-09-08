@@ -1865,6 +1865,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     "tests/execution/test_quota_io.py": frozenset({"autoskillit.config"}),
     "tests/execution/test_quota_sleep.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),
+    # managed Codex conformance exercises the server-owned attestation and fixed-batch
+    # route end to end from the backend boundary
+    "tests/execution/backends/test_cli_conformance_probes.py": frozenset({"autoskillit.server"}),
     # tether tests cross into config to validate the parity between
     # ProcessTetherConfig's literal ceiling defaults and this module's constants,
     # and to exercise the coherence gate — config cannot import execution (IL-002),

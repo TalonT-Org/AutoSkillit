@@ -32,6 +32,8 @@ from autoskillit.core import (
 
 if TYPE_CHECKING:
     from autoskillit.core import CleanupResult, SessionSkillManager, SubprocessRunner
+    from autoskillit.hooks._session_binding import LoadedSkillEntry
+    from autoskillit.server._misc import AgentSkillDocument
 
 
 logger = get_logger(__name__)
@@ -325,8 +327,8 @@ class ManagedLeafProjection:
 def bind_managed_leaf(
     *,
     assignment: ManagedLeafAssignmentIdentity,
-    selected_source: object,
-    source_document: object,
+    selected_source: LoadedSkillEntry,
+    source_document: AgentSkillDocument,
     adaptation: SkillSemanticAdaptationResult,
     default_model: str,
     write_behavior: WriteBehaviorSpec,
@@ -400,7 +402,7 @@ def bind_managed_leaf(
 
 def project_managed_leaf(
     binding: ManagedLeafBinding,
-    source_document: object,
+    source_document: AgentSkillDocument,
 ) -> ManagedLeafProjection:
     """Wrap a source-bound document without mutating it or importing parent context."""
     source_projected_digest = _required_attribute(

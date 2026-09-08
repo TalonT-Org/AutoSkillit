@@ -5,16 +5,17 @@ from __future__ import annotations
 import hashlib
 import os
 import signal
+import site
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import cast
 
-import autoskillit.hooks._capture_spawn as capture_spawn
 import pytest
 
 import autoskillit.hooks._capture_process as capture_process
+import autoskillit.hooks._capture_spawn as capture_spawn
 from autoskillit.hooks._capture_process import (
     OwnedProcessError,
     OwnedProcessGroup,
@@ -57,13 +58,15 @@ def test_process_and_spawn_import_orders_share_module_authority(
 ) -> None:
     src_dir = Path(__file__).parents[2] / "src"
     hooks_dir = src_dir / "autoskillit" / "hooks"
+    site_packages = site.getsitepackages()[0]
     code = r"""
 import importlib
 import sys
 
 sys.path.insert(0, sys.argv[1])
 sys.path.insert(0, sys.argv[2])
-importlib.import_module(sys.argv[3])
+sys.path.append(sys.argv[3])
+importlib.import_module(sys.argv[4])
 
 package_process = importlib.import_module("autoskillit.hooks._capture_process")
 bare_process = importlib.import_module("_capture_process")
@@ -95,6 +98,7 @@ for name in (
             code,
             str(src_dir),
             str(hooks_dir),
+            site_packages,
             first_import,
         ],
         env=production_interpreter_env(),

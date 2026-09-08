@@ -17,7 +17,6 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
 
-import autoskillit.hooks._capture_spawn as capture_spawn
 import pytest
 
 import autoskillit.hooks._capture._authority as capture_authority
@@ -27,6 +26,7 @@ import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture._runner as capture_runner
 import autoskillit.hooks._capture._types as capture_types
 import autoskillit.hooks._capture_lifecycle._admission as capture_admission
+import autoskillit.hooks._capture_spawn as capture_spawn
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
     CommandOutcome,

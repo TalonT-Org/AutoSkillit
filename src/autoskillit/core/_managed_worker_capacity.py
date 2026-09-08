@@ -183,6 +183,7 @@ class DefaultManagedWorkerCapacity:
         try:
             self._waiters.remove(waiter)
         except ValueError:
+            # Admission may already have popped the waiter before cancellation cleanup runs.
             pass
 
     def _admit_waiters_locked(self) -> None:

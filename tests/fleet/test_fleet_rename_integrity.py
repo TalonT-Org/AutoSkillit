@@ -106,6 +106,7 @@ def test_tool_context_worker_capacity_field() -> None:
 
     field_names = {f.name for f in fields(ToolContext)}
     assert "worker_capacity" in field_names
+    assert "fleet_lock" not in field_names
     assert "franchise_lock" not in field_names
 
 

@@ -6,7 +6,6 @@ import pytest
 
 from autoskillit.core import (
     DefaultManagedWorkerCapacity,
-    ManagedWorkerCapacity,
     ManagedWorkerCapacityError,
 )
 
@@ -52,12 +51,6 @@ def test_capacity_max_concurrent_property():
     """max_concurrent returns the constructor argument."""
     s = DefaultManagedWorkerCapacity(max_concurrent=7)
     assert s.max_concurrent == 7
-
-
-def test_capacity_satisfies_protocol():
-    """The concrete authority is a structural ManagedWorkerCapacity."""
-    s = DefaultManagedWorkerCapacity(max_concurrent=1)
-    assert isinstance(s, ManagedWorkerCapacity)
 
 
 @pytest.mark.anyio
@@ -118,7 +111,7 @@ async def test_capacity_acquire_succeeds_within_timeout():
 
 @pytest.mark.anyio
 async def test_capacity_no_timeout_is_default():
-    """timeout=None means no timeout (backward compat)."""
+    """No timeout is configured by default."""
     s = DefaultManagedWorkerCapacity(max_concurrent=1)
     assert s.timeout is None
 

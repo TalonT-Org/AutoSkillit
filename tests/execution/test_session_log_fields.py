@@ -17,14 +17,7 @@ from autoskillit.core import (
     ExecutionIdentity,
     SessionType,
 )
-from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
-from autoskillit.core.types._type_results_execution import (
-    RecipeIdentity,
-    SessionTelemetry,
-)
-from autoskillit.execution.session_log import (
-    flush_session_log,
-)
+from autoskillit.core.types._type_results import ModelIdentity
 from tests.execution.conftest import (
     _flush,
     _make_cc_jsonl_record,
@@ -146,7 +139,8 @@ def test_flush_session_log_write_call_count_defaults_to_zero(tmp_path):
 
 def test_flush_session_log_writes_kitchen_id(tmp_path):
     """kitchen_id parameter is written to sessions.jsonl index entry."""
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -154,7 +148,6 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/some/worktree",
         kitchen_id="my-pipeline-123",
         session_id="sess-001",
@@ -165,9 +158,6 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
         exit_code=0,
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     index = (tmp_path / "sessions.jsonl").read_text()
@@ -177,7 +167,8 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
 
 def test_flush_session_log_writes_order_id_to_index(tmp_path):
     """order_id is written to sessions.jsonl index entry when provided."""
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -185,7 +176,6 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/some/worktree",
         kitchen_id="kitchen-abc",
         order_id="issue-185",
@@ -197,9 +187,6 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
         exit_code=0,
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -208,7 +195,8 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
 
 def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
     """order_id defaults to empty string when not supplied."""
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -216,7 +204,6 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/some/worktree",
         kitchen_id="kitchen-abc",
         session_id="sess-003",
@@ -227,9 +214,6 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
         exit_code=0,
         start_ts="2026-03-27T08:00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     entry = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
@@ -239,7 +223,8 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
 
 def test_flush_writes_crash_exception_file(tmp_path):
     """When exception_text is provided, flush_session_log writes crash_exception.txt."""
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -247,7 +232,6 @@ def test_flush_writes_crash_exception_file(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="test-session",
         pid=1234,
@@ -259,9 +243,6 @@ def test_flush_writes_crash_exception_file(tmp_path):
         proc_snapshots=None,
         termination_reason="CRASHED",
         exception_text="RuntimeError: boom\n  at headless.py:1023",
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "test-session"
     crash_file = session_dir / "crash_exception.txt"
@@ -276,7 +257,8 @@ def test_flush_writes_crash_exception_file(tmp_path):
 
 def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
     raw = '{"type": "assistant"}\n{"type": "result"}\n'
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -284,7 +266,6 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="test-session",
         pid=1,
@@ -295,9 +276,6 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         raw_stdout=raw,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
     raw_file = tmp_path / "sessions" / "test-session" / "raw_stdout.jsonl"
     assert raw_file.exists()
@@ -305,7 +283,8 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
 
 
 def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -313,7 +292,6 @@ def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="ok-session",
         pid=1,
@@ -324,9 +302,6 @@ def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         raw_stdout='{"type": "result"}',
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
     raw_file = tmp_path / "sessions" / "ok-session" / "raw_stdout.jsonl"
     assert not raw_file.exists()
@@ -344,7 +319,8 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -352,7 +328,6 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -363,9 +338,6 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path):
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
         last_stop_reason="end_turn",
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -389,7 +361,8 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -397,7 +370,6 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -407,9 +379,6 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path):
         exit_code=0,
         start_ts="2026-05-01T10:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -444,7 +413,8 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -452,7 +422,6 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -462,9 +431,6 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path):
         exit_code=0,
         start_ts="2026-05-01T10:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -493,17 +459,8 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
         )
         + "\n"
     )
-    telemetry = SessionTelemetry(
-        token_usage={"input_tokens": 0, "output_tokens": 0, "turn_count": 2},
-        timing_seconds=None,
-        audit_record=None,
-        github_api_usage=None,
-        github_api_requests=0,
-        loc_insertions=0,
-        loc_deletions=0,
-        subagent_model_outcomes=(),
-    )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -511,7 +468,6 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -521,9 +477,7 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
         exit_code=0,
         start_ts="2026-05-01T10:00:00Z",
         proc_snapshots=None,
-        telemetry=telemetry,
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
+        token_usage={"input_tokens": 0, "output_tokens": 0, "turn_count": 2},
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -565,7 +519,8 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -573,7 +528,6 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -583,9 +537,6 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path):
         exit_code=0,
         start_ts="2026-05-01T10:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -632,7 +583,8 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -640,7 +592,6 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -650,9 +601,6 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -672,7 +620,8 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -680,7 +629,6 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -690,9 +638,6 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -712,7 +657,8 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -720,7 +666,6 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -730,9 +675,6 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -752,7 +694,8 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path):
     ]
     cb_log = tmp_path / "s.jsonl"
     cb_log.write_text("\n".join(records) + "\n")
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -760,7 +703,6 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -770,9 +712,6 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path):
         exit_code=0,
         start_ts="2026-04-15T07:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -1159,7 +1098,8 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -1167,7 +1107,6 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -1177,9 +1116,6 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):
         exit_code=0,
         start_ts="2026-05-04T00:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -1202,7 +1138,8 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -1210,7 +1147,6 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -1220,9 +1156,6 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path):
         exit_code=0,
         start_ts="2026-05-04T00:00:00Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads((tmp_path / "sessions" / "s" / "summary.json").read_text())
@@ -1384,7 +1317,8 @@ class TestCodexLogFields:
         codex_log = tmp_path / "codex-sessions" / "2026" / "05" / "26" / "rollout.jsonl"
         codex_log.parent.mkdir(parents=True)
         codex_log.write_text(event_line)
-        flush_session_log(
+        _flush(
+            tmp_path,
             needs_retry=False,
             retry_reason="none",
             infra_exit_category="completed",
@@ -1392,7 +1326,6 @@ class TestCodexLogFields:
             infra_fault_domain="unknown",
             api_error_status=None,
             is_error=False,
-            log_dir=str(tmp_path),
             backend="codex",
             channel_b_capable=False,
             session_locator=_FakeLocator(codex_log),
@@ -1405,9 +1338,6 @@ class TestCodexLogFields:
             exit_code=0,
             start_ts="2026-05-26T08:00:00",
             proc_snapshots=None,
-            telemetry=SessionTelemetry.empty(),
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=RecipeIdentity.empty(),
         )
         index = (tmp_path / "sessions.jsonl").read_text().strip()
         entry = json.loads(index)
@@ -1415,7 +1345,8 @@ class TestCodexLogFields:
         assert entry["claude_code_log"] is None
 
     def test_flush_codex_log_null_when_not_provided(self, tmp_path):
-        flush_session_log(
+        _flush(
+            tmp_path,
             needs_retry=False,
             retry_reason="none",
             infra_exit_category="completed",
@@ -1423,7 +1354,6 @@ class TestCodexLogFields:
             infra_fault_domain="unknown",
             api_error_status=None,
             is_error=False,
-            log_dir=str(tmp_path),
             session_locator=_FakeLocator(None),
             cwd="/some/worktree",
             session_id="cc-session-001",
@@ -1434,9 +1364,6 @@ class TestCodexLogFields:
             exit_code=0,
             start_ts="2026-05-26T08:00:00",
             proc_snapshots=None,
-            telemetry=SessionTelemetry.empty(),
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=RecipeIdentity.empty(),
         )
         index = (tmp_path / "sessions.jsonl").read_text().strip()
         entry = json.loads(index)
@@ -1454,7 +1381,8 @@ class TestCodexLogFields:
     ):
         codex_log = tmp_path / "rollout.jsonl"
         codex_log.write_text(event_line)
-        flush_session_log(
+        _flush(
+            tmp_path,
             needs_retry=False,
             retry_reason="none",
             infra_exit_category="completed",
@@ -1462,7 +1390,6 @@ class TestCodexLogFields:
             infra_fault_domain="unknown",
             api_error_status=None,
             is_error=False,
-            log_dir=str(tmp_path),
             backend="codex",
             channel_b_capable=False,
             session_locator=_FakeLocator(codex_log),
@@ -1475,14 +1402,12 @@ class TestCodexLogFields:
             exit_code=0,
             start_ts="2026-05-26T08:00:00",
             proc_snapshots=None,
-            telemetry=SessionTelemetry.empty(),
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=RecipeIdentity.empty(),
         )
         assert "claude_code_log_not_found" not in caplog.text
 
     def test_backend_codex_skips_channel_b_parsing(self, tmp_path):
-        flush_session_log(
+        _flush(
+            tmp_path,
             needs_retry=False,
             retry_reason="none",
             infra_exit_category="completed",
@@ -1490,7 +1415,6 @@ class TestCodexLogFields:
             infra_fault_domain="unknown",
             api_error_status=None,
             is_error=False,
-            log_dir=str(tmp_path),
             cwd="/some/worktree",
             session_id="codex-session-003",
             pid=12345,
@@ -1503,9 +1427,6 @@ class TestCodexLogFields:
             backend="codex",
             channel_b_capable=False,
             session_locator=_FakeLocator(None),
-            telemetry=SessionTelemetry.empty(),
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=RecipeIdentity.empty(),
         )
         summary = json.loads(
             (tmp_path / "sessions" / "codex-session-003" / "summary.json").read_text()
@@ -1992,7 +1913,8 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
         )
         + "\n"
     )
-    flush_session_log(
+    _flush(
+        tmp_path,
         needs_retry=False,
         retry_reason="none",
         infra_exit_category="completed",
@@ -2000,7 +1922,6 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
         infra_fault_domain="unknown",
         api_error_status=None,
         is_error=False,
-        log_dir=str(tmp_path),
         cwd="/tmp",
         session_id="minimax-dedup-001",
         pid=1,
@@ -2010,9 +1931,6 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
         exit_code=0,
         start_ts="2026-05-30T08:33:53.843Z",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
         session_locator=_FakeLocator(cb_log),
     )
     summary = json.loads(

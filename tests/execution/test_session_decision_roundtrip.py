@@ -8,16 +8,13 @@ import pytest
 
 from autoskillit.core import (
     ChannelConfirmation,
-    ProviderOutcome,
-    RecipeIdentity,
-    SessionTelemetry,
     SubprocessResult,
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.session._session_model import parse_session_result
-from autoskillit.execution.session_log import flush_session_log
+from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -53,8 +50,8 @@ def test_session_decision_roundtrip(tmp_path, status, is_error, result) -> None:
     skill_result = _build_skill_result(process, backend=ClaudeCodeBackend())
     assert parsed.session_id == skill_result.session_id
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd=str(tmp_path),
         session_id=skill_result.session_id,
         pid=process.pid,
@@ -72,9 +69,6 @@ def test_session_decision_roundtrip(tmp_path, status, is_error, result) -> None:
         start_ts="2026-08-28T00:00:00+00:00",
         proc_snapshots=None,
         kill_reason=skill_result.kill_reason.value,
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
-        telemetry=SessionTelemetry.empty(),
     )
 
     summary = json.loads(
@@ -149,8 +143,8 @@ def test_historical_weekly_quota_replay_keeps_subtype_alongside_retry_fields(
     )
     assert skill_result.subtype == "missing_completion_marker"
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd=str(tmp_path),
         session_id=skill_result.session_id,
         pid=process.pid,
@@ -168,9 +162,6 @@ def test_historical_weekly_quota_replay_keeps_subtype_alongside_retry_fields(
         start_ts="2026-08-28T00:00:00+00:00",
         proc_snapshots=None,
         kill_reason=skill_result.kill_reason.value,
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
-        telemetry=SessionTelemetry.empty(),
     )
 
     summary = json.loads(

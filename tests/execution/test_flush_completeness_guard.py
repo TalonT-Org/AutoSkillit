@@ -7,8 +7,7 @@ import json
 
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome
-from autoskillit.core.types._type_results_execution import RecipeIdentity
+from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -61,11 +60,8 @@ class TestFlushOutputCompleteness:
     """Every ProviderOutcome field must appear in flush output."""
 
     def test_provider_outcome_fields_written_to_summary(self, tmp_path):
-        from autoskillit.core.types._type_results_execution import SessionTelemetry
-        from autoskillit.execution.session_log import flush_session_log
-
-        outcome = ProviderOutcome(provider_used="test-provider", fallback_activated=True)
-        flush_session_log(
+        _flush(
+            tmp_path,
             needs_retry=False,
             retry_reason="none",
             infra_exit_category="completed",
@@ -73,7 +69,6 @@ class TestFlushOutputCompleteness:
             infra_fault_domain="unknown",
             api_error_status=None,
             is_error=False,
-            log_dir=str(tmp_path),
             cwd="/tmp",
             session_id="completeness-test-001",
             pid=1,
@@ -83,9 +78,8 @@ class TestFlushOutputCompleteness:
             exit_code=0,
             start_ts="2026-05-05T00:00:00+00:00",
             proc_snapshots=None,
-            provider_outcome=outcome,
-            recipe_identity=RecipeIdentity.empty(),
-            telemetry=SessionTelemetry.empty(),
+            provider_used="test-provider",
+            provider_fallback=True,
         )
         summary_path = tmp_path / "sessions" / "completeness-test-001" / "summary.json"
         summary = json.loads(summary_path.read_text())
@@ -93,16 +87,8 @@ class TestFlushOutputCompleteness:
         assert summary["provider_fallback"] is True
 
     def test_recipe_identity_fields_written_to_index(self, tmp_path):
-        from autoskillit.core.types._type_results_execution import SessionTelemetry
-        from autoskillit.execution.session_log import flush_session_log
-
-        identity = RecipeIdentity(
-            name="my-recipe",
-            content_hash="abc123",
-            composite_hash="def456",
-            version="1.0",
-        )
-        flush_session_log(
+        _flush(
+            tmp_path,
             needs_retry=False,
             retry_reason="none",
             infra_exit_category="completed",
@@ -110,7 +96,6 @@ class TestFlushOutputCompleteness:
             infra_fault_domain="unknown",
             api_error_status=None,
             is_error=False,
-            log_dir=str(tmp_path),
             cwd="/tmp",
             session_id="recipe-completeness-001",
             pid=1,
@@ -120,9 +105,10 @@ class TestFlushOutputCompleteness:
             exit_code=0,
             start_ts="2026-05-05T00:00:00+00:00",
             proc_snapshots=None,
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=identity,
-            telemetry=SessionTelemetry.empty(),
+            recipe_name="my-recipe",
+            recipe_content_hash="abc123",
+            recipe_composite_hash="def456",
+            recipe_version="1.0",
         )
         index_path = tmp_path / "sessions.jsonl"
         entry = json.loads(index_path.read_text().strip())

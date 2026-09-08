@@ -32,8 +32,6 @@ SRC_ROOT = PROJECT_ROOT / "src" / "autoskillit"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# _LINE_LIMIT_EXEMPTIONS is the single existing rationale ledger for files
-# permitted past the hard cap; reused here so both gates share one source of truth.
 from tests.arch._subpackage_isolation_line_limits import (
     _LINE_LIMIT_EXEMPTIONS,
     LineLimitExemption,

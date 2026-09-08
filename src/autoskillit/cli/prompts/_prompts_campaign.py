@@ -283,8 +283,8 @@ The following manifest defines all dispatches for this campaign:
 
 Execute static manifest dispatches SEQUENTIALLY via {mcp_prefix}dispatch_food_truck.
 Static manifest dispatches use the worker_capacity authority and are SEQUENTIAL — do NOT issue
-static manifest calls in parallel, regardless of the fleet semaphore's
-max_concurrent_dispatches setting.
+static manifest calls in parallel, regardless of the worker capacity's
+max_concurrent setting.
 
 Each dispatch is an independent L2 food truck session with its own kitchen context. There is NO
 cross-dispatch state sharing managed by you — the runtime handles it

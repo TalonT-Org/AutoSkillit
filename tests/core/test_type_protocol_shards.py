@@ -90,7 +90,6 @@ def test_workspace_shard_all():
 
     assert set(__all__) == {
         "WorkspaceManager",
-        "ManagedJoinAttestationAuthority",
         "PluginArtifactAuthority",
         "PluginArtifactRetirementOwner",
         "PluginRetirementCoordinator",
@@ -160,6 +159,7 @@ def test_infra_shard_all():
         "GateState",
         "BackgroundSupervisor",
         "ManagedFixedBatchSupervisor",
+        "ManagedJoinAttestationAuthority",
         "ManagedWorkerCapacity",
         "KitchenTransitionLock",
         "QuotaRefreshTask",

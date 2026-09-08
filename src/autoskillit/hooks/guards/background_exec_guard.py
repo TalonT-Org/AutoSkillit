@@ -99,9 +99,22 @@ def main() -> None:
     )
     if managed_route is not None:
         route, guards, _config_digest = managed_route
-        blocked_names = {"Agent", "spawn_agent", "code_mode", "background"}
         if "background_exec_guard" not in guards:
-            blocked_names = {str(tool_name)}
+            payload = json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": (
+                            f"{MANAGED_CODEX_CHILD_DENY_TRIGGER} ({route} binding omits "
+                            "background_exec_guard)."
+                        ),
+                    }
+                }
+            )
+            sys.stdout.write(payload + "\n")
+            sys.exit(0)
+        blocked_names = {"Agent", "spawn_agent", "code_mode", "background"}
         if tool_name in blocked_names or tool_input.get("run_in_background"):
             payload = json.dumps(
                 {

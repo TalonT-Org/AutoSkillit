@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 import os
 import signal
-import site
 import subprocess
 import sys
+import sysconfig
 import time
 from pathlib import Path
 from typing import cast
@@ -58,7 +58,7 @@ def test_process_and_spawn_import_orders_share_module_authority(
 ) -> None:
     src_dir = Path(__file__).parents[2] / "src"
     hooks_dir = src_dir / "autoskillit" / "hooks"
-    site_packages = site.getsitepackages()[0]
+    site_packages = sysconfig.get_paths()["purelib"]
     code = r"""
 import importlib
 import sys

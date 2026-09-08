@@ -64,6 +64,9 @@ from autoskillit.hook_registry import (
 )
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.workspace import (
+    AgentSkillDocument as AgentSkillDocument,
+)
+from autoskillit.workspace import (
     SkillProjectionContext as SkillProjectionContext,
 )
 from autoskillit.workspace import (

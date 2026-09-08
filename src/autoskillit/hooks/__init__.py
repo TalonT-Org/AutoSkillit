@@ -75,6 +75,7 @@ from autoskillit.hooks._join_ledger import (
     settle_assignment,
     settle_unadmitted_assignment,
 )
+from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.hooks.guards.branch_protection_guard import BRANCH_PROTECTION_DENY_TRIGGER
 from autoskillit.hooks.guards.review_loop_gate import REVIEW_LOOP_DENY_TRIGGER
@@ -108,6 +109,7 @@ __all__ = [
     "REVIEW_LOOP_DENY_TRIGGER",
     "CaptureStoreStats",
     "JoinLedgerError",
+    "LoadedSkillEntry",
     "CleanupBlocker",
     "CleanupProgress",
     "SweepBudgetSpec",

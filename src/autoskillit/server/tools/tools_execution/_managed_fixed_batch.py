@@ -36,6 +36,7 @@ from autoskillit.hooks import (
     OUTCOME_REAPED,
     OUTCOME_SUCCESS,
     JoinLedgerError,
+    LoadedSkillEntry,
     active_batch,
     admit_assignment,
     aggregate_batch,
@@ -47,7 +48,7 @@ from autoskillit.hooks import (
     settle_assignment,
     settle_unadmitted_assignment,
 )
-from autoskillit.hooks._session_binding import LoadedSkillEntry
+from autoskillit.server._misc import AgentSkillDocument
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentIdentity,
     ManagedLeafAssignmentInput,
@@ -60,7 +61,6 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
     plan_managed_leaf_identities,
     project_managed_leaf,
 )
-from autoskillit.workspace import AgentSkillDocument
 
 logger = get_logger(__name__)
 

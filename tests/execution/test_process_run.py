@@ -400,9 +400,20 @@ class TestManagedProcessOwnership:
             return original_settle(self, cause, **kwargs)
 
         monkeypatch.setattr(OwnedProcessGroup, "settle_preserving", record_settle)
+        spawned = anyio.Event()
 
-        with anyio.move_on_after(0.1):
-            await run_managed_async(["sleep", "10"], cwd=tmp_path, timeout=30)
+        async def run_until_cancelled() -> None:
+            await run_managed_async(
+                ["sleep", "10"],
+                cwd=tmp_path,
+                timeout=30,
+                on_pid_resolved=lambda _pid, _ticks: spawned.set(),
+            )
+
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(run_until_cancelled)
+            await spawned.wait()
+            task_group.cancel_scope.cancel()
 
         assert settled
 

@@ -400,10 +400,12 @@ async def _run_dispatch(
     try:
         permit = await capacity.acquire(ready.dispatch_id)
     except TimeoutError:
+        timeout = capacity.timeout
+        wait_description = f"{timeout}s" if timeout is not None else "an unbounded wait"
         return complete_failure_with_state(
             error_code=FleetErrorCode.FLEET_ACQUIRE_TIMEOUT,
             message=(
-                f"Timed out waiting for managed worker capacity after {capacity.timeout}s "
+                f"Timed out waiting for managed worker capacity after {wait_description} "
                 f"({capacity.active_count}/{capacity.max_concurrent} dispatches running)."
             ),
             dispatch_id=ready.dispatch_id,
@@ -414,9 +416,7 @@ async def _run_dispatch(
             tool_ctx=tool_ctx,
         )
     except ManagedWorkerCapacityError as exc:
-        # New failure mode introduced when FleetSemaphore was replaced by
-        # ManagedWorkerCapacity: foreign/duplicate owner and owner-already-holds
-        # permits surface as ManagedWorkerCapacityError rather than TimeoutError.
+        # Invalid or duplicate owner claims are hard refusals, not capacity timeouts.
         return complete_failure_with_state(
             error_code=FleetErrorCode.FLEET_HARD_REFUSAL_HEADLESS,
             message=str(exc),

@@ -711,6 +711,7 @@ from .types import (
 from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
+from .types import VALID_EXTERNAL_EFFECTS as VALID_EXTERNAL_EFFECTS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
@@ -1252,7 +1253,6 @@ from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
 )
 from .types import Utf8ByteLimit as Utf8ByteLimit
-from .types import VALID_EXTERNAL_EFFECTS as VALID_EXTERNAL_EFFECTS
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
 from .types import VerifiedInputPreflightRequest as VerifiedInputPreflightRequest

@@ -18,13 +18,16 @@ _HOOKS_DIR = str(__file__).rsplit("/", 1)[0].rsplit("/", 1)[0]
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
+    MANAGED_PARENT_ALLOWED_TOOLS,
+)
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import session_managed_codex_route  # noqa: E402
 
 SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 
 _ORCHESTRATION_TOOLS: frozenset[str] = frozenset({"run_skill", "run_cmd", "run_python"})
-_MANAGED_PARENT_TOOLS: frozenset[str] = frozenset({"run_fixed_batch", "read_fixed_batch_result"})
+_MANAGED_PARENT_TOOLS: frozenset[str] = MANAGED_PARENT_ALLOWED_TOOLS
 
 
 def _deny(reason: str) -> None:

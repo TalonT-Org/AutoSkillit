@@ -24,6 +24,7 @@ from autoskillit.core import (
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
+    SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
@@ -92,7 +93,7 @@ class _ManagedRequestFacts:
     binding: SessionBinding
     selected_source: LoadedSkillEntry
     channel_dir: Path
-    adaptation_context: Any
+    adaptation_context: SemanticAdaptationContext
 
 
 def _deny(message: str) -> dict[str, object]:

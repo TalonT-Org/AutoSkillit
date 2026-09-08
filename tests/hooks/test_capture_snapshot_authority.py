@@ -795,7 +795,7 @@ def test_render_degraded_capture_returns_inline_when_within_cap(tmp_path: Path) 
         os.close(fd)
 
 
-def test_render_degraded_capture_renders_oversized_via_reference_factory(
+def test_render_degraded_capture_renders_oversized_output(
     tmp_path: Path,
 ) -> None:
     """render_degraded_capture returns head+V2 unavailable marker+tail when total exceeds cap."""

@@ -7,18 +7,58 @@ from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from .._managed_worker_capacity import ManagedWorkerPermit
+from ._type_skill_semantics import SemanticAdaptationContext
 
 __all__ = [
     "GateState",
     "BackgroundSupervisor",
     "ManagedFixedBatchSupervisor",
     "ManagedWorkerCapacity",
+    "ManagedJoinAttestationAuthority",
     "KitchenTransitionLock",
     "QuotaPolicy",
     "QuotaRefreshTask",
     "TokenFactory",
     "CampaignProtector",
 ]
+
+
+class ManagedJoinAttestationAuthority(Protocol):
+    """Server-owned issuer and verifier for managed-join adaptation evidence."""
+
+    @property
+    def activation_epoch(self) -> int: ...
+
+    def issue(
+        self,
+        *,
+        backend: str,
+        launch_context: str,
+        parent_session_id: str,
+        direct_tool_mode: bool,
+        resolved_model: str,
+        resolved_reasoning_effort: str,
+        codex_catalog_digest: str,
+        fixed_batch_tool_registry_digest: str,
+        hook_registry_digest: str,
+        skill_load_applies: bool,
+        guards_apply: bool,
+    ) -> SemanticAdaptationContext: ...
+
+    def verify(
+        self,
+        context: SemanticAdaptationContext | None,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None: ...
+
+    def find_verified_context(
+        self,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None: ...
 
 
 @runtime_checkable

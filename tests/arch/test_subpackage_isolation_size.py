@@ -41,6 +41,64 @@ def test_no_src_module_exceeds_line_limit() -> None:
     )
 
 
+def test_basename_fallback_dead_exemptions_are_retired() -> None:
+    """REQ-CNST-010 basename-fallback fix (#4662): two rubber-stamp entries stay removed.
+
+    The four bare-basename keys removed by #4662 (`types.py`, `session.py`,
+    `_doctor.py`, `tools_recipe.py`) matched no file anywhere in
+    src/autoskillit/ and are already covered by
+    test_every_exemption_key_matches_an_existing_file, which fails on any key
+    that does not resolve to a real file -- reintroducing them needs no
+    dedicated assertion here. `server/_recipe_delivery.py`'s 750/750 exemption
+    was a rubber-stamp ceiling equal to its own line count (see
+    test_no_exemption_ceiling_equals_current_line_count) and, like
+    `server/_recipe_section_pagination.py` (465 lines, limit 750), is redundant
+    now that 750 is the universal default under REQ-CNST-010's diff-scoped gate.
+    """
+    retired = {
+        "server/_recipe_delivery.py",
+        "server/_recipe_section_pagination.py",
+    }
+    stale = retired.intersection(_LINE_LIMIT_EXEMPTIONS)
+    assert not stale, f"Retired basename-fallback exemptions reintroduced: {sorted(stale)}"
+
+
+def test_every_exemption_key_matches_an_existing_file() -> None:
+    """Every _LINE_LIMIT_EXEMPTIONS key must resolve to a real file under SRC_ROOT.
+
+    A key matching nothing is dead weight no test can ever exercise -- exactly
+    how types.py, session.py, and _doctor.py sat unnoticed until #4662's
+    basename-fallback fix.
+    """
+    dead = sorted(key for key in _LINE_LIMIT_EXEMPTIONS if not (SRC_ROOT / key).is_file())
+    assert not dead, f"_LINE_LIMIT_EXEMPTIONS keys with no matching file: {dead}"
+
+
+def test_no_exemption_ceiling_equals_current_line_count() -> None:
+    """An exemption ceiling equal to the file's real size is a rubber stamp.
+
+    Cross-cutting finding from issue #4662: at the time the issue was filed,
+    codex.py's ceiling (2444) and fleet/_api.py's ceiling (1590) each equaled
+    the line count *at the moment they were written*, guaranteeing the very
+    next line added trips the guard the ceiling was supposed to satisfy.
+    Both have since been corrected -- codex.py's exemption is narrower than
+    its original rubber-stamp value and fleet/_api.py carries no exemption at
+    all -- this test guards against the pattern recurring for any entry.
+    Ceilings must carry real headroom.
+    """
+    offenders = [
+        f"{rel}: limit {exemption.limit} equals current line count"
+        for rel, exemption in sorted(_LINE_LIMIT_EXEMPTIONS.items())
+        if (SRC_ROOT / rel).is_file()
+        and len((SRC_ROOT / rel).read_text(encoding="utf-8").splitlines()) == exemption.limit
+    ]
+    assert not offenders, (
+        "Exemption ceilings equal to the current line count are rubber stamps -- "
+        "raise the ceiling to give real headroom, or remove the entry if the file "
+        "no longer needs one:\n" + "\n".join(f"  {o}" for o in offenders)
+    )
+
+
 def test_pipeline_exploration_context_is_a_package() -> None:
     """REQ-CNST-010-E22: ``pipeline/exploration_context`` is a sub-package (#4835)."""
     assert not (SRC_ROOT / "pipeline" / "exploration_context.py").exists(), (
@@ -184,21 +242,11 @@ def test_hook_registry_e21_exemption_is_retired() -> None:
     PR #4898 reintroduced the entry while decomposing the exemption registry out of
     test_subpackage_isolation.py. No ``hook_registry.py`` source file exists; every
     shard of the ``hook_registry/`` package is under the 1000-line default ceiling,
-    so no exemption — under any key form — is warranted.
-
-    The basename check mirrors the lookup in ``_collect_line_limit_violations``
-    (``exemptions.get(rel, exemptions.get(py_file.name, ...))``): a path-keyed entry
-    ending in ``hook_registry.py`` would be an equivalent reintroduction.
+    so the retired root-level exemption is not warranted.
     """
     assert "hook_registry.py" not in _LINE_LIMIT_EXEMPTIONS, (
         "REQ-CNST-010-E21 was retired by issue #4853; the hook_registry.py exemption "
         "must not be reintroduced (no such source file exists)"
-    )
-    basename_offenders = sorted(
-        key for key in _LINE_LIMIT_EXEMPTIONS if key.rsplit("/", 1)[-1] == "hook_registry.py"
-    )
-    assert not basename_offenders, (
-        "REQ-CNST-010-E21 reintroduced under a path-form key: " + ", ".join(basename_offenders)
     )
 
 

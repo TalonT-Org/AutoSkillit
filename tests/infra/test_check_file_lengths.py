@@ -173,6 +173,35 @@ def test_main_reports_violations_and_is_silent_on_success(
     assert capsys.readouterr().out == ""
 
 
+def test_main_is_silent_for_empty_and_missing_inputs(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _load_check_module()
+
+    assert mod.main([]) == 0
+    assert capsys.readouterr().out == ""
+
+    assert mod.main([str(tmp_path / "missing.py")]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_main_aggregates_multiple_violations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    first = _write_module(mod.SRC_ROOT, 751, "first.py")
+    second = _write_module(mod.SRC_ROOT, 751, "second.py")
+
+    assert mod.main([str(first), str(second)]) == 1
+    output = capsys.readouterr().out
+    assert "first.py" in output
+    assert "second.py" in output
+    assert "Total: 2 violation(s)" in output
+
+
 def test_path_outside_source_root_is_ignored(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

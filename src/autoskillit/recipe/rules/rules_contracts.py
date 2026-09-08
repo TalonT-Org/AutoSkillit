@@ -12,6 +12,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._contracts_types import VALID_EXTERNAL_EFFECTS
 from autoskillit.recipe._skill_helpers import bound_skill_name
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -255,11 +256,6 @@ def _check_missing_pattern_examples(ctx: ValidationContext) -> list[RuleFinding]
 
 
 _VALID_WRITE_BEHAVIORS = {"always", "conditional"}
-_VALID_EXTERNAL_EFFECTS = {
-    "none",
-    "serialized-idempotent",
-    "serialized-unknown-completion",
-}
 
 
 @semantic_rule(
@@ -319,7 +315,7 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                     severity=Severity.WARNING,
                 )
             )
-        if external_effect not in _VALID_EXTERNAL_EFFECTS:
+        if external_effect not in VALID_EXTERNAL_EFFECTS:
             findings.append(
                 make_finding(
                     rule_name="write-behavior-consistency",

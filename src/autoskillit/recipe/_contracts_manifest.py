@@ -24,6 +24,7 @@ from autoskillit.recipe._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
+    VALID_EXTERNAL_EFFECTS,
     AuditAuthorityPublicationSpec,
     AuditOutputContract,
     AuditOutputMode,
@@ -103,11 +104,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     external_effect = skill_data.get("external_effect", "none")
     if not isinstance(external_effect, str):
         raise ValueError(f"external_effect for skill '{skill_name}' must be a string")
-    if external_effect not in {
-        "none",
-        "serialized-idempotent",
-        "serialized-unknown-completion",
-    }:
+    if external_effect not in VALID_EXTERNAL_EFFECTS:
         raise ValueError(
             f"external_effect for skill '{skill_name}' must be 'none', "
             "'serialized-idempotent', or 'serialized-unknown-completion'"

@@ -14,6 +14,13 @@ INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
 
+# Canonical set of valid external_effect declarations; imported by
+# _contracts_manifest.py and rules_contracts.py to keep all three
+# validations in lock-step.
+VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(
+    {"none", "serialized-idempotent", "serialized-unknown-completion"}
+)
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class SkillInput:
@@ -126,11 +133,7 @@ class SkillContract:
     audit_output_mode: AuditOutputMode | None = None
 
     def __post_init__(self) -> None:
-        if self.external_effect not in {
-            "none",
-            "serialized-idempotent",
-            "serialized-unknown-completion",
-        }:
+        if self.external_effect not in VALID_EXTERNAL_EFFECTS:
             raise ValueError(
                 "external_effect must be 'none', 'serialized-idempotent', or "
                 "'serialized-unknown-completion'"

@@ -178,18 +178,15 @@ async def test_owner_cleanup_precedes_settlement_and_permit_release(tmp_path) ->
             events.append("owner-cleanup")
 
     assert await service.reconcile_startup()
-    result = await service.run(_binding(tmp_path, launch_leaf))
+    binding = _binding(tmp_path, launch_leaf)
+    result = await service.run(binding)
 
     assert result.wave_outcome == "complete"
-    assert events == [
-        "owner-enter",
-        "execute",
-        "finalize",
-        "owner-cleanup",
-        "permit-release",
+    expected_assignment_events = [
         "owner-enter",
         "execute",
         "finalize",
         "owner-cleanup",
         "permit-release",
     ]
+    assert events == expected_assignment_events * len(binding.assignments)

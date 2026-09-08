@@ -37,6 +37,9 @@ from ._type_results_records import (
 )
 
 T = TypeVar("T")
+VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(
+    {"none", "serialized-idempotent", "serialized-unknown-completion"}
+)
 
 __all__ = [
     "AuditResultOutcome",
@@ -220,11 +223,6 @@ class OutcomeInvariantSpec:
 
     when: str
     require: str
-
-
-VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(
-    {"none", "serialized-idempotent", "serialized-unknown-completion"}
-)
 
 
 @dataclass(frozen=True, slots=True)

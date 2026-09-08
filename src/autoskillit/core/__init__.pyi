@@ -1252,9 +1252,9 @@ from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
 )
 from .types import Utf8ByteLimit as Utf8ByteLimit
+from .types import VALID_EXTERNAL_EFFECTS as VALID_EXTERNAL_EFFECTS
 from .types import ValidatedAddDir as ValidatedAddDir
 from .types import ValidatedWorktreePath as ValidatedWorktreePath
-from .types import VALID_EXTERNAL_EFFECTS as VALID_EXTERNAL_EFFECTS
 from .types import VerifiedInputPreflightRequest as VerifiedInputPreflightRequest
 from .types import VerifiedInputPreflightResult as VerifiedInputPreflightResult
 from .types import WindowEpochId as WindowEpochId

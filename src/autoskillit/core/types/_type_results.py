@@ -57,6 +57,7 @@ __all__ = [
     "SkillUnavailabilityRecord",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
+    "VALID_EXTERNAL_EFFECTS",
     "VALID_INPUT_SPEC_TYPES",
     "OutcomeInvariantSpec",
     "WriteBehaviorSpec",
@@ -221,6 +222,11 @@ class OutcomeInvariantSpec:
     require: str
 
 
+VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(
+    {"none", "serialized-idempotent", "serialized-unknown-completion"}
+)
+
+
 @dataclass(frozen=True, slots=True)
 class WriteBehaviorSpec:
     """Write-expectation metadata resolved from skill contracts.
@@ -242,11 +248,7 @@ class WriteBehaviorSpec:
     external_effect: str = "none"
 
     def __post_init__(self) -> None:
-        if self.external_effect not in {
-            "none",
-            "serialized-idempotent",
-            "serialized-unknown-completion",
-        }:
+        if self.external_effect not in VALID_EXTERNAL_EFFECTS:
             raise ValueError(
                 "external_effect must be 'none', 'serialized-idempotent', or "
                 "'serialized-unknown-completion'"

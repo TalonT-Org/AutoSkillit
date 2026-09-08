@@ -7,19 +7,12 @@ from enum import StrEnum
 
 import regex as re
 
-from autoskillit.core import BoundScalar, PreflightKind
+from autoskillit.core import VALID_EXTERNAL_EFFECTS, BoundScalar, PreflightKind
 
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
 _TEMPLATE_REF_RE = re.compile(r"\$\{\{[^}]+\}\}")
 RESULT_CAPTURE_RE = re.compile(r"\$\{\{\s*result\.([\w-]+)\s*\}\}")
-
-# Canonical set of valid external_effect declarations; imported by
-# _contracts_manifest.py and rules_contracts.py to keep all three
-# validations in lock-step.
-VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(
-    {"none", "serialized-idempotent", "serialized-unknown-completion"}
-)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

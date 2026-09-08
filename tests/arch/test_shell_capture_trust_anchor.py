@@ -136,6 +136,58 @@ else:
         )
 
 
+def test_capture_process_and_spawn_share_standalone_authority(tmp_path: Path) -> None:
+    hooks_dir = _SRC / "hooks"
+    child_code = r"""
+import importlib
+import sys
+
+sys.path.insert(0, sys.argv[1])
+capture_process = importlib.import_module("_capture_process")
+capture_spawn = importlib.import_module("_capture_spawn")
+
+assert "autoskillit" not in sys.modules
+assert capture_spawn._capture_process is capture_process
+for name in (
+    "spawn_owned_process",
+    "_finish_owned_spawn",
+    "_wrap_user_command",
+    "_scrubbed_user_environment",
+    "_spawn_bash",
+    "_TRUSTED_BASH_CANDIDATES",
+):
+    assert getattr(capture_process, name) is getattr(capture_spawn, name)
+
+try:
+    import autoskillit
+except ModuleNotFoundError as exc:
+    assert exc.name == "autoskillit", exc
+else:
+    raise AssertionError("autoskillit unexpectedly available in hooks-only import")
+"""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-B",
+            "-c",
+            child_code,
+            str(hooks_dir.resolve()),
+        ],
+        env=production_interpreter_env(),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, (
+        f"standalone process/spawn identity import failed\n"
+        f"stdout:\n{completed.stdout}\n"
+        f"stderr:\n{completed.stderr}"
+    )
+
+
 def _render_string_node(node: ast.Constant | ast.JoinedStr) -> str:
     if isinstance(node, ast.Constant):
         return node.value if isinstance(node.value, str) else ""
@@ -266,6 +318,7 @@ def test_shell_capture_code_has_no_pathname_harness_or_cleanup() -> None:
             "hooks/shell_capture_hook.py",
             "hooks/_capture/_runner.py",
             "hooks/_capture_process.py",
+            "hooks/_capture_spawn.py",
         )
     }
     violations = {}

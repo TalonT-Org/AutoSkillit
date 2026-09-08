@@ -17,6 +17,7 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import SimpleNamespace
 
+import autoskillit.hooks._capture_spawn as capture_spawn
 import pytest
 
 import autoskillit.hooks._capture._authority as capture_authority
@@ -26,7 +27,6 @@ import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture._runner as capture_runner
 import autoskillit.hooks._capture._types as capture_types
 import autoskillit.hooks._capture_lifecycle._admission as capture_admission
-import autoskillit.hooks._capture_process as capture_process
 from autoskillit.hooks._capture._snapshot import (
     CaptureMeasurement,
     CommandOutcome,
@@ -1618,7 +1618,7 @@ def test_spawn_scrubs_all_protected_controls_from_user_bash_environment(
     monkeypatch.setenv("PHASE4_UNRELATED_ENV", "preserved")
     monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
-        capture_process,
+        capture_spawn,
         "_finish_owned_spawn",
         lambda process, **_kwargs: process,
     )
@@ -1681,7 +1681,7 @@ def test_spawn_bash_anchors_and_closes_inherited_cwd_fd(
     monkeypatch.setattr(capture_runner.os, "fchdir", record_fchdir)
     monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
-        capture_process,
+        capture_spawn,
         "_finish_owned_spawn",
         lambda spawned, **_kwargs: spawned,
     )
@@ -1960,7 +1960,7 @@ def test_restore_failure_closes_pipe_and_inherited_cwd_fd(
     monkeypatch.setattr(capture_runner.os, "fchdir", fail_restore)
     monkeypatch.setattr(capture_runner.subprocess, "Popen", record_popen)
     monkeypatch.setattr(
-        capture_process,
+        capture_spawn,
         "_finish_owned_spawn",
         lambda spawned, **_kwargs: spawned,
     )

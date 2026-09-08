@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import cast
 
+import autoskillit.hooks._capture_spawn as capture_spawn
 import pytest
 
 import autoskillit.hooks._capture_process as capture_process
@@ -19,8 +20,90 @@ from autoskillit.hooks._capture_process import (
     OwnedProcessGroup,
     spawn_owned_process,
 )
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
+
+def test_capture_process_reexports_spawn_implementation() -> None:
+    assert capture_process.__all__ == [
+        "OwnedProcessError",
+        "OwnedProcessGroup",
+        "spawn_owned_process",
+    ]
+    for name in (
+        "spawn_owned_process",
+        "_finish_owned_spawn",
+        "_wrap_user_command",
+        "_scrubbed_user_environment",
+        "_spawn_bash",
+        "_TRUSTED_BASH_CANDIDATES",
+    ):
+        assert getattr(capture_process, name) is getattr(capture_spawn, name)
+
+
+@pytest.mark.parametrize(
+    "first_import",
+    (
+        "_capture_process",
+        "autoskillit.hooks._capture_process",
+        "_capture_spawn",
+        "autoskillit.hooks._capture_spawn",
+    ),
+)
+def test_process_and_spawn_import_orders_share_module_authority(
+    tmp_path: Path,
+    first_import: str,
+) -> None:
+    src_dir = Path(__file__).parents[2] / "src"
+    hooks_dir = src_dir / "autoskillit" / "hooks"
+    code = r"""
+import importlib
+import sys
+
+sys.path.insert(0, sys.argv[1])
+sys.path.insert(0, sys.argv[2])
+importlib.import_module(sys.argv[3])
+
+package_process = importlib.import_module("autoskillit.hooks._capture_process")
+bare_process = importlib.import_module("_capture_process")
+package_spawn = importlib.import_module("autoskillit.hooks._capture_spawn")
+bare_spawn = importlib.import_module("_capture_spawn")
+
+assert package_process is bare_process
+assert package_spawn is bare_spawn
+assert package_spawn._capture_process is package_process
+assert package_process.OwnedProcessGroup is bare_process.OwnedProcessGroup
+assert package_process._OWNED_PROCESS_SPAWN_TOKEN is bare_process._OWNED_PROCESS_SPAWN_TOKEN
+for name in (
+    "spawn_owned_process",
+    "_finish_owned_spawn",
+    "_wrap_user_command",
+    "_scrubbed_user_environment",
+    "_spawn_bash",
+    "_TRUSTED_BASH_CANDIDATES",
+):
+    assert getattr(package_process, name) is getattr(package_spawn, name)
+"""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-S",
+            "-B",
+            "-c",
+            code,
+            str(src_dir),
+            str(hooks_dir),
+            first_import,
+        ],
+        env=production_interpreter_env(),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 class _OrderedProcess:
@@ -413,6 +496,7 @@ def test_pty_foreground_handoff_and_parent_state_restoration(
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process groups required")
 def test_owned_process_natural_exit_is_reaped(tmp_path: Path) -> None:
     cwd_fd = os.open(tmp_path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    owner: OwnedProcessGroup | None = None
     try:
         owner = spawn_owned_process(
             [sys.executable, "-c", "raise SystemExit(7)"],
@@ -420,10 +504,14 @@ def test_owned_process_natural_exit_is_reaped(tmp_path: Path) -> None:
             env=os.environ,
             capture_output=True,
         )
+        assert type(owner) is capture_process.OwnedProcessGroup
+        assert owner._spawn_token is capture_process._OWNED_PROCESS_SPAWN_TOKEN
         assert owner.pgid == owner.pid
         assert owner.wait() == 7
         assert not capture_process._process_group_exists(owner.pgid)
     finally:
+        if owner is not None and owner.returncode is None:
+            owner.settle()
         os.close(cwd_fd)
 
 
@@ -606,7 +694,7 @@ def test_owned_spawn_identity_error_is_preserved(
     )
 
     with pytest.raises(OwnedProcessError, match="unsafe") as raised:
-        capture_process._finish_owned_spawn(
+        capture_spawn._finish_owned_spawn(
             cast("subprocess.Popen[bytes]", FailedIdentityProcess()),
             inherit_terminal=False,
         )
@@ -638,7 +726,7 @@ def test_owned_spawn_restore_error_preserves_settlement_failure(
     monkeypatch.setattr(capture_process.os, "fchdir", fail_restore)
     monkeypatch.setattr(capture_process.os, "close", lambda _fd: None)
     monkeypatch.setattr(capture_process.subprocess, "Popen", lambda *_args, **_kwargs: process)
-    monkeypatch.setattr(capture_process, "_finish_owned_spawn", lambda *_args, **_kwargs: owner)
+    monkeypatch.setattr(capture_spawn, "_finish_owned_spawn", lambda *_args, **_kwargs: owner)
     monkeypatch.setattr(
         OwnedProcessGroup,
         "settle",

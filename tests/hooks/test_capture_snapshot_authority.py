@@ -773,6 +773,11 @@ def test_reference_matches_validates_issued_reference_through_snapshot(tmp_path:
             reference_expiry=1_500.0,
         )
         assert capture_snapshot._reference_matches(token, finalized.snapshot.manifest)
+        mismatched_token = f"ascr2:{_CAPTURE_ID}:{_INCARNATION}:{'b' * 64}"
+        assert not capture_snapshot._reference_matches(
+            mismatched_token,
+            finalized.snapshot.manifest,
+        )
         assert not capture_snapshot._reference_matches("bogus-token", finalized.snapshot.manifest)
         assert not capture_snapshot._reference_matches(token, snapshot.manifest)
     finally:

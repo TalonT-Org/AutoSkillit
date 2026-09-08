@@ -590,8 +590,6 @@ def test_reference_hash_is_stable_and_expiry_overwrite_changes_digest(
 
 
 def test_reference_hash_rejects_malformed_token(tmp_path: Path) -> None:
-    """_reference_hash must reject tokens that fail parse_capture_reference."""
-
     fd, snapshot = _verify(tmp_path / "capture", b"hash bad token bytes")
     try:
         with pytest.raises(CaptureAuthorityError, match="invalid capture reference"):
@@ -601,8 +599,6 @@ def test_reference_hash_rejects_malformed_token(tmp_path: Path) -> None:
 
 
 def test_bind_finalized_snapshot_rejects_non_verified_snapshot(tmp_path: Path) -> None:
-    """_bind_finalized_snapshot must enforce the type guard on its snapshot argument."""
-
     fd, snapshot = _verify(tmp_path / "capture", b"bind guard bytes")
     try:
         with pytest.raises(CaptureAuthorityError, match="verified snapshot"):
@@ -710,8 +706,6 @@ def test_bind_finalized_snapshot_binds_with_reference(tmp_path: Path) -> None:
 
 
 def test_make_published_reference_rejects_non_issued(tmp_path: Path) -> None:
-    """_make_published_reference must enforce the type guard on issuance."""
-
     fd, snapshot = _verify(tmp_path / "capture", b"published guard bytes")
     try:
         with pytest.raises(CaptureAuthorityError, match="issued reference"):
@@ -839,8 +833,6 @@ def test_render_degraded_capture_renders_oversized_output(
 
 
 def test_render_degraded_capture_rejects_non_verified_snapshot(tmp_path: Path) -> None:
-    """render_degraded_capture must reject inputs that are not VerifiedCaptureSnapshot."""
-
     payload = b"guard the degraded path"
     fd, snapshot = _verify(tmp_path / "capture", payload)
     try:

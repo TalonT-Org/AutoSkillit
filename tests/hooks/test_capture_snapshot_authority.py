@@ -701,6 +701,8 @@ def test_bind_finalized_snapshot_binds_with_reference(tmp_path: Path) -> None:
         )
         assert finalized.issuance is not None
         assert finalized.issuance.token == token
+        assert finalized.issuance.snapshot.manifest.reference_hash == reference_hash
+        assert finalized.issuance.snapshot.manifest.reference_expiry == 1_500.0
     finally:
         os.close(fd)
 

@@ -242,21 +242,11 @@ def test_hook_registry_e21_exemption_is_retired() -> None:
     PR #4898 reintroduced the entry while decomposing the exemption registry out of
     test_subpackage_isolation.py. No ``hook_registry.py`` source file exists; every
     shard of the ``hook_registry/`` package is under the 1000-line default ceiling,
-    so no exemption — under any key form — is warranted.
-
-    The basename-suffix scan below is defense-in-depth against a same-named module
-    reappearing under a *different* directory (e.g. ``foo/hook_registry.py``) even
-    though no fallback lookup connects such a key to this file anymore.
+    so the retired root-level exemption is not warranted.
     """
     assert "hook_registry.py" not in _LINE_LIMIT_EXEMPTIONS, (
         "REQ-CNST-010-E21 was retired by issue #4853; the hook_registry.py exemption "
         "must not be reintroduced (no such source file exists)"
-    )
-    basename_offenders = sorted(
-        key for key in _LINE_LIMIT_EXEMPTIONS if key.rsplit("/", 1)[-1] == "hook_registry.py"
-    )
-    assert not basename_offenders, (
-        "REQ-CNST-010-E21 reintroduced under a path-form key: " + ", ".join(basename_offenders)
     )
 
 

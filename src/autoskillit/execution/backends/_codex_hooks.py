@@ -35,7 +35,7 @@ from autoskillit.hook_registry import (
     hook_applies_to_backend,
     validate_lifecycle_contracts,
 )
-from autoskillit.hooks._hook_constants import MANAGED_PARENT_ALLOWED_TOOLS
+from autoskillit.hooks import MANAGED_PARENT_ALLOWED_TOOLS
 
 logger = get_logger(__name__)
 

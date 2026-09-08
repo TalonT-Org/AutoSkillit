@@ -8,8 +8,8 @@ import secrets
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from . import _syntax
 from ._module_identity import register_module_aliases
-from ._syntax import REFERENCE_RE
 
 if TYPE_CHECKING:
     from ._snapshot import (
@@ -56,7 +56,7 @@ def parse_capture_reference(token: str) -> CaptureReferenceHint:
         raise CaptureAuthorityError("invalid capture reference") from exc
     if len(encoded) > MAX_REFERENCE_TOKEN_BYTES:
         raise CaptureAuthorityError("invalid capture reference")
-    matched = REFERENCE_RE.fullmatch(token)
+    matched = _syntax.REFERENCE_RE.fullmatch(token)
     if matched is None:
         raise CaptureAuthorityError("invalid capture reference")
     return CaptureReferenceHint(

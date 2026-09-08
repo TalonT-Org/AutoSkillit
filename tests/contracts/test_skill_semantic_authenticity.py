@@ -158,7 +158,9 @@ def test_managed_codex_admits_every_bundled_join_required_plan() -> None:
         is not None
     ]
 
-    assert not refusals
+    assert not refusals, "bundled join-required plans refused by managed Codex:\n" + "\n".join(
+        sorted(refusals)
+    )
 
 
 def test_every_bundled_codex_child_spawn_targets_a_registered_role() -> None:

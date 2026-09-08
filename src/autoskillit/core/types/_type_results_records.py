@@ -25,7 +25,7 @@ __all__ = [
     "SessionIndexEntry",
 ]
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 9
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 10
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,7 +12,7 @@ from autoskillit.core.types._type_results import SessionIndexEntry
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
-_EXPECTED = (9, "b58f798743648c2d1b678fcf6b83bb7a450785fbef685b3a73c17e887dfea6e5")
+_EXPECTED = (10, "83c36e84773d76f2fea2d9f1d064d3cd49ea7afd07b793abc37c1bfb4d0b23ac")
 
 
 def test_session_index_schema_version_matches_field_digest() -> None:

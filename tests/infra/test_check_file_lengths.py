@@ -112,6 +112,22 @@ def test_verified_exemption_within_limit_passes(
     assert mod.check_file(path) is None
 
 
+def test_file_at_exemption_limit_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    path = _write_module(mod.SRC_ROOT, 800)
+    monkeypatch.setitem(
+        mod._LINE_LIMIT_EXEMPTIONS,
+        "candidate.py",
+        mod.LineLimitExemption(
+            800,
+            "REQ-CNST-010-E4: verifiable rationale",
+            predicate=lambda: True,
+        ),
+    )
+
+    assert mod.check_file(path) is None
+
+
 def test_file_exceeding_exemption_limit_reports_ceiling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

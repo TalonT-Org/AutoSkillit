@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from string import ascii_letters, digits
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -24,6 +24,8 @@ from autoskillit.core import (
     BackendAuthority,
     BackendAuthorityKind,
     BackendAuthorityTier,
+    EffectiveSkillInvocationAuthority,
+    ManagedJoinAttestation,
     SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
@@ -69,11 +71,16 @@ from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
 from autoskillit.server.tools.tools_execution._managed_leaf import (
     ManagedLeafAssignmentInput,
     ManagedLeafPreparedLaunch,
+    ManagedLeafProjection,
     _ChildResourceOwnerRequest,
     _ChildWorktreeRequest,
     bind_managed_leaf,
     project_managed_leaf,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline import ToolContext
+    from autoskillit.server._misc import SkillProjectionContext
 
 _MAX_ASSIGNMENTS = 128
 _MAX_IDEMPOTENCY_KEY_CHARS = 160
@@ -169,7 +176,7 @@ def _normalize_assignments(raw: object) -> tuple[ManagedLeafAssignmentInput, ...
 def _validate_membership(
     assignments: Sequence[ManagedLeafAssignmentInput],
     selected_source: LoadedSkillEntry,
-    adaptation: object,
+    adaptation: SkillSemanticAdaptationResult,
 ) -> None:
     cardinality = selected_source.child_spawn_cardinality
     if not cardinality:
@@ -213,7 +220,7 @@ def _bind_managed_parent_route(
     binding_path: Path,
     *,
     request_session_id: str,
-    attestation: object,
+    attestation: ManagedJoinAttestation,
 ) -> SessionBinding:
     """Mint or verify the server-owned parent route under the binding lock."""
     expected_guards = tuple(sorted(MANAGED_CODEX_PARENT_GUARD_SET))
@@ -331,16 +338,16 @@ def _request_facts(
 
 @dataclass(slots=True)
 class _ManagedLeafLaunchAdapter:
-    tool_ctx: Any
+    tool_ctx: ToolContext
     launch: ManagedLaunchBinding
-    invocation: Any
-    projection_context: Any
+    invocation: EffectiveSkillInvocationAuthority
+    projection_context: SkillProjectionContext
     source_name: str
     write_behavior: WriteBehaviorSpec
     read_only: bool
-    adaptation: object
+    adaptation: SkillSemanticAdaptationResult
 
-    def _write_leaf_binding(self, leaf_session_id: str, projection: object) -> None:
+    def _write_leaf_binding(self, leaf_session_id: str, projection: ManagedLeafProjection) -> None:
         attestation = getattr(
             getattr(self.projection_context, "adaptation_context", None),
             "managed_join_attestation",

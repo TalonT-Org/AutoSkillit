@@ -17,7 +17,7 @@ import pytest
 
 import autoskillit.hooks._capture._snapshot as capture_snapshot
 from autoskillit.hooks._capture._lifecycle_policy import CaptureStatus
-from autoskillit.hooks._capture._replay import render_degraded_capture
+from autoskillit.hooks._capture._replay import _ReplayError, render_degraded_capture
 from autoskillit.hooks._capture._snapshot import (
     CaptureAuthorityError,
     CaptureFinalManifest,
@@ -844,7 +844,7 @@ def test_render_degraded_capture_rejects_non_verified_snapshot(tmp_path: Path) -
     payload = b"guard the degraded path"
     fd, snapshot = _verify(tmp_path / "capture", payload)
     try:
-        with pytest.raises(Exception, match="verified snapshot"):
+        with pytest.raises(_ReplayError, match="verified snapshot"):
             render_degraded_capture(snapshot.manifest, reason_code="TEST_GUARD")  # type: ignore[arg-type]
     finally:
         os.close(fd)

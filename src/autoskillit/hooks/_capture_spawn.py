@@ -7,7 +7,7 @@ import logging
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture._authority import (
@@ -23,9 +23,6 @@ else:
     from _capture_contract import PROTECTED_CAPTURE_ENV_VARS
 
 _TRUSTED_BASH_CANDIDATES = ("/bin/bash", "/usr/bin/bash")
-logger = logging.getLogger(__name__)  # noqa: TID251 - isolated stdlib runner
-logger.addHandler(logging.NullHandler())
-logger.propagate = False
 
 
 def spawn_owned_process(
@@ -214,6 +211,8 @@ elif __package__:
     from . import _capture_process
 else:
     import _capture_process
+
+logger = cast(logging.Logger, getattr(_capture_process, "logger"))
 
 if __package__:
     from ._capture import _module_identity

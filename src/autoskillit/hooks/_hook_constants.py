@@ -82,12 +82,10 @@ DENY_REASON_BY_GUARD: Final[dict[str, str]] = {
 }
 
 # ── Managed Codex parent-route direct-tool surface ───────────────────────────
-# Single canonical allow-list referenced by every guard that branches on
-# managed parent routes. Mirrors MANAGED_CODEX_PARENT_MCP_TOOLS at
-# execution/backends/_codex_hooks.py (which drives generated Codex homes);
-# the two lists must stay in lock-step, since adding a new parent tool
-# requires updating the generated home alongside the in-script allow-list.
+# Single canonical ordered allow-list referenced by every guard that branches
+# on managed parent routes and by generated Codex homes.
 
-MANAGED_PARENT_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset(
-    {"run_fixed_batch", "read_fixed_batch_result"}
+MANAGED_PARENT_ALLOWED_TOOLS: Final[tuple[str, ...]] = (
+    "run_fixed_batch",
+    "read_fixed_batch_result",
 )

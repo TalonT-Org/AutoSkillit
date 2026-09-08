@@ -35,15 +35,13 @@ from autoskillit.hook_registry import (
     hook_applies_to_backend,
     validate_lifecycle_contracts,
 )
+from autoskillit.hooks._hook_constants import MANAGED_PARENT_ALLOWED_TOOLS
 
 logger = get_logger(__name__)
 
 ManagedCodexRoute = Literal["parent", "leaf"]
 
-MANAGED_CODEX_PARENT_MCP_TOOLS: tuple[str, ...] = (
-    "run_fixed_batch",
-    "read_fixed_batch_result",
-)
+MANAGED_CODEX_PARENT_MCP_TOOLS: tuple[str, ...] = MANAGED_PARENT_ALLOWED_TOOLS
 """The complete AutoSkillit MCP surface for a managed parent."""
 
 MANAGED_CODEX_LEAF_MCP_TOOLS: tuple[str, ...] = ("test_check",)

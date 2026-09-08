@@ -47,7 +47,7 @@ JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
 )
-_MANAGED_PARENT_ALLOWED_TOOLS: frozenset[str] = MANAGED_PARENT_ALLOWED_TOOLS
+_MANAGED_PARENT_ALLOWED_TOOLS: frozenset[str] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)
 
 
 def _resolve_session_id(data: dict[str, object]) -> str:

@@ -27,7 +27,7 @@ from _hook_settings import session_managed_codex_route  # noqa: E402
 SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 
 _ORCHESTRATION_TOOLS: frozenset[str] = frozenset({"run_skill", "run_cmd", "run_python"})
-_MANAGED_PARENT_TOOLS: frozenset[str] = MANAGED_PARENT_ALLOWED_TOOLS
+_MANAGED_PARENT_TOOLS: frozenset[str] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)
 
 
 def _deny(reason: str) -> None:

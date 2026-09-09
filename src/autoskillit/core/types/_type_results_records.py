@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final, Literal, TypedDict
+from typing import Any, Final, Generic, Literal, TypedDict, TypeVar
 
 from ._type_execution_identity import ChildExecutionIdentityDict
 from ._type_results_execution import SubagentModelOutcomeDict
@@ -23,7 +24,18 @@ __all__ = [
     "SESSION_INDEX_SCHEMA_VERSION",
     "TokenUsageFileEntry",
     "SessionIndexEntry",
+    "LoadReport",
+    "LoadResult",
+    "ManagedSessionHome",
+    "PreLaunchReadiness",
+    "SkillUnavailabilityPayload",
+    "SkillUnavailabilityRecord",
+    "TestResult",
+    "ValidatedAddDir",
+    "ValidatedWorktreePath",
 ]
+
+T = TypeVar("T")
 
 SESSION_INDEX_SCHEMA_VERSION: Final[int] = 10
 
@@ -301,3 +313,125 @@ class SessionIndexEntry(TypedDict):
     session_type: str | None
     subagent_model_outcomes: list[SubagentModelOutcomeDict]
     schema_version: int
+
+
+@dataclass
+class TestResult:
+    """Result of a test runner invocation."""
+
+    passed: bool
+    stdout: str
+    stderr: str
+    duration_seconds: float | None = None
+    tests_selected: int | None = None
+    tests_deselected: int | None = None
+    filter_mode: str | None = None
+    full_run_reason: str | None = None
+    outer_timeout_seconds: float | None = None
+
+
+@dataclass
+class LoadReport:
+    """A single file that failed to load, with the reason."""
+
+    path: Path
+    error: str
+
+
+@dataclass
+class LoadResult(Generic[T]):
+    """Discovery result: successfully loaded items + error reports."""
+
+    items: list[T]
+    errors: list[LoadReport] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class PreLaunchReadiness:
+    """Backend readiness result whose failed probes never carry capability claims."""
+
+    errors: tuple[str, ...]
+    attested_env: Mapping[str, str] = field(default_factory=dict)
+
+
+class SkillUnavailabilityRecord(TypedDict):
+    """One deterministic backend-admission refusal exposed to the session."""
+
+    skill: str
+    backend: str
+    operation: str
+    diagnostic: str
+
+
+class SkillUnavailabilityPayload(TypedDict):
+    """Canonical machine-readable backend-admission refusals for one session."""
+
+    backend: str | None
+    unavailable: tuple[SkillUnavailabilityRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ValidatedAddDir:
+    """An --add-dir path validated for Claude Code convention compliance.
+
+    Cannot be constructed directly — use ``validate_add_dir()`` or obtain from
+    ``DefaultSessionSkillManager.init_session()``.
+
+    Implements ``__str__``, ``__fspath__``, and ``__truediv__`` so it works
+    transparently with ``str(d)`` (used by ``build_interactive_cmd``),
+    ``shutil.rmtree`` (used by cook), and ``d / "subdir"`` (path
+    composition in tests and production code).
+    """
+
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
+
+    def __truediv__(self, other: str | Path) -> Path:
+        return Path(self.path) / other
+
+    def exists(self) -> bool:
+        return Path(self.path).exists()
+
+    def is_dir(self) -> bool:
+        return Path(self.path).is_dir()
+
+    def glob(self, pattern: str) -> list[Path]:
+        return list(Path(self.path).glob(pattern))
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedSessionHome:
+    """Already-owned generated home for one logical interactive cook launch."""
+
+    launch_id: str
+    generated_home: Path
+    skills_dir: ValidatedAddDir
+    pass_fds: tuple[int, ...]
+    unavailability_payload: SkillUnavailabilityPayload
+
+
+@dataclass(frozen=True, slots=True)
+class ValidatedWorktreePath:
+    """A worktree path validated as absolute and existing on disk.
+
+    Cannot be constructed directly — use ``validate_worktree_path()``.
+    """
+
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
+
+    def __truediv__(self, other: str | Path) -> Path:
+        return Path(self.path) / other
+
+    def is_dir(self) -> bool:
+        return Path(self.path).is_dir()

@@ -7,7 +7,12 @@ from enum import StrEnum
 
 import regex as re
 
-from autoskillit.core import VALID_EXTERNAL_EFFECTS, BoundScalar, PreflightKind
+from autoskillit.core import (
+    VALID_EXTERNAL_EFFECTS,
+    BoundScalar,
+    PreflightKind,
+    render_external_effect_choices,
+)
 
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
@@ -127,10 +132,7 @@ class SkillContract:
 
     def __post_init__(self) -> None:
         if self.external_effect not in VALID_EXTERNAL_EFFECTS:
-            raise ValueError(
-                "external_effect must be 'none', 'serialized-idempotent', or "
-                "'serialized-unknown-completion'"
-            )
+            raise ValueError(f"external_effect must be {render_external_effect_choices()}")
         if self.input_preflight is None:
             return
         try:

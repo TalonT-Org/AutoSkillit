@@ -17,6 +17,7 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
+    render_external_effect_choices,
     resolve_skill_name,
 )
 from autoskillit.recipe._api_cache import YamlFileCache
@@ -106,8 +107,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         raise ValueError(f"external_effect for skill '{skill_name}' must be a string")
     if external_effect not in VALID_EXTERNAL_EFFECTS:
         raise ValueError(
-            f"external_effect for skill '{skill_name}' must be 'none', "
-            "'serialized-idempotent', or 'serialized-unknown-completion'"
+            f"external_effect for skill '{skill_name}' must be {render_external_effect_choices()}"
         )
     read_only = bool(skill_data.get("read_only", False))
     scope_discipline = skill_data.get("scope_discipline", False)

@@ -10,6 +10,7 @@ from autoskillit.core import (
     Severity,
     get_logger,
     pkg_root,
+    render_external_effect_choices,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._contracts_types import VALID_EXTERNAL_EFFECTS
@@ -321,8 +322,8 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                     rule_name="write-behavior-consistency",
                     step_name=step_name,
                     message=(
-                        f"Invalid external_effect '{external_effect}'. Must be 'none', "
-                        "'serialized-idempotent', or 'serialized-unknown-completion'."
+                        f"Invalid external_effect '{external_effect}'. Must be "
+                        f"{render_external_effect_choices()}."
                     ),
                 )
             )

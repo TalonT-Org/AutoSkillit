@@ -37,9 +37,19 @@ from ._type_results_records import (
 )
 
 T = TypeVar("T")
-VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(
-    {"none", "serialized-idempotent", "serialized-unknown-completion"}
+_EXTERNAL_EFFECT_VALUES = (
+    "none",
+    "serialized-idempotent",
+    "serialized-unknown-completion",
 )
+VALID_EXTERNAL_EFFECTS: frozenset[str] = frozenset(_EXTERNAL_EFFECT_VALUES)
+
+
+def render_external_effect_choices() -> str:
+    """Return the canonical human-readable list of external-effect modes."""
+    quoted = tuple(repr(value) for value in _EXTERNAL_EFFECT_VALUES)
+    return f"{', '.join(quoted[:-1])}, or {quoted[-1]}"
+
 
 __all__ = [
     "AuditResultOutcome",
@@ -61,6 +71,7 @@ __all__ = [
     "ValidatedAddDir",
     "ValidatedWorktreePath",
     "VALID_EXTERNAL_EFFECTS",
+    "render_external_effect_choices",
     "VALID_INPUT_SPEC_TYPES",
     "OutcomeInvariantSpec",
     "WriteBehaviorSpec",
@@ -247,10 +258,7 @@ class WriteBehaviorSpec:
 
     def __post_init__(self) -> None:
         if self.external_effect not in VALID_EXTERNAL_EFFECTS:
-            raise ValueError(
-                "external_effect must be 'none', 'serialized-idempotent', or "
-                "'serialized-unknown-completion'"
-            )
+            raise ValueError(f"external_effect must be {render_external_effect_choices()}")
 
 
 @dataclass(frozen=True, slots=True)

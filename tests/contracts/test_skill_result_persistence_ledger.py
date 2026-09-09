@@ -233,4 +233,16 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
                 assert summary[artifact_key] == expected_values[artifact_key]
         if classification in {"persisted", "index-only"}:
             assert artifact_key in index
-            assert index[artifact_key] == expected_values[artifact_key]
+            if leaf.startswith("execution_identity."):
+                # execution_identity.* leaves flatten directly into top-level index
+                # keys (e.g. child_executions, execution_cli_version) rather than a
+                # nested dict as in summary.json -- check against `identity` itself,
+                # same as the summary branch above, instead of duplicating its field
+                # values into expected_values.
+                summary_key = leaf.removeprefix("execution_identity.")
+                if summary_key == "children":
+                    assert index[artifact_key] == [child.to_dict() for child in identity.children]
+                else:
+                    assert index[artifact_key] == getattr(identity, summary_key)
+            else:
+                assert index[artifact_key] == expected_values[artifact_key]

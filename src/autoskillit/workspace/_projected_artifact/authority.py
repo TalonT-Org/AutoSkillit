@@ -33,28 +33,31 @@ from autoskillit.core import (
     PluginLaunchBinding,
     PluginLoadMode,
     SemanticAdaptationContext,
-    SkillAuthority,
     SkillExecutionRole,
     SkillProjectionRefusal,
     SkillSemanticAdaptationResult,
     SkillSource,
     SkillSourceRef,
-    StaleGeneratorError,
     _InstallLock,
     get_logger,
-    install_binding_matches_current_state,
     log_plugin_artifact_lifecycle,
     managed_home,
     new_plugin_artifact_incarnation_id,
     pkg_root,
-    resolve_install_binding,
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.workspace._projected_artifact._authority_types import (
+    _manifest_identity,
+    _ProjectedArtifactPlan,
+    _StagedProjectedArtifact,
+)
 from autoskillit.workspace._projected_artifact._documents import (
-    SkillProjectionContext,
     _default_base_branch,
     _direct_install_projection_context,
+)
+from autoskillit.workspace._projected_artifact._generator_freshness import (
+    assert_generator_process_fresh,
 )
 from autoskillit.workspace._projected_artifact._hook_repair import (
     ProjectedArtifactHooksInvalid,
@@ -81,7 +84,6 @@ from autoskillit.workspace._projection_cache import (
     projected_plugin_artifact_digest,
     prune_stale_projections,
     public_plugin_asset_digest,
-    read_projected_plugin_identity,
 )
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
@@ -97,74 +99,6 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
 ]
-
-
-def assert_generator_process_fresh() -> None:
-    """Verify that the running process's on-disk installation still exists.
-
-    Called at the top of :func:`acquire_launch_binding`, this probe refuses a
-    deleted or replaced installation with a typed, actionable error.
-
-    Under Phase 3's immutable, version-addressed install roots (issue #4597),
-    an AutoSkillit-initiated upgrade never mutates or deletes a root any live
-    process is reading from — it always publishes a fresh generation instead,
-    and the retirement engine refuses to reclaim a superseded root until both
-    a grace window has elapsed and its lease is uncontended. This probe is
-    therefore not "restart after every upgrade" — that hazard is gone — it is
-    a backstop against a scenario the transaction guarantees not to cause on
-    its own: external tampering (something other than AutoSkillit removed or
-    replaced the tree), disk corruption, or an install shaped by a version
-    older than #4597's immutable-root scheme.
-
-    Checks:
-    1. ``pkg_root()`` must still be a directory and contain ``hooks/_dispatch.py``.
-    2. The sealed install root (``InstallBinding``, captured once at this
-       process's first access) must still own its path — verified by
-       ``device``/``inode`` via ``install_binding_matches_current_state()``,
-       never by comparing a live-re-read version string against the frozen
-       in-process one. A version-string comparison reads the same fact at two
-       different times and is exactly the shape ARCH-012 forbids.
-    """
-    source = pkg_root()
-    dispatcher = source / "hooks" / "_dispatch.py"
-    if not source.is_dir() or not dispatcher.is_file():
-        raise StaleGeneratorError(
-            f"Generator installation deleted: {source} no longer exists or is "
-            "missing hooks/_dispatch.py. This should not happen under "
-            "AutoSkillit's own immutable install-root lifecycle; if it does, "
-            "the tree was altered outside that lifecycle."
-        )
-    binding = resolve_install_binding()
-    if not install_binding_matches_current_state(binding):
-        raise StaleGeneratorError(
-            f"Generator installation replaced under this process: {binding.root} "
-            f"no longer matches the identity sealed at this process's first access "
-            f"(device={binding.device}, inode={binding.inode}). This should not "
-            "happen under AutoSkillit's own immutable install-root lifecycle; if "
-            "it does, the tree was altered outside that lifecycle."
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class _ProjectedArtifactPlan:
-    source_root: Path
-    destination: Path
-    manifest_path: Path
-    lease_path: Path
-    semantic_key: str
-    catalog: EffectiveSkillCatalogAuthority
-    validation_catalog: tuple[SkillAuthority, ...] | EffectiveSkillCatalogAuthority
-    require_sources_within_root: bool
-    context: SkillProjectionContext
-    unavailable: tuple[SkillProjectionRefusal, ...]
-    semantic_adaptations: Mapping[str, SkillSemanticAdaptationResult]
-
-
-@dataclass(frozen=True, slots=True)
-class _StagedProjectedArtifact:
-    root: Path
-    manifest: Path
-    identity: PluginArtifactIdentity
 
 
 def _discard_staging_manifest(manifest: Path) -> None:
@@ -265,15 +199,6 @@ def _publish_projected_plugin_manifest(
             f"projected plugin manifest destination is not a file: {manifest_path}"
         )
     os.replace(staged.manifest, manifest_path)
-
-
-def _manifest_identity(plan: _ProjectedArtifactPlan) -> PluginArtifactIdentity:
-    return read_projected_plugin_identity(
-        plan.destination,
-        manifest_path=plan.manifest_path,
-        expected_semantic_key=plan.semantic_key,
-        expected_projection_version=plan.context.projection_version,
-    )
 
 
 def _validate_published_plugin_artifact(

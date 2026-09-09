@@ -7,14 +7,9 @@ not add runtime imports from ``autoskillit.*``.
 
 from __future__ import annotations
 
-import contextlib
-import errno
-import fcntl
 import json
-import os
-import tempfile
 import time
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -26,190 +21,75 @@ else:
     )
 
 if __package__:
-    from ._join_ledger_declaration import (
-        OUTCOME_PENDING,
-        WAVE_PENDING,
-        JoinLedgerError,
-        _active_from_payload,
-        _canonical,
-        _digest,
-        _make_batch,
-        _new_batch_id,
-        _normalize_scope,
-        _scope_record,
-    )
-else:
-    from _join_ledger_declaration import (  # type: ignore[import-not-found,no-redef]
-        OUTCOME_PENDING,
-        WAVE_PENDING,
-        JoinLedgerError,
-        _active_from_payload,
-        _canonical,
-        _digest,
-        _make_batch,
-        _new_batch_id,
-        _normalize_scope,
-        _scope_record,
-    )
-
-LEDGER_FILENAME = "join_ledger.json"
-LOCK_FILENAME = "join_ledger.lock"
-JOIN_LEDGER_SCHEMA_VERSION = 2
-_LOCK_ACQUIRE_TIMEOUT_SECONDS = 2.0
-_LOCK_RETRY_INTERVAL_SECONDS = 0.01
-
-OUTCOME_SUCCESS = "success"
-OUTCOME_FAILURE = "failure"
-OUTCOME_LAUNCH_FAILED = "launch-failed"
-OUTCOME_TIMEOUT = "timeout"
-OUTCOME_CANCELLED = "cancelled"
-OUTCOME_INTERRUPTION = "interruption"
-OUTCOME_MISSING = "missing"
-OUTCOME_REAPED = "reaped"
-
-WAVE_COMPLETE = "complete"
-WAVE_PARTIAL_TIMEOUT = "partial_timeout"
-WAVE_FAILURE = "failure"
-WAVE_LAUNCH_FAILED = "launch_failed"
-WAVE_CANCELLED = "cancelled"
-WAVE_INTERRUPTION = "interruption"
-WAVE_MISSING_CHILD = "missing_child"
-WAVE_REAPED = "reaped"
-WAVE_PARTIAL = "partial"
-
-_NON_SUCCESS_WAVE_OUTCOMES: frozenset[str] = frozenset(
-    {
-        WAVE_PARTIAL_TIMEOUT,
-        WAVE_FAILURE,
-        WAVE_LAUNCH_FAILED,
-        WAVE_CANCELLED,
-        WAVE_INTERRUPTION,
-        WAVE_MISSING_CHILD,
-        WAVE_REAPED,
-        WAVE_PARTIAL,
-    }
-)
-_TERMINAL_OUTCOMES: frozenset[str] = frozenset(
-    {
-        OUTCOME_SUCCESS,
-        OUTCOME_FAILURE,
-        OUTCOME_LAUNCH_FAILED,
-        OUTCOME_TIMEOUT,
+    from ._join import (  # noqa: F401
+        _NON_SUCCESS_WAVE_OUTCOMES,
         OUTCOME_CANCELLED,
+        OUTCOME_FAILURE,
         OUTCOME_INTERRUPTION,
+        OUTCOME_LAUNCH_FAILED,
         OUTCOME_MISSING,
         OUTCOME_REAPED,
-    }
-)
-_COMPLETED_OUTCOMES: frozenset[str] = frozenset({OUTCOME_SUCCESS})
-
-
-def is_terminal_outcome(outcome: object) -> bool:
-    """Return whether ``outcome`` is a terminal assignment outcome."""
-    return outcome in _TERMINAL_OUTCOMES
-
-
-class _CorruptedLedger(Exception):
-    """Raised when the on-disk ledger cannot be parsed safely."""
-
-
-def ledger_paths(flag_dir: Path) -> tuple[Path, Path]:
-    return (flag_dir / LEDGER_FILENAME, flag_dir / LOCK_FILENAME)
+        OUTCOME_SUCCESS,
+        OUTCOME_TIMEOUT,
+        WAVE_COMPLETE,
+        WAVE_PENDING,
+        JoinLedgerError,
+        _active_from_payload,
+        _aggregate_wave_outcome,
+        _append_attempt,
+        _batch_and_assignment,
+        _canonical,
+        _CorruptedLedger,
+        _digest,
+        _flock,
+        _make_batch,
+        _mutate_attempt,
+        _new_batch_id,
+        _normalize_scope,
+        _read_locked,
+        _scope_record,
+        _terminalize_unsettled,
+        is_terminal_outcome,
+        ledger_paths,
+        write_join_ledger,
+    )
+else:
+    from _join import (  # type: ignore[import-not-found,no-redef]  # noqa: F401
+        _NON_SUCCESS_WAVE_OUTCOMES,
+        OUTCOME_CANCELLED,
+        OUTCOME_FAILURE,
+        OUTCOME_INTERRUPTION,
+        OUTCOME_LAUNCH_FAILED,
+        OUTCOME_MISSING,
+        OUTCOME_REAPED,
+        OUTCOME_SUCCESS,
+        OUTCOME_TIMEOUT,
+        WAVE_COMPLETE,
+        WAVE_PENDING,
+        JoinLedgerError,
+        _active_from_payload,
+        _aggregate_wave_outcome,
+        _append_attempt,
+        _batch_and_assignment,
+        _canonical,
+        _CorruptedLedger,
+        _digest,
+        _flock,
+        _make_batch,
+        _mutate_attempt,
+        _new_batch_id,
+        _normalize_scope,
+        _read_locked,
+        _scope_record,
+        _terminalize_unsettled,
+        is_terminal_outcome,
+        ledger_paths,
+        write_join_ledger,
+    )
 
 
 def resolve_flag_dir(project_root: Path) -> Path:
     return _resolve_channel_dir(project_root)
-
-
-def _acquire_lock(fd: int) -> None:
-    """Acquire an exclusive lock without waiting indefinitely."""
-    deadline = time.monotonic() + _LOCK_ACQUIRE_TIMEOUT_SECONDS
-    while True:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise OSError(
-                    errno.EWOULDBLOCK,
-                    "timed out acquiring the join-ledger lock",
-                ) from None
-            time.sleep(min(_LOCK_RETRY_INTERVAL_SECONDS, remaining))
-        else:
-            return
-
-
-@contextlib.contextmanager
-def _flock(lock_path: Path) -> Generator[int, None, None]:
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600)
-    locked = False
-    try:
-        _acquire_lock(fd)
-        locked = True
-        yield fd
-    finally:
-        try:
-            if locked:
-                try:
-                    fcntl.flock(fd, fcntl.LOCK_UN)
-                except OSError:
-                    pass
-        finally:
-            os.close(fd)
-
-
-def _empty_payload() -> dict[str, Any]:
-    return {
-        "schema_version": JOIN_LEDGER_SCHEMA_VERSION,
-        "sessions": {},
-        "batches": {},
-        "declaration_index": {},
-    }
-
-
-def _read_locked(ledger_path: Path) -> dict[str, Any]:
-    try:
-        raw = ledger_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return _empty_payload()
-    except OSError:
-        raise
-    try:
-        payload = json.loads(raw)
-    except (json.JSONDecodeError, ValueError) as exc:
-        raise _CorruptedLedger(f"join ledger is not valid JSON: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise _CorruptedLedger("join ledger top level must be an object")
-    if payload.get("schema_version") != JOIN_LEDGER_SCHEMA_VERSION:
-        raise _CorruptedLedger(
-            "unsupported join ledger schema_version: "
-            f"{payload.get('schema_version')!r}; expected {JOIN_LEDGER_SCHEMA_VERSION}"
-        )
-    fields = ("sessions", "batches", "declaration_index")
-    if not all(isinstance(payload.get(field), dict) for field in fields):
-        raise _CorruptedLedger("join ledger v2 indexes must be objects")
-    return payload
-
-
-def write_join_ledger(ledger_path: Path, payload: dict[str, Any]) -> None:
-    """Persist one locked ledger snapshot through atomic replacement."""
-    encoded = _canonical(payload).encode("utf-8")
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        prefix=".join_ledger.", suffix=".tmp", dir=str(ledger_path.parent)
-    )
-    try:
-        with os.fdopen(tmp_fd, "wb") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, ledger_path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
 
 
 def open_or_replay(
@@ -336,111 +216,6 @@ def declare_batch(
         declaration={"assignments": [{"label": label} for label in labels]},
         now=now,
     )
-
-
-def _assignment(batch: dict[str, Any], assignment_id: str) -> dict[str, Any]:
-    assignments = batch.get("assignments")
-    if not isinstance(assignments, list):
-        raise JoinLedgerError("batch assignments are malformed")
-    for assignment in assignments:
-        if isinstance(assignment, dict) and assignment.get("assignment_id") == assignment_id:
-            return assignment
-    raise JoinLedgerError(f"assignment {assignment_id!r} is not part of this batch")
-
-
-def _append_attempt(
-    assignment: dict[str, Any],
-    *,
-    attempt_id: str,
-    run_id: str,
-    evidence: Mapping[str, object],
-    ts: float,
-) -> dict[str, Any]:
-    if assignment.get("current_attempt_id") is not None:
-        raise JoinLedgerError("assignment already has a current attempt")
-    if not attempt_id or not run_id:
-        raise JoinLedgerError("attempt_id and run_id must be non-empty strings")
-    attempts = assignment.get("attempts")
-    if not isinstance(attempts, list):
-        raise JoinLedgerError("assignment attempts are malformed")
-    record = {
-        "attempt_id": attempt_id,
-        "run_id": run_id,
-        "generated_home_id": evidence.get("generated_home_id"),
-        "leaf_projection_artifact_digest": evidence.get("leaf_projection_artifact_digest"),
-        "backend_session_id": evidence.get("backend_session_id"),
-        "process_id": evidence.get("process_id"),
-        "permit_id": evidence.get("permit_id"),
-        "admitted_at": ts,
-        "running_at": None,
-        "terminal_at": None,
-        "terminal_event_id": None,
-        "terminal_payload_digest": None,
-        "outcome": OUTCOME_PENDING,
-        "result_reference": None,
-        "result_digest": None,
-    }
-    attempts.append(record)
-    assignment["current_attempt_id"] = attempt_id
-    assignment["current_run_id"] = run_id
-    assignment["lifecycle_state"] = "admitted"
-    assignment["updated_at"] = ts
-    return record
-
-
-def _batch_and_assignment(
-    payload: dict[str, Any], *, batch_id: str, assignment_id: str
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    batch = payload["batches"].get(batch_id)
-    if not isinstance(batch, dict):
-        raise JoinLedgerError(f"unknown join batch {batch_id!r}")
-    return batch, _assignment(batch, assignment_id)
-
-
-def _mutate_attempt(
-    flag_dir: Path,
-    *,
-    batch_id: str,
-    assignment_id: str,
-    attempt_id: str,
-    run_id: str,
-    evidence: Mapping[str, object],
-    retry: bool,
-    prior_attempt_id: str | None = None,
-    now: float | None = None,
-) -> dict[str, Any]:
-    ledger_path, lock_path = ledger_paths(flag_dir)
-    ts = time.time() if now is None else now
-    try:
-        with _flock(lock_path):
-            payload = _read_locked(ledger_path)
-            batch, assignment = _batch_and_assignment(
-                payload, batch_id=batch_id, assignment_id=assignment_id
-            )
-            if retry:
-                if assignment.get("current_attempt_id") != prior_attempt_id:
-                    raise JoinLedgerError("retry does not name the current prior attempt")
-                if not is_terminal_outcome(assignment.get("outcome")):
-                    raise JoinLedgerError("retry requires a terminal prior attempt")
-                assignment["current_attempt_id"] = None
-                assignment["current_run_id"] = None
-                assignment["outcome"] = OUTCOME_PENDING
-                assignment["terminal_event_id"] = None
-                assignment["terminal_payload_digest"] = None
-            record = _append_attempt(
-                assignment,
-                attempt_id=attempt_id,
-                run_id=run_id,
-                evidence=evidence,
-                ts=ts,
-            )
-            batch["lifecycle_state"] = "admitted"
-            write_join_ledger(ledger_path, payload)
-            return record
-    except _CorruptedLedger as exc:
-        raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
-    except OSError as exc:
-        raise JoinLedgerError(f"join ledger IO error during admission: {exc}") from exc
 
 
 def admit_assignment(
@@ -580,32 +355,6 @@ def claim_assignment(
         raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
     except OSError as exc:
         raise JoinLedgerError(f"join ledger IO error during claim: {exc}") from exc
-
-
-def _aggregate_wave_outcome(assignments: list[object]) -> str:
-    if not assignments:
-        return WAVE_MISSING_CHILD
-    entries = [entry for entry in assignments if isinstance(entry, dict)]
-    outcomes = [str(entry.get("outcome", OUTCOME_PENDING)) for entry in entries]
-    if len(entries) != len(assignments) or any(outcome == OUTCOME_PENDING for outcome in outcomes):
-        return WAVE_PENDING
-    if any(entry.get("cleanup_outcome") == OUTCOME_REAPED for entry in entries):
-        return WAVE_REAPED
-    if all(outcome in _COMPLETED_OUTCOMES for outcome in outcomes):
-        return WAVE_COMPLETE
-    if any(outcome == OUTCOME_LAUNCH_FAILED for outcome in outcomes):
-        return WAVE_LAUNCH_FAILED
-    if any(outcome == OUTCOME_INTERRUPTION for outcome in outcomes):
-        return WAVE_INTERRUPTION
-    if any(outcome == OUTCOME_CANCELLED for outcome in outcomes):
-        return WAVE_CANCELLED
-    if any(outcome == OUTCOME_TIMEOUT for outcome in outcomes):
-        return WAVE_PARTIAL_TIMEOUT
-    if any(outcome == OUTCOME_FAILURE for outcome in outcomes):
-        return WAVE_FAILURE
-    if all(outcome == OUTCOME_MISSING for outcome in outcomes):
-        return WAVE_MISSING_CHILD
-    return WAVE_PARTIAL
 
 
 def settle_assignment(
@@ -829,66 +578,6 @@ def reconcile_batch(
         outcome=OUTCOME_MISSING,
         now=now,
     )
-
-
-def _terminalize_unsettled(
-    flag_dir: Path,
-    *,
-    batch_id: str,
-    terminal_event_id: str,
-    outcome: str,
-    now: float | None,
-) -> dict[str, Any]:
-    ledger_path, lock_path = ledger_paths(flag_dir)
-    ts = time.time() if now is None else now
-    try:
-        with _flock(lock_path):
-            payload = _read_locked(ledger_path)
-            batch = payload["batches"].get(batch_id)
-            if not isinstance(batch, dict):
-                raise JoinLedgerError(f"unknown join batch {batch_id!r}")
-            assignments = batch.get("assignments")
-            if not isinstance(assignments, list):
-                raise JoinLedgerError("batch assignments are malformed")
-            any_updated = False
-            for entry in assignments:
-                if not isinstance(entry, dict) or entry.get("outcome") != OUTCOME_PENDING:
-                    continue
-                any_updated = True
-                assignment_event_id = f"{terminal_event_id}:{entry.get('assignment_id', '')}"
-                entry.update(
-                    {
-                        "outcome": outcome,
-                        "terminal_event_id": assignment_event_id,
-                        "terminal_payload_digest": _digest({"outcome": outcome}),
-                        "lifecycle_state": "terminal",
-                        "updated_at": ts,
-                    }
-                )
-                attempts = entry.get("attempts")
-                if isinstance(attempts, list) and attempts:
-                    attempts[-1].update(
-                        {
-                            "terminal_at": ts,
-                            "terminal_event_id": entry["terminal_event_id"],
-                            "terminal_payload_digest": entry["terminal_payload_digest"],
-                            "outcome": outcome,
-                        }
-                    )
-            if not any_updated:
-                # Already-terminal batch — return without rewriting the
-                # ledger so we don't overwrite the original `settled_at`
-                # timestamp or churn the file with identical contents.
-                return batch
-            batch["wave_outcome"] = _aggregate_wave_outcome(assignments)
-            batch["lifecycle_state"] = "terminal"
-            batch["settled_at"] = ts
-            write_join_ledger(ledger_path, payload)
-            return batch
-    except _CorruptedLedger as exc:
-        raise JoinLedgerError(f"join ledger is unreadable: {exc}") from exc
-    except OSError as exc:
-        raise JoinLedgerError(f"join ledger IO error during terminalization: {exc}") from exc
 
 
 def aggregate_batch(flag_dir: Path, *, batch_id: str) -> str:

@@ -682,13 +682,20 @@ class ManagedFixedBatchSupervisor:
                 # entry has no current_attempt_id/current_run_id yet — admit_assignment
                 # never ran for this run, so the attempt/run guard in settle_assignment
                 # would always raise.
-                settle_unadmitted_assignment(
-                    binding.flag_dir,
-                    batch_id=batch_id,
-                    assignment_id=ledger_assignment_id,
-                    terminal_event_id=f"launch-failed:{identity.first_run_id}",
-                    terminal_payload_digest=_digest({"outcome": OUTCOME_LAUNCH_FAILED}),
-                )
+                try:
+                    settle_unadmitted_assignment(
+                        binding.flag_dir,
+                        batch_id=batch_id,
+                        assignment_id=ledger_assignment_id,
+                        terminal_event_id=f"launch-failed:{identity.first_run_id}",
+                        terminal_payload_digest=_digest({"outcome": OUTCOME_LAUNCH_FAILED}),
+                    )
+                except (OSError, JoinLedgerError, SkillContractError):
+                    logger.warning(
+                        "managed_fixed_batch_unadmitted_settle_failed",
+                        assignment_id=ledger_assignment_id,
+                        exc_info=True,
+                    )
         except BaseException:
             if admitted:
                 try:

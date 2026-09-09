@@ -190,3 +190,31 @@ async def test_owner_cleanup_precedes_settlement_and_permit_release(tmp_path) ->
         "permit-release",
     ]
     assert events == expected_assignment_events * len(binding.assignments)
+
+
+@pytest.mark.anyio
+async def test_unadmitted_settlement_failure_does_not_leak_capacity(tmp_path, monkeypatch) -> None:
+    capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
+    service = ManagedFixedBatchSupervisor(
+        capacity=capacity,
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+
+    def launch_leaf(_projection, _permit):
+        raise RuntimeError("preparation failed")
+
+    def fail_settlement(*_args, **_kwargs):
+        raise SkillContractError("settlement failed")
+
+    monkeypatch.setattr(
+        "autoskillit.server.tools.tools_execution._managed_fixed_batch."
+        "settle_unadmitted_assignment",
+        fail_settlement,
+    )
+    assert await service.reconcile_startup()
+
+    result = await service.run(_binding(tmp_path, launch_leaf))
+
+    assert result.wave_outcome == "pending"
+    assert capacity.active_count == 0

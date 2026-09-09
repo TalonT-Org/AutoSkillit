@@ -13,8 +13,9 @@ calling run_skill directly. Skill sessions use native Claude Code tools only.
 import json
 import os
 import sys
+from pathlib import Path
 
-_HOOKS_DIR = str(__file__).rsplit("/", 1)[0].rsplit("/", 1)[0]
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 

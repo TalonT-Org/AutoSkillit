@@ -1,7 +1,21 @@
 from __future__ import annotations
 
+import ast
 import dataclasses
 from collections.abc import Callable
+from pathlib import Path
+
+_SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
+
+
+def _module_defines(relative_path: str, *symbols: str) -> bool:
+    tree = ast.parse((_SRC_ROOT / relative_path).read_text(encoding="utf-8"))
+    defined = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    return set(symbols).issubset(defined)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -34,11 +48,58 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "keeping both stages in the runner preserves one owner for capture settlement",
     ),
     "hooks/_join_ledger.py": LineLimitExemption(
-        1150,
+        1000,
         "REQ-CNST-010-E32: PR #4913 extends the existing join ledger as the sole "
         "lock-coupled authority for immutable managed-batch declaration, attempt "
         "settlement, and authorized result references; splitting those transitions "
         "would duplicate the canonical declaration and terminal-event invariants.",
+        predicate=lambda: _module_defines(
+            "hooks/_join_ledger.py", "open_or_replay", "settle_assignment", "aggregate_batch"
+        ),
+    ),
+    "server/tools/tools_execution/_fixed_batch_handlers.py": LineLimitExemption(
+        900,
+        "REQ-CNST-010-E33: PR #4913 keeps request validation, managed leaf launch "
+        "adaptation, and result paging in the fixed-batch handler boundary.",
+        predicate=lambda: _module_defines(
+            "server/tools/tools_execution/_fixed_batch_handlers.py",
+            "_ManagedLeafLaunchAdapter",
+            "_run_fixed_batch_handler",
+            "_read_fixed_batch_result_handler",
+        ),
+    ),
+    "server/tools/tools_execution/_managed_fixed_batch.py": LineLimitExemption(
+        950,
+        "REQ-CNST-010-E34: PR #4913 keeps recovery, assignment supervision, and "
+        "terminal settlement under one managed fixed-batch supervisor.",
+        predicate=lambda: _module_defines(
+            "server/tools/tools_execution/_managed_fixed_batch.py",
+            "ManagedFixedBatchSupervisor",
+            "_run_assignment",
+            "_settle",
+        ),
+    ),
+    "workspace/_projected_artifact/authority.py": LineLimitExemption(
+        850,
+        "REQ-CNST-010-E35: PR #4913 keeps projected artifact planning, publication, "
+        "and launch-binding acquisition under one artifact authority.",
+        predicate=lambda: _module_defines(
+            "workspace/_projected_artifact/authority.py",
+            "ProjectedPluginArtifactAuthority",
+            "acquire_launch_binding",
+            "project_direct_install_authority",
+        ),
+    ),
+    "execution/backends/_codex_cmd_builders.py": LineLimitExemption(
+        850,
+        "REQ-CNST-010-E36: PR #4913 keeps Codex flag, environment, session-location, "
+        "and skill-session command construction in the existing builder authority.",
+        predicate=lambda: _module_defines(
+            "execution/backends/_codex_cmd_builders.py",
+            "CodexSessionCommandMixin",
+            "build_skill_session_cmd",
+            "CodexEnvPolicy",
+        ),
     ),
     "core/types/_type_constants.py": LineLimitExemption(
         1050,
@@ -150,7 +211,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "without re-tripping the limit on the next small addition.",
     ),
     "execution/backends/codex.py": LineLimitExemption(
-        1350,
+        1000,
         "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
         "(cmd/cmd-spec grammar with build_skill_session_cmd/"
         "build_food_truck_cmd/build_interactive_cmd/"
@@ -164,9 +225,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "lines before the managed fixed-batch route; PR #4913 retains its Codex-only "
         "attestation and launch wiring at that same backend authority boundary. The cap "
         "remains narrow while preserving headroom beyond the current line count.",
+        predicate=lambda: _module_defines(
+            "execution/backends/codex.py",
+            "CodexBackend",
+            "build_interactive_cmd",
+            "adapt_skill_semantics",
+        ),
     ),
     "execution/backends/claude.py": LineLimitExemption(
-        1600,
+        1000,
         "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
         "decision/reference disposition beside executable launch-binding validation; "
         "both are shared builder-interface obligations even though Claude deliberately "
@@ -190,6 +257,12 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT env var when given, plus hardens all four "
         "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
         "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
+        predicate=lambda: _module_defines(
+            "execution/backends/claude.py",
+            "ClaudeCodeBackend",
+            "build_skill_session_cmd",
+            "adapt_skill_semantics",
+        ),
     ),
     "execution/backends/_codex_session_storage.py": LineLimitExemption(
         1500,

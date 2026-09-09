@@ -30,13 +30,9 @@ from autoskillit.core import (
     LAUNCH_ID_ENV_VAR,
     MCP_CLIENT_BACKEND_ENV_VAR,
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
-    ORCHESTRATOR_SESSION_REQUIRED_ENV,
     PROVIDER_PROFILE_ENV_VAR,
     RESUME_SESSION_BASELINE_KEYS,
     SESSION_ADD_DIR_SUBDIR,
-    SESSION_TYPE_ORCHESTRATOR,
-    SESSION_TYPE_SKILL,
-    SKILL_SESSION_REQUIRED_ENV,
     AgentDef,
     BackendCapabilities,
     BackendConventions,
@@ -59,35 +55,25 @@ from autoskillit.core import (
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
-    SessionCheckpoint,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
-    SkillSessionConfig,
     ValidatedAddDir,
     atomic_write,
     default_log_dir,
-    extract_skill_name,
     get_logger,
     required_join_is_unsupported,
 )
 from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
-    BackendCmdBuilderBase,
     FlagVocabulary,
     _managed_native_shell_env,
     _merge_caller_env_extras,
 )
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
-    _PROVIDER_EXTRAS_BASE_DENYLIST,
-    _SKILL_SESSION_EXTRAS_DENYLIST,
-    PromptBuildContext,
-    _compose_resume_prompt,
-    _ensure_skill_prefix,
-    apply_prompt_injector_chain,
     codex_discipline_suffix,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
@@ -106,10 +92,12 @@ from autoskillit.execution.backends._codex_cmd_builders import (
     VARIADIC_CODEX_FLAGS,
     CodexEnvPolicy,
     CodexFlags,
+    CodexSessionCommandMixin,
     CodexSessionLocator,
     CodexStateReadinessProbe,
     _codex_exec_base,
     _codex_exec_extras,
+    _codex_home_from_plugin_binding,
     _should_bypass_hook_trust,
 )
 from autoskillit.execution.backends._codex_config import (
@@ -149,18 +137,9 @@ from autoskillit.execution.backends._explorer_dispatch import (
 )
 from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
-
 # Codex has its own timeout mechanism (``ensure_codex_mcp_registered`` /
 # ``CODEX_MCP_TOOL_TIMEOUT_FLOOR``); ``mcp_tool_timeout_sec`` on Codex builders
 # exists only to satisfy the shared Protocol and is intentionally ignored.
-def _codex_home_from_plugin_binding(
-    plugin_binding: PluginLaunchBinding | None,
-) -> str | None:
-    if plugin_binding is None:
-        return None
-    return str(plugin_binding.plugin_dir)
-
-
 _CODEX_HOME_ENV_VAR = "CODEX_HOME"
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
@@ -198,7 +177,7 @@ def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
 
 
 @dataclass(frozen=True, slots=True)
-class CodexBackend(BackendCmdBuilderBase):
+class CodexBackend(CodexSessionCommandMixin):
     source_codex_home: Path | None = None
 
     def __post_init__(self) -> None:
@@ -378,19 +357,6 @@ class CodexBackend(BackendCmdBuilderBase):
     def version_cmd(self) -> tuple[str, ...]:
         return ("codex", "--version")
 
-    @staticmethod
-    def _otlp_overrides(extras: Mapping[str, str]) -> tuple[str, ...]:
-        logs_endpoint = extras.get("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-        metrics_endpoint = extras.get("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
-        if not logs_endpoint or not metrics_endpoint:
-            return ()
-        return (
-            "otel.exporter="
-            f'{{otlp-http={{endpoint={_format_toml_value(logs_endpoint)},protocol="json"}}}}',
-            "otel.metrics_exporter="
-            f'{{otlp-http={{endpoint={_format_toml_value(metrics_endpoint)},protocol="json"}}}}',
-        )
-
     def build_headless_cmd(
         self,
         prompt: str,
@@ -418,317 +384,6 @@ class CodexBackend(BackendCmdBuilderBase):
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
         return CmdSpec(
             cmd=tuple(cmd), env=env, force_inactive_agent_teams=force_inactive_agent_teams
-        )
-
-    def build_skill_session_cmd(
-        self,
-        skill_command: str,
-        cwd: str = "",
-        config: SkillSessionConfig | None = None,
-        *,
-        completion_marker: str = "",
-        model: str | None = None,
-        plugin_binding: PluginLaunchBinding | None = None,
-        output_format: OutputFormat = OutputFormat.JSON,
-        add_dirs: Sequence[ValidatedAddDir] = (),
-        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
-        exit_after_stop_delay_ms: int = 0,
-        stream_idle_timeout_ms: int = 0,
-        project_root: Path | str | None = None,
-        scenario_step_name: str = "",
-        temp_dir_relpath: str | None = None,
-        allowed_write_prefix: str = "",
-        allowed_write_prefixes: tuple[str, ...] = (),
-        provider_extras: Mapping[str, str] | None = None,
-        profile_name: str = "",
-        resume_session_id: str = "",
-        resume_checkpoint: SessionCheckpoint | None = None,
-        resume_message: str | None = None,
-        sandbox_mode: str = "workspace-write",
-        network_access: bool = False,
-        include_scope_discipline: bool = False,
-    ) -> CmdSpec:
-        if config is not None:
-            cfg = self._apply_config(config)
-            completion_marker = cfg["completion_marker"]
-            model = cfg["model"]
-            plugin_binding = cfg["plugin_binding"]
-            output_format = cfg["output_format"]
-            add_dirs = cfg["add_dirs"]
-            exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
-            stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
-            scenario_step_name = cfg["scenario_step_name"]
-            temp_dir_relpath = cfg["temp_dir_relpath"]
-            allowed_write_prefix = cfg["allowed_write_prefix"]
-            allowed_write_prefixes = cfg["allowed_write_prefixes"]
-            provider_extras = cfg["provider_extras"]
-            profile_name = cfg["profile_name"]
-            resume_session_id = cfg["resume_session_id"]
-            resume_checkpoint = cfg["resume_checkpoint"]
-            resume_message = cfg["resume_message"]
-            sandbox_mode = cfg["sandbox_mode"]
-            network_access = cfg.get("network_access", False)
-            include_scope_discipline = cfg["include_scope_discipline"]
-            native_shell_capture_decision = cfg["native_shell_capture_decision"]
-            managed_lineage_ref = cfg["managed_lineage_ref"]
-            managed_attempt_id = cfg["managed_attempt_id"]
-        else:
-            native_shell_capture_decision = None
-            managed_lineage_ref = None
-            managed_attempt_id = None
-        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
-        if output_format != OutputFormat.JSON:
-            logger.warning("codex_output_format_coerced")
-        _has_prefix = (
-            bool(profile_name)
-            and skill_command.strip().startswith("/")
-            and self.capabilities.skill_sigil == "/"
-        )
-
-        if resume_session_id:
-            effective_prompt = _compose_resume_prompt(
-                base_prompt=_ensure_skill_prefix(
-                    skill_command,
-                    provider_profile=profile_name or "",
-                    skill_sigil=self.capabilities.skill_sigil,
-                ),
-                resume_checkpoint=resume_checkpoint,
-                resume_message=resume_message,
-            )
-        else:
-            effective_prompt = _ensure_skill_prefix(
-                skill_command,
-                provider_profile=profile_name or "",
-                skill_sigil=self.capabilities.skill_sigil,
-            )
-
-        prompt = apply_prompt_injector_chain(
-            effective_prompt,
-            PromptBuildContext(
-                completion_marker=completion_marker,
-                cwd=cwd,
-                temp_dir_relpath=temp_dir_relpath,
-                has_skill_prefix=_has_prefix,
-                profile_name=profile_name,
-                include_output_discipline=True,
-                include_intake_discipline=True,
-                include_scope_discipline=include_scope_discipline,
-            ),
-        )
-
-        extras = self._assemble_shared_env_extras(
-            session_type=SESSION_TYPE_SKILL,
-            applicable_guards=self.capabilities.applicable_guards,
-            write_guard_tool_names=self.capabilities.write_guard_tool_names,
-            write_prefix=allowed_write_prefix,
-            write_prefixes=allowed_write_prefixes,
-            cwd=cwd,
-            scenario_step_name=scenario_step_name,
-        )
-        extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
-        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
-        extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
-        extras.setdefault(LAUNCH_ID_ENV_VAR, "")
-        extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, cwd)
-        extras["AUTOSKILLIT_SKILL_NAME"] = extract_skill_name(skill_command) or ""
-        _merge_caller_env_extras(
-            extras,
-            provider_extras,
-            denylist=_SKILL_SESSION_EXTRAS_DENYLIST,
-        )
-        if profile_name:
-            extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
-            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
-        if add_dirs:
-            extras["CODEX_HOME"] = add_dirs[0].path
-        elif projected_codex_home is not None:
-            extras["CODEX_HOME"] = projected_codex_home
-        if exit_after_stop_delay_ms:
-            extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
-            )
-        if stream_idle_timeout_ms:
-            extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
-            )
-        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = CodexEnvPolicy().build_env(
-            filtered_base,
-            extras=extras,
-            required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
-        )
-        env.update(
-            _managed_native_shell_env(
-                decision=native_shell_capture_decision,
-                lineage_ref=managed_lineage_ref,
-                attempt_id=managed_attempt_id,
-            )
-        )
-
-        _net_overrides: list[str] = []
-        if network_access:
-            _net_overrides.append("sandbox_workspace_write.network_access=true")
-        _net_overrides.extend(self._otlp_overrides(extras))
-        cmd = _codex_exec_base(
-            sandbox=sandbox_mode if sandbox_mode == "read-only" else None,
-            bypass_hook_trust=_should_bypass_hook_trust(
-                self.capabilities.hook_trust_policy,
-                automated_session=True,
-            ),
-            extra_overrides=_net_overrides,
-        )
-        if model:
-            cmd += [CodexFlags.MODEL, self.translate_model(model)]
-            for override in self.model_config_overrides(model):
-                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
-        if resume_session_id:
-            cmd.append(CodexFlags.RESUME_SUBCOMMAND)
-            cmd.append(resume_session_id)
-        cmd.append(prompt)
-
-        return CmdSpec(
-            cmd=tuple(cmd),
-            env=env,
-            cwd=cwd,
-            is_resume=bool(resume_session_id),
-            process_idle_timeout_ms=stream_idle_timeout_ms,
-            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
-            force_inactive_agent_teams=force_inactive_agent_teams,
-        )
-
-    def build_food_truck_cmd(
-        self,
-        *,
-        orchestrator_prompt: str,
-        plugin_binding: PluginLaunchBinding | None,
-        cwd: str,
-        completion_marker: str,
-        resume_session_id: str | None = None,
-        resume_checkpoint: SessionCheckpoint | None = None,
-        model: str | None = None,
-        env_extras: Mapping[str, str] | None = None,
-        output_format: OutputFormat = OutputFormat.STREAM_JSON,
-        exit_after_stop_delay_ms: int = 0,
-        stream_idle_timeout_ms: int = 0,
-        mcp_tool_timeout_sec: float | None = None,
-        scenario_step_name: str = "",
-        temp_dir_relpath: str | None = None,
-        allowed_write_prefix: str = "",
-        allowed_write_prefixes: tuple[str, ...] = (),
-        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
-        sentinel_contract: str = "",
-        resume_message: str | None = None,
-        native_shell_capture_decision: NativeShellCaptureDecision | None = None,
-        managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
-        project_root: Path | str | None = None,
-        managed_attempt_id: str | None = None,
-    ) -> CmdSpec:
-        # Codex has its own timeout mechanism (see comment above
-        # _codex_home_from_plugin_binding); param is intentionally ignored.
-        del mcp_tool_timeout_sec
-        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
-        if output_format != OutputFormat.STREAM_JSON:
-            logger.warning("codex_output_format_coerced")
-
-        if resume_session_id:
-            effective_prompt = _compose_resume_prompt(
-                base_prompt=orchestrator_prompt,
-                resume_checkpoint=resume_checkpoint,
-                sentinel_contract=sentinel_contract,
-                resume_message=resume_message,
-            )
-        else:
-            effective_prompt = orchestrator_prompt
-
-        prompt = apply_prompt_injector_chain(
-            effective_prompt,
-            PromptBuildContext(
-                completion_marker=completion_marker,
-                cwd=cwd,
-                temp_dir_relpath=temp_dir_relpath,
-                has_skill_prefix=False,
-                profile_name="",
-                include_output_discipline=True,
-                include_intake_discipline=True,
-            ),
-        )
-
-        extras = self._assemble_shared_env_extras(
-            session_type=SESSION_TYPE_ORCHESTRATOR,
-            applicable_guards=self.capabilities.applicable_guards,
-            write_guard_tool_names=self.capabilities.write_guard_tool_names,
-            write_prefix=allowed_write_prefix,
-            write_prefixes=allowed_write_prefixes,
-            cwd=cwd,
-            scenario_step_name=scenario_step_name,
-        )
-        extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
-        extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[AGENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[MCP_CLIENT_BACKEND_ENV_VAR] = AGENT_BACKEND_CODEX
-        extras[FLEET_INSPECTOR_MODEL_ENV_VAR] = ""
-        extras[FOOD_TRUCK_TOOL_TAGS_ENV_VAR] = ""
-        extras.setdefault(LAUNCH_ID_ENV_VAR, "")
-        extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, cwd)
-        if completion_marker:
-            extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
-        _merge_caller_env_extras(
-            extras,
-            env_extras,
-            denylist=_PROVIDER_EXTRAS_BASE_DENYLIST,
-        )
-        if projected_codex_home is not None:
-            extras["CODEX_HOME"] = projected_codex_home
-        if exit_after_stop_delay_ms:
-            extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
-            )
-        if stream_idle_timeout_ms:
-            extras.setdefault(
-                "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(stream_idle_timeout_ms / 1000)
-            )
-        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = CodexEnvPolicy().build_env(
-            filtered_base,
-            extras=extras,
-            required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
-        )
-        env.update(
-            _managed_native_shell_env(
-                decision=native_shell_capture_decision,
-                lineage_ref=managed_lineage_ref,
-                attempt_id=managed_attempt_id,
-            )
-        )
-
-        cmd = _codex_exec_base(
-            sandbox="read-only",
-            extra_overrides=["web_search=disabled", *self._otlp_overrides(extras)],
-            bypass_hook_trust=_should_bypass_hook_trust(
-                self.capabilities.hook_trust_policy,
-                automated_session=True,
-            ),
-        )
-        if model:
-            cmd += [CodexFlags.MODEL, self.translate_model(model)]
-            for override in self.model_config_overrides(model):
-                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
-        if resume_session_id:
-            cmd.append(CodexFlags.RESUME_SUBCOMMAND)
-            cmd.append(resume_session_id)
-        cmd.append(prompt)
-
-        return CmdSpec(
-            cmd=tuple(cmd),
-            env=env,
-            cwd=cwd,
-            is_resume=bool(resume_session_id),
-            process_idle_timeout_ms=stream_idle_timeout_ms,
-            inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
-            force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
     def build_interactive_cmd(

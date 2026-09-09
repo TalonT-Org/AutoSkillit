@@ -20,6 +20,7 @@ import httpx
 from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     InfraExitCategory,
+    RateLimitWindow,
     SkillResult,
     acquire_flock_with_timeout,
     get_logger,
@@ -357,6 +358,32 @@ def record_observed_rate_limit(
         os.close(fd)
 
 
+def _skill_result_rate_limit_skip_reason(
+    *,
+    skill_result: SkillResult,
+    supports_quota_check: bool,
+    config: QuotaPersistenceConfigLike | None,
+    rate_limit: RateLimitWindow,
+) -> str | None:
+    """First reason (in check order) to skip persisting this result, or None to proceed.
+
+    One ordered guard table for the boundary checks record_skill_result_rate_limit
+    must apply before it may safely call record_observed_rate_limit — mirrors the
+    checks that were previously five near-identical inline if/log/return blocks.
+    """
+    if config is None:
+        return "no_quota_guard_config"
+    if not supports_quota_check:
+        return "backend_does_not_support_quota_check"
+    if skill_result.infra.exit_category != InfraExitCategory.RATE_LIMITED.value:
+        return "exit_category_not_rate_limited"
+    if rate_limit.resets_at_epoch is None:
+        return "rate_limit_resets_at_epoch is None"
+    if not rate_limit.limit_type:
+        return "rate_limit.limit_type is empty"
+    return None
+
+
 def record_skill_result_rate_limit(
     skill_result: SkillResult,
     supports_quota_check: bool,
@@ -366,62 +393,36 @@ def record_skill_result_rate_limit(
 ) -> None:
     """Project structured terminal reset evidence into the observed store.
 
-    When the boundary checks below fail (no config, quota checks unsupported by
-    backend, infra exit not classified as RATE_LIMITED, or missing rate_limit
-    fields) this is a meaningful decision — the PR's goal is "retain provider
-    failure evidence", so silent drops undermine it. Each no-op path logs at
-    ``debug`` with the suppressed fields so an operator investigating why a
-    429 did not project into the observed store can find the reason without
-    rerunning the session.
+    When _skill_result_rate_limit_skip_reason finds a boundary check fails (no
+    config, quota checks unsupported by backend, infra exit not classified as
+    RATE_LIMITED, or missing rate_limit fields) this is a meaningful decision —
+    the PR's goal is "retain provider failure evidence", so silent drops
+    undermine it. The skip logs at ``debug`` with the suppressed fields so an
+    operator investigating why a 429 did not project into the observed store
+    can find the reason without rerunning the session.
     """
     rate_limit = skill_result.api_failure.rate_limit
-    if config is None:
+    skip_reason = _skill_result_rate_limit_skip_reason(
+        skill_result=skill_result,
+        supports_quota_check=supports_quota_check,
+        config=config,
+        rate_limit=rate_limit,
+    )
+    if skip_reason is not None:
         logger.debug(
             "quota_observed_evidence_skipped",
-            skip_reason="no_quota_guard_config",
+            skip_reason=skip_reason,
             exit_category=skill_result.infra.exit_category,
             supports_quota_check=supports_quota_check,
             resets_at_epoch=rate_limit.resets_at_epoch,
             limit_type=rate_limit.limit_type,
         )
         return
-    if not supports_quota_check:
-        logger.debug(
-            "quota_observed_evidence_skipped",
-            skip_reason="backend_does_not_support_quota_check",
-            exit_category=skill_result.infra.exit_category,
-            resets_at_epoch=rate_limit.resets_at_epoch,
-            limit_type=rate_limit.limit_type,
-        )
-        return
-    if skill_result.infra.exit_category != InfraExitCategory.RATE_LIMITED.value:
-        logger.debug(
-            "quota_observed_evidence_skipped",
-            skip_reason="exit_category_not_rate_limited",
-            exit_category=skill_result.infra.exit_category,
-            supports_quota_check=supports_quota_check,
-            resets_at_epoch=rate_limit.resets_at_epoch,
-            limit_type=rate_limit.limit_type,
-        )
-        return
-    if rate_limit.resets_at_epoch is None:
-        logger.debug(
-            "quota_observed_evidence_skipped",
-            skip_reason="rate_limit_resets_at_epoch is None",
-            exit_category=skill_result.infra.exit_category,
-            supports_quota_check=supports_quota_check,
-            limit_type=rate_limit.limit_type,
-        )
-        return
-    if not rate_limit.limit_type:
-        logger.debug(
-            "quota_observed_evidence_skipped",
-            skip_reason="rate_limit.limit_type is empty",
-            exit_category=skill_result.infra.exit_category,
-            supports_quota_check=supports_quota_check,
-            resets_at_epoch=rate_limit.resets_at_epoch,
-        )
-        return
+    # _skill_result_rate_limit_skip_reason returning None means every one of its
+    # guards passed, which narrows both of these away from their Optional types --
+    # spelled out explicitly since mypy cannot narrow across the function call.
+    assert config is not None
+    assert rate_limit.resets_at_epoch is not None
     try:
         record_observed_rate_limit(
             config,

@@ -72,21 +72,23 @@ def test_no_unexpected_quota_gate_callers() -> None:
     """No function outside the expected gate set may call the fold helper."""
     src_root = Path(__file__).parents[2] / "src" / "autoskillit"
     expected_callers = {relative + "::" + name for relative, name in _EXPECTED_QUOTA_GATES}
-    # Scan every .py under execution/ and hooks/ for callers of the fold helpers.
+    # Scan the entire src/autoskillit tree for callers of the fold helpers — not just
+    # execution/ and hooks/, so a caller added under core/, server/, cli/, recipe/,
+    # planner/, etc. is also detected. quota_constraints.py (the fold helpers' own
+    # module, at the package root) is only reachable by a full-tree scan.
     mismatch: list[str] = []
-    for root_dir in ("execution", "hooks"):
-        for path in (src_root / root_dir).rglob("*.py"):
-            if path.name == "__init__.py":
-                continue
-            callers = _all_callers_of_fold(path.read_text())
-            for _, function_name in callers:
-                rel = path.relative_to(src_root).as_posix()
-                identifier = f"{rel}::{function_name}"
-                if identifier not in expected_callers:
-                    # Allow calls inside quota_constraints.py — it owns the helpers.
-                    if path.name == "quota_constraints.py":
-                        continue
-                    mismatch.append(identifier)
+    for path in src_root.rglob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        callers = _all_callers_of_fold(path.read_text())
+        for _, function_name in callers:
+            rel = path.relative_to(src_root).as_posix()
+            identifier = f"{rel}::{function_name}"
+            if identifier not in expected_callers:
+                # Allow calls inside quota_constraints.py — it owns the helpers.
+                if path.name == "quota_constraints.py":
+                    continue
+                mismatch.append(identifier)
     assert not mismatch, "Unexpected callers of the quota fold helper detected: " + ", ".join(
         sorted(mismatch)
     )

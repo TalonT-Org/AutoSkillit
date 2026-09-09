@@ -25,7 +25,7 @@ async def test_capacity_max1_at_capacity_after_acquire():
 
 @pytest.mark.anyio
 async def test_capacity_max3_allows_three_concurrent():
-    """max=3 semaphore allows 3 acquires without blocking."""
+    """max=3 capacity allows three concurrent acquisitions without blocking."""
     s = DefaultManagedWorkerCapacity(max_concurrent=3)
     permits = [await s.acquire(f"dispatch-{index}") for index in range(3)]
     assert s.at_capacity()

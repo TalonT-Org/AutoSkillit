@@ -811,7 +811,8 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
         SRC_ROOT / "execution" / "process" / "_process_kill.py",  # defines settle()
         SRC_ROOT / "cli" / "session" / "_session_process.py",  # requires raising semantics
         SRC_ROOT / "execution" / "evidence_reader.py",  # pre-existing catch-and-convert
-        SRC_ROOT / "hooks" / "_capture_process.py",  # structurally unrelated reimpl
+        SRC_ROOT / "hooks" / "_capture_process.py",  # retained capture settlement
+        SRC_ROOT / "hooks" / "_capture_spawn.py",  # spawn adoption cleanup
     }
     violations: list[str] = []
 
@@ -972,7 +973,7 @@ _DETACHED_SPAWN_ALLOWLIST: list[tuple[Path, str]] = [
         "defines spawn_owned_process — the funnel itself",
     ),
     (
-        SRC_ROOT / "hooks" / "_capture_process.py",
+        SRC_ROOT / "hooks" / "_capture_spawn.py",
         "stdlib-only standalone hook primitive; sub-second bounded capture shells; "
         "passes process_group=0 but start_new_session=False — group-isolated, not "
         "session-detached, so not an orphan source; expansion forbidden",

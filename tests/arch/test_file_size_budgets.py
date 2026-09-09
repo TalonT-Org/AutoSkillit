@@ -41,6 +41,10 @@ def test_pretty_output_below_budget() -> None:
 
 
 _WARNING_ZONE_BUDGETS: dict[str, int] = {
+    # Issue #4732 — process ownership remains behind a facade while spawn
+    # mechanics move into a cohesive hooks-level sibling.
+    "hooks/_capture_process.py": 750,
+    "hooks/_capture_spawn.py": 750,
     "execution/clone_guard.py": 750,
     "execution/github.py": 750,
     "execution/session_log.py": 750,

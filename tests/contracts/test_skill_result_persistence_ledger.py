@@ -163,12 +163,41 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
     summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
     index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
 
+    # Values this test explicitly constructed above, keyed by artifact_key -- checked
+    # for equality (not just key presence) so a flush bug that mangles, coerces, or
+    # drops a value while keeping its key would fail this test.
+    expected_values: dict[str, object] = {
+        "success": False,
+        "needs_retry": True,
+        "retry_reason": "resume",
+        "infra_exit_category": "api_error",
+        "infra_cleanup_incomplete": True,
+        "infra_fault_domain": "infrastructure",
+        "api_error_status": 503,
+        "is_error": True,
+        "outcome_fields": {"attempt": 1},
+        "outcome_invariant_violated": True,
+        "outcome_qualifier": "retry",
+    }
+
     for leaf, artifact_key, classification in SKILL_RESULT_PERSISTENCE:
         if classification in {"persisted", "summary-only"}:
             if leaf.startswith("execution_identity."):
                 summary_key = leaf.removeprefix("execution_identity.")
                 assert summary_key in summary["execution_identity"]
+                if summary_key == "children":
+                    assert summary["execution_identity"]["children"] == [
+                        child.to_dict() for child in identity.children
+                    ]
+                else:
+                    assert summary["execution_identity"][summary_key] == getattr(
+                        identity, summary_key
+                    )
             else:
                 assert artifact_key in summary
+                if artifact_key in expected_values:
+                    assert summary[artifact_key] == expected_values[artifact_key]
         if classification in {"persisted", "index-only"}:
             assert artifact_key in index
+            if artifact_key in expected_values:
+                assert index[artifact_key] == expected_values[artifact_key]

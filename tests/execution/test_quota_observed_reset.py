@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from autoskillit.execution._quota_observed import record_observed_rate_limit
 from autoskillit.execution.quota import (
     QuotaFetchResult,
     QuotaStatus,
@@ -16,6 +15,7 @@ from autoskillit.execution.quota import (
     _write_cache,
     check_and_sleep_if_needed,
 )
+from autoskillit.execution.quota._quota_observed import record_observed_rate_limit
 from autoskillit.quota_constraints import (
     decode_observed_constraints,
     observed_constraint_path,
@@ -60,7 +60,7 @@ async def test_observation_survives_nonblocking_poll_cache(monkeypatch, tmp_path
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.quota._fetch_quota",
+        "autoskillit.execution.quota._quota_gate._fetch_quota",
         lambda *args, **kwargs: pytest.fail("fresh nonblocking cache must not fetch"),
     )
     result = await check_and_sleep_if_needed(config)
@@ -85,7 +85,7 @@ async def test_cross_dispatch_observation_suppresses_without_fetch(monkeypatch, 
     async def fail_fetch(*args, **kwargs):
         raise AssertionError("observation must suppress before network fetch")
 
-    monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", fail_fetch)
+    monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fail_fetch)
     assert (await check_and_sleep_if_needed(config))["should_sleep"] is True
     assert (await check_and_sleep_if_needed(config))["should_sleep"] is True
 
@@ -112,7 +112,7 @@ async def test_blocking_cache_refetch_cannot_clobber_observation(monkeypatch, tm
     async def refreshed(*args, **kwargs):
         return QuotaFetchResult(binding=QuotaStatus(10, None, "five_hour", False, 85))
 
-    monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", refreshed)
+    monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", refreshed)
     result = await check_and_sleep_if_needed(config)
     assert result["block_source"] == "observed_terminal"
     assert json.loads(observed_constraint_path(config.cache_path).read_text())["constraints"]

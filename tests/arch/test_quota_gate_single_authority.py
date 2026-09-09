@@ -17,7 +17,7 @@ pytestmark = pytest.mark.medium
 _DECISION_HELPERS = frozenset({"decide_quota_block", "effective_quota_block"})
 
 _EXPECTED_QUOTA_GATES = (
-    ("execution/quota.py", "check_and_sleep_if_needed"),
+    ("execution/quota/_quota_gate.py", "check_and_sleep_if_needed"),
     ("hooks/guards/quota_guard.py", "quota_guard_decision"),
     ("hooks/quota_post_hook.py", "quota_post_decision"),
 )

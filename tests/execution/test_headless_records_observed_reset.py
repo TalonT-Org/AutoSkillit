@@ -15,7 +15,7 @@ from autoskillit.core import (
     RetryReason,
     SkillResult,
 )
-from autoskillit.execution._quota_observed import record_skill_result_rate_limit
+from autoskillit.execution.quota._quota_observed import record_skill_result_rate_limit
 from autoskillit.quota_constraints import (
     decode_observed_constraints,
     observed_constraint_path,

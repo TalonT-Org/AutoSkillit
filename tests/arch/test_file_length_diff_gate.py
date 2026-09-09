@@ -34,7 +34,11 @@ def _load_check_module():
 
 def _resolve_base_ref() -> str | None:
     """Resolve the explicit test base, treating an empty value as unset."""
-    return os.environ.get("AUTOSKILLIT_TEST_BASE_REF") or os.environ.get("GITHUB_BASE_REF") or None
+    explicit_base = os.environ.get("AUTOSKILLIT_TEST_BASE_REF")
+    if explicit_base:
+        return explicit_base
+    github_base = os.environ.get("GITHUB_BASE_REF")
+    return f"origin/{github_base}" if github_base else None
 
 
 def _changed_files_or_skip() -> set[str]:
@@ -77,7 +81,7 @@ def test_resolve_base_ref_falls_through_empty_to_github(
 ) -> None:
     monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "")
     monkeypatch.setenv("GITHUB_BASE_REF", "github-base")
-    assert _resolve_base_ref() == "github-base"
+    assert _resolve_base_ref() == "origin/github-base"
 
 
 def test_resolve_base_ref_returns_none_without_refs(monkeypatch: pytest.MonkeyPatch) -> None:

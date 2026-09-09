@@ -142,9 +142,9 @@ def _scrubbed_user_environment() -> dict[str, str]:
         environment.pop(name, None)
     # Unconditional, not conditional-forward: an *unset* DBUS_SESSION_BUS_ADDRESS is what
     # triggers libdbus autolaunch, so this must be set even when the host has none.
-    # Duplicated (not imported) from core._claude_env.resolve_dbus_session_bus_address --
-    # this module is intentionally stdlib-only (see module docstring), no autoskillit.*
-    # imports, matching hooks/_hook_settings.py's identical duplication precedent.
+    # Duplicated from core._claude_env.resolve_dbus_session_bus_address so standalone
+    # hook imports do not depend on autoskillit.core, matching the _hook_settings.py
+    # duplication precedent.
     environment["DBUS_SESSION_BUS_ADDRESS"] = os.environ.get("DBUS_SESSION_BUS_ADDRESS") or (
         "disabled:"
     )

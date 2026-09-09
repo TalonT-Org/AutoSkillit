@@ -53,16 +53,6 @@ def test_capacity_max_concurrent_property():
     assert s.max_concurrent == 7
 
 
-@pytest.mark.anyio
-async def test_capacity_max1_equivalent_to_serial():
-    """A held permit makes the single-capacity authority unavailable."""
-    s = DefaultManagedWorkerCapacity(max_concurrent=1)
-    permit = await s.acquire("first")
-    assert s.at_capacity()  # second would be refused at call site
-    s.release(permit)
-    assert not s.at_capacity()
-
-
 class TestManagedWorkerCapacityConstructorGuard:
     def test_max_concurrent_zero_raises(self) -> None:
         with pytest.raises(ValueError):

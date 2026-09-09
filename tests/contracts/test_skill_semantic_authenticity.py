@@ -146,15 +146,16 @@ def test_managed_codex_admits_every_bundled_join_required_plan() -> None:
     from tests.contracts._skill_admission_ledger import _production_managed_codex_context
 
     managed_context = _production_managed_codex_context()
+    backend = CodexBackend()
     refusals = [
         skill.name
         for skill in DefaultSkillResolver().list_all()
         if skill.semantic_plan is not None
         and skill.semantic_plan.join is not None
         and skill.semantic_plan.join.required
-        and CodexBackend()
-        .adapt_skill_semantics(skill.semantic_plan, managed_context)
-        .unsupported_operation
+        and backend.adapt_skill_semantics(
+            skill.semantic_plan, managed_context
+        ).unsupported_operation
         is not None
     ]
 

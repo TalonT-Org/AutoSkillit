@@ -309,11 +309,6 @@ class ManagedLeafProjection:
     binding: ManagedLeafBinding
     prompt: str
     leaf_projection_artifact_digest: str
-    resume_session_id: str = ""
-
-    def __post_init__(self) -> None:
-        if self.resume_session_id:
-            raise SkillContractError("managed leaf projections must always launch without resume")
 
     @property
     def ledger_attempt_evidence(self) -> Mapping[str, str]:

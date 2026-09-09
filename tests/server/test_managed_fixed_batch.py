@@ -106,7 +106,7 @@ async def test_supervisor_opens_once_replays_and_releases_each_owned_permit(tmp_
 
     def launch_leaf(projection, permit):
         seen_permits.append(permit.permit_id)
-        assert projection.resume_session_id == ""
+        assert projection.binding.assignment.label in {"first", "second"}
         return _prepared_leaf(projection, ManagedLeafLaunchResult())
 
     binding = _binding(tmp_path, launch_leaf)

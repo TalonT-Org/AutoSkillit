@@ -96,7 +96,7 @@ def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
     )
     leaf = project_managed_leaf(binding, document)
 
-    assert leaf.resume_session_id == ""
+    assert leaf.binding is binding
     assert leaf.binding.model == "gpt-5.6-luna"
     assert leaf.leaf_projection_artifact_digest != document.projected_digest
     assert (

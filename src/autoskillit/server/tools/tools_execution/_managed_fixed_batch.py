@@ -105,13 +105,10 @@ class ManagedLeafLaunchResult:
     result_reference: str | None = None
     result_digest: str | None = None
     result_payload: object | None = None
-    cleanup_outcome: str | None = None
 
     def __post_init__(self) -> None:
         if not is_terminal_outcome(self.outcome):
             raise ValueError(f"unsupported managed leaf terminal outcome {self.outcome!r}")
-        if self.cleanup_outcome not in {None, OUTCOME_REAPED}:
-            raise ValueError("managed leaf cleanup outcome must be reaped or absent")
 
 
 ManagedLeafLauncher = Callable[
@@ -767,12 +764,10 @@ class ManagedFixedBatchSupervisor:
                     "outcome": result.outcome,
                     "result_reference": result.result_reference,
                     "result_digest": result.result_digest,
-                    "cleanup_outcome": result.cleanup_outcome,
                 }
             ),
             result_reference=result.result_reference,
             result_digest=result.result_digest,
-            cleanup_outcome=result.cleanup_outcome,
         )
 
     def _published_batch_result(

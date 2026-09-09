@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
 from autoskillit.core import (
+    EXTERNAL_EFFECT_CHOICES,
     VALID_INPUT_SPEC_TYPES,
     BoundScalar,
     InputSpec,
@@ -17,7 +18,6 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
     pkg_root,
-    render_external_effect_choices,
     resolve_skill_name,
 )
 from autoskillit.recipe._api_cache import YamlFileCache
@@ -107,7 +107,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         raise ValueError(f"external_effect for skill '{skill_name}' must be a string")
     if external_effect not in VALID_EXTERNAL_EFFECTS:
         raise ValueError(
-            f"external_effect for skill '{skill_name}' must be {render_external_effect_choices()}"
+            f"external_effect for skill '{skill_name}' must be {EXTERNAL_EFFECT_CHOICES}"
         )
     read_only = bool(skill_data.get("read_only", False))
     scope_discipline = skill_data.get("scope_discipline", False)

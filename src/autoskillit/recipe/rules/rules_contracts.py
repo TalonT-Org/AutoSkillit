@@ -5,12 +5,12 @@ from __future__ import annotations
 import regex as re
 
 from autoskillit.core import (
+    EXTERNAL_EFFECT_CHOICES,
     SKILL_TOOLS,
     BoundValueOrigin,
     Severity,
     get_logger,
     pkg_root,
-    render_external_effect_choices,
 )
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._contracts_types import VALID_EXTERNAL_EFFECTS
@@ -323,7 +323,7 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                     step_name=step_name,
                     message=(
                         f"Invalid external_effect '{external_effect}'. Must be "
-                        f"{render_external_effect_choices()}."
+                        f"{EXTERNAL_EFFECT_CHOICES}."
                     ),
                 )
             )

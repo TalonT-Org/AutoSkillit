@@ -43,6 +43,7 @@ from autoskillit.core import (
     is_in_git_repo,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.execution._quota_observed import record_skill_result_rate_limit
 from autoskillit.execution.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
@@ -84,7 +85,6 @@ from autoskillit.execution.headless._managed import (
 )
 from autoskillit.execution.otlp_sink import LocalOtlpSink
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
-from autoskillit.execution.quota import record_skill_result_rate_limit
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult

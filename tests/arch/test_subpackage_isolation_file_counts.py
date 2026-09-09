@@ -17,7 +17,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "recipe": 53,  # +7 shards added by issue #4905 decomposition of _api_orchestration.py
     "recipe/rules": 66,
     "server": 28,
-    "execution": 23,
+    "execution": 24,  # +1 _quota_observed.py extracted from quota.py (REQ-CNST-010)
     "cli": 9,
     "cli/session": 11,
     "cli/doctor": 13,

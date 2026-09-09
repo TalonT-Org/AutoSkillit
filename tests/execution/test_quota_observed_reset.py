@@ -8,13 +8,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from autoskillit.execution._quota_observed import record_observed_rate_limit
 from autoskillit.execution.quota import (
     QuotaFetchResult,
     QuotaStatus,
     QuotaWindowEntry,
     _write_cache,
     check_and_sleep_if_needed,
-    record_observed_rate_limit,
 )
 from autoskillit.quota_constraints import (
     decode_observed_constraints,

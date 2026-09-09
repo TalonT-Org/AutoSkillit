@@ -2903,7 +2903,7 @@ def test_fcntl_import_allowlist() -> None:
 
     FCNTL_ALLOWED_MODULES = _FCNTL_ALLOWED_RELATIVE_PATHS | {
         "execution/session/_managed_headless_session_lineage_records.py",
-        "execution/quota.py",
+        "execution/_quota_observed.py",
         "hooks/guards/open_kitchen_guard.py",
         "hooks/_join_ledger.py",
         "cli/session/_session_reload.py",

@@ -125,6 +125,7 @@ def ledger_paths(flag_dir: Path) -> tuple[Path, Path]:
 def resolve_flag_dir(project_root: Path) -> Path:
     return _resolve_channel_dir(project_root)
 
+
 def _acquire_lock(fd: int) -> None:
     """Acquire an exclusive lock without waiting indefinitely."""
     deadline = time.monotonic() + _LOCK_ACQUIRE_TIMEOUT_SECONDS

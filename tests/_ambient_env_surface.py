@@ -74,6 +74,7 @@ _ENV_BUILD_HANDOFFS = frozenset(
     {
         ("prepare_interactive_launch", "extra_env"),
         ("build_interactive_cmd", "env_extras"),
+        ("build_headless_cmd", "env_extras"),
         ("build_agent_env", "extras"),
         ("build_env", "extras"),
         ("dispatch_food_truck", "env_extras"),

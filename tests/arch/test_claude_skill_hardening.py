@@ -21,7 +21,8 @@ def test_claude_skill_hardening_has_no_codex_consumer_or_duplicate_authority() -
     assert (
         claude_source.count("_CLAUDE_SKILL_SESSION_HARDENING")
         + session_source.count("_CLAUDE_SKILL_SESSION_HARDENING")
-        == 4
+        # Three consumers plus one import in each backend shard.
+        == 5
     )
     assert "_CLAUDE_SKILL_SESSION_HARDENING" not in codex_source
     for key in ("CLAUDE_CODE_DISABLE_BACKGROUND_TASKS", "CLAUDE_CODE_DISABLE_CRON"):

@@ -27,7 +27,7 @@ class TestCheckAndSleepIfNeeded:
             fetch_called.append(1)
             raise AssertionError("should not fetch")
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert fetch_called == []
@@ -56,7 +56,7 @@ class TestCheckAndSleepIfNeeded:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["utilization"] == pytest.approx(50.0)
@@ -93,7 +93,7 @@ class TestCheckAndSleepIfNeeded:
             )
 
         mock_fetch = AsyncMock(side_effect=[_make_result(90.0), _make_result(91.0)])
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert mock_fetch.call_count == 2
@@ -132,7 +132,7 @@ class TestCheckAndSleepIfNeeded:
             fetch_called.append(1)
             raise AssertionError("should not fetch when cache is fresh")
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert fetch_called == []
         assert result["should_sleep"] is False
@@ -168,7 +168,7 @@ class TestCheckAndSleepIfNeeded:
         async def mock_fetch(path, **kwargs):
             raise OSError("network down")
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert "error" in result
@@ -220,7 +220,7 @@ class TestCheckAndSleepIfNeeded:
         )
 
         mock_fetch = AsyncMock(side_effect=[first_result, second_result])
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
 
         with structlog.testing.capture_logs() as cap:
             result = await check_and_sleep_if_needed(config)
@@ -265,7 +265,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] > 0
@@ -310,7 +310,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
             ),
         )
         mock_fetch = AsyncMock(side_effect=[first_result, second_result])
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] > 0
@@ -353,7 +353,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
             fetch_called.append(1)
             raise AssertionError("should not reach re-fetch when first branch blocks")
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert fetch_called == []
@@ -386,7 +386,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] >= 120
@@ -423,7 +423,7 @@ class TestCheckAndSleepResetAtNoneBlocks:
             )
 
         mock_fetch = AsyncMock(side_effect=[_r(90.0), _r(90.0)])
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] > 0
@@ -441,7 +441,7 @@ class TestProviderBypassUnit:
             fetch_called.append(1)
             raise AssertionError("should not fetch")
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config, provider="openai")
         assert result["should_sleep"] is False
         assert result["provider_bypass"] is True
@@ -473,7 +473,7 @@ class TestProviderBypassUnit:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config, provider="anthropic")
         assert result["should_sleep"] is False
         assert fetch_called == [1]
@@ -581,7 +581,7 @@ class TestFetchQuotaNovelWindowWarning:
             "httpx.AsyncClient", lambda **kw: self._make_fake_httpx_client(api_response)
         )
         monkeypatch.setattr(
-            "autoskillit.execution.quota._read_credentials",
+            "autoskillit.execution.quota._quota_gate._read_credentials",
             lambda path: "fake-token",
         )
 
@@ -624,7 +624,7 @@ class TestFetchQuotaNovelWindowWarning:
             "httpx.AsyncClient", lambda **kw: self._make_fake_httpx_client(api_response)
         )
         monkeypatch.setattr(
-            "autoskillit.execution.quota._read_credentials",
+            "autoskillit.execution.quota._quota_gate._read_credentials",
             lambda path: "fake-token",
         )
 
@@ -688,7 +688,7 @@ class TestProviderBypass:
             fetch_called.append(1)
             raise AssertionError("should not fetch")
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config, provider="minimax")
         assert result["should_sleep"] is False
         assert result.get("provider_bypass") is True
@@ -726,7 +726,7 @@ class TestProviderBypass:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._fetch_quota", mock_fetch)
+        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", mock_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is True
         assert result["sleep_seconds"] > 0

@@ -1,7 +1,8 @@
-"""Quota-aware check for long-running pipeline recipes.
+"""Poll-based quota gate implementation, re-exported by the quota package facade.
 
-IL-1 module: depends only on stdlib, httpx (FastMCP transitive dep), and core/logging.
-Does NOT sleep. Returns metadata; the orchestrator sleeps via run_cmd.
+IL-1 module: depends only on stdlib, httpx (FastMCP transitive dep), and
+core/logging. Does NOT sleep. Returns metadata; the orchestrator sleeps via
+run_cmd.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Any
 import httpx
 
 from autoskillit.core import get_logger, read_versioned_json, write_versioned_json
-from autoskillit.execution._quota_observed import _OPERATIONAL_EXCEPTION_TYPES
+from autoskillit.execution.quota._quota_observed import _OPERATIONAL_EXCEPTION_TYPES
 from autoskillit.quota_constraints import (
     QuotaConstraint,
     QuotaEvidenceSource,
@@ -303,8 +304,9 @@ async def _fetch_quota(
     if novel:
         logger.warning(
             "Anthropic quota API returned unknown quota window names. "
-            "If this is a new rate-limit window, add it to KNOWN_QUOTA_WINDOW_NAMES in quota.py "
-            "and update LONG_WINDOW_NAMES and long_window_patterns if it is a long window.",
+            "If this is a new rate-limit window, add it to KNOWN_QUOTA_WINDOW_NAMES in "
+            "execution/quota/_quota_gate.py and update LONG_WINDOW_NAMES and "
+            "long_window_patterns if it is a long window.",
             novel_windows=sorted(novel),
         )
     if not windows:

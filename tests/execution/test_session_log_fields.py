@@ -141,13 +141,6 @@ def test_flush_session_log_writes_kitchen_id(tmp_path):
     """kitchen_id parameter is written to sessions.jsonl index entry."""
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/worktree",
         kitchen_id="my-pipeline-123",
         session_id="sess-001",
@@ -169,13 +162,6 @@ def test_flush_session_log_writes_order_id_to_index(tmp_path):
     """order_id is written to sessions.jsonl index entry when provided."""
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/worktree",
         kitchen_id="kitchen-abc",
         order_id="issue-185",
@@ -197,13 +183,6 @@ def test_flush_session_log_order_id_defaults_to_empty(tmp_path):
     """order_id defaults to empty string when not supplied."""
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/worktree",
         kitchen_id="kitchen-abc",
         session_id="sess-003",
@@ -225,13 +204,6 @@ def test_flush_writes_crash_exception_file(tmp_path):
     """When exception_text is provided, flush_session_log writes crash_exception.txt."""
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="test-session",
         pid=1234,
@@ -259,13 +231,6 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
     raw = '{"type": "assistant"}\n{"type": "result"}\n'
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="test-session",
         pid=1,
@@ -285,13 +250,6 @@ def test_flush_session_log_writes_raw_stdout_on_failure(tmp_path):
 def test_flush_session_log_no_raw_stdout_on_success(tmp_path):
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="ok-session",
         pid=1,
@@ -321,13 +279,6 @@ def test_flush_session_log_summary_contains_per_turn_fields(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -363,13 +314,6 @@ def test_flush_session_log_includes_no_request_id_turns(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -415,13 +359,6 @@ def test_flush_session_log_all_no_rid_turns_still_recorded(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -461,13 +398,6 @@ def test_channel_b_turn_count_bounded_by_channel_a(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -521,13 +451,6 @@ def test_parallel_lists_aligned_mixed_rid_no_rid(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -585,13 +508,6 @@ def test_flush_session_log_summary_contains_turn_tool_calls(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -622,13 +538,6 @@ def test_turn_tool_calls_capped_at_8_per_turn(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -659,13 +568,6 @@ def test_turn_tool_calls_empty_for_text_only_turn(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -696,13 +598,6 @@ def test_turn_tool_calls_parallel_to_request_ids(tmp_path):
     cb_log.write_text("\n".join(records) + "\n")
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -1100,13 +995,6 @@ def test_turn_tool_calls_merged_across_thinking_and_tool_records(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -1140,13 +1028,6 @@ def test_parallel_lists_aligned_when_timestamp_missing(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="s",
         pid=1,
@@ -1915,13 +1796,6 @@ def test_flush_session_log_minimax_message_id_turn_dedup(tmp_path):
     )
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="minimax-dedup-001",
         pid=1,

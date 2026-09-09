@@ -758,13 +758,6 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
     # Flush a 9th session: four are expired, including two unprotected sessions
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -839,13 +832,6 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
 
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -901,13 +887,6 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
 
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -953,13 +932,6 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
 
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -1008,13 +980,6 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
     # Must not crash even though project_dir exists but has no dispatches dir
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -1068,13 +1033,6 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
 
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -1265,13 +1223,6 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
 
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=None,

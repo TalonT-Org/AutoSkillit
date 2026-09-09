@@ -45,13 +45,6 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
 
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id="integration-test-001",
         pid=os.getpid(),
@@ -108,13 +101,6 @@ _BASE_SNAP: dict[str, object] = {
 def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
     _flush(
         tmp_path,
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd="/tmp",
         session_id=session_id,
         pid=12345,
@@ -192,13 +178,6 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
 
     _flush(
         tmp_path / "logs",
-        needs_retry=False,
-        retry_reason="none",
-        infra_exit_category="completed",
-        infra_cleanup_incomplete=False,
-        infra_fault_domain="unknown",
-        api_error_status=None,
-        is_error=False,
         cwd=str(tmp_path),
         session_id="sanity-floor-001",
         pid=result.pid,

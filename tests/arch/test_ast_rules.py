@@ -590,6 +590,46 @@ def test_hooks_are_stdlib_only() -> None:
     )
 
 
+def test_stdlib_only_hook_callable_modules_have_zero_autoskillit_imports() -> None:
+    """quota_constraints.py and _recipe_delivery_framing.py must stay stdlib-only.
+
+    src/autoskillit/AGENTS.md documents these two root-level modules as
+    "stdlib-only hook-callable authorities" — safe for hook subprocesses running
+    outside the package venv, loaded via bare-name sys.path bootstrap
+    (hooks/guards/quota_guard.py, hooks/quota_post_hook.py). Unlike hooks/*.py
+    (guarded above by test_hooks_are_stdlib_only), nothing previously guarded
+    these two root-level modules against silently growing an autoskillit.*
+    import, which would break at runtime for any hook subprocess without the
+    package venv active.
+
+    Exemption: imports inside `if TYPE_CHECKING:` blocks are annotation-only
+    and are never executed at runtime, so they do not break the constraint.
+    """
+    stdlib_only_modules = ("quota_constraints.py", "_recipe_delivery_framing.py")
+    violations: list[str] = []
+    for name in stdlib_only_modules:
+        path = SRC_ROOT / name
+        tree = ast.parse(path.read_text())
+        exempt = _type_checking_linenos(tree)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("autoskillit")
+                and node.lineno not in exempt
+            ):
+                violations.append(f"  {name}:{node.lineno}: imports from {node.module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("autoskillit") and node.lineno not in exempt:
+                        violations.append(f"  {name}:{node.lineno}: imports {alias.name}")
+    assert not violations, (
+        "Stdlib-only hook-callable authorities must not import from autoskillit.* — "
+        "they are loaded via bare-name sys.path bootstrap by hook subprocesses running "
+        "outside the venv (src/autoskillit/AGENTS.md):\n" + "\n".join(violations)
+    )
+
+
 def test_init_files_are_pure_facades() -> None:
     """P14-2: Sub-package __init__.py files must not define FunctionDef or AsyncFunctionDef
     at module scope. They must be pure re-export facades.

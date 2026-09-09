@@ -6,6 +6,7 @@ import hashlib
 import json
 import tomllib
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from autoskillit.core import ManagedJoinAttestation, atomic_write
 from autoskillit.execution.backends import _codex_config as _codex_cfg
@@ -16,6 +17,9 @@ from autoskillit.execution.backends._codex_hooks import (
     managed_codex_mcp_tools,
     sync_managed_codex_hooks_to_config,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.execution.backends.codex import CodexBackend
 
 
 def _managed_codex_config_errors(
@@ -80,7 +84,7 @@ def _managed_codex_config_errors(
 
 
 def project_managed_route(
-    backend: object,
+    backend: CodexBackend,
     session_dir: Path,
     *,
     attestation: ManagedJoinAttestation,
@@ -89,7 +93,7 @@ def project_managed_route(
     """Project one attested route after source-config synchronization."""
     if not attestation.admits_backend("codex"):
         raise ValueError("managed Codex route requires a direct-mode Codex attestation")
-    source_codex_home = getattr(backend, "source_codex_home", None)
+    source_codex_home = backend.source_codex_home
     if not isinstance(source_codex_home, Path):
         raise ValueError("managed Codex route has no source Codex home")
     source_catalog = source_codex_home / "models_cache.json"

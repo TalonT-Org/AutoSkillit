@@ -380,7 +380,8 @@ def record_skill_result_rate_limit(
     if skill_result.infra.exit_category != InfraExitCategory.RATE_LIMITED.value:
         logger.debug(
             "quota_observed_evidence_skipped",
-            skip_reason=(f"exit_category={skill_result.infra.exit_category!r} (not RATE_LIMITED)"),
+            skip_reason="exit_category_not_rate_limited",
+            exit_category=skill_result.infra.exit_category,
             supports_quota_check=supports_quota_check,
             resets_at_epoch=rate_limit.resets_at_epoch,
             limit_type=rate_limit.limit_type,

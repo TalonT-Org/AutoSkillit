@@ -104,10 +104,7 @@ class TestPreCommitConfig:
         entry_script = hook["entry"].split()[1]
         script_path = PRECOMMIT_CONFIG.parent / entry_script
         assert script_path.is_file(), (
-            f"check-file-lengths hook's entry script {entry_script!r} does not "
-            "exist -- this part depends on an earlier part's "
-            "scripts/check_file_lengths.py artifact already being merged; "
-            "landing this part first wires the hook to nothing"
+            f"check-file-lengths hook's entry script {entry_script!r} does not exist"
         )
 
     def test_per_file_ignores_e501_bounded(self):

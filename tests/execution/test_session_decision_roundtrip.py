@@ -13,7 +13,6 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.headless._headless_result import _build_skill_result
-from autoskillit.execution.session._session_model import parse_session_result
 from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -38,7 +37,6 @@ def _stdout(*, status: int | None, is_error: bool, result: str) -> str:
 )
 def test_session_decision_roundtrip(tmp_path, status, is_error, result) -> None:
     stdout = _stdout(status=status, is_error=is_error, result=result)
-    parsed = parse_session_result(stdout)
     process = SubprocessResult(
         returncode=0,
         stdout=stdout,
@@ -48,7 +46,7 @@ def test_session_decision_roundtrip(tmp_path, status, is_error, result) -> None:
         channel_confirmation=ChannelConfirmation.UNMONITORED,
     )
     skill_result = _build_skill_result(process, backend=ClaudeCodeBackend())
-    assert parsed.session_id == skill_result.session_id
+    assert skill_result.session_id == f"roundtrip-{status or 'success'}"
 
     _flush(
         tmp_path,

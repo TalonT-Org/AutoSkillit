@@ -105,6 +105,18 @@ def _unwrap(annotation):
 
 
 def _live_leaves(cls, prefix: str = "") -> set[str]:
+    """Recursively reflect the dataclass-leaf vocabulary used by SKILL_RESULT_PERSISTENCE.
+
+    Only recurses into fields typed as a *nested dataclass* directly (or via a
+    ``| None`` union). A ``list[Dataclass]``/``dict[str, Dataclass]``/
+    ``tuple[Dataclass, ...]`` container field (currently only
+    ``execution_identity.children: tuple[ChildExecutionIdentity, ...]``) is
+    added as one opaque leaf, not expanded per-item — so a future subfield
+    added inside ``ChildExecutionIdentity`` that needs a different
+    classification than its siblings would not be caught by this closed-set
+    assertion. Building generic container recursion for a single, currently
+    homogeneous container field is not worth the added complexity.
+    """
     hints = get_type_hints(cls)
     leaves: set[str] = set()
     for field in fields(cls):

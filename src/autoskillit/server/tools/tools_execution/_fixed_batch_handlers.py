@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from string import ascii_letters, digits
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from fastmcp import Context
 from fastmcp.dependencies import CurrentContext
@@ -261,7 +261,7 @@ def _request_facts(
     *,
     skill_name: str,
     request_context: Context,
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
 ) -> _ManagedRequestFacts:
     request_session_id = _request_session_identity(request_context)
     validate_session_id(request_session_id)
@@ -530,7 +530,7 @@ def _resolve_launch_binding(
     assignments: tuple[ManagedLeafAssignmentInput, ...],
     idempotency_key: str,
     request_context: Context,
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
 ) -> ManagedFixedBatchLaunchBinding:
     facts = _request_facts(
         skill_name=skill_name,
@@ -636,7 +636,7 @@ async def _run_fixed_batch_handler(
     assignments: object,
     idempotency_key: str,
     request_context: Context,
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
 ) -> dict[str, object]:
     try:
         normalized_assignments = _normalize_assignments(assignments)
@@ -717,7 +717,7 @@ def _read_fixed_batch_result_handler(
     offset: int,
     page_size: int,
     request_context: Context,
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
 ) -> dict[str, object]:
     try:
         facts = _request_facts(

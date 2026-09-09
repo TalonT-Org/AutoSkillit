@@ -62,13 +62,6 @@ class TestFlushOutputCompleteness:
     def test_provider_outcome_fields_written_to_summary(self, tmp_path):
         _flush(
             tmp_path,
-            needs_retry=False,
-            retry_reason="none",
-            infra_exit_category="completed",
-            infra_cleanup_incomplete=False,
-            infra_fault_domain="unknown",
-            api_error_status=None,
-            is_error=False,
             cwd="/tmp",
             session_id="completeness-test-001",
             pid=1,
@@ -89,13 +82,6 @@ class TestFlushOutputCompleteness:
     def test_recipe_identity_fields_written_to_index(self, tmp_path):
         _flush(
             tmp_path,
-            needs_retry=False,
-            retry_reason="none",
-            infra_exit_category="completed",
-            infra_cleanup_incomplete=False,
-            infra_fault_domain="unknown",
-            api_error_status=None,
-            is_error=False,
             cwd="/tmp",
             session_id="recipe-completeness-001",
             pid=1,

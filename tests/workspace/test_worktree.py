@@ -112,10 +112,12 @@ class TestCreateGitWorktree:
         destination = worktree_root / "assignment"
         project_root.mkdir()
         calls = 0
+        commands = []
 
         async def runner(cmd, *, cwd, timeout):
             nonlocal calls
             calls += 1
+            commands.append(cmd)
             if calls == 1:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_text("not a worktree")
@@ -126,6 +128,15 @@ class TestCreateGitWorktree:
             await create_git_worktree(project_root, worktree_root, destination, "abc123", runner)
 
         assert calls == 2
+        assert commands[1] == [
+            "git",
+            "-C",
+            str(project_root),
+            "worktree",
+            "remove",
+            "--force",
+            str(destination),
+        ]
 
 
 class TestListGitWorktrees:

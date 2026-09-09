@@ -219,7 +219,9 @@ def test_main_aggregates_multiple_violations(
     assert "Total: 2 violation(s)" in output
 
 
+@pytest.mark.parametrize("argv", [["--staged"], ["--staged", "ignored.py"]])
 def test_staged_mode_checks_only_cached_source_python_files(
+    argv: list[str],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -251,7 +253,7 @@ def test_staged_mode_checks_only_cached_source_python_files(
 
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
 
-    assert mod.main(["--staged"]) == 1
+    assert mod.main(argv) == 1
     output = capsys.readouterr().out
     assert "nested/oversized file.py" in output
     assert unstaged.name not in output

@@ -78,7 +78,7 @@ def check_file(path: Path) -> str | None:
 
 def main(argv: list[str]) -> int:
     """Check the supplied files and return a shell-compatible status code."""
-    if argv == ["--staged"]:
+    if "--staged" in argv:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
             cwd=PROJECT_ROOT,

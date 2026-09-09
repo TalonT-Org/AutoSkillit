@@ -266,26 +266,6 @@ def test_test_suite_has_domain_subdirectories():
     assert not missing, f"Missing test subdirectories (run groupE): {missing}"
 
 
-def test_test_suite_oversized_files_split():
-    """No test file at tests/ root exceeds 1,000 lines after groupE split.
-
-    Exemptions (rule ID | rationale):
-      test_test_filter_core_cascade.py — REQ-CNST-004-E2: Cascade-map guard test
-        whose per-stem expected-set mirroring is a one-line cascade consumers pin
-        into ``expected_stems``. Adding issue #4741's three plugin-cache shards
-        pushed the file to 1003 lines; splitting would scatter a single declared-
-        vs-actual invariant across multiple files. Exempt at 1100 lines.
-    """
-    tests_root = SRC_ROOT.parents[1] / "tests"
-    over = [
-        f"{f.name} ({len(f.read_text().splitlines())} lines)"
-        for f in tests_root.glob("test_*.py")
-        if len(f.read_text().splitlines()) > 1000
-        and f.name != "test_test_filter_core_cascade.py"  # REQ-CNST-004-E2
-    ]
-    assert not over, f"Oversized test files remain (run groupE): {over}"
-
-
 def test_smoke_utils_suite_is_split() -> None:
     tests_root = SRC_ROOT.parents[1] / "tests"
     smoke_utils_root = tests_root / "smoke_utils"

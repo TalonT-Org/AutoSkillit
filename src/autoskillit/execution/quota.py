@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -263,8 +263,23 @@ def _write_cache(cache_path: str, result: QuotaFetchResult) -> None:
         logger.warning("quota cache write failed", path=cache_path, error=str(exc))
 
 
+class QuotaPersistenceConfigLike(Protocol):
+    """Structural contract for the persistence-path recorder functions below.
+
+    ``execution/`` (IL-1) may not import ``autoskillit.config`` (a higher
+    layer), so ``record_observed_rate_limit``/``record_skill_result_rate_limit``
+    cannot type their ``config`` parameter as the concrete ``QuotaGuardConfig``
+    dataclass. A local Protocol restores real attribute-access type coverage
+    for the two fields these functions actually touch, mirroring the
+    ``EvidenceReaderInvocationLike`` pattern in ``execution/evidence_reader.py``.
+    """
+
+    credentials_path: str
+    cache_path: str
+
+
 def record_observed_rate_limit(
-    config: Any,
+    config: QuotaPersistenceConfigLike,
     *,
     scope: str,
     resets_at_epoch: int,
@@ -328,7 +343,7 @@ def record_observed_rate_limit(
 def record_skill_result_rate_limit(
     skill_result: SkillResult,
     supports_quota_check: bool,
-    config: Any | None,
+    config: QuotaPersistenceConfigLike | None,
     *,
     now_epoch: int | None = None,
 ) -> None:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from inspect import isawaitable
 from pathlib import Path
 
 from fastmcp import Context
@@ -163,9 +162,7 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
 
         service = _get_ctx().managed_fixed_batch_supervisor
         if service is not None:
-            close_result = service.close()
-            if isawaitable(close_result):
-                await close_result
+            await service.close()
         _close_kitchen_handler()
 
         exploration_store = _get_ctx().exploration_context_store

@@ -15,6 +15,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _QUOTA_MODULES: tuple[str, ...] = (
     "execution/quota.py",
+    "execution/_quota_observed.py",
     "server/_misc.py",
     "hooks/guards/quota_guard.py",
     "hooks/quota_post_hook.py",

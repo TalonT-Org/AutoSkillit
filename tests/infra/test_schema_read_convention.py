@@ -114,6 +114,13 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/planner/consolidation.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/planner/validation.py": "Transient single-pipeline-run artifacts",
     "src/autoskillit/execution/_recording_skills.py": "Informational manifest — never read back",
+    "src/autoskillit/execution/_quota_observed.py": (
+        "record_observed_rate_limit's read-modify-write reads the same "
+        "observed-constraints file back via quota_constraints.safe_decode_observed_constraints "
+        "— a stricter schema validator (exact schema_version match, raises on malformed "
+        "entries, decoded to typed QuotaConstraint records) rather than read_versioned_json's "
+        "generic reader, mirroring the _retiring_cache.py/_active_kitchens.py pattern above."
+    ),
     "src/autoskillit/core/_execution_marker.py": (
         "Progress signal — written and deleted, never read back"
     ),

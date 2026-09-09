@@ -27,7 +27,9 @@ class TestSessionIndexRoundtrip:
         assert not extra, f"Keys written to sessions.jsonl but not in SessionIndexEntry: {extra}"
         assert not missing, f"SessionIndexEntry fields never written to sessions.jsonl: {missing}"
 
-    def test_appending_v9_row_preserves_retained_v8_row_bytes(self, tmp_path):
+    def test_appending_current_schema_row_preserves_retained_v8_row_bytes(self, tmp_path):
+        from autoskillit.core import SESSION_INDEX_SCHEMA_VERSION
+
         _flush(tmp_path, session_id="retained-v8", proc_snapshots=None)
         retained_session_dir = tmp_path / "sessions" / "retained-v8"
         assert retained_session_dir.is_dir()
@@ -57,5 +59,5 @@ class TestSessionIndexRoundtrip:
         old_row, new_row = map(json.loads, lines)
         assert old_row["schema_version"] == 8
         assert "subagent_model_outcomes" not in old_row
-        assert new_row["schema_version"] == 9
+        assert new_row["schema_version"] == SESSION_INDEX_SCHEMA_VERSION
         assert new_row["subagent_model_outcomes"] == [outcome]

@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
     ChannelConfirmation,
@@ -21,14 +21,21 @@ from autoskillit.core import (
     SkillResult,
     TerminationReason,
     WriteBehaviorSpec,
-    extract_skill_name,
     get_logger,
     validate_worktree_path,
 )
 from autoskillit.execution.headless._headless_adjudication import (
+    _EVIDENCE_RECOVERABLE_SUBTYPES,
+    _IDLE_STALL_SPEC,
+    _STALE_SPEC,
+    _apply_closure_verification_gate,
+    _apply_contract_recovery_gate,
+    _apply_outcome_qualifier,
     _apply_post_session_adjudication,
+    _attempt_stall_recovery,
+    _build_api_failure_outcome,
     _build_api_retry_outcome,
-    _has_out_of_cwd_file_change,
+    _detect_path_contamination,
     _make_terminated_result,
     _parse_stdout,
     _resolve_skill_session_id,
@@ -43,34 +50,26 @@ from autoskillit.execution.headless._headless_evidence import (
 )
 from autoskillit.execution.headless._headless_path_tokens import (
     _extract_branch_name,
-    _extract_output_paths,
     _extract_worktree_path,
     _normalize_messages,
-    _select_output_path_tokens,
-    _validate_output_paths,
 )
 from autoskillit.execution.headless._headless_recovery import (
     _infer_enum_token_from_write_contract,
     _recover_block_from_assistant_messages,
     _recover_from_separate_marker,
-    _scan_jsonl_write_paths,
     _synthesize_from_write_artifacts,
 )
 from autoskillit.execution.process import (
     fold_lifecycle_evidence,
     fold_lifecycle_evidence_path,
 )
-from autoskillit.execution.session._exit_classification import (
-    classify_infra_exit,
-    has_rate_limit_signal,
-)
+from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
 )
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
-    _compute_success,
 )
 
 if TYPE_CHECKING:
@@ -79,9 +78,55 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_EVIDENCE_RECOVERABLE_SUBTYPES: frozenset[str] = frozenset({"adjudicated_failure", "unparseable"})
-
 __all__ = ["_build_skill_result"]
+
+
+def _apply_infra_retry_policy(
+    category: InfraExitCategory,
+    *,
+    outcome: SessionOutcome,
+    success: bool,
+    needs_retry: bool,
+    retry_reason: RetryReason,
+    kill_reason: KillReason,
+    termination: TerminationReason,
+) -> tuple[SessionOutcome, bool, RetryReason]:
+    """Apply the single retry decision authority for an infra exit category."""
+    match category:
+        case InfraExitCategory.RATE_LIMITED:
+            if not success:
+                return outcome, True, RetryReason.RATE_LIMITED
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.API_ERROR:
+            if not success:
+                return outcome, True, RetryReason.RESUME
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.API_ERROR_TERMINAL:
+            if not success:
+                return SessionOutcome.FAILED, False, RetryReason.NONE
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.UNCLASSIFIED | InfraExitCategory.CONTEXT_EXHAUSTED:
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.PROCESS_KILLED:
+            # `not needs_retry` is reachable only from the main call site (where
+            # needs_retry is computed dynamically). The stale and idle call
+            # sites always pass needs_retry=True, so from those two paths this
+            # guard never matches and execution falls through to the
+            # unconditional return below, which already yields needs_retry=True
+            # (retaining the caller's STALE/IDLE_STALL retry_reason instead of
+            # switching to RESUME).
+            if (
+                not success
+                and not needs_retry
+                and kill_reason == KillReason.NATURAL_EXIT
+                and termination != TerminationReason.TIMED_OUT
+            ):
+                return SessionOutcome.RETRIABLE, True, RetryReason.RESUME
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.COMPLETED:
+            return outcome, needs_retry, retry_reason
+        case _ as unreachable:
+            assert_never(unreachable)
 
 
 def _build_skill_result(
@@ -196,77 +241,47 @@ def _build_skill_result(
     )
     if result.termination == TerminationReason.STALE:
         # Attempt to recover from stdout before declaring stale failure.
-        stale_session = _parse_stdout(result.stdout, backend=backend)
-        stale_evidence = _compute_write_evidence(
-            stale_session,
-            fs_writes_detected,
-            git_writes_detected,
+        recovered_sr, stale_session, stale_evidence, stale_api_retry = _attempt_stall_recovery(
+            result,
             backend,
+            _STALE_SPEC,
+            completion_marker=completion_marker,
+            skill_command=skill_command,
+            expected_output_patterns=expected_output_patterns,
+            completion_required=completion_required,
+            provider_used=provider_used,
+            write_behavior=write_behavior,
+            skill_contract=skill_contract,
+            cwd=cwd,
+            fs_writes_detected=fs_writes_detected,
+            git_writes_detected=git_writes_detected,
             file_changes=file_changes,
             write_watch_dirs=write_watch_dirs,
-            cwd=cwd,
-            skill_command=skill_command,
         )
-        stale_api_retry = _build_api_retry_outcome(stale_session)
-        stale_returncode = result.returncode if result.returncode is not None else -1
-        can_attempt_stale_recovery = (
-            stale_session.subtype == CliSubtype.SUCCESS
-            and stale_session.result.strip()
-            and not stale_session.is_error
-        )
-        if can_attempt_stale_recovery:
-            success = _compute_success(
-                stale_session,
-                stale_returncode,
-                TerminationReason.COMPLETED,
-                completion_marker=completion_marker,
-                channel_confirmation=result.channel_confirmation,
-                expected_output_patterns=expected_output_patterns,
-                completion_required=completion_required,
-            )
-            if success:
-                logger.warning(
-                    "Session went stale but stdout contained a valid result; recovering"
-                )
-                _stale_success_sr = _make_terminated_result(
-                    result=result,
-                    session=stale_session,
-                    success=True,
-                    result_text=stale_session.agent_result,
-                    subtype="recovered_from_stale",
-                    needs_retry=False,
-                    retry_reason=RetryReason.NONE,
-                    evidence=stale_evidence,
-                    provider_used=provider_used,
-                    api_retry=stale_api_retry,
-                )
-                _stale_success_sr = _apply_post_session_adjudication(
-                    _stale_success_sr, stale_evidence, write_behavior, skill_contract, cwd
-                )
-                return _stale_success_sr
+        if recovered_sr is not None:
+            return recovered_sr
         # No valid result in stdout — fall through to original stale response
-        _stale_is_rate_limited = has_rate_limit_signal(stale_session, result)
-        _stale_is_api_error = stale_session.api_retry_exhausted or (
-            stale_session.api_error_status is not None and stale_session.api_error_status >= 400
+        stale_category = classify_infra_exit(
+            stale_session, result, capabilities=backend.capabilities
         )
-        _stale_retry_reason = (
-            RetryReason.RATE_LIMITED if _stale_is_rate_limited else RetryReason.STALE
+        _, stale_needs_retry, stale_retry_reason = _apply_infra_retry_policy(
+            stale_category,
+            outcome=SessionOutcome.RETRIABLE,
+            success=False,
+            needs_retry=True,
+            retry_reason=RetryReason.STALE,
+            kill_reason=result.kill_reason,
+            termination=result.termination,
         )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="stale",
-            needs_retry=True,
-            retry_reason=_stale_retry_reason,
+            needs_retry=stale_needs_retry,
+            retry_reason=stale_retry_reason,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
-        if _stale_is_rate_limited:
-            stale_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
-        elif _stale_is_api_error:
-            stale_infra = InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-        else:
-            stale_infra = InfraOutcome()
         stale_sr = _make_terminated_result(
             result=result,
             session=stale_session,
@@ -276,89 +291,59 @@ def _build_skill_result(
                 "Partial progress may have been made. Retry to continue."
             ),
             subtype="stale",
-            needs_retry=True,
-            retry_reason=_stale_retry_reason,
+            needs_retry=stale_needs_retry,
+            retry_reason=stale_retry_reason,
             evidence=stale_evidence,
             provider_used=provider_used,
-            infra=stale_infra,
+            infra=InfraOutcome(exit_category=stale_category.value),
             api_retry=stale_api_retry,
         )
         return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.IDLE_STALL:
-        idle_session = _parse_stdout(result.stdout, backend=backend)
-        idle_evidence = _compute_write_evidence(
-            idle_session,
-            fs_writes_detected,
-            git_writes_detected,
+        recovered_sr, idle_session, idle_evidence, idle_api_retry = _attempt_stall_recovery(
+            result,
             backend,
+            _IDLE_STALL_SPEC,
+            completion_marker=completion_marker,
+            skill_command=skill_command,
+            expected_output_patterns=expected_output_patterns,
+            completion_required=completion_required,
+            provider_used=provider_used,
+            write_behavior=write_behavior,
+            skill_contract=skill_contract,
+            cwd=cwd,
+            fs_writes_detected=fs_writes_detected,
+            git_writes_detected=git_writes_detected,
             file_changes=file_changes,
             write_watch_dirs=write_watch_dirs,
-            cwd=cwd,
-            skill_command=skill_command,
         )
-        idle_api_retry = _build_api_retry_outcome(idle_session)
-        idle_returncode = result.returncode if result.returncode is not None else -1
-        can_attempt_idle_stall_recovery = (
-            idle_session.subtype == CliSubtype.SUCCESS
-            and idle_session.result.strip()
-            and not idle_session.is_error
+        if recovered_sr is not None:
+            return recovered_sr
+        idle_category = classify_infra_exit(
+            idle_session, result, capabilities=backend.capabilities
         )
-        if can_attempt_idle_stall_recovery:
-            success = _compute_success(
-                idle_session,
-                idle_returncode,
-                TerminationReason.COMPLETED,
-                completion_marker=completion_marker,
-                channel_confirmation=result.channel_confirmation,
-                expected_output_patterns=expected_output_patterns,
-                completion_required=completion_required,
-            )
-            if success:
-                logger.warning(
-                    "Session idle-stalled but stdout contained a valid result; recovering"
-                )
-                _idle_success_sr = _make_terminated_result(
-                    result=result,
-                    session=idle_session,
-                    success=True,
-                    result_text=idle_session.agent_result,
-                    subtype="recovered_from_idle_stall",
-                    needs_retry=False,
-                    retry_reason=RetryReason.NONE,
-                    evidence=idle_evidence,
-                    provider_used=provider_used,
-                    api_retry=idle_api_retry,
-                )
-                _idle_success_sr = _apply_post_session_adjudication(
-                    _idle_success_sr, idle_evidence, write_behavior, skill_contract, cwd
-                )
-                return _idle_success_sr
-        _idle_is_rate_limited = has_rate_limit_signal(idle_session, result)
-        _idle_is_api_error = idle_session.api_retry_exhausted or (
-            idle_session.api_error_status is not None and idle_session.api_error_status >= 400
-        )
-        _idle_retry_reason = (
-            RetryReason.RATE_LIMITED if _idle_is_rate_limited else RetryReason.IDLE_STALL
+        _, idle_needs_retry, idle_retry_reason = _apply_infra_retry_policy(
+            idle_category,
+            outcome=SessionOutcome.RETRIABLE,
+            success=False,
+            needs_retry=True,
+            retry_reason=RetryReason.IDLE_STALL,
+            kill_reason=result.kill_reason,
+            termination=result.termination,
         )
         _capture_failure(
             skill_command,
             exit_code=result.returncode if result.returncode is not None else -1,
             subtype="idle_stall",
-            needs_retry=True,
-            retry_reason=_idle_retry_reason,
+            needs_retry=idle_needs_retry,
+            retry_reason=idle_retry_reason,
             stderr=result.stderr if result.stderr else "",
             audit=audit,
         )
         logger.warning(
             "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
         )
-        if _idle_is_rate_limited:
-            idle_infra = InfraOutcome(exit_category=InfraExitCategory.RATE_LIMITED.value)
-        elif _idle_is_api_error:
-            idle_infra = InfraOutcome(exit_category=InfraExitCategory.API_ERROR.value)
-        else:
-            idle_infra = InfraOutcome()
         idle_sr = _make_terminated_result(
             result=result,
             session=idle_session,
@@ -368,11 +353,11 @@ def _build_skill_result(
                 "Partial progress may have been made. Retry to continue."
             ),
             subtype="idle_stall",
-            needs_retry=True,
-            retry_reason=_idle_retry_reason,
+            needs_retry=idle_needs_retry,
+            retry_reason=idle_retry_reason,
             evidence=idle_evidence,
             provider_used=provider_used,
-            infra=idle_infra,
+            infra=InfraOutcome(exit_category=idle_category.value),
             api_retry=idle_api_retry,
         )
         return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
@@ -516,43 +501,15 @@ def _build_skill_result(
     infra_category = classify_infra_exit(session, result, capabilities=backend.capabilities)
     api_retry = _build_api_retry_outcome(session)
 
-    # API error override: when the session failed due to an API infrastructure error
-    # (overload, 529, ECONNRESET), promote to RESUME so the orchestrator routes to
-    # on_context_limit instead of on_failure (partial progress may exist).
-    if not success and infra_category == InfraExitCategory.API_ERROR:
-        logger.info(
-            "api_error_override",
-            original_retry_reason=retry_reason.value,
-            promoted_to="resume",
-        )
-        retry_reason = RetryReason.RESUME
-        needs_retry = True
-
-    # Rate-limit override: HTTP 429 is a transient rate limit, not structural context
-    # exhaustion. Produce RATE_LIMITED so the orchestrator can route to on_rate_limit
-    # instead of on_context_limit, enabling wait-and-retry rather than escalation.
-    if not success and infra_category == InfraExitCategory.RATE_LIMITED:
-        logger.info(
-            "rate_limit_override",
-            original_retry_reason=retry_reason.value,
-            promoted_to="rate_limited",
-        )
-        retry_reason = RetryReason.RATE_LIMITED
-        needs_retry = True
-
-    # Process kill override: external kills (SIGKILL/OOM, not autoskillit-initiated)
-    # route to RESUME so the orchestrator can attempt recovery.
-    # TIMED_OUT uses a synthetic returncode=-1 but is a wall-clock timeout (non-recoverable).
-    if (
-        not success
-        and not needs_retry
-        and infra_category == InfraExitCategory.PROCESS_KILLED
-        and result.kill_reason == KillReason.NATURAL_EXIT
-        and result.termination != TerminationReason.TIMED_OUT
-    ):
-        retry_reason = RetryReason.RESUME
-        needs_retry = True
-        outcome = SessionOutcome.RETRIABLE
+    outcome, needs_retry, retry_reason = _apply_infra_retry_policy(
+        infra_category,
+        outcome=outcome,
+        success=success,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        kill_reason=result.kill_reason,
+        termination=result.termination,
+    )
 
     normalized_subtype = session.normalize_subtype(
         outcome, completion_marker, prior_completion_markers
@@ -628,70 +585,18 @@ def _build_skill_result(
     effective_worktree_path = validated_wt.path if validated_wt else None
     extracted_branch_name = _extract_branch_name(normalized_msgs)
 
-    # Path contamination detection (two-factor contract — see plan #4150).
-    # Factor 1: contract-scoped text candidate (an assistant-text token path outside CWD,
-    #           selected from the running skill's own file_path* outputs).
-    # Factor 2: boundary-specific write proof (Claude write_path_warnings OR Codex
-    #           completed out-of-CWD FILE_CHANGE with implementation evidence).
-    # Both factors must hold for terminal classification; text alone is never proof.
-    text_path_violation: str | None = None
-    write_path_warnings: list[str] = []
-    skill_name = extract_skill_name(skill_command)
-
-    if not cwd:
-        logger.debug("path_contamination_check_skipped", reason="cwd not provided")
-    else:
-        selected_tokens = _select_output_path_tokens(skill_name)
-        extracted_paths = _extract_output_paths(normalized_msgs, token_scope=selected_tokens)
-        text_path_violation = _validate_output_paths(extracted_paths, cwd)
-        if text_path_violation:
-            logger.debug(
-                "text_path_candidate_detected",
-                detail=text_path_violation,
-                cwd=cwd,
-                skill_name=skill_name,
-                scope_size=len(selected_tokens),
-            )
-
-        if supports_claude_format_stdout:
-            _wtn = backend.capabilities.write_guard_tool_names
-            if _wtn:
-                write_path_warnings = _scan_jsonl_write_paths(
-                    result.stdout,
-                    cwd,
-                    write_tool_names=_wtn,
-                )
-            else:
-                write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
-            if write_path_warnings:
-                logger.warning(
-                    "write_path_warnings_detected",
-                    count=len(write_path_warnings),
-                    cwd=cwd,
-                    warnings=write_path_warnings[:5],
-                )
-
-    # Factor 2: boundary-specific write proof (path-bearing, not just counts).
-    claude_boundary_proof = bool(write_path_warnings)
-    codex_boundary_proof = (
-        backend.capabilities.write_detection_strategy == "file_changes"
-        and _has_out_of_cwd_file_change(file_changes, cwd)
-        and evidence.has_implementation_evidence
+    # Path contamination detection (two-factor contract — see plan #4150);
+    # see _detect_path_contamination for the factor breakdown.
+    write_path_warnings, is_path_contamination = _detect_path_contamination(
+        result,
+        backend,
+        normalized_msgs=normalized_msgs,
+        cwd=cwd,
+        skill_command=skill_command,
+        file_changes=file_changes,
+        evidence=evidence,
+        supports_claude_format_stdout=supports_claude_format_stdout,
     )
-    is_path_contamination = bool(text_path_violation) and (
-        claude_boundary_proof or codex_boundary_proof
-    )
-
-    if text_path_violation and not is_path_contamination:
-        # Recurrence analysis signal: text alone is a hint, not a verdict.
-        logger.info(
-            "text_path_candidate_uncorroborated",
-            detail=text_path_violation,
-            cwd=cwd,
-            skill_name=skill_name,
-            claude_boundary_proof=claude_boundary_proof,
-            codex_boundary_proof=codex_boundary_proof,
-        )
 
     _cleanup_incomplete = _should_flag_cleanup_incomplete(result, subtype=normalized_subtype)
 
@@ -719,6 +624,7 @@ def _build_skill_result(
             exit_category=infra_category.value, cleanup_incomplete=_cleanup_incomplete
         ),
         api_retry=api_retry,
+        api_failure=_build_api_failure_outcome(session),
         ndjson_drift=NdjsonDriftOutcome(
             unknown_event_count=session.seen_ndjson_unknown_event_count,
             unknown_item_count=session.seen_ndjson_unknown_item_count,
@@ -735,59 +641,21 @@ def _build_skill_result(
         )
     sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
-    # CONTRACT_RECOVERY gate: when the session was classified as a terminal failure
-    # (adjudicated_failure or unparseable) but write evidence exists and the process
-    # exited cleanly, the model wrote the artifact but the structured output token was
-    # missing or the stdout stream was truncated — promote to RETRIABLE(CONTRACT_RECOVERY).
-    # Re-apply budget_guard after promoting so budget exhaustion can still cap retries.
-    # The first _apply_budget_guard skips this case because needs_retry is False then.
-    if (
-        not sr.success
-        and not sr.needs_retry
-        and sr.subtype in _EVIDENCE_RECOVERABLE_SUBTYPES
-        and _has_write_evidence
-        and not readonly_skill
-        and (sr.subtype == "adjudicated_failure" or returncode == 0)
-    ):
-        sr = dataclasses.replace(
-            sr,
-            needs_retry=True,
-            retry_reason=RetryReason.CONTRACT_RECOVERY,
-        )
-        sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+    # CONTRACT_RECOVERY gate: see _apply_contract_recovery_gate.
+    sr = _apply_contract_recovery_gate(
+        sr,
+        has_write_evidence=_has_write_evidence,
+        readonly_skill=readonly_skill,
+        returncode=returncode,
+        skill_command=skill_command,
+        audit=audit,
+        max_consecutive_retries=max_consecutive_retries,
+    )
 
     sr = _apply_post_session_adjudication(sr, evidence, write_behavior, skill_contract, cwd)
 
-    # Closure verification gate: when a ClosureAuthoritySpec is active, independently
-    # verify the canonical closure report. On failure, demote to execution error so
-    # the recipe's on_failure route fires. This gate cannot be bypassed by the LLM
-    # orchestrator — it is enforced programmatically after session completion.
-    if closure_spec is not None and closure_report_root is not None:
-        from autoskillit.core import verify_closure_report
-
-        report_file = closure_report_root / "closure_report.json"
-        verification = verify_closure_report(
-            report_path=report_file,
-            authority_path=Path(closure_spec.authority_path),
-            authority_hash=closure_spec.authority_hash,
-            output_root=closure_report_root,
-            plan_paths=tuple(Path(p) for p in closure_spec.plan_paths),
-            base_sha=closure_spec.base_sha,
-            diff_sha=closure_spec.diff_sha,
-            target_sha=closure_spec.target_sha,
-        )
-        if not verification.success:
-            error_detail = "; ".join(verification.errors)
-            sr = dataclasses.replace(
-                sr,
-                success=False,
-                is_error=True,
-                subtype="closure_verification_failed",
-                result=f"Closure verification failed: {error_detail}",
-            )
-        else:
-            if sr.retry_reason == RetryReason.EMPTY_OUTPUT:
-                sr = dataclasses.replace(sr, is_error=False)
+    # Closure verification gate: see _apply_closure_verification_gate.
+    sr = _apply_closure_verification_gate(sr, closure_spec, closure_report_root)
 
     if sr.needs_retry and sr.retry_reason == RetryReason.EMPTY_OUTPUT and _has_write_evidence:
         sr = dataclasses.replace(
@@ -797,22 +665,7 @@ def _build_skill_result(
         )
         sr = _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
 
-    if skill_contract is not None and skill_contract.outputs:
-        _parsed_fields = dict(sr.outcome_fields or {})
-        _qualifier: str | None = None
-        if sr.success and skill_contract.success_qualifiers:
-            from autoskillit.execution.headless._headless_outcome import (
-                evaluate_success_qualifier,
-            )
-
-            _qualifier = evaluate_success_qualifier(
-                _parsed_fields, skill_contract.success_qualifiers
-            )
-        sr = dataclasses.replace(
-            sr,
-            outcome_invariant_violated=sr.retry_reason == RetryReason.OUTCOME_INVARIANT,
-            outcome_qualifier=_qualifier,
-        )
+    sr = _apply_outcome_qualifier(sr, skill_contract)
 
     logger.debug(
         "build_skill_result_exit",

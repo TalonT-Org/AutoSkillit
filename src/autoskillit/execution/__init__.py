@@ -12,6 +12,10 @@ from autoskillit.execution._recording_skills import (
     snapshot_skill_dir,
 )
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
+from autoskillit.execution._session_retention import (
+    read_telemetry_clear_marker,
+    write_telemetry_clear_marker,
+)
 from autoskillit.execution.anomaly_detection import (
     AnomalyKind,
     AnomalySeverity,
@@ -202,10 +206,8 @@ from autoskillit.execution.session import (
 from autoskillit.execution.session_index import read_session_index_rows
 from autoskillit.execution.session_log import (
     flush_session_log,
-    read_telemetry_clear_marker,
     resolve_log_dir,
     session_index_lock_path,
-    write_telemetry_clear_marker,
 )
 from autoskillit.execution.testing import (
     DefaultTestRunner,

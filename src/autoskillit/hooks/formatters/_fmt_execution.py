@@ -258,6 +258,14 @@ _FMT_RUN_SKILL_SUPPRESSED: frozenset[str] = frozenset(
         "execution_identity",
         "stage",
         "retriable",
+        "api_error_status",
+        "api_terminal_reason",
+        "api_error_code",
+        "api_error_message_seen",
+        "rate_limit_status",
+        "rate_limit_type",
+        "rate_limit_resets_at_epoch",
+        "branch_name",
     }
 )
 _FMT_RUN_CMD_RENDERED: frozenset[str] = frozenset(

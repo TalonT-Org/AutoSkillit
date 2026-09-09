@@ -21,18 +21,9 @@ from autoskillit.core import (
     NativeShellCaptureMode,
     NativeShellCaptureReason,
 )
-from autoskillit.core.types._type_results import ProviderOutcome
-from autoskillit.core.types._type_results_execution import (
-    RecipeIdentity,
-    SessionTelemetry,
-)
+from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
-from autoskillit.execution.session_log import (
-    flush_session_log,
-    read_telemetry_clear_marker,
-    resolve_log_dir,
-    write_telemetry_clear_marker,
-)
+from autoskillit.execution.session_log import resolve_log_dir
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -505,7 +496,6 @@ def test_resumed_session_uses_distinct_log_directory(tmp_path):
     start_ts_resume = "2026-05-24T11:00:00+00:00"
 
     common_kwargs = dict(
-        log_dir=str(tmp_path),
         cwd="/home/test/project",
         session_id=shared_session_id,
         pid=12345,
@@ -514,13 +504,10 @@ def test_resumed_session_uses_distinct_log_directory(tmp_path):
         subtype="completed",
         exit_code=0,
         proc_snapshots=None,
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
-        telemetry=SessionTelemetry.empty(),
     )
 
-    flush_session_log(**common_kwargs, start_ts=start_ts_original, is_resume=False)
-    flush_session_log(**common_kwargs, start_ts=start_ts_resume, is_resume=True)
+    _flush(tmp_path, **common_kwargs, start_ts=start_ts_original, is_resume=False)
+    _flush(tmp_path, **common_kwargs, start_ts=start_ts_resume, is_resume=True)
 
     sessions_dir = tmp_path / "sessions"
     dirs = sorted(d.name for d in sessions_dir.iterdir())
@@ -734,8 +721,8 @@ def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_pat
     """duration_seconds must never be negative, even if end_ts precedes start_ts."""
     start_ts = "2026-01-01T12:05:00+00:00"  # later
     end_ts = "2026-01-01T12:00:00+00:00"  # earlier — backward clock
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/tmp",
         session_id="backward-clock-test",
         pid=1,
@@ -748,9 +735,6 @@ def test_flush_session_log_backward_clock_produces_non_negative_duration(tmp_pat
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "backward-clock-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -763,8 +747,8 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
     """When elapsed_seconds is provided, it is used as duration_seconds, not ISO subtraction."""
     start_ts = "2026-01-01T12:00:00+00:00"
     end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/tmp",
         session_id="elapsed-seconds-test",
         pid=1,
@@ -778,9 +762,6 @@ def test_flush_session_log_uses_elapsed_seconds_over_iso_subtraction(tmp_path):
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "elapsed-seconds-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -796,8 +777,8 @@ def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
     """
     start_ts = "2026-01-01T12:00:00+00:00"
     end_ts = "2026-01-01T12:00:05+00:00"  # ISO implies 5.0s
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/tmp",
         session_id="zero-elapsed-test",
         pid=1,
@@ -811,9 +792,6 @@ def test_flush_session_log_zero_elapsed_seconds_is_valid(tmp_path):
         proc_snapshots=[],
         termination_reason="completed",
         snapshot_interval_seconds=5.0,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
     session_dir = tmp_path / "sessions" / "zero-elapsed-test"
     summary = json.loads((session_dir / "summary.json").read_text())
@@ -947,12 +925,14 @@ def test_flush_index_includes_step_name_and_token_fields(tmp_path):
     assert entry["cache_read_tokens"] == 80
 
 
-def test_flush_index_includes_schema_version_9(tmp_path):
-    """sessions.jsonl entry must contain schema_version: 9."""
+def test_flush_index_includes_current_schema_version(tmp_path):
+    """sessions.jsonl entry must contain the current schema version."""
+    from autoskillit.core import SESSION_INDEX_SCHEMA_VERSION
+
     _flush(tmp_path)
     index_path = tmp_path / "sessions.jsonl"
     entry = json.loads(index_path.read_text().strip().split("\n")[-1])
-    assert entry["schema_version"] == 9
+    assert entry["schema_version"] == SESSION_INDEX_SCHEMA_VERSION
 
 
 def test_native_shell_diagnostic_is_limited_to_summary_and_index(tmp_path):
@@ -1153,6 +1133,17 @@ def test_read_clear_marker_missing_returns_none(tmp_path):
 def test_read_clear_marker_corrupt_returns_none(tmp_path):
     (tmp_path / ".telemetry_cleared_at").write_text("not-a-date")
     assert read_telemetry_clear_marker(tmp_path) is None
+
+
+def test_read_clear_marker_naive_timestamp_normalized_to_utc(tmp_path):
+    # A marker file without a timezone offset (hand-edited, or written by an
+    # older/foreign format) must still round-trip to a UTC-aware datetime —
+    # callers compare it against UTC-aware session timestamps.
+    (tmp_path / ".telemetry_cleared_at").write_text("2026-01-01T00:00:00")
+    result = read_telemetry_clear_marker(tmp_path)
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def test_write_clear_marker_is_atomic(tmp_path):

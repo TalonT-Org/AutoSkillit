@@ -158,50 +158,31 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
-        from autoskillit.core.types._type_results import ProviderOutcome
-        from autoskillit.core.types._type_results_execution import (
-            RecipeIdentity,
-            SessionTelemetry,
-        )
-        from autoskillit.execution.session_log import (
-            flush_session_log,
-        )
         from autoskillit.server import _state
+        from tests.execution.conftest import _flush
 
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
 
         # Write a session that completed 5 hours ago (within 24h window)
         five_hours_ago = datetime.now(UTC) - timedelta(hours=5)
-        flush_session_log(
+        _flush(
+            tmp_path,
             log_dir=str(log_dir),
             cwd="/tmp",
             session_id="old-session",
             pid=999,
             skill_command="/autoskillit:foo",
-            success=True,
-            subtype="completed",
-            exit_code=0,
             start_ts=five_hours_ago.isoformat(),
             proc_snapshots=None,
             step_name="old-step",
-            telemetry=SessionTelemetry(
-                token_usage={
-                    "input_tokens": 1000,
-                    "output_tokens": 500,
-                    "cache_write_tokens": 0,
-                    "cache_read_tokens": 0,
-                },
-                timing_seconds=10.0,
-                audit_record=None,
-                github_api_usage=None,
-                github_api_requests=0,
-                loc_insertions=0,
-                loc_deletions=0,
-                subagent_model_outcomes=(),
-            ),
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=RecipeIdentity.empty(),
+            token_usage={
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 0,
+            },
+            timing_seconds=10.0,
         )
 
         # Write a clear marker 3 hours ago (after the session completed)

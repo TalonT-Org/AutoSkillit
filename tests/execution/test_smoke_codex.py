@@ -25,6 +25,7 @@ from autoskillit.execution.backends.codex import (
 )
 from autoskillit.recipe._api import load_and_validate
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
 
@@ -245,13 +246,6 @@ class TestCodexSmokeRecipeComposition:
         session_data, rollout = codex_session
         assert session_data.thread_id, "thread_id not resolved from codex NDJSON"
 
-        from autoskillit.core.types._type_results import ProviderOutcome
-        from autoskillit.core.types._type_results_execution import (
-            RecipeIdentity,
-            SessionTelemetry,
-        )
-        from autoskillit.execution.session_log import flush_session_log
-
         class _FakeLocator:
             def __init__(self, path: Path) -> None:
                 self._path = path
@@ -268,23 +262,17 @@ class TestCodexSmokeRecipeComposition:
             def list_sessions(self, cwd: str) -> tuple:
                 return ()
 
-        flush_session_log(
-            log_dir=str(tmp_path),
+        _flush(
+            tmp_path,
             backend="codex",
-            channel_b_capable=False,
             session_locator=_FakeLocator(rollout),
+            channel_b_capable=False,
             cwd="/tmp/smoke",
             session_id=session_data.thread_id,
             pid=os.getpid(),
             skill_command="/autoskillit:implement",
-            success=True,
-            subtype="completed",
-            exit_code=0,
             start_ts="2026-06-28T00:00:00",
             proc_snapshots=None,
-            telemetry=SessionTelemetry.empty(),
-            provider_outcome=ProviderOutcome.none_used(),
-            recipe_identity=RecipeIdentity.empty(),
         )
         index_text = (tmp_path / "sessions.jsonl").read_text().strip()
         entry = json.loads(index_text)

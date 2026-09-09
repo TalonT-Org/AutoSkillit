@@ -11,13 +11,53 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
-from autoskillit.core import VANISHED_ERRORS, get_logger, scan_observed
+from autoskillit.core import VANISHED_ERRORS, atomic_write, get_logger, scan_observed
 
 logger = get_logger(__name__)
 
 _MAX_SESSIONS = 2000
+_CLEAR_MARKER_FILENAME = ".telemetry_cleared_at"
+
+
+def write_telemetry_clear_marker(log_root: Path) -> None:
+    """Write the current UTC timestamp as a telemetry-clear fence."""
+    try:
+        log_root = Path(log_root)
+        log_root.mkdir(parents=True, exist_ok=True)
+        atomic_write(log_root / _CLEAR_MARKER_FILENAME, datetime.now(UTC).isoformat())
+    except (OSError, ValueError, TypeError) as exc:
+        # Narrow catch for filesystem ops and atomic_write's known exception set;
+        # broader ``Exception`` would mask programmatic bugs (AttributeError, KeyError)
+        # as routine retention failures.
+        logger.debug(
+            "write_telemetry_clear_marker failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
+
+
+def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
+    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt.
+
+    ``write_telemetry_clear_marker`` always writes a UTC-aware timestamp, but
+    ``datetime.fromisoformat`` returns a naive datetime for any source string
+    that lacks a timezone offset (e.g. a hand-edited or older-format marker
+    file). Consumers compare the result against UTC-aware timestamps, so
+    naive values are normalized to UTC here, mirroring
+    ``quota_constraints.normalize_naive_utc``.
+    """
+    try:
+        text = (Path(log_root) / _CLEAR_MARKER_FILENAME).read_text(encoding="utf-8").strip()
+        parsed = datetime.fromisoformat(text)
+    except (OSError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 def apply_session_retention(

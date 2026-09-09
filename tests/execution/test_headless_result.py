@@ -684,18 +684,24 @@ class TestBackendDelegatedWriteToolNames:
         assert captured["backend"] is mock_backend
 
     def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
-        """_build_skill_result passes backend to _parse_stdout on stale branch."""
+        """_build_skill_result passes backend to _parse_stdout on stale branch.
 
-        from autoskillit.execution.headless import _headless_result
+        The stale branch's recovery attempt (parse + evidence + recovery check)
+        is delegated to _attempt_stall_recovery in _headless_adjudication, which
+        calls its own module-level _parse_stdout binding -- so the spy is set
+        there, not on _headless_result.
+        """
+
+        from autoskillit.execution.headless import _headless_adjudication
 
         captured: dict = {}
-        original_parse = _headless_result._parse_stdout
+        original_parse = _headless_adjudication._parse_stdout
 
         def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
-        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+        monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -710,18 +716,23 @@ class TestBackendDelegatedWriteToolNames:
         assert captured["backend"] is mock_backend
 
     def test_build_skill_result_idle_stall_threads_backend_to_parse_stdout(self, monkeypatch):
-        """_build_skill_result passes backend to _parse_stdout on idle_stall branch."""
+        """_build_skill_result passes backend to _parse_stdout on idle_stall branch.
 
-        from autoskillit.execution.headless import _headless_result
+        See test_build_skill_result_stale_threads_backend_to_parse_stdout: the
+        idle_stall branch's recovery attempt is likewise delegated to
+        _attempt_stall_recovery in _headless_adjudication.
+        """
+
+        from autoskillit.execution.headless import _headless_adjudication
 
         captured: dict = {}
-        original_parse = _headless_result._parse_stdout
+        original_parse = _headless_adjudication._parse_stdout
 
         def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
-        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+        monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -1647,8 +1658,8 @@ class TestStaleApiRetryExhaustion:
         assert sr.api_retry.exhausted is True
         assert sr.api_retry.count == 1
 
-    def test_stale_without_api_retry_has_empty_infra(self):
-        """Stale with no api_retry → infra_exit_category='', count=0."""
+    def test_stale_without_api_retry_retains_unclassified_infra_category(self):
+        """Stale with an unrecognized failed session retains its shared category."""
         ndjson = json.dumps(
             {
                 "type": "result",
@@ -1661,7 +1672,7 @@ class TestStaleApiRetryExhaustion:
         result = _sr(0, ndjson, "", TerminationReason.STALE)
         sr = _build_skill_result(result, backend=ClaudeCodeBackend())
         assert sr.success is False
-        assert sr.infra.exit_category == ""
+        assert sr.infra.exit_category == "unclassified"
         assert sr.api_retry.count == 0
 
     def test_stale_recovery_with_api_retry_does_not_set_infra_error(self):

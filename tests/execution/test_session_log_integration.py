@@ -12,12 +12,7 @@ from datetime import UTC, datetime, timedelta
 import anyio
 import pytest
 
-from autoskillit.core.types._type_results import ProviderOutcome
-from autoskillit.core.types._type_results_execution import (
-    RecipeIdentity,
-    SessionTelemetry,
-)
-from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT
+from tests.execution.conftest import _ALLOCATE_60MB_SCRIPT, _flush
 
 pytestmark = [
     pytest.mark.layer("execution"),
@@ -30,7 +25,6 @@ pytestmark = [
 async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     """End-to-end: snapshot accumulation + flush produces unique ts per record."""
     from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
-    from autoskillit.execution.session_log import flush_session_log
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(proc_interval=0.05, tmpfs_path=str(tmp_path))
@@ -49,8 +43,8 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     assert len(snaps) >= 2, "Need at least 2 snapshots for timestamp variance test"
     snap_dicts = [asdict(s) for s in snaps]
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/tmp",
         session_id="integration-test-001",
         pid=os.getpid(),
@@ -64,9 +58,6 @@ async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
         termination_reason="natural_exit",
         snapshot_interval_seconds=0.05,
         proc_snapshots=snap_dicts,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     session_dir = tmp_path / "sessions" / "integration-test-001"
@@ -108,10 +99,8 @@ _BASE_SNAP: dict[str, object] = {
 
 
 def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
-    from autoskillit.execution.session_log import flush_session_log
-
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/tmp",
         session_id=session_id,
         pid=12345,
@@ -121,9 +110,6 @@ def _flush_with_snaps(tmp_path, session_id: str, snaps: list[dict]) -> None:
         exit_code=0,
         start_ts="2026-01-01T00:00:00+00:00",
         proc_snapshots=snaps,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
 
@@ -172,7 +158,6 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
     If this ever fails, the test name points directly at the PTY wrapper tracer bug class.
     """
     from autoskillit.execution.process import run_managed_async
-    from autoskillit.execution.session_log import flush_session_log
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(proc_interval=0.1, tmpfs_path=str(tmp_path / "shm"))
@@ -191,8 +176,8 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
 
     assert result.proc_snapshots is not None, "Snapshots must be present"
 
-    flush_session_log(
-        log_dir=str(tmp_path / "logs"),
+    _flush(
+        tmp_path / "logs",
         cwd=str(tmp_path),
         session_id="sanity-floor-001",
         pid=result.pid,
@@ -202,9 +187,6 @@ async def test_peak_rss_kb_above_sanity_floor(tmp_path):
         exit_code=0,
         start_ts=result.start_ts or "2026-01-01T00:00:00+00:00",
         proc_snapshots=result.proc_snapshots,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     summary_path = tmp_path / "logs" / "sessions" / "sanity-floor-001" / "summary.json"

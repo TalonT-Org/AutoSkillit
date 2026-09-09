@@ -24,18 +24,39 @@ from pathlib import Path
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_PACKAGE_DIR = str(Path(__file__).resolve().parent.parent)
+if _PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, _PACKAGE_DIR)
 
 from _hook_settings import (  # noqa: E402
+    QuotaHookSettings,
     is_quota_guard_disabled_for_session,
     read_quota_cache,
     resolve_quota_log_dir,
     resolve_quota_settings,
     write_quota_log_event,
 )  # type: ignore[import-not-found]
+from quota_constraints import (  # noqa: E402
+    QuotaConstraint,
+    decide_quota_block,
+)  # type: ignore[import-not-found]
 
 # Emitted in post-tool output; referenced by orchestrator prompt and sous-chef SKILL.md.
 QUOTA_POST_WARNING_TRIGGER: str = "--- QUOTA WARNING ---"
 QUOTA_POST_BUDGET_EXCEEDED_TRIGGER: str = "QUOTA BUDGET EXCEEDED"
+
+
+def quota_post_decision(
+    settings: QuotaHookSettings, *, now_epoch: int
+) -> tuple[QuotaConstraint | None, dict]:
+    """Return the cumulative quota blocker and poll display metadata."""
+    return decide_quota_block(
+        settings.cache_path,
+        account_scope=settings.quota_account_scope,
+        read_cache=read_quota_cache,
+        cache_max_age=settings.cache_max_age,
+        now_epoch=now_epoch,
+    )
 
 
 def main(*, cache_path_override: str | None = None) -> None:
@@ -58,7 +79,6 @@ def main(*, cache_path_override: str | None = None) -> None:
     if event_session_id and is_quota_guard_disabled_for_session(event_session_id):
         sys.exit(0)  # session-scoped disable marker present
     cache_path_str = settings.cache_path
-    cache_max_age = settings.cache_max_age
     log_dir = resolve_quota_log_dir(caller="quota_post_hook")
     ts = datetime.now(UTC).isoformat()
 
@@ -92,20 +112,12 @@ def main(*, cache_path_override: str | None = None) -> None:
         )
         sys.exit(0)
 
-    cache = read_quota_cache(cache_path_str, cache_max_age)
-    if cache is None:
-        sys.exit(0)
-
-    try:
-        binding = cache.get("binding")
-        if not binding or not isinstance(binding, dict):
-            raise KeyError("binding")
-        utilization = float(binding["utilization"])
-        should_block = bool(binding.get("should_block", False))
-        effective_threshold = float(binding.get("effective_threshold", 0.0))
-        window_name = str(binding.get("window_name", "unknown"))
-    except (KeyError, ValueError, TypeError):
-        sys.exit(0)
+    now_epoch = int(time.time())
+    winner, metadata = quota_post_decision(settings, now_epoch=now_epoch)
+    utilization = float(metadata["utilization"])
+    effective_threshold = float(metadata["effective_threshold"])
+    window_name = str(metadata["window_name"])
+    should_block = winner is not None or bool(metadata["unknown_reset_block"])
 
     if not should_block:
         write_quota_log_event(
@@ -122,18 +134,15 @@ def main(*, cache_path_override: str | None = None) -> None:
         )
         sys.exit(0)
 
-    resets_at_str = binding.get("resets_at")
-    if resets_at_str:
-        try:
-            resets_at = datetime.fromisoformat(resets_at_str)
-            now = datetime.now(UTC)
-            n = max(
-                0,
-                int((resets_at - now).total_seconds()) + settings.buffer_seconds,
-            )
-        except (ValueError, TypeError):
-            n = settings.buffer_seconds
+    if winner is not None:
+        resets_at_str = datetime.fromtimestamp(winner.blocked_until_epoch, tz=UTC).isoformat()
+        n = max(
+            0,
+            winner.blocked_until_epoch - now_epoch + settings.buffer_seconds,
+        )
+        window_name = winner.limit_type or window_name
     else:
+        resets_at_str = None
         n = settings.buffer_seconds
 
     session_deadline_str = os.environ.get("AUTOSKILLIT_SESSION_DEADLINE")

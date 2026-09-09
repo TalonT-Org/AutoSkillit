@@ -22,6 +22,7 @@ from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import (
     _RATE_LIMIT_PATTERNS,
+    classify_api_status,
     classify_infra_exit,
     is_signal_death_code,
 )
@@ -221,8 +222,8 @@ class TestClassifyInfraExit:
             classify_infra_exit(session, result, capabilities=_CAPS) == InfraExitCategory.COMPLETED
         )
 
-    def test_completed_logical_failure(self):
-        """Agent failure (success=false, explicit error) → COMPLETED (not infra)."""
+    def test_unclassified_logical_failure(self):
+        """An unrecognized failing session is visible as UNCLASSIFIED."""
         session = ClaudeSessionResult(
             subtype=CliSubtype.ERROR_DURING_EXECUTION,
             is_error=True,
@@ -231,7 +232,8 @@ class TestClassifyInfraExit:
         )
         result = _sr(returncode=1, stderr="")
         assert (
-            classify_infra_exit(session, result, capabilities=_CAPS) == InfraExitCategory.COMPLETED
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     def test_context_exhaustion_takes_precedence_over_api_error(self):
@@ -458,7 +460,7 @@ class TestModelCapacityClassification:
 
         assert (
             classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     def test_disabled_capability_ignores_error_and_stderr_evidence(self) -> None:
@@ -473,7 +475,7 @@ class TestModelCapacityClassification:
 
         assert (
             classify_infra_exit(session, result, capabilities=BackendCapabilities())
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     @pytest.mark.parametrize(
@@ -492,7 +494,7 @@ class TestModelCapacityClassification:
 
         assert (
             classify_infra_exit(session, _sr(returncode=1), capabilities=caps)
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
     @pytest.mark.parametrize(
@@ -530,7 +532,7 @@ class TestModelCapacityClassification:
                 _sr(returncode=1),
                 capabilities=CodexBackend().capabilities,
             )
-            == InfraExitCategory.COMPLETED
+            == InfraExitCategory.UNCLASSIFIED
         )
 
 
@@ -573,8 +575,10 @@ def test_all_infra_categories_handled(category: InfraExitCategory) -> None:
         "completed",
         "context_exhausted",
         "api_error",
+        "api_error_terminal",
         "process_killed",
         "rate_limited",
+        "unclassified",
     }
 
 
@@ -700,8 +704,8 @@ class TestRateLimitClassification:
             == InfraExitCategory.RATE_LIMITED
         )
 
-    def test_api_error_status_400_classified_as_api_error(self) -> None:
-        """api_error_status=400 (bad request) → API_ERROR (not RATE_LIMITED)."""
+    def test_api_error_status_400_classified_as_terminal_api_error(self) -> None:
+        """api_error_status=400 is default-deny terminal provider evidence."""
         session = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
             is_error=False,
@@ -711,7 +715,8 @@ class TestRateLimitClassification:
         )
         result = _sr(returncode=0, stderr="")
         assert (
-            classify_infra_exit(session, result, capabilities=_CAPS) == InfraExitCategory.API_ERROR
+            classify_infra_exit(session, result, capabilities=_CAPS)
+            == InfraExitCategory.API_ERROR_TERMINAL
         )
 
     def test_api_error_status_below_400_does_not_trigger(self) -> None:
@@ -811,3 +816,103 @@ def test_positive_signal_death_codes_classified_as_process_killed(returncode: in
 def test_is_signal_death_code_boundary_cases(returncode: int, expected: bool) -> None:
     """is_signal_death_code boundary cases (Test 1B)."""
     assert is_signal_death_code(returncode) is expected
+
+
+class TestStructuredProviderFailurePrecedence:
+    """Structured provider evidence wins over broad text-pattern evidence."""
+
+    def _session(self, **overrides: object) -> ClaudeSessionResult:
+        values: dict[str, object] = {
+            "subtype": CliSubtype.EMPTY_OUTPUT,
+            "is_error": True,
+            "result": "",
+            "session_id": "structured-provider-failure",
+        }
+        values.update(overrides)
+        return ClaudeSessionResult(**values)  # type: ignore[arg-type]
+
+    def test_terminal_status_precedes_matching_codex_text(self) -> None:
+        session = self._session(api_error_status=404, errors=["model_not_found"])
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS)
+            is InfraExitCategory.API_ERROR_TERMINAL
+        )
+
+    def test_terminal_status_precedes_exhausted_retry_evidence(self) -> None:
+        session = self._session(api_error_status=401, api_retry_exhausted=True)
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS)
+            is InfraExitCategory.API_ERROR_TERMINAL
+        )
+
+    def test_retriable_status_remains_retriable_with_exhausted_retry_evidence(self) -> None:
+        session = self._session(api_error_status=503, api_retry_exhausted=True)
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS) is InfraExitCategory.API_ERROR
+        )
+
+    @pytest.mark.parametrize("text", ["Rate limited", "provider overloaded"])
+    def test_terminal_status_precedes_rate_limit_and_overload_text(self, text: str) -> None:
+        session = self._session(api_error_status=404, assistant_messages=[text])
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS)
+            is InfraExitCategory.API_ERROR_TERMINAL
+        )
+
+    def test_structured_authentication_failure_precedes_overload_text(self) -> None:
+        session = self._session(
+            provider_error_code="authentication_failed",
+            assistant_messages=["provider overloaded"],
+        )
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS)
+            is InfraExitCategory.API_ERROR_TERMINAL
+        )
+
+    def test_exhausted_retry_with_unmapped_error_is_terminal(self) -> None:
+        session = self._session(
+            api_retry_exhausted=True,
+            api_retry_last_error="authentication_failed",
+        )
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS)
+            is InfraExitCategory.API_ERROR_TERMINAL
+        )
+
+    def test_successful_nonzero_returncode_is_not_unclassified(self) -> None:
+        session = self._session(
+            subtype=CliSubtype.SUCCESS,
+            is_error=False,
+            result="complete result",
+        )
+
+        assert (
+            classify_infra_exit(session, _sr(returncode=1), capabilities=_CAPS)
+            is InfraExitCategory.COMPLETED
+        )
+
+
+class TestClassifyApiStatusGuard:
+    """classify_api_status treats sub-400 input as a precondition violation."""
+
+    @pytest.mark.parametrize("status", [0, -1, 200, 301, 399])
+    def test_sub_400_status_is_terminal(self, status: int) -> None:
+        assert classify_api_status(status) is InfraExitCategory.API_ERROR_TERMINAL
+
+    @pytest.mark.parametrize("status,expected", [(429, InfraExitCategory.RATE_LIMITED)])
+    def test_rate_limit_status_routes_to_rate_limited(self, status, expected) -> None:
+        assert classify_api_status(status) is expected
+
+    @pytest.mark.parametrize("status", [408, 409, 500, 502, 503, 529])
+    def test_retriable_server_status_is_api_error(self, status: int) -> None:
+        assert classify_api_status(status) is InfraExitCategory.API_ERROR
+
+    @pytest.mark.parametrize("status", [400, 401, 403, 404, 410])
+    def test_terminal_client_status_is_terminal(self, status: int) -> None:
+        assert classify_api_status(status) is InfraExitCategory.API_ERROR_TERMINAL

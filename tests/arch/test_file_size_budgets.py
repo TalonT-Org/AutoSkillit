@@ -25,7 +25,10 @@ def test_pretty_output_below_budget() -> None:
         # #4457 renders completion receipts verbatim; #4641/#4644 rectify adds
         # infra_cleanup_incomplete to the run_skill SUPPRESSED coverage set (+1 line)
         # #4597 rectify adds infra_fault_domain to the same SUPPRESSED set (+1 line)
-        "_fmt_execution.py": 361,  # #4765 renders managed outer timeout provenance
+        # PR #4916 round-5 finding tests/infra/conftest.py:26 (user-approved): folds
+        # branch_name and the 7 api_error_status/rate_limit_* fields into the
+        # production SUPPRESSED set, replacing two test-local overlay sets (+8 lines)
+        "_fmt_execution.py": 369,  # #4765 renders managed outer timeout provenance
         "_fmt_dispatch.py": 200,
         "_fmt_status.py": 250,
         "_fmt_recipe.py": 350,  # replay/effect provenance remains visible after compaction

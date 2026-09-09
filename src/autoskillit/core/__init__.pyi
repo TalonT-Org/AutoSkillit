@@ -678,6 +678,7 @@ from .types import RUN_SKILL_ATTESTATION_PARAMS as RUN_SKILL_ATTESTATION_PARAMS
 from .types import RUNTIME_ADMISSION_BY_ROLE as RUNTIME_ADMISSION_BY_ROLE
 from .types import SCOPE_DIRECTION_SOURCE_TYPES as SCOPE_DIRECTION_SOURCE_TYPES
 from .types import SESSION_ADD_DIR_SUBDIR as SESSION_ADD_DIR_SUBDIR
+from .types import SESSION_INDEX_SCHEMA_VERSION as SESSION_INDEX_SCHEMA_VERSION
 from .types import SESSION_TYPE_ENV_VAR as SESSION_TYPE_ENV_VAR
 from .types import SESSION_TYPE_FLEET as SESSION_TYPE_FLEET
 from .types import SESSION_TYPE_ORCHESTRATOR as SESSION_TYPE_ORCHESTRATOR
@@ -737,6 +738,7 @@ from .types import AgentInstanceId as AgentInstanceId
 from .types import AgentPackDef as AgentPackDef
 from .types import AgentSessionResult as AgentSessionResult
 from .types import AggregateRevision as AggregateRevision
+from .types import ApiFailureOutcome as ApiFailureOutcome
 from .types import ApiRetryOutcome as ApiRetryOutcome
 from .types import ArtifactRef as ArtifactRef
 from .types import (
@@ -1070,6 +1072,7 @@ from .types import QuarantinedRetiringRecord as QuarantinedRetiringRecord
 from .types import QuarantineRecordedEffect as QuarantineRecordedEffect
 from .types import QuotaPolicy as QuotaPolicy
 from .types import QuotaRefreshTask as QuotaRefreshTask
+from .types import RateLimitWindow as RateLimitWindow
 from .types import ReadinessProbe as ReadinessProbe
 from .types import ReadingToken as ReadingToken
 from .types import ReadOnlyResolver as ReadOnlyResolver

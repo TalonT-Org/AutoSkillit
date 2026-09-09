@@ -14,16 +14,10 @@ import pytest
 from structlog.testing import capture_logs
 
 import autoskillit.execution._session_retention as session_retention
-from autoskillit.core.types._type_results import ProviderOutcome
-from autoskillit.core.types._type_results_execution import (
-    RecipeIdentity,
-    SessionTelemetry,
-)
 from autoskillit.execution._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution._session_retention import apply_session_retention
 from autoskillit.execution.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
-from autoskillit.execution.session_log import flush_session_log
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
@@ -762,8 +756,8 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
     _make_state_file(project_dir, "active-campaign", "running")
 
     # Flush a 9th session: four are expired, including two unprotected sessions
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -775,9 +769,6 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Protected sessions are in the expired slice and survive even above the target.
@@ -839,8 +830,8 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
 
     _make_state_file(project_dir, "done-campaign", "released")
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -852,9 +843,6 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Released campaign sessions are NOT protected — oldest 2 should be deleted
@@ -897,8 +885,8 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
 
     _make_state_file(project_dir, "live-campaign", "pending")
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -910,9 +898,6 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     index_lines = [ln for ln in index_path.read_text().strip().split("\n") if ln.strip()]
@@ -945,8 +930,8 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -958,9 +943,6 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Oldest dirs with no meta.json are deleted normally
@@ -996,8 +978,8 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
 
     # Must not crash even though project_dir exists but has no dispatches dir
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -1009,9 +991,6 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Normal retention applies — oldest dirs deleted
@@ -1052,8 +1031,8 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         # Set mtime AFTER all writes inside the dir to get the intended ordering
         os.utime(d, (1_000_000_000 + i, 1_000_000_000 + i))
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=build_protected_campaign_ids,
@@ -1065,9 +1044,6 @@ def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     # Corrupt meta.json → not protected → deleted normally
@@ -1245,8 +1221,8 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
         with index_path.open("a") as f:
             f.write(json.dumps({"session_id": dir_name, "dir_name": dir_name}) + "\n")
 
-    flush_session_log(
-        log_dir=str(tmp_path),
+    _flush(
+        tmp_path,
         cwd="/some/project",
         project_dir=str(project_dir),
         build_protected_campaign_ids=None,
@@ -1258,9 +1234,6 @@ def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypat
         exit_code=0,
         start_ts="2026-04-20T10:00:00+00:00",
         proc_snapshots=None,
-        telemetry=SessionTelemetry.empty(),
-        provider_outcome=ProviderOutcome.none_used(),
-        recipe_identity=RecipeIdentity.empty(),
     )
 
     # No protection applied — oldest sessions deleted even though campaign is active

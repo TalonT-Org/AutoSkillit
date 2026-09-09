@@ -719,12 +719,12 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
     # -- execution._session_retention::apply_session_retention --
-    f"{_SL}::L51": _self_limiting(
+    f"{_SL}::L91": _self_limiting(
         "The just-recommitted crash-recovery directory for this same dir_name is protected "
         "from being counted as expired in the same flush that created it, the session-log "
         "equivalent of a reaper excluding the generation it is currently claiming."
     ),
-    f"{_SL}::L67": RetentionDecision(
+    f"{_SL}::L107": RetentionDecision(
         Revocability.REVOCABLE,
         "A caller-declared protected campaign id is honoured unconditionally, retaining "
         "the session directory regardless of its age, the same self-exclusion family as "
@@ -1060,49 +1060,49 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "retryable."
     ),
     # -- execution._session_log_recovery::recover_crashed_sessions --
-    f"{_SR}::L36": _retries_after_input_changes(
+    f"{_SR}::L38": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SR}::L45": _retries_after_input_changes(
+    f"{_SR}::L47": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L47": _resolves_with_contention(
+    f"{_SR}::L49": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SR}::L60": _retries_after_input_changes(
+    f"{_SR}::L62": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SR}::L67": _self_limiting(
+    f"{_SR}::L69": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SR}::L78": _resolves_with_contention(
+    f"{_SR}::L80": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SR}::L89": _self_limiting(
+    f"{_SR}::L91": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SR}::L94": _self_limiting(
+    f"{_SR}::L96": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SR}::L97": _self_limiting(
+    f"{_SR}::L99": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SR}::L102": _retries_after_input_changes(
+    f"{_SR}::L104": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L112": _self_limiting(
+    f"{_SR}::L114": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SR}::L134": _self_limiting(
+    f"{_SR}::L136": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SR}::L140": _retries_after_input_changes(
+    f"{_SR}::L142": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SR}::L171": _retries_after_input_changes(
+    f"{_SR}::L186": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

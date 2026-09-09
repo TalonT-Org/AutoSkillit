@@ -28,6 +28,7 @@ from tests.execution.conftest import (
     CODEX_API_ERROR_SIGNAL_STRINGS,
     _make_synthetic_api_error_ndjson,
 )
+from tests.fixtures.claude_code import AUTHENTICATION_FAILED_V1, fixture_path
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -274,6 +275,110 @@ def test_detection_methods_are_session_model_methods() -> None:
     assert hasattr(ClaudeSessionResult, "_has_api_error")
     assert callable(getattr(ClaudeSessionResult, "_is_context_exhausted"))
     assert callable(getattr(ClaudeSessionResult, "_has_api_error"))
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_terminal_provider_status_does_not_resume(status: int) -> None:
+    result_line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "empty_output",
+            "is_error": True,
+            "result": "",
+            "session_id": "terminal-status",
+            "api_error_status": status,
+        }
+    )
+    skill_result = _build_skill_result(
+        _make_result(stdout=result_line), backend=ClaudeCodeBackend()
+    )
+
+    assert skill_result.infra.exit_category == InfraExitCategory.API_ERROR_TERMINAL.value
+    assert skill_result.needs_retry is False
+    assert skill_result.retry_reason is RetryReason.NONE
+
+
+def test_retriable_provider_status_continues_to_resume() -> None:
+    result_line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "empty_output",
+            "is_error": True,
+            "result": "",
+            "session_id": "retriable-status",
+            "api_error_status": 503,
+        }
+    )
+    skill_result = _build_skill_result(
+        _make_result(stdout=result_line), backend=ClaudeCodeBackend()
+    )
+
+    assert skill_result.infra.exit_category == InfraExitCategory.API_ERROR.value
+    assert skill_result.needs_retry is True
+    assert skill_result.retry_reason is RetryReason.RESUME
+
+
+def test_unclassified_failure_is_visible_without_retry_override() -> None:
+    result_line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "empty_output",
+            "is_error": True,
+            "result": "",
+            "session_id": "unclassified-failure",
+        }
+    )
+    skill_result = _build_skill_result(
+        _make_result(stdout=result_line), backend=ClaudeCodeBackend()
+    )
+
+    assert skill_result.infra.exit_category == InfraExitCategory.UNCLASSIFIED.value
+    assert skill_result.needs_retry is True
+    assert skill_result.retry_reason is RetryReason.EMPTY_OUTPUT
+
+
+def test_untyped_authentication_failure_is_terminal_end_to_end() -> None:
+    skill_result = _build_skill_result(
+        _make_result(stdout=fixture_path(AUTHENTICATION_FAILED_V1).read_text()),
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.infra.exit_category == InfraExitCategory.API_ERROR_TERMINAL.value
+    assert skill_result.needs_retry is False
+    assert skill_result.api_failure.error_code == "authentication_failed"
+
+
+def test_provider_failure_evidence_is_attached_to_the_skill_result() -> None:
+    result_line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "empty_output",
+            "is_error": True,
+            "result": "",
+            "session_id": "provider-evidence",
+            "api_error_status": 429,
+            "terminal_reason": "api_error",
+        }
+    )
+    rate_limit_line = json.dumps(
+        {
+            "type": "rate_limit_event",
+            "rate_limit_info": {
+                "status": "rejected",
+                "rateLimitType": "seven_day",
+                "resetsAt": 1735689600,
+            },
+        }
+    )
+    skill_result = _build_skill_result(
+        _make_result(stdout="\n".join([rate_limit_line, result_line])),
+        backend=ClaudeCodeBackend(),
+    )
+
+    assert skill_result.api_failure.status == 429
+    assert skill_result.api_failure.terminal_reason == "api_error"
+    assert skill_result.api_failure.rate_limit.limit_type == "seven_day"
+    assert skill_result.api_failure.rate_limit.resets_at_epoch == 1735689600
 
 
 # ---------------------------------------------------------------------------

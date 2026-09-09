@@ -60,7 +60,7 @@ def test_join_ledger_lock_contention_stops_at_its_fake_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A contended join-ledger acquisition does not spin or block past its deadline."""
-    from autoskillit.hooks import _join_ledger as ledger_module  # noqa: PLC0415
+    from autoskillit.hooks._join import storage as ledger_storage  # noqa: PLC0415
 
     timestamps = iter((0.0, 1.0, 2.0))
     sleeps: list[float] = []
@@ -71,15 +71,15 @@ def test_join_ledger_lock_contention_stops_at_its_fake_deadline(
         attempts += 1
         raise BlockingIOError("join ledger lock is held")
 
-    monkeypatch.setattr(ledger_module.time, "monotonic", lambda: next(timestamps))
-    monkeypatch.setattr(ledger_module.time, "sleep", sleeps.append)
-    monkeypatch.setattr(ledger_module.fcntl, "flock", always_contended)
+    monkeypatch.setattr(ledger_storage.time, "monotonic", lambda: next(timestamps))
+    monkeypatch.setattr(ledger_storage.time, "sleep", sleeps.append)
+    monkeypatch.setattr(ledger_storage.fcntl, "flock", always_contended)
 
     with pytest.raises(BlockingIOError):
-        ledger_module._acquire_lock(17)
+        ledger_storage._acquire_lock(17)
 
     assert attempts == 2
-    assert sleeps == [ledger_module._LOCK_RETRY_INTERVAL_SECONDS]
+    assert sleeps == [ledger_storage._LOCK_RETRY_INTERVAL_SECONDS]
 
 
 def _worker_declare_with_artifact(args: tuple[str, str, str, str, str, str]) -> str:

@@ -871,35 +871,35 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_COOK_RESERVED_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:654": (
+    "execution/backends/claude.py:359": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
-    "execution/backends/claude.py:871": (
+    "execution/backends/_claude/session_commands.py:175": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/claude.py:983": (
+    "execution/backends/_claude/session_commands.py:287": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:417": (
+    "execution/backends/codex.py:340": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:557": (
+    "execution/backends/_codex/session_commands.py:272": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:693": (
+    "execution/backends/_codex/session_commands.py:408": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:813": (
+    "execution/backends/_codex/session_commands.py:528": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:880": (
+    "execution/backends/_codex/session_commands.py:595": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

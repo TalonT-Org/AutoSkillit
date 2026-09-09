@@ -28,8 +28,9 @@ from autoskillit.core import (
     SESSION_TYPE_SKILL,
     load_bundled_agent_definitions,
 )
+from autoskillit.execution.backends._codex_explorer_projection import _generate_agent_tomls
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend, _generate_agent_tomls
+from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]

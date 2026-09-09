@@ -14,7 +14,6 @@ from autoskillit.core import (
     SkillSemanticAdaptationResult,
 )
 from autoskillit.workspace._projected_artifact._documents import SkillProjectionContext
-from autoskillit.workspace._projection_cache import read_projected_plugin_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,12 +36,3 @@ class _StagedProjectedArtifact:
     root: Path
     manifest: Path
     identity: PluginArtifactIdentity
-
-
-def _manifest_identity(plan: _ProjectedArtifactPlan) -> PluginArtifactIdentity:
-    return read_projected_plugin_identity(
-        plan.destination,
-        manifest_path=plan.manifest_path,
-        expected_semantic_key=plan.semantic_key,
-        expected_projection_version=plan.context.projection_version,
-    )

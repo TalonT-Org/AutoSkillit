@@ -39,7 +39,7 @@ def test_claim_translates_oserror_to_joinledgererror(tmp_path: Path) -> None:
         assignments=("a1", "a2"),
     )
     with patch(
-        "autoskillit.hooks._join_ledger.fcntl.flock",
+        "autoskillit.hooks._join.storage.fcntl.flock",
         side_effect=OSError("synthetic contention"),
     ):
         with pytest.raises(JoinLedgerError, match="IO error"):
@@ -64,7 +64,7 @@ def test_settle_translates_oserror_to_joinledgererror(tmp_path: Path) -> None:
     )
     claim_assignment(flag_dir, session_id="s1", top_level_parent="p1", tool_use_id="t1")
     with patch(
-        "autoskillit.hooks._join_ledger.os.replace",
+        "autoskillit.hooks._join.storage.os.replace",
         side_effect=OSError("synthetic disk failure"),
     ):
         with pytest.raises(JoinLedgerError, match="IO error"):

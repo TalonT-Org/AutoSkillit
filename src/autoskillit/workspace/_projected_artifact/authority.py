@@ -48,7 +48,6 @@ from autoskillit.core import (
 )
 from autoskillit.hook_registry import render_hooks_json_text
 from autoskillit.workspace._projected_artifact._authority_types import (
-    _manifest_identity,
     _ProjectedArtifactPlan,
     _StagedProjectedArtifact,
 )
@@ -84,6 +83,7 @@ from autoskillit.workspace._projection_cache import (
     projected_plugin_artifact_digest,
     prune_stale_projections,
     public_plugin_asset_digest,
+    read_projected_plugin_identity,
 )
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,
@@ -99,6 +99,15 @@ __all__ = [
     "project_default_plugin_authority",
     "project_direct_install_authority",
 ]
+
+
+def _manifest_identity(plan: _ProjectedArtifactPlan) -> PluginArtifactIdentity:
+    return read_projected_plugin_identity(
+        plan.destination,
+        manifest_path=plan.manifest_path,
+        expected_semantic_key=plan.semantic_key,
+        expected_projection_version=plan.context.projection_version,
+    )
 
 
 def _discard_staging_manifest(manifest: Path) -> None:

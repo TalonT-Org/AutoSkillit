@@ -25,7 +25,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
-from autoskillit.execution.backends.codex import _generate_agent_tomls
+from autoskillit.execution.backends._codex_explorer_projection import _generate_agent_tomls
 from autoskillit.workspace import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,

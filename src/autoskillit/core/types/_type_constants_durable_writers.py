@@ -139,7 +139,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.hooks._join_ledger:write_join_ledger",
+        writer="autoskillit.hooks._join.storage:write_join_ledger",
         artifact=(
             "join_ledger.json — immutable declared-batch records and the "
             "declaration-key index, serialized under the sibling flock"
@@ -149,7 +149,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     ),
     DurableArtifactWriterDef(
         writer=(
-            "autoskillit.server.tools.tools_execution._managed_fixed_batch:"
+            "autoskillit.server.tools.tools_execution._managed_fixed_batch_results:"
             "_write_fixed_batch_result"
         ),
         artifact=(

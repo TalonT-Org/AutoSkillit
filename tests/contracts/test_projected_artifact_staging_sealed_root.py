@@ -63,7 +63,10 @@ def test_staging_reads_the_sealed_root_not_a_live_lookup(
             "staging called resolve_install_binding() instead of using plan.source_root"
         )
 
-    monkeypatch.setattr(authority, "resolve_install_binding", _poisoned)
+    monkeypatch.setattr(
+        "autoskillit.workspace._projected_artifact._generator_freshness.resolve_install_binding",
+        _poisoned,
+    )
 
     staged = None
     try:

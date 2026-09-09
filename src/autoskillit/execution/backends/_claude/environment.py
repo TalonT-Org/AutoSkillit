@@ -22,7 +22,6 @@ from autoskillit.core import (
 )
 from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
-_ANNOTATION_SUPPORT_MIN = Version(CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION)
 CLAUDE_AGENT_TEAMS_ENV_VAR: str = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 _AGENT_TEAMS_SETTINGS_CANDIDATE_NAMES = (
     ".claude/settings.json",
@@ -303,7 +302,8 @@ def _claude_host_attestation_env(
     """
     meta_support = (
         "1"
-        if installed_version is not None and installed_version >= _ANNOTATION_SUPPORT_MIN
+        if installed_version is not None
+        and installed_version >= Version(CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION)
         else "0"
     )
     return {

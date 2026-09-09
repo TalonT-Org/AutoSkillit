@@ -116,12 +116,12 @@ def test_all_capability_fields_have_production_consumers():
 def test_hook_trust_policy_has_a_real_production_consumer() -> None:
     from autoskillit.core import paths
 
-    codex_path = paths.pkg_root() / "execution" / "backends" / "codex.py"
+    codex_path = paths.pkg_root() / "execution" / "backends" / "_codex" / "session_commands.py"
     tree = ast.parse(codex_path.read_text(encoding="utf-8"), filename=str(codex_path))
     backend_class = next(
         node
         for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "CodexBackend"
+        if isinstance(node, ast.ClassDef) and node.name == "CodexSessionCommandMixin"
     )
     interactive_builder = next(
         node

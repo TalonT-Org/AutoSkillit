@@ -147,4 +147,10 @@ def test_concurrent_observations_are_not_lost(tmp_path) -> None:
             )
         )
     constraints = decode_observed_constraints(observed_constraint_path(config.cache_path))
-    assert {item.limit_type for item in constraints} == {f"window-{offset}" for offset in range(8)}
+    # Set-equality on limit_type alone would still pass if a race dropped and
+    # duplicated a record (all 8 distinct limit_types present, but not 8 records, or
+    # with a scrambled blocked_until_epoch). Assert the count and the paired value.
+    assert len(constraints) == 8
+    assert {item.limit_type: item.blocked_until_epoch for item in constraints} == {
+        f"window-{offset}": 1000 + offset for offset in range(8)
+    }

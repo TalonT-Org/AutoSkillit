@@ -64,6 +64,23 @@ LONG_WINDOW_NAMES: frozenset[str] = frozenset(
     }
 )
 
+# Shared severity-split for this module's fail-open exception boundaries: an
+# operational failure (I/O, lock contention, malformed JSON, HTTP) stays at
+# WARNING, while anything outside this set is a programming bug that should
+# surface at ERROR instead of being masked as routine. Used by both
+# check_and_sleep_if_needed and record_skill_result_rate_limit — each catches
+# Exception broadly (never raising, per this module's fail-open contract) but
+# splits the log severity by isinstance against this tuple.
+_OPERATIONAL_EXCEPTION_TYPES: tuple[type[BaseException], ...] = (
+    TimeoutError,
+    OSError,
+    KeyError,
+    ValueError,
+    TypeError,
+    json.JSONDecodeError,
+    httpx.HTTPError,
+)
+
 
 @dataclass
 class QuotaStatus:
@@ -415,8 +432,15 @@ def record_skill_result_rate_limit(
         )
     except Exception as exc:
         # Quota evidence is a side-channel; failure must never abort the headless
-        # execution path that already classified this run as RATE_LIMITED.
-        logger.warning(
+        # execution path that already classified this run as RATE_LIMITED. Stay
+        # broad (never narrow this to a fixed tuple: acquire_flock_with_timeout
+        # can raise TimeoutError under real lock contention, which must still be
+        # swallowed here). Split severity via the shared operational-vs-bug tuple
+        # so unexpected bugs (e.g. AttributeError from a malformed config) surface
+        # at ERROR while routine I/O/lock failures stay at WARNING, mirroring
+        # check_and_sleep_if_needed's fail-open boundary in this same module.
+        log = logger.warning if isinstance(exc, _OPERATIONAL_EXCEPTION_TYPES) else logger.error
+        log(
             "quota_observed_evidence_persist_failed",
             error=str(exc),
             error_type=type(exc).__name__,
@@ -702,16 +726,7 @@ async def check_and_sleep_if_needed(
         # Split severity so operational failures stay at WARNING while programming
         # bugs (AttributeError, NameError, ImportError, ...) surface at ERROR in
         # dashboards instead of being masked as routine transient errors.
-        _operational_types = (
-            TimeoutError,
-            OSError,
-            KeyError,
-            ValueError,
-            TypeError,
-            json.JSONDecodeError,
-            httpx.HTTPError,
-        )
-        if isinstance(exc, _operational_types):
+        if isinstance(exc, _OPERATIONAL_EXCEPTION_TYPES):
             logger.warning(
                 "quota check failed — continuing without sleep",
                 error=str(exc),

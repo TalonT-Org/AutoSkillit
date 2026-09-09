@@ -209,7 +209,7 @@ def _validate_membership(
             )
         if len(dynamic_keys) != len(set(dynamic_keys)):
             raise SkillContractError("run_fixed_batch dynamic runtime keys must be unique")
-    logical_roles = getattr(adaptation, "logical_role_mapping", {})
+    logical_roles = adaptation.logical_role_mapping
     if logical_roles and any(role not in logical_roles for role in received_roles):
         raise SkillContractError(
             "run_fixed_batch assignments use roles absent from source adaptation"

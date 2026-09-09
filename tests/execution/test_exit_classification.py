@@ -874,6 +874,17 @@ class TestStructuredProviderFailurePrecedence:
             is InfraExitCategory.API_ERROR_TERMINAL
         )
 
+    def test_exhausted_retry_with_unmapped_error_is_terminal(self) -> None:
+        session = self._session(
+            api_retry_exhausted=True,
+            api_retry_last_error="authentication_failed",
+        )
+
+        assert (
+            classify_infra_exit(session, _sr(), capabilities=_CAPS)
+            is InfraExitCategory.API_ERROR_TERMINAL
+        )
+
     def test_successful_nonzero_returncode_is_not_unclassified(self) -> None:
         session = self._session(
             subtype=CliSubtype.SUCCESS,

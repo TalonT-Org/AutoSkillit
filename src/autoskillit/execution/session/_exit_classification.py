@@ -197,6 +197,19 @@ def classify_infra_exit(
     # api_retry_last_error can be "unknown" or another value not in _KNOWN_API_ERROR_PATTERNS.
     # In that case _has_api_error() returns False while api_retry_exhausted is still True.
     if session.api_retry_exhausted:
+        # Mirror the provider_error_code evidence consultation above (L176-186):
+        # an exhausted retry loop may carry its own status/error-code evidence,
+        # and a known-terminal-but-unmapped code should not fall through to the
+        # blanket API_ERROR return below, which would waste a session-level
+        # retry on a code with no known recovery path.
+        if session.api_retry_last_status is not None and session.api_retry_last_status >= 400:
+            return classify_api_status(session.api_retry_last_status)
+        if session.api_retry_last_error:
+            if session.api_retry_last_error in _CODEX_ERROR_CODE_API_STATUS:
+                return classify_api_status(
+                    _CODEX_ERROR_CODE_API_STATUS[session.api_retry_last_error]
+                )
+            return InfraExitCategory.API_ERROR_TERMINAL
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and is_signal_death_code(result.returncode):
         return InfraExitCategory.PROCESS_KILLED

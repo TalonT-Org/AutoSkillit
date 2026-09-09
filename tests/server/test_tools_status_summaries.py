@@ -450,7 +450,7 @@ class TestClearMarkerWritten:
     async def test_clear_writes_marker(
         self, tool_ctx_kitchen_open, tmp_path, monkeypatch, fn, kwargs
     ):
-        from autoskillit.execution.session_log import read_telemetry_clear_marker
+        from autoskillit.execution import read_telemetry_clear_marker
 
         log_dir = tmp_path / "logs"
         log_dir.mkdir()

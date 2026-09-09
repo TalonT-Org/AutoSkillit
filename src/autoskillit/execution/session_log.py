@@ -41,11 +41,7 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
-from autoskillit.execution._session_retention import (
-    apply_session_retention,
-    read_telemetry_clear_marker,
-    write_telemetry_clear_marker,
-)
+from autoskillit.execution._session_retention import apply_session_retention
 from autoskillit.execution.anomaly_detection import (
     detect_anomalies,
     detect_identity_drift,
@@ -53,12 +49,6 @@ from autoskillit.execution.anomaly_detection import (
     detect_outcome_anomalies,
 )
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
-
-__all__ = [
-    "apply_session_retention",
-    "read_telemetry_clear_marker",
-    "write_telemetry_clear_marker",
-]
 
 logger = get_logger(__name__)
 

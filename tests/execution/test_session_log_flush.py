@@ -21,12 +21,9 @@ from autoskillit.core import (
     NativeShellCaptureMode,
     NativeShellCaptureReason,
 )
+from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
-from autoskillit.execution.session_log import (
-    read_telemetry_clear_marker,
-    resolve_log_dir,
-    write_telemetry_clear_marker,
-)
+from autoskillit.execution.session_log import resolve_log_dir
 from tests.execution.conftest import _flush, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]

@@ -102,7 +102,15 @@ def test_type_ignore_count_budget() -> None:
     # # type: ignore comments in fleet/dispatch/_*.py for cross-phase SpawnContext /
     # DispatchResult field threading that pyright cannot narrow through the
     # module-attribute indirection used for monkeypatch-friendly imports).
-    budget = 155
+    # Bumped from 155 to 156. Issue #4349's rectify adds a
+    # `from quota_constraints import (...)  # type: ignore[import-not-found]` block to
+    # both quota_guard.py and quota_post_hook.py (+2), following the existing
+    # `from quota import (...)` suppression already present in both files for the
+    # same stdlib-only bare-module hook bootstrap that cannot be statically resolved.
+    # Merging in develop's own progress since this branch's fork point separately
+    # brings in #4926's `hooks/_capture_spawn.py:215` (+1, `# type: ignore[has-type]`
+    # on a module-level logger reassignment). Net of both: 153 (fork point) + 2 + 1 = 156.
+    budget = 156
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

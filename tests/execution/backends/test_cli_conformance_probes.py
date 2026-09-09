@@ -123,7 +123,7 @@ from autoskillit.hooks._capture_contract import (
     encode_capture_request,
 )
 from autoskillit.hooks._capture_lifecycle import CaptureState
-from autoskillit.hooks._join_ledger import can_release_stop
+from autoskillit.hooks._join_ledger import WAVE_CANCELLED, can_release_stop
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.pipeline import DefaultBackgroundSupervisor
 from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
@@ -1915,7 +1915,7 @@ def test_codex_managed_fixed_batch_smoke_conformance(tmp_path: Path) -> None:
             assert static_result.wave_outcome == "complete"
             assert static_replay.replayed is True
             assert static_replay.batch_id == static_result.batch_id
-            assert dynamic_result.wave_outcome != "complete"
+            assert dynamic_result.wave_outcome == WAVE_CANCELLED
             assert len({home for home, _session in observed}) == len(observed)
             assert len({session for _home, session in observed}) == len(observed)
             assert capacity.active_count == 0

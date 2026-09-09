@@ -26,7 +26,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
-    MANAGED_PARENT_ALLOWED_TOOLS,
+    MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,
@@ -47,7 +47,6 @@ JOIN_FOLLOWUP_DENY_TRIGGER: str = (
     "required-join wave is unresolved: top-level parent may not invoke non-Agent "
     "follow-up effects before every declared Agent handle settles"
 )
-_MANAGED_PARENT_ALLOWED_TOOLS: frozenset[str] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)
 
 
 def _resolve_session_id(data: dict[str, object]) -> str:
@@ -109,7 +108,7 @@ def main() -> None:
             sys.exit(2)
         if (
             isinstance(tool_name, str)
-            and tool_name.split("__")[-1] in _MANAGED_PARENT_ALLOWED_TOOLS
+            and tool_name.split("__")[-1] in MANAGED_PARENT_ALLOWED_TOOL_SET
         ):
             sys.exit(0)
     if not isinstance(tool_name, str) or tool_name == "Agent":

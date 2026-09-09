@@ -89,3 +89,4 @@ MANAGED_PARENT_ALLOWED_TOOLS: Final[tuple[str, ...]] = (
     "run_fixed_batch",
     "read_fixed_batch_result",
 )
+MANAGED_PARENT_ALLOWED_TOOL_SET: Final[frozenset[str]] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)

@@ -19,7 +19,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
-    MANAGED_PARENT_ALLOWED_TOOLS,
+    MANAGED_PARENT_ALLOWED_TOOL_SET,
 )
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import session_managed_codex_route  # noqa: E402
@@ -27,7 +27,6 @@ from _hook_settings import session_managed_codex_route  # noqa: E402
 SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 
 _ORCHESTRATION_TOOLS: frozenset[str] = frozenset({"run_skill", "run_cmd", "run_python"})
-_MANAGED_PARENT_TOOLS: frozenset[str] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)
 
 
 def _deny(reason: str) -> None:
@@ -75,7 +74,7 @@ def main() -> None:
         route, guards, _config_digest = managed_route
         if "skill_orchestration_guard" not in guards:
             _deny("managed Codex binding omits skill_orchestration_guard")
-        if route == "parent" and tool in _MANAGED_PARENT_TOOLS:
+        if route == "parent" and tool in MANAGED_PARENT_ALLOWED_TOOL_SET:
             sys.exit(0)
         _deny(
             f"{tool} is unavailable to the managed Codex {route}; "

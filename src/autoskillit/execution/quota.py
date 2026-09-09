@@ -440,13 +440,20 @@ def record_skill_result_rate_limit(
         # so unexpected bugs (e.g. AttributeError from a malformed config) surface
         # at ERROR while routine I/O/lock failures stay at WARNING, mirroring
         # check_and_sleep_if_needed's fail-open boundary in this same module.
-        log = logger.warning if isinstance(exc, _OPERATIONAL_EXCEPTION_TYPES) else logger.error
-        log(
-            "quota_observed_evidence_persist_failed",
-            error=str(exc),
-            error_type=type(exc).__name__,
-            exc_info=True,
-        )
+        if isinstance(exc, _OPERATIONAL_EXCEPTION_TYPES):
+            logger.warning(
+                "quota_observed_evidence_persist_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+        else:
+            logger.error(
+                "quota_observed_evidence_persist_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
 
 
 def invalidate_cache(cache_path: str) -> None:

@@ -1166,6 +1166,17 @@ def test_read_clear_marker_corrupt_returns_none(tmp_path):
     assert read_telemetry_clear_marker(tmp_path) is None
 
 
+def test_read_clear_marker_naive_timestamp_normalized_to_utc(tmp_path):
+    # A marker file without a timezone offset (hand-edited, or written by an
+    # older/foreign format) must still round-trip to a UTC-aware datetime —
+    # callers compare it against UTC-aware session timestamps.
+    (tmp_path / ".telemetry_cleared_at").write_text("2026-01-01T00:00:00")
+    result = read_telemetry_clear_marker(tmp_path)
+    assert result is not None
+    assert result.tzinfo is not None
+    assert result == datetime(2026, 1, 1, tzinfo=UTC)
+
+
 def test_write_clear_marker_is_atomic(tmp_path):
     # Calling write twice does not corrupt — second write wins
     write_telemetry_clear_marker(tmp_path)

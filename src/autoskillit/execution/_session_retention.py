@@ -41,12 +41,23 @@ def write_telemetry_clear_marker(log_root: Path) -> None:
 
 
 def read_telemetry_clear_marker(log_root: Path) -> datetime | None:
-    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt."""
+    """Read the persisted telemetry-clear timestamp, or None if absent/corrupt.
+
+    ``write_telemetry_clear_marker`` always writes a UTC-aware timestamp, but
+    ``datetime.fromisoformat`` returns a naive datetime for any source string
+    that lacks a timezone offset (e.g. a hand-edited or older-format marker
+    file). Consumers compare the result against UTC-aware timestamps, so
+    naive values are normalized to UTC here, mirroring
+    ``quota_constraints.normalize_naive_utc``.
+    """
     try:
         text = (Path(log_root) / _CLEAR_MARKER_FILENAME).read_text(encoding="utf-8").strip()
-        return datetime.fromisoformat(text)
+        parsed = datetime.fromisoformat(text)
     except (OSError, ValueError):
         return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 def apply_session_retention(

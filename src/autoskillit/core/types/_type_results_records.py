@@ -22,8 +22,6 @@ __all__ = [
     "CloneResult",
     "ModelTotalEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
-    "TokenUsageFileEntry",
-    "SessionIndexEntry",
     "LoadReport",
     "LoadResult",
     "ManagedSessionHome",
@@ -33,6 +31,8 @@ __all__ = [
     "TestResult",
     "ValidatedAddDir",
     "ValidatedWorktreePath",
+    "TokenUsageFileEntry",
+    "SessionIndexEntry",
 ]
 
 T = TypeVar("T")

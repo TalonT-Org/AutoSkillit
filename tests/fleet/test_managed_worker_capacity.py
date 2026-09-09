@@ -122,6 +122,15 @@ async def test_capacity_rejects_duplicate_or_foreign_release():
     permit = await capacity.acquire(("batch", "assignment", "run"))
     with pytest.raises(ManagedWorkerCapacityError):
         await capacity.acquire(("batch", "assignment", "run"))
+
+    other_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
+    foreign_permit = await other_capacity.acquire("foreign-owner")
+    try:
+        with pytest.raises(ManagedWorkerCapacityError):
+            capacity.release(foreign_permit)
+    finally:
+        other_capacity.release(foreign_permit)
+
     capacity.release(permit)
     with pytest.raises(ManagedWorkerCapacityError):
         capacity.release(permit)

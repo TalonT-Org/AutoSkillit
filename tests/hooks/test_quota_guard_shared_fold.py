@@ -6,12 +6,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from autoskillit.execution._quota_observed import record_observed_rate_limit
 from autoskillit.execution.quota import (
     QuotaFetchResult,
     QuotaStatus,
     _write_cache,
 )
+from autoskillit.execution.quota._quota_observed import record_observed_rate_limit
 from autoskillit.hooks._hook_settings import QuotaHookSettings
 from autoskillit.hooks.guards.quota_guard import quota_guard_decision
 from autoskillit.hooks.quota_post_hook import quota_post_decision

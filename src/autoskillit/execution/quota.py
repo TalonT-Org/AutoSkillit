@@ -31,6 +31,7 @@ from autoskillit.quota_constraints import (
     QuotaConstraint,
     QuotaEvidenceSource,
     effective_quota_block,
+    normalize_naive_utc,
     observed_constraint_path,
     quota_scope,
     safe_decode_observed_constraints,
@@ -102,19 +103,15 @@ class QuotaFetchResult:
 def _parse_resets_at(resets_at_str: str | None) -> datetime | None:
     """Parse a resets_at string from API or cache, handling Z-suffix and +00:00 variants.
 
-    A source string without timezone information yields a naive datetime, and
-    ``.timestamp()`` would then interpret it in the host's local timezone. Every
-    consumer of this value compares it against UTC epochs, so naive values are
-    normalized to UTC here — the single parse point — keeping this path in
-    agreement with ``quota_constraints.fold_poll_and_observed_constraints``,
-    which applies the same rule when reading the same cache file.
+    Delegates naive-datetime UTC normalization to
+    ``quota_constraints.normalize_naive_utc`` — the single shared
+    normalization point also used by
+    ``quota_constraints.fold_poll_and_observed_constraints`` when reading
+    the same cache file.
     """
     if not resets_at_str:
         return None
-    parsed = datetime.fromisoformat(resets_at_str.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed
+    return normalize_naive_utc(datetime.fromisoformat(resets_at_str.replace("Z", "+00:00")))
 
 
 def _is_long_window(name: str, long_patterns: list[str]) -> bool:

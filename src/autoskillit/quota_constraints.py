@@ -36,6 +36,23 @@ class QuotaConstraint:
         }
 
 
+def normalize_naive_utc(parsed: datetime) -> datetime:
+    """Normalize a naive datetime to UTC.
+
+    ``datetime.fromisoformat`` returns a naive datetime when the source string
+    carries no timezone offset, and ``.timestamp()`` would then interpret it
+    in the host's local timezone — shifting any computed epoch by the local
+    UTC offset. Every consumer of a quota reset time compares it against UTC
+    epochs, so naive values are normalized here — the single normalization
+    point shared by the poll-cache path
+    (:func:`fold_poll_and_observed_constraints`) and the live-fetch path
+    (``execution.quota._parse_resets_at``).
+    """
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
 def quota_scope(provider: str, credentials_path: Path) -> str:
     digest = sha256(str(credentials_path).encode()).hexdigest()[:16]
     return f"{provider}:{digest}"
@@ -145,15 +162,7 @@ def fold_poll_and_observed_constraints(
         resets_at = binding.get("resets_at")
         if bool(binding.get("should_block", False)):
             if resets_at:
-                # ``datetime.fromisoformat`` returns a naive datetime when the
-                # input has no timezone — calling ``.timestamp()`` on it then
-                # interprets the value in the local timezone, which would
-                # shift the computed ``blocked_until_epoch`` by the local UTC
-                # offset. Treat naive values as UTC explicitly so the deadline
-                # is interpreted consistently regardless of the host timezone.
-                parsed_reset = datetime.fromisoformat(str(resets_at))
-                if parsed_reset.tzinfo is None:
-                    parsed_reset = parsed_reset.replace(tzinfo=UTC)
+                parsed_reset = normalize_naive_utc(datetime.fromisoformat(str(resets_at)))
                 constraints.append(
                     QuotaConstraint(
                         source=QuotaEvidenceSource.PROVIDER_POLL,

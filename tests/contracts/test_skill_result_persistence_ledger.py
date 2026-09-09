@@ -175,9 +175,12 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
     summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
     index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
 
-    # Values this test explicitly constructed above, keyed by artifact_key -- checked
-    # for equality (not just key presence) so a flush bug that mangles, coerces, or
-    # drops a value while keeping its key would fail this test.
+    # Values for every persisted/summary-only/index-only artifact_key, keyed by
+    # artifact_key -- checked for equality (not just key presence) so a flush bug
+    # that mangles, coerces, or drops a value while keeping its key would fail this
+    # test. Fields this test overrode above use the override; every other field
+    # uses _flush()'s / flush_session_log()'s own default (see tests/execution/
+    # conftest.py and src/autoskillit/execution/session_log.py).
     expected_values: dict[str, object] = {
         "success": False,
         "needs_retry": True,
@@ -190,6 +193,26 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
         "outcome_fields": {"attempt": 1},
         "outcome_invariant_violated": True,
         "outcome_qualifier": "retry",
+        "api_retry_count": 0,
+        "api_retry_exhausted": False,
+        "api_retry_last_error": "",
+        "api_retry_last_status": None,
+        "cli_subtype": "",
+        "file_changes_count": 0,
+        "fs_writes_detected": False,
+        "git_writes_detected": False,
+        "write_call_count": 0,
+        "exit_code": 0,
+        "kill_reason": "",
+        "last_stop_reason": "",
+        "ndjson_unknown_event_count": 0,
+        "ndjson_unknown_item_count": 0,
+        "order_id": "",
+        "provider_fallback": False,
+        "provider_used": "",
+        "session_id": "test-session-001",
+        "subtype": "completed",
+        "write_path_warnings": [],
     }
 
     for leaf, artifact_key, classification in SKILL_RESULT_PERSISTENCE:
@@ -207,9 +230,7 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
                     )
             else:
                 assert artifact_key in summary
-                if artifact_key in expected_values:
-                    assert summary[artifact_key] == expected_values[artifact_key]
+                assert summary[artifact_key] == expected_values[artifact_key]
         if classification in {"persisted", "index-only"}:
             assert artifact_key in index
-            if artifact_key in expected_values:
-                assert index[artifact_key] == expected_values[artifact_key]
+            assert index[artifact_key] == expected_values[artifact_key]

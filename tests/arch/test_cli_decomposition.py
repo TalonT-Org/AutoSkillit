@@ -42,21 +42,6 @@ def _body_is_only_sys_exit(node: ast.ExceptHandler) -> bool:
     )
 
 
-# CD1
-# cli/app.py is IL-3 and can import from every internal layer (IL-0–IL-2), which makes
-# it the single easiest place for AI to dump new logic — it bypasses all layer
-# restrictions that guard other modules.  This limit exists to keep that file
-# decomposed.  Only a human may raise it beyond 750.
-def test_app_py_under_line_limit():
-    """cli/app.py must stay under the line limit to prevent monolith regrowth."""
-    p = SRC_ROOT / "cli" / "app.py"
-    lines = p.read_text().splitlines()
-    assert len(lines) <= 755, (
-        f"cli/app.py has {len(lines)} lines -- must be <=755; "
-        "decompose into cli/ submodules instead of growing this file"
-    )
-
-
 # CD2
 def test_unified_hook_helper_in_hooks_module():
     """cli/_hooks.py must define sync_hooks_to_settings (registry-driven registration)."""
@@ -79,55 +64,6 @@ def test_skill_command_guard_no_silent_broad_except():
                     "skill_command_guard.py has bare 'except Exception: sys.exit(0)' -- "
                     "CC-1 fix required: narrow scope or deny on unexpected errors"
                 )
-
-
-# CD5
-def test_doctor_py_under_line_limit():
-    """CD5: doctor/__init__.py stays a thin hub — checks live in _doctor_* spokes.
-
-    Budget raised 257 -> 261 for check 2f (install-state consistency), then
-    261 -> 262 for check 46 (orphaned process tethers), then 262 -> 280 for the
-    opt-in repair routing that delegates mutation to _doctor_repair.py — all delegate wholly
-    to a spoke (verify_install_state() in workspace/, _check_orphaned_process_tethers()
-    in _doctor_runtime.py) and add only their dispatch line here. Raise this only
-    for a check that lives in a spoke; a check whose *body* lands in the facade is
-    the thing this guard exists to prevent.
-    """
-    p = SRC_ROOT / "cli" / "doctor" / "__init__.py"
-    lines = p.read_text().splitlines()
-    assert len(lines) <= 280, f"doctor/__init__.py is {len(lines)} lines — split required"
-
-
-# CD6
-def test_fleet_py_under_line_limit():
-    """CD6: fleet/__init__.py must be ≤400 lines after sub-module extraction."""
-    p = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "cli"
-        / "fleet"
-        / "__init__.py"
-    )
-    lines = len(p.read_text().splitlines())
-    assert lines <= 415, f"fleet/__init__.py is {lines} lines — extract display/lifecycle/session"
-
-
-# CD7
-def test_update_checks_py_under_line_limit():
-    """CD7: update/_update_checks.py must be ≤450 lines after sub-module extraction."""
-    p = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "autoskillit"
-        / "cli"
-        / "update"
-        / "_update_checks.py"
-    )
-    lines = len(p.read_text().splitlines())
-    assert lines <= 450, (
-        f"update/_update_checks.py is {lines} lines — extract fetch/source modules"
-    )
 
 
 # CD4

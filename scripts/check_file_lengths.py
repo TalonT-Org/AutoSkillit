@@ -1,28 +1,24 @@
 #!/usr/bin/env python3
-"""Pre-commit hook: enforce REQ-CNST-010's diff-scoped 750-line hard cap.
+"""Enforce REQ-CNST-010's diff-scoped 750-line hard cap.
 
 Every non-test file under src/autoskillit/ must be <=750 lines, or <=1000 with a
 REQ-CNST-010-E<N> entry in _LINE_LIMIT_EXEMPTIONS whose `predicate` callable
-verifies True. Test files are exempt by design and are excluded by both callers'
-file-selection: a pre-commit `files:` regex (added in a later part) and
-test_file_length_diff_gate.py's own path filter here.
+verifies True. Test files are exempt by design.
 
-Scoped to the files passed as arguments -- a future pre-commit hook only
-invokes this with the commit's own diff, so this script never walks the full
-tree. tests/arch/test_file_length_diff_gate.py reuses check_file() below
-against the PR's changed-file set for the CI-side gate.
+Positional arguments are checked directly; test_file_length_diff_gate.py uses
+that mode for the CI-side changed-file set. ``--staged`` obtains added, copied,
+modified, and renamed source paths from Git's cached index for the local hook.
+Both modes route files through check_file() and never walk the full tree.
 
-This script itself never imports tests._test_filter.git_changed_files or
-resolves a base ref -- git-diff scoping is entirely the caller's
-responsibility (pre-commit's own file-selection locally, via `files:` +
-default `pass_filenames`; test_file_length_diff_gate.py's own
-_resolve_base_ref()/git_changed_files call in CI). Do not import the
-git-diff helper into this script to "consolidate" the two callers -- that
-would introduce a coupling this design deliberately keeps absent.
+The pre-commit hook cannot use its filename arguments: the project's mandatory
+``pre-commit run --all-files`` command supplies every matching repository file.
+The hook therefore disables filename passing and delegates exact staged-file
+selection to ``--staged``.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -82,6 +78,33 @@ def check_file(path: Path) -> str | None:
 
 def main(argv: list[str]) -> int:
     """Check the supplied files and return a shell-compatible status code."""
+    if "--staged" in argv:
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or "git diff --cached failed without a diagnostic"
+            print(f"Unable to select staged files: {detail}", file=sys.stderr)
+            return 1
+
+        source_root = SRC_ROOT.resolve()
+        paths: list[Path] = []
+        for name in result.stdout.split("\0"):
+            if not name:
+                continue
+            path = (PROJECT_ROOT / name).resolve()
+            try:
+                path.relative_to(source_root)
+            except ValueError:
+                continue
+            if path.suffix == ".py":
+                paths.append(path)
+        argv = [str(path) for path in paths]
+
     violations: list[str] = []
     for arg in argv:
         path = Path(arg)

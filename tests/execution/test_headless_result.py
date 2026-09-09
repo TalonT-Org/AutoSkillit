@@ -684,18 +684,24 @@ class TestBackendDelegatedWriteToolNames:
         assert captured["backend"] is mock_backend
 
     def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
-        """_build_skill_result passes backend to _parse_stdout on stale branch."""
+        """_build_skill_result passes backend to _parse_stdout on stale branch.
 
-        from autoskillit.execution.headless import _headless_result
+        The stale branch's recovery attempt (parse + evidence + recovery check)
+        is delegated to _attempt_stall_recovery in _headless_adjudication, which
+        calls its own module-level _parse_stdout binding -- so the spy is set
+        there, not on _headless_result.
+        """
+
+        from autoskillit.execution.headless import _headless_adjudication
 
         captured: dict = {}
-        original_parse = _headless_result._parse_stdout
+        original_parse = _headless_adjudication._parse_stdout
 
         def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
-        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+        monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
@@ -710,18 +716,23 @@ class TestBackendDelegatedWriteToolNames:
         assert captured["backend"] is mock_backend
 
     def test_build_skill_result_idle_stall_threads_backend_to_parse_stdout(self, monkeypatch):
-        """_build_skill_result passes backend to _parse_stdout on idle_stall branch."""
+        """_build_skill_result passes backend to _parse_stdout on idle_stall branch.
 
-        from autoskillit.execution.headless import _headless_result
+        See test_build_skill_result_stale_threads_backend_to_parse_stdout: the
+        idle_stall branch's recovery attempt is likewise delegated to
+        _attempt_stall_recovery in _headless_adjudication.
+        """
+
+        from autoskillit.execution.headless import _headless_adjudication
 
         captured: dict = {}
-        original_parse = _headless_result._parse_stdout
+        original_parse = _headless_adjudication._parse_stdout
 
         def spy(stdout, backend):
             captured["backend"] = backend
             return original_parse(stdout, backend=backend)
 
-        monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
+        monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
 
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE

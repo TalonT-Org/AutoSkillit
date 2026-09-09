@@ -184,16 +184,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
         "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
     ),
-    "execution/headless/_headless_result.py": LineLimitExemption(
-        900,
-        "REQ-CNST-010-E25-narrowed: #4233 keeps the async-obligation success gate adjacent to "
-        "the existing stale, idle, timeout, and content adjudication order it must preempt. "
-        "After #4664 decomposition, adjudication helpers live in _headless_adjudication.py "
-        "— including the #4641/#4644 _should_flag_cleanup_incomplete diagnostic shared by "
-        "both SkillResult construction seams; _build_skill_result remains here as the "
-        "headless orchestration authority. The 827-line residual is dominated by that "
-        "single 741-line function, which owns the success-gate adjacency rule.",
-    ),
     "execution/backends/_codex_session_storage.py": LineLimitExemption(
         1500,
         "REQ-CNST-010-E13-narrowed: CodexSessionStore + CodexInteractiveSessionLease + "

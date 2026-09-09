@@ -160,6 +160,10 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         # A bare Path("/proc") constant, no I/O -- the default proc_root every
         # function below defaults its keyword-only proc_root parameter to (S1-1).
         ("src/autoskillit/core/runtime/_linux_proc.py", "_DEFAULT_PROC"),
+        # Frozen _StallOutcomeSpec literals distinguishing the STALE/IDLE_STALL
+        # branches of _attempt_stall_recovery -- immutable config, not shared state.
+        ("src/autoskillit/execution/headless/_headless_adjudication.py", "_STALE_SPEC"),
+        ("src/autoskillit/execution/headless/_headless_adjudication.py", "_IDLE_STALL_SPEC"),
     }
 )
 

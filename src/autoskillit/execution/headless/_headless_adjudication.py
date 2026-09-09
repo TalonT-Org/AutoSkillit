@@ -17,30 +17,50 @@ from typing import TYPE_CHECKING, cast
 from autoskillit.core import (
     ApiFailureOutcome,
     ApiRetryOutcome,
+    CliSubtype,
     InfraOutcome,
     NdjsonDriftOutcome,
     ProviderOutcome,
     RateLimitWindow,
     RetryReason,
     SkillResult,
+    TerminationReason,
     WriteBehaviorSpec,
     WriteEvidence,
+    extract_skill_name,
     get_logger,
 )
-from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
+from autoskillit.execution.headless._headless_evidence import (
+    _adapt_agent_result,
+    _apply_budget_guard,
+    _compute_write_evidence,
+)
 from autoskillit.execution.headless._headless_outcome import (
     evaluate_outcome_invariants,
     parse_outcome_fields,
 )
-from autoskillit.execution.headless._headless_path_tokens import _is_path_outside_cwd
+from autoskillit.execution.headless._headless_path_tokens import (
+    NormalizedMessages,
+    _extract_output_paths,
+    _is_path_outside_cwd,
+    _select_output_path_tokens,
+    _validate_output_paths,
+)
+from autoskillit.execution.headless._headless_recovery import _scan_jsonl_write_paths
 from autoskillit.execution.session._session_content import _check_expected_patterns
 from autoskillit.execution.session._session_model import (
     ClaudeSessionResult,
     parse_session_result,
 )
+from autoskillit.execution.session._session_outcome import _compute_success
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend, SubprocessResult
+    from autoskillit.core import (
+        AuditLog,
+        ClosureAuthoritySpec,
+        CodingAgentBackend,
+        SubprocessResult,
+    )
     from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
@@ -277,3 +297,286 @@ def _validate_declared_artifact(cwd: str, field_name: str, value: str) -> tuple[
         )
         return "artifact_adjudication_error", infrastructure_detail
     return None
+
+
+_EVIDENCE_RECOVERABLE_SUBTYPES: frozenset[str] = frozenset({"adjudicated_failure", "unparseable"})
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _StallOutcomeSpec:
+    """Distinguishes the STALE and IDLE_STALL branches of _attempt_stall_recovery.
+
+    The retry-policy dispatch and failure-result construction for each branch
+    stay in _headless_result.py so each keeps its own visible call to
+    _apply_infra_retry_policy -- see
+    tests/arch/test_infra_exit_retry_policy_exhaustive.py, which counts exactly
+    three such call sites in that module.
+    """
+
+    recovered_subtype: str
+    recovery_log_message: str
+
+
+_STALE_SPEC = _StallOutcomeSpec(
+    recovered_subtype="recovered_from_stale",
+    recovery_log_message="Session went stale but stdout contained a valid result; recovering",
+)
+
+_IDLE_STALL_SPEC = _StallOutcomeSpec(
+    recovered_subtype="recovered_from_idle_stall",
+    recovery_log_message="Session idle-stalled but stdout contained a valid result; recovering",
+)
+
+
+def _attempt_stall_recovery(
+    result: SubprocessResult,
+    backend: CodingAgentBackend,
+    spec: _StallOutcomeSpec,
+    *,
+    completion_marker: str,
+    skill_command: str,
+    expected_output_patterns: Sequence[str],
+    completion_required: bool,
+    provider_used: str,
+    write_behavior: WriteBehaviorSpec | None,
+    skill_contract: SkillContract | None,
+    cwd: str,
+    fs_writes_detected: bool,
+    git_writes_detected: bool,
+    file_changes: Sequence[str],
+    write_watch_dirs: Sequence[Path],
+) -> tuple[SkillResult | None, ClaudeSessionResult, WriteEvidence, ApiRetryOutcome]:
+    """Parse a STALE/IDLE_STALL session's stdout and attempt success-recovery.
+
+    Returns ``(recovered_sr, session, evidence, api_retry)``. When recovery
+    succeeds, ``recovered_sr`` is the final adjudicated result and the caller
+    must return it directly. Otherwise ``recovered_sr`` is ``None`` and the
+    caller proceeds to its own retry-policy dispatch and failure construction,
+    using the returned ``session``/``evidence``/``api_retry``.
+    """
+    session = _parse_stdout(result.stdout, backend=backend)
+    evidence = _compute_write_evidence(
+        session,
+        fs_writes_detected,
+        git_writes_detected,
+        backend,
+        file_changes=file_changes,
+        write_watch_dirs=write_watch_dirs,
+        cwd=cwd,
+        skill_command=skill_command,
+    )
+    api_retry = _build_api_retry_outcome(session)
+    returncode = result.returncode if result.returncode is not None else -1
+    can_attempt_recovery = (
+        session.subtype == CliSubtype.SUCCESS and session.result.strip() and not session.is_error
+    )
+    if not can_attempt_recovery:
+        return None, session, evidence, api_retry
+
+    success = _compute_success(
+        session,
+        returncode,
+        TerminationReason.COMPLETED,
+        completion_marker=completion_marker,
+        channel_confirmation=result.channel_confirmation,
+        expected_output_patterns=expected_output_patterns,
+        completion_required=completion_required,
+    )
+    if not success:
+        return None, session, evidence, api_retry
+
+    logger.warning(spec.recovery_log_message)
+    recovered_sr = _make_terminated_result(
+        result=result,
+        session=session,
+        success=True,
+        result_text=session.agent_result,
+        subtype=spec.recovered_subtype,
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        evidence=evidence,
+        provider_used=provider_used,
+        api_retry=api_retry,
+    )
+    recovered_sr = _apply_post_session_adjudication(
+        recovered_sr, evidence, write_behavior, skill_contract, cwd
+    )
+    return recovered_sr, session, evidence, api_retry
+
+
+def _detect_path_contamination(
+    result: SubprocessResult,
+    backend: CodingAgentBackend,
+    *,
+    normalized_msgs: NormalizedMessages,
+    cwd: str,
+    skill_command: str,
+    file_changes: Sequence[str],
+    evidence: WriteEvidence,
+    supports_claude_format_stdout: bool,
+) -> tuple[list[str], bool]:
+    """Two-factor path-contamination check (see plan #4150).
+
+    Factor 1: a contract-scoped text candidate (an assistant-text token path
+    outside CWD, selected from the running skill's own file_path* outputs).
+    Factor 2: a boundary-specific write proof (Claude write_path_warnings OR
+    Codex completed out-of-CWD FILE_CHANGE with implementation evidence).
+    Both factors must hold for terminal classification; text alone is never
+    proof. Returns ``(write_path_warnings, is_path_contamination)``.
+    """
+    text_path_violation: str | None = None
+    write_path_warnings: list[str] = []
+    skill_name = extract_skill_name(skill_command)
+
+    if not cwd:
+        logger.debug("path_contamination_check_skipped", reason="cwd not provided")
+    else:
+        selected_tokens = _select_output_path_tokens(skill_name)
+        extracted_paths = _extract_output_paths(normalized_msgs, token_scope=selected_tokens)
+        text_path_violation = _validate_output_paths(extracted_paths, cwd)
+        if text_path_violation:
+            logger.debug(
+                "text_path_candidate_detected",
+                detail=text_path_violation,
+                cwd=cwd,
+                skill_name=skill_name,
+                scope_size=len(selected_tokens),
+            )
+
+        if supports_claude_format_stdout:
+            write_guard_tool_names = backend.capabilities.write_guard_tool_names
+            if write_guard_tool_names:
+                write_path_warnings = _scan_jsonl_write_paths(
+                    result.stdout,
+                    cwd,
+                    write_tool_names=write_guard_tool_names,
+                )
+            else:
+                write_path_warnings = _scan_jsonl_write_paths(result.stdout, cwd)
+            if write_path_warnings:
+                logger.warning(
+                    "write_path_warnings_detected",
+                    count=len(write_path_warnings),
+                    cwd=cwd,
+                    warnings=write_path_warnings[:5],
+                )
+
+    claude_boundary_proof = bool(write_path_warnings)
+    codex_boundary_proof = (
+        backend.capabilities.write_detection_strategy == "file_changes"
+        and _has_out_of_cwd_file_change(file_changes, cwd)
+        and evidence.has_implementation_evidence
+    )
+    is_path_contamination = bool(text_path_violation) and (
+        claude_boundary_proof or codex_boundary_proof
+    )
+
+    if text_path_violation and not is_path_contamination:
+        logger.info(
+            "text_path_candidate_uncorroborated",
+            detail=text_path_violation,
+            cwd=cwd,
+            skill_name=skill_name,
+            claude_boundary_proof=claude_boundary_proof,
+            codex_boundary_proof=codex_boundary_proof,
+        )
+
+    return write_path_warnings, is_path_contamination
+
+
+def _apply_contract_recovery_gate(
+    sr: SkillResult,
+    *,
+    has_write_evidence: bool,
+    readonly_skill: bool,
+    returncode: int,
+    skill_command: str,
+    audit: AuditLog | None,
+    max_consecutive_retries: int,
+) -> SkillResult:
+    """Promote a terminal adjudicated_failure/unparseable result to retriable.
+
+    When the session was classified as a terminal failure but write evidence
+    exists and the process exited cleanly, the model wrote the artifact but
+    the structured output token was missing or the stdout stream was
+    truncated -- promote to RETRIABLE(CONTRACT_RECOVERY). Re-applies the
+    budget guard so budget exhaustion can still cap retries; the caller's own
+    first _apply_budget_guard call skips this case because needs_retry is
+    False at that point.
+    """
+    if not (
+        not sr.success
+        and not sr.needs_retry
+        and sr.subtype in _EVIDENCE_RECOVERABLE_SUBTYPES
+        and has_write_evidence
+        and not readonly_skill
+        and (sr.subtype == "adjudicated_failure" or returncode == 0)
+    ):
+        return sr
+    sr = dataclasses.replace(
+        sr,
+        needs_retry=True,
+        retry_reason=RetryReason.CONTRACT_RECOVERY,
+    )
+    return _apply_budget_guard(sr, skill_command, audit, max_consecutive_retries)
+
+
+def _apply_closure_verification_gate(
+    sr: SkillResult,
+    closure_spec: ClosureAuthoritySpec | None,
+    closure_report_root: Path | None,
+) -> SkillResult:
+    """Independently verify the canonical closure report when one is active.
+
+    On failure, demote to execution error so the recipe's on_failure route
+    fires. This gate cannot be bypassed by the LLM orchestrator -- it is
+    enforced programmatically after session completion.
+    """
+    if closure_spec is None or closure_report_root is None:
+        return sr
+
+    from autoskillit.core import verify_closure_report
+
+    report_file = closure_report_root / "closure_report.json"
+    verification = verify_closure_report(
+        report_path=report_file,
+        authority_path=Path(closure_spec.authority_path),
+        authority_hash=closure_spec.authority_hash,
+        output_root=closure_report_root,
+        plan_paths=tuple(Path(p) for p in closure_spec.plan_paths),
+        base_sha=closure_spec.base_sha,
+        diff_sha=closure_spec.diff_sha,
+        target_sha=closure_spec.target_sha,
+    )
+    if not verification.success:
+        error_detail = "; ".join(verification.errors)
+        return dataclasses.replace(
+            sr,
+            success=False,
+            is_error=True,
+            subtype="closure_verification_failed",
+            result=f"Closure verification failed: {error_detail}",
+        )
+    if sr.retry_reason == RetryReason.EMPTY_OUTPUT:
+        return dataclasses.replace(sr, is_error=False)
+    return sr
+
+
+def _apply_outcome_qualifier(
+    sr: SkillResult,
+    skill_contract: SkillContract | None,
+) -> SkillResult:
+    """Evaluate the skill contract's success qualifier and invariant-violation flag."""
+    if skill_contract is None or not skill_contract.outputs:
+        return sr
+    parsed_fields = dict(sr.outcome_fields or {})
+    qualifier: str | None = None
+    if sr.success and skill_contract.success_qualifiers:
+        from autoskillit.execution.headless._headless_outcome import evaluate_success_qualifier
+
+        qualifier = evaluate_success_qualifier(parsed_fields, skill_contract.success_qualifiers)
+    return dataclasses.replace(
+        sr,
+        outcome_invariant_violated=sr.retry_reason == RetryReason.OUTCOME_INVARIANT,
+        outcome_qualifier=qualifier,
+    )

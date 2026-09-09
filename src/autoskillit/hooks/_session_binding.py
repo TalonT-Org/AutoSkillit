@@ -34,6 +34,7 @@ PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2
 _BINDING_CANDIDATE_LIMIT = 20
 _CANONICAL_SKILL_PREFIX = "autoskillit:"
 _BINDING_LOCK_SUFFIX = ".lock"
+_DEFAULT_MANAGED_PARENT_ID = "top_level"
 
 
 class SessionBindingError(Exception):
@@ -161,7 +162,7 @@ class SessionBinding(NamedTuple):
     binding_valid: bool
     artifact_digest: str
     loaded_skills: tuple[LoadedSkillEntry, ...]
-    managed_parent_id: str = "top_level"
+    managed_parent_id: str = _DEFAULT_MANAGED_PARENT_ID
     managed_leaf_id: str = ""
     managed_route: str = ""
     managed_guard_set: tuple[str, ...] = ()
@@ -382,7 +383,7 @@ def merge_binding(
     session_id: str,
     new_entry: LoadedSkillEntry,
     artifact_digest: str,
-    managed_parent_id: str = "top_level",
+    managed_parent_id: str = _DEFAULT_MANAGED_PARENT_ID,
     managed_leaf_id: str = "",
     managed_route: str = "",
     managed_guard_set: tuple[str, ...] = (),
@@ -463,7 +464,7 @@ def merge_and_write_binding(
     session_id: str,
     new_entry: LoadedSkillEntry,
     artifact_digest: str,
-    managed_parent_id: str = "top_level",
+    managed_parent_id: str = _DEFAULT_MANAGED_PARENT_ID,
     managed_leaf_id: str = "",
     managed_route: str = "",
     managed_guard_set: tuple[str, ...] = (),

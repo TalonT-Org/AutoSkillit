@@ -7,7 +7,7 @@ import logging
 import os
 import subprocess
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture._authority import (
@@ -212,7 +212,7 @@ elif __package__:
 else:
     import _capture_process
 
-logger = cast(logging.Logger, getattr(_capture_process, "logger"))
+logger: logging.Logger = _capture_process.logger  # type: ignore[has-type]
 
 if __package__:
     from ._capture import _module_identity

@@ -915,7 +915,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for a local read-only `git` subprocess (snapshot"
         "diffing); only GIT_OPTIONAL_LOCKS is added on top."
     ),
-    "hooks/_capture_spawn.py:143": (
+    "hooks/_capture_spawn.py:140": (
         "dict(os.environ) followed by an explicit per-key .pop() loop over"
         "PROTECTED_CAPTURE_ENV_VARS; the exclusion happens outside the single expression this"
         "scanner inspects."

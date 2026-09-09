@@ -197,8 +197,8 @@ def classify_infra_exit(
     # api_retry_last_error can be "unknown" or another value not in _KNOWN_API_ERROR_PATTERNS.
     # In that case _has_api_error() returns False while api_retry_exhausted is still True.
     if session.api_retry_exhausted:
-        # Mirror the provider_error_code evidence consultation above (L176-186):
-        # an exhausted retry loop may carry its own status/error-code evidence,
+        # Mirror the provider_error_code evidence consultation above: an exhausted
+        # retry loop may carry its own status/error-code evidence,
         # and a known-terminal-but-unmapped code should not fall through to the
         # blanket API_ERROR return below, which would waste a session-level
         # retry on a code with no known recovery path.

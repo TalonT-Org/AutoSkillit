@@ -1,4 +1,9 @@
-"""Stdlib-only durable authority for declared fixed-set join batches."""
+"""Stdlib-only durable authority for declared fixed-set join batches.
+
+Hook subprocesses import this module as ``_join_ledger`` while package callers
+import it as ``autoskillit.hooks._join_ledger``. Keep both paths working and do
+not add runtime imports from ``autoskillit.*``.
+"""
 
 from __future__ import annotations
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -216,6 +217,79 @@ def test_main_aggregates_multiple_violations(
     assert "first.py" in output
     assert "second.py" in output
     assert "Total: 2 violation(s)" in output
+
+
+def test_staged_mode_checks_only_cached_source_python_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
+    staged = _write_module(mod.SRC_ROOT, 751, "nested/oversized file.py")
+    unstaged = _write_module(mod.SRC_ROOT, 751, "unstaged.py")
+    test_file = _write_module(tmp_path / "tests", 751, "test_oversized.py")
+    non_python = _write_module(mod.SRC_ROOT, 751, "notes.txt")
+    git_result = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout="\0".join(
+            [
+                str(staged.relative_to(tmp_path)),
+                str(test_file.relative_to(tmp_path)),
+                str(non_python.relative_to(tmp_path)),
+                "",
+            ]
+        ),
+        stderr="",
+    )
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_run(command: list[str], **kwargs: object):
+        calls.append((command, kwargs))
+        return git_result
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    assert mod.main(["--staged"]) == 1
+    output = capsys.readouterr().out
+    assert "nested/oversized file.py" in output
+    assert unstaged.name not in output
+    assert test_file.name not in output
+    assert non_python.name not in output
+    assert "Total: 1 violation(s)" in output
+    assert calls == [
+        (
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
+            {
+                "cwd": tmp_path,
+                "capture_output": True,
+                "text": True,
+                "check": False,
+            },
+        )
+    ]
+
+
+def test_staged_mode_fails_closed_when_git_diff_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
+    git_result = subprocess.CompletedProcess(
+        args=[],
+        returncode=128,
+        stdout="",
+        stderr="fatal: simulated cached-index failure",
+    )
+    monkeypatch.setattr(mod.subprocess, "run", lambda *args, **kwargs: git_result)
+
+    assert mod.main(["--staged"]) != 0
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "fatal: simulated cached-index failure" in output.err
 
 
 def test_path_outside_source_root_is_ignored(

@@ -73,6 +73,43 @@ class TestPreCommitConfig:
             "the script does its own filesystem scan"
         )
 
+    def test_file_length_check_pre_commit_hook_exists(self) -> None:
+        """pre-commit config must include a check-file-lengths hook (REQ-CNST-010).
+
+        Without this, an oversized src file is only caught by CI's diff-scoped
+        arch test (test_file_length_diff_gate.py), losing the fast local
+        feedback the pre-commit surface exists to provide.
+        """
+        config = load_yaml(PRECOMMIT_CONFIG)
+        hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
+        length_hooks = [hook for hook in hooks if "check_file_lengths" in hook.get("entry", "")]
+        assert length_hooks, (
+            "Missing 'check-file-lengths' hook in .pre-commit-config.yaml -- "
+            "add it so oversized src files are caught before commit"
+        )
+        hook = length_hooks[0]
+        assert hook.get("entry") == "python scripts/check_file_lengths.py --staged"
+        assert hook.get("files") == r"^src/autoskillit/.*\.py$", (
+            "check-file-lengths hook must scope to src/autoskillit/*.py so "
+            "the local hook only applies when staged source files are present"
+        )
+        assert hook.get("pass_filenames") is False, (
+            "check-file-lengths must select the cached-index paths itself so "
+            "pre-commit run --all-files does not turn it into a full-tree scan"
+        )
+        assert "exclude" not in hook, (
+            "check-file-lengths must not statically exclude legacy files from "
+            "future staged-file enforcement"
+        )
+        entry_script = hook["entry"].split()[1]
+        script_path = PRECOMMIT_CONFIG.parent / entry_script
+        assert script_path.is_file(), (
+            f"check-file-lengths hook's entry script {entry_script!r} does not "
+            "exist -- this part depends on an earlier part's "
+            "scripts/check_file_lengths.py artifact already being merged; "
+            "landing this part first wires the hook to nothing"
+        )
+
     def test_per_file_ignores_e501_bounded(self):
         """E501 exemptions in per-file-ignores must not exceed the established cap.
 

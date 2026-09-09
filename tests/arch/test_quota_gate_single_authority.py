@@ -39,23 +39,6 @@ def _functions_calling_fold(source: str) -> set[str]:
     return found
 
 
-def _all_callers_of_fold(source: str) -> set[tuple[str, str]]:
-    """Return (file_relpath, function_name) for every function that calls a fold helper."""
-    tree = ast.parse(source)
-    found: set[tuple[str, str]] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if any(
-            isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Name)
-            and call.func.id in _DECISION_HELPERS
-            for call in ast.walk(node)
-        ):
-            found.add(("", node.name))
-    return found
-
-
 def test_quota_gate_inventory_is_closed() -> None:
     src_root = Path(__file__).parents[2] / "src" / "autoskillit"
     observed = []
@@ -80,8 +63,8 @@ def test_no_unexpected_quota_gate_callers() -> None:
     for path in src_root.rglob("*.py"):
         if path.name == "__init__.py":
             continue
-        callers = _all_callers_of_fold(path.read_text())
-        for _, function_name in callers:
+        callers = _functions_calling_fold(path.read_text())
+        for function_name in callers:
             rel = path.relative_to(src_root).as_posix()
             identifier = f"{rel}::{function_name}"
             if identifier not in expected_callers:

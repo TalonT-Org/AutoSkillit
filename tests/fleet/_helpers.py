@@ -75,12 +75,12 @@ def _setup_dispatch(
     ingredients: dict[str, Any] | None = None,
 ):
     """Wire tool_ctx for dispatch tests."""
-    from autoskillit.core import DefaultManagedWorkerCapacity
     from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
     from autoskillit.recipe.schema import Recipe, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+    from tests.fleet.conftest import worker_capacity_from_ctx
 
-    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
+    worker_capacity_from_ctx(tool_ctx)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info(recipe_name)
     repo.add_recipe(recipe_name, recipe_info)

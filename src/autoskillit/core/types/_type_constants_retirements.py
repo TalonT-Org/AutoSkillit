@@ -6,7 +6,7 @@ types package. The ``disposition`` field on ``RetiredArtifactShape`` requires
 ``Literal`` is imported alongside ``NamedTuple``.
 
 Issue #4735: extracted from ``_type_constants.py`` to keep the facade under
-the enforced 750-line budget (``test_warning_zone_files_under_750_lines``).
+the enforced 750-line budget.
 ``RETIRED_READINESS_TOKENS`` is structurally a retirement registry and is
 grouped here.
 """

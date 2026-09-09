@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from . import _failure_policy
+from . import _reference as _capture_reference
 from ._module_identity import register_module_aliases
 
 if TYPE_CHECKING:
@@ -226,9 +227,7 @@ def render_degraded_capture(
     measurement = verified.measurement
     if measurement.total_bytes <= measurement.inline_bytes:
         return measurement.inline
-    from ._snapshot import _make_unavailable_reference
-
-    reference = _make_unavailable_reference(verified, reason_code)
+    reference = _capture_reference._make_unavailable_reference(verified, reason_code)
     return render_oversized_capture(reference)
 
 

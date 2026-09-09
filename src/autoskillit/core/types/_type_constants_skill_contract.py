@@ -1,7 +1,7 @@
 """Skill-contract remediation registry.
 
 Issue #4735: extracted from ``_type_constants.py`` to keep the facade under
-the enforced 750-line budget (``test_warning_zone_files_under_750_lines``).
+the enforced 750-line budget.
 The forcing-function guards (uniqueness of kinds, bijection with
 ``SkillInvalidityKind``) run at module load time and must remain intact —
 they are what make adding a new ``SkillInvalidityKind`` member a CI-blocking

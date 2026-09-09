@@ -180,11 +180,23 @@ infrastructure -> depends on nothing project-specific
 
 ### Principle 8: No Monolithic Files
 
-**Rule:** No file should exceed 1000 lines. Large files should be decomposed.
+**Rule:** A changed Python source file under `src/autoskillit/` may not exceed
+750 lines. It may exceed 750, up to the diff-scoped gate's absolute maximum of
+1000, only when registered in `_LINE_LIMIT_EXEMPTIONS`
+(`tests/arch/_subpackage_isolation_line_limits.py`) under a `REQ-CNST-010-E<N>`
+rule ID with a machine-checkable predicate. Test files are outside this gate's
+scope by design.
+
+The retained full-tree `test_no_src_module_exceeds_line_limit` guard is a
+separate legacy layer: it uses a 1000-line default and honors registered higher
+ceilings. Do not apply the diff-scoped 1000-line absolute maximum to untouched
+legacy exemptions; changing one of those files subjects it to the diff-scoped
+gate.
 
 **Audit Strategy:**
-- Find files exceeding 1000 lines (exclude generated/vendored)
-- Flag files approaching threshold (800+ lines) as warnings
+- For changed `src/autoskillit/**/*.py` files, flag files over 750 lines without a matching predicate-backed exemption whose ceiling is at most 1000
+- For repository-wide scans, apply the retained guard's 1000-line default and registered legacy ceilings
+- Flag changed source files approaching 700+ lines as warnings
 
 ---
 

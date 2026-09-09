@@ -102,6 +102,13 @@ repos:
         files: ^src/autoskillit/.*\.py$
         pass_filenames: false
 
+      - id: check-file-lengths
+        name: Check REQ-CNST-010 file-length hard cap (staged-file scoped)
+        language: system
+        entry: python scripts/check_file_lengths.py --staged
+        files: ^src/autoskillit/.*\.py$
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

@@ -726,10 +726,10 @@ def test_owned_spawn_restore_error_preserves_settlement_failure(
         if fchdir_calls == 2:
             raise restore_error
 
-    monkeypatch.setattr(capture_process.os, "open", lambda *_args: 99)
-    monkeypatch.setattr(capture_process.os, "fchdir", fail_restore)
-    monkeypatch.setattr(capture_process.os, "close", lambda _fd: None)
-    monkeypatch.setattr(capture_process.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(capture_spawn.os, "open", lambda *_args: 99)
+    monkeypatch.setattr(capture_spawn.os, "fchdir", fail_restore)
+    monkeypatch.setattr(capture_spawn.os, "close", lambda _fd: None)
+    monkeypatch.setattr(capture_spawn.subprocess, "Popen", lambda *_args, **_kwargs: process)
     monkeypatch.setattr(capture_spawn, "_finish_owned_spawn", lambda *_args, **_kwargs: owner)
     monkeypatch.setattr(
         OwnedProcessGroup,

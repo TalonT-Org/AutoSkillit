@@ -120,6 +120,7 @@ _EXPECTED_ACQUISITIONS = (
     ("hooks/_capture_lifecycle/_admission.py", "_acquire_flock", "flock"),
     ("hooks/_capture_lifecycle/_store.py", "_try_artifact_lease", "flock"),
     ("hooks/_join_ledger.py", "_acquire_lock", "flock"),
+    ("hooks/_session_binding.py", "binding_lock", "flock"),
     ("hooks/guards/open_kitchen_guard.py", "_acquire_registry_lock", "flock"),
     ("hooks/resume_gate_post_hook.py", "_acquire_lock", "flock"),
     ("planner/merge.py", "merge_files", "acquire_flock_with_timeout"),

@@ -33,6 +33,13 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "the command-body handler because the latter assumes an initialized artifact; "
         "keeping both stages in the runner preserves one owner for capture settlement",
     ),
+    "hooks/_join_ledger.py": LineLimitExemption(
+        1150,
+        "REQ-CNST-010-E32: PR #4913 extends the existing join ledger as the sole "
+        "lock-coupled authority for immutable managed-batch declaration, attempt "
+        "settlement, and authorized result references; splitting those transitions "
+        "would duplicate the canonical declaration and terminal-event invariants.",
+    ),
     "core/types/_type_constants.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "
@@ -143,7 +150,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "without re-tripping the limit on the next small addition.",
     ),
     "execution/backends/codex.py": LineLimitExemption(
-        1300,
+        1350,
         "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
         "(cmd/cmd-spec grammar with build_skill_session_cmd/"
         "build_food_truck_cmd/build_interactive_cmd/"
@@ -154,9 +161,9 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "session locator) and the cmd-spec grammar is the backend's authority "
         "boundary — splitting these would force a separate mutable state object "
         "and break the protocol. The remaining slimmed file is 1242 "
-        "lines; cap lowered from 2500 to 1300 to acknowledge the architectural seam that "
-        "the decomposition could not cross without breaking the backend "
-        "dataclass invariant.",
+        "lines before the managed fixed-batch route; PR #4913 retains its Codex-only "
+        "attestation and launch wiring at that same backend authority boundary. The cap "
+        "remains narrow while preserving headroom beyond the current line count.",
     ),
     "execution/backends/claude.py": LineLimitExemption(
         1600,

@@ -70,9 +70,11 @@ def _parse_provider_records(stdout: str) -> _ProviderParseAccumulator:
     - ``api_error_message_seen`` latches true once observed (OR-accumulate) so an
       earlier API-error-message flag is not lost when a later assistant turn
       records ``false``.
-    - ``rate_limit_status`` and ``rate_limit_type`` may still be overwritten by a
-      later ``rate_limit_event`` record; downstream classification only trusts
-      these fields when accompanied by a retained reset epoch.
+    - ``rate_limit_status`` may still be overwritten by a later ``rate_limit_event``
+      record, except once ``"rejected"`` has been observed, which is sticky.
+      ``rate_limit_type`` is sticky on first non-empty value and is never
+      overwritten once set. Downstream classification only trusts these fields
+      when accompanied by a retained reset epoch.
     """
     acc = _ProviderParseAccumulator()
     for line in stdout.strip().splitlines():

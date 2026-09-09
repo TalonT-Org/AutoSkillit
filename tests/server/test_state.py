@@ -7,7 +7,7 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -35,6 +35,7 @@ def _make_mock_ctx(tmp_path: Path) -> MagicMock:
     ctx.config.linux_tracing = tracing_cfg
     ctx.project_dir = tmp_path / "project"
     ctx.build_protected_campaign_ids = Mock(name="build_protected_campaign_ids")
+    ctx.managed_fixed_batch_supervisor = None
     store_health = ContextAdmissionStoreHealth(ContextAdmissionStorageHealthStatus.HEALTHY)
     ctx.context_admission_ledger.recover_all.return_value = ContextAdmissionRecoveryResult(
         status=ContextAdmissionStorageHealthStatus.HEALTHY,
@@ -282,6 +283,8 @@ async def test_deferred_initialize_runs_recovery_operations(tmp_path):
     mock_ctx.session_skill_manager = MagicMock()
     mock_ctx.session_skill_manager.cleanup_stale.return_value = []
     mock_ctx.audit.load_from_log_dir.return_value = 0
+    mock_ctx.managed_fixed_batch_supervisor = MagicMock()
+    mock_ctx.managed_fixed_batch_supervisor.reconcile_startup = AsyncMock(return_value=True)
 
     event = asyncio.Event()
     with patch(
@@ -290,6 +293,7 @@ async def test_deferred_initialize_runs_recovery_operations(tmp_path):
         await deferred_initialize(mock_ctx, ready_event=event)
 
     assert event.is_set(), "deferred_initialize did not signal readiness"
+    mock_ctx.managed_fixed_batch_supervisor.reconcile_startup.assert_awaited_once_with()
     mock_ctx.context_admission_ledger.recover_all.assert_called_once_with()
     recover_crashed_sessions.assert_called_once_with(
         tmpfs_path=mock_ctx.config.linux_tracing.tmpfs_path,

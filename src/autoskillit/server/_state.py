@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC
-from inspect import isawaitable
 
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -112,10 +111,7 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     try:
         service = ctx.managed_fixed_batch_supervisor
         if service is not None:
-            recovery_result = service.reconcile_startup()
-            recovered = (
-                await recovery_result if isawaitable(recovery_result) else bool(recovery_result)
-            )
+            recovered = await service.reconcile_startup()
             if not recovered:
                 logger.warning(
                     "managed_fixed_batch_recovery_blocked",

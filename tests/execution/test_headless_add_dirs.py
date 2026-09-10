@@ -100,8 +100,12 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
 
     async def mock_runner(_cmd, **kwargs):
         captured_kwargs.update(kwargs)
-        kwargs["on_process_spawned"](101, 101)
-        kwargs["on_process_reaped"](101, 101)
+        on_process_spawned = kwargs["on_process_spawned"]
+        on_process_reaped = kwargs["on_process_reaped"]
+        assert callable(on_process_spawned)
+        assert callable(on_process_reaped)
+        on_process_spawned(101, 101)
+        on_process_reaped(101, 101)
         return _make_result()
 
     def session_attempt_context(

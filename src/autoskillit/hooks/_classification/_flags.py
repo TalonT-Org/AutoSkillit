@@ -28,8 +28,8 @@ if TYPE_CHECKING:
         extract_git_subcommand_and_flags,
     )
 else:
-    if __package__:
-        from . import _command_classification as _classification
+    if __package__ == "autoskillit.hooks._classification":
+        from .. import _command_classification as _classification
     else:
         import _command_classification as _classification
 

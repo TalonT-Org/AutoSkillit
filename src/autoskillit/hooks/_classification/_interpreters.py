@@ -22,8 +22,8 @@ if TYPE_CHECKING:
         tokenize_command_segments,
     )
 else:
-    if __package__:
-        from . import _command_classification as _classification
+    if __package__ == "autoskillit.hooks._classification":
+        from .. import _command_classification as _classification
     else:
         import _command_classification as _classification
 

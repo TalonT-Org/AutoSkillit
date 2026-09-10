@@ -13,19 +13,23 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_tokenizer import (  # noqa: F401
+    from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
         ArgvToken,
         _CommandSegment,
         _normalize_newlines_for_tokenize,
         _tokenize_command_segments_with_redirects,
-        strip_heredoc_bodies,
-        tokenize_command_segments,
+    )
+    from autoskillit.hooks._classification._tokenizer import (
+        strip_heredoc_bodies as _strip_heredoc_bodies_impl,
+    )
+    from autoskillit.hooks._classification._tokenizer import (
+        tokenize_command_segments as _tokenize_command_segments_impl,
     )
 else:
     if __package__:
-        from . import _command_tokenizer as _tokenizer
+        from ._classification import _tokenizer
     else:
-        import _command_tokenizer as _tokenizer
+        from _classification import _tokenizer
 
     ArgvToken = _tokenizer.ArgvToken
     _CommandSegment = _tokenizer._CommandSegment
@@ -33,8 +37,17 @@ else:
     _tokenize_command_segments_with_redirects = (
         _tokenizer._tokenize_command_segments_with_redirects
     )
-    strip_heredoc_bodies = _tokenizer.strip_heredoc_bodies
-    tokenize_command_segments = _tokenizer.tokenize_command_segments
+    _strip_heredoc_bodies_impl = _tokenizer.strip_heredoc_bodies
+    _tokenize_command_segments_impl = _tokenizer.tokenize_command_segments
+
+
+def strip_heredoc_bodies(command: str) -> str:
+    return _strip_heredoc_bodies_impl(command)
+
+
+def tokenize_command_segments(command: str) -> list[list[str]]:
+    return _tokenize_command_segments_impl(command)
+
 
 PROTECTED_SOURCE_PATH_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml"),
@@ -624,7 +637,7 @@ def extract_git_subcommand_and_flags(
 
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_flags import (  # noqa: F401
+    from autoskillit.hooks._classification._flags import (  # noqa: F401
         _GIT_GLOBAL_FLAG_SPEC,
         _PIP_GLOBAL_FLAG_SPEC,
         _argv_token_after_prefix,
@@ -636,7 +649,7 @@ if TYPE_CHECKING:
         command_has_blocked_protected_path_read,
         is_allowed_protected_path_metadata_command,
     )
-    from autoskillit.hooks._command_interpreters import (  # noqa: F401
+    from autoskillit.hooks._classification._interpreters import (  # noqa: F401
         _extract_interpreter_command_specs,
         _extract_interpreter_segment_specs,
         _normalize_executable,
@@ -651,11 +664,9 @@ if TYPE_CHECKING:
     )
 else:
     if __package__:
-        from . import _command_flags as _flags
-        from . import _command_interpreters as _interpreters
+        from ._classification import _flags, _interpreters
     else:
-        import _command_flags as _flags
-        import _command_interpreters as _interpreters
+        from _classification import _flags, _interpreters
 
     _GIT_GLOBAL_FLAG_SPEC = _flags._GIT_GLOBAL_FLAG_SPEC
     _PIP_GLOBAL_FLAG_SPEC = _flags._PIP_GLOBAL_FLAG_SPEC

@@ -1,4 +1,4 @@
-"""IL-0 filesystem, path, JSON, YAML, terminal-table, version-snapshot, and delivery-bounds primitives (issue #4671 Phase A).
+"""IL-0 filesystem, path, JSON, terminal-table, version-snapshot, and delivery-bounds primitives.
 
 Re-exports the public surface of the io/ sub-package through the
 ``autoskillit.core.io`` namespace. Backward-compat shims at
@@ -28,8 +28,6 @@ from autoskillit.core.io.io import (
     ReadResult,
     TreeEntry,
     TreeVanishedError,
-    _AtomicWriteDurabilityError,
-    _reset_schema_drift_logged_for_tests,
     atomic_write,
     decode_versioned_json_bytes,
     directory_tree_digest,
@@ -44,6 +42,12 @@ from autoskillit.core.io.io import (
     temp_dir_display_str,
     write_canonical_versioned_json,
     write_versioned_json,
+)
+from autoskillit.core.io.io import (
+    _AtomicWriteDurabilityError as _AtomicWriteDurabilityError,
+)
+from autoskillit.core.io.io import (
+    _reset_schema_drift_logged_for_tests as _reset_schema_drift_logged_for_tests,
 )
 from autoskillit.core.io.json import (
     fast_dumps,
@@ -140,6 +144,7 @@ __all__ = [
     "resolve_skill_temp_dir",
     "resolve_temp_dir",
     "safe_upsert_section",
+    "_reset_schema_drift_logged_for_tests",
     "spill_output",
     "strict_walk",
     "temp_dir_display_str",

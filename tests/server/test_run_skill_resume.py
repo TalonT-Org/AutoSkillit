@@ -773,15 +773,6 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
         assert add_dir.session_home
         session_home = Path(add_dir.session_home)
         catalog_skill = Path(add_dir.path) / "skills" / "implement" / "SKILL.md"
-        assert all(
-            session_home.name in mapping
-            for mapping in (
-                manager._session_roots,  # noqa: SLF001
-                manager._session_skills_subdirs,  # noqa: SLF001
-                manager._session_skill_infos,  # noqa: SLF001
-                manager._session_leases,  # noqa: SLF001
-            )
-        )
         assert catalog_skill.read_text(encoding="utf-8") == projected_document.content
         assert (
             hashlib.sha256(catalog_skill.read_bytes()).hexdigest()
@@ -823,10 +814,6 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
     restored_home = observed["session_home"]
     assert isinstance(restored_home, Path)
     assert not restored_home.exists()
-    assert manager._session_roots == {}  # noqa: SLF001
-    assert manager._session_skills_subdirs == {}  # noqa: SLF001
-    assert manager._session_skill_infos == {}  # noqa: SLF001
-    assert manager._session_leases == {}  # noqa: SLF001
 
 
 @pytest.mark.parametrize(

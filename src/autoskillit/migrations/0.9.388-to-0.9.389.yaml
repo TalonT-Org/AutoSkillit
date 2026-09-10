@@ -31,3 +31,19 @@ changes:
       No manual action required. hook_registry.py references the new path.
       leaf_orchestration_guard.py is listed in RETIRED_SCRIPT_BASENAMES and
       will be removed from existing installs automatically on next init.
+
+  - id: execution-commands-relocated
+    description: >
+      autoskillit.execution.commands moved to
+      autoskillit.execution.runtime.commands as part of #4672's decomposition
+      of execution/ into execution/{github_ops,evidence,runtime}/ sub-packages.
+      The single public name ClaudeHeadlessCmd is also re-exported by the
+      execution/ gateway (autoskillit.execution) so most consumers need no
+      change.
+    instruction: |
+      Direct imports of `autoskillit.execution.commands` (the module path
+      that existed prior to this release) must be updated to
+      `autoskillit.execution.runtime.commands`. Indirect consumers that
+      import `from autoskillit.execution import ClaudeHeadlessCmd` (or any
+      other name from the gateway) need no change — the execution/__init__.py
+      gateway re-exports the full public surface at the legacy path.

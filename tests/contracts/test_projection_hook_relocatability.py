@@ -228,3 +228,50 @@ class TestCacheHitReuseSafety:
         finally:
             second.close()
         assert second.closed
+
+
+# ── REQ-HOOKS-004: dispatcher bootstrap must expose hooks/_runtime/ ────────────
+
+
+def test_dispatch_py_sys_path_includes_runtime_subdir() -> None:
+    """REQ-HOOKS-004: `hooks/_dispatch.py` sys.path bootstrap prepends `hooks/_runtime/`.
+
+    After #4672's decomposition, hook-script utilities live at
+    `hooks/_runtime/`. The dispatcher subprocess spawns child hook scripts
+    via `subprocess.run([sys.executable, "-B", str(target)], ...)` with a
+    fresh process that does NOT inherit `_dispatch.py`'s sys.path. Each
+    child script then runs `from _<x> import …` (bare-name) which requires
+    `hooks/_runtime/` on its sys.path. The dispatcher must therefore add
+    BOTH `hooks/` and `hooks/_runtime/` to its bootstrap.
+
+    This test reads `hooks/_dispatch.py` source and asserts the runtime
+    subdir is referenced by the bootstrap block (regardless of insertion
+    order). It does NOT execute the dispatcher (subprocess bootstrap is
+    verified by `TestProjectedHooksAreRelocatable`).
+    """
+    from autoskillit.core import pkg_root
+
+    dispatch_path = pkg_root() / "hooks" / "_dispatch.py"
+    assert dispatch_path.is_file(), f"dispatcher missing: {dispatch_path}"
+    source = dispatch_path.read_text(encoding="utf-8")
+
+    # The bootstrap block must reference the _runtime subdir explicitly.
+    # Strategy A preserves the bare-name contract without violating the
+    # stdlib-only `hooks/AGENTS.md` rule by adding `hooks/_runtime/` to
+    # sys.path alongside `hooks/`.
+    assert "_runtime" in source, (
+        "hooks/_dispatch.py sys.path bootstrap does not reference "
+        "`hooks/_runtime/` — hook subprocesses would fail to import "
+        "moved utilities like `_hook_settings` (REQ-HOOKS-004)."
+    )
+
+    # More specific: a _RUNTIME_DIR variable should resolve to hooks/_runtime.
+    # The bootstrap pattern (post-#4672) is:
+    #   _HOOKS_DIR = ...
+    #   _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+    #   if _RUNTIME_DIR not in sys.path:
+    #       sys.path.insert(0, _RUNTIME_DIR)
+    assert "_RUNTIME_DIR" in source, (
+        "hooks/_dispatch.py is missing the `_RUNTIME_DIR = ... / `_runtime`` "
+        "bootstrap entry required for bare-name imports after #4672."
+    )

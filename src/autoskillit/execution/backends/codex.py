@@ -69,6 +69,11 @@ from autoskillit.execution.backends._codex_config import (
     _format_toml_value,
     ensure_codex_mcp_registered,
 )
+from autoskillit.execution.backends._codex_discovery import (
+    CODEX_SKILL_DISCOVERY_CONTRACT,
+    attest_catalog_discovery,
+    probe_codex_version,
+)
 from autoskillit.execution.backends._codex_execution_identity import (
     extract_codex_execution_identity,
 )
@@ -99,6 +104,7 @@ _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
 
 __all__ = [
+    "CODEX_SKILL_DISCOVERY_CONTRACT",
     "CODEX_EXEC_FLAGS",
     "CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES",
     "CODEX_TOP_LEVEL_ONLY_FLAGS",
@@ -217,7 +223,7 @@ class CodexBackend(CodexSessionCommandMixin):
             session_dir_persistent=True,
             cook_startup_observer_capable=True,
             explicit_path_env_var="",
-            cook_exact_binding_probe_required=False,
+            cook_exact_binding_probe_required=True,
             supports_model_invocation_gating=False,
             terminal_explorer_capable=True,
             session_scoped_explorer_capable=False,
@@ -428,6 +434,18 @@ class CodexBackend(CodexSessionCommandMixin):
         if str(generated_home) != home_value:
             return ["Codex interactive generated home environment is not canonical"]
 
+        managed_catalog = spec.managed_skill_catalog
+        if managed_catalog is None:
+            return ["Codex interactive managed home requires a frozen skill catalog"]
+        expected_add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
+        if managed_catalog.session_home != str(generated_home):
+            return ["Codex interactive managed skill catalog is bound to another home"]
+        if Path(managed_catalog.path) != expected_add_dir:
+            return ["Codex interactive managed skill catalog is bound to another add-dir"]
+        if not managed_catalog.skill_entries:
+            return ["Codex interactive managed skill catalog has no frozen entries"]
+        catalog_dir = generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
+
         sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
         config_overrides = [
             value for flag, value in origin.kv_flags if flag == CodexFlags.CONFIG_OVERRIDE
@@ -470,6 +488,36 @@ class CodexBackend(CodexSessionCommandMixin):
         errors.extend(after_errors)
         if not after_errors and after_fingerprint != before_fingerprint:
             errors.append("Codex MCP validation mutated the inert rollout path topology")
+        if errors:
+            return errors
+
+        raw_version, _, version_errors = probe_codex_version(
+            executable=origin.binary,
+            env=spec.env,
+            cwd=spec.cwd,
+            timeout_seconds=30,
+        )
+        if version_errors:
+            return version_errors
+
+        discovery_command: list[str] = [origin.binary]
+        for flag, value in origin.kv_flags:
+            if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
+                discovery_command.extend((flag, value))
+        discovery_command.extend(CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe)
+        errors = attest_catalog_discovery(
+            probe_command=tuple(discovery_command),
+            env=spec.env,
+            cwd=spec.cwd,
+            catalog_dir=catalog_dir,
+            expected_entries=managed_catalog.skill_entries,
+            version=raw_version,
+            timeout_seconds=30,
+        )
+        final_errors, final_fingerprint = _validate_inert_rollout_paths(generated_home)
+        errors.extend(final_errors)
+        if not final_errors and final_fingerprint != before_fingerprint:
+            errors.append("Codex skill discovery mutated the inert rollout path topology")
         return errors
 
     configure_managed_session_dir = project_managed_route
@@ -603,7 +651,6 @@ class CodexBackend(CodexSessionCommandMixin):
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
     ) -> PreLaunchReadiness:
-        del executable
         try:
             assert self.source_codex_home is not None
             with codex_prelaunch_transaction(
@@ -621,7 +668,9 @@ class CodexBackend(CodexSessionCommandMixin):
                 try:
                     errors = tuple(
                         _validate_global_codex_home(
-                            self.source_codex_home, config_path=config_path
+                            self.source_codex_home,
+                            config_path=config_path,
+                            executable=executable,
                         )
                     )
                 except Exception as exc:

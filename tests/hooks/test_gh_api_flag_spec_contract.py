@@ -64,7 +64,8 @@ def _assert_spec_covers_parsed_flags(
     missing = parsed_flags - spec_value_flags
     assert not missing, (
         f"{cli_label} --help lists value-taking flags absent from its spec table: "
-        f"{sorted(missing)} -- add them in src/autoskillit/hooks/_runtime/_command_classification.py"
+        f"{sorted(missing)} -- add them in "
+        f"src/autoskillit/hooks/_runtime/_command_classification.py"
     )
 
 

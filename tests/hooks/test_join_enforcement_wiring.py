@@ -20,7 +20,7 @@ from autoskillit.hooks._join_ledger import (
     resolve_flag_dir,
     settle_assignment,
 )
-from autoskillit.hooks._session_binding import read_binding, resolve_binding_path
+from autoskillit.hooks._session_binding import read_binding, resolve_binding_path, write_binding
 from tests._helpers import _EnvVarReadCollector
 from tests.conftest import production_interpreter_env
 from tests.hooks._session_binding_helpers import copy_projected_hook, write_projection_manifest
@@ -251,6 +251,25 @@ def test_stop_guard_blocks_on_an_unresolved_wave_using_payload_identity(tmp_path
 
     assert completed.returncode == 2
     assert _stdout_json(completed)["decision"] == "block"
+
+
+def test_stop_guard_blocks_an_invalid_managed_scope(tmp_path: Path) -> None:
+    session_id = "stop-invalid-scope"
+    worktree = _load_join_bearing_skill(tmp_path, session_id=session_id)
+    binding_path = resolve_binding_path(str(worktree), session_id)
+    binding = read_binding(binding_path)
+    assert binding is not None
+    write_binding(binding_path, binding._replace(binding_valid=False))
+
+    completed = _run_hook(
+        tmp_path,
+        _GUARDS_DIR / "join_stop_guard.py",
+        {"session_id": session_id, "cwd": str(worktree)},
+        cwd=worktree,
+    )
+
+    assert completed.returncode == 2
+    assert "required-join binding scope" in _stdout_json(completed)["reason"]
 
 
 def test_stop_guard_releases_when_the_wave_is_complete(tmp_path: Path) -> None:

@@ -38,6 +38,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     read_session_binding,
     session_managed_codex_route,
+    session_managed_scope,
     write_join_diagnostic,
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
@@ -98,12 +99,13 @@ def main() -> None:
                 denial_reason="missing_managed_stop_guard",
             )
 
-    top_level_parent = binding.get("managed_parent_id")
-    if not isinstance(top_level_parent, str) or not top_level_parent:
+    scope = session_managed_scope(payload_cwd, sid)
+    if scope is None:
         _block_stop(
             reason="Stop cannot verify the required-join binding scope.",
             denial_reason="invalid_managed_scope",
         )
+    top_level_parent, _managed_leaf_id = scope
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     allow_stop, reason = can_release_stop(
         flag_dir,

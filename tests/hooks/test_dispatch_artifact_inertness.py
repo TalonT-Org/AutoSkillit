@@ -38,7 +38,7 @@ from tests.conftest import production_interpreter_env
 pytestmark = [pytest.mark.integration, pytest.mark.medium]
 
 _DISPATCH_SCRIPT = HOOKS_DIR / "_dispatch.py"
-_HOOK_SETTINGS_SCRIPT = HOOKS_DIR / "_hook_settings.py"
+_HOOK_SETTINGS_SCRIPT = HOOKS_DIR / "_runtime" / "_hook_settings.py"
 _QUOTA_GUARD_SCRIPT = HOOKS_DIR / "guards" / "quota_guard.py"
 _QUOTA_CONSTRAINTS_SCRIPT = HOOKS_DIR.parent / "quota_constraints.py"
 

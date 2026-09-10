@@ -29,7 +29,7 @@ elif __package__ == "_capture":
     import _capture_contract
     import _capture_lifecycle
     import _capture_process
-    from _runtime import _hook_settings, _policy_event  # noqa: I001 — bare-name post-move
+    from _runtime import _hook_settings, _policy_event  # noqa: I001 — bare-name post-move; cyclic broken by sys.modules register in _capture_artifacts.py
     from _capture._module_identity import register_module_aliases
 else:
     from . import _authority, _delivery, _failure_policy, _observation, _reader  # noqa: I001

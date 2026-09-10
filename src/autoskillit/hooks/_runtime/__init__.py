@@ -2,265 +2,255 @@
 
 from __future__ import annotations
 
-from autoskillit.hooks._runtime._command_classification import (
-    _COMMAND_WRAPPERS,  # noqa: F401
-    _ENV_NO_VALUE_FLAGS,  # noqa: F401
-    _ENV_VALUE_FLAGS,  # noqa: F401
-    _ENV_VALUE_FLAGS_ATTACHED,  # noqa: F401
-    _FD_DUPLICATION_RE,  # noqa: F401
-    _FD_REDIRECT_RE,  # noqa: F401
-    _GIT_ADD_CONTENT_FLAGS,  # noqa: F401
-    _GIT_DIFF_CONTENT_FLAGS,  # noqa: F401
-    _GIT_DIFF_METADATA_FLAGS,  # noqa: F401
-    _GIT_GLOBAL_FLAG_SPEC,  # noqa: F401
-    _GIT_GLOBAL_FLAGS,  # noqa: F401
-    _GIT_GLOBAL_FLAGS_WITH_VALUE,  # noqa: F401
-    _GIT_STATUS_CONTENT_FLAGS,  # noqa: F401
-    _HEREDOC_BODY_RE,  # noqa: F401
-    _HEREDOC_MARKER_RE,  # noqa: F401
-    _INTERPRETER_LINE_RE,  # noqa: F401
-    _INTERPRETER_RE,  # noqa: F401
-    _LITERAL_OPEN_PATH_RE,  # noqa: F401
-    _LITERAL_PATH_CONSTRUCTOR_RE,  # noqa: F401
-    _NESTED_SHELL_RE,  # noqa: F401
-    _PIP_GLOBAL_FLAG_SPEC,  # noqa: F401
-    _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS,  # noqa: F401
-    _PROTECTED_READ_SHELL_OPS,  # noqa: F401
-    _PYTHON_OS_EXEC_FUNCS,  # noqa: F401
-    _PYTHON_SUBPROCESS_FUNCS,  # noqa: F401
-    _REDIRECT_OP_ONLY_RE,  # noqa: F401
-    _REDIRECT_TOKEN_RE,  # noqa: F401
-    _SHELL_CONTROL_WORDS,  # noqa: F401
-    _SHELL_INTERPRETERS,  # noqa: F401
-    _SHELL_OPERATOR_CHARS,  # noqa: F401
-    _SHELL_OPERATORS,  # noqa: F401
-    _SHELL_OPS,  # noqa: F401
-    _SHELL_STATE_VAR_RE,  # noqa: F401
-    _SHELL_SUBSTITUTION_RE,  # noqa: F401
-    _SHELL_VAR_RE,  # noqa: F401
-    _SUBPROCESS_APIS_RE,  # noqa: F401
-    _TRAILING_SHELL_CLOSERS,  # noqa: F401
-    _WC_FLAG_RE,  # noqa: F401
-    _WRAPPER_VALUE_FLAGS_ATTACHED,  # noqa: F401
-    _WRAPPER_VALUE_FLAGS_DETACHED,  # noqa: F401
-    _WRAPPERS_WITH_DURATION,  # noqa: F401
-    _WRAPPERS_WITH_SHORT_FLAG,  # noqa: F401
-    _WRITE_APIS_RE,  # noqa: F401
-    _WRITE_CALL_SITE_RE,  # noqa: F401
-    DECLARABLE_SOURCE_PATH_PATTERNS,  # noqa: F401
-    PROTECTED_SOURCE_PATH_PATTERNS,  # noqa: F401
-    ArgvToken,  # noqa: F401
-    SearchPattern,  # noqa: F401
-    _argv_token_after_prefix,  # noqa: F401
-    _argv_token_value_after_key,  # noqa: F401
-    _command_start_index,  # noqa: F401
-    _CommandSegment,  # noqa: F401
-    _consume_argv_flag,  # noqa: F401
-    _consume_env,  # noqa: F401
-    _consume_str_flag,  # noqa: F401
-    _consume_wrapper_options,  # noqa: F401
-    _extract_interpreter_command_specs,  # noqa: F401
-    _extract_interpreter_segment_specs,  # noqa: F401
-    _extract_substitution_payloads,  # noqa: F401
-    _find_substitution_end,  # noqa: F401
-    _FlagArity,  # noqa: F401
-    _InterpreterCommandSpec,  # noqa: F401
-    _is_allowed_wc_flag,  # noqa: F401
-    _is_posix_assignment,  # noqa: F401
-    _is_shell_interpreter,  # noqa: F401
-    _literal_to_argv,  # noqa: F401
-    _literal_to_string,  # noqa: F401
-    _mark_unquoted_output_redirects,  # noqa: F401
-    _normalize_executable,  # noqa: F401
-    _normalize_newlines_for_tokenize,  # noqa: F401
-    _parse_python_program_literals,  # noqa: F401
-    _partition_output_redirect_indices,  # noqa: F401
-    _partition_output_redirects,  # noqa: F401
-    _python_program_command_specs,  # noqa: F401
-    _segment_evaluates_shell_payload,  # noqa: F401
-    _select_executable_argv_tokens,  # noqa: F401
-    _tokenize_command_segments_with_redirects,  # noqa: F401
-    _tokenize_protected_read_segments,  # noqa: F401
-    _verb_start_index,  # noqa: F401
-    command_has_blocked_protected_path_read,  # noqa: F401
-    command_verb,  # noqa: F401
-    command_verb_and_args,  # noqa: F401
-    extract_git_subcommand_and_flags,  # noqa: F401
-    extract_interpreter_command_payloads,  # noqa: F401
-    extract_interpreter_write_paths,  # noqa: F401
-    extract_redirect_targets,  # noqa: F401
-    extract_shell_command_payloads,  # noqa: F401
-    has_interpreter_wrapped_command,  # noqa: F401
-    has_interpreter_write,  # noqa: F401
-    has_nested_shell,  # noqa: F401
-    is_allowed_protected_path_metadata_command,  # noqa: F401
-    is_gh_command,  # noqa: F401
-    is_git_command,  # noqa: F401
-    resolve_write_target,  # noqa: F401
-    strip_heredoc_bodies,  # noqa: F401
-    tokenize_command_segments,  # noqa: F401
-    tokenize_shell_payload_segments,  # noqa: F401
-)
-from autoskillit.hooks._runtime._exploration_request_record import (
-    _CLAIM_PREFIX,  # noqa: F401
-    _DIRECTORY_FLAGS,  # noqa: F401
-    _MAX_CLEANUP_ENTRIES,  # noqa: F401
-    _MAX_RECORD_BYTES,  # noqa: F401
-    _READ_FLAGS,  # noqa: F401
-    _RECORD_PREFIX,  # noqa: F401
-    _RECORD_SUFFIX,  # noqa: F401
-    _REQUEST_DIRECTORY,  # noqa: F401
-    _REQUEST_TTL_SECONDS,  # noqa: F401
-    _TOKEN_PATTERN,  # noqa: F401
-    _WRITE_FLAGS,  # noqa: F401
-    SUPPORTED_EXPLORATION_REQUEST_TOOLS,  # noqa: F401
-    _cleanup_expired,  # noqa: F401
-    _clock,  # noqa: F401
-    _open_child_directory,  # noqa: F401
-    _open_request_directory,  # noqa: F401
-    _parse_record,  # noqa: F401
-    _read_bounded,  # noqa: F401
-    _record_name,  # noqa: F401
-    _valid_session_id,  # noqa: F401
-    _valid_tool_name,  # noqa: F401
-    _write_all,  # noqa: F401
-    consume_exploration_request_record,  # noqa: F401
-    write_exploration_request_record,  # noqa: F401
-)
-from autoskillit.hooks._runtime._github_mutation_analysis import (
-    _CURL_FLAG_SPEC,  # noqa: F401
-    _DYNAMIC_SHELL_TOKEN_RE,  # noqa: F401
-    _GH_API_FLAG_SPEC,  # noqa: F401
-    _GH_DISPATCH_WORDS,  # noqa: F401
-    _GH_HELP_FLAGS,  # noqa: F401
-    _GH_ISSUE_EDIT_LONG_VALUE_FLAGS,  # noqa: F401
-    _GH_ISSUE_EDIT_SHORT_VALUE_FLAGS,  # noqa: F401
-    _GH_ISSUE_URL_RE,  # noqa: F401
-    _GH_KNOWN_VALUE_FLAGS,  # noqa: F401
-    _GH_MUTATION_SUBCOMMANDS,  # noqa: F401
-    _GH_READ_ONLY_SUBCOMMANDS,  # noqa: F401
-    _GITHUB_INPUT_LIMIT,  # noqa: F401
-    _GITHUB_WRITE_METHODS,  # noqa: F401
-    _GRAPHQL_REVIEW_MUTATIONS,  # noqa: F401
-    _INPUT_SAFE_PRIOR_COMMANDS,  # noqa: F401
-    _POSSIBLE_GITHUB_EXEC_NAMES,  # noqa: F401
-    _POSSIBLE_GITHUB_EXEC_RE,  # noqa: F401
-    _PROCESS_SUBSTITUTION_RE,  # noqa: F401
-    _PULL_REVIEW_COMMENT_ROUTE_RE,  # noqa: F401
-    _PULL_REVIEW_REPLY_ROUTE_RE,  # noqa: F401
-    _PULL_REVIEW_ROUTE_RE,  # noqa: F401
-    _REPEATABLE_SHELL_RE,  # noqa: F401
-    GitHubMutationAnalysis,  # noqa: F401
-    GitHubMutationKind,  # noqa: F401
-    GitHubMutationRecord,  # noqa: F401
-    GitHubMutationStatus,  # noqa: F401
-    _analyze_curl_segment,  # noqa: F401
-    _analyze_gh_api,  # noqa: F401
-    _analyze_gh_segment,  # noqa: F401
-    _analyze_github_segment,  # noqa: F401
-    _command_verb_and_args,  # noqa: F401
-    _comment_count_from_payload,  # noqa: F401
-    _extract_interpreter_segment_specs_call,  # noqa: F401
-    _extract_shell_command_payloads_call,  # noqa: F401
-    _flag_value,  # noqa: F401
-    _gh_args_have_bare_help_flag,  # noqa: F401
-    _github_mutation_kind,  # noqa: F401
-    _is_dynamic_shell_value,  # noqa: F401
-    _is_static_issue_edit_target,  # noqa: F401
-    _issue_edit_request_count,  # noqa: F401
-    _json_object_without_duplicate_keys,  # noqa: F401
-    _load_literal_github_input,  # noqa: F401
-    _none_github_analysis,  # noqa: F401
-    _normalize_executable_call,  # noqa: F401
-    _normalize_github_route,  # noqa: F401
-    _partition_output_redirects_call,  # noqa: F401
-    _segment_cwd,  # noqa: F401
-    _segment_evaluates_shell_payload_call,  # noqa: F401
-    _segment_has_possible_github_exec_token,  # noqa: F401
-    _segment_is_safe_before_literal_input,  # noqa: F401
-    _segments_have_dispatch_word_exec_risk,  # noqa: F401
-    _segments_have_possible_github_exec_token,  # noqa: F401
-    _tokenize_with_redirects,  # noqa: F401
-    _unresolved_github_analysis,  # noqa: F401
-    analyze_github_mutations,  # noqa: F401
-)
-from autoskillit.hooks._runtime._hook_constants import (
-    DENY_REASON_BY_GUARD,  # noqa: F401
-    DENY_TRIGGER_BY_GUARD,  # noqa: F401
-    EXEMPT_SESSION_TYPES_BY_GUARD,  # noqa: F401
-    EXEMPT_SKILLS_BY_GUARD,  # noqa: F401
-    MANAGED_PARENT_ALLOWED_TOOL_SET,  # noqa: F401
-    MANAGED_PARENT_ALLOWED_TOOLS,  # noqa: F401
-    RISKY_GH_SUBCOMMANDS,  # noqa: F401
-    RISKY_GIT_OPERATIONS,  # noqa: F401
-)
-from autoskillit.hooks._runtime._hook_payload import (
-    _RUN_CMD_SUFFIX,  # noqa: F401
-    ParsedHookCommand,  # noqa: F401
-    PayloadAnomaly,  # noqa: F401
-    _absolute_string_or_blank,  # noqa: F401
-    extract_apply_patch_text,  # noqa: F401
-    normalize_payload_cwd,  # noqa: F401
-    parse_hook_command,  # noqa: F401
-    resolve_kitchen_state_dir,  # noqa: F401
-    resolve_state_root,  # noqa: F401
-)
-from autoskillit.hooks._runtime._hook_settings import (
-    _AUTOSKILLIT_LOG_DIR_ENV,  # noqa: F401
-    _MAPPING_OVERLAY_DOMAINS,  # noqa: F401
-    _MAX_HOOK_LOG_LINES,  # noqa: F401
-    _V1_TOKEN_FIELD_ALIASES,  # noqa: F401
-    DEFAULT_BUFFER_SECONDS,  # noqa: F401
-    DEFAULT_CACHE_MAX_AGE,  # noqa: F401
-    DEFAULT_CACHE_PATH,  # noqa: F401
-    DIAGNOSTIC_KEYS,  # noqa: F401
-    ENV_BUFFER_SECONDS,  # noqa: F401
-    ENV_CACHE_MAX_AGE,  # noqa: F401
-    ENV_CACHE_PATH,  # noqa: F401
-    ENV_DISABLED,  # noqa: F401
-    HOOK_CONFIG_FILENAME,  # noqa: F401
-    HOOK_CONFIG_OVERLAY_FILENAME,  # noqa: F401
-    HOOK_DIR_COMPONENTS,  # noqa: F401
-    MARKER_TTL_SECONDS,  # noqa: F401
-    OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS,  # noqa: F401
-    QUOTA_GUARD_HOOK_PAYLOAD_KEYS,  # noqa: F401
-    TOKEN_USAGE_FILE_KEYS,  # noqa: F401
-    QuotaHookSettings,  # noqa: F401
-    _append_and_trim_jsonl_line,  # noqa: F401
-    _atomic_write_marker,  # noqa: F401
-    _default_state_root,  # noqa: F401
-    _read_hook_config,  # noqa: F401
-    _resolve_int,  # noqa: F401
-    _resolve_quota_disable_state_dir,  # noqa: F401
-    clear_quota_disable_marker,  # noqa: F401
-    is_quota_guard_disabled_for_session,  # noqa: F401
-    merge_hook_configs,  # noqa: F401
-    payload_managed_codex_route,  # noqa: F401
-    quota_disable_marker_path,  # noqa: F401
-    read_merged_hook_config,  # noqa: F401
-    read_quota_cache,  # noqa: F401
-    read_quota_disable_marker,  # noqa: F401
-    read_session_binding,  # noqa: F401
-    resolve_quota_log_dir,  # noqa: F401
-    resolve_quota_settings,  # noqa: F401
-    session_join_required,  # noqa: F401
-    session_managed_codex_route,  # noqa: F401
-    session_managed_scope,  # noqa: F401
-    validate_session_id,  # noqa: F401
-    write_dispatch_diagnostic,  # noqa: F401
-    write_join_diagnostic,  # noqa: F401
-    write_quota_disable_marker,  # noqa: F401
-    write_quota_log_event,  # noqa: F401
-)
-from autoskillit.hooks._runtime._hook_utils import (
-    STEP_SUFFIX_RE,  # noqa: F401
-    find_project_root,  # noqa: F401
-)
-from autoskillit.hooks._runtime._policy_event import (
-    POLICY_EVENT_SCHEMA_VERSION,  # noqa: F401
-    PolicyEvent,  # noqa: F401
-    render_provenance_prefix,  # noqa: F401
-)
+# Lazy gateway: importing _runtime/__init__.py must NOT trigger
+# `import autoskillit.hooks` (which would create a cycle when this package
+# is loaded during subprocess hook-script invocation). Each re-exported
+# name resolves through __getattr__ on first attribute access.
+_NAME_TO_MODULE: dict[str, str] = {
+    "ArgvToken": "_command_classification",
+    "DECLARABLE_SOURCE_PATH_PATTERNS": "_command_classification",
+    "DEFAULT_BUFFER_SECONDS": "_hook_settings",
+    "DEFAULT_CACHE_MAX_AGE": "_hook_settings",
+    "DEFAULT_CACHE_PATH": "_hook_settings",
+    "DENY_REASON_BY_GUARD": "_hook_constants",
+    "DENY_TRIGGER_BY_GUARD": "_hook_constants",
+    "DIAGNOSTIC_KEYS": "_hook_settings",
+    "ENV_BUFFER_SECONDS": "_hook_settings",
+    "ENV_CACHE_MAX_AGE": "_hook_settings",
+    "ENV_CACHE_PATH": "_hook_settings",
+    "ENV_DISABLED": "_hook_settings",
+    "EXEMPT_SESSION_TYPES_BY_GUARD": "_hook_constants",
+    "EXEMPT_SKILLS_BY_GUARD": "_hook_constants",
+    "GitHubMutationAnalysis": "_github_mutation_analysis",
+    "GitHubMutationKind": "_github_mutation_analysis",
+    "GitHubMutationRecord": "_github_mutation_analysis",
+    "GitHubMutationStatus": "_github_mutation_analysis",
+    "HOOK_CONFIG_FILENAME": "_hook_settings",
+    "HOOK_CONFIG_OVERLAY_FILENAME": "_hook_settings",
+    "HOOK_DIR_COMPONENTS": "_hook_settings",
+    "MANAGED_PARENT_ALLOWED_TOOLS": "_hook_constants",
+    "MANAGED_PARENT_ALLOWED_TOOL_SET": "_hook_constants",
+    "MARKER_TTL_SECONDS": "_hook_settings",
+    "OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS": "_hook_settings",
+    "POLICY_EVENT_SCHEMA_VERSION": "_policy_event",
+    "PROTECTED_SOURCE_PATH_PATTERNS": "_command_classification",
+    "ParsedHookCommand": "_hook_payload",
+    "PayloadAnomaly": "_hook_payload",
+    "PolicyEvent": "_policy_event",
+    "QUOTA_GUARD_HOOK_PAYLOAD_KEYS": "_hook_settings",
+    "QuotaHookSettings": "_hook_settings",
+    "RISKY_GH_SUBCOMMANDS": "_hook_constants",
+    "RISKY_GIT_OPERATIONS": "_hook_constants",
+    "STEP_SUFFIX_RE": "_hook_utils",
+    "SUPPORTED_EXPLORATION_REQUEST_TOOLS": "_exploration_request_record",
+    "SearchPattern": "_command_classification",
+    "TOKEN_USAGE_FILE_KEYS": "_hook_settings",
+    "_AUTOSKILLIT_LOG_DIR_ENV": "_hook_settings",
+    "_CLAIM_PREFIX": "_exploration_request_record",
+    "_COMMAND_WRAPPERS": "_command_classification",
+    "_CURL_FLAG_SPEC": "_github_mutation_analysis",
+    "_CommandSegment": "_command_classification",
+    "_DIRECTORY_FLAGS": "_exploration_request_record",
+    "_DYNAMIC_SHELL_TOKEN_RE": "_github_mutation_analysis",
+    "_ENV_NO_VALUE_FLAGS": "_command_classification",
+    "_ENV_VALUE_FLAGS": "_command_classification",
+    "_ENV_VALUE_FLAGS_ATTACHED": "_command_classification",
+    "_FD_DUPLICATION_RE": "_command_classification",
+    "_FD_REDIRECT_RE": "_command_classification",
+    "_FlagArity": "_command_classification",
+    "_GH_API_FLAG_SPEC": "_github_mutation_analysis",
+    "_GH_DISPATCH_WORDS": "_github_mutation_analysis",
+    "_GH_HELP_FLAGS": "_github_mutation_analysis",
+    "_GH_ISSUE_EDIT_LONG_VALUE_FLAGS": "_github_mutation_analysis",
+    "_GH_ISSUE_EDIT_SHORT_VALUE_FLAGS": "_github_mutation_analysis",
+    "_GH_ISSUE_URL_RE": "_github_mutation_analysis",
+    "_GH_KNOWN_VALUE_FLAGS": "_github_mutation_analysis",
+    "_GH_MUTATION_SUBCOMMANDS": "_github_mutation_analysis",
+    "_GH_READ_ONLY_SUBCOMMANDS": "_github_mutation_analysis",
+    "_GITHUB_INPUT_LIMIT": "_github_mutation_analysis",
+    "_GITHUB_WRITE_METHODS": "_github_mutation_analysis",
+    "_GIT_ADD_CONTENT_FLAGS": "_command_classification",
+    "_GIT_DIFF_CONTENT_FLAGS": "_command_classification",
+    "_GIT_DIFF_METADATA_FLAGS": "_command_classification",
+    "_GIT_GLOBAL_FLAGS": "_command_classification",
+    "_GIT_GLOBAL_FLAGS_WITH_VALUE": "_command_classification",
+    "_GIT_GLOBAL_FLAG_SPEC": "_command_classification",
+    "_GIT_STATUS_CONTENT_FLAGS": "_command_classification",
+    "_GRAPHQL_REVIEW_MUTATIONS": "_github_mutation_analysis",
+    "_HEREDOC_BODY_RE": "_command_classification",
+    "_HEREDOC_MARKER_RE": "_command_classification",
+    "_INPUT_SAFE_PRIOR_COMMANDS": "_github_mutation_analysis",
+    "_INTERPRETER_LINE_RE": "_command_classification",
+    "_INTERPRETER_RE": "_command_classification",
+    "_InterpreterCommandSpec": "_command_classification",
+    "_LITERAL_OPEN_PATH_RE": "_command_classification",
+    "_LITERAL_PATH_CONSTRUCTOR_RE": "_command_classification",
+    "_MAPPING_OVERLAY_DOMAINS": "_hook_settings",
+    "_MAX_CLEANUP_ENTRIES": "_exploration_request_record",
+    "_MAX_HOOK_LOG_LINES": "_hook_settings",
+    "_MAX_RECORD_BYTES": "_exploration_request_record",
+    "_NESTED_SHELL_RE": "_command_classification",
+    "_PIP_GLOBAL_FLAG_SPEC": "_command_classification",
+    "_POSSIBLE_GITHUB_EXEC_NAMES": "_github_mutation_analysis",
+    "_POSSIBLE_GITHUB_EXEC_RE": "_github_mutation_analysis",
+    "_PROCESS_SUBSTITUTION_RE": "_github_mutation_analysis",
+    "_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS": "_command_classification",
+    "_PROTECTED_READ_SHELL_OPS": "_command_classification",
+    "_PULL_REVIEW_COMMENT_ROUTE_RE": "_github_mutation_analysis",
+    "_PULL_REVIEW_REPLY_ROUTE_RE": "_github_mutation_analysis",
+    "_PULL_REVIEW_ROUTE_RE": "_github_mutation_analysis",
+    "_PYTHON_OS_EXEC_FUNCS": "_command_classification",
+    "_PYTHON_SUBPROCESS_FUNCS": "_command_classification",
+    "_READ_FLAGS": "_exploration_request_record",
+    "_RECORD_PREFIX": "_exploration_request_record",
+    "_RECORD_SUFFIX": "_exploration_request_record",
+    "_REDIRECT_OP_ONLY_RE": "_command_classification",
+    "_REDIRECT_TOKEN_RE": "_command_classification",
+    "_REPEATABLE_SHELL_RE": "_github_mutation_analysis",
+    "_REQUEST_DIRECTORY": "_exploration_request_record",
+    "_REQUEST_TTL_SECONDS": "_exploration_request_record",
+    "_RUN_CMD_SUFFIX": "_hook_payload",
+    "_SHELL_CONTROL_WORDS": "_command_classification",
+    "_SHELL_INTERPRETERS": "_command_classification",
+    "_SHELL_OPERATORS": "_command_classification",
+    "_SHELL_OPERATOR_CHARS": "_command_classification",
+    "_SHELL_OPS": "_command_classification",
+    "_SHELL_STATE_VAR_RE": "_command_classification",
+    "_SHELL_SUBSTITUTION_RE": "_command_classification",
+    "_SHELL_VAR_RE": "_command_classification",
+    "_SUBPROCESS_APIS_RE": "_command_classification",
+    "_TOKEN_PATTERN": "_exploration_request_record",
+    "_TRAILING_SHELL_CLOSERS": "_command_classification",
+    "_V1_TOKEN_FIELD_ALIASES": "_hook_settings",
+    "_WC_FLAG_RE": "_command_classification",
+    "_WRAPPERS_WITH_DURATION": "_command_classification",
+    "_WRAPPERS_WITH_SHORT_FLAG": "_command_classification",
+    "_WRAPPER_VALUE_FLAGS_ATTACHED": "_command_classification",
+    "_WRAPPER_VALUE_FLAGS_DETACHED": "_command_classification",
+    "_WRITE_APIS_RE": "_command_classification",
+    "_WRITE_CALL_SITE_RE": "_command_classification",
+    "_WRITE_FLAGS": "_exploration_request_record",
+    "_absolute_string_or_blank": "_hook_payload",
+    "_analyze_curl_segment": "_github_mutation_analysis",
+    "_analyze_gh_api": "_github_mutation_analysis",
+    "_analyze_gh_segment": "_github_mutation_analysis",
+    "_analyze_github_segment": "_github_mutation_analysis",
+    "_append_and_trim_jsonl_line": "_hook_settings",
+    "_argv_token_after_prefix": "_command_classification",
+    "_argv_token_value_after_key": "_command_classification",
+    "_atomic_write_marker": "_hook_settings",
+    "_cleanup_expired": "_exploration_request_record",
+    "_clock": "_exploration_request_record",
+    "_command_start_index": "_command_classification",
+    "_command_verb_and_args": "_github_mutation_analysis",
+    "_comment_count_from_payload": "_github_mutation_analysis",
+    "_consume_argv_flag": "_command_classification",
+    "_consume_env": "_command_classification",
+    "_consume_str_flag": "_command_classification",
+    "_consume_wrapper_options": "_command_classification",
+    "_default_state_root": "_hook_settings",
+    "_extract_interpreter_command_specs": "_command_classification",
+    "_extract_interpreter_segment_specs": "_command_classification",
+    "_extract_interpreter_segment_specs_call": "_github_mutation_analysis",
+    "_extract_shell_command_payloads_call": "_github_mutation_analysis",
+    "_extract_substitution_payloads": "_command_classification",
+    "_find_substitution_end": "_command_classification",
+    "_flag_value": "_github_mutation_analysis",
+    "_gh_args_have_bare_help_flag": "_github_mutation_analysis",
+    "_github_mutation_kind": "_github_mutation_analysis",
+    "_is_allowed_wc_flag": "_command_classification",
+    "_is_dynamic_shell_value": "_github_mutation_analysis",
+    "_is_posix_assignment": "_command_classification",
+    "_is_shell_interpreter": "_command_classification",
+    "_is_static_issue_edit_target": "_github_mutation_analysis",
+    "_issue_edit_request_count": "_github_mutation_analysis",
+    "_json_object_without_duplicate_keys": "_github_mutation_analysis",
+    "_literal_to_argv": "_command_classification",
+    "_literal_to_string": "_command_classification",
+    "_load_literal_github_input": "_github_mutation_analysis",
+    "_mark_unquoted_output_redirects": "_command_classification",
+    "_none_github_analysis": "_github_mutation_analysis",
+    "_normalize_executable": "_command_classification",
+    "_normalize_executable_call": "_github_mutation_analysis",
+    "_normalize_github_route": "_github_mutation_analysis",
+    "_normalize_newlines_for_tokenize": "_command_classification",
+    "_open_child_directory": "_exploration_request_record",
+    "_open_request_directory": "_exploration_request_record",
+    "_parse_python_program_literals": "_command_classification",
+    "_parse_record": "_exploration_request_record",
+    "_partition_output_redirect_indices": "_command_classification",
+    "_partition_output_redirects": "_command_classification",
+    "_partition_output_redirects_call": "_github_mutation_analysis",
+    "_python_program_command_specs": "_command_classification",
+    "_read_bounded": "_exploration_request_record",
+    "_read_hook_config": "_hook_settings",
+    "_record_name": "_exploration_request_record",
+    "_resolve_int": "_hook_settings",
+    "_resolve_quota_disable_state_dir": "_hook_settings",
+    "_segment_cwd": "_github_mutation_analysis",
+    "_segment_evaluates_shell_payload": "_command_classification",
+    "_segment_evaluates_shell_payload_call": "_github_mutation_analysis",
+    "_segment_has_possible_github_exec_token": "_github_mutation_analysis",
+    "_segment_is_safe_before_literal_input": "_github_mutation_analysis",
+    "_segments_have_dispatch_word_exec_risk": "_github_mutation_analysis",
+    "_segments_have_possible_github_exec_token": "_github_mutation_analysis",
+    "_select_executable_argv_tokens": "_command_classification",
+    "_tokenize_command_segments_with_redirects": "_command_classification",
+    "_tokenize_protected_read_segments": "_command_classification",
+    "_tokenize_with_redirects": "_github_mutation_analysis",
+    "_unresolved_github_analysis": "_github_mutation_analysis",
+    "_valid_session_id": "_exploration_request_record",
+    "_valid_tool_name": "_exploration_request_record",
+    "_verb_start_index": "_command_classification",
+    "_write_all": "_exploration_request_record",
+    "analyze_github_mutations": "_github_mutation_analysis",
+    "clear_quota_disable_marker": "_hook_settings",
+    "command_has_blocked_protected_path_read": "_command_classification",
+    "command_verb": "_command_classification",
+    "command_verb_and_args": "_command_classification",
+    "consume_exploration_request_record": "_exploration_request_record",
+    "extract_apply_patch_text": "_hook_payload",
+    "extract_git_subcommand_and_flags": "_command_classification",
+    "extract_interpreter_command_payloads": "_command_classification",
+    "extract_interpreter_write_paths": "_command_classification",
+    "extract_redirect_targets": "_command_classification",
+    "extract_shell_command_payloads": "_command_classification",
+    "find_project_root": "_hook_utils",
+    "has_interpreter_wrapped_command": "_command_classification",
+    "has_interpreter_write": "_command_classification",
+    "has_nested_shell": "_command_classification",
+    "is_allowed_protected_path_metadata_command": "_command_classification",
+    "is_gh_command": "_command_classification",
+    "is_git_command": "_command_classification",
+    "is_quota_guard_disabled_for_session": "_hook_settings",
+    "merge_hook_configs": "_hook_settings",
+    "normalize_payload_cwd": "_hook_payload",
+    "parse_hook_command": "_hook_payload",
+    "payload_managed_codex_route": "_hook_settings",
+    "quota_disable_marker_path": "_hook_settings",
+    "read_merged_hook_config": "_hook_settings",
+    "read_quota_cache": "_hook_settings",
+    "read_quota_disable_marker": "_hook_settings",
+    "read_session_binding": "_hook_settings",
+    "render_provenance_prefix": "_policy_event",
+    "resolve_kitchen_state_dir": "_hook_payload",
+    "resolve_quota_log_dir": "_hook_settings",
+    "resolve_quota_settings": "_hook_settings",
+    "resolve_state_root": "_hook_payload",
+    "resolve_write_target": "_command_classification",
+    "session_join_required": "_hook_settings",
+    "session_managed_codex_route": "_hook_settings",
+    "session_managed_scope": "_hook_settings",
+    "strip_heredoc_bodies": "_command_classification",
+    "tokenize_command_segments": "_command_classification",
+    "tokenize_shell_payload_segments": "_command_classification",
+    "validate_session_id": "_hook_settings",
+    "write_dispatch_diagnostic": "_hook_settings",
+    "write_exploration_request_record": "_exploration_request_record",
+    "write_join_diagnostic": "_hook_settings",
+    "write_quota_disable_marker": "_hook_settings",
+    "write_quota_log_event": "_hook_settings",
+}
 
 __all__ = [
     "DENY_REASON_BY_GUARD",
@@ -276,4 +266,20 @@ __all__ = [
     "command_has_blocked_protected_path_read",
     "analyze_github_mutations",
     "consume_exploration_request_record",
+    "]",
 ]
+
+def __getattr__(name: str) -> object:
+    """Lazily resolve re-exported names from their source submodules."""
+    mapping = globals()["_NAME_TO_MODULE"]
+    submod = mapping.get(name)
+    if submod is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+    module = import_module(f"{__name__}.{submod}")
+    value = getattr(module, name)
+    globals()[name] = value  # cache for next access
+    return value
+
+def __dir__() -> list[str]:
+    return sorted(set(globals().keys()) | set(_NAME_TO_MODULE.keys()))

@@ -6,9 +6,21 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# When invoked as a subprocess via `python _capture_artifacts.py`, register
+# ourselves under the package name so `autoskillit.hooks._capture_artifacts`
+# imports resolve to THIS module instead of re-executing the file. This breaks
+# the cycle: `from autoskillit.hooks._runtime._x import x` (needed by the
+# _runtime/__init__.py lazy gateway when triggered from elsewhere) →
+# `autoskillit.hooks.__init__` → `_capture_artifacts` re-entry.
+if __name__ == "__main__":
+    sys.modules.setdefault("autoskillit.hooks._capture_artifacts", sys.modules[__name__])
+
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture._authority import (

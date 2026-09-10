@@ -1,4 +1,7 @@
-"""Backward-compat shim for _plugin_artifact_identity — see core.plugins._plugin_artifact_identity."""
+"""Backward-compat shim for _plugin_artifact_identity.
+
+See ``core.plugins._plugin_artifact_identity`` for the real module.
+"""
 
 from autoskillit.core.plugins._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,

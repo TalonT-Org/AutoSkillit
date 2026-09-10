@@ -1,4 +1,5 @@
-"""IL-0 pipeline tracker authority, tool-sequence analysis, execution marker, and step-context primitives.
+"""IL-0 pipeline tracker authority, tool-sequence analysis, execution marker,
+and step-context primitives.
 
 Exposes the canonical public surface of ``pipeline_tracker``,
 ``tool_sequence_analysis``, ``_execution_marker``, and ``_step_context``

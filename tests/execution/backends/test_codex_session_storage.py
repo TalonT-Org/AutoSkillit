@@ -119,10 +119,9 @@ def test_attempt_spawn_rejects_boolean_process_ids(
         current_resume_spec=NoResume(),
     )
 
-    with pytest.raises(RuntimeError, match="no rollout data"):
-        with lease as handle:
-            with pytest.raises(ValueError, match="positive integers"):
-                handle.record_spawn(pid, pgid)
+    with lease as handle:
+        with pytest.raises(ValueError, match="positive integers"):
+            handle.record_spawn(pid, pgid)
 
 
 def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:

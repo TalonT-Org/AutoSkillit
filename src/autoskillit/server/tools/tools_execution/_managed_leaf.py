@@ -245,12 +245,10 @@ def plan_managed_leaf_identities(
 
 @dataclass(frozen=True, slots=True)
 class ManagedLeafWorkspacePlan:
-    """Server-derived resource and retry classification for one leaf."""
+    """Server-derived workspace and external-effect classification for one leaf."""
 
-    shared_workspace: bool
     requires_isolated_worktree: bool
     external_effect: str
-    automatic_retry_allowed: bool
 
 
 def classify_managed_leaf_workspace(
@@ -262,28 +260,15 @@ def classify_managed_leaf_workspace(
     if read_only:
         if write_behavior.external_effect != "none":
             raise SkillContractError("read-only managed leaf cannot declare an external effect")
-        return ManagedLeafWorkspacePlan(True, False, "none", True)
+        return ManagedLeafWorkspacePlan(False, "none")
     if write_behavior.mode is None:
         raise SkillContractError(
             "managed leaf with workspace writes requires a declared write_behavior adapter"
         )
     return ManagedLeafWorkspacePlan(
-        shared_workspace=False,
         requires_isolated_worktree=True,
         external_effect=write_behavior.external_effect,
-        automatic_retry_allowed=write_behavior.external_effect
-        in {"none", "serialized-idempotent"},
     )
-
-
-def may_retry_managed_leaf(
-    workspace_plan: ManagedLeafWorkspacePlan,
-    *,
-    launched: bool,
-    verified_non_execution: bool,
-) -> bool:
-    """Permit retries only before launch or after verified non-execution."""
-    return workspace_plan.automatic_retry_allowed and (not launched or verified_non_execution)
 
 
 @dataclass(frozen=True, slots=True)

@@ -21,7 +21,6 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
     _ChildResourceOwnerRequest,
     bind_managed_leaf,
     classify_managed_leaf_workspace,
-    may_retry_managed_leaf,
     plan_managed_leaf_identities,
     project_managed_leaf,
     scoped_child_resource_owner,
@@ -111,7 +110,7 @@ def test_managed_leaf_planner_and_projection_bind_only_leaf_authority() -> None:
     assert document.content != leaf.prompt
 
 
-def test_managed_leaf_workspace_classification_is_safe_for_effect_retries() -> None:
+def test_managed_leaf_workspace_classification_binds_isolation_and_effects() -> None:
     read_only = classify_managed_leaf_workspace(
         read_only=True,
         write_behavior=WriteBehaviorSpec(),
@@ -123,20 +122,10 @@ def test_managed_leaf_workspace_classification_is_safe_for_effect_retries() -> N
             external_effect="serialized-idempotent",
         ),
     )
-    unknown = classify_managed_leaf_workspace(
-        read_only=False,
-        write_behavior=WriteBehaviorSpec(
-            mode="always",
-            external_effect="serialized-unknown-completion",
-        ),
-    )
-
-    assert read_only.shared_workspace
+    assert not read_only.requires_isolated_worktree
+    assert read_only.external_effect == "none"
     assert idempotent.requires_isolated_worktree
-    assert may_retry_managed_leaf(idempotent, launched=False, verified_non_execution=False)
-    assert may_retry_managed_leaf(idempotent, launched=True, verified_non_execution=True)
-    assert not may_retry_managed_leaf(idempotent, launched=True, verified_non_execution=False)
-    assert not may_retry_managed_leaf(unknown, launched=False, verified_non_execution=False)
+    assert idempotent.external_effect == "serialized-idempotent"
     with pytest.raises(SkillContractError, match="requires a declared write_behavior"):
         classify_managed_leaf_workspace(read_only=False, write_behavior=WriteBehaviorSpec())
 

@@ -26,9 +26,6 @@ from autoskillit.execution.session._turn_usage import (
     valid_context_window,
     valid_token_count,
 )
-from autoskillit.execution.session._turn_usage import (
-    is_parent_assistant_record as _is_parent_assistant_record,
-)
 
 logger = get_logger(__name__)
 
@@ -36,10 +33,6 @@ _API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS = (
     ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"),
     ("input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens"),
 )
-_CACHE_READ_TOKENS_API_FIELD = _API_TOKEN_FIELDS[
-    _CANONICAL_TOKEN_FIELDS.index("cache_read_tokens")
-]
-_CACHE_READ_CANON = "cache_read_tokens"
 FAILURE_SUBTYPES: frozenset[CliSubtype] = frozenset(
     {
         CliSubtype.UNKNOWN,
@@ -239,6 +232,14 @@ class ClaudeSessionResult:
     def lifespan_started(self) -> bool:
         """Heuristic: True when at least one MCP tool call was observed."""
         return bool(self.tool_uses)
+
+
+def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
+    """Return whether a record is a real parent assistant observation."""
+    if obj.get("type") != "assistant" or obj.get("subagent_type"):
+        return False
+    message = obj.get("message")
+    return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
 
 
 def _nonempty_string(value: Any) -> str | None:

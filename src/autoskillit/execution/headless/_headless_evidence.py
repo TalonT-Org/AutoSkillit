@@ -107,7 +107,6 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         error_code == CODEX_CONTEXT_EXHAUSTION_MARKER
         or CODEX_CONTEXT_EXHAUSTION_MARKER in (agent_result.error or "")
     )
-
     errors: list[str] = []
     if agent_result.error:
         errors.append(agent_result.error)

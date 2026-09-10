@@ -51,7 +51,7 @@ async def _run_turn_usage_nudge(
     main_message_id: str | None = "main-message",
     nudge_message_id: str | None = "nudge-message",
 ) -> tuple[SkillResult, Mock]:
-    from autoskillit.execution.headless import _headless_launch
+    from autoskillit.execution.headless import _headless_recovery
     from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
     from tests.execution.conftest import _mock_backend
     from tests.fakes import MockSubprocessRunner
@@ -62,7 +62,7 @@ async def _run_turn_usage_nudge(
         cache_read_tokens=30,
     )
     extractor = Mock(return_value=[nudge_row])
-    monkeypatch.setattr(_headless_launch, "extract_codex_turn_usage", extractor)
+    monkeypatch.setattr(_headless_recovery, "extract_codex_turn_usage", extractor)
     backend = _mock_backend(
         supports_claude_format_stdout=False,
         session_resume_capable=True,

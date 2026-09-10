@@ -1288,9 +1288,9 @@ def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.session._turn_usage as turn_usage_module
 
-    original_dumps = session_log._fast_dumps
+    original_dumps = turn_usage_module.fast_dumps
     serialized_rows = 0
 
     def fail_during_second_row(value: Any, *args: Any, **kwargs: Any) -> str:
@@ -1301,7 +1301,7 @@ def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(
                 raise OSError("injected turn-usage stream failure")
         return original_dumps(value, *args, **kwargs)
 
-    monkeypatch.setattr(session_log, "_fast_dumps", fail_during_second_row)
+    monkeypatch.setattr(turn_usage_module, "fast_dumps", fail_during_second_row)
 
     _flush(
         tmp_path,

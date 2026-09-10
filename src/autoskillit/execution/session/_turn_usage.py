@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any
 
@@ -40,15 +40,9 @@ def resolve_session_label(step_name: str, dispatch_id: str) -> str:
     return "(ad-hoc)"
 
 
-def is_parent_assistant_record(obj: dict[str, Any]) -> bool:
-    """Return whether a record is a real parent assistant observation."""
-    if obj.get("type") != "assistant" or obj.get("subagent_type"):
-        return False
-    message = obj.get("message")
-    return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
-
-
-def first_parent_message_timestamps(text: str) -> dict[str, str]:
+def first_parent_message_timestamps(
+    text: str, is_parent_assistant_record: Callable[[dict[str, Any]], bool]
+) -> dict[str, str]:
     """Map native parent message IDs to their first valid source timestamp."""
     timestamps: dict[str, str] = {}
     for line in text.splitlines():

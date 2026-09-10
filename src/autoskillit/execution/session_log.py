@@ -27,7 +27,6 @@ if TYPE_CHECKING:
 
 
 from autoskillit.core import (
-    AGENT_BACKEND_CLAUDE_CODE,
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     SESSION_INDEX_SCHEMA_VERSION,
     ArtifactLease,
@@ -49,15 +48,18 @@ from autoskillit.execution.anomaly_detection import (
     detect_model_drift,
     detect_outcome_anomalies,
 )
+from autoskillit.execution.session._session_model import _is_parent_assistant_record
 from autoskillit.execution.session._turn_usage import (
-    first_parent_message_timestamps,
-    write_turn_usage_sidecar,
+    first_parent_message_timestamps as _message_timestamps,
 )
 from autoskillit.execution.session._turn_usage import (
     primary_model_identifier as _primary_model_identifier,
 )
 from autoskillit.execution.session._turn_usage import (
     resolve_session_label as _resolve_session_label,
+)
+from autoskillit.execution.session._turn_usage import (
+    write_turn_usage_sidecar,
 )
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
 
@@ -235,20 +237,18 @@ def flush_session_log(
     if cc_log and cc_log.exists():
         try:
             _text = cc_log.read_text(encoding="utf-8", errors="replace")
-            _cb_message_timestamps = first_parent_message_timestamps(_text)
+            _cb_message_timestamps = _message_timestamps(_text, _is_parent_assistant_record)
             for _turn in iter_merged_assistant_turns(_text):
                 _cb_request_ids.append(_turn.request_id)
                 _cb_turn_timestamps.append(_turn.timestamp)
                 _cb_turn_tool_calls.append(_turn.tool_names)
         except OSError:
             logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
-
-    if backend == AGENT_BACKEND_CLAUDE_CODE and _cb_message_timestamps:
+    if _cb_message_timestamps:
         for row in turn_usage:
             message_id = row["message_id"]
             if row["timestamp"] is None and message_id in _cb_message_timestamps:
                 row["timestamp"] = _cb_message_timestamps[message_id]
-
     lock_path = session_index_lock_path(log_root)
     try:
         session_index_lease = ArtifactLease.acquire_exclusive(

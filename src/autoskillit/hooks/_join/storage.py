@@ -36,8 +36,6 @@ def _read_locked(ledger_path: Path) -> dict[str, Any]:
         raw = ledger_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return _empty_payload()
-    except OSError:
-        raise
     try:
         payload = json.loads(raw)
     except (json.JSONDecodeError, ValueError) as exc:

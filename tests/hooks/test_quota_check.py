@@ -587,7 +587,7 @@ def test_log_dir_resolvers_stay_in_sync(monkeypatch):
     hook modules are stdlib-only and self-contained. This test is the canonical drift guard.
     """
     from autoskillit.core.paths import default_log_dir
-    from autoskillit.execution.session_log import resolve_log_dir
+    from autoskillit.execution.evidence.session_log import resolve_log_dir
     from autoskillit.hooks._hook_settings import resolve_quota_log_dir as _resolve_quota_log_dir
     from autoskillit.hooks.token_summary_hook import _log_root
 

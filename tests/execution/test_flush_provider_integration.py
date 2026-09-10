@@ -31,7 +31,7 @@ def _launch_kwargs(ctx, cwd: str) -> dict[str, object]:
 
 
 def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
-    import autoskillit.execution.session_log as _sl_mod
+    import autoskillit.execution.evidence.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
     from tests.execution.conftest import _sr
 
@@ -73,7 +73,7 @@ class TestProviderFieldsReachFlush:
     async def test_normal_path_provider_used_in_flush_kwargs(
         self, minimal_ctx, tmp_path, monkeypatch
     ):
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
         fake_runner, flush_calls = _patch_common(
@@ -103,7 +103,7 @@ class TestProviderFieldsReachFlush:
         self, minimal_ctx, tmp_path, monkeypatch
     ):
         from autoskillit.core.types import RetryReason, SkillResult
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
         stale = SkillResult(
@@ -120,7 +120,7 @@ class TestProviderFieldsReachFlush:
         results = [stale, _SUCCESS_RESULT]
         call_count = [0]
 
-        import autoskillit.execution.session_log as _sl_mod
+        import autoskillit.execution.evidence.session_log as _sl_mod
         from autoskillit.execution.headless import PostSessionMetrics
         from tests.execution.conftest import _sr
 
@@ -185,7 +185,7 @@ class TestProviderFieldsReachFlush:
     async def test_crash_path_provider_used_in_flush_kwargs(
         self, minimal_ctx, tmp_path, monkeypatch
     ):
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
         monkeypatch.setattr(
@@ -229,7 +229,7 @@ class TestProviderFieldsReachFlush:
     ):
         import anyio
 
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
         monkeypatch.setattr(
@@ -273,7 +273,7 @@ class TestProviderFieldsReachFlush:
     ):
         """model_identity must be forwarded to flush_session_log — not silently dropped."""
         from autoskillit.core.types._type_results import ModelIdentity
-        from autoskillit.execution.commands import ClaudeHeadlessCmd
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
 
         fake_runner, flush_calls = _patch_common(

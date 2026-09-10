@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.pr_analysis import (
+from autoskillit.execution.github_ops.pr_analysis import (
     DOMAIN_PATHS,
     extract_linked_issues,
     is_valid_fidelity_finding,

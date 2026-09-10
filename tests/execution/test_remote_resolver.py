@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.execution import resolve_remote_repo
-from autoskillit.execution.remote_resolver import resolve_remote_name
+from autoskillit.execution.github_ops.remote_resolver import resolve_remote_name
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

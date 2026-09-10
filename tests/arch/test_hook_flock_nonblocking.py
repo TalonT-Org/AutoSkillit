@@ -96,7 +96,7 @@ _EXPECTED_ACQUISITIONS = (
         "acquire",
         "acquire_flock_with_timeout",
     ),
-    ("execution/otlp_sink.py", "_persist_line", "ArtifactLease.acquire_exclusive"),
+    ("execution/evidence/otlp_sink.py", "_persist_line", "ArtifactLease.acquire_exclusive"),
     (
         "execution/quota/_quota_observed.py",
         "record_observed_rate_limit",

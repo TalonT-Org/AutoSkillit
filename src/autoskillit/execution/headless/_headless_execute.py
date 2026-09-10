@@ -45,7 +45,7 @@ from autoskillit.core import (
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.child_outcomes import collect_and_project_child_outcomes
-from autoskillit.execution.clone_guard import (
+from autoskillit.execution.runtime.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
@@ -83,7 +83,7 @@ from autoskillit.execution.headless._managed import (
     _LineageCallbacks,
     _ManagedLineageObserver,
 )
-from autoskillit.execution.otlp_sink import LocalOtlpSink
+from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 from autoskillit.execution.quota._quota_observed import record_skill_result_rate_limit
 
@@ -577,7 +577,7 @@ async def _execute_claude_headless(
             new_audit_records = ctx.audit.get_report_as_dicts()[audit_count_before:]
             audit_record = new_audit_records[0] if new_audit_records else None
 
-            from autoskillit.execution.session_log import _resolve_session_label
+            from autoskillit.execution.evidence.session_log import _resolve_session_label
 
             _token_label = _resolve_session_label(step_name, dispatch_id)
             try:
@@ -628,7 +628,7 @@ async def _execute_claude_headless(
             if result is None:
                 from autoskillit.execution import flush_session_log
             else:
-                from autoskillit.execution.session_log import flush_session_log
+                from autoskillit.execution.evidence.session_log import flush_session_log
 
             flush_kwargs: dict[str, Any] = {
                 "log_dir": ctx.config.linux_tracing.log_dir,

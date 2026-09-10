@@ -7,7 +7,7 @@ import pathlib
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.execution.clone_guard import CLONE_COMMIT_SKILLS, WORKTREE_SKILLS
+from autoskillit.execution.runtime.clone_guard import CLONE_COMMIT_SKILLS, WORKTREE_SKILLS
 from autoskillit.recipe.rules.rules_worktree import _WORKTREE_MODIFYING_SKILLS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]

@@ -19,8 +19,8 @@ from autoskillit.core import (
     read_starttime_ticks,
 )
 from autoskillit.execution.child_outcomes import reconcile_child_outcome_snapshots
-from autoskillit.execution.linux_tracing import read_enrollment
-from autoskillit.execution.session_log import flush_session_log, resolve_log_dir
+from autoskillit.execution.evidence.linux_tracing import read_enrollment
+from autoskillit.execution.evidence.session_log import flush_session_log, resolve_log_dir
 
 logger = get_logger(__name__)
 

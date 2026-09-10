@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.config import AutomationConfig
-from autoskillit.execution.github import DefaultGitHubFetcher
+from autoskillit.execution.github_ops.github import DefaultGitHubFetcher
 from autoskillit.recipe.contracts import (
     get_skill_contract,
     load_bundled_manifest,

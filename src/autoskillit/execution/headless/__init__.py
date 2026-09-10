@@ -108,8 +108,8 @@ from autoskillit.execution.headless._managed import (
 from autoskillit.execution.headless._managed._food_truck_executor import (
     DefaultHeadlessExecutor,
 )
-from autoskillit.execution.recording import RecordingSubprocessRunner
-from autoskillit.execution.session_log import resolve_log_dir
+from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
+from autoskillit.execution.evidence.session_log import resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext

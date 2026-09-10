@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.db import (
+from autoskillit.execution.runtime.db import (
     _execute_readonly_query,
     _row_to_dict,
     _select_only_authorizer,

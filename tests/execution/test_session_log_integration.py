@@ -24,7 +24,7 @@ pytestmark = [
 @pytest.mark.anyio
 async def test_full_tracing_pipeline_writes_distinct_timestamps(tmp_path):
     """End-to-end: snapshot accumulation + flush produces unique ts per record."""
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(proc_interval=0.05, tmpfs_path=str(tmp_path))

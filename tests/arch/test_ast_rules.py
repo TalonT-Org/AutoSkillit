@@ -2767,7 +2767,7 @@ def test_arch008_detects_raw_pid_attribute_passed_as_target(tmp_path: Path) -> N
     """
     f = tmp_path / "bad.py"
     f.write_text(
-        "from autoskillit.execution.linux_tracing import start_linux_tracing\n"
+        "from autoskillit.execution.evidence.linux_tracing import start_linux_tracing\n"
         "start_linux_tracing(target=proc.pid, config=cfg, tg=tg)\n"
     )
     violations = _scan(f)
@@ -2789,7 +2789,7 @@ def test_arch008_accepts_resolve_trace_target_result(tmp_path: Path) -> None:
     """
     f = tmp_path / "good.py"
     f.write_text(
-        "from autoskillit.execution.linux_tracing import (\n"
+        "from autoskillit.execution.evidence.linux_tracing import (\n"
         "    start_linux_tracing, resolve_trace_target)\n"
         "target = resolve_trace_target(\n"
         "    root_pid=proc.pid, expected_basename='claude')\n"
@@ -2807,7 +2807,7 @@ def test_arch008_accepts_trace_target_from_pid_result(tmp_path: Path) -> None:
     """ARCH-008 calibration: start_linux_tracing(target=trace_target_from_pid(...)) is allowed."""
     f = tmp_path / "good_direct.py"
     f.write_text(
-        "from autoskillit.execution.linux_tracing import (\n"
+        "from autoskillit.execution.evidence.linux_tracing import (\n"
         "    start_linux_tracing, trace_target_from_pid)\n"
         "target = trace_target_from_pid(proc.pid)\n"
         "start_linux_tracing(target=target, config=cfg, tg=tg)\n"

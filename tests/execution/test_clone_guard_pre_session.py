@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core.types import SubprocessResult, TerminationReason
-from autoskillit.execution.clone_guard import (
+from autoskillit.execution.runtime.clone_guard import (
     CloneSnapshot,
     ContaminationReport,
     revert_contamination,

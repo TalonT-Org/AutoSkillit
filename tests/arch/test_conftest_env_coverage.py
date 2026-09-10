@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
-from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]

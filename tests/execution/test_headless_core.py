@@ -20,7 +20,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.commands import _ensure_skill_prefix
+from autoskillit.execution.runtime.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     NormalizedMessages,
     _build_skill_result,
@@ -41,7 +41,7 @@ def audit_log() -> DefaultAuditLog:
 
 
 def test_inject_completion_directive_appends_marker():
-    from autoskillit.execution.commands import _inject_completion_directive
+    from autoskillit.execution.runtime.commands import _inject_completion_directive
 
     result = _inject_completion_directive("/investigate foo", "%%DONE%%")
     assert "%%DONE%%" in result
@@ -865,7 +865,7 @@ class TestRunHeadlessCore:
 
     @pytest.mark.anyio
     async def test_run_headless_core_returns_success_result(self, monkeypatch, tool_ctx, tmp_path):
-        import autoskillit.execution.session_log as session_log
+        import autoskillit.execution.evidence.session_log as session_log
         from autoskillit.execution.headless import run_headless_core
 
         flushed: list[dict] = []
@@ -3332,7 +3332,7 @@ class TestRetryBudgetEnforcement:
 
 class TestInjectCwdAnchor:
     def test_appends_cwd_directive(self):
-        from autoskillit.execution.commands import _inject_cwd_anchor
+        from autoskillit.execution.runtime.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("/investigate foo", "/some/clone/path")
         assert "WORKING DIRECTORY ANCHOR" in result
@@ -3340,26 +3340,26 @@ class TestInjectCwdAnchor:
         assert "/investigate foo" in result
 
     def test_preserves_original_command(self):
-        from autoskillit.execution.commands import _inject_cwd_anchor
+        from autoskillit.execution.runtime.commands import _inject_cwd_anchor
 
         original = "Use /autoskillit:make-plan detailed prompt here"
         result = _inject_cwd_anchor(original, "/clone/dir")
         assert result.startswith(original)
 
     def test_directive_mentions_temp(self):
-        from autoskillit.execution.commands import _inject_cwd_anchor
+        from autoskillit.execution.runtime.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "/wd")
         assert ".autoskillit/temp/" in result
 
     def test_skips_when_cwd_empty(self):
-        from autoskillit.execution.commands import _inject_cwd_anchor
+        from autoskillit.execution.runtime.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "")
         assert result == "cmd"
 
     def test_skips_when_cwd_relative(self):
-        from autoskillit.execution.commands import _inject_cwd_anchor
+        from autoskillit.execution.runtime.commands import _inject_cwd_anchor
 
         result = _inject_cwd_anchor("cmd", "relative/path")
         assert result == "cmd"
@@ -3372,52 +3372,52 @@ class TestInjectCwdAnchor:
 
 class TestInjectNarrationSuppression:
     def test_appends_efficiency_directive(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("Use /make-plan foo")
         assert "EFFICIENCY DIRECTIVE" in result
 
     def test_preserves_original_command(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         original = "Use /autoskillit:investigate problem"
         result = _inject_narration_suppression(original)
         assert result.startswith(original)
 
     def test_directive_targets_inter_tool_prose(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd")
         # Directive must reference tool calls specifically
         assert "between tool calls" in result
 
     def test_directive_exempts_final_response(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd")
         # Must not suppress the final response where structured output tokens live
         assert "final response" in result
 
     def test_no_after_loading_by_default(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd")
         assert "After loading" not in result
 
     def test_no_after_loading_when_false(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd", has_skill_prefix=False)
         assert "After loading" not in result
 
     def test_after_loading_when_has_skill_prefix(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd", has_skill_prefix=True)
         assert "After loading the skill instructions" in result
 
     def test_still_contains_efficiency_directive_with_prefix(self):
-        from autoskillit.execution.commands import _inject_narration_suppression
+        from autoskillit.execution.runtime.commands import _inject_narration_suppression
 
         result = _inject_narration_suppression("cmd", has_skill_prefix=True)
         assert "EFFICIENCY DIRECTIVE" in result
@@ -3426,20 +3426,20 @@ class TestInjectNarrationSuppression:
 
 class TestInjectCompletionReminder:
     def test_with_marker(self):
-        from autoskillit.execution.commands import _inject_completion_reminder
+        from autoskillit.execution.runtime.commands import _inject_completion_reminder
 
         result = _inject_completion_reminder("prompt", "%%DONE%%")
         assert "%%DONE%%" in result
         assert result.endswith("%%DONE%%")
 
     def test_empty_marker_noop(self):
-        from autoskillit.execution.commands import _inject_completion_reminder
+        from autoskillit.execution.runtime.commands import _inject_completion_reminder
 
         result = _inject_completion_reminder("prompt", "")
         assert result == "prompt"
 
     def test_always_appends(self):
-        from autoskillit.execution.commands import _inject_completion_reminder
+        from autoskillit.execution.runtime.commands import _inject_completion_reminder
 
         once = _inject_completion_reminder("prompt", "%%DONE%%")
         twice = _inject_completion_reminder(once, "%%DONE%%")

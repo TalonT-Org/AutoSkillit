@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 import pytest
 import structlog
 
-from autoskillit.execution.otlp_sink import _SIGNALS as _OTLP_SIGNALS
+from autoskillit.execution.evidence.otlp_sink import _SIGNALS as _OTLP_SIGNALS
 from tests.execution.conftest import _flush
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.large]
@@ -37,7 +37,7 @@ _FIXTURE_DIR = Path(__file__).with_name("fixtures")
 
 @pytest.fixture
 def local_sink(tmp_path: Path) -> Iterator[Any]:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     sink = LocalOtlpSink.start(str(tmp_path))
     assert sink.env
@@ -612,7 +612,7 @@ def test_non_log_signals_remain_raw_without_model_projection(
 
 
 def test_model_evidence_lookup_states_and_post_close_snapshot(tmp_path: Path) -> None:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     assert LocalOtlpSink().model_evidence_for("never-started") == ("", ())
 
@@ -656,8 +656,8 @@ def test_model_evidence_lookup_states_and_post_close_snapshot(tmp_path: Path) ->
 def test_projection_capacity_retains_earliest_sessions_without_raw_drops(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_MODEL_EVIDENCE_SESSION_CAPACITY", 2)
     sink = LocalOtlpSink.start(str(tmp_path))
@@ -687,8 +687,8 @@ def test_projection_capacity_retains_earliest_sessions_without_raw_drops(
 def test_outcome_capacity_retains_earliest_accepted_completions(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_MODEL_EVIDENCE_OUTCOME_CAPACITY", 2)
     sink = LocalOtlpSink.start(str(tmp_path))
@@ -726,8 +726,8 @@ def test_outcome_capacity_retains_earliest_accepted_completions(
 def test_queue_full_and_shutdown_rejections_do_not_project_observations(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_QUEUE_CAPACITY", 1)
     writer_entered = threading.Event()
@@ -912,8 +912,8 @@ def test_persisted_jsonl_is_user_only_and_contains_complete_records(
 
 
 def test_tiny_generation_cap_rotates_complete_jsonl_records(tmp_path: Path, monkeypatch) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_MAX_GENERATION_BYTES", 30)
     sink = LocalOtlpSink.start(str(tmp_path))
@@ -938,8 +938,8 @@ def test_tiny_generation_cap_rotates_complete_jsonl_records(tmp_path: Path, monk
 def test_interrupted_tiny_generation_rotation_recovers_on_restart(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_MAX_GENERATION_BYTES", 30)
     first = b'{"record":"first"}\n'
@@ -979,7 +979,7 @@ def test_interrupted_tiny_generation_rotation_recovers_on_restart(
 def test_persistence_failures_drop_records_without_stopping_http_server(
     local_sink: Any, monkeypatch, failure: str, counter: str
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
     from autoskillit.core import ArtifactLeaseContention
 
     if failure == "lease":
@@ -1014,7 +1014,7 @@ def test_persistence_failures_drop_records_without_stopping_http_server(
 
 
 def test_writer_loop_contains_unexpected_persistence_failure(monkeypatch) -> None:
-    from autoskillit.execution.otlp_sink import _SENTINEL, LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import _SENTINEL, LocalOtlpSink
 
     sink = LocalOtlpSink()
     persisted: list[bytes] = []
@@ -1038,7 +1038,7 @@ def test_writer_loop_contains_unexpected_persistence_failure(monkeypatch) -> Non
 
 
 def test_close_logs_one_aggregate_summary_without_payload_data(tmp_path: Path) -> None:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     sink = LocalOtlpSink.start(str(tmp_path))
     secret = "raw-payload-value-that-must-not-be-logged"
@@ -1062,7 +1062,7 @@ def test_close_logs_one_aggregate_summary_without_payload_data(tmp_path: Path) -
 def test_close_propagates_process_interrupt(
     monkeypatch, exception_type: type[BaseException]
 ) -> None:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     sink = LocalOtlpSink()
 
@@ -1078,8 +1078,8 @@ def test_close_propagates_process_interrupt(
 def test_startup_failure_returns_disabled_sink_and_partial_start_releases_port(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink, _OtlpHTTPServer
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink, _OtlpHTTPServer
 
     class FailingServer:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
@@ -1130,7 +1130,7 @@ def test_startup_failure_returns_disabled_sink_and_partial_start_releases_port(
 def test_start_propagates_process_interrupt_after_partial_cleanup(
     tmp_path: Path, monkeypatch, exception_type: type[BaseException]
 ) -> None:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     class InterruptingServer:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
@@ -1154,7 +1154,7 @@ def test_start_propagates_process_interrupt_after_partial_cleanup(
 
 
 def test_partial_start_cleanup_propagates_process_interrupt() -> None:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     class InterruptingServer:
         def shutdown(self) -> None:
@@ -1179,8 +1179,8 @@ def test_partial_start_cleanup_propagates_process_interrupt() -> None:
 def test_close_rejects_handler_that_reaches_enqueue_after_shutdown_gate(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_HANDLER_DRAIN_SECONDS", 0.01)
     monkeypatch.setattr(otlp_sink, "_THREAD_JOIN_SECONDS", 0.5)
@@ -1241,8 +1241,8 @@ def test_close_rejects_handler_that_reaches_enqueue_after_shutdown_gate(
 
 
 def test_close_terminates_when_the_bounded_queue_is_full(tmp_path: Path, monkeypatch) -> None:
-    import autoskillit.execution.otlp_sink as otlp_sink
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    import autoskillit.execution.evidence.otlp_sink as otlp_sink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
     monkeypatch.setattr(otlp_sink, "_QUEUE_CAPACITY", 1)
     writer_entered = threading.Event()

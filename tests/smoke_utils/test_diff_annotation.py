@@ -331,7 +331,7 @@ def test_annotate_pr_diff_produces_valid_lines_artifact(mock_run, tmp_path: Path
     """annotate_pr_diff writes valid lines alongside the explicitly named hunk ranges."""
     import json
 
-    from autoskillit.execution.diff_annotator import extract_valid_lines
+    from autoskillit.execution.github_ops.diff_annotator import extract_valid_lines
 
     mock_run.side_effect = _annotation_run_side_effect()
     output_dir = tmp_path / "output"

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.execution._recording_skills as recording_skills
-from autoskillit.execution._recording_skills import (
+import autoskillit.execution.evidence._recording_skills as recording_skills
+from autoskillit.execution.evidence._recording_skills import (
     _assert_agent_safe_skill_tree,
     _extract_ephemeral_add_dir,
     build_skills_manifest,

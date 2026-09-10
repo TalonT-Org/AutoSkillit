@@ -146,7 +146,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates"),
         ("src/autoskillit/workspace/worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar"),
-        ("src/autoskillit/execution/_session_retention.py", "apply_session_retention"),
+        ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention"),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
         ("src/autoskillit/workspace/_projection_cache.py", "prune_stale_projections"),
         ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry"),
@@ -178,7 +178,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
             "repair_broken_projection_hooks",
         ),
-        ("src/autoskillit/execution/_session_log_recovery.py", "recover_crashed_sessions"),
+        ("src/autoskillit/execution/evidence/_session_log_recovery.py", "recover_crashed_sessions"),
     }
 )
 
@@ -251,10 +251,10 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar")
     ),
     (
-        "src/autoskillit/execution/_session_retention.py",
+        "src/autoskillit/execution/evidence/_session_retention.py",
         "apply_session_retention",
     ): _convergence_adapters(
-        ("src/autoskillit/execution/_session_retention.py", "apply_session_retention")
+        ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention")
     ),
     ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"): _convergence_adapters(
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one")
@@ -335,11 +335,11 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         )
     ),
     (
-        "src/autoskillit/execution/_session_log_recovery.py",
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
         "recover_crashed_sessions",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/_session_log_recovery.py",
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
             "recover_crashed_sessions",
         )
     ),
@@ -410,7 +410,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_remove_index",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/execution/session_log.py",
+        "src/autoskillit/execution/evidence/session_log.py",
         "flush_session_log",
     ): _DELEGATED_MUTATION_REASON,
     (
@@ -492,7 +492,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "cleanup_readiness_sentinel",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/execution/_recording_skills.py",
+        "src/autoskillit/execution/evidence/_recording_skills.py",
         "snapshot_skill_dir",
     ): _SEPARATE_LIFECYCLE_REASON,
     (

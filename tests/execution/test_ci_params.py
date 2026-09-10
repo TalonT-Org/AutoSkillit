@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 from autoskillit.core import CIRunScope
-from autoskillit.execution.ci import DefaultCIWatcher, _validate_run_matches_scope
+from autoskillit.execution.github_ops.ci import DefaultCIWatcher, _validate_run_matches_scope
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

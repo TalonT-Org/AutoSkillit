@@ -266,7 +266,7 @@ async def test_default_executor_run_forwards_provider_name_and_fallback_env(
 async def test_no_fallback_env_returns_empty_provider_used(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -310,7 +310,7 @@ async def test_no_fallback_env_returns_empty_provider_used(
 async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disabled(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -357,7 +357,7 @@ async def test_empty_skill_command_keeps_shared_fleet_lifecycle_observation_disa
 async def test_provider_name_stamps_provider_used_on_result(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -551,7 +551,7 @@ async def test_execute_forwards_readonly_skill_to_build_result(
     import json
 
     import autoskillit.execution.headless._headless_execute as _hx
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from autoskillit.execution.headless._headless_result import _build_skill_result as _orig_bsr
     from tests.execution.conftest import _sr
@@ -706,7 +706,7 @@ async def test_execute_claude_headless_forwards_marker_dir_to_runner(
 ) -> None:
     from pathlib import Path
 
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -765,7 +765,7 @@ async def test_execute_claude_headless_pty_mode_from_backend(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
 
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -819,7 +819,7 @@ async def test_execute_claude_headless_session_log_dir_none_when_no_channel_b(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
 
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -917,7 +917,7 @@ async def test_dispatch_food_truck_marker_dir_none_when_no_channel_b(
 async def test_execute_claude_headless_passes_stream_parser_to_runner(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -966,7 +966,7 @@ async def test_execute_claude_headless_passes_stream_parser_to_runner(
 async def test_execute_claude_headless_stream_parser_receives_completion_marker(
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 
@@ -1097,7 +1097,7 @@ async def test_sink_environment_reaches_contract_nudge_and_overrides_caller_valu
     minimal_ctx, tmp_path, monkeypatch
 ) -> None:
     import autoskillit.execution.headless._headless_execute as _execute_module
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
     from tests.execution.conftest import _sr
 

@@ -34,7 +34,7 @@ def test_no_raw_readonly_skill_in_clone_guard_call():
 
 def test_check_and_revert_has_no_readonly_skill_param():
     """The function signature must not accept readonly_skill (only policy)."""
-    from autoskillit.execution.clone_guard import check_and_revert_clone_contamination
+    from autoskillit.execution.runtime.clone_guard import check_and_revert_clone_contamination
 
     sig = inspect.signature(check_and_revert_clone_contamination)
     assert "readonly_skill" not in sig.parameters, (
@@ -50,7 +50,7 @@ def test_clone_guard_detection_revert_exclude_coherence():
     """detect_contamination must accept exclude_prefix if revert_contamination does."""
     import inspect
 
-    from autoskillit.execution.clone_guard import detect_contamination, revert_contamination
+    from autoskillit.execution.runtime.clone_guard import detect_contamination, revert_contamination
 
     detect_sig = inspect.signature(detect_contamination)
     revert_sig = inspect.signature(revert_contamination)

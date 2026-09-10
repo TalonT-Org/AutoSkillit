@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.clone_guard import (
+from autoskillit.execution.runtime.clone_guard import (
     CloneSnapshot,
     build_clone_guard_policy,
     check_and_revert_clone_contamination,

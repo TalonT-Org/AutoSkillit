@@ -14,7 +14,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.clone_guard import (
+from autoskillit.execution.runtime.clone_guard import (
     CloneSnapshot,
     _parse_worktree_branches,
     _recover_branch_name,
@@ -225,7 +225,7 @@ async def test_detect_contamination_clean(tmp_path):
 async def test_revert_uncommitted_only(tmp_path):
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     report = ContaminationReport(
         pre_sha="abc123",
@@ -251,7 +251,7 @@ async def test_revert_contamination_returns_false_when_git_fails(tmp_path):
     runner.push(_git_result(returncode=128))  # git reset --hard fails
     runner.push(_git_result(returncode=0))  # git clean succeeds (still reverted=False)
     snapshot = CloneSnapshot(head_sha="abc123")
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     report = ContaminationReport(
         pre_sha="abc123",
@@ -271,7 +271,7 @@ async def test_revert_contamination_returns_false_when_git_fails(tmp_path):
 async def test_revert_direct_commits(tmp_path):
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     report = ContaminationReport(
         pre_sha="abc123",
@@ -509,7 +509,7 @@ async def test_readonly_selective_revert_checkout_and_clean(tmp_path):
     runner = MockSubprocessRunner()
 
     snapshot = CloneSnapshot(head_sha="abc123")
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     report = ContaminationReport(
         pre_sha="abc123",
@@ -536,7 +536,7 @@ async def test_readonly_selective_revert_with_commits(tmp_path):
     runner = MockSubprocessRunner()
 
     snapshot = CloneSnapshot(head_sha="abc123")
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     report = ContaminationReport(
         pre_sha="abc123",
@@ -561,7 +561,7 @@ async def test_worktree_skill_still_uses_nuclear_revert(tmp_path):
     runner = MockSubprocessRunner()
 
     snapshot = CloneSnapshot(head_sha="abc123")
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     report = ContaminationReport(
         pre_sha="abc123",
@@ -614,7 +614,7 @@ async def test_contamination_check_fires_on_success_when_write_scoped(tmp_path):
 @pytest.mark.anyio
 async def test_selective_revert_with_custom_exclude_prefix(tmp_path):
     """revert_contamination uses the supplied exclude_prefix in git clean."""
-    from autoskillit.execution.clone_guard import ContaminationReport
+    from autoskillit.execution.runtime.clone_guard import ContaminationReport
 
     runner = MockSubprocessRunner()
     snapshot = CloneSnapshot(head_sha="abc123")

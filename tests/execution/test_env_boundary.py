@@ -93,7 +93,7 @@ def test_managed_native_shell_controls_are_scrubbed_and_never_mcp_forwarded() ->
         MANAGED_LINEAGE_REF_ENV_VAR,
         NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
     )
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     protected = frozenset(
         {
@@ -178,7 +178,7 @@ def test_ensure_codex_mcp_registered_auto_gate_false_excludes_only_auto_gate(tmp
 
 def test_fleet_injected_vars_covered_by_filter_lists() -> None:
     from autoskillit.core import AUTOSKILLIT_PRIVATE_ENV_VARS
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     combined = AUTOSKILLIT_PRIVATE_ENV_VARS | _HEADLESS_EXCLUSIVE_VARS
     uncovered = _FLEET_INJECTED_VARS - combined
@@ -194,7 +194,7 @@ _PREFIX_BRANCH_EXEMPLARS: frozenset[str] = frozenset({"CLAUDE_CODE_IDE_THEME"})
 def test_no_unrecognized_claude_code_vars_pass_through() -> None:
     """Any known CLAUDE_CODE_* var must be filtered or documented as intentional passthrough."""
     from autoskillit.core._claude_env import IDE_ENV_DENYLIST, IDE_ENV_PREFIX_DENYLIST
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     surface = production_env_read_surface(SRC_ROOT)
     known_vars = sorted(
@@ -234,7 +234,7 @@ def test_codex_mcp_env_forward_vars_parity_with_config_toml(tmp_path) -> None:
 
 def test_fleet_inspector_model_is_scrubbed_then_explicitly_forwarded() -> None:
     from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     assert FLEET_INSPECTOR_MODEL_ENV_VAR in _HEADLESS_EXCLUSIVE_VARS
 
@@ -259,7 +259,7 @@ def test_ensure_codex_mcp_registered_includes_mcp_client_backend(tmp_path) -> No
 def test_unknown_claude_code_var_is_caught() -> None:
     """Verify the filter framework catches unclassified CLAUDE_CODE_* vars."""
     from autoskillit.core._claude_env import IDE_ENV_DENYLIST, IDE_ENV_PREFIX_DENYLIST
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     var = "CLAUDE_CODE_UNKNOWN_FUTURE_VAR"
     covered = (
@@ -280,7 +280,7 @@ def test_orchestrator_session_required_env_hygiene_coverage() -> None:
         CODEX_MCP_ENV_FORWARD_VARS,
         ORCHESTRATOR_SESSION_REQUIRED_ENV,
     )
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     always_injected = {
         "MCP_CONNECTION_NONBLOCKING",
@@ -320,7 +320,7 @@ def test_skill_session_required_env_hygiene_coverage() -> None:
         CODEX_MCP_ENV_FORWARD_VARS,
         SKILL_SESSION_REQUIRED_ENV,
     )
-    from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+    from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
     always_injected = {
         "MCP_CONNECTION_NONBLOCKING",

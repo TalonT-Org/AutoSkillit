@@ -23,8 +23,8 @@ from autoskillit.core import (
     NativeShellCaptureReason,
 )
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
-from autoskillit.execution.session_index import read_tolerant_session_index_rows
-from autoskillit.execution.session_log import resolve_log_dir
+from autoskillit.execution.evidence.session_index import read_tolerant_session_index_rows
+from autoskillit.execution.evidence.session_log import resolve_log_dir
 from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -93,7 +93,7 @@ def test_flush_session_log_defers_artifact_publication_on_lock_contention(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
     from autoskillit.core import ARTIFACT_LEASE_TIMEOUT_SECONDS, ArtifactLeaseContention
 
     pending = tmp_path / "sessions" / "pending-recovery"
@@ -221,7 +221,7 @@ def test_next_writer_removes_abandoned_session_before_retention(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Summary-less directories are removed before committed sessions are ranked."""
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     _flush(tmp_path, session_id="committed-old", max_sessions=2)
     committed_old = tmp_path / "sessions" / "committed-old"
@@ -249,7 +249,7 @@ def test_next_writer_removes_abandoned_session_before_retention(
 def test_retention_delete_failure_preserves_index_projection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     _flush(tmp_path, session_id="committed-old", max_sessions=2)
     committed_old = tmp_path / "sessions" / "committed-old"
@@ -273,7 +273,7 @@ def test_retention_delete_failure_preserves_index_projection(
 def test_archive_failure_leaves_checkpoint_recoverable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     _flush(tmp_path, session_id="old", max_sessions=2)
     os.utime(tmp_path / "sessions" / "old", (1, 1))
@@ -345,7 +345,7 @@ def test_archive_append_recovers_after_truncated_tail(tmp_path: Path) -> None:
 def test_compaction_failure_allows_at_least_once_archive_retry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     _flush(tmp_path, session_id="old", max_sessions=2)
     os.utime(tmp_path / "sessions" / "old", (1, 1))
@@ -380,7 +380,7 @@ def test_concurrent_retention_preserves_committed_index_projection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A rollover transaction cannot overwrite a concurrently committed row."""
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     _flush(tmp_path, session_id="seed-0", max_sessions=2)
     _flush(tmp_path, session_id="seed-1", max_sessions=2)
@@ -432,7 +432,7 @@ def test_retention_cannot_delete_an_in_progress_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Retention waits while another writer has not yet published its summary."""
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     _flush(tmp_path, session_id="seed", max_sessions=2)
     os.utime(tmp_path / "sessions" / "seed", (2, 2))
@@ -480,7 +480,7 @@ def test_retention_cannot_delete_an_in_progress_writer(
 def test_summary_is_last_per_session_artifact(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, success: bool
 ) -> None:
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     writes: list[Path] = []
     original_atomic_write = session_log.atomic_write
@@ -1472,7 +1472,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
 
     # _flush() does a local import from autoskillit.execution.session_log.
     # Patch the function at its source module so the local import picks up the mock.
-    with mock.patch("autoskillit.execution.session_log.flush_session_log", side_effect=_capture):
+    with mock.patch("autoskillit.execution.evidence.session_log.flush_session_log", side_effect=_capture):
         with tempfile.TemporaryDirectory() as td:
             _flush(Path(td), turn_usage=[_turn_usage_row()])
 

@@ -401,7 +401,7 @@ class TestClosureExecutionNarrowCascade:
         result = build_test_scope(
             changed_files={
                 "src/autoskillit/execution/ci.py",
-                "src/autoskillit/execution/clone_guard.py",
+                "src/autoskillit/execution/runtime/clone_guard.py",
             },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,

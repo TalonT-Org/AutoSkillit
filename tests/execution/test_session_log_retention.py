@@ -13,11 +13,11 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
-import autoskillit.execution._session_retention as session_retention
-from autoskillit.execution._session_log_recovery import recover_crashed_sessions
-from autoskillit.execution._session_retention import apply_session_retention
-from autoskillit.execution.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
-from autoskillit.execution.session_index import read_tolerant_session_index_rows
+import autoskillit.execution.evidence._session_retention as session_retention
+from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
+from autoskillit.execution.evidence._session_retention import apply_session_retention
+from autoskillit.execution.evidence.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
+from autoskillit.execution.evidence.session_index import read_tolerant_session_index_rows
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
@@ -439,7 +439,7 @@ def test_recover_crashed_sessions_skips_file_without_enrollment(tmp_path):
 def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
     """An enrollment sidecar with a different boot_id must be rejected."""
     monkeypatch.setattr(
-        "autoskillit.execution._session_log_recovery.read_boot_id",
+        "autoskillit.execution.evidence._session_log_recovery.read_boot_id",
         lambda: "current-boot-id",
     )
     tmpfs = tmp_path / "shm"
@@ -496,7 +496,7 @@ def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_onc
         flush_calls.append(kwargs)
 
     monkeypatch.setattr(
-        "autoskillit.execution._session_log_recovery.flush_session_log", record_flush
+        "autoskillit.execution.evidence._session_log_recovery.flush_session_log", record_flush
     )
 
     target = (
@@ -547,7 +547,7 @@ def test_recover_crashed_sessions_keeps_trace_after_transient_flush_failure(
         raise RuntimeError("temporary output failure")
 
     monkeypatch.setattr(
-        "autoskillit.execution._session_log_recovery.flush_session_log", fail_flush
+        "autoskillit.execution.evidence._session_log_recovery.flush_session_log", fail_flush
     )
 
     with capture_logs() as logs:
@@ -586,7 +586,7 @@ def test_recover_crashed_sessions_flushes_valid_trace_once(
         flush_calls.append(kwargs)
 
     monkeypatch.setattr(
-        "autoskillit.execution._session_log_recovery.flush_session_log", record_flush
+        "autoskillit.execution.evidence._session_log_recovery.flush_session_log", record_flush
     )
 
     assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 1
@@ -716,7 +716,7 @@ def _make_state_file(project_dir, campaign_id, status):
 
 def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
     """Sessions belonging to an active campaign survive retention even when expired."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
@@ -808,7 +808,7 @@ def test_retention_protects_active_campaign_sessions(tmp_path, monkeypatch):
 
 def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
     """Sessions whose campaign is in a terminal state are eligible for deletion."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
@@ -866,7 +866,7 @@ def test_retention_deletes_released_campaign_sessions(tmp_path, monkeypatch):
 
 def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
     """Protected sessions' entries survive the sessions.jsonl rewrite."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
@@ -918,7 +918,7 @@ def test_retention_preserves_index_for_protected(tmp_path, monkeypatch):
 
 def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
     """Session dirs without meta.json are not protected (normal deletion)."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
@@ -962,7 +962,7 @@ def test_retention_handles_missing_meta_json(tmp_path, monkeypatch):
 
 def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
     """No franchise state files → normal retention behavior (no crash)."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
@@ -1010,7 +1010,7 @@ def test_retention_handles_missing_franchise_state_dir(tmp_path, monkeypatch):
 
 def test_retention_handles_corrupt_meta_json(tmp_path, monkeypatch):
     """Malformed meta.json → session not protected (graceful degradation)."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
     warning_events: list[str] = []
@@ -1192,21 +1192,21 @@ def test_retention_still_requires_summary_json(tmp_path: Path) -> None:
 
 def test_session_log_removed_build_protected_function() -> None:
     """SL_CB_1: _build_protected_campaign_ids must not exist on session_log module."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution.evidence.session_log as sl_module
 
     assert not hasattr(sl_module, "_build_protected_campaign_ids")
 
 
 def test_session_log_removed_terminal_statuses_constant() -> None:
     """SL_CB_2: TERMINAL_DISPATCH_STATUSES must not exist on session_log module."""
-    import autoskillit.execution.session_log as sl_module
+    import autoskillit.execution.evidence.session_log as sl_module
 
     assert not hasattr(sl_module, "TERMINAL_DISPATCH_STATUSES")
 
 
 def test_retention_no_protection_when_callback_is_none(tmp_path: Path, monkeypatch) -> None:
     """SL_CB_6: build_protected_campaign_ids=None with active campaign → no protection applied."""
-    import autoskillit.execution._session_retention as retention_module
+    import autoskillit.execution.evidence._session_retention as retention_module
 
     monkeypatch.setattr(retention_module, "_MAX_SESSIONS", 5)
 
@@ -1277,7 +1277,7 @@ def test_flush_uses_campaign_protector_during_transaction(tmp_path: Path) -> Non
 
 def test_max_sessions_constant_is_2000():
     """T5: _MAX_SESSIONS equals 2000."""
-    from autoskillit.execution._session_retention import _MAX_SESSIONS
+    from autoskillit.execution.evidence._session_retention import _MAX_SESSIONS
 
     assert _MAX_SESSIONS == 2000
 

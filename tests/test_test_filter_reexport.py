@@ -49,7 +49,7 @@ class TestReexportClosure:
 
         def run() -> None:
             outcome["result"] = _expand_reexport_closure(
-                {"src/autoskillit/execution/testing.py"}, Path(".")
+                {"src/autoskillit/execution/runtime/testing.py"}, Path(".")
             )
 
         worker = threading.Thread(target=run, daemon=True)

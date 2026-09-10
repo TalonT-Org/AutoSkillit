@@ -6,7 +6,7 @@ from functools import partial
 
 import pytest
 
-from autoskillit.execution.anomaly_detection import (
+from autoskillit.execution.evidence.anomaly_detection import (
     BENIGN_WCHANS,
     AnomalyKind,
     AnomalySeverity,
@@ -290,7 +290,7 @@ def test_identity_drift_anomaly_fires_when_comm_mismatches():
     Test 1.8: architectural immunity check. If PTY wrapping ever bypasses the
     resolver, the drift detector surfaces it rather than letting it rot for months.
     """
-    from autoskillit.execution.anomaly_detection import AnomalyKind, detect_identity_drift
+    from autoskillit.execution.evidence.anomaly_detection import AnomalyKind, detect_identity_drift
 
     # Use plain dicts (as flush_session_log passes to detect_anomalies)
     # Simulate: expected process is 'claude' but every snapshot has comm='script'
@@ -324,7 +324,7 @@ def test_identity_drift_kind_exists():
 )
 def test_identity_drift_accepts_comm_aliases(actual_comm, aliases, should_fire):
     """detect_identity_drift accepts aliased comm values via comm_aliases."""
-    from autoskillit.execution.anomaly_detection import detect_identity_drift
+    from autoskillit.execution.evidence.anomaly_detection import detect_identity_drift
 
     snap_dicts = [{"comm": actual_comm, "vm_rss_kb": 2048, "oom_score": 10}]
     anomalies = detect_identity_drift(snap_dicts, expected_comm="codex", comm_aliases=aliases)
@@ -346,7 +346,7 @@ def test_empty_result_with_tokens_kind_exists():
 
 def test_detect_outcome_anomalies_fires_for_empty_result_with_tokens():
     """output_tokens > 0 and subtype == 'empty_result' → EMPTY_RESULT_WITH_TOKENS anomaly."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     anomalies = detect_outcome_anomalies({"output_tokens": 945}, "empty_result")
     kinds = [a["kind"] for a in anomalies]
@@ -355,21 +355,21 @@ def test_detect_outcome_anomalies_fires_for_empty_result_with_tokens():
 
 def test_detect_outcome_anomalies_no_fire_when_zero_tokens():
     """output_tokens == 0 must NOT fire even when subtype matches."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     assert detect_outcome_anomalies({"output_tokens": 0}, "empty_result") == []
 
 
 def test_detect_outcome_anomalies_no_fire_when_wrong_subtype():
     """output_tokens > 0 but subtype != 'empty_result' must NOT fire."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     assert detect_outcome_anomalies({"output_tokens": 100}, "completed") == []
 
 
 def test_detect_outcome_anomalies_record_structure():
     """Each outcome anomaly record has the required fields."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     anomalies = detect_outcome_anomalies({"output_tokens": 100}, "empty_result")
     assert len(anomalies) == 1
@@ -388,7 +388,7 @@ def test_thinking_only_final_turn_kind_exists():
 
 def test_detect_outcome_anomalies_thinking_only_fires():
     """THINKING_ONLY_FINAL_TURN anomaly fires when has_thinking_only_turn is True."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     anomalies = detect_outcome_anomalies(
         {"output_tokens": 500}, "empty_result", has_thinking_only_turn=True
@@ -399,7 +399,7 @@ def test_detect_outcome_anomalies_thinking_only_fires():
 
 def test_detect_outcome_anomalies_thinking_only_not_empty_result_with_tokens():
     """When has_thinking_only_turn=True, EMPTY_RESULT_WITH_TOKENS is suppressed."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     anomalies = detect_outcome_anomalies(
         {"output_tokens": 500}, "empty_result", has_thinking_only_turn=True
@@ -410,7 +410,7 @@ def test_detect_outcome_anomalies_thinking_only_not_empty_result_with_tokens():
 
 def test_detect_outcome_anomalies_thinking_only_no_fire_wrong_subtype():
     """THINKING_ONLY_FINAL_TURN does not fire when subtype is not 'empty_result'."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     anomalies = detect_outcome_anomalies(
         {"output_tokens": 100}, "success", has_thinking_only_turn=True
@@ -420,7 +420,7 @@ def test_detect_outcome_anomalies_thinking_only_no_fire_wrong_subtype():
 
 def test_detect_outcome_anomalies_thinking_only_false_falls_back_to_empty_result():
     """When has_thinking_only_turn=False, EMPTY_RESULT_WITH_TOKENS still fires."""
-    from autoskillit.execution.anomaly_detection import detect_outcome_anomalies
+    from autoskillit.execution.evidence.anomaly_detection import detect_outcome_anomalies
 
     anomalies = detect_outcome_anomalies(
         {"output_tokens": 200}, "empty_result", has_thinking_only_turn=False
@@ -611,12 +611,12 @@ def test_rss_growth_low_baseline_with_genuine_anomalous_growth():
 
 
 def test_rss_baseline_floor_is_reasonable():
-    from autoskillit.execution.anomaly_detection import RSS_BASELINE_FLOOR_KB
+    from autoskillit.execution.evidence.anomaly_detection import RSS_BASELINE_FLOOR_KB
 
     assert RSS_BASELINE_FLOOR_KB >= 10_000
 
 
 def test_rss_absolute_growth_threshold_is_reasonable():
-    from autoskillit.execution.anomaly_detection import RSS_ABSOLUTE_GROWTH_KB
+    from autoskillit.execution.evidence.anomaly_detection import RSS_ABSOLUTE_GROWTH_KB
 
     assert RSS_ABSOLUTE_GROWTH_KB >= 300_000

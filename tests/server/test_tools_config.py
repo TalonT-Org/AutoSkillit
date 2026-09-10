@@ -216,7 +216,7 @@ async def test_same_worktree_contexts_do_not_import_each_others_overrides(
 
 
 @pytest.mark.anyio
-async def test_configured_fleet_semaphore_enforces_capacity_and_timeout(
+async def test_configured_managed_worker_capacity_enforces_capacity_and_timeout(
     tmp_path, monkeypatch
 ) -> None:
     from autoskillit.server import _state

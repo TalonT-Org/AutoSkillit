@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from ..closure_hashing import compute_bytes_hash, compute_canonical_hash
+from ..audit.closure_hashing import compute_bytes_hash, compute_canonical_hash
 from ._type_audit_admission_artifact_ownership import (
     AUDIT_ARTIFACT_FIELD_OWNERSHIP_REGISTRY,
     AuditArtifactFieldOwnership,

@@ -28,15 +28,39 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         "_terminal_table.py",
         "_version_snapshot.py",
         "_delivery_bounds.py",
+        # Phase B: core/git/ sub-package
+        "git_remote.py",
+        "github_url.py",
+        "bash_write_targets.py",
+        "branch_guard.py",
+        # Phase B: core/audit/ sub-package
+        "audit_cycle_verifier.py",
+        "audit_semantic_codec.py",
+        "closure_hashing.py",
+        "closure_verifier.py",
+        # Phase B: core/plugins/ sub-package
+        "_plugin_cache.py",
+        "_plugin_artifact_identity.py",
+        "_plugin_ids.py",
+        "agent_definition.py",
+        # Phase B: core/pipeline/ sub-package
+        "pipeline_tracker.py",
+        "tool_sequence_analysis.py",
+        "_execution_marker.py",
+        "_step_context.py",
     }
 )
 _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset()
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 37,  # Phase A: 49 - 12 moved files (issue #4671)
+    "core": 21,  # Phase B: 37 - 16 moved files (issue #4671)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 8,  # 7 files + __init__ + buffer
+    "core/git": 5,  # 4 files + __init__ + buffer
+    "core/audit": 5,  # 4 files + __init__ + buffer
+    "core/plugins": 5,  # 4 files + __init__ + buffer
+    "core/pipeline": 5,  # 4 files + __init__ + buffer
     # _type_truth replaces the retired _type_tradition_manifest shard.
     "core/types": 76,
     "core/runtime": 11,

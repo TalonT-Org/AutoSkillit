@@ -26,7 +26,7 @@ _CAPTURE_PATH_TERM_RE = re.compile(
 )
 
 _PROJECT_TEMP_CLEANUP_DEBT = {
-    "core/io.py": {
+    "core/io/io.py": {
         "owner": "core IO",
         "reason": "atomic temp writes still use mkdir/mkstemp/os.replace by pathname",
         "tracking_issue": "#4319",

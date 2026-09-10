@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 SESSION_LOG = SRC / "execution" / "session_log.py"
-TOOL_SEQ = SRC / "core" / "tool_sequence_analysis.py"
+TOOL_SEQ = SRC / "core" / "pipeline" / "tool_sequence_analysis.py"
 
 
 def _function_scoped_names(tree: ast.AST, name: str) -> list[int]:
@@ -50,7 +50,7 @@ class TestNoInlineJsonlRequestIdDedup:
         tree = ast.parse(TOOL_SEQ.read_text(encoding="utf-8"))
         hits = _function_scoped_names(tree, "seen_request_ids")
         assert not hits, (
-            "core/tool_sequence_analysis.py re-introduced an inline requestId dedup set.\n"
+            "core/pipeline/tool_sequence_analysis.py re-introduced an inline requestId dedup set.\n"  # noqa: E501
             "Use _resolve_turn_id() (called by iter_merged_assistant_turns()) instead.\n"
             "Offending lines: " + ", ".join(str(ln) for ln in hits)
         )

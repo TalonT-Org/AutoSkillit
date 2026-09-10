@@ -1,12 +1,8 @@
-"""ContextVars for current pipeline step attribution.
+"""Backward-compat shim for _step_context — see core.pipeline._step_context."""
 
-IL-0 module — stdlib only.  Read by execution/ and server/ layers at
-GitHub API recording time; set/reset by tools_execution.run_skill().
-"""
+from autoskillit.core.pipeline._step_context import (
+    current_order_id,
+    current_step_name,
+)
 
-from __future__ import annotations
-
-from contextvars import ContextVar
-
-current_step_name: ContextVar[str] = ContextVar("current_step_name", default="")
-current_order_id: ContextVar[str] = ContextVar("current_order_id", default="")
+__all__ = ["current_order_id", "current_step_name"]

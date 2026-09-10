@@ -10,6 +10,9 @@ from tests.arch._helpers import (
     _extract_module_level_internal_imports,
     _is_mcp_tool_decorator,
 )
+from tests.arch.test_subpackage_isolation_file_counts import (
+    _SHIM_FILENAMES,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -156,6 +159,8 @@ def test_core_has_no_autoskillit_imports() -> None:
     assert core_dir.exists(), "core/ package must exist"
     violations: list[str] = []
     for py_file in core_dir.glob("*.py"):
+        if py_file.name in _SHIM_FILENAMES:
+            continue  # Issue #4671: shims re-export from sub-packages by definition
         tree = ast.parse(py_file.read_text())
         tc_lines: set[int] = set()
         for node in ast.walk(tree):
@@ -341,9 +346,9 @@ def test_default_recipe_repository_not_in_io() -> None:
 
 
 def test_only_yaml_imports_yaml_directly() -> None:
-    """Only core/io.py may contain 'import yaml' at any scope."""
+    """Only core/io/yaml_io.py may contain 'import yaml' at any scope."""
     src_dir = SRC_ROOT
-    allowed_rel = str(Path("core") / "io.py")
+    allowed_rel = str(Path("core") / "io" / "yaml_io.py")
     violations = []
     for py_file in sorted(src_dir.rglob("*.py")):
         rel = str(py_file.relative_to(src_dir))

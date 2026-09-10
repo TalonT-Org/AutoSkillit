@@ -16,7 +16,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Protocol, TypedDict, runtime_checkable
 
-from ..closure_hashing import HASH_RE, compute_canonical_hash
+from ..audit.closure_hashing import HASH_RE, compute_canonical_hash
 from ._type_audit_admission import InstallationVersion
 from ._type_audit_admission_ledger import AuditAdmissionLedger
 from ._type_audit_cycle_disposition import InventoryAdmissionDecision

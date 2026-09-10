@@ -54,7 +54,7 @@ class TestClosureCoreNarrowCascade:
             },
         )
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_plugin_ids.py"},
+            changed_files={"src/autoskillit/core/plugins/_plugin_ids.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -89,7 +89,7 @@ class TestClosureCoreNarrowCascade:
         result = build_test_scope(
             changed_files={
                 "src/autoskillit/core/_plugin_ids.py",
-                "src/autoskillit/core/_plugin_cache.py",
+                "src/autoskillit/core/plugins/_plugin_cache.py",
             },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,

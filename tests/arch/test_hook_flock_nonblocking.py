@@ -71,10 +71,10 @@ _EXPECTED_ACQUISITIONS = (
         "ArtifactLease.acquire_exclusive",
     ),
     ("core/_retiring_cache.py", "_open_lock", "acquire_flock_with_timeout"),
-    ("core/pipeline_tracker.py", "__enter__", "acquire_flock_with_timeout"),
-    ("core/pipeline_tracker.py", "retain_tracker_lease", "ArtifactLease.acquire_shared"),
+    ("core/pipeline/pipeline_tracker.py", "__enter__", "acquire_flock_with_timeout"),
+    ("core/pipeline/pipeline_tracker.py", "retain_tracker_lease", "ArtifactLease.acquire_shared"),
     (
-        "core/pipeline_tracker.py",
+        "core/pipeline/pipeline_tracker.py",
         "try_retire_tracker",
         "ArtifactLease.acquire_exclusive",
     ),

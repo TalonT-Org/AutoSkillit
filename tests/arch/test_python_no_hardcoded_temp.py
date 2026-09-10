@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: canonical default literal used by resolve_temp_dir +
     # temp_dir_display_str (the single source of truth).
-    "core/io.py": "canonical default literal used by resolve_temp_dir",
+    "core/io/io.py": "canonical default literal used by resolve_temp_dir",
     # Justification: load_recipe() default parameter value (matches resolver default).
     "recipe/io.py": "load_recipe default arg matches canonical default",
     # Justification: default fallback values for temp_dir_relpath in load_and_validate

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..closure_hashing import HASH_RE
+from ..audit.closure_hashing import HASH_RE
 
 
 def _require_nonempty(name: str, value: object) -> str:

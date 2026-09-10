@@ -2553,7 +2553,7 @@ _TREE_ENUMERATION_ALLOWLIST: list[tuple[Path, str]] = [
         "silent corruption)",
     ),
     (
-        SRC_ROOT / "core" / "_plugin_artifact_identity.py",
+        SRC_ROOT / "core" / "plugins" / "_plugin_artifact_identity.py",
         "_classify_bytecode_contamination is diagnostic-only, called after a "
         "digest mismatch has already been raised, purely to embellish the error "
         "message with a bytecode-contamination hint; omission only affects "

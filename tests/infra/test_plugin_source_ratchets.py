@@ -29,7 +29,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 #: registry data as evidence only; no execution path may derive a plugin source
 #: or managed root from it.
 REGISTRY_READ_ALLOWLIST: dict[str, str] = {
-    "core/_plugin_ids.py": (
+    "core/plugins/_plugin_ids.py": (
         "Defines registered_install_paths(), the stdlib evidence parser. Its output "
         "cannot authorize a source, launch path, or managed artifact root."
     ),
@@ -109,7 +109,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "A revalidated invalid direct child is atomically renamed while its original-key "
         "exclusive lease and the managed-home install lock are held.",
     ),
-    ("core/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
+    ("core/pipeline/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
         1,
         "Exclusive per-tracker lease, tracker lock, strict registry lock, and fresh "
         "authority/liveness reads guard deletion of exactly one tracker JSON.",

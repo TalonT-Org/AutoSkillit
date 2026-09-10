@@ -35,7 +35,7 @@ returns a `MergeFailedStep` value to the orchestrator and aborts the merge:
 
 1. **path validation** — the worktree path must exist and be a real git
    worktree, not a regular directory.
-2. **protected branch check** — `core/branch_guard.is_protected_branch`
+2. **protected branch check** — `core/git/branch_guard.is_protected_branch`
    denies merges into branches in `safety.protected_branches`.
 3. **branch detection** — resolve the worktree's HEAD branch and the merge
    target branch.

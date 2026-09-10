@@ -1001,7 +1001,7 @@ class TestBuildTestScopeCoreCascade:
         """_step_context → narrow cascade of 4 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_step_context.py"},
+            changed_files={"src/autoskillit/core/pipeline/_step_context.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

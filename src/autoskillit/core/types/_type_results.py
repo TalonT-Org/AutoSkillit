@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
-from ..closure_hashing import HASH_RE as _HASH_RE
+from ..audit.closure_hashing import HASH_RE as _HASH_RE
 from ._type_audit_admission import AuditAttemptId, AuditOutcomeStatus
 from ._type_audit_cycle_authority import AuditVerdict
 from ._type_enums import FaultDomain, KillReason, RetryReason, SessionOutcome

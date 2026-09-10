@@ -593,7 +593,7 @@ def write_canonical_versioned_json(
     exclusive: bool = False,
 ) -> None:
     """Atomically write versioned canonical JSON for hash-bound artifacts."""
-    from ..closure_hashing import canonical_json_bytes
+    from ..audit.closure_hashing import canonical_json_bytes
 
     if not isinstance(payload, dict):
         raise TypeError("write_canonical_versioned_json requires a dict payload")
@@ -612,7 +612,7 @@ def decode_versioned_json_bytes(
 
     try:
         if require_canonical:
-            from ..closure_hashing import parse_canonical_json_bytes
+            from ..audit.closure_hashing import parse_canonical_json_bytes
 
             raw = parse_canonical_json_bytes(data)
         else:

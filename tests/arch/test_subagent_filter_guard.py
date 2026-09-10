@@ -15,7 +15,7 @@ _GUARDED_FILES = [
     SRC / "execution" / "session" / "_session_model.py",
     SRC / "execution" / "headless" / "_headless_recovery.py",
     SRC / "execution" / "headless" / "_headless_evidence.py",
-    SRC / "core" / "tool_sequence_analysis.py",
+    SRC / "core" / "pipeline" / "tool_sequence_analysis.py",
     SRC / "fleet" / "result_parser.py",
 ]
 
@@ -42,7 +42,7 @@ def test_predicate_copies_are_structurally_complete() -> None:
     """Both IL-0 and IL-1 predicate copies must check all exclusion conditions."""
     for path in [
         SRC / "execution" / "session" / "_session_model.py",
-        SRC / "core" / "tool_sequence_analysis.py",
+        SRC / "core" / "pipeline" / "tool_sequence_analysis.py",
         SRC / "fleet" / "result_parser.py",
     ]:
         source = path.read_text()

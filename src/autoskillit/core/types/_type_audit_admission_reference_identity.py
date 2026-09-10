@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..closure_hashing import canonical_json_bytes, compute_canonical_hash
+from ..audit.closure_hashing import canonical_json_bytes, compute_canonical_hash
 from ._type_audit_admission_validation import _require_nonempty, _typed_tuple
 from ._type_audit_artifact_ref import ArtifactRef
 

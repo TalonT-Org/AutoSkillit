@@ -709,10 +709,13 @@ def test_restore_snapshot_session_refuses_snapshot_symlinks(
         durable_scripts_root=pkg_root(),
     )
 
-    with pytest.raises(ValueError, match="symlink"):
+    with pytest.raises(
+        ValueError,
+        match=r"restored skill snapshot (?:root must not be|contains) a symlink",
+    ):
         manager.restore_snapshot_session(f"refuse-{symlink_shape}", snapshot, context)
 
-    assert f"refuse-{symlink_shape}" not in manager._session_roots
+    assert f"refuse-{symlink_shape}" not in manager._session_roots  # noqa: SLF001
     assert not (tmp_path / "codex-root" / f"refuse-{symlink_shape}").exists()
 
 

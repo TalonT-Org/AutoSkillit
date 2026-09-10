@@ -492,6 +492,7 @@ class CmdSpec:
     is_resume: bool = False
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
+    managed_skill_catalog: ValidatedAddDir | None = None
     # Records that the builder was asked to keep Claude agent teams inactive
     # and honored that request at construction. Post-spawn checkpoints read
     # this intent rather than inferring policy from environment content.

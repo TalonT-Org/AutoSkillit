@@ -48,7 +48,12 @@ class ClaudeDirectoryConventions:
     SKILL_FILENAME: str = "SKILL.md"
 
 
-def validate_add_dir(path: Path, *, session_home: str = "") -> ValidatedAddDir:
+def validate_add_dir(
+    path: Path,
+    *,
+    session_home: str = "",
+    skill_entries: tuple[tuple[str, str], ...] = (),
+) -> ValidatedAddDir:
     """Validate that a directory satisfies the --add-dir convention.
 
     Raises LayoutError if ``path/.claude/skills/`` does not exist or
@@ -60,7 +65,19 @@ def validate_add_dir(path: Path, *, session_home: str = "") -> ValidatedAddDir:
     skill_files = list(skills_subdir.glob("*/SKILL.md"))
     if not skill_files:
         raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
-    return ValidatedAddDir(path=str(path), session_home=session_home)
+    for name, relative_path in skill_entries:
+        if not name or Path(name).name != name or name.startswith("."):
+            raise LayoutError(f"invalid managed skill name: {name!r}")
+        expected_path = Path(name) / ClaudeDirectoryConventions.SKILL_FILENAME
+        if Path(relative_path) != expected_path:
+            raise LayoutError(
+                f"managed skill entry {name!r} must use {expected_path.as_posix()!r}"
+            )
+    return ValidatedAddDir(
+        path=str(path),
+        session_home=session_home,
+        skill_entries=skill_entries,
+    )
 
 
 def validate_worktree_path(

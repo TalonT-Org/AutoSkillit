@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import selectors
 import subprocess
@@ -22,7 +23,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, get_logger
+from autoskillit.core import (
+    CODEX_RESERVED_HOME_ENV_VARS,
+    ExecutableLaunchBinding,
+    get_logger,
+)
 from autoskillit.execution.backends._codex_cmd_builders import CodexFlags
 from autoskillit.execution.backends._codex_config import _format_toml_value
 
@@ -63,7 +68,10 @@ def _run_bounded_codex_probe(
     *,
     env: Mapping[str, str],
     cwd: str,
+    timeout_seconds: float = _CODEX_PROBE_TIMEOUT_SECONDS,
 ) -> _BoundedProbeResult:
+    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("Codex probe timeout must be finite and positive")
     try:
         from autoskillit.execution.process._process_kill import spawn_owned_process
         from autoskillit.execution.process._process_tether import TetherSpec
@@ -89,7 +97,7 @@ def _run_bounded_codex_probe(
 
     selector: selectors.BaseSelector | None = None
     output = {"stdout": bytearray(), "stderr": bytearray()}
-    deadline = time.monotonic() + _CODEX_PROBE_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout_seconds
     try:
         assert process.stdout is not None
         assert process.stderr is not None
@@ -328,6 +336,7 @@ def _validate_global_codex_home(
     source_codex_home: Path,
     *,
     config_path: Path,
+    executable: ExecutableLaunchBinding | None = None,
 ) -> list[str]:
     try:
         config_bytes = config_path.read_bytes()
@@ -335,20 +344,25 @@ def _validate_global_codex_home(
         return [f"Failed to read final Codex config: {type(exc).__name__}: {exc}"]
     sqlite_override = f"sqlite_home={_format_toml_value(str(source_codex_home))}"
     command = (
-        "codex",
+        str(executable.path) if executable is not None else "codex",
         CodexFlags.CONFIG_OVERRIDE,
         sqlite_override,
         "mcp",
         "list",
         CodexFlags.JSON,
     )
-    env = dict(os.environ)
-    for key in CODEX_RESERVED_HOME_ENV_VARS:
-        env[key] = str(source_codex_home)
+    if executable is not None:
+        env = dict(executable.launch_environment)
+        cwd = str(executable.cwd)
+    else:
+        env = dict(os.environ)
+        for key in CODEX_RESERVED_HOME_ENV_VARS:
+            env[key] = str(source_codex_home)
+        cwd = str(source_codex_home)
     return _validate_mcp_probe(
         command,
         env=env,
-        cwd=str(source_codex_home),
+        cwd=cwd,
         config_bytes=config_bytes,
     )
 

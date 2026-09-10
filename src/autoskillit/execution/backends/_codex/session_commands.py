@@ -570,12 +570,17 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
+        managed_skill_catalog = next(
+            (entry for entry in add_dirs if isinstance(entry, ValidatedAddDir)),
+            None,
+        )
         return CmdSpec(
             cmd=partial.cmd,
             env=executable.launch_environment if executable is not None else env,
             origin=partial.origin,
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            managed_skill_catalog=managed_skill_catalog,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 

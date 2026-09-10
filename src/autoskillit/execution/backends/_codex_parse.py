@@ -34,6 +34,8 @@ from autoskillit.core import (
 from autoskillit.execution.process import _marker_is_standalone
 from autoskillit.execution.session._turn_usage import (
     build_turn_token_entry,
+    first_nonempty_string,
+    first_valid_token_count,
     valid_context_window,
     valid_token_count,
 )
@@ -212,18 +214,6 @@ def _utc_datetime(value: Any) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def _source_string(*values: Any) -> str | None:
-    return next((value for value in values if isinstance(value, str) and value), None)
-
-
-def _native_counter(usage: Mapping[str, Any], *fields: str) -> int | None:
-    for field_name in fields:
-        value = valid_token_count(usage.get(field_name))
-        if value is not None:
-            return value
-    return None
-
-
 def extract_codex_turn_usage(
     locator: SessionLocator,
     thread_id: str,
@@ -260,7 +250,7 @@ def extract_codex_turn_usage(
                 record_type = record.get("type")
                 payload = record.get("payload")
                 if record_type == "turn_context" and isinstance(payload, Mapping):
-                    current_model = _source_string(payload.get("model"))
+                    current_model = first_nonempty_string(payload.get("model"))
                     continue
                 if record_type == "compacted":
                     compacting = True
@@ -288,14 +278,14 @@ def extract_codex_turn_usage(
                 if compacting:
                     continue
 
-                timestamp = _source_string(record.get("timestamp"))
+                timestamp = first_nonempty_string(record.get("timestamp"))
                 event_time = _utc_datetime(timestamp)
                 if event_time is None or event_time < start or event_time > end:
                     continue
-                input_tokens = _native_counter(last_usage, "input_tokens")
-                output_tokens = _native_counter(last_usage, "output_tokens")
-                cache_read_tokens = _native_counter(last_usage, "cached_input_tokens")
-                cache_creation_tokens = _native_counter(
+                input_tokens = first_valid_token_count(last_usage, "input_tokens")
+                output_tokens = first_valid_token_count(last_usage, "output_tokens")
+                cache_read_tokens = first_valid_token_count(last_usage, "cached_input_tokens")
+                cache_creation_tokens = first_valid_token_count(
                     last_usage,
                     "cache_write_input_tokens",
                     "cache_creation_input_tokens",
@@ -314,12 +304,12 @@ def extract_codex_turn_usage(
                 rows.append(
                     build_turn_token_entry(
                         backend=AGENT_BACKEND_CODEX,
-                        message_id=_source_string(
+                        message_id=first_nonempty_string(
                             info.get("message_id"),
                             payload.get("message_id"),
                             record.get("message_id"),
                         ),
-                        request_id=_source_string(
+                        request_id=first_nonempty_string(
                             info.get("request_id"),
                             payload.get("request_id"),
                             payload.get("requestId"),

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +95,20 @@ def valid_token_count(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return None
     return value
+
+
+def first_nonempty_string(*values: Any) -> str | None:
+    """Return the first non-empty string from provider evidence."""
+    return next((value for value in values if isinstance(value, str) and value), None)
+
+
+def first_valid_token_count(usage: Mapping[str, Any], *fields: str) -> int | None:
+    """Return the first valid token count from the named provider fields."""
+    for field_name in fields:
+        value = valid_token_count(usage.get(field_name))
+        if value is not None:
+            return value
+    return None
 
 
 def valid_context_window(value: Any) -> int | None:

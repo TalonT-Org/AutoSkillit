@@ -22,9 +22,10 @@ from autoskillit.core import (
 from autoskillit.execution.session._provider_parse import _parse_provider_records
 from autoskillit.execution.session._turn_usage import (
     build_turn_token_entry,
+    first_nonempty_string,
+    first_valid_token_count,
     merge_turn_usage,
     valid_context_window,
-    valid_token_count,
 )
 
 logger = get_logger(__name__)
@@ -242,17 +243,6 @@ def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
     return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
 
 
-def _nonempty_string(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
-def _usage_counter(usage: dict[str, Any], api_field: str, canonical_field: str) -> int | None:
-    api_value = valid_token_count(usage.get(api_field))
-    if api_value is not None:
-        return api_value
-    return valid_token_count(usage.get(canonical_field))
-
-
 def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTokenEntry]]:
     """Extract token usage from Claude CLI NDJSON output.
 
@@ -286,7 +276,7 @@ def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTo
             if not isinstance(usage, dict):
                 continue
             counters = {
-                canon_f: _usage_counter(usage, api_f, canon_f)
+                canon_f: first_valid_token_count(usage, api_f, canon_f)
                 for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
             }
             if all(value is None for value in counters.values()):
@@ -294,10 +284,10 @@ def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTo
             candidate_rows.append(
                 build_turn_token_entry(
                     backend=AGENT_BACKEND_CLAUDE_CODE,
-                    message_id=_nonempty_string(msg.get("id")),
-                    request_id=_nonempty_string(obj.get("requestId")),
-                    timestamp=_nonempty_string(obj.get("timestamp")),
-                    model=_nonempty_string(msg.get("model")),
+                    message_id=first_nonempty_string(msg.get("id")),
+                    request_id=first_nonempty_string(obj.get("requestId")),
+                    timestamp=first_nonempty_string(obj.get("timestamp")),
+                    model=first_nonempty_string(msg.get("model")),
                     input_tokens=counters["input_tokens"],
                     output_tokens=counters["output_tokens"],
                     cache_read_tokens=counters["cache_read_tokens"],
@@ -308,7 +298,7 @@ def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTo
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 result_usage = {
-                    canon_f: _usage_counter(usage, api_f, canon_f) or 0
+                    canon_f: first_valid_token_count(usage, api_f, canon_f) or 0
                     for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
                 }
             model_usage = obj.get("modelUsage")

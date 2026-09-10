@@ -12,8 +12,6 @@ if TYPE_CHECKING:
         _GIT_ADD_CONTENT_FLAGS,
         _GIT_DIFF_CONTENT_FLAGS,
         _GIT_DIFF_METADATA_FLAGS,
-        _GIT_GLOBAL_FLAGS,
-        _GIT_GLOBAL_FLAGS_WITH_VALUE,
         _GIT_STATUS_CONTENT_FLAGS,
         _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS,
         _PROTECTED_READ_SHELL_OPS,
@@ -27,31 +25,12 @@ if TYPE_CHECKING:
         command_verb,
         extract_git_subcommand_and_flags,
     )
-else:
-    if __package__ == "autoskillit.hooks._classification":
-        from .. import _command_classification as _classification
-    else:
-        import _command_classification as _classification
 
-    _GIT_ADD_CONTENT_FLAGS = _classification._GIT_ADD_CONTENT_FLAGS
-    _GIT_DIFF_CONTENT_FLAGS = _classification._GIT_DIFF_CONTENT_FLAGS
-    _GIT_DIFF_METADATA_FLAGS = _classification._GIT_DIFF_METADATA_FLAGS
-    _GIT_GLOBAL_FLAGS = _classification._GIT_GLOBAL_FLAGS
-    _GIT_GLOBAL_FLAGS_WITH_VALUE = _classification._GIT_GLOBAL_FLAGS_WITH_VALUE
-    _GIT_STATUS_CONTENT_FLAGS = _classification._GIT_STATUS_CONTENT_FLAGS
-    _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS = (
-        _classification._PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS
-    )
-    _PROTECTED_READ_SHELL_OPS = _classification._PROTECTED_READ_SHELL_OPS
-    _SHELL_STATE_VAR_RE = _classification._SHELL_STATE_VAR_RE
-    _SHELL_SUBSTITUTION_RE = _classification._SHELL_SUBSTITUTION_RE
-    _WC_FLAG_RE = _classification._WC_FLAG_RE
-    ArgvToken = _classification.ArgvToken
-    SearchPattern = _classification.SearchPattern
-    _command_start_index = _classification._command_start_index
-    _normalize_newlines_for_tokenize = _classification._normalize_newlines_for_tokenize
-    command_verb = _classification.command_verb
-    extract_git_subcommand_and_flags = _classification.extract_git_subcommand_and_flags
+
+_GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
+    {"-C", "--work-tree", "--git-dir", "--no-pager", "--bare", "-c"}
+)
+_GIT_GLOBAL_FLAGS_WITH_VALUE: frozenset[str] = frozenset({"-C", "--work-tree", "--git-dir", "-c"})
 
 
 class _FlagArity(StrEnum):
@@ -375,3 +354,28 @@ def command_has_blocked_protected_path_read(
             if not is_allowed_protected_path_metadata_command(segment):
                 return True
     return False
+
+
+if not TYPE_CHECKING:
+    if __package__ == "autoskillit.hooks._classification":
+        from .. import _command_classification as _classification
+    else:
+        import _command_classification as _classification
+
+    _GIT_ADD_CONTENT_FLAGS = _classification._GIT_ADD_CONTENT_FLAGS
+    _GIT_DIFF_CONTENT_FLAGS = _classification._GIT_DIFF_CONTENT_FLAGS
+    _GIT_DIFF_METADATA_FLAGS = _classification._GIT_DIFF_METADATA_FLAGS
+    _GIT_STATUS_CONTENT_FLAGS = _classification._GIT_STATUS_CONTENT_FLAGS
+    _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS = (
+        _classification._PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS
+    )
+    _PROTECTED_READ_SHELL_OPS = _classification._PROTECTED_READ_SHELL_OPS
+    _SHELL_STATE_VAR_RE = _classification._SHELL_STATE_VAR_RE
+    _SHELL_SUBSTITUTION_RE = _classification._SHELL_SUBSTITUTION_RE
+    _WC_FLAG_RE = _classification._WC_FLAG_RE
+    ArgvToken = _classification.ArgvToken
+    SearchPattern = _classification.SearchPattern
+    _command_start_index = _classification._command_start_index
+    _normalize_newlines_for_tokenize = _classification._normalize_newlines_for_tokenize
+    command_verb = _classification.command_verb
+    extract_git_subcommand_and_flags = _classification.extract_git_subcommand_and_flags

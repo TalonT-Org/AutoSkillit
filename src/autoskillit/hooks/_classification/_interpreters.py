@@ -21,21 +21,6 @@ if TYPE_CHECKING:
         command_verb_and_args,
         tokenize_command_segments,
     )
-else:
-    if __package__ == "autoskillit.hooks._classification":
-        from .. import _command_classification as _classification
-    else:
-        import _command_classification as _classification
-
-    _INTERPRETER_RE = _classification._INTERPRETER_RE
-    _LITERAL_OPEN_PATH_RE = _classification._LITERAL_OPEN_PATH_RE
-    _LITERAL_PATH_CONSTRUCTOR_RE = _classification._LITERAL_PATH_CONSTRUCTOR_RE
-    _NESTED_SHELL_RE = _classification._NESTED_SHELL_RE
-    _SUBPROCESS_APIS_RE = _classification._SUBPROCESS_APIS_RE
-    _WRITE_APIS_RE = _classification._WRITE_APIS_RE
-    _WRITE_CALL_SITE_RE = _classification._WRITE_CALL_SITE_RE
-    command_verb_and_args = _classification.command_verb_and_args
-    tokenize_command_segments = _classification.tokenize_command_segments
 
 
 def has_interpreter_write(command: str) -> bool:
@@ -436,3 +421,20 @@ def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[
     """Return literal subprocess payloads and whether any were unresolved."""
     specs, has_unresolved = _extract_interpreter_command_specs(command)
     return ([spec.payload for spec in specs], has_unresolved)
+
+
+if not TYPE_CHECKING:
+    if __package__ == "autoskillit.hooks._classification":
+        from .. import _command_classification as _classification
+    else:
+        import _command_classification as _classification
+
+    _INTERPRETER_RE = _classification._INTERPRETER_RE
+    _LITERAL_OPEN_PATH_RE = _classification._LITERAL_OPEN_PATH_RE
+    _LITERAL_PATH_CONSTRUCTOR_RE = _classification._LITERAL_PATH_CONSTRUCTOR_RE
+    _NESTED_SHELL_RE = _classification._NESTED_SHELL_RE
+    _SUBPROCESS_APIS_RE = _classification._SUBPROCESS_APIS_RE
+    _WRITE_APIS_RE = _classification._WRITE_APIS_RE
+    _WRITE_CALL_SITE_RE = _classification._WRITE_CALL_SITE_RE
+    command_verb_and_args = _classification.command_verb_and_args
+    tokenize_command_segments = _classification.tokenize_command_segments

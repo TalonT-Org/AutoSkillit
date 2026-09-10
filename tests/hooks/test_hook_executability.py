@@ -35,6 +35,23 @@ def _extract_hook_commands() -> list[str]:
     return commands
 
 
+@pytest.mark.parametrize("module_name", ["_flags", "_interpreters"])
+def test_classification_submodule_imports_standalone(module_name: str) -> None:
+    hooks_dir = pkg_root() / "hooks"
+    code = (
+        f"import sys; sys.path.insert(0, {str(hooks_dir)!r}); import _classification.{module_name}"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+
+
 @pytest.mark.parametrize("command", _extract_hook_commands(), ids=_extract_hook_commands())
 def test_hook_command_executable(command: str) -> None:
     """Every hook command must execute successfully as a subprocess.

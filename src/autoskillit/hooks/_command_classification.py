@@ -588,12 +588,6 @@ def is_git_command(segment: list[str]) -> bool:
     return verb == "git" or verb.endswith("/git")
 
 
-_GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
-    {"-C", "--work-tree", "--git-dir", "--no-pager", "--bare", "-c"}
-)
-_GIT_GLOBAL_FLAGS_WITH_VALUE: frozenset[str] = frozenset({"-C", "--work-tree", "--git-dir", "-c"})
-
-
 def extract_git_subcommand_and_flags(
     segment: list[str],
 ) -> tuple[str, list[str]] | None:
@@ -639,6 +633,8 @@ def extract_git_subcommand_and_flags(
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._flags import (  # noqa: F401
         _GIT_GLOBAL_FLAG_SPEC,
+        _GIT_GLOBAL_FLAGS,
+        _GIT_GLOBAL_FLAGS_WITH_VALUE,
         _PIP_GLOBAL_FLAG_SPEC,
         _argv_token_after_prefix,
         _argv_token_value_after_key,
@@ -669,6 +665,8 @@ else:
         from _classification import _flags, _interpreters
 
     _GIT_GLOBAL_FLAG_SPEC = _flags._GIT_GLOBAL_FLAG_SPEC
+    _GIT_GLOBAL_FLAGS = _flags._GIT_GLOBAL_FLAGS
+    _GIT_GLOBAL_FLAGS_WITH_VALUE = _flags._GIT_GLOBAL_FLAGS_WITH_VALUE
     _PIP_GLOBAL_FLAG_SPEC = _flags._PIP_GLOBAL_FLAG_SPEC
     _argv_token_after_prefix = _flags._argv_token_after_prefix
     _argv_token_value_after_key = _flags._argv_token_value_after_key

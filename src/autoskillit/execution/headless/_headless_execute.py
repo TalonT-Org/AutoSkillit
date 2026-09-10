@@ -45,17 +45,7 @@ from autoskillit.core import (
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.child_outcomes import collect_and_project_child_outcomes
-from autoskillit.execution.runtime.clone_guard import (
-    GUARD_EXCLUDE_PREFIX,
-    build_clone_guard_policy,
-    check_and_revert_clone_contamination,
-    derive_exclude_prefix,
-    is_clone_commit_skill,
-    is_path_under_exclude,
-    is_worktree_skill,
-    snapshot_clone_state,
-    validate_pre_session_index,
-)
+from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 from autoskillit.execution.headless._headless_evidence import (
     _build_error_path_telemetry,
     _build_session_telemetry,
@@ -83,9 +73,19 @@ from autoskillit.execution.headless._managed import (
     _LineageCallbacks,
     _ManagedLineageObserver,
 )
-from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 from autoskillit.execution.quota._quota_observed import record_skill_result_rate_limit
+from autoskillit.execution.runtime.clone_guard import (
+    GUARD_EXCLUDE_PREFIX,
+    build_clone_guard_policy,
+    check_and_revert_clone_contamination,
+    derive_exclude_prefix,
+    is_clone_commit_skill,
+    is_path_under_exclude,
+    is_worktree_skill,
+    snapshot_clone_state,
+    validate_pre_session_index,
+)
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult

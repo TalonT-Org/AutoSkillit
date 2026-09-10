@@ -178,7 +178,8 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
             "repair_broken_projection_hooks",
         ),
-        ("src/autoskillit/execution/evidence/_session_log_recovery.py", "recover_crashed_sessions"),
+        ("src/autoskillit/execution/"
+        "evidence/_session_log_recovery.py", "recover_crashed_sessions"),
     }
 )
 

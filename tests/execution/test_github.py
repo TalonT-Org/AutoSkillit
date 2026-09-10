@@ -856,7 +856,9 @@ async def test_mutating_throttle_enforces_delay(httpx_mock):
         json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
     )
     fetcher = DefaultGitHubFetcher(token="test")
-    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+    with patch(
+        "autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
         await fetcher.create_issue("owner", "repo", "Title 1", "body")
         await fetcher.create_issue("owner", "repo", "Title 2", "body")
 
@@ -883,7 +885,9 @@ async def test_read_methods_bypass_throttle(httpx_mock):
         json=_ISSUE_NO_COMMENTS_JSON,
     )
     fetcher = DefaultGitHubFetcher(token="test")
-    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+    with patch(
+        "autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
         await fetcher.create_issue("owner", "repo", "Title", "body")
         await fetcher.fetch_issue("owner/repo#1", include_comments=False)
 
@@ -984,7 +988,9 @@ async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
         await _real_sleep(0)  # yield to event loop while lock is held
         events.append("sleep_end")
 
-    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", side_effect=recording_sleep):
+    with patch(
+        "autoskillit.execution.github_ops.github.asyncio.sleep", side_effect=recording_sleep
+    ):
         await asyncio.gather(
             fetcher.add_labels("owner", "repo", 42, ["bug"]),
             fetcher.create_issue("owner", "repo", "Title", "body"),

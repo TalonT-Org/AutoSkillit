@@ -7,7 +7,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.execution.evidence.recording import RecordingSubprocessRunner, ReplayingSubprocessRunner
+from autoskillit.execution.evidence.recording import (
+    RecordingSubprocessRunner,
+    ReplayingSubprocessRunner,
+)
 from tests.conftest import _make_result
 from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 

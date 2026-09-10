@@ -14,16 +14,16 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks._runtime._hook_settings import (
-    DIAGNOSTIC_KEYS,
-    write_join_diagnostic,
-)
 from autoskillit.hooks._join_ledger import (
     OUTCOME_FAILURE,
     OUTCOME_SUCCESS,
     claim_assignment,
     declare_batch,
     settle_assignment,
+)
+from autoskillit.hooks._runtime._hook_settings import (
+    DIAGNOSTIC_KEYS,
+    write_join_diagnostic,
 )
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]

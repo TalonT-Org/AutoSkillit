@@ -25,7 +25,7 @@ from typing import Any
 _HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
-_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+_RUNTIME_DIR = str(pathlib.Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 

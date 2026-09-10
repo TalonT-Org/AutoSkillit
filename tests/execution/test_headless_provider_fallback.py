@@ -17,8 +17,8 @@ from autoskillit.core import (
     resolve_native_shell_capture_decision,
 )
 from autoskillit.core.types import PluginLoadMode, RetryReason, SkillResult
-from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
+from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from tests.execution.conftest import _launch_preparation, _mock_backend, _sink_env
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
@@ -138,8 +138,8 @@ class _Authority:
 
 class TestProviderFallbackLoop:
     def _patch_common(self, monkeypatch, tmp_path, build_result_fn, ctx=None):
-        import autoskillit.execution.headless._headless_execute as _execute_module
         import autoskillit.execution.evidence.session_log as _sl_mod
+        import autoskillit.execution.headless._headless_execute as _execute_module
         from autoskillit.execution.headless import PostSessionMetrics
         from tests.execution.conftest import _sr
 

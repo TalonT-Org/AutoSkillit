@@ -56,7 +56,9 @@ def _command_verb_and_args(segment: Sequence[str]) -> tuple[str, list[str]]:
 
 
 def _tokenize_with_redirects(command: str) -> list[Any]:
-    from autoskillit.hooks._runtime._command_classification import _tokenize_command_segments_with_redirects
+    from autoskillit.hooks._runtime._command_classification import (
+        _tokenize_command_segments_with_redirects,
+    )
 
     return _tokenize_command_segments_with_redirects(command)
 
@@ -78,7 +80,9 @@ def _partition_output_redirects_call(
 def _extract_interpreter_segment_specs_call(
     segment: Sequence[str],
 ) -> tuple[list[Any], bool]:
-    from autoskillit.hooks._runtime._command_classification import _extract_interpreter_segment_specs
+    from autoskillit.hooks._runtime._command_classification import (
+        _extract_interpreter_segment_specs,
+    )
 
     return _extract_interpreter_segment_specs(segment)
 

@@ -16,7 +16,11 @@ from structlog.testing import capture_logs
 import autoskillit.execution.evidence._session_retention as session_retention
 from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.evidence._session_retention import apply_session_retention
-from autoskillit.execution.evidence.linux_tracing import is_pid_zombie, read_boot_id, read_starttime_ticks
+from autoskillit.execution.evidence.linux_tracing import (
+    is_pid_zombie,
+    read_boot_id,
+    read_starttime_ticks,
+)
 from autoskillit.execution.evidence.session_index import read_tolerant_session_index_rows
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION, build_protected_campaign_ids
 from tests._retention_surface import (

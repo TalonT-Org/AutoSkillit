@@ -14,6 +14,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from autoskillit.execution.headless import _build_skill_result
 from autoskillit.execution.runtime.clone_guard import (
     CloneSnapshot,
     _parse_worktree_branches,
@@ -27,7 +28,6 @@ from autoskillit.execution.runtime.clone_guard import (
     revert_contamination,
     snapshot_clone_state,
 )
-from autoskillit.execution.headless import _build_skill_result
 from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.fakes import MockSubprocessRunner
 

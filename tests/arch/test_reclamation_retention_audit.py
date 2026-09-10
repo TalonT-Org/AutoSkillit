@@ -432,5 +432,6 @@ def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     )
     assert errors == [
         "unclassified discovered reclaimers: "
-        "[('src/autoskillit/execution/evidence/_session_log_recovery.py', 'recover_crashed_sessions')]"
+        + "[('src/autoskillit/execution/evidence/_session_log_recovery.py',"
+        + " 'recover_crashed_sessions')]"
     ]

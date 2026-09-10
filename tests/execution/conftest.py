@@ -32,8 +32,8 @@ from autoskillit.core import (
     SemanticLaunchPlan,
 )
 from autoskillit.core.types import SubprocessResult, TerminationReason
-from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
 from autoskillit.execution.evidence.otlp_sink import _build_env
+from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._exit_classification import _CODEX_API_ERROR_PATTERNS
 from tests._helpers import make_tracing_config

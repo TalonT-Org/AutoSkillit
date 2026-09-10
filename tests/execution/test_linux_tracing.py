@@ -90,7 +90,10 @@ async def test_tracing_handle_accumulates_snapshots(tmp_path):
 
     import anyio
 
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     proc = subprocess.Popen(["sleep", "2"])
@@ -116,7 +119,10 @@ async def test_tracing_handle_stop_returns_snapshots(tmp_path):
 
     import anyio
 
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
@@ -197,7 +203,10 @@ async def test_proc_monitor_stamps_unique_captured_at():
 @pytest.mark.anyio
 async def test_start_linux_tracing_creates_trace_file(tmp_path):
     """When tmpfs_path is configured, start_linux_tracing opens a trace file."""
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
@@ -217,7 +226,10 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
     """Each yielded snapshot appears as a JSONL line in the trace file."""
     import subprocess
 
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     proc = subprocess.Popen(["sleep", "2"])
@@ -277,7 +289,10 @@ def test_stop_idempotent(tmp_path):
 @pytest.mark.anyio
 async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
     """If tmpfs_path does not exist, tracing still works in-memory."""
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(
@@ -319,7 +334,10 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps(tmp_path):
 
     import anyio
 
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(proc_interval=0.05, tmpfs_path=str(tmp_path))
@@ -431,7 +449,10 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     """start_linux_tracing must write autoskillit_enrollment_{pid}.json immediately."""
     import anyio
 
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
@@ -553,7 +574,10 @@ async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""
     import anyio
 
-    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))

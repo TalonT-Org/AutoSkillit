@@ -73,8 +73,8 @@ class TestProviderFieldsReachFlush:
     async def test_normal_path_provider_used_in_flush_kwargs(
         self, minimal_ctx, tmp_path, monkeypatch
     ):
-        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         fake_runner, flush_calls = _patch_common(
             monkeypatch, tmp_path, _SUCCESS_RESULT, minimal_ctx
@@ -103,8 +103,8 @@ class TestProviderFieldsReachFlush:
         self, minimal_ctx, tmp_path, monkeypatch
     ):
         from autoskillit.core.types import RetryReason, SkillResult
-        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         stale = SkillResult(
             success=False,
@@ -185,8 +185,8 @@ class TestProviderFieldsReachFlush:
     async def test_crash_path_provider_used_in_flush_kwargs(
         self, minimal_ctx, tmp_path, monkeypatch
     ):
-        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
@@ -229,8 +229,8 @@ class TestProviderFieldsReachFlush:
     ):
         import anyio
 
-        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         monkeypatch.setattr(
             "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
@@ -273,8 +273,8 @@ class TestProviderFieldsReachFlush:
     ):
         """model_identity must be forwarded to flush_session_log — not silently dropped."""
         from autoskillit.core.types._type_results import ModelIdentity
-        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
         from autoskillit.execution.headless import _execute_claude_headless
+        from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         fake_runner, flush_calls = _patch_common(
             monkeypatch, tmp_path, _SUCCESS_RESULT, minimal_ctx

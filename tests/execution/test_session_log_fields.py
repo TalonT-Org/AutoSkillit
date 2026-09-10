@@ -1350,8 +1350,8 @@ def test_primary_model_identifier_argmax_parent_only():
 def test_no_false_drift_with_subagent_dominant_output():
     """End-to-end: opus parent + sonnet subagent stream -> no MODEL_DRIFT anomaly."""
     from autoskillit.execution.evidence.anomaly_detection import detect_model_drift
-    from autoskillit.execution.session import extract_token_usage
     from autoskillit.execution.evidence.session_log import _primary_model_identifier
+    from autoskillit.execution.session import extract_token_usage
 
     parent_lines = [
         json.dumps(

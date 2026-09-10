@@ -50,7 +50,10 @@ def test_clone_guard_detection_revert_exclude_coherence():
     """detect_contamination must accept exclude_prefix if revert_contamination does."""
     import inspect
 
-    from autoskillit.execution.runtime.clone_guard import detect_contamination, revert_contamination
+    from autoskillit.execution.runtime.clone_guard import (
+        detect_contamination,
+        revert_contamination,
+    )
 
     detect_sig = inspect.signature(detect_contamination)
     revert_sig = inspect.signature(revert_contamination)

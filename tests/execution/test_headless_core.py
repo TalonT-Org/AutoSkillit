@@ -20,13 +20,13 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.runtime.commands import _ensure_skill_prefix
 from autoskillit.execution.headless import (
     NormalizedMessages,
     _build_skill_result,
     _extract_worktree_path,
     _normalize_messages,
 )
+from autoskillit.execution.runtime.commands import _ensure_skill_prefix
 from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.conftest import _make_result, _make_timeout_result
 from tests.execution.conftest import _mock_backend, _sr, _success_session_json

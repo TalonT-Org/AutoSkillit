@@ -18,7 +18,6 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeStreamParser
-from autoskillit.execution.headless._headless_result import _build_skill_result
 from autoskillit.execution.evidence.recording import (
     RecordingSubprocessRunner,
     ReplayingSubprocessRunner,
@@ -26,6 +25,7 @@ from autoskillit.execution.evidence.recording import (
     _detect_backend_format,
     _extract_model,
 )
+from autoskillit.execution.headless._headless_result import _build_skill_result
 from tests.conftest import _make_result
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fakes import MockSubprocessRunner
@@ -924,7 +924,8 @@ def test_build_replay_runner_detects_codex_format(tmp_path, monkeypatch):
     mock_codex_instance.scenario.return_value = mock_scenario
     mock_codex_instance.build_session_map.return_value = {}
 
-    monkeypatch.setattr("autoskillit.execution.evidence.recording.CodexScenarioPlayer", mock_codex_cls)
+    monkeypatch.setattr("autoskillit.execution.evidence.recording.CodexScenarioPlayer",
+    mock_codex_cls)
 
     monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
     monkeypatch.setattr("atexit.register", Mock())

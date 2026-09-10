@@ -755,10 +755,7 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
     assert projected_document.projected_digest == projected_binding.projected_digests["implement"]
     projected_contract = replace(
         initial_stored.contract,
-        canonical_digests=projected_binding.canonical_digests,
         projected_digests=projected_binding.projected_digests,
-        semantic_digests=projected_binding.semantic_digests,
-        adaptation_digests=projected_binding.adaptation_digests,
     )
     snapshot_path = (backend.conventions.skills_subdir / "implement" / "SKILL.md").as_posix()
     contract_store.delete("codex-restored")
@@ -819,7 +816,8 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
         )
     )
 
-    assert result["success"] == (not executor_raises)
+    assert result["success"] == (not executor_raises), result
+    assert "session_home" in observed, result
     restored_home = observed["session_home"]
     assert isinstance(restored_home, Path)
     assert not restored_home.exists()

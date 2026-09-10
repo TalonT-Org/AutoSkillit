@@ -17,6 +17,7 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -45,6 +46,7 @@ def test_classification_submodule_imports_standalone(module_name: str) -> None:
     proc = subprocess.run(
         [sys.executable, "-B", "-c", code],
         capture_output=True,
+        env=production_interpreter_env(),
         text=True,
         timeout=10,
     )

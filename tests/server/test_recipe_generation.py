@@ -12,7 +12,7 @@ from typing import cast
 
 import pytest
 
-import autoskillit.server._recipe_generation as generation_module
+import autoskillit.server.recipe._recipe_generation as generation_module
 from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
@@ -27,7 +27,7 @@ from autoskillit.core import (
     RecipeFlowGeneration,
     compute_recipe_execution_snapshot_digest,
 )
-from autoskillit.server._recipe_generation import (
+from autoskillit.server.recipe._recipe_generation import (
     RecipeGenerationCapacityError,
     RecipeGenerationConflictError,
     RecipeGenerationRecord,
@@ -35,7 +35,7 @@ from autoskillit.server._recipe_generation import (
     RecipeGenerationStore,
     recipe_generation_weight_bytes,
 )
-from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
+from autoskillit.server.recipe.section._lifecycle import notify_kitchen_retired
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

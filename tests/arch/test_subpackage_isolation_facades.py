@@ -18,6 +18,14 @@ def test_response_budget_decomposition_has_expected_siblings() -> None:
     }
 
 
+def test_recipe_delivery_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "recipe" / "_recipe_delivery"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_completion",
+    }
+
+
 def test_execution_helpers_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "server" / "tools" / "_execution_helpers"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
@@ -44,7 +52,6 @@ def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
-        "_open_kitchen",
         "_open_kitchen_transition",
         "_open_kitchen_errors",
         "_close_kitchen",
@@ -55,6 +62,16 @@ def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
         "_hook_config",
         "_tracker_authority",
         "_declare_join_batch",
+    }
+
+
+def test_open_kitchen_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen" / "_open_kitchen"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_gate",
+        "_visibility",
+        "_recipe_serve",
     }
 
 

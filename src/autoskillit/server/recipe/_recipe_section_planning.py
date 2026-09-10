@@ -25,8 +25,8 @@ from autoskillit.core import (
     recipe_section_digest,
     recipe_section_element_digest,
 )
-from autoskillit.server._recipe_initialization import recipe_initialization_receipt
-from autoskillit.server.recipe_section._contracts import (
+from autoskillit.server.recipe._recipe_initialization import recipe_initialization_receipt
+from autoskillit.server.recipe.section._contracts import (
     PlannedRecipeSectionPage,
     RecipeSectionBoundError,
     RecipeSectionPageDescriptor,

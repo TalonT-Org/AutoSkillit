@@ -10,10 +10,6 @@ from __future__ import annotations
 # Module-level logger for tests that patch ``..._response_budget.logger``.
 from autoskillit.core import atomic_write  # noqa: F401  (mock.patch reachability)
 from autoskillit.core import get_logger as _get_logger
-from autoskillit.server._recipe_segment_delivery import (  # noqa: F401  (mock.patch reachability)
-    RecipeSegmentDeliveryError,
-    build_post_effect_segment_failure,
-)
 from autoskillit.server._response_budget._enforce import (
     enforce_response_budget,
     post_effect_recipe_segment_failure,
@@ -36,6 +32,10 @@ from autoskillit.server._response_budget._projection import (
 from autoskillit.server._response_budget._spill import (
     _artifact_path,
     bounded_response_budget_failure,
+)
+from autoskillit.server.recipe._recipe_segment_delivery import (  # noqa: F401  (mock.patch reachability)
+    RecipeSegmentDeliveryError,
+    build_post_effect_segment_failure,
 )
 
 logger = _get_logger(__name__)

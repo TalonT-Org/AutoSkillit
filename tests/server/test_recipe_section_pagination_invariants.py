@@ -21,7 +21,7 @@ import pytest
 from autoskillit.core import recipe_section_plan_digest
 from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server import _recipe_section_planning as planning
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     RecipeSectionPaginationError,
 )
 from tests.conftest import production_interpreter_env
@@ -232,7 +232,7 @@ from autoskillit.core import (
     RECIPE_FLOW_SCHEMA_VERSION,
     RecipeArtifactGeneration,
 )
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     build_recipe_section_page_plan,
     render_recipe_section_page,
     select_recipe_section,

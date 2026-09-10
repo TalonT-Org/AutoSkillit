@@ -1,7 +1,7 @@
 """Default-config four-call efficiency pin.
 
 Replaces the runtime invariant (``_MAX_BOUNDED_RECIPE_CALLS = 4`` in
-``server/_recipe_delivery.py``) with an explicit, non-negotiable contract:
+``server/recipe/_recipe_delivery.py``) with an explicit, non-negotiable contract:
 under the default ``OutputBudgetConfig``, every bundled recipe's Codex
 ENVELOPE plan (Codex always forces the bounded path) must complete a full
 session-start round trip in at most 4 MCP calls -- one ``open_kitchen``, up

@@ -75,7 +75,7 @@ _PRODUCTION_MODULES = (
     "autoskillit.recipe.rules.rules_packs",
     "autoskillit.recipe.rules.rules_phoropter_adjacency",
     "autoskillit.recipe.rules.rules_reachability",
-    "autoskillit.server._recipe_execution",
+    "autoskillit.server.recipe._recipe_execution",
     "autoskillit.server.tools.tools_execution._run_skill_admission",
     "autoskillit.server.tools.tools_execution._run_skill_prepare",
     "autoskillit.server.tools.tools_recipe",

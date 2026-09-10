@@ -24,7 +24,7 @@ from autoskillit.server._guards import (
 )
 from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_segment_delivery import attach_recipe_segment
+from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
@@ -39,7 +39,7 @@ from autoskillit.server.tools._execution_helpers import (
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
-    from autoskillit.server._recipe_segment_delivery import PreparedRecipeSegmentDelivery
+    from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 logger = get_logger(__name__)
 

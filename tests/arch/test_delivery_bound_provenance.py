@@ -22,8 +22,10 @@ from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_SCANNED_FILES = tuple(sorted((SRC_ROOT / "server").glob("_recipe_*.py"))) + tuple(
-    sorted((SRC_ROOT / "server" / "tools").glob("*recipe*.py"))
+_SCANNED_FILES = (
+    tuple(sorted((SRC_ROOT / "server" / "recipe").glob("_recipe_*.py")))
+    + (SRC_ROOT / "server" / "recipe" / "_recipe_delivery" / "__init__.py",)
+    + tuple(sorted((SRC_ROOT / "server" / "tools").glob("*recipe*.py")))
 )
 
 _BOUND_ATTRS = frozenset({"page_max_bytes", "response_max_bytes"})
@@ -34,12 +36,12 @@ _BOUND_ATTRS = frozenset({"page_max_bytes", "response_max_bytes"})
 _ALLOWED_BOUND_READS: frozenset[tuple[str, str, str]] = frozenset(
     {
         (
-            "server/_recipe_delivery.py",
+            "server/recipe/_recipe_delivery/__init__.py",
             "finalize_recipe_delivery",
             "response_budget.response_max_bytes",
         ),
         (
-            "server/_recipe_delivery.py",
+            "server/recipe/_recipe_delivery/__init__.py",
             "finalize_recipe_delivery",
             "response_budget.page_max_bytes",
         ),

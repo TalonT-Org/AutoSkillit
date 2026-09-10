@@ -36,7 +36,7 @@ from autoskillit.server._audit_authority_materializer import (
     load_current_prior_authority,
     normalize_audited_plan_refs,
 )
-from autoskillit.server._recipe_execution import (
+from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     bind_attested_runtime_invocation,
     build_bound_child_prompt,

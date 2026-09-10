@@ -19,7 +19,7 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import ReadyRecipe
 from autoskillit.recipe import edge_routes_success
-from autoskillit.server._recipe_artifact import (
+from autoskillit.server.recipe._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
     extract_recipe_step_bodies,

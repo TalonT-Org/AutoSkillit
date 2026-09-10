@@ -20,10 +20,6 @@ from autoskillit.core import (
 # they must be resolved via attribute access on the package at call time
 # rather than imported by name into this submodule.
 from autoskillit.server import _response_budget as _response_budget_pkg
-from autoskillit.server._recipe_segment_delivery import (
-    RECIPE_SEGMENT_MAX_BYTES,
-    RecipeSegmentDeliveryError,
-)
 from autoskillit.server._response_budget._primitives import (
     _bounded_tool_name,
     _canonical_json,
@@ -37,6 +33,10 @@ from autoskillit.server._response_budget._projection import (
 from autoskillit.server._response_budget._spill import (
     _plain_spill_envelope,
     bounded_response_budget_failure,
+)
+from autoskillit.server.recipe._recipe_segment_delivery import (
+    RECIPE_SEGMENT_MAX_BYTES,
+    RecipeSegmentDeliveryError,
 )
 
 if TYPE_CHECKING:

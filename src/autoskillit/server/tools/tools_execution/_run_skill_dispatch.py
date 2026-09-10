@@ -33,7 +33,7 @@ from autoskillit.server._guards import (
     _validate_skill_command,
 )
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_execution import get_recipe_execution
+from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import build_fresh_projection_context

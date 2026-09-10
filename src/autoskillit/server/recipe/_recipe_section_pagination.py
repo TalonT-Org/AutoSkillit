@@ -21,13 +21,13 @@ from autoskillit.core import (
     recipe_section_plan_digest,
     resolve_recipe_section_response_bound,
 )
-from autoskillit.server._recipe_section_planning import (
+from autoskillit.server.recipe._recipe_section_planning import (
     _render_candidate,
     plan_pages,
     recipe_section_continuation_binding,
     selected_section_sha256,
 )
-from autoskillit.server.recipe_section._contracts import (
+from autoskillit.server.recipe.section._contracts import (
     PlannedRecipeSectionPage,
     RecipeSectionBoundError,
     RecipeSectionNonConvergenceError,
@@ -38,9 +38,9 @@ from autoskillit.server.recipe_section._contracts import (
     RecipeSectionRequestState,
     SelectedRecipeSection,
 )
-from autoskillit.server.recipe_section._lifecycle import register_kitchen_retirement_callback
-from autoskillit.server.recipe_section._rendering import render_recipe_section_failure
-from autoskillit.server.recipe_section._verification import (
+from autoskillit.server.recipe.section._lifecycle import register_kitchen_retirement_callback
+from autoskillit.server.recipe.section._rendering import render_recipe_section_failure
+from autoskillit.server.recipe.section._verification import (
     verify_finalized_recipe_section_plan,
 )
 

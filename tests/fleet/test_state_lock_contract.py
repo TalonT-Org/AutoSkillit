@@ -57,7 +57,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "server/tools/_overlay_state.py",  # session overlay transaction lock
         "server/tools/tools_pipeline_tracker/_handlers.py",  # mark_step_complete: flock sidecar
         "core/pipeline_tracker.py",  # tracker authority: lease-before-tracker-lock order
-        "server/_recipe_artifact.py",  # shared/exclusive immutable-generation lifecycle lock
+        "server/recipe/_recipe_artifact.py",  # shared/exclusive immutable-generation lock
         "hooks/resume_gate_post_hook.py",
         "hooks/_capture/_resolver.py",
         "hooks/_capture_lifecycle/_store.py",

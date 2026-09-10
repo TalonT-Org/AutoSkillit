@@ -6,8 +6,8 @@ import pytest
 
 from autoskillit.core import recipe_section_digest, recipe_section_element_digest
 from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server._recipe_artifact import extract_recipe_step_bodies
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_artifact import extract_recipe_step_bodies
+from autoskillit.server.recipe._recipe_section_pagination import (
     PagePlanCache,
     render_recipe_section_page,
 )

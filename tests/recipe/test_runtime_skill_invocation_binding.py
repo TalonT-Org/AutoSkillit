@@ -56,7 +56,7 @@ def _template(
     **extra_with_args: object,
 ) -> InvocationTemplate:
     """Build a compiled InvocationTemplate the way the production initialization
-    envelope does (see server/_recipe_execution.py:build_recipe_execution_snapshot),
+    envelope does (see server/recipe/_recipe_execution.py:build_recipe_execution_snapshot),
     without driving the full server stack."""
     step = RecipeStep(
         name=_STEP_NAME,

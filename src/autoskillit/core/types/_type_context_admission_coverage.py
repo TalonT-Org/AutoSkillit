@@ -126,7 +126,9 @@ _LOCAL_SOURCE_LOCATORS = {
     ProducerSurface.HEADLESS_CHILD_PROMPT: (
         "src/autoskillit/execution/headless/_headless_helpers.py"
     ),
-    ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY: ("src/autoskillit/server/_recipe_delivery.py"),
+    ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY: (
+        "src/autoskillit/server/recipe/_recipe_delivery/__init__.py"
+    ),
 }
 
 

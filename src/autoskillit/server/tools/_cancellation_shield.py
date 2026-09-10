@@ -18,7 +18,7 @@ from typing import Any, Literal, TypeVar, cast, overload
 import anyio
 
 from autoskillit.core import FleetErrorCode, fleet_error, get_logger
-from autoskillit.server._recipe_initialization import (
+from autoskillit.server.recipe._recipe_initialization import (
     admit_registered_tool_during_initialization,
 )
 

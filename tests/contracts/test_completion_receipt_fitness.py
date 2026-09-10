@@ -19,12 +19,12 @@ from autoskillit.core import (
     build_recipe_execution_credential,
     resolve_general_output_token_limit,
 )
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     persist_recipe_artifact,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_generation import RecipeGenerationStore
-from autoskillit.server._recipe_initialization import (
+from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
+from autoskillit.server.recipe._recipe_initialization import (
     _render_completion_receipt,
     recipe_initialization_receipt,
 )

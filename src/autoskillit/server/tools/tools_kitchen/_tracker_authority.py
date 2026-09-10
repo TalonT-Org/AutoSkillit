@@ -183,7 +183,7 @@ def _pipeline_tracker_auto_init_failure(tool_ctx: ToolContext, error: str) -> st
 
 def _register_active_recipe_kitchen(ctx: ToolContext) -> None:
     """Publish one kitchen to both process and recipe-generation lifecycles."""
-    from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
+    from autoskillit.server.recipe._recipe_generation import activate_kitchen  # circular-break
 
     identity = cast(KitchenProcessIdentity, ctx.kitchen_process_identity)
     if not register_active_kitchen(identity):

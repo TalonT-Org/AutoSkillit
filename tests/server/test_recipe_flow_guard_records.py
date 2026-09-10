@@ -17,7 +17,7 @@ from autoskillit.core import (
     RecipeStepGuard,
 )
 from autoskillit.recipe._api import load_and_validate
-from autoskillit.server._recipe_artifact import build_recipe_flow_generation
+from autoskillit.server.recipe._recipe_artifact import build_recipe_flow_generation
 from tests.server.test_tools_recipe_pull import _finalize_recipe_delivery, _payload
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

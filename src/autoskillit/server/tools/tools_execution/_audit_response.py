@@ -16,7 +16,7 @@ from autoskillit.core import (
     KillReason,
     compute_bytes_hash,
 )
-from autoskillit.server._recipe_execution import (
+from autoskillit.server.recipe._recipe_execution import (
     required_audit_finalization_effect_names as _required_audit_finalization_effect_names,
 )
 from autoskillit.server.tools import tools_execution as _te_pkg

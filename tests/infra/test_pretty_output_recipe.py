@@ -22,7 +22,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.hooks.formatters.pretty_output_hook import _format_response
-from autoskillit.server._recipe_delivery import _attested_render, persist_recipe_artifact
+from autoskillit.server.recipe._recipe_delivery import _attested_render, persist_recipe_artifact
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -1038,7 +1038,7 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
     from autoskillit.recipe.repository import DefaultRecipeRepository
     from autoskillit.server._misc import strip_ingredients_only_keys
-    from autoskillit.server._recipe_delivery import build_recipe_envelope
+    from autoskillit.server.recipe._recipe_delivery import build_recipe_envelope
     from autoskillit.server.tools._serve_helpers import (
         build_open_kitchen_recipe_payload,
         render_served_response,

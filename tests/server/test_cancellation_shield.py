@@ -336,7 +336,7 @@ async def test_typed_state_does_not_leak_between_concurrent_tasks() -> None:
 async def test_cancellation_before_and_after_admission_uses_captured_state(
     admitted: bool,
 ) -> None:
-    from autoskillit.server._recipe_section_pagination import (
+    from autoskillit.server.recipe._recipe_section_pagination import (
         RecipeSectionRequestState,
         render_recipe_section_failure,
     )

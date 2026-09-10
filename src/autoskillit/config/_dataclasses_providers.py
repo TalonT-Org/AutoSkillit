@@ -200,7 +200,7 @@ class AgentBackendConfig:
     # session types eligible to bind exploration authority. Defaults to False —
     # the HMAC capability lease remains the authorization boundary regardless;
     # this only auto-provisions the weaker visibility gate. consumer:
-    # server/tools/tools_kitchen/_open_kitchen.py open_kitchen,
+    # server/tools/tools_kitchen/_open_kitchen/__init__.py open_kitchen,
     # server/_lifespan/_session_boots.py _pre_reveal_kitchen. Refs #4684.
     auto_provision_exploration: bool = False
 

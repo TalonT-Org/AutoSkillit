@@ -264,7 +264,7 @@ EXPECTED_COVERAGE = (
         "VERIFIED",
         _autoskillit_evidence(
             "COV-PARENT-VISIBLE-CHILD-DELIVERY",
-            "src/autoskillit/server/_recipe_delivery.py",
+            "src/autoskillit/server/recipe/_recipe_delivery/__init__.py",
         ),
     ),
     _row(

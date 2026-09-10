@@ -125,7 +125,7 @@ _EXPECTED_ACQUISITIONS = (
     ("hooks/resume_gate_post_hook.py", "_acquire_lock", "flock"),
     ("planner/merge.py", "merge_files", "acquire_flock_with_timeout"),
     ("planner/merge.py", "replace_item", "acquire_flock_with_timeout"),
-    ("server/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
+    ("server/recipe/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
     ("server/tools/_overlay_state.py", "locked_overlay", "acquire_flock_with_timeout"),
     (
         "workspace/_install_state.py",

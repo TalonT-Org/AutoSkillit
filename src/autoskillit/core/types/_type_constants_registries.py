@@ -392,16 +392,16 @@ class ExecutionInstallSiteDef(NamedTuple):
 RECIPE_EXECUTION_INSTALL_SITE_REGISTRY: Mapping[str, ExecutionInstallSiteDef] = MappingProxyType(
     {
         "inline_delivery": ExecutionInstallSiteDef(
-            installer_module="src/autoskillit/server/_recipe_delivery.py",
+            installer_module="src/autoskillit/server/recipe/_recipe_delivery/_completion.py",
             installer_symbol="complete_finalized_recipe_response",
-            delivering_module="src/autoskillit/server/_recipe_artifact.py",
+            delivering_module="src/autoskillit/server/recipe/_recipe_artifact.py",
             delivering_symbol="build_canonical_recipe_artifact_payload",
             delivery_surface="open_kitchen",
         ),
         "initialization_completion": ExecutionInstallSiteDef(
-            installer_module="src/autoskillit/server/_recipe_initialization.py",
+            installer_module="src/autoskillit/server/recipe/_recipe_initialization.py",
             installer_symbol="complete_initialization_response",
-            delivering_module="src/autoskillit/server/_recipe_initialization.py",
+            delivering_module="src/autoskillit/server/recipe/_recipe_initialization.py",
             delivering_symbol="build_completion_response",
             delivery_surface="complete_recipe_initialization",
         ),

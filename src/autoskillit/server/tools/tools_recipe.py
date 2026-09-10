@@ -31,12 +31,12 @@ from autoskillit.server._misc import (
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.recipe._recipe_delivery import (
     document_recipe_delivery_contract,
     finalize_recipe_delivery,
 )
-from autoskillit.server._recipe_initialization import build_completion_response
-from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.recipe._recipe_initialization import build_completion_response
 from autoskillit.server.tools._authority_feedback import build_authority_rejection_envelope
 from autoskillit.server.tools._auto_overrides import (
     _compute_effective_backend_map,
@@ -267,7 +267,7 @@ async def load_recipe(
     try:
         # Tier 1 — Authority gate: explicitly reject caller overrides for
         # SERVER_AUTHORITATIVE_INGREDIENTS keys. Mirrors open_kitchen behavior
-        # (see tools_kitchen/_open_kitchen.py). Runs at function entry, before
+        # (see tools_kitchen/_open_kitchen/__init__.py). Runs at function entry, before
         # any setup, before serve_recipe, before any session_snapshot mutation.
         if overrides:
             authority_overlap = set(overrides.keys()) & SERVER_AUTHORITATIVE_INGREDIENTS
@@ -361,7 +361,7 @@ async def load_recipe(
             if not ingredients_only and result.get("valid", False):
                 if _finalized_projection is None:
                     raise RuntimeError("valid recipe is missing its finalized projection")
-                from autoskillit.server._recipe_delivery import (  # circular-break
+                from autoskillit.server.recipe._recipe_delivery import (  # circular-break
                     prepare_recipe_delivery_generation,
                 )
 

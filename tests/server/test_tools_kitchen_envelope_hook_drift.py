@@ -31,7 +31,7 @@ async def test_named_delivery_preserves_finalized_bytes_across_anonymous_guidanc
 ):
     """Named delivery preserves finalized bytes and never injects sous-chef."""
     from autoskillit.core import RecipeDeliveryDecision, RecipeDeliveryMode
-    from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+    from autoskillit.server.recipe._recipe_delivery import FinalizedRecipeResponse
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()

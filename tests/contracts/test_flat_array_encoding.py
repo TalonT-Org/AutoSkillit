@@ -13,7 +13,7 @@ from autoskillit.core import (
     RECIPE_SECTION_REGISTRY,
     RecipeArtifactGeneration,
 )
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     build_recipe_section_page_plan,
     render_recipe_section_page,
     select_recipe_section,

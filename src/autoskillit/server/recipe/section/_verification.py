@@ -10,8 +10,8 @@ from autoskillit.core import (
     client_serialized_char_len,
     recipe_section_element_digest,
 )
-from autoskillit.server._recipe_section_planning import _decode_flow_record_elements
-from autoskillit.server.recipe_section._contracts import (
+from autoskillit.server.recipe._recipe_section_planning import _decode_flow_record_elements
+from autoskillit.server.recipe.section._contracts import (
     RECIPE_SECTION_PAGE_RANGE_FIELDS,
     PlannedRecipeSectionPage,
     RecipeSectionPaginationError,

@@ -18,8 +18,8 @@ from autoskillit.core import (
 from autoskillit.pipeline import closed_kitchen_open_state
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_delivery import retire_recipe_artifacts
-from autoskillit.server._recipe_generation import (
+from autoskillit.server.recipe._recipe_delivery import retire_recipe_artifacts
+from autoskillit.server.recipe._recipe_generation import (
     retire_kitchen as retire_recipe_generation,
 )
 

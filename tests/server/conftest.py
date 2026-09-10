@@ -36,7 +36,7 @@ def _reset_server_state():
     because the previous value may itself be leaked state from an earlier test.
     """
     from autoskillit.server import _state
-    from autoskillit.server._recipe_generation import get_recipe_generation_store
+    from autoskillit.server.recipe._recipe_generation import get_recipe_generation_store
 
     _state._ctx = None
     _state._startup_ready = None

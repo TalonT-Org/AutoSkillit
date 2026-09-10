@@ -15,8 +15,8 @@ from autoskillit.core import (
 )
 from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server import _recipe_section_planning as planning
-from autoskillit.server._recipe_initialization import recipe_initialization_receipt
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_initialization import recipe_initialization_receipt
+from autoskillit.server.recipe._recipe_section_pagination import (
     PagePlanCache,
     RecipeSectionBoundError,
     RecipeSectionPageDescriptor,
@@ -296,7 +296,7 @@ def test_select_recipe_section_rejects_empty_dynamic_content() -> None:
 
 def test_failure_floor_is_derived_from_the_registered_renderer() -> None:
     assert (
-        render_recipe_section_failure.__module__ == "autoskillit.server.recipe_section._rendering"
+        render_recipe_section_failure.__module__ == "autoskillit.server.recipe.section._rendering"
     )
     rendered_failures = [
         render_recipe_section_failure(

@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core import RECIPE_DELIVERY_SURFACE_REGISTRY
 from autoskillit.execution.backends import BACKEND_REGISTRY
-from autoskillit.server._recipe_delivery import validate_recipe_exemption_fitness
+from autoskillit.server.recipe._recipe_delivery import validate_recipe_exemption_fitness
 from tests.contracts._delivery_constants import CALIBRATED_PAGES_PER_SECTION
 from tests.contracts.fixtures.recipes import (
     ALL_DELIVERY_SURFACES,

@@ -4,7 +4,7 @@ import pytest
 
 from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import RECIPE_RESPONSE_MAX_UTF8_BYTES, RECIPE_SECTION_RESPONSE_FLOOR_BYTES
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     resolve_recipe_section_bound_bytes,
 )
 

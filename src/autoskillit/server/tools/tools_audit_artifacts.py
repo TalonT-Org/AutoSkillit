@@ -421,7 +421,7 @@ def _write_audit_disposition_bundle_sync(
     dispositions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Prepare, verify, and CAS-publish one disposition/association bundle."""
-    from autoskillit.server._recipe_execution import get_recipe_execution  # circular-break
+    from autoskillit.server.recipe._recipe_execution import get_recipe_execution  # circular-break
 
     installed = get_recipe_execution(tool_ctx)
     if installed is None:

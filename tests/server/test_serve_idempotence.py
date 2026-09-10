@@ -339,7 +339,7 @@ async def test_all_surfaces_share_canonical_flow_artifact_and_execution_identity
     monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server._recipe_generation import (
+    from autoskillit.server.recipe._recipe_generation import (
         get_recipe_generation_store,
         thaw_recipe_generation_mapping,
     )

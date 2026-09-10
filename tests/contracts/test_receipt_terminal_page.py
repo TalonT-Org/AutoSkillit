@@ -8,7 +8,7 @@ from autoskillit.core import (
     RECIPE_FLOW_SCHEMA_VERSION,
     RecipeArtifactGeneration,
 )
-from autoskillit.server._recipe_initialization import recipe_initialization_receipt
+from autoskillit.server.recipe._recipe_initialization import recipe_initialization_receipt
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 

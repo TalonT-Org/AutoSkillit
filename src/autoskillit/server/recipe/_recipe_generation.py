@@ -18,7 +18,7 @@ from autoskillit.core import (
     RecipeExecutionSnapshot,
     RecipeFlowGeneration,
 )
-from autoskillit.server.recipe_section._lifecycle import (
+from autoskillit.server.recipe.section._lifecycle import (
     register_kitchen_retirement_callback,
 )
 

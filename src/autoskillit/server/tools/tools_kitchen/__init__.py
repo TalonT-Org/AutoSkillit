@@ -61,9 +61,9 @@ from autoskillit.server._misc import (
     _quota_refresh_loop,
     resolve_log_dir,
 )
-from autoskillit.server._recipe_delivery import finalize_recipe_delivery
-from autoskillit.server._recipe_execution import clear_recipe_execution
-from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
+from autoskillit.server.recipe._recipe_delivery import finalize_recipe_delivery
+from autoskillit.server.recipe._recipe_execution import clear_recipe_execution
+from autoskillit.server.recipe._recipe_segment_delivery import prepare_recipe_segment_delivery
 from autoskillit.server.tools._overlay_state import locked_overlay, update_overlay
 from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 from autoskillit.server.tools._serve_helpers import project_orchestrator_guidance, serve_recipe

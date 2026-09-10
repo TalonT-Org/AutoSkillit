@@ -106,7 +106,9 @@ _KITCHEN_TOOL_MODULE_PATHS: Mapping[str, str] = MappingProxyType(
         "server.tools.tools_kitchen._close_kitchen": (
             "server/tools/tools_kitchen/_close_kitchen.py"
         ),
-        "server.tools.tools_kitchen._open_kitchen": "server/tools/tools_kitchen/_open_kitchen.py",
+        "server.tools.tools_kitchen._open_kitchen": (
+            "server/tools/tools_kitchen/_open_kitchen/__init__.py"
+        ),
         "server.tools.tools_pipeline_tracker._handlers": (
             "server/tools/tools_pipeline_tracker/_handlers.py"
         ),

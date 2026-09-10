@@ -36,7 +36,7 @@ from autoskillit.core import (
     load_standalone_audit_evidence,
 )
 from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
-from autoskillit.server._recipe_execution import DefaultInputPreflightResolver
+from autoskillit.server.recipe._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.server.tools.tools_audit_artifacts import (
     _build_semantic_result,
     _SemanticInputError,
@@ -469,7 +469,7 @@ def test_disposition_final_cas_rejects_prepared_artifact_toctou(
         recipe_execution_lock=_TamperAtFinalCas(tamper),
     )
     monkeypatch.setattr(
-        "autoskillit.server._recipe_execution.get_recipe_execution",
+        "autoskillit.server.recipe._recipe_execution.get_recipe_execution",
         lambda _tool_ctx: installed,
     )
 
@@ -510,7 +510,7 @@ def test_disposition_final_cas_commits_unchanged_verified_copy(
         recipe_execution_lock=_TamperAtFinalCas(lambda: None),
     )
     monkeypatch.setattr(
-        "autoskillit.server._recipe_execution.get_recipe_execution",
+        "autoskillit.server.recipe._recipe_execution.get_recipe_execution",
         lambda _tool_ctx: installed,
     )
 

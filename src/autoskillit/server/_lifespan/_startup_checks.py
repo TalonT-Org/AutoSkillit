@@ -86,7 +86,7 @@ def run_startup_drift_check() -> None:
 
 def _activate_recipe_kitchen(kitchen_id: str) -> None:
     """Publish one kitchen to the recipe-generation lifecycle."""
-    from autoskillit.server._recipe_generation import activate_kitchen  # circular-break
+    from autoskillit.server.recipe._recipe_generation import activate_kitchen  # circular-break
 
     activate_kitchen(kitchen_id)
 

@@ -13,7 +13,7 @@ from autoskillit.core import (
 )
 from autoskillit.server import mcp
 from autoskillit.server._misc import strip_ingredients_only_keys
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     enforce_recipe_resource_response,
     prepare_recipe_delivery_generation,
 )

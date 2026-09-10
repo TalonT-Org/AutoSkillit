@@ -30,7 +30,7 @@ def _reload_lock(sentinel_dir: Path) -> Iterator[None]:
 
     Two independent OS processes (cook, launch) poll the same reload_sentinel/
     directory; without this, their enumerate/prune/read/delete sequences can
-    interleave and race. Mirrors server/_recipe_artifact.py's _generation_lock
+    interleave and race. Mirrors server/recipe/_recipe_artifact.py's _generation_lock
     (a fixed-name lock file created inside the locked directory) — the closer
     precedent for locking a directory, versus core/runtime/session_registry.py's
     _registry_lock, which locks a file's sibling instead.

@@ -21,11 +21,11 @@ from autoskillit.core import (
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     finalize_recipe_delivery,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_generation import RecipeGenerationStore
+from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
 from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
 from tests.contracts.fixtures.recipes import BUNDLED_RECIPE_PATHS
 

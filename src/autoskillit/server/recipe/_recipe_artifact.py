@@ -34,13 +34,13 @@ from autoskillit.core import (
     load_yaml,
     validate_recipe_artifact_sections,
 )
-from autoskillit.server._recipe_generation import (
+from autoskillit.server.recipe._recipe_generation import (
     RecipeGenerationError,
     RecipeGenerationRecord,
     generation_json_primitive,
     get_recipe_generation_store,
 )
-from autoskillit.server.recipe_section._lifecycle import notify_kitchen_retired
+from autoskillit.server.recipe.section._lifecycle import notify_kitchen_retired
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
@@ -294,7 +294,7 @@ def prepare_recipe_delivery_generation(
     finalized_projection: FinalizedRecipeProjection,
 ) -> PreparedRecipeGeneration:
     """Build or reuse one server-owned canonical compile generation."""
-    from autoskillit.server._recipe_execution import (  # circular-break
+    from autoskillit.server.recipe._recipe_execution import (  # circular-break
         build_recipe_execution_snapshot,
     )
 

@@ -20,7 +20,7 @@ from autoskillit.core import (
 )
 from autoskillit.core.io import resolve_temp_dir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.server._recipe_execution import get_recipe_execution
+from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
 from autoskillit.workspace import project_default_plugin_authority

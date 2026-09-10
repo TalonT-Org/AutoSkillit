@@ -24,11 +24,11 @@ from autoskillit.core import (
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     persist_recipe_artifact,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     build_recipe_section_page_plan,
     render_recipe_section_page,
     resolve_recipe_section_bound_bytes,

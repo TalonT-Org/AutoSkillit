@@ -286,7 +286,7 @@ def _claude_host_attestation_env(
 
     Carries the launcher's attestation of what the connected Claude Code host
     client supports to the MCP server — read once at server startup (see
-    ``server._recipe_delivery``) and used as the conservative-default source
+    ``server.recipe._recipe_delivery``) and used as the conservative-default source
     for recipe-delivery decisions.
 
     ``annotation_support`` is derived from the installed CLI version probed by

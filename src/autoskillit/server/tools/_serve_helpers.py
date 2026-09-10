@@ -257,7 +257,9 @@ def reset_session_serve_overrides(ctx: ToolContext) -> None:
     """
     ctx.session_serve_overrides = None
     ctx.session_serve_defer_unresolved = False
-    from autoskillit.server._recipe_execution import clear_recipe_execution  # circular-break
+    from autoskillit.server.recipe._recipe_execution import (
+        clear_recipe_execution,
+    )  # circular-break
 
     clear_recipe_execution(ctx)
 

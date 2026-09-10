@@ -21,7 +21,7 @@ from autoskillit.fleet._capture import _extract_captures
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
 )
-from autoskillit.server._recipe_execution import get_recipe_execution
+from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools.tools_audit_artifacts import (
     write_audit_semantic_result,
 )

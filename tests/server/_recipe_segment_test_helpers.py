@@ -6,7 +6,7 @@ from types import ModuleType
 
 import pytest
 
-from autoskillit.server._recipe_segment_delivery import PreparedRecipeSegmentDelivery
+from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 
 def install_prepared_recipe_segment(

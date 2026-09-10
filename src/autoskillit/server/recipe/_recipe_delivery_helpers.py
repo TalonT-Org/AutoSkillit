@@ -28,9 +28,9 @@ from autoskillit.core import (
     load_yaml,
 )
 from autoskillit.pipeline import RecipeInitializationRequirement
-from autoskillit.server._recipe_artifact import RecipeArtifactSchemaError
-from autoskillit.server._recipe_initialization import build_embedded_completion_response
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_artifact import RecipeArtifactSchemaError
+from autoskillit.server.recipe._recipe_initialization import build_embedded_completion_response
+from autoskillit.server.recipe._recipe_section_pagination import (
     get_or_build_recipe_section_page_plan,
     select_recipe_section,
 )

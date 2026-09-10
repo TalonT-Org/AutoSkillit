@@ -79,6 +79,19 @@ class _RecoveryDebt:
             not isinstance(component, str) or not component for component in self.owner
         ):
             raise ValueError("managed recovery owner must contain three non-empty strings")
+        for field_name in (
+            "permit_id",
+            "flag_dir",
+            "request_session_id",
+            "managed_parent_id",
+            "batch_id",
+            "assignment_id",
+            "attempt_id",
+            "run_id",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"managed recovery {field_name} must be a non-empty string")
 
 
 RecoveryVerifier = Callable[[_RecoveryDebt], Awaitable[bool | None]]

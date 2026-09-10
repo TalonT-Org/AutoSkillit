@@ -13,6 +13,7 @@ from autoskillit.core import (
     SkillSource,
     SkillSourceIdentity,
     WriteBehaviorSpec,
+    write_versioned_json,
 )
 from autoskillit.hooks._join_ledger import aggregate_batch
 from autoskillit.hooks._session_binding import LoadedSkillEntry
@@ -243,3 +244,35 @@ async def test_capacity_acquisition_failure_terminalizes_assignment(tmp_path, mo
 
     assert result.wave_outcome == "launch_failed"
     assert capacity.active_count == 0
+
+
+@pytest.mark.anyio
+async def test_recovery_rejects_malformed_persisted_string_fields(tmp_path) -> None:
+    state_root = tmp_path / "state"
+    write_versioned_json(
+        state_root / "recovery.json",
+        {
+            "debt": [
+                {
+                    "owner": ["batch", "assignment", "run"],
+                    "permit_id": "permit-1",
+                    "flag_dir": str(tmp_path / "channel"),
+                    "request_session_id": 7,
+                    "managed_parent_id": "parent",
+                    "batch_id": "batch",
+                    "assignment_id": "assignment",
+                    "attempt_id": "attempt",
+                    "run_id": "run",
+                }
+            ]
+        },
+        1,
+    )
+    service = DefaultManagedFixedBatchSupervisor(
+        capacity=DefaultManagedWorkerCapacity(),
+        background=DefaultBackgroundSupervisor(),
+        state_root=state_root,
+    )
+
+    assert not await service.reconcile_startup()
+    assert "request_session_id must be a non-empty string" in service.recovery_diagnostic

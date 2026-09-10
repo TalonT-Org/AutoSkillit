@@ -314,7 +314,7 @@ def _patch_for_flush(monkeypatch, tmp_path, skill_result):
     Mirrors _patch_common from test_flush_provider_integration.py, minus the ctx
     argument and the unused _sub_result shared state.
     """
-    import autoskillit.execution.session_log as _sl_mod
+    import autoskillit.execution.evidence.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
 
     sub_result = SubprocessResult(

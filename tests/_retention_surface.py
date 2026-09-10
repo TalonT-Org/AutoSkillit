@@ -538,7 +538,7 @@ _CS = (
 )
 _WGW = "src/autoskillit/workspace/worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/worktree.py::remove_worktree_sidecar"
-_SL = "src/autoskillit/execution/_session_retention.py::apply_session_retention"
+_SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
 _PP = "src/autoskillit/workspace/_projection_cache.py::prune_stale_projections"
 _PRE = "src/autoskillit/workspace/_projection_cache.py::_reconcile_projection_entry"
@@ -561,7 +561,7 @@ _HC = (
 _HP = (
     "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::repair_broken_projection_hooks"
 )
-_SR = "src/autoskillit/execution/_session_log_recovery.py::recover_crashed_sessions"
+_SR = "src/autoskillit/execution/evidence/_session_log_recovery.py::recover_crashed_sessions"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_reap --

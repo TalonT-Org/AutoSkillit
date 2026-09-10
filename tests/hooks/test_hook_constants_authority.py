@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks import _hook_constants
+from autoskillit.hooks._runtime import _hook_constants
 from autoskillit.hooks._runtime._hook_constants import (
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,

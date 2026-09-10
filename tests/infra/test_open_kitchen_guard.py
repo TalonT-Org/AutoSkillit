@@ -130,7 +130,7 @@ def test_hook_config_is_read_from_state_root_outside_hook_cwd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Quota settings honor the state-root config when a hook runs elsewhere."""
-    from autoskillit.hooks import _hook_settings
+    from autoskillit.hooks._runtime import _hook_settings
 
     project_dir = tmp_path / "project"
     foreign_cwd = tmp_path / "foreign"

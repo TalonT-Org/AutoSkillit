@@ -83,14 +83,24 @@ def _module_assignment(source: str, symbol: str) -> ast.expr:
         tree = ast.parse(source)
     except SyntaxError as exc:
         raise UnsupportedSurfaceShape(f"{symbol}: source does not parse ({exc})") from exc
+    value: ast.expr | None = None
     for node in tree.body:
         if isinstance(node, ast.Assign):
             targets = node.targets
             if len(targets) == 1 and isinstance(targets[0], ast.Name) and targets[0].id == symbol:
-                return node.value
+                if value is not None:
+                    raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
+                value = node.value
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and node.target.id == symbol and node.value:
-                return node.value
+                if value is not None:
+                    raise UnsupportedSurfaceShape(f"{symbol}: multiple module-level assignments")
+                value = node.value
+        elif isinstance(node, ast.AugAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == symbol:
+                raise UnsupportedSurfaceShape(f"{symbol}: augmented assignment is not readable")
+    if value is not None:
+        return value
     raise SurfaceMissing(f"{symbol}: no module-level assignment")
 
 

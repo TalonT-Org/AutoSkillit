@@ -249,6 +249,11 @@ def test_extract_reads_annotated_assignment() -> None:
     assert values == {None: check.SurfaceValue(limit=156)}
 
 
+def test_extract_rejects_augmented_reassignment() -> None:
+    with pytest.raises(check.UnsupportedSurfaceShape, match="augmented assignment"):
+        check.extract_surface_values("BUDGET = 156\nBUDGET += 1", _int_scalar())
+
+
 def test_extract_approvals_rejects_nonpositive_issue() -> None:
     source = """
 POLICY_RELAXATION_APPROVALS = (

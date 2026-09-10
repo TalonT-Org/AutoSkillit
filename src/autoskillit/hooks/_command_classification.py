@@ -42,10 +42,12 @@ else:
 
 
 def strip_heredoc_bodies(command: str) -> str:
+    """Strip heredoc bodies while preserving opening lines and terminators."""
     return _strip_heredoc_bodies_impl(command)
 
 
 def tokenize_command_segments(command: str) -> list[list[str]]:
+    """Split a shell command into segments of verb-and-argument tokens."""
     return _tokenize_command_segments_impl(command)
 
 

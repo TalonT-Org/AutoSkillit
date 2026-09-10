@@ -404,7 +404,7 @@ class TestModuleCascadeServerCrossLayerGuard:
         phantoms = [
             stem
             for stem in MODULE_CASCADE_SERVER_CROSS_LAYER
-            if not (_SRC_ROOT / "server" / f"{stem}.py").exists()
+            if not any((_SRC_ROOT / "server").rglob(f"{stem}.py"))
         ]
         assert not phantoms, (
             "MODULE_CASCADE_SERVER_CROSS_LAYER contains missing server modules:\n"

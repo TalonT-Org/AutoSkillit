@@ -215,8 +215,13 @@ class TestSyncHooksToCodexConfig:
                     all_cmds.append(h.get("command", ""))
         autoskillit_cmds = [c for c in all_cmds if "/autoskillit/" in c or "_dispatch.py" in c]
         assert len(autoskillit_cmds) > 0
-        stale = [c for c in all_cmds if "old" in c]
-        assert len(stale) == 0
+        stale_matchers = [
+            entry.get("matcher")
+            for entries in hooks.values()
+            for entry in entries
+            if entry.get("matcher") == "StaleMatch"
+        ]
+        assert len(stale_matchers) == 0
 
     def test_sync_empty_config(self, tmp_path):
         p = tmp_path / "config.toml"

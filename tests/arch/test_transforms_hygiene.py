@@ -302,7 +302,7 @@ def test_session_type_visibility_uses_known_tags():
 
     allowed = ALL_VISIBILITY_TAGS | CATEGORY_TAGS
 
-    session_type_path = _SRC_ROOT / "server" / "_session_type.py"
+    session_type_path = _SRC_ROOT / "server" / "lifecycle" / "_session_type.py"
     source = session_type_path.read_text()
     tree = ast.parse(source, filename=str(session_type_path))
 

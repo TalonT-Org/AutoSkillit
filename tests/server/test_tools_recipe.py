@@ -517,7 +517,7 @@ async def test_list_recipes_returns_error_string_when_context_missing(monkeypatc
 
 # P5F2-T4  (import hygiene check)
 def test_tools_recipe_does_not_import_raw_ctx():
-    """tools_recipe.py must not import _ctx directly from server._state."""
+    """tools_recipe.py must not import _ctx directly from server.lifecycle._state."""
     import ast
     import pathlib
 
@@ -530,7 +530,7 @@ def test_tools_recipe_does_not_import_raw_ctx():
             if node.module and "_state" in node.module:
                 names = [alias.name for alias in node.names]
                 assert "_ctx" not in names, (
-                    "tools_recipe.py must not import _ctx directly from server._state"
+                    "tools_recipe.py must not import _ctx directly from server.lifecycle._state"
                 )
 
 

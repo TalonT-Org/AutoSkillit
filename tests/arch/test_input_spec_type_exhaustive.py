@@ -43,7 +43,7 @@ def test_check_input_contracts_uses_match_assert_never():
     """_check_input_contracts must use match/assert_never for exhaustive dispatch."""
     from autoskillit.core import paths
 
-    src_file = paths.pkg_root() / "server" / "_guards.py"
+    src_file = paths.pkg_root() / "server" / "lifecycle" / "_guards.py"
     assert src_file.exists(), f"File not found: {src_file}"
     body = _get_function_body(src_file.read_text(), "_check_input_contracts")
     fn_tree = ast.Module(body=body, type_ignores=[])

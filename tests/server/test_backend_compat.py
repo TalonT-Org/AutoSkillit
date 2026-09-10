@@ -57,8 +57,6 @@ def test_managed_join_attestation_is_server_issued_and_admits_preflight() -> Non
         )
         is None
     )
-    authority.rotate_activation_epoch()
-    assert authority.verify(context, backend="codex", parent_session_id="parent-1") is None
 
 
 def test_codex_managed_join_attestation_does_not_admit_claude_preflight() -> None:

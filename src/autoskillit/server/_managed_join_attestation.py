@@ -34,13 +34,6 @@ class DefaultManagedJoinAttestationAuthority:
         with self._lock:
             return self._activation_epoch
 
-    def rotate_activation_epoch(self) -> int:
-        """Invalidate unopened contexts after a visibility or hook-state transition."""
-        with self._lock:
-            self._activation_epoch += 1
-            self._issued.clear()
-            return self._activation_epoch
-
     def issue(
         self,
         *,

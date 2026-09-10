@@ -21,7 +21,10 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         "_claude_env.py",
         "claude_conventions.py",
         "feature_flags.py",
-        "io.py",
+        # NOTE: ``core/io.py`` is absent. A module cannot sit beside a
+        # same-named package — Python resolves ``autoskillit.core.io`` to
+        # ``core/io/`` unconditionally, so the shim was unreachable dead code
+        # and was deleted. ``core/io/io.py`` is the real module and is counted.
         "paths.py",
         "path_containment.py",
         "_json.py",
@@ -51,8 +54,9 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         # Phase C: core/context_admission/ sub-package
         # NOTE: ``context_admission.py`` was moved into the
         # ``core/context_admission/`` sub-package itself, which re-exports
-        # every symbol through its ``__init__.py``. ``from autoskillit.core.context_admission import X``
-        # resolves through the sub-package, so no top-level shim is needed.
+        # every symbol through its ``__init__.py``. The import
+        # ``from autoskillit.core.context_admission import X`` resolves
+        # through the sub-package, so no top-level shim is needed.
         "context_admission_helpers.py",
         "context_admission_accept_release.py",
         "context_admission_expiry_rollover.py",
@@ -86,7 +90,9 @@ _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
         "_cmd_rpc_guards.py",
         "_cmd_rpc_issues.py",
         "_cmd_rpc_merge.py",
-        "contracts.py",
+        # NOTE: ``recipe/contracts.py`` is absent for the same reason as
+        # ``core/io.py`` above — it sat beside ``recipe/contracts/`` and so was
+        # unreachable. ``recipe/contracts/contracts.py`` is the real module.
         "_contracts_card.py",
         "_contracts_manifest.py",
         "_contracts_staleness.py",

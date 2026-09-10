@@ -109,16 +109,14 @@ class _ManagedLeafLaunchAdapter:
     adaptation: SkillSemanticAdaptationResult
 
     def _write_leaf_binding(self, leaf_session_id: str, projection: ManagedLeafProjection) -> None:
-        attestation = getattr(
-            getattr(self.projection_context, "adaptation_context", None),
-            "managed_join_attestation",
-            None,
+        adaptation_context = self.projection_context.adaptation_context
+        attestation = (
+            adaptation_context.managed_join_attestation if adaptation_context is not None else None
         )
-        config_digest = getattr(attestation, "hook_registry_digest", "")
+        config_digest = attestation.hook_registry_digest if attestation is not None else ""
         if not isinstance(config_digest, str) or not config_digest:
             raise SkillContractError("managed leaf launch lacks an attested config digest")
-        assignment = getattr(getattr(projection, "binding", None), "assignment", None)
-        assignment_id = getattr(assignment, "assignment_id", "")
+        assignment_id = projection.binding.assignment.assignment_id
         if not isinstance(assignment_id, str) or not assignment_id:
             raise SkillContractError("managed leaf launch lacks an assignment identity")
         selected = self.launch.selected_source

@@ -218,3 +218,28 @@ async def test_unadmitted_settlement_failure_does_not_leak_capacity(tmp_path, mo
 
     assert result.wave_outcome == "pending"
     assert capacity.active_count == 0
+
+
+@pytest.mark.anyio
+async def test_capacity_acquisition_failure_terminalizes_assignment(tmp_path, monkeypatch) -> None:
+    capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
+
+    async def fail_acquire(_owner):
+        raise RuntimeError("capacity unavailable")
+
+    monkeypatch.setattr(capacity, "acquire", fail_acquire)
+    service = ManagedFixedBatchSupervisor(
+        capacity=capacity,
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+
+    def launch_leaf(_projection, _permit):
+        raise AssertionError("launch must not run without capacity")
+
+    assert await service.reconcile_startup()
+
+    result = await service.run(_binding(tmp_path, launch_leaf))
+
+    assert result.wave_outcome == "launch_failed"
+    assert capacity.active_count == 0

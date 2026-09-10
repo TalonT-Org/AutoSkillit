@@ -480,8 +480,8 @@ class ManagedFixedBatchSupervisor:
                         assignment_id=ledger_assignment_id,
                         exc_info=True,
                     )
-            elif permit is not None:
-                # Projection/preparation failed after a permit but before admission.
+            else:
+                # Capacity acquisition, projection, or preparation failed before admission.
                 # Mark only this assignment as launch-failed so peer assignments in
                 # the same batch can still complete their own lifecycle. We use
                 # settle_unadmitted_assignment (not settle_assignment) because the

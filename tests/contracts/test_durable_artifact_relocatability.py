@@ -43,13 +43,13 @@ class TestRegistryIntegrity:
     """Every registry entry resolves and obeys its machine-local contract."""
 
     def test_session_archive_writer_has_exact_machine_local_contract(self) -> None:
-        writer = "autoskillit.execution.session_log:_append_session_archive_rows"
+        writer = "autoskillit.execution.evidence.session_log:_append_session_archive_rows"
         entries = [entry for entry in DURABLE_ARTIFACT_WRITERS if entry.writer == writer]
         assert len(entries) == 1
         entry = entries[0]
         assert entry.machine_local is True
         assert entry.detection == (
-            "autoskillit.execution.session_index:find_stale_session_archive_references"
+            "autoskillit.execution.evidence.session_index:find_stale_session_archive_references"
         )
         assert callable(_resolve(entry.writer))
         assert callable(_resolve(entry.detection))

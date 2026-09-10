@@ -500,7 +500,7 @@ def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_onc
     )
 
     target = (
-        "src/autoskillit/execution/_session_log_recovery.py",
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
         "recover_crashed_sessions",
     )
     run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]

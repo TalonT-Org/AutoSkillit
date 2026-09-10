@@ -18,7 +18,7 @@ changes:
   - id: build-leaf-headless-cmd-renamed
     description: >
       build_leaf_headless_cmd() renamed to build_skill_session_cmd() in
-      autoskillit.execution.commands.
+      autoskillit.execution.runtime.commands.
     instruction: |
       Update any direct callers of build_leaf_headless_cmd() to use
       build_skill_session_cmd(). Function signature is unchanged.

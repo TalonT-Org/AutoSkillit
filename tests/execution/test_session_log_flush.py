@@ -1470,7 +1470,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     def _capture(**kwargs):
         captured.update(kwargs)
 
-    # _flush() does a local import from autoskillit.execution.session_log.
+    # _flush() does a local import from autoskillit.execution.evidence.session_log.
     # Patch the function at its source module so the local import picks up the mock.
     with mock.patch("autoskillit.execution.evidence.session_log.flush_session_log", side_effect=_capture):
         with tempfile.TemporaryDirectory() as td:

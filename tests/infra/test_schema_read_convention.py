@@ -107,7 +107,7 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/core/pipeline/_execution_marker.py": (
         "Progress signal — written and deleted, never read back"
     ),
-    "src/autoskillit/execution/session_log.py": (
+    "src/autoskillit/execution/evidence/session_log.py": (
         "token_usage.json readers use dual-key fallback, not version-gated reading"
     ),
     "src/autoskillit/workspace/session_skill_catalog.py": (

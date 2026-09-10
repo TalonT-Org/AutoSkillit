@@ -284,7 +284,7 @@ def test_all_headless_builders_handle_output_format():
 
     builders_with_format = []
     for mod_name in (
-        "autoskillit.execution.commands",
+        "autoskillit.execution.runtime.commands",
         "autoskillit.execution.backends.claude",
         "autoskillit.execution.backends._claude.session_commands",
         "autoskillit.execution.backends._codex.session_commands",

@@ -390,14 +390,14 @@ def test_injected_reclaimer_is_not_silently_unclassified() -> None:
 def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     """Canary: target-list completeness survives a coordinated target/row deletion."""
     target = (
-        "src/autoskillit/execution/_session_log_recovery.py",
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
         "recover_crashed_sessions",
     )
     reduced_targets = RECLAIMER_TARGETS - {target}
     reduced_registry = {
         key: decision
         for key, decision in _REAL_REGISTRY.items()
-        if not key.startswith("src/autoskillit/execution/_session_log_recovery.py::")
+        if not key.startswith("src/autoskillit/execution/evidence/_session_log_recovery.py::")
     }
     assert _actual_retention_branches(reduced_targets) == set(reduced_registry)
     errors = _target_partition_errors(
@@ -407,5 +407,5 @@ def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     )
     assert errors == [
         "unclassified discovered reclaimers: "
-        "[('src/autoskillit/execution/_session_log_recovery.py', 'recover_crashed_sessions')]"
+        "[('src/autoskillit/execution/evidence/_session_log_recovery.py', 'recover_crashed_sessions')]"
     ]

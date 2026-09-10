@@ -185,7 +185,7 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
     # that mangles, coerces, or drops a value while keeping its key would fail this
     # test. Fields this test overrode above use the override; every other field
     # uses _flush()'s / flush_session_log()'s own default (see tests/execution/
-    # conftest.py and src/autoskillit/execution/session_log.py).
+    # conftest.py and src/autoskillit/execution/evidence/session_log.py).
     expected_values: dict[str, object] = {
         "success": False,
         "needs_retry": True,

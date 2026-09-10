@@ -31,7 +31,7 @@ async def test_delegates_to_merge_queue_watcher(
     install_prepared_recipe_segment(monkeypatch, tools_ci_merge_queue, step_name="queue")
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -65,7 +65,7 @@ async def test_infers_repo_from_git_remote_when_repo_empty(tool_ctx_kitchen_open
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -88,7 +88,7 @@ async def test_explicit_repo_skips_subprocess(tool_ctx_kitchen_open):
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         await wait_for_merge_queue(
@@ -170,7 +170,7 @@ async def test_wait_for_merge_queue_invalid_remote_url_falls_through_to_inferenc
     # GitHub origin in some environments (e.g. TMPDIR=$HOME), which would otherwise leak
     # into resolve_remote_repo and break the "repo is None" assertion below.
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -210,7 +210,7 @@ async def test_wait_for_merge_queue_watcher_exception_returns_structured_json(
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -249,7 +249,7 @@ async def test_wait_for_merge_queue_serializes_every_pr_state(pr_state, tool_ctx
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()
@@ -294,7 +294,7 @@ class TestWaitForMergeQueueTiming:
         )
         tool_ctx_kitchen_open.merge_queue_watcher = watcher
         with patch(
-            "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+            "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
         ) as mock_proc:
             proc_inst = AsyncMock()
@@ -315,7 +315,7 @@ class TestWaitForMergeQueueTiming:
         )
         tool_ctx_kitchen_open.merge_queue_watcher = watcher
         with patch(
-            "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+            "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
         ) as mock_proc:
             proc_inst = AsyncMock()

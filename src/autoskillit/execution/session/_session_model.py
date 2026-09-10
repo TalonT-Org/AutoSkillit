@@ -236,7 +236,7 @@ class ClaudeSessionResult:
 
 
 def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
-    """Return whether a record is a real parent assistant observation."""
+    """Return true for parent assistant records, excluding subagents and synthetic turns."""
     if obj.get("type") != "assistant" or obj.get("subagent_type"):
         return False
     message = obj.get("message")

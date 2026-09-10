@@ -31,6 +31,8 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 └── sessions/
     └── {session_id}/                 # or pid_{pid}_{timestamp} if session_id unavailable
         ├── proc_trace.jsonl          # Full ProcSnapshot series
+        ├── token_usage.json          # Bounded aggregate and turn-series descriptor
+        ├── turn_usage.jsonl          # One row per observed parent model request
         ├── summary.json              # Session metadata and outcome
         └── anomalies.jsonl           # Present only if anomalies detected
 ```
@@ -109,6 +111,36 @@ Absent values read as empty lists.
 | --- | --- | --- |
 | `model_identifier` | Effective model (OTLP-proven native top-level when available, otherwise launch/token fallback). | `sessions.jsonl`, `token_usage.json`, `summary.json.versions.model_identifier` (when a versions bundle exists) |
 | `configured_model` | Requested launch value. | `sessions.jsonl`, `token_usage.json`. Not written to `summary.json`. |
+
+## Per-request token usage
+
+Completed sessions with per-request evidence publish `turn_usage.jsonl` before
+`token_usage.json`; `summary.json` remains the final completion artifact. The
+version-3 token descriptor adds `turn_usage_file`, `turn_usage_count`, and
+`turn_usage_schema_version`. The file reference is `null` with count zero when
+no series was observed. The JSONL row schema is version 1.
+
+Each row retains nullable source `message_id`, `request_id`, `timestamp`, and
+observed `model`, plus `input_tokens`, `output_tokens`, `cache_read_tokens`,
+`cache_creation_tokens`, `context_window_tokens`, and `context_fraction`.
+Ledger input is inclusive of cached input: Claude raw counters are combined
+only when all input components are known, while Codex input is already
+inclusive. Unknown counters and metadata remain `null`.
+
+`context_fraction` is the normalized cache-read proxy
+`cache_read_tokens / context_window_tokens` for that row's observed model. It
+does not include uncached or newly cached input and is not total context
+occupancy. Claude snapshots deduplicate only by a non-empty native
+`message.id`, preserving first-seen order and the first timestamp. Codex rows
+come from advancing `last_token_usage` snapshots in the native rollout, bounded
+to the subprocess interval; the terminal stdout aggregate is not a request row.
+
+Use the `turn_usage` handle of `inspect_session_logs` to read the series. Reads
+use the tool's existing byte cap and signed continuation token, and incomplete
+final JSONL records are withheld. Inspection reads the retained sidecar and
+does not reparse a transcript. Older diagnostics acquire a series only when
+their native evidence is explicitly processed; no automatic archive backfill
+is performed.
 
 ## Native OTLP capture and correlation
 

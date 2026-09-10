@@ -16,6 +16,7 @@ from autoskillit.core.types import (
 )
 from autoskillit.execution.headless._headless_evidence import _adapt_agent_result
 from autoskillit.execution.session._exit_classification import classify_infra_exit
+from autoskillit.execution.session._turn_usage import build_turn_token_entry
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -59,6 +60,7 @@ def test_session_id_preserved() -> None:
 
 def test_hardcoded_thinking_defaults() -> None:
     result = _adapt_agent_result(_make_agent_result())
+    assert result.turn_usage == []
     assert result.has_thinking_only_turn is False
     assert result.seen_block_types == frozenset()
     assert result.seen_ndjson_unknown_event_count == 0
@@ -285,6 +287,7 @@ def test_empty_output_maps_to_empty_result() -> None:
 
 
 def test_full_round_trip_all_fields() -> None:
+    turn_usage = [build_turn_token_entry(backend="codex", request_id="request-1")]
     agent = _make_agent_result(
         success=True,
         exit_code=42,
@@ -299,6 +302,7 @@ def test_full_round_trip_all_fields() -> None:
             "stop_reasons": ["end_turn"],
             "canonical_token_usage": {"input": 200, "output": 50},
             "token_usage": {"input": 100},
+            "turn_usage": turn_usage,
             "command_executions": [{"name": "bash", "cmd": "ls"}],
             "mcp_tool_calls": [{"name": "read", "path": "/tmp"}],
             "file_changes": ["main.py"],
@@ -315,6 +319,7 @@ def test_full_round_trip_all_fields() -> None:
     assert result.session_id == "sess-abc"
     assert result.errors == ["some warning"]
     assert result.token_usage == {"input": 200, "output": 50}
+    assert result.turn_usage == turn_usage
     assert result.assistant_messages == ["I updated the file."]
     assert result.tool_uses == [
         {"name": "bash", "cmd": "ls"},

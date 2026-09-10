@@ -216,6 +216,7 @@ class TestExecutionSubpackages:
             "_retry_fsm",
             "_exit_classification",
             "_provider_parse",
+            "_turn_usage",
             "_managed_headless_session_lineage",
             "_managed_headless_session_lineage_codec",
             "_managed_headless_session_lineage_indexes",

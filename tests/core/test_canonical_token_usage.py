@@ -221,30 +221,35 @@ class TestFrozen:
 
 
 def test_importable_via_core_gateway():
-    from autoskillit.core.types import CanonicalTokenUsage
+    from autoskillit.core.types import CanonicalTokenUsage, TurnTokenEntry
 
     assert CanonicalTokenUsage is not None
+    assert TurnTokenEntry is not None
 
 
 def test_canonical_token_usage_importable_from_core():
-    from autoskillit.core import CanonicalTokenUsage
+    from autoskillit.core import CanonicalTokenUsage, TurnTokenEntry
 
     assert CanonicalTokenUsage is not None
+    assert TurnTokenEntry is not None
 
 
 def test_canonical_token_usage_in_types_all():
     from autoskillit.core.types import __all__ as types_all
 
     assert "CanonicalTokenUsage" in types_all
+    assert "TurnTokenEntry" in types_all
 
 
 def test_canonical_token_usage_in_core_all():
     import autoskillit.core as core
 
     assert "CanonicalTokenUsage" in core.__all__
+    assert "TurnTokenEntry" in core.__all__
 
 
 def test_canonical_token_usage_not_in_private_reexports():
     import autoskillit.core as core
 
     assert "CanonicalTokenUsage" not in core._PRIVATE_REEXPORTS
+    assert "TurnTokenEntry" not in core._PRIVATE_REEXPORTS

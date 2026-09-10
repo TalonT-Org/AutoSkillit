@@ -3,9 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict
 
-__all__ = ["CanonicalTokenUsage"]
+__all__ = ["CanonicalTokenUsage", "TurnTokenEntry"]
+
+
+class TurnTokenEntry(TypedDict):
+    """One provider-observed parent model request."""
+
+    backend: str
+    message_id: str | None
+    request_id: str | None
+    timestamp: str | None
+    model: str | None
+    input_tokens: int | None
+    output_tokens: int | None
+    cache_read_tokens: int | None
+    cache_creation_tokens: int | None
+    context_window_tokens: int | None
+    context_fraction: float | None
 
 
 @dataclass(frozen=True, slots=True)

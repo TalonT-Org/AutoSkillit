@@ -30,6 +30,7 @@ from autoskillit.core import (
     extract_skill_name,
     get_logger,
 )
+from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,
     _apply_budget_guard,
@@ -76,10 +77,20 @@ def _resolve_skill_session_id(
     return result.session_id or result.channel_b_session_id
 
 
-def _parse_stdout(stdout: str, backend: CodingAgentBackend) -> ClaudeSessionResult:
+def _parse_stdout(result: SubprocessResult, backend: CodingAgentBackend) -> ClaudeSessionResult:
     if backend.capabilities.supports_claude_format_stdout:
-        return parse_session_result(stdout)
-    agent_result = backend.result_parser().parse_stdout(stdout)
+        return parse_session_result(result.stdout)
+    agent_result = backend.result_parser().parse_stdout(result.stdout)
+    rows = extract_codex_turn_usage(
+        backend.session_locator(),
+        agent_result.session_id or result.session_id or result.channel_b_session_id,
+        result.start_ts,
+        result.end_ts,
+    )
+    agent_result = dataclasses.replace(
+        agent_result,
+        raw={**agent_result.raw, "turn_usage": rows},
+    )
     return _adapt_agent_result(agent_result)
 
 
@@ -152,6 +163,7 @@ def _make_terminated_result(
         retry_reason=retry_reason,
         stderr=result.stderr if result.stderr else "",
         token_usage=session.token_usage,
+        turn_usage=session.turn_usage,
         evidence=evidence,
         kill_reason=result.kill_reason,
         last_stop_reason=session.last_stop_reason,
@@ -354,7 +366,7 @@ def _attempt_stall_recovery(
     caller proceeds to its own retry-policy dispatch and failure construction,
     using the returned ``session``/``evidence``/``api_retry``.
     """
-    session = _parse_stdout(result.stdout, backend=backend)
+    session = _parse_stdout(result, backend=backend)
     evidence = _compute_write_evidence(
         session,
         fs_writes_detected,

@@ -12,6 +12,7 @@ class TestExecutionTypesImport:
         from autoskillit.core.types._type_results_execution import SessionTelemetry
 
         assert hasattr(SessionTelemetry, "empty")
+        assert SessionTelemetry.empty().turn_usage == []
 
     def test_recipe_identity_importable(self):
         from autoskillit.core.types._type_results_execution import RecipeIdentity

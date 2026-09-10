@@ -41,7 +41,7 @@ _CONTINUATION_LIFETIME_SECONDS = 300
 _CONTINUATION_VERSION = 1
 _CONTINUATION_KEY: bytes | None = None
 _CONTINUATION_CLOCK = time.time
-_HANDLES = ("summary", "anomalies", "audit", "transcript")
+_HANDLES = ("summary", "anomalies", "audit", "turn_usage", "transcript")
 _DIR_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\Z")
 
 
@@ -115,9 +115,10 @@ def _artifact_location(
             "summary": "summary.json",
             "anomalies": "anomalies.jsonl",
             "audit": "audit_log.json",
+            "turn_usage": "turn_usage.jsonl",
         }
         root = log_root / "sessions"
-        return root / dir_name / filenames[artifact], root, artifact == "anomalies"
+        return root / dir_name / filenames[artifact], root, artifact in {"anomalies", "turn_usage"}
 
     claude_log = row.get("claude_code_log")
     codex_log = row.get("codex_log")

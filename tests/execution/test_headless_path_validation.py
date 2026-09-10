@@ -1,10 +1,12 @@
 """Tests for headless.py: _build_skill_result, path validation, synthesis, and contract gates."""
 
 import json
+from unittest.mock import Mock
 
 import pytest
 
 from autoskillit.core.types import (
+    AgentSessionResult,
     ChannelConfirmation,
     CliSubtype,
     RetryReason,
@@ -24,9 +26,10 @@ from autoskillit.execution.headless._headless_path_tokens import (
 )
 from autoskillit.execution.headless._headless_result import _EVIDENCE_RECOVERABLE_SUBTYPES
 from autoskillit.execution.session import ClaudeSessionResult
+from autoskillit.execution.session._turn_usage import build_turn_token_entry
 from autoskillit.pipeline.audit import DefaultAuditLog, FailureRecord
 from tests.conftest import _make_result
-from tests.execution.conftest import _make_tool_use_line, _success_session_json
+from tests.execution.conftest import _make_tool_use_line, _mock_backend, _success_session_json
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -481,6 +484,68 @@ class TestTimedOutSessionPreservesState:
         assert sr.evidence.write_call_count == 0
         assert sr.subtype == "timeout"
         assert sr.cli_subtype == CliSubtype.TIMEOUT
+
+    def test_codex_timeout_with_empty_stdout_preserves_native_turn_usage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from autoskillit.execution.headless import _headless_adjudication
+
+        turn_usage = [
+            build_turn_token_entry(
+                backend="codex",
+                request_id="request-1",
+                timestamp="2026-09-10T12:00:01Z",
+                cache_read_tokens=40,
+                context_window_tokens=200_000,
+            )
+        ]
+        extractor = Mock(return_value=turn_usage)
+        monkeypatch.setattr(
+            _headless_adjudication,
+            "extract_codex_turn_usage",
+            extractor,
+        )
+        backend = _mock_backend(
+            supports_claude_format_stdout=False,
+            write_detection_strategy="file_changes",
+        )
+        backend.name = "codex"
+        result_parser = Mock()
+        result_parser.parse_stdout.return_value = AgentSessionResult(
+            success=False,
+            exit_code=-1,
+            backend_name="codex",
+            elapsed_seconds=0.0,
+            session_id=None,
+            output="",
+            error="",
+            raw={"subtype": "empty_output", "is_error": True},
+        )
+        backend.result_parser.return_value = result_parser
+        locator = backend.session_locator.return_value
+        sub_result = SubprocessResult(
+            returncode=-1,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.TIMED_OUT,
+            pid=12345,
+            session_id="observed-thread",
+            start_ts="2026-09-10T12:00:00Z",
+            end_ts="2026-09-10T12:00:02Z",
+        )
+
+        result = _build_skill_result(sub_result, backend=backend)
+
+        assert result.subtype == "timeout"
+        assert result.turn_usage == turn_usage
+        result_parser.parse_stdout.assert_called_with("")
+        extractor.assert_called_once()
+        call_args, call_kwargs = extractor.call_args
+        supplied = (*call_args, *call_kwargs.values())
+        assert locator in supplied
+        assert "observed-thread" in supplied
+        assert "2026-09-10T12:00:00Z" in supplied
+        assert "2026-09-10T12:00:02Z" in supplied
 
     def test_timed_out_with_success_result_overrides_to_timeout(self):
         """When timed-out stdout has a success result, subtype is overridden to timeout."""
@@ -1274,6 +1339,25 @@ def _ndjson_with_write(result_text: str, file_paths: list[str], session_id: str 
     return "\n".join(records)
 
 
+def _turn_usage_ndjson(message_id: str, cache_read_tokens: int) -> str:
+    return json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "id": message_id,
+                "model": "claude-sonnet-4-6",
+                "content": [],
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 5,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": cache_read_tokens,
+                },
+            },
+        }
+    )
+
+
 class TestExtractMissingTokenHints:
     def test_extracts_token_and_path(self):
 
@@ -1345,7 +1429,12 @@ class TestContractNudge:
         if include_token:
             result_text += "plan_path = /tmp/out.md\n"
         result_text += marker
-        return _ndjson_with_write(result_text, ["/tmp/out.md"], session_id=session_id)
+        return "\n".join(
+            [
+                _turn_usage_ndjson("main-message", 10),
+                _ndjson_with_write(result_text, ["/tmp/out.md"], session_id=session_id),
+            ]
+        )
 
     def _main_subprocess_result(
         self, marker: str, *, session_id: str = "sess-main"
@@ -1366,7 +1455,7 @@ class TestContractNudge:
             result_text = f"plan_path = /tmp/out.md\n{marker}"
         else:
             result_text = f"I cannot do that.\n{marker}"
-        return json.dumps(
+        result_record = json.dumps(
             {
                 "type": "result",
                 "subtype": "success",
@@ -1376,6 +1465,7 @@ class TestContractNudge:
                 "usage": {"input_tokens": 100, "output_tokens": 50},
             }
         )
+        return "\n".join([_turn_usage_ndjson("nudge-message", 20), result_record])
 
     @pytest.mark.anyio
     async def test_nudge_fires_on_contract_recovery(self, tool_ctx):
@@ -1397,6 +1487,7 @@ class TestContractNudge:
         assert result.success is True
         assert result.needs_retry is False
         assert "plan_path = /tmp/out.md" in result.result
+        assert len(result.turn_usage) == 2
 
     @pytest.mark.anyio
     async def test_nudge_failure_falls_through(self, tool_ctx):
@@ -1779,7 +1870,12 @@ class TestEarlyStopRecovery:
         """Build a SubprocessResult that produces EARLY_STOP: substantive output, no marker."""
         return SubprocessResult(
             returncode=0,
-            stdout=_success_session_json(result_text),
+            stdout="\n".join(
+                [
+                    _turn_usage_ndjson("main-message", 10),
+                    _success_session_json(result_text),
+                ]
+            ),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=12345,
@@ -1791,7 +1887,12 @@ class TestEarlyStopRecovery:
         result_text = f"completion confirmed\n{marker}"
         return SubprocessResult(
             returncode=0,
-            stdout=_success_session_json(result_text),
+            stdout="\n".join(
+                [
+                    _turn_usage_ndjson("nudge-message", 20),
+                    _success_session_json(result_text),
+                ]
+            ),
             stderr="",
             termination=TerminationReason.NATURAL_EXIT,
             pid=2,
@@ -1816,6 +1917,7 @@ class TestEarlyStopRecovery:
         )
         assert result.success is True
         assert len(tool_ctx.runner.call_args_list) == 2
+        assert len(result.turn_usage) == 2
 
     @pytest.mark.anyio
     async def test_early_stop_nudge_bypasses_hints_guard(self, tool_ctx):

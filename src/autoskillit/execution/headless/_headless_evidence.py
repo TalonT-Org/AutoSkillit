@@ -136,6 +136,7 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         session_id=session_id,
         errors=errors,
         token_usage=token_usage,
+        turn_usage=raw.get("turn_usage", []),
         assistant_messages=assistant_messages,
         tool_uses=tool_uses,
         jsonl_context_exhausted=jsonl_context_exhausted,
@@ -271,6 +272,7 @@ def _build_session_telemetry(
         _api_usage = None
     return SessionTelemetry(
         token_usage=skill_result.token_usage,
+        turn_usage=skill_result.turn_usage,
         timing_seconds=timing_seconds,
         audit_record=audit_record,
         github_api_usage=_api_usage,
@@ -297,6 +299,7 @@ def _build_error_path_telemetry(
         _api_usage = None
     return SessionTelemetry(
         token_usage=None,
+        turn_usage=[],
         timing_seconds=None,
         audit_record=None,
         github_api_usage=_api_usage,

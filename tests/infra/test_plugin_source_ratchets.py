@@ -83,6 +83,24 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "recovery directory for the same dir_name being committed.",
     ),
     (
+        "execution/session/_turn_usage.py",
+        "write_turn_usage_sidecar",
+        "os.replace",
+    ): (
+        1,
+        "A fully flushed per-turn ledger atomically replaces its same-directory temporary "
+        "sibling before the descriptor is published.",
+    ),
+    (
+        "execution/session/_turn_usage.py",
+        "write_turn_usage_sidecar",
+        "temp_path.unlink",
+    ): (
+        1,
+        "Best-effort cleanup removes only the function-owned temporary turn ledger after "
+        "publication succeeds or fails.",
+    ),
+    (
         "workspace/_projected_artifact/_artifact_residue.py",
         "teardown_artifact_residue",
         "manifest.unlink",

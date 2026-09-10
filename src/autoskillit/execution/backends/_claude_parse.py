@@ -216,6 +216,7 @@ class ClaudeResultParser:
                 "subtype": result.subtype.value,
                 "is_error": result.is_error,
                 "token_usage": result.token_usage,
+                "turn_usage": result.turn_usage,
                 "write_artifacts": write_artifacts,
                 "tool_uses": result.tool_uses,
                 "assistant_messages": result.assistant_messages,

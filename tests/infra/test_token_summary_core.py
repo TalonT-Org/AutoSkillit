@@ -871,7 +871,7 @@ def test_pr_telemetry_assembly_parity() -> None:
 
 
 class TestLoadSessionsSchemaVersionCompat:
-    """Backward compatibility: _load_sessions reads both v1 and v2 token_usage.json."""
+    """Backward compatibility: _load_sessions reads v1-v3 token_usage.json."""
 
     _KITCHEN_ID = "test-kitchen-compat"
 
@@ -901,9 +901,24 @@ class TestLoadSessionsSchemaVersionCompat:
                 },
                 id="v2-canonical-keys",
             ),
+            pytest.param(
+                {
+                    "session_label": "plan",
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_write_tokens": 10,
+                    "cache_read_tokens": 5,
+                    "timing_seconds": 30.0,
+                    "turn_usage_file": "turn_usage.jsonl",
+                    "turn_usage_count": 2,
+                    "turn_usage_schema_version": 1,
+                    "schema_version": 3,
+                },
+                id="v3-turn-usage-descriptor",
+            ),
         ],
     )
-    def test_loads_both_schema_versions(self, tmp_path: Path, payload: dict) -> None:
+    def test_loads_supported_schema_versions(self, tmp_path: Path, payload: dict) -> None:
         from autoskillit.hooks.token_summary_hook import _load_sessions
 
         log_root = tmp_path / "logs"

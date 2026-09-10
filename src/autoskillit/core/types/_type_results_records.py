@@ -228,6 +228,9 @@ class TokenUsageFileEntry(TypedDict):
     profile_name: str
     dispatch_id: str
     campaign_id: str
+    turn_usage_file: str | None
+    turn_usage_count: int
+    turn_usage_schema_version: int
     schema_version: int
 
 

@@ -7,6 +7,7 @@ import pytest
 from autoskillit.core import BackendEventKind, ClaudeEventData, ResultParser, SessionEvent
 from autoskillit.execution.backends import ClaudeResultParser
 from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
+from autoskillit.execution.session._turn_usage import build_turn_token_entry
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -130,6 +131,15 @@ class TestClaudeResultParser:
         assert result.output == "task completed"
 
     def test_parse_stdout_maps_all_fields(self) -> None:
+        turn_usage = [
+            build_turn_token_entry(
+                backend="claude-code",
+                message_id="msg-1",
+                request_id="req-1",
+                cache_read_tokens=20,
+                context_window_tokens=200_000,
+            )
+        ]
         mock_result = ClaudeSessionResult(
             subtype=CliSubtype.SUCCESS,
             is_error=False,
@@ -137,6 +147,7 @@ class TestClaudeResultParser:
             session_id="sess-123",
             errors=[],
             token_usage={"input_tokens": 100, "output_tokens": 50},
+            turn_usage=turn_usage,
             assistant_messages=['{"type": "assistant", "message": {}}'],
             tool_uses=[{"name": "Write", "id": "1", "file_path": "/tmp/foo.py"}],
             jsonl_context_exhausted=False,
@@ -158,6 +169,7 @@ class TestClaudeResultParser:
             assert raw["subtype"] == "success"
             assert raw["is_error"] is False
             assert raw["token_usage"] == {"input_tokens": 100, "output_tokens": 50}
+            assert raw["turn_usage"] == turn_usage
             assert raw["write_artifacts"] == ["/tmp/foo.py"]
             assert raw["tool_uses"] == [{"name": "Write", "id": "1", "file_path": "/tmp/foo.py"}]
             assert raw["assistant_messages"] == ['{"type": "assistant", "message": {}}']

@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     SESSION_INDEX_SCHEMA_VERSION,
     ArtifactLease,
@@ -48,19 +49,19 @@ from autoskillit.execution.anomaly_detection import (
     detect_model_drift,
     detect_outcome_anomalies,
 )
+from autoskillit.execution.session._turn_usage import (
+    first_parent_message_timestamps,
+    write_turn_usage_sidecar,
+)
+from autoskillit.execution.session._turn_usage import (
+    primary_model_identifier as _primary_model_identifier,
+)
+from autoskillit.execution.session._turn_usage import (
+    resolve_session_label as _resolve_session_label,
+)
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
 
 logger = get_logger(__name__)
-
-
-def _primary_model_identifier(token_usage: dict[str, Any] | None) -> str:
-    """Return the model with most output tokens, or empty when unavailable."""
-    if not token_usage:
-        return ""
-    mb = token_usage.get("model_breakdown", {})
-    if not isinstance(mb, dict) or not mb:
-        return ""
-    return max(mb, key=lambda m: mb[m].get("output_tokens", 0) if isinstance(mb[m], dict) else 0)
 
 
 def resolve_log_dir(log_dir: str) -> Path:
@@ -90,19 +91,6 @@ def _append_session_archive_rows(archive_path: Path, rows: list[dict[str, Any]])
         os.fsync(archive.fileno())
     if not archive_existed:
         fsync_directory(archive_path.parent)
-
-
-def _resolve_session_label(step_name: str, dispatch_id: str) -> str:
-    """Derive a non-empty session label for telemetry file identification.
-
-    Recipe steps use step_name. Fleet dispatches use dispatch_id.
-    Ad-hoc sessions get a fallback label.
-    """
-    if step_name:
-        return step_name
-    if dispatch_id:
-        return f"dispatch:{dispatch_id}"
-    return "(ad-hoc)"
 
 
 def flush_session_log(
@@ -188,6 +176,7 @@ def flush_session_log(
     for recovery at next server startup.
     """
     token_usage = telemetry.token_usage
+    turn_usage = [row.copy() for row in telemetry.turn_usage]
     timing_seconds = telemetry.timing_seconds
     audit_record = telemetry.audit_record
     loc_insertions = telemetry.loc_insertions
@@ -242,15 +231,23 @@ def flush_session_log(
     _cb_request_ids: list[str] = []
     _cb_turn_timestamps: list[str] = []
     _cb_turn_tool_calls: list[tuple[str, ...]] = []
+    _cb_message_timestamps: dict[str, str] = {}
     if cc_log and cc_log.exists():
         try:
             _text = cc_log.read_text(encoding="utf-8", errors="replace")
+            _cb_message_timestamps = first_parent_message_timestamps(_text)
             for _turn in iter_merged_assistant_turns(_text):
                 _cb_request_ids.append(_turn.request_id)
                 _cb_turn_timestamps.append(_turn.timestamp)
                 _cb_turn_tool_calls.append(_turn.tool_names)
         except OSError:
             logger.debug("channel_b_log_read_error", path=cc_log_str, exc_info=True)
+
+    if backend == AGENT_BACKEND_CLAUDE_CODE and _cb_message_timestamps:
+        for row in turn_usage:
+            message_id = row["message_id"]
+            if row["timestamp"] is None and message_id in _cb_message_timestamps:
+                row["timestamp"] = _cb_message_timestamps[message_id]
 
     lock_path = session_index_lock_path(log_root)
     try:
@@ -548,39 +545,54 @@ def flush_session_log(
             atomic_write(session_dir / "crash_exception.txt", exception_text)
 
         label = _resolve_session_label(step_name, dispatch_id)
-        if token_usage is not None and publish_artifacts:
-            _cw_raw = token_usage.get("cache_write_tokens")
+        sidecar_published = False
+        sidecar_failed = False
+        if turn_usage and publish_artifacts:
+            sidecar_published = write_turn_usage_sidecar(
+                session_dir / "turn_usage.jsonl", turn_usage
+            )
+            sidecar_failed = not sidecar_published
+        if (
+            (token_usage is not None or sidecar_published)
+            and publish_artifacts
+            and not sidecar_failed
+        ):
+            effective_token_usage = token_usage or {}
+            _cw_raw = effective_token_usage.get("cache_write_tokens")
             _cache_write = (
                 _cw_raw
                 if _cw_raw is not None
-                else (token_usage.get("cache_creation_input_tokens") or 0)
+                else (effective_token_usage.get("cache_creation_input_tokens") or 0)
             )
-            _cr_raw = token_usage.get("cache_read_tokens")
+            _cr_raw = effective_token_usage.get("cache_read_tokens")
             _cache_read = (
                 _cr_raw
                 if _cr_raw is not None
-                else (token_usage.get("cache_read_input_tokens") or 0)
+                else (effective_token_usage.get("cache_read_input_tokens") or 0)
             )
             tu_data = {
                 "session_label": label,
-                "input_tokens": token_usage.get("input_tokens") or 0,
-                "output_tokens": token_usage.get("output_tokens") or 0,
+                "input_tokens": effective_token_usage.get("input_tokens") or 0,
+                "output_tokens": effective_token_usage.get("output_tokens") or 0,
                 "cache_write_tokens": _cache_write,
                 "cache_read_tokens": _cache_read,
                 "timing_seconds": timing_seconds if timing_seconds is not None else 0.0,
                 "order_id": order_id,
                 "loc_insertions": loc_insertions,
                 "loc_deletions": loc_deletions,
-                "peak_context": token_usage.get("peak_context", 0),
-                "turn_count": token_usage.get("turn_count", 0),
+                "peak_context": effective_token_usage.get("peak_context", 0),
+                "turn_count": effective_token_usage.get("turn_count", 0),
                 "provider_used": provider_outcome.provider_used,
                 "model_identifier": effective_model_id,
                 "configured_model": model_identity.configured_model,
                 "profile_name": model_identity.profile_name,
                 "dispatch_id": dispatch_id,
                 "campaign_id": campaign_id,
+                "turn_usage_file": "turn_usage.jsonl" if sidecar_published else None,
+                "turn_usage_count": len(turn_usage) if sidecar_published else 0,
+                "turn_usage_schema_version": 1,
             }
-            write_versioned_json(session_dir / "token_usage.json", tu_data, schema_version=2)
+            write_versioned_json(session_dir / "token_usage.json", tu_data, schema_version=3)
 
         if timing_seconds is not None and publish_artifacts:
             atomic_write(

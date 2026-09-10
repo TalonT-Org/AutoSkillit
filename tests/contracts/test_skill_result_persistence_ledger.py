@@ -88,6 +88,7 @@ SKILL_RESULT_PERSISTENCE: tuple[tuple[str, str, str], ...] = (
     ("subtype", "subtype", "persisted"),
     ("success", "success", "persisted"),
     ("token_usage", "token_usage", "live-only:derived-elsewhere"),
+    ("turn_usage", "turn_usage", "live-only:derived-elsewhere"),
     ("worktree_path", "worktree_path", "live-only:ephemeral-path"),
     ("write_path_warnings", "write_path_warnings", "summary-only"),
 )

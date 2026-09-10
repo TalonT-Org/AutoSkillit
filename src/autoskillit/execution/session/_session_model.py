@@ -9,15 +9,26 @@ from enum import StrEnum
 from typing import Any, assert_never
 
 from autoskillit.core import (
+    AGENT_BACKEND_CLAUDE_CODE,
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     CONTEXT_EXHAUSTION_MARKER,
     ClaudeContentBlockType,
     CliSubtype,
     RetryReason,
     SessionOutcome,
+    TurnTokenEntry,
     get_logger,
 )
 from autoskillit.execution.session._provider_parse import _parse_provider_records
+from autoskillit.execution.session._turn_usage import (
+    build_turn_token_entry,
+    merge_turn_usage,
+    valid_context_window,
+    valid_token_count,
+)
+from autoskillit.execution.session._turn_usage import (
+    is_parent_assistant_record as _is_parent_assistant_record,
+)
 
 logger = get_logger(__name__)
 
@@ -60,6 +71,7 @@ class ClaudeSessionResult:
     session_id: str
     errors: list[str] = field(default_factory=list)
     token_usage: dict[str, Any] | None = None
+    turn_usage: list[TurnTokenEntry] = field(default_factory=list)
     assistant_messages: list[str] = field(default_factory=list)
     tool_uses: list[dict[str, Any]] = field(default_factory=list)
     jsonl_context_exhausted: bool = False
@@ -229,35 +241,29 @@ class ClaudeSessionResult:
         return bool(self.tool_uses)
 
 
-def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
-    """True only for parent-session assistant records.
-
-    Excludes subagent records (identified by top-level subagent_type field)
-    and <synthetic> bookkeeping turns.
-    """
-    if obj.get("type") != "assistant":
-        return False
-    if obj.get("subagent_type"):
-        return False
-    msg = obj.get("message")
-    if isinstance(msg, dict) and msg.get("model") == "<synthetic>":
-        return False
-    return True
+def _nonempty_string(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
 
 
-def extract_token_usage(stdout: str) -> dict[str, Any] | None:
+def _usage_counter(usage: dict[str, Any], api_field: str, canonical_field: str) -> int | None:
+    api_value = valid_token_count(usage.get(api_field))
+    if api_value is not None:
+        return api_value
+    return valid_token_count(usage.get(canonical_field))
+
+
+def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTokenEntry]]:
     """Extract token usage from Claude CLI NDJSON output.
 
     Takes raw stdout (not ClaudeSessionResult) — called during parse_session_result
-    construction before the object exists. Returns None if no usage data found.
+    construction before the object exists. Returns aggregates and deduplicated rows.
     """
     if not stdout.strip():
-        return None
+        return None, []
 
-    model_buckets: dict[str, dict[str, int]] = {}
     result_usage: dict[str, int] | None = None
-    peak_context = 0
-    turn_count = 0
+    candidate_rows: list[TurnTokenEntry] = []
+    model_windows: dict[str, set[int]] = {}
 
     for line in stdout.strip().splitlines():
         line = line.strip()
@@ -278,23 +284,83 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
             usage = msg.get("usage")
             if not isinstance(usage, dict):
                 continue
-            model = msg.get("model", "unknown")
-            bucket = model_buckets.setdefault(model, {f: 0 for f in _CANONICAL_TOKEN_FIELDS})
-            for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS):
-                bucket[canon_f] += int(usage.get(api_f, usage.get(canon_f, 0)) or 0)
-            _cr = int(usage.get(_CACHE_READ_TOKENS_API_FIELD) or usage.get(_CACHE_READ_CANON) or 0)
-            peak_context = max(peak_context, _cr)
-            turn_count += 1
+            counters = {
+                canon_f: _usage_counter(usage, api_f, canon_f)
+                for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
+            }
+            if all(value is None for value in counters.values()):
+                continue
+            candidate_rows.append(
+                build_turn_token_entry(
+                    backend=AGENT_BACKEND_CLAUDE_CODE,
+                    message_id=_nonempty_string(msg.get("id")),
+                    request_id=_nonempty_string(obj.get("requestId")),
+                    timestamp=_nonempty_string(obj.get("timestamp")),
+                    model=_nonempty_string(msg.get("model")),
+                    input_tokens=counters["input_tokens"],
+                    output_tokens=counters["output_tokens"],
+                    cache_read_tokens=counters["cache_read_tokens"],
+                    cache_creation_tokens=counters["cache_write_tokens"],
+                )
+            )
         elif record_type == "result":
             usage = obj.get("usage")
             if isinstance(usage, dict):
                 result_usage = {
-                    canon_f: int(usage.get(api_f, usage.get(canon_f, 0)) or 0)
+                    canon_f: _usage_counter(usage, api_f, canon_f) or 0
                     for api_f, canon_f in zip(_API_TOKEN_FIELDS, _CANONICAL_TOKEN_FIELDS)
                 }
+            model_usage = obj.get("modelUsage")
+            if isinstance(model_usage, dict):
+                for model, metadata in model_usage.items():
+                    if not isinstance(model, str) or not model or not isinstance(metadata, dict):
+                        continue
+                    window = valid_context_window(metadata.get("contextWindow"))
+                    if window is not None:
+                        model_windows.setdefault(model, set()).add(window)
 
-    if not model_buckets and result_usage is None:
-        return None
+    raw_rows = merge_turn_usage(candidate_rows)
+    if not raw_rows and result_usage is None:
+        return None, []
+
+    model_buckets: dict[str, dict[str, int]] = {}
+    peak_context = 0
+    turn_usage: list[TurnTokenEntry] = []
+    for row in raw_rows:
+        model = row["model"]
+        bucket = model_buckets.setdefault(
+            model or "unknown", {f: 0 for f in _CANONICAL_TOKEN_FIELDS}
+        )
+        bucket["input_tokens"] += row["input_tokens"] or 0
+        bucket["output_tokens"] += row["output_tokens"] or 0
+        bucket["cache_read_tokens"] += row["cache_read_tokens"] or 0
+        bucket["cache_write_tokens"] += row["cache_creation_tokens"] or 0
+        peak_context = max(peak_context, row["cache_read_tokens"] or 0)
+
+        raw_input = row["input_tokens"]
+        cache_read = row["cache_read_tokens"]
+        cache_creation = row["cache_creation_tokens"]
+        inclusive_input = (
+            raw_input + cache_read + cache_creation
+            if raw_input is not None and cache_read is not None and cache_creation is not None
+            else None
+        )
+        windows = model_windows.get(model, set()) if model is not None else set()
+        context_window = next(iter(windows)) if len(windows) == 1 else None
+        turn_usage.append(
+            build_turn_token_entry(
+                backend=row["backend"],
+                message_id=row["message_id"],
+                request_id=row["request_id"],
+                timestamp=row["timestamp"],
+                model=model,
+                input_tokens=inclusive_input,
+                output_tokens=row["output_tokens"],
+                cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
+                context_window_tokens=context_window,
+            )
+        )
 
     if result_usage is not None:
         totals = dict(result_usage)
@@ -308,8 +374,8 @@ def extract_token_usage(stdout: str) -> dict[str, Any] | None:
         **totals,
         "model_breakdown": dict(model_buckets) if model_buckets else {},
         "peak_context": peak_context,
-        "turn_count": turn_count,
-    }
+        "turn_count": len(raw_rows),
+    }, turn_usage
 
 
 _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
@@ -321,6 +387,7 @@ _KNOWN_RESULT_KEYS: frozenset[str] = frozenset(
         "session_id",
         "errors",
         "usage",
+        "modelUsage",
         "api_error_status",
         "terminal_reason",
         "terminalReason",
@@ -355,13 +422,15 @@ def parse_session_result(stdout: str) -> ClaudeSessionResult:
             else CliSubtype.UNPARSEABLE
         )
         is_error, result_text, session_id, errors = True, stdout, "", []
+    token_usage, turn_usage = extract_token_usage(stdout)
     return ClaudeSessionResult(
         subtype=subtype,
         is_error=is_error,
         result=result_text,
         session_id=session_id,
         errors=errors,
-        token_usage=extract_token_usage(stdout),
+        token_usage=token_usage,
+        turn_usage=turn_usage,
         assistant_messages=acc.assistant_messages,
         tool_uses=acc.tool_uses,
         jsonl_context_exhausted=acc.jsonl_context_exhausted,

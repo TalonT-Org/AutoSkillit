@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -14,6 +15,11 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 _MAX_BLOCKED_RESPONSE_BYTES = 500
 _INCOMPLETE_THREE_BYTE_UTF8 = b"\xe2\x82"
+
+
+async def _inspect(**kwargs: Any) -> dict[str, Any]:
+    result: dict[str, Any] = json.loads(await session_logs.inspect_session_logs(**kwargs))
+    return result
 
 
 @pytest.mark.asyncio
@@ -33,11 +39,18 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
     summary = session_dir / "summary.json"
     anomalies = session_dir / "anomalies.jsonl"
     audit = session_dir / "audit_log.json"
+    turn_usage = session_dir / "turn_usage.jsonl"
     transcript = tmp_path / "transcripts" / "session-one.jsonl"
     transcript.parent.mkdir()
     summary.write_text('{"needs_retry":true,"retry_reason":"early_stop"}\n')
     anomalies.write_text('{"kind":"retry"}\n{"kind":"error"}\n')
     audit.write_text('{"subtype":"missing_completion_marker"}\n')
+    turn_usage.write_text(
+        "".join(
+            json.dumps({"message_id": f"message-{index}"}, separators=(",", ":")) + "\n"
+            for index in (1, 2)
+        )
+    )
     transcript.write_text('{"event":"turn.failed"}\n')
     row = {
         "session_id": "session-one",
@@ -70,6 +83,7 @@ def retained_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, 
         "summary": summary,
         "anomalies": anomalies,
         "audit": audit,
+        "turn_usage": turn_usage,
         "transcript": transcript,
     }
 
@@ -97,7 +111,7 @@ async def test_index_returns_only_requested_metadata_and_exact_handles(retained_
             "backend": "claude-code",
             "kitchen_id": "kitchen-one",
             "step_name": "implement",
-            "handles": ["summary", "anomalies", "audit", "transcript"],
+            "handles": ["summary", "anomalies", "audit", "turn_usage", "transcript"],
             "retry": {
                 "success": False,
                 "subtype": "missing_completion_marker",
@@ -267,6 +281,56 @@ async def test_read_pages_have_byte_counts_citations_and_authenticated_continuat
         )
     )
     assert invalid["reason"] == "continuation_invalid"
+
+
+@pytest.mark.asyncio
+async def test_turn_usage_discovery_paging_and_lifecycle(retained_logs) -> None:
+    rows = retained_logs["turn_usage"].read_text().splitlines(keepends=True)
+    retained_logs["transcript"].unlink()
+
+    handles = (await _inspect(operation="index", session_ids=["session-one"]))["sessions"][0][
+        "handles"
+    ]
+    assert "turn_usage" in handles
+    assert "transcript" not in handles
+
+    first = await _inspect(
+        operation="read",
+        session_id="session-one",
+        artifact="turn_usage",
+        byte_limit=len(rows[0].encode()),
+    )
+    assert first["content"] == rows[0]
+    assert first["line_range"] == {"start": 1, "end": 1}
+    assert first["citation"] == "session-one/turn_usage:1-1"
+    assert first["truncated"] is True
+    assert first["next_continuation"]
+
+    second = await _inspect(
+        operation="read",
+        session_id="session-one",
+        artifact="turn_usage",
+        continuation=first["next_continuation"],
+        byte_limit=len(rows[1].encode()),
+    )
+    assert second["content"] == rows[1]
+    assert second["line_range"] == {"start": 2, "end": 2}
+    assert second["truncated"] is False
+
+    retained_logs["turn_usage"].unlink()
+    handles = (await _inspect(operation="index", session_ids=["session-one"]))["sessions"][0][
+        "handles"
+    ]
+    assert "turn_usage" not in handles
+    missing = await _inspect(operation="read", session_id="session-one", artifact="turn_usage")
+    assert missing == {
+        "operation": "read",
+        "status": "blocked",
+        "reason": "artifact_missing",
+        "searched_scope": {},
+        "truncated": False,
+        "incomplete_final_line": False,
+    }
 
 
 @pytest.mark.asyncio
@@ -494,6 +558,24 @@ async def test_incomplete_jsonl_suffix_is_disclosed_without_citation(retained_lo
     assert result["status"] == "partial"
     assert result["reason"] == "incomplete_final_line"
     assert result["content"] == '{"complete":true}\n'
+    assert result["line_range"] == {"start": 1, "end": 1}
+    assert result["next_continuation"] == ""
+
+
+@pytest.mark.asyncio
+async def test_turn_usage_withholds_incomplete_final_record(retained_logs) -> None:
+    complete = b'{"backend":"claude-code","message_id":"message-1"}\n'
+    retained_logs["turn_usage"].write_bytes(complete + b'{"backend":"claude-code"')
+
+    result = await _inspect(
+        operation="read",
+        session_id="session-one",
+        artifact="turn_usage",
+    )
+
+    assert result["status"] == "partial"
+    assert result["reason"] == "incomplete_final_line"
+    assert result["content"] == complete.decode()
     assert result["line_range"] == {"start": 1, "end": 1}
     assert result["next_continuation"] == ""
 

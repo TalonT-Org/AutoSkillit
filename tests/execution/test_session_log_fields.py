@@ -1399,7 +1399,7 @@ def test_no_false_drift_with_subagent_dominant_output():
         }
     )
     stdout = "\n".join(parent_lines + subagent_lines + [result_line])
-    token_usage = extract_token_usage(stdout)
+    token_usage, _rows = extract_token_usage(stdout)
     observed = _primary_model_identifier(token_usage)
     assert observed == "claude-opus-4-6"
     anomalies = detect_model_drift("claude-opus-4-6[1m]", observed)

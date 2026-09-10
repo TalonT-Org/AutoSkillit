@@ -23,6 +23,7 @@ from autoskillit.core.types import (
     SkillResult,
     SubprocessResult,
     TerminationReason,
+    TurnTokenEntry,
     WriteBehaviorSpec,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeResultParser
@@ -40,6 +41,7 @@ from autoskillit.execution.headless._headless_evidence import (
 )
 from autoskillit.execution.session import ClaudeSessionResult
 from autoskillit.execution.session._session_outcome import _compute_outcome
+from autoskillit.execution.session._turn_usage import build_turn_token_entry
 from tests.execution.conftest import (
     CODEX_OBSERVED_PROVIDER_FAILURE_CASES,
     _make_tool_use_line,
@@ -97,6 +99,19 @@ def _success_result_json(result_text: str = "done", session_id: str = "test-sess
             "session_id": session_id,
             "is_error": False,
         }
+    )
+
+
+def _turn_usage_entry(
+    *,
+    message_id: str | None = "message-1",
+    cache_read_tokens: int = 25,
+) -> TurnTokenEntry:
+    return build_turn_token_entry(
+        backend="codex",
+        message_id=message_id,
+        cache_read_tokens=cache_read_tokens,
+        context_window_tokens=200_000,
     )
 
 
@@ -433,8 +448,11 @@ def _adapt_codex_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
 def _make_codex_parse_stdout() -> object:
     """Return a _parse_stdout replacement that delegates to CodexResultParser."""
 
-    def _patched(stdout: str, backend: object) -> ClaudeSessionResult:  # noqa: ARG001
-        agent_result = CodexBackend().result_parser().parse_stdout(stdout)
+    def _patched(
+        result: SubprocessResult,
+        backend: object,  # noqa: ARG001
+    ) -> ClaudeSessionResult:
+        agent_result = CodexBackend().result_parser().parse_stdout(result.stdout)
         return _adapt_codex_result(agent_result)
 
     return _patched  # type: ignore[return-value]
@@ -554,6 +572,27 @@ class TestStaleTokenUsagePropagation:
         assert tu["cache_read_tokens"] == 75
 
 
+class TestTurnUsagePropagation:
+    def test_public_result_omits_a_long_turn_series(self) -> None:
+        turn_usage = [_turn_usage_entry(message_id=f"message-{index}") for index in range(501)]
+        result = SkillResult(
+            success=True,
+            result="done",
+            session_id="session-1",
+            subtype="success",
+            is_error=False,
+            exit_code=0,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE,
+            stderr="",
+            turn_usage=turn_usage,
+        )
+
+        serialized = json.loads(result.to_json())
+
+        assert "turn_usage" not in serialized
+
+
 class TestBackendDelegatedWriteToolNames:
     def test_claude_backend_uses_write_edit_tool_names(self):
         """ClaudeCodeBackend uses frozenset({'Write', 'Edit'})."""
@@ -664,10 +703,13 @@ class TestBackendDelegatedWriteToolNames:
 
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
+        turn_usage = [_turn_usage_entry()]
 
-        def spy(stdout, backend):
+        def spy(result, backend):
             captured["backend"] = backend
-            return original_parse(stdout, backend=backend)
+            return dataclasses.replace(
+                original_parse(result, backend=backend), turn_usage=turn_usage
+            )
 
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
@@ -679,9 +721,10 @@ class TestBackendDelegatedWriteToolNames:
         )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
-        _build_skill_result(result, backend=mock_backend)
+        skill_result = _build_skill_result(result, backend=mock_backend)
         assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
+        assert skill_result.turn_usage == turn_usage
 
     def test_build_skill_result_stale_threads_backend_to_parse_stdout(self, monkeypatch):
         """_build_skill_result passes backend to _parse_stdout on stale branch.
@@ -696,10 +739,13 @@ class TestBackendDelegatedWriteToolNames:
 
         captured: dict = {}
         original_parse = _headless_adjudication._parse_stdout
+        turn_usage = [_turn_usage_entry()]
 
-        def spy(stdout, backend):
+        def spy(result, backend):
             captured["backend"] = backend
-            return original_parse(stdout, backend=backend)
+            return dataclasses.replace(
+                original_parse(result, backend=backend), turn_usage=turn_usage
+            )
 
         monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
 
@@ -711,9 +757,10 @@ class TestBackendDelegatedWriteToolNames:
         )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.STALE)
-        _build_skill_result(result, backend=mock_backend)
+        skill_result = _build_skill_result(result, backend=mock_backend)
         assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
+        assert skill_result.turn_usage == turn_usage
 
     def test_build_skill_result_idle_stall_threads_backend_to_parse_stdout(self, monkeypatch):
         """_build_skill_result passes backend to _parse_stdout on idle_stall branch.
@@ -727,10 +774,13 @@ class TestBackendDelegatedWriteToolNames:
 
         captured: dict = {}
         original_parse = _headless_adjudication._parse_stdout
+        turn_usage = [_turn_usage_entry()]
 
-        def spy(stdout, backend):
+        def spy(result, backend):
             captured["backend"] = backend
-            return original_parse(stdout, backend=backend)
+            return dataclasses.replace(
+                original_parse(result, backend=backend), turn_usage=turn_usage
+            )
 
         monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
 
@@ -742,9 +792,10 @@ class TestBackendDelegatedWriteToolNames:
         )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.IDLE_STALL)
-        _build_skill_result(result, backend=mock_backend)
+        skill_result = _build_skill_result(result, backend=mock_backend)
         assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
+        assert skill_result.turn_usage == turn_usage
 
     def test_build_skill_result_timed_out_threads_backend_to_parse_stdout(self, monkeypatch):
         """_build_skill_result passes backend to _parse_stdout on timed_out branch."""
@@ -753,10 +804,13 @@ class TestBackendDelegatedWriteToolNames:
 
         captured: dict = {}
         original_parse = _headless_result._parse_stdout
+        turn_usage = [_turn_usage_entry()]
 
-        def spy(stdout, backend):
+        def spy(result, backend):
             captured["backend"] = backend
-            return original_parse(stdout, backend=backend)
+            return dataclasses.replace(
+                original_parse(result, backend=backend), turn_usage=turn_usage
+            )
 
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
 
@@ -768,9 +822,10 @@ class TestBackendDelegatedWriteToolNames:
         )
         stdout = _success_session_json("Done")
         result = _sr(0, stdout, "", TerminationReason.TIMED_OUT)
-        _build_skill_result(result, backend=mock_backend)
+        skill_result = _build_skill_result(result, backend=mock_backend)
         assert "backend" in captured, "_parse_stdout was not called"
         assert captured["backend"] is mock_backend
+        assert skill_result.turn_usage == turn_usage
 
 
 class TestRecoveryWriteNameWiring:
@@ -922,22 +977,28 @@ class TestComputeWriteEvidenceCodex:
 
 
 class TestParseStdout:
-    def test_claude_backend_calls_parse_session_result(self):
+    def test_claude_backend_calls_parse_session_result(self, monkeypatch: pytest.MonkeyPatch):
         """_parse_stdout with ClaudeCodeBackend returns the same result as parse_session_result."""
         from autoskillit.execution.session import parse_session_result
 
+        backend = ClaudeCodeBackend()
+        locator = Mock(side_effect=AssertionError("Claude parsing requested native evidence"))
+        monkeypatch.setattr(ClaudeCodeBackend, "session_locator", locator)
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=ClaudeCodeBackend())
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result = _parse_stdout(subprocess_result, backend=backend)
         expected = parse_session_result(stdout)
         assert result.result == expected.result
         assert result.session_id == expected.session_id
         assert result.session_complete == expected.session_complete
+        locator.assert_not_called()
 
     def test_default_backend_returns_claude_session_result(self):
         """_parse_stdout with no backend arg returns a ClaudeSessionResult."""
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, ClaudeCodeBackend())
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result = _parse_stdout(subprocess_result, ClaudeCodeBackend())
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
 
@@ -947,7 +1008,8 @@ class TestParseStdout:
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=mock_backend)
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result = _parse_stdout(subprocess_result, backend=mock_backend)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "test result"
 
@@ -957,8 +1019,9 @@ class TestParseStdout:
         mock_backend = Mock()
         mock_backend.name = AGENT_BACKEND_CLAUDE_CODE
         stdout = _success_session_json("test result")
-        with_backend = _parse_stdout(stdout, backend=mock_backend)
-        without_backend = _parse_stdout(stdout, ClaudeCodeBackend())
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        with_backend = _parse_stdout(subprocess_result, backend=mock_backend)
+        without_backend = _parse_stdout(subprocess_result, ClaudeCodeBackend())
         assert with_backend.result == without_backend.result
         assert with_backend.session_id == without_backend.session_id
         assert with_backend.session_complete == without_backend.session_complete
@@ -969,7 +1032,8 @@ class TestParseStdout:
         from autoskillit.execution.session import parse_session_result
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=ClaudeCodeBackend())
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result = _parse_stdout(subprocess_result, backend=ClaudeCodeBackend())
         expected = parse_session_result(stdout)
         assert result.result == expected.result
         assert result.session_id == expected.session_id
@@ -994,7 +1058,8 @@ class TestParseStdout:
         )
 
         stdout = _success_session_json("test result")
-        result = _parse_stdout(stdout, backend=mock_backend)
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result = _parse_stdout(subprocess_result, backend=mock_backend)
         mock_backend.result_parser.return_value.parse_stdout.assert_called_once_with(stdout)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result == "adapter output"
@@ -1018,7 +1083,8 @@ class TestParseStdout:
         stdout = _success_session_json("test result")
         codex_backend = CodexBackend()
         assert codex_backend.capabilities.supports_claude_format_stdout is False
-        result = _parse_stdout(stdout, backend=codex_backend)
+        subprocess_result = _sr(0, stdout, "", TerminationReason.NATURAL_EXIT)
+        result = _parse_stdout(subprocess_result, backend=codex_backend)
         spy.assert_called_once()
         (agent_result,), _ = spy.call_args
         assert isinstance(agent_result, AgentSessionResult)
@@ -1389,7 +1455,7 @@ class TestCodexPipelineHappyPath:
 
     def test_parse_stdout_with_codex_backend(self):
         content = fixture_path(HAPPY_PATH_V0136).read_text()
-        session = _parse_stdout(content, backend=CodexBackend())
+        session = _parse_stdout(_codex_subprocess_result(content), backend=CodexBackend())
         assert session.session_id == "thread_v0136_abc"
         assert session.is_error is False
         assert session.token_usage is not None
@@ -1401,13 +1467,13 @@ class TestCodexPipelineHappyPath:
 
     def test_parse_stdout_populates_assistant_messages(self):
         content = fixture_path(HAPPY_PATH_V0136).read_text()
-        session = _parse_stdout(content, backend=CodexBackend())
+        session = _parse_stdout(_codex_subprocess_result(content), backend=CodexBackend())
         assert len(session.assistant_messages) > 0
         assert "Task completed successfully." in session.assistant_messages[0]
 
     def test_parse_stdout_populates_tool_uses(self):
         content = fixture_path(HAPPY_PATH_V0136).read_text()
-        session = _parse_stdout(content, backend=CodexBackend())
+        session = _parse_stdout(_codex_subprocess_result(content), backend=CodexBackend())
         assert len(session.tool_uses) > 0
 
     def test_happy_path_pipeline(self):
@@ -1426,7 +1492,7 @@ class TestCodexPipelineHappyPath:
     def test_subtype_via_compute_outcome(self):
         content = fixture_path(HAPPY_PATH_V0136).read_text()
         backend = CodexBackend()
-        session = _parse_stdout(content, backend=backend)
+        session = _parse_stdout(_codex_subprocess_result(content), backend=backend)
         result = _codex_subprocess_result(content)
         sr = _build_skill_result(
             result,
@@ -1439,7 +1505,7 @@ class TestCodexPipelineHappyPath:
 
     def test_v0133_legacy_parse_still_works(self):
         content = fixture_path(HAPPY_PATH_SINGLE_TURN).read_text()
-        session = _parse_stdout(content, backend=CodexBackend())
+        session = _parse_stdout(_codex_subprocess_result(content), backend=CodexBackend())
         assert session.session_id == "thread_hp_abc123"
         assert session.is_error is False
         assert session.token_usage is not None

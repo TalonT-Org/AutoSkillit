@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -33,7 +34,8 @@ from autoskillit.execution.headless._headless_helpers import (
 from autoskillit.execution.headless._headless_recovery import (
     _EnumHint,
     _extract_missing_token_hints,
-    _merge_token_usage,
+    _merge_turn_usage_metrics,
+    _with_native_turn_usage,
 )
 from autoskillit.execution.headless._managed import (
     _BuildSpec,
@@ -397,6 +399,7 @@ async def _attempt_contract_nudge(
                             dict.fromkeys((*spec.inherited_fds, *handle.pass_fds))
                         ),
                     )
+                nudge_start_ts = datetime.now(UTC).isoformat()
                 nudge_result = await runner(
                     list(spec.cmd),
                     cwd=Path(spec.cwd),
@@ -411,6 +414,7 @@ async def _attempt_contract_nudge(
                     ceiling_seconds=ceiling_seconds,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
                 )
+                nudge_end_ts = datetime.now(UTC).isoformat()
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)
         return None
@@ -425,13 +429,29 @@ async def _attempt_contract_nudge(
     except Exception:
         logger.warning("nudge_parse_stdout_failed", exc_info=True)
         return None
+    nudge_observed_session_id = nudge_session.session_id or nudge_result.session_id
+    nudge_session = _with_native_turn_usage(
+        nudge_session,
+        backend,
+        nudge_observed_session_id or skill_result.session_id,
+        nudge_start_ts,
+        nudge_end_ts,
+    )
     if managed_lineage_observer is not None and nudge_session.session_id:
         managed_lineage_observer.bind_candidate(nudge_session.session_id)
     if on_session_id_resolved is not None and nudge_session.session_id:
         on_session_id_resolved(nudge_session.session_id)
     combined_result = skill_result.result + "\n" + nudge_session.output
     nudge_usage = nudge_session.raw.get("token_usage")
-
+    nudge_turn_usage = nudge_session.raw.get("turn_usage", []) or []
+    combined_turn_usage, combined_usage = _merge_turn_usage_metrics(
+        skill_result.turn_usage,
+        nudge_turn_usage,
+        skill_result.token_usage,
+        nudge_usage,
+        subprocess_result.session_id,
+        nudge_observed_session_id,
+    )
     if retry_reason == RetryReason.EARLY_STOP:
         if completion_marker in nudge_session.output:
             if patterns_to_check and not _check_expected_patterns(
@@ -451,7 +471,8 @@ async def _attempt_contract_nudge(
                 subtype="success",
                 needs_retry=False,
                 retry_reason=RetryReason.NONE,
-                token_usage=_merge_token_usage(skill_result.token_usage, nudge_usage),
+                token_usage=combined_usage,
+                turn_usage=combined_turn_usage,
             )
         logger.debug(
             "nudge_early_stop_marker_not_found",
@@ -478,7 +499,8 @@ async def _attempt_contract_nudge(
         subtype="success",
         needs_retry=False,
         retry_reason=RetryReason.NONE,
-        token_usage=_merge_token_usage(skill_result.token_usage, nudge_usage),
+        token_usage=combined_usage,
+        turn_usage=combined_turn_usage,
     )
 
 

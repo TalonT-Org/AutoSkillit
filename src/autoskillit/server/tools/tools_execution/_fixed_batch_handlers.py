@@ -443,6 +443,14 @@ def _page_payload(payload: object, *, offset: int, page_size: int) -> dict[str, 
         encoded[:offset].decode("utf-8")
     except UnicodeDecodeError as exc:
         raise SkillContractError("read_fixed_batch_result offset is not a UTF-8 boundary") from exc
+    if offset == len(encoded):
+        return {
+            "content": "",
+            "offset": offset,
+            "next_offset": offset,
+            "complete": True,
+            "total_bytes": len(encoded),
+        }
     end = min(offset + page_size, len(encoded))
     while end > offset:
         try:

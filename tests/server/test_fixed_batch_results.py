@@ -81,3 +81,15 @@ def test_fixed_batch_result_pages_are_byte_bounded_and_utf8_safe() -> None:
     assert first["next_offset"] == 1
     assert second["content"] == "éz"
     assert second["complete"] is True
+
+
+def test_fixed_batch_result_terminal_offset_returns_empty_complete_page() -> None:
+    page = _page_payload("complete", offset=len("complete"), page_size=4)
+
+    assert page == {
+        "content": "",
+        "offset": 8,
+        "next_offset": 8,
+        "complete": True,
+        "total_bytes": 8,
+    }

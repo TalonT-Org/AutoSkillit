@@ -479,12 +479,14 @@ class TestNudgeTurnUsage:
         assert result.token_usage is not None
         assert result.token_usage["turn_count"] == len(expected_cache_reads)
         assert result.token_usage["peak_context"] == max(expected_cache_reads)
-        args, kwargs = extractor.call_args
-        supplied = (*args, *kwargs.values())
-        assert "2000-01-01T00:00:00+00:00" not in supplied
-        timestamps = [value for value in supplied if isinstance(value, str) and "T" in value]
-        assert len(timestamps) == 2
-        assert all(datetime.fromisoformat(value).utcoffset() is not None for value in timestamps)
+        assert extractor.call_args.kwargs == {}
+        _, _, start_ts, end_ts = extractor.call_args.args
+        assert end_ts != "2000-01-01T00:00:00+00:00"
+        start = datetime.fromisoformat(start_ts)
+        end = datetime.fromisoformat(end_ts)
+        assert start.utcoffset() is not None
+        assert end.utcoffset() is not None
+        assert start <= end
 
 
 @pytest.mark.anyio

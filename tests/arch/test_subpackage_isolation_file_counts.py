@@ -8,6 +8,14 @@ from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
+# Per-issue #4671: shim files at core/ and recipe/ top level are 2-line forwarding
+# re-exports that preserve old import paths after moving real implementations into
+# sub-packages. The arch test excludes these from the file count because they
+# contribute no real module surface; only the underlying real modules are counted.
+# Populated by Phase A (core/) and Phase D (recipe/) of issue #4671.
+_SHIM_FILENAMES: frozenset[str] = frozenset()
+_RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset()
+
 FILE_COUNT_LIMITS: dict[str, int] = {
     "core": 49,  # +_managed_worker_capacity shared fleet/fixed-batch authority
     # _type_truth replaces the retired _type_tradition_manifest shard.
@@ -272,7 +280,14 @@ def test_no_subpackage_exceeds_10_files() -> None:
             dirs_to_check.append(nested_dir)
     for sub_dir in dirs_to_check:
         rel_key = str(sub_dir.relative_to(SRC_ROOT))
-        py_files = list(sub_dir.glob("*.py"))
+        # Pick the correct shim registry based on package (issue #4671).
+        if rel_key.startswith("recipe/"):
+            shim_set = _RECIPE_SHIM_FILENAMES
+        elif rel_key.startswith("core/") or rel_key == "core":
+            shim_set = _SHIM_FILENAMES
+        else:
+            shim_set = frozenset()
+        py_files = [p for p in sub_dir.glob("*.py") if p.name not in shim_set]
         limit = FILE_COUNT_LIMITS.get(rel_key, 10)
         if len(py_files) > limit:
             violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")

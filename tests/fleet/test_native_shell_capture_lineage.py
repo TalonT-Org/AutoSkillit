@@ -16,7 +16,7 @@ from autoskillit.core import (
     resolve_native_shell_capture_decision,
 )
 from autoskillit.fleet import DispatchRecord, DispatchStatus, execute_dispatch, read_state
-from autoskillit.fleet.state import write_initial_state
+from autoskillit.fleet.campaign_state.state import write_initial_state
 from tests.fakes import _DEFAULT_SKILL_RESULT
 from tests.fleet._helpers import (
     _make_completed_clean,

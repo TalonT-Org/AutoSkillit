@@ -18,9 +18,9 @@ from autoskillit.fleet import (
     resume_campaign_from_state,
     write_initial_state,
 )
-from autoskillit.fleet.state import _clear_dispatch_for_retry
-from autoskillit.fleet.state_records import _RETRY_IDENTITY_FIELDS
-from autoskillit.fleet.state_transitions import _validate_transition
+from autoskillit.fleet.campaign_state.state import _clear_dispatch_for_retry
+from autoskillit.fleet.campaign_state.state_records import _RETRY_IDENTITY_FIELDS
+from autoskillit.fleet.campaign_state.state_transitions import _validate_transition
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

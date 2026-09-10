@@ -16,7 +16,7 @@ from autoskillit.fleet import (
     find_dispatch_in_campaigns,
 )
 from autoskillit.fleet._reset import ResetReport, reset_dispatch_artifacts, update_campaign_state
-from autoskillit.fleet.state import write_initial_state
+from autoskillit.fleet.campaign_state.state import write_initial_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -288,7 +288,7 @@ class TestUpdateCampaignState:
             "d-test", sp, reset_to_queued=False, labels_reset=False
         )
         assert result is True
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(sp)
         assert state is not None
@@ -302,7 +302,7 @@ class TestUpdateCampaignState:
             "d-test2", sp, reset_to_queued=False, labels_reset=True
         )
         assert result is True
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(sp)
         assert state is not None

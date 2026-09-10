@@ -28,7 +28,7 @@ _SHARED_READ_SIDE_VALIDATORS = {
 def _scan_write_versioned_json_callers_cached() -> frozenset[str]:
     """AST-scan src/autoskillit/ for modules that call write_versioned_json.
 
-    Returns repo-relative module paths (e.g. "src/autoskillit/fleet/state.py").
+    Returns repo-relative module paths (e.g. "src/autoskillit/fleet/campaign_state/state.py").
     """
     src_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
     modules: set[str] = set()

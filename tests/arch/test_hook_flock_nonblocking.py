@@ -113,7 +113,7 @@ _EXPECTED_ACQUISITIONS = (
         "flush_session_log",
         "ArtifactLease.acquire_exclusive",
     ),
-    ("fleet/_state_lock.py", "acquire", "acquire_flock_with_timeout"),
+    ("fleet/campaign_state/_state_lock.py", "acquire", "acquire_flock_with_timeout"),
     ("hooks/_capture/_resolver.py", "_acquire_shared_lease", "flock"),
     ("hooks/_capture/_resolver.py", "acquire_writer_lease", "flock"),
     ("hooks/_capture_lifecycle/_admission.py", "_acquire_flock", "flock"),

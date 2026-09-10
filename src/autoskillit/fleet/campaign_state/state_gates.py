@@ -6,8 +6,8 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from autoskillit.fleet.state_outcomes import GateRecordResult
-from autoskillit.fleet.state_transitions import DispatchStatus, _validate_transition
+from autoskillit.fleet.campaign_state.state_outcomes import GateRecordResult
+from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus, _validate_transition
 
 
 def record_gate_outcome(
@@ -19,7 +19,7 @@ def record_gate_outcome(
 
     Returns a GateRecordResult with success/failure and error details.
     """
-    from autoskillit.fleet.state import CampaignStateMutator  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import CampaignStateMutator  # noqa: PLC0415
 
     with CampaignStateMutator(state_path) as m:
         if m.state is None:

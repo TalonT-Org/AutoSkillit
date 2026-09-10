@@ -50,7 +50,7 @@ class TestResumeWithoutPriorDispatchId:
         assert len(state_files) == 1
         assert state_files[0].exists()
 
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(state_files[0])
         assert state is not None
@@ -93,7 +93,7 @@ class TestResumeWithoutPriorDispatchId:
         )
 
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         await _run_dispatch(
             tool_ctx=tool_ctx,
@@ -122,7 +122,7 @@ class TestResumeWithoutPriorDispatchId:
 
 class TestDispatchStateHandleFactory:
     def test_dispatch_state_handle_create_fresh_writes_file(self, tmp_path):
-        from autoskillit.fleet.state import DispatchStateHandle, read_state
+        from autoskillit.fleet.campaign_state.state import DispatchStateHandle, read_state
 
         d = _dispatches_dir(tmp_path)
         handle = DispatchStateHandle.create_fresh(
@@ -137,14 +137,14 @@ class TestDispatchStateHandleFactory:
         assert state.dispatches[0].name == "d1"
 
     def test_dispatch_state_handle_open_continued_rejects_missing_file(self, tmp_path):
-        from autoskillit.fleet.state import DispatchStateHandle
+        from autoskillit.fleet.campaign_state.state import DispatchStateHandle
 
         d = _dispatches_dir(tmp_path)
         with pytest.raises(FileNotFoundError):
             DispatchStateHandle.open_continued(d, "00000000-0000-0000-0000-000000000001")
 
     def test_dispatch_state_handle_open_continued_succeeds_with_existing_file(self, tmp_path):
-        from autoskillit.fleet.state import DispatchStateHandle
+        from autoskillit.fleet.campaign_state.state import DispatchStateHandle
 
         d = _dispatches_dir(tmp_path)
         known_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -170,7 +170,7 @@ class TestAllResumeCombinationsProduceValidHandle:
     def test_all_resume_combinations_produce_valid_handle(
         self, tmp_path, resume, prior, expect_fresh
     ):
-        from autoskillit.fleet.state import DispatchStateHandle
+        from autoskillit.fleet.campaign_state.state import DispatchStateHandle
 
         d = _dispatches_dir(tmp_path)
 
@@ -202,7 +202,7 @@ class TestCaptureChainAcrossResumeBoundary:
             write_captured_values,
         )
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state_outcomes import DispatchRejected
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
         from tests.fleet._helpers import (
@@ -264,7 +264,7 @@ class TestCaptureChainAcrossResumeBoundary:
                 f"Campaign capture ref not resolved — captures lost: {result.message}"
             )
         else:
-            from autoskillit.fleet.state_outcomes import DispatchCompleted
+            from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted
 
             assert isinstance(result, DispatchCompleted), f"Unexpected result type: {type(result)}"
             assert result.dispatch_id != prior_id
@@ -283,7 +283,7 @@ class TestSessionChainAccumulatesAcrossResume:
             resolve_native_shell_capture_decision,
         )
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
         from tests.fleet._helpers import (
             _mock_backend_with_locator,
             _no_sleep_quota_checker,
@@ -378,7 +378,7 @@ class TestSessionChainAccumulatesAcrossResume:
             prior_dispatch_id=prior_id,
         )
 
-        from autoskillit.fleet.state_outcomes import DispatchRejected
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
 
         assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
 
@@ -395,7 +395,7 @@ class TestDispatchedSessionLogDirPopulated:
         """dispatched_session_log_dir is populated after _run_dispatch completes."""
         from autoskillit.core import DefaultManagedWorkerCapacity
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
         from autoskillit.recipe.schema import Recipe, RecipeKind
         from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
         from tests.fleet._helpers import (
@@ -454,7 +454,7 @@ class TestDispatchedSessionLogDirPopulated:
             quota_refresher=_noop_quota_refresher,
         )
 
-        from autoskillit.fleet.state_outcomes import DispatchRejected
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
 
         assert not isinstance(result, DispatchRejected), f"Unexpected rejection: {result}"
 
@@ -477,8 +477,8 @@ class TestProcessIdentityPreservation:
 
         from autoskillit.core import DefaultManagedWorkerCapacity, RetryReason, SkillResult
         from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.state import read_state
-        from autoskillit.fleet.state_outcomes import DispatchRejected
+        from autoskillit.fleet.campaign_state.state import read_state
+        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
         from autoskillit.recipe.schema import Recipe, RecipeKind
         from tests.fleet._helpers import (
             _make_recipe_info,
@@ -565,7 +565,7 @@ class TestProcessIdentityPreservation:
             )
 
         def _fake_classify(*args, **kwargs):
-            from autoskillit.fleet.state import DispatchStatus
+            from autoskillit.fleet.campaign_state.state import DispatchStatus
 
             return (DispatchStatus.SUCCESS, None)
 

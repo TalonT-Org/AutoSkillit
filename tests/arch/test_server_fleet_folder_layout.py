@@ -444,3 +444,115 @@ def test_stage_c_package_exists_within_file_limit_with_docs(rel_path: str, max_f
     assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
         f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
     )
+
+
+# ---------------------------------------------------------------------------
+# T1 -- Stage D: canonical imports and removed old locations
+# ---------------------------------------------------------------------------
+
+_STAGE_D_SCRIPT = """
+import importlib
+import json
+
+results = {}
+
+# The relocated campaign-state module is the first real import in this process.
+from autoskillit.fleet.campaign_state.state import read_state
+results["campaign_state_first_import"] = read_state.__module__
+
+# Representative real `from ... import ...`, resolved through the fleet
+# gateway, which retains its exact existing `__all__`.
+from autoskillit.fleet.campaign_state.state_records import CampaignState, DispatchRecord
+from autoskillit.fleet import CampaignState as _gw_campaign_state
+from autoskillit.fleet import DispatchRecord as _gw_dispatch_record
+results["gateway_identity_ok"] = (
+    CampaignState is _gw_campaign_state and DispatchRecord is _gw_dispatch_record
+)
+
+# Every relocated module resolves by its full canonical name.
+canonical_modules = [
+    "autoskillit.fleet.campaign_state.state",
+    "autoskillit.fleet.campaign_state.state_effects",
+    "autoskillit.fleet.campaign_state.state_error_codes",
+    "autoskillit.fleet.campaign_state.state_gates",
+    "autoskillit.fleet.campaign_state.state_outcomes",
+    "autoskillit.fleet.campaign_state.state_records",
+    "autoskillit.fleet.campaign_state.state_recovery",
+    "autoskillit.fleet.campaign_state.state_transitions",
+    "autoskillit.fleet.campaign_state._state_lock",
+]
+for _name in canonical_modules:
+    importlib.import_module(_name)
+results["canonical_imports_ok"] = True
+
+# Every corresponding old full module name must be gone.
+old_names = [
+    "autoskillit.fleet.state",
+    "autoskillit.fleet.state_effects",
+    "autoskillit.fleet.state_error_codes",
+    "autoskillit.fleet.state_gates",
+    "autoskillit.fleet.state_outcomes",
+    "autoskillit.fleet.state_records",
+    "autoskillit.fleet.state_recovery",
+    "autoskillit.fleet.state_transitions",
+    "autoskillit.fleet._state_lock",
+]
+old_name_results = {}
+for _name in old_names:
+    try:
+        importlib.import_module(_name)
+        old_name_results[_name] = "IMPORTED"
+    except ModuleNotFoundError:
+        old_name_results[_name] = "ModuleNotFoundError"
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        old_name_results[_name] = f"{type(exc).__name__}: {exc}"
+results["old_name_results"] = old_name_results
+
+print(json.dumps(results))
+"""
+
+
+def test_stage_d_canonical_campaign_state_imports_resolve_and_old_paths_are_gone() -> None:
+    """New `fleet/campaign_state/` imports resolve; every old `fleet/state*` path is gone."""
+    results = _run_cold_import(_STAGE_D_SCRIPT)
+    assert results["campaign_state_first_import"] == "autoskillit.fleet.campaign_state.state"
+    assert results["gateway_identity_ok"] is True
+    assert results["canonical_imports_ok"] is True
+    old_name_results = results["old_name_results"]
+    assert isinstance(old_name_results, dict)
+    not_removed = {
+        name: outcome
+        for name, outcome in old_name_results.items()
+        if outcome != "ModuleNotFoundError"
+    }
+    assert not not_removed, f"old campaign-state module path(s) still importable: {not_removed}"
+
+
+# ---------------------------------------------------------------------------
+# T2 -- Stage D: layout, documentation, and real ceilings
+# ---------------------------------------------------------------------------
+
+_STAGE_D_PACKAGES: tuple[tuple[str, int], ...] = (("fleet/campaign_state", 10),)
+
+
+@pytest.mark.parametrize("rel_path,max_files", _STAGE_D_PACKAGES)
+def test_stage_d_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
+    """The new Stage D package exists, stays within its nested-file ceiling, and is documented."""
+    pkg_dir = SRC_ROOT / rel_path
+    assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
+
+    py_files = list(pkg_dir.glob("*.py"))
+    assert len(py_files) <= max_files, (
+        f"{rel_path}/ has {len(py_files)} direct Python files, max is {max_files}"
+    )
+
+    agents_md = pkg_dir / "AGENTS.md"
+    assert agents_md.is_file(), f"{rel_path}/AGENTS.md is missing"
+    agents_text = agents_md.read_text(encoding="utf-8")
+    assert agents_text.strip(), f"{rel_path}/AGENTS.md is empty"
+
+    claude_md = pkg_dir / "CLAUDE.md"
+    assert claude_md.is_file(), f"{rel_path}/CLAUDE.md is missing"
+    assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
+        f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
+    )

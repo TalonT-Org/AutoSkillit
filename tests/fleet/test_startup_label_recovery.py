@@ -20,7 +20,7 @@ def _make_running_dispatch_state(
 ) -> None:
     """Create a campaign state file with one RUNNING dispatch and a sidecar."""
     from autoskillit.fleet import DispatchRecord, write_initial_state
-    from autoskillit.fleet.state import mark_dispatch_running
+    from autoskillit.fleet.campaign_state.state import mark_dispatch_running
 
     write_initial_state(
         state_path,
@@ -112,7 +112,7 @@ class TestStartupLabelRecoverySweep:
         """Sweep handles RUNNING dispatch with sidecar_path=None without error."""
         from autoskillit.fleet import DispatchRecord, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import mark_dispatch_running
+        from autoskillit.fleet.campaign_state.state import mark_dispatch_running
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -182,7 +182,7 @@ class TestStartupLabelRecoverySweep:
         """Sweep cleans labels for FAILURE dispatch with labels_cleaned=False."""
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+        from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -236,7 +236,7 @@ class TestStartupLabelRecoverySweep:
         """Sweep leaves labels_cleaned=False when cleanup_orphaned_labels fails."""
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+        from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -290,7 +290,7 @@ class TestStartupLabelRecoverySweep:
         """Sweep does NOT clean labels for FAILURE dispatch with labels_cleaned=True."""
         from autoskillit.fleet import DispatchRecord, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+        from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -341,7 +341,7 @@ class TestStartupLabelRecoverySweep:
         """Dispatch with deleted sidecar file must NOT get labels_cleaned=True."""
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+        from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
@@ -386,7 +386,7 @@ class TestStartupLabelRecoverySweep:
         """Sweep cleans labels for FAILURE dispatch with sidecar_path=None + issue_url set."""
         from autoskillit.fleet import DispatchRecord, read_state, write_initial_state
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+        from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
             "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",

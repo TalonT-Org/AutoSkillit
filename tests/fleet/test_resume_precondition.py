@@ -13,9 +13,9 @@ import pytest
 
 from autoskillit.core import FleetErrorCode as FEC
 from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
-from autoskillit.fleet.state import read_state
-from autoskillit.fleet.state_records import FLEET_HALTED_SENTINEL
-from autoskillit.fleet.state_recovery import ResumePreflight
+from autoskillit.fleet.campaign_state.state import read_state
+from autoskillit.fleet.campaign_state.state_records import FLEET_HALTED_SENTINEL
+from autoskillit.fleet.campaign_state.state_recovery import ResumePreflight
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -59,7 +59,7 @@ class TestPrepareResume:
     """
 
     def _prepare_resume(self):
-        from autoskillit.fleet.state_recovery import prepare_resume
+        from autoskillit.fleet.campaign_state.state_recovery import prepare_resume
 
         return prepare_resume
 

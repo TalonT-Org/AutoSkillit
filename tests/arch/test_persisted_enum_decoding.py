@@ -125,7 +125,7 @@ def test_every_registered_decoder_module_exists() -> None:
     assert set(PERSISTED_ENUM_DECODERS) == {
         "core/_retiring_cache.py",
         "execution/session/_skill_session_contract_codec.py",
-        "fleet/state_records.py",
+        "fleet/campaign_state/state_records.py",
         "hooks/_capture/_lifecycle_record.py",
     }
 

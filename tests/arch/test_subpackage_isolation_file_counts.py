@@ -22,7 +22,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "cli/session": 11,
     "cli/doctor": 13,
     "pipeline": 19,
-    "fleet": 29,
+    "fleet": 20,
     "server/tools": 39,
     "execution/process": 11,
     "execution/backends": 30,
@@ -246,15 +246,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
             configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
             Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
             narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
-            server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
-            state_recovery.py to reduce the 757-line monolith and centralize deserialization
-            logic on DispatchRecord.from_dict. Startup warming lives here so its
-            execution/fleet imports remain layer-correct. state_types.py was then further
-            decomposed into state_effects.py, state_records.py, state_transitions.py,
-            state_outcomes.py, and state_error_codes.py (#4856) to split the 899-line monolith
-            along effect-provenance, dispatch-record/campaign-state, transition/retry, and
-            outcome/result boundaries, after which the transitional state_types.py re-export
-            facade was deleted. Exempt at 28 files.
+            server/ tests. The nine campaign-state modules (state, state_effects,
+            state_error_codes, state_gates, state_outcomes, state_records, state_recovery,
+            state_transitions, _state_lock) moved into their own fleet/campaign_state/
+            subpackage (issue #4673), each retaining its basename; fleet's remaining
+            sidecar, dispatch, parsing, and prompt concerns do not form a shared
+            responsibility that would justify grouping them into a further package.
+            Exempt at 20 files -- a root package a single reviewer can still hold in mind.
     """
     violations: list[str] = []
     dirs_to_check: list[Path] = []

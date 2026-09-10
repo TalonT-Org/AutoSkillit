@@ -1,4 +1,4 @@
-"""Tests for fleet.state.build_protected_campaign_ids (PROT_1–PROT_9)."""
+"""Tests for fleet.campaign_state.state.build_protected_campaign_ids (PROT_1–PROT_9)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.fleet import FLEET_STATE_SCHEMA_VERSION
-from autoskillit.fleet.state import build_protected_campaign_ids
+from autoskillit.fleet.campaign_state.state import build_protected_campaign_ids
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.feature("fleet"), pytest.mark.small]
 

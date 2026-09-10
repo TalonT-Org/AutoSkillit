@@ -147,7 +147,7 @@ class TestDispatchFoodTruckExecution:
         assert "dispatch_id" in result
         assert result["dispatched_session_id"] == "sess-abc"
         assert result["l3_payload"] == canned_payload
-        from autoskillit.fleet.state import normalize_dispatch_token_usage
+        from autoskillit.fleet.campaign_state.state import normalize_dispatch_token_usage
 
         assert result["token_usage"] == normalize_dispatch_token_usage({"input_tokens": 100})
         assert result["l3_parse_source"] == "stdout"
@@ -161,7 +161,7 @@ class TestDispatchFoodTruckExecution:
     async def test_dispatch_food_truck_on_spawn_writes_pid(self, tool_ctx, monkeypatch):
         """on_spawn callback writes dispatched_pid into state.json via mark_dispatch_running."""
         from autoskillit.fleet._api import _write_pid
-        from autoskillit.fleet.state import DispatchRecord, write_initial_state
+        from autoskillit.fleet.campaign_state.state import DispatchRecord, write_initial_state
 
         state_path = tool_ctx.temp_dir / "dispatches" / "test-dispatch.json"
         state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,7 +185,7 @@ class TestDispatchFoodTruckExecution:
     async def test_dispatch_food_truck_passes_on_spawn_to_executor(self, tool_ctx, monkeypatch):
         """execute_dispatch passes an on_spawn that writes the PID to the state file."""
         from autoskillit.fleet._api import execute_dispatch
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         self._setup_standard_dispatch(tool_ctx, monkeypatch)
 

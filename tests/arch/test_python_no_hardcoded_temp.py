@@ -56,7 +56,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: reads fleet dispatch state files from the canonical temp dir
     # (<project_root>/.autoskillit/temp/dispatches/) to determine which campaign IDs
     # have active dispatches; owned by the fleet layer after the IL-1→IL-2 refactor.
-    "fleet/state.py": "reads fleet dispatch state from canonical temp dir",
+    "fleet/campaign_state/state.py": "reads fleet dispatch state from canonical temp dir",
     # Justification: stdlib-only IL-0 module (no autoskillit imports allowed); uses the
     # canonical .autoskillit/temp path to locate session_registry.json, mirroring the
     # same path construction used by kitchen_state.py and _hook_settings.py.

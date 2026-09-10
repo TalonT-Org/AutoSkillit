@@ -22,7 +22,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageRef,
     ResolvedLaunchContract,
 )
-from autoskillit.fleet.state_transitions import (
+from autoskillit.fleet.campaign_state.state_transitions import (
     DispatchStatus,
     _validate_transition,
 )

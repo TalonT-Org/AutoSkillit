@@ -13,16 +13,16 @@ from autoskillit.core import (
     SkillResult,
     truncate_text,
 )
-from autoskillit.fleet.result_parser import L3ParseResult
-from autoskillit.fleet.state import (
+from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
     DispatchStateHandle,
     DispatchStatus,
     normalize_dispatch_token_usage,
 )
-from autoskillit.fleet.state_effects import DispatchEffectProvenance
-from autoskillit.fleet.state_outcomes import DispatchCompleted, DispatchResult
-from autoskillit.fleet.state_transitions import _ABANDON_REASONS
+from autoskillit.fleet.campaign_state.state_effects import DispatchEffectProvenance
+from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted, DispatchResult
+from autoskillit.fleet.campaign_state.state_transitions import _ABANDON_REASONS
+from autoskillit.fleet.result_parser import L3ParseResult
 
 ENVELOPE_STDERR_MAX = 2000
 

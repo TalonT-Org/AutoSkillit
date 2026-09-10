@@ -17,15 +17,15 @@ from autoskillit.core import (
     ManagedHeadlessSessionTerminalState,
     get_logger,
 )
-from autoskillit.fleet import state as _fleet_state
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
-from autoskillit.fleet.state import DispatchStatus
-from autoskillit.fleet.state_effects import DispatchProvenanceTracker
-from autoskillit.fleet.state_outcomes import (
+from autoskillit.fleet.campaign_state import state as _fleet_state
+from autoskillit.fleet.campaign_state.state import DispatchStatus
+from autoskillit.fleet.campaign_state.state_effects import DispatchProvenanceTracker
+from autoskillit.fleet.campaign_state.state_outcomes import (
     DispatchCompleted,
     DispatchResult,
 )
-from autoskillit.fleet.state_records import DispatchRecord
+from autoskillit.fleet.campaign_state.state_records import DispatchRecord
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -81,7 +81,8 @@ def complete_failure_with_state(
         return DispatchResult(completed, per_dispatch_state_path=None)
     try:
         # Access via module attribute (not ``from … import …``) so that
-        # ``monkeypatch.setattr("autoskillit.fleet.state.append_dispatch_record", ...)``
+        # ``monkeypatch.setattr(
+        #     "autoskillit.fleet.campaign_state.state.append_dispatch_record", ...)``
         # patches observed by tests reach this call site.
         _fleet_state.append_dispatch_record(
             state_path,

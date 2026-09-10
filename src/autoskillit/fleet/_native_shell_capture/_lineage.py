@@ -21,13 +21,13 @@ from autoskillit.core import (
     new_managed_launch_id,
     resolve_native_shell_capture_decision,
 )
-from autoskillit.fleet.state import (
+from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
     DispatchStateHandle,
     DispatchStatus,
     read_state,
 )
-from autoskillit.fleet.state_recovery import ResumePreflight
+from autoskillit.fleet.campaign_state.state_recovery import ResumePreflight
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext

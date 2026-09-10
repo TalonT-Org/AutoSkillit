@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import FleetErrorCode
-from autoskillit.fleet.state_effects import DispatchEffectProvenance
-from autoskillit.fleet.state_transitions import DispatchStatus
+from autoskillit.fleet.campaign_state.state_effects import DispatchEffectProvenance
+from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
 
 
 @dataclass(frozen=True, slots=True)

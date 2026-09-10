@@ -28,8 +28,11 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet._native_shell_capture import set_lineage_terminal_state
+from autoskillit.fleet.campaign_state.state_effects import (
+    DispatchEffectName,
+    DispatchProvenanceTracker,
+)
 from autoskillit.fleet.dispatch._execution import SpawnContext
-from autoskillit.fleet.state_effects import DispatchEffectName, DispatchProvenanceTracker
 
 if TYPE_CHECKING:
     from autoskillit.core import SkillResult
@@ -107,7 +110,9 @@ async def handle_cancellation(
                 exc_info=True,
             )
         try:
-            from autoskillit.fleet.state import mark_dispatch_interrupted  # noqa: PLC0415
+            from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
+                mark_dispatch_interrupted,
+            )
 
             captured_session_id = (
                 spawn_ctx.dispatched_session_id[0] if spawn_ctx.dispatched_session_id else ""

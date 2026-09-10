@@ -488,8 +488,12 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
     """Prior captured_values in state file are resolved into ingredients before dispatch."""
 
     from autoskillit.fleet._api import execute_dispatch
+    from autoskillit.fleet.campaign_state.state import (
+        DispatchRecord,
+        write_captured_values,
+        write_initial_state,
+    )
     from autoskillit.fleet.result_parser import L3ParseResult
-    from autoskillit.fleet.state import DispatchRecord, write_captured_values, write_initial_state
 
     # Pre-create a state file for the same campaign_id with captured_values
     campaign_id = tool_ctx.kitchen_id
@@ -503,7 +507,7 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
         manifest_path="",
         dispatches=[DispatchRecord(name="prior-dispatch")],
     )
-    from autoskillit.fleet.state import DispatchStatus, append_dispatch_record
+    from autoskillit.fleet.campaign_state.state import DispatchStatus, append_dispatch_record
 
     append_dispatch_record(
         prior_state_path,
@@ -834,9 +838,9 @@ def test_interpolate_rejects_empty_string_campaign_ref():
 
 def _make_success_state(state_path, campaign_id, captures):
     """Helper: create a state file with one SUCCESS dispatch and captured values."""
-    from autoskillit.fleet.state import write_captured_values, write_initial_state
-    from autoskillit.fleet.state_records import DispatchRecord
-    from autoskillit.fleet.state_transitions import DispatchStatus
+    from autoskillit.fleet.campaign_state.state import write_captured_values, write_initial_state
+    from autoskillit.fleet.campaign_state.state_records import DispatchRecord
+    from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
 
     dispatch = DispatchRecord(
         name="test-dispatch-1",
@@ -854,7 +858,7 @@ def _make_success_state(state_path, campaign_id, captures):
 
 def test_captures_from_prior_session_visible_with_same_campaign_id(tmp_path):
     """Captures written under campaign_id X must be readable when kitchen_id == X."""
-    from autoskillit.fleet.state import read_all_campaign_captures
+    from autoskillit.fleet.campaign_state.state import read_all_campaign_captures
 
     dispatches_dir = tmp_path / "dispatches"
     dispatches_dir.mkdir()
@@ -868,7 +872,7 @@ def test_captures_from_prior_session_visible_with_same_campaign_id(tmp_path):
 
 def test_captures_from_prior_session_invisible_with_different_campaign_id(tmp_path):
     """Different campaign_id = invisible captures (orphaned by namespace mismatch)."""
-    from autoskillit.fleet.state import read_all_campaign_captures
+    from autoskillit.fleet.campaign_state.state import read_all_campaign_captures
 
     dispatches_dir = tmp_path / "dispatches"
     dispatches_dir.mkdir()

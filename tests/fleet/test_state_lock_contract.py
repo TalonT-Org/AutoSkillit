@@ -52,7 +52,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "execution/session/_session_state.py",
         "workspace/clone_registry.py",
         "workspace/session_skill_lifecycle.py",
-        "fleet/_state_lock.py",
+        "fleet/campaign_state/_state_lock.py",
         "planner/merge.py",
         "server/tools/_overlay_state.py",  # session overlay transaction lock
         "server/tools/tools_pipeline_tracker/_handlers.py",  # mark_step_complete: flock sidecar
@@ -83,7 +83,7 @@ class TestCampaignStateMutatorBoundedLocking:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The in-process lock has a bounded wait before any file resource opens."""
-        import autoskillit.fleet.state as fleet_state
+        import autoskillit.fleet.campaign_state.state as fleet_state
 
         class RejectingLock:
             def __init__(self) -> None:
@@ -113,8 +113,8 @@ class TestCampaignStateMutatorBoundedLocking:
         """A cross-process lock failure cannot leak either lock ownership resource."""
         import builtins
 
-        import autoskillit.fleet._state_lock as state_lock
-        import autoskillit.fleet.state as fleet_state
+        import autoskillit.fleet.campaign_state._state_lock as state_lock
+        import autoskillit.fleet.campaign_state.state as fleet_state
 
         class TrackingLock:
             def __init__(self) -> None:
@@ -159,8 +159,8 @@ class TestCampaignStateMutatorBoundedLocking:
         """Cleanup preserves the body error while still releasing the thread lock."""
         import builtins
 
-        import autoskillit.fleet._state_lock as state_lock
-        import autoskillit.fleet.state as fleet_state
+        import autoskillit.fleet.campaign_state._state_lock as state_lock
+        import autoskillit.fleet.campaign_state.state as fleet_state
 
         class TrackingLock:
             def __init__(self) -> None:
@@ -207,8 +207,8 @@ class TestCampaignStateMutatorBoundedLocking:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The state mutator delegates the nonblocking retry policy to core."""
-        import autoskillit.fleet._state_lock as state_lock
-        import autoskillit.fleet.state as fleet_state
+        import autoskillit.fleet.campaign_state._state_lock as state_lock
+        import autoskillit.fleet.campaign_state.state as fleet_state
 
         state_path = tmp_path / "state.json"
         write_initial_state(state_path, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
@@ -238,7 +238,7 @@ class TestCampaignStateMutatorBoundedLocking:
             os.close(read_fd)
             result = b"sigint-not-delivered"
             try:
-                import autoskillit.fleet._state_lock as state_lock
+                import autoskillit.fleet.campaign_state._state_lock as state_lock
 
                 original_pthread_sigmask = state_lock.signal.pthread_sigmask
                 sent_sigint = False
@@ -578,7 +578,7 @@ class TestFlockTargetPathVerification:
         with (
             patch.object(builtins, "open", side_effect=tracking_open),
             patch(
-                "autoskillit.fleet._state_lock.acquire_flock_with_timeout",
+                "autoskillit.fleet.campaign_state._state_lock.acquire_flock_with_timeout",
                 side_effect=tracking_acquire_flock,
             ),
         ):

@@ -37,19 +37,19 @@ from autoskillit.fleet._native_shell_capture import (
     resolve_dispatch_timeout,
 )
 from autoskillit.fleet._outcome import build_success_short_circuit as _build_success_short_circuit
-from autoskillit.fleet.dispatch._errors import complete_failure_with_state
-from autoskillit.fleet.state import (
+from autoskillit.fleet.campaign_state.state import (
     DispatchIdentity,
     DispatchRecord,
     DispatchStateHandle,
     read_all_campaign_captures,
 )
-from autoskillit.fleet.state_effects import (
+from autoskillit.fleet.campaign_state.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
 )
-from autoskillit.fleet.state_outcomes import DispatchResult
-from autoskillit.fleet.state_recovery import ResumePreflight, prepare_resume
+from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
+from autoskillit.fleet.campaign_state.state_recovery import ResumePreflight, prepare_resume
+from autoskillit.fleet.dispatch._errors import complete_failure_with_state
 from autoskillit.workspace import default_skill_resolver, prepare_skill_projection
 
 if TYPE_CHECKING:

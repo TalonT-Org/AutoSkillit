@@ -14,14 +14,14 @@ from autoskillit.core import (
     RetryReason,
     get_logger,
 )
-from autoskillit.fleet.state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
-from autoskillit.fleet.state_records import (
+from autoskillit.fleet.campaign_state.state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
+from autoskillit.fleet.campaign_state.state_records import (
     FLEET_HALTED_SENTINEL,
     CampaignState,
     DispatchRecord,
     ResumeDecision,
 )
-from autoskillit.fleet.state_transitions import (
+from autoskillit.fleet.campaign_state.state_transitions import (
     _ABANDON_REASONS,
     _VISIBLE_IN_BLOCK_STATUSES,
     TERMINAL_UNCLEANED_STATUSES,
@@ -31,7 +31,7 @@ from autoskillit.fleet.state_transitions import (
 MAX_CONSECUTIVE_RESUME_ATTEMPTS = 3
 
 if TYPE_CHECKING:
-    from autoskillit.fleet.state import CampaignStateMutator
+    from autoskillit.fleet.campaign_state.state import CampaignStateMutator
 
 
 class ResumePreflight(NamedTuple):
@@ -147,7 +147,7 @@ def prepare_resume(
     cap semantics apply regardless of the entry point that triggered the
     transition.
     """
-    from autoskillit.fleet.state import read_state, reset_blocking_dispatch
+    from autoskillit.fleet.campaign_state.state import read_state, reset_blocking_dispatch
 
     if not state_path.exists():
         return None
@@ -255,7 +255,7 @@ def has_failed_dispatch(state_path: Path) -> bool:
 
     Returns False when the file is missing or corrupted (fail-open).
     """
-    from autoskillit.fleet.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
 
     if not state_path.exists():
         return False
@@ -276,7 +276,7 @@ def has_blocking_dispatch(state_path: Path) -> bool:
 
     Returns False when the file is missing or corrupted (fail-open).
     """
-    from autoskillit.fleet.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
 
     if not state_path.exists():
         return False
@@ -307,7 +307,7 @@ def find_completed_dispatch(state_path: Path, dispatch_name: str) -> DispatchRec
     Returns None when the file is missing, corrupted, or no matching SUCCESS
     record exists (fail-open).
     """
-    from autoskillit.fleet.state import read_state  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
 
     if not state_path.exists():
         return None
@@ -438,11 +438,13 @@ def resume_campaign_from_state(
     ResumeDecision with next_dispatch_name="" if all dispatches are
     complete or the campaign is halted.
     """
-    from autoskillit.fleet.state import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
         CampaignStateMutator,
         read_state,
     )
-    from autoskillit.fleet.state_records import _clear_dispatch_for_retry  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state_records import (
+        _clear_dispatch_for_retry,  # noqa: PLC0415
+    )
 
     # Pass 1: stale-RUNNING recovery + per-dispatch halt/reset for the FAILURE /
     # INTERRUPTED / REFUSED statuses. This pass mutates the file (closes the
@@ -586,8 +588,8 @@ def find_dispatch_for_issue(
     Returns the first matching DispatchRecord, else None. Reads are filesystem-only.
     Never raises.
     """
+    from autoskillit.fleet.campaign_state.state import read_state  # noqa: PLC0415
     from autoskillit.fleet.sidecar import read_sidecar_from_path  # noqa: PLC0415
-    from autoskillit.fleet.state import read_state  # noqa: PLC0415
 
     terminal_match: DispatchRecord | None = None
     for state_path in campaign_state_paths:

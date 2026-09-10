@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.fleet.state_records import ResumeDecision
+from autoskillit.fleet.campaign_state.state_records import ResumeDecision
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -661,7 +661,7 @@ class TestCrossInvocationResume:
         )
 
         from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
-        from autoskillit.fleet.state import update_orchestrator_session_id
+        from autoskillit.fleet.campaign_state.state import update_orchestrator_session_id
 
         update_orchestrator_session_id(state_path, "prior-session-abc")
 

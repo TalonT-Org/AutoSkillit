@@ -1,4 +1,4 @@
-"""Tests for find_dispatch_for_issue in fleet/state_recovery.py."""
+"""Tests for find_dispatch_for_issue in fleet/campaign_state/state_recovery.py."""
 
 from __future__ import annotations
 

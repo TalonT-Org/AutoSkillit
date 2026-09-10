@@ -16,8 +16,8 @@ from autoskillit.core import (
     read_versioned_json,
     write_versioned_json,
 )
-from autoskillit.fleet._state_lock import CampaignStateMutatorOwnership
-from autoskillit.fleet.state_effects import (
+from autoskillit.fleet.campaign_state._state_lock import CampaignStateMutatorOwnership
+from autoskillit.fleet.campaign_state.state_effects import (
     DispatchAggregatePhase,
     DispatchEffectName,
     DispatchEffectPhase,
@@ -26,14 +26,14 @@ from autoskillit.fleet.state_effects import (
     DispatchProvenanceTracker,
     DispatchRetryDisposition,
 )
-from autoskillit.fleet.state_gates import record_gate_outcome
-from autoskillit.fleet.state_outcomes import (
+from autoskillit.fleet.campaign_state.state_gates import record_gate_outcome
+from autoskillit.fleet.campaign_state.state_outcomes import (
     DispatchCompleted,
     DispatchRejected,
     DispatchResult,
     GateRecordResult,
 )
-from autoskillit.fleet.state_records import (
+from autoskillit.fleet.campaign_state.state_records import (
     _RETRY_IDENTITY_FIELDS,
     FLEET_HALTED_SENTINEL,
     FLEET_STATE_SCHEMA_VERSION,
@@ -42,14 +42,14 @@ from autoskillit.fleet.state_records import (
     ResumeDecision,
     _clear_dispatch_for_retry,
 )
-from autoskillit.fleet.state_recovery import (
+from autoskillit.fleet.campaign_state.state_recovery import (
     find_completed_dispatch,
     has_blocking_dispatch,
     has_completed_dispatch,
     has_failed_dispatch,
     resume_campaign_from_state,
 )
-from autoskillit.fleet.state_transitions import (
+from autoskillit.fleet.campaign_state.state_transitions import (
     TERMINAL_DISPATCH_STATUSES,
     TERMINAL_UNCLEANED_STATUSES,
     DispatchStatus,
@@ -389,7 +389,7 @@ def mark_dispatch_running(
     so the existing campaign-level cap semantics are extended to the headless
     path without skipping the cap on a reset-rewriting-the-status path.
     """
-    from autoskillit.fleet.state_recovery import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state_recovery import (  # noqa: PLC0415
         MAX_CONSECUTIVE_RESUME_ATTEMPTS,
         _count_consecutive_resumable_timeouts,
     )

@@ -91,5 +91,5 @@ def test_fixed_batch_result_terminal_offset_returns_empty_complete_page() -> Non
         "offset": 8,
         "next_offset": 8,
         "complete": True,
-        "total_bytes": 8,
+        "total_utf8_bytes": 8,
     }

@@ -450,7 +450,7 @@ def _page_payload(payload: object, *, offset: int, page_size: int) -> dict[str, 
             "offset": offset,
             "next_offset": offset,
             "complete": True,
-            "total_bytes": len(encoded),
+            "total_utf8_bytes": len(encoded),
         }
     end = min(offset + page_size, len(encoded))
     while end > offset:

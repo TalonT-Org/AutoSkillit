@@ -73,7 +73,7 @@ def resolve_ci_profile(
     event_name: str,
     payload: Mapping[str, object],
 ) -> tuple[CiTargetPolicyDef, str]:
-    """Resolve the immutable target policy and conservative-filter base revision."""
+    """Resolve the immutable target policy and the event's trusted base revision."""
 
     allowed_targets = ALLOWED_TARGETS_BY_EVENT.get(event_name)
     if allowed_targets is None:
@@ -114,7 +114,7 @@ def resolve_ci_profile(
         )
 
     base_revision = ""
-    if policy.filter_mode == "conservative":
+    if base_sha is not None:
         base_revision = _require_commit_sha(base_sha, "base SHA")
     return policy, base_revision
 

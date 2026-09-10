@@ -151,7 +151,7 @@ changed files. Controlled by env var + CLI flags:
 
 - **Opt-in**: Set `AUTOSKILLIT_TEST_FILTER=1` (or `=conservative` / `=aggressive`)
 - **CLI override**: `--filter-mode=conservative|aggressive|none`
-- **Base ref override**: `--filter-base-ref=<branch>` (default: reads `AUTOSKILLIT_TEST_BASE_REF` then `GITHUB_BASE_REF`)
+- **Base ref override**: `--filter-base-ref=<branch>` (default: reads `AUTOSKILLIT_TEST_BASE_REF`, then `origin/<GITHUB_BASE_REF>`; an empty value falls through as if unset)
 
 **Filter algorithm** (`tests/_test_filter.py`):
 
@@ -295,6 +295,22 @@ classification layer in `test_command_classification.py`'s
 guard layer in `test_github_mutation_guard.py`'s
 `test_graphql_delivery_matrix_decision_matches_classification` to prove the guard's
 own decision wiring, not to re-derive the classification layer's own matrix.
+
+## Acceptance Policy Surfaces
+
+Register any new numeric budget, ceiling, or exemption registry in `POLICY_SURFACES`
+(`tests/arch/_acceptance_policy_surfaces.py`). Relaxing one — raising a value, adding an
+exemption, adding or changing an exemption predicate, or removing an entry whose limit sits
+below the map's default — needs a `PolicyRelaxationApproval` entry naming a tracking issue and
+the human who recorded it, plus code-owner review. Tightening is free, and so is removing an
+obsolete exemption.
+
+`scripts/check_policy_relaxation.py` enforces this as a pre-commit hook (staged vs `HEAD`), as
+`test_no_registered_surface_relaxed_against_base`, and in CI from the base revision's own copy
+of the script. Here "base" means the merge-base revision's policy values that the candidate is
+compared against — not a Semgrep- or Checkov-style baseline of known findings to suppress. The
+word collides across tools and the two mechanisms are inverted: this one makes the recorded
+state harder to leave, not easier.
 
 ## Retirement Registries
 

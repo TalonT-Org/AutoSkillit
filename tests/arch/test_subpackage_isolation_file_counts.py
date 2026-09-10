@@ -48,12 +48,21 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         "tool_sequence_analysis.py",
         "_execution_marker.py",
         "_step_context.py",
+        # Phase C: core/context_admission/ sub-package
+        "context_admission.py",
+        "context_admission_helpers.py",
+        "context_admission_accept_release.py",
+        "context_admission_expiry_rollover.py",
+        "context_admission_generation.py",
+        "context_admission_indeterminate.py",
+        "context_admission_prepare_stage_dispatch.py",
+        "context_admission_propose_reserve.py",
     }
 )
 _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset()
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 21,  # Phase B: 37 - 16 moved files (issue #4671)
+    "core": 13,  # Phase C: 21 - 8 moved files (issue #4671)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 8,  # 7 files + __init__ + buffer
@@ -61,6 +70,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/audit": 5,  # 4 files + __init__ + buffer
     "core/plugins": 5,  # 4 files + __init__ + buffer
     "core/pipeline": 5,  # 4 files + __init__ + buffer
+    "core/context_admission": 9,  # 8 files + __init__
     # _type_truth replaces the retired _type_tradition_manifest shard.
     "core/types": 76,
     "core/runtime": 11,

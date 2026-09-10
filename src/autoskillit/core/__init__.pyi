@@ -92,6 +92,7 @@ from .context_admission import (
 from .context_admission import (
     ContextAdmissionValidationError as ContextAdmissionValidationError,
 )
+from .context_admission import ProducerSurface as ProducerSurface
 from .context_admission import (
     UnsupportedContextAdmissionProtocolError as UnsupportedContextAdmissionProtocolError,
 )

@@ -477,7 +477,7 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
 ) -> None:
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())

@@ -79,7 +79,7 @@ def test_implementation_flow_records_real_page_within_115k(
     section using the production pagination pipeline (not a synthetic envelope).
     Each rendered page's client-serialized char count must fit within 115K.
     """
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(
         _recipe_generation,

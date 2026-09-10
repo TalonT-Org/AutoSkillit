@@ -35,7 +35,7 @@ from autoskillit.server.recipe._recipe_initialization import stage_recipe_initia
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext
-    from autoskillit.server.recipe._recipe_delivery import FinalizedRecipeResponse
+    from autoskillit.server.recipe._recipe_delivery._response import FinalizedRecipeResponse
 
 
 def complete_finalized_recipe_response(

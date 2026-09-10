@@ -13,8 +13,8 @@ from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     client_serialized_char_len,
 )
-from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server import _recipe_section_planning as planning
+from autoskillit.server.recipe import _recipe_section_pagination as pagination
+from autoskillit.server.recipe import _recipe_section_planning as planning
 from autoskillit.server.recipe._recipe_initialization import recipe_initialization_receipt
 from autoskillit.server.recipe._recipe_section_pagination import (
     PagePlanCache,

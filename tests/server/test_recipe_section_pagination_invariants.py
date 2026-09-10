@@ -19,8 +19,8 @@ from typing import Any
 import pytest
 
 from autoskillit.core import recipe_section_plan_digest
-from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server import _recipe_section_planning as planning
+from autoskillit.server.recipe import _recipe_section_pagination as pagination
+from autoskillit.server.recipe import _recipe_section_planning as planning
 from autoskillit.server.recipe._recipe_section_pagination import (
     RecipeSectionPaginationError,
 )

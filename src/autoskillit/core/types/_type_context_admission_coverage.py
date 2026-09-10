@@ -127,7 +127,7 @@ _LOCAL_SOURCE_LOCATORS = {
         "src/autoskillit/execution/headless/_headless_helpers.py"
     ),
     ProducerSurface.PARENT_VISIBLE_CHILD_DELIVERY: (
-        "src/autoskillit/server/recipe/_recipe_delivery/__init__.py"
+        "src/autoskillit/server/recipe/_recipe_delivery/_finalize.py"
     ),
 }
 

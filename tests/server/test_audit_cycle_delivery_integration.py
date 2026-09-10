@@ -26,10 +26,10 @@ from autoskillit.core import (
     compute_bytes_hash,
 )
 from autoskillit.pipeline import DefaultAuditAdmissionLedger
-from autoskillit.server import _recipe_execution
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
 )
+from autoskillit.server.recipe import _recipe_execution
 from autoskillit.server.tools.tools_audit_artifacts import (
     write_standalone_audit_evidence_sync,
 )

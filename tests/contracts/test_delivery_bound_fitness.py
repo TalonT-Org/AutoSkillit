@@ -157,7 +157,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     from autoskillit.recipe._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(
         _recipe_generation,

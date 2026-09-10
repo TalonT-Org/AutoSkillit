@@ -103,5 +103,5 @@ def test_recipe_execution_install_site_registry_digest_is_canonical() -> None:
     )
     assert (
         RECIPE_EXECUTION_INSTALL_SITE_REGISTRY_DIGEST
-        == "7aec26971d5946cf50a32c9da3b5c1db10046ec14045881b0339f91993888fe4"
+        == "23e3043b50bafb0aeb8c60296b2d44a6f7bb5e92abf78b92d1f1685603b045e6"
     )

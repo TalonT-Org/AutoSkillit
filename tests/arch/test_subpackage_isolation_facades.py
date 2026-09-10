@@ -23,6 +23,8 @@ def test_recipe_delivery_decomposition_has_expected_siblings() -> None:
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_completion",
+        "_finalize",
+        "_response",
     }
 
 
@@ -70,6 +72,7 @@ def test_open_kitchen_decomposition_has_expected_siblings() -> None:
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_gate",
+        "_orchestrator",
         "_visibility",
         "_recipe_serve",
     }

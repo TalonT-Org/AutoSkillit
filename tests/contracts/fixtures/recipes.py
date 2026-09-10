@@ -82,7 +82,7 @@ def compile_bounded_page_plan(
     response ceiling) exercised by the existing fitness contracts. Pass an
     explicit ``OutputBudgetConfig()`` to compile under production defaults.
     """
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
     payload, projection = _payload_and_projection(recipe_path)

@@ -53,10 +53,10 @@ from autoskillit.pipeline import (
     start_kitchen_effect,
 )
 from autoskillit.recipe import load_and_validate
-from autoskillit.server import _recipe_artifact as recipe_artifact
-from autoskillit.server import _recipe_delivery as recipe_delivery
-from autoskillit.server import _recipe_section_pagination as pagination
 from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.recipe import _recipe_artifact as recipe_artifact
+from autoskillit.server.recipe import _recipe_delivery as recipe_delivery
+from autoskillit.server.recipe import _recipe_section_pagination as pagination
 from autoskillit.server.recipe._recipe_artifact import (
     _canonical_payload,
     _generation_dir,

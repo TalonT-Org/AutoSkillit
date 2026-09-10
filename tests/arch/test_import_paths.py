@@ -363,6 +363,7 @@ def test_req_imp_007_server_cli_no_unauthorized_cross_submodule_imports() -> Non
         Path("server/tools/tools_kitchen/__init__.py"),
         Path("server/tools/tools_kitchen/_open_kitchen/__init__.py"),
         Path("server/tools/tools_kitchen/_open_kitchen/_gate.py"),
+        Path("server/tools/tools_kitchen/_open_kitchen/_orchestrator.py"),
         Path("server/tools/tools_kitchen/_open_kitchen/_visibility.py"),
         Path("server/tools/tools_kitchen/_open_kitchen/_recipe_serve.py"),
         Path("server/tools/tools_kitchen/_open_kitchen_transition.py"),

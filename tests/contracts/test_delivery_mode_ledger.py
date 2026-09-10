@@ -81,7 +81,7 @@ def _resolve_delivery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> _ResolvedDelivery:
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
     project_root = Path(__file__).resolve().parents[2]

@@ -5,17 +5,15 @@ relocated from `server/` (issue #4673) with no behavior change.
 
 ## Responsibilities
 
-| Module | Owns |
-|---|---|
-| `_recipe_artifact.py` | Immutable recipe artifact persistence and canonical generation building |
-| `_recipe_delivery.py` | Unified recipe finalization: decision, shaping, and transactional commit |
-| `_recipe_delivery_helpers.py` | Delivery decision-support: attestation, margins, manifest planning |
-| `_recipe_segment_delivery.py` | Canonical startup and checkpoint carriers for segmented delivery |
-| `_recipe_execution.py` | Server-owned compiled recipe execution and audit admission state |
-| `_recipe_generation.py` | Kitchen-scoped ownership of compiled and persisted recipe generations |
-| `_recipe_initialization.py` | Server translation and post-enforcement commits for initialization |
-| `_recipe_section_pagination.py` | Deterministic grammar-aware pagination for persisted recipe sections |
-| `_recipe_section_planning.py` | Page boundary planning: binary search plus candidate-page fitness |
+Compiled-recipe generation and its persisted artifacts are owned by
+`_recipe_generation` and `_recipe_artifact` respectively. Transactional
+finalization lives in the `_recipe_delivery/` sub-package, with its own
+decision-support helpers in `_recipe_delivery_helpers` and its segmented
+startup/checkpoint carriers in `_recipe_segment_delivery`. Server-owned
+execution and initialization commits are split across `_recipe_execution`
+and `_recipe_initialization`. Section pagination is split between the
+page-fitting engine (`_recipe_section_pagination`, `_recipe_section_planning`)
+and the `section/` sub-package's final invariant proof.
 
 ## Import boundary
 

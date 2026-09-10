@@ -38,7 +38,7 @@ from autoskillit.execution import (
     MANAGED_CODEX_LEAF_GUARD_SET,
     MANAGED_CODEX_PARENT_GUARD_SET,
 )
-from autoskillit.hooks import OUTCOME_FAILURE, OUTCOME_SUCCESS
+from autoskillit.hooks import OUTCOME_FAILURE, OUTCOME_SUCCESS, JoinLedgerError
 from autoskillit.hooks._hook_settings import validate_session_id
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
@@ -410,7 +410,7 @@ async def _run_fixed_batch_handler(
         if service is None:
             raise SkillContractError("run_fixed_batch supervisor is unavailable")
         result = await service.run(binding)
-    except (OSError, ValueError, SkillContractError) as exc:
+    except (OSError, ValueError, JoinLedgerError, SkillContractError) as exc:
         logger.warning(
             "run_fixed_batch_rejected",
             exc_info=True,

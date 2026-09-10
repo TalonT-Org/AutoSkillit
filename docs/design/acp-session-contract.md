@@ -107,6 +107,14 @@ ownership:
 | `SessionAttemptHandle` | One attempt view: store-derived `view_id`, inherited view/thread descriptors, and one-shot `record_spawn(pid, pgid)` / `record_reaped(pid, pgid)` callbacks. Reap proof is recorded only after the complete process group is empty and the direct child is reaped. |
 | `HookTrustPolicy` | `REVIEW_EACH_SESSION` emits no hook-trust bypass for interactive fresh, named-resume, bare-resume, or reload commands. Automated skill and food-truck builders retain their explicit bypass. |
 
+For interactive Codex Cook, `ManagedSessionHome.generated_home` is the scoped
+`CODEX_HOME` and `CODEX_SQLITE_HOME`. Its typed `ValidatedAddDir` names the
+generated home's `add-dir`; the sole managed catalog is
+`<generated_home>/add-dir/skills`, and `<generated_home>/skills` is the legacy
+discovery alias to it. The frozen catalog inventory travels with the finalized
+`CmdSpec` so prelaunch validation can attest the same home and catalog that the
+child receives.
+
 ### Plugin load modes and descriptor ownership
 
 The selected backend and effective home determine `PluginLoadMode` before

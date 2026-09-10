@@ -1,7 +1,7 @@
 """Server-owned execution and recovery for one immutable managed fixed batch.
 
 This module deliberately has no MCP decorator.  A later handler resolves a
-trusted launch binding and calls :meth:`ManagedFixedBatchSupervisor.run`; native
+trusted launch binding and calls :meth:`DefaultManagedFixedBatchSupervisor.run`; native
 join declaration remains a separate backend capability route.
 """
 
@@ -84,7 +84,7 @@ class _RecoveryDebt:
 RecoveryVerifier = Callable[[_RecoveryDebt], Awaitable[bool | None]]
 
 
-class ManagedFixedBatchSupervisor:
+class DefaultManagedFixedBatchSupervisor:
     """Own fixed-batch scheduling, capacity debt, settlement, and recovery gating."""
 
     def __init__(

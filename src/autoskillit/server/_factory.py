@@ -455,7 +455,7 @@ def make_context(
         session_serve_overrides=None,
     )
     from autoskillit.server.tools.tools_execution._managed_fixed_batch import (  # noqa: PLC0415  # circular-break: compose after ToolContext exists
-        ManagedFixedBatchSupervisor,
+        DefaultManagedFixedBatchSupervisor,
     )
 
     # Resolve once so the supervisor receives a non-Optional binding; the
@@ -469,7 +469,7 @@ def make_context(
         )
     )
     ctx.worker_capacity = capacity
-    ctx.managed_fixed_batch_supervisor = ManagedFixedBatchSupervisor(
+    ctx.managed_fixed_batch_supervisor = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
         background=background,
         state_root=ctx.temp_dir / "managed-fixed-batches",

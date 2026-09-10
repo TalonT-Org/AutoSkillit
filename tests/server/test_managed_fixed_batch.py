@@ -18,8 +18,8 @@ from autoskillit.hooks._join_ledger import aggregate_batch
 from autoskillit.hooks._session_binding import LoadedSkillEntry
 from autoskillit.pipeline import DefaultBackgroundSupervisor
 from autoskillit.server.tools.tools_execution._managed_fixed_batch import (
+    DefaultManagedFixedBatchSupervisor,
     ManagedFixedBatchLaunchBinding,
-    ManagedFixedBatchSupervisor,
     ManagedLaunchBinding,
     ManagedLeafLaunchResult,
 )
@@ -97,7 +97,7 @@ def _binding(tmp_path, launch_leaf):
 @pytest.mark.anyio
 async def test_supervisor_opens_once_replays_and_releases_each_owned_permit(tmp_path) -> None:
     capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
-    service = ManagedFixedBatchSupervisor(
+    service = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
         background=DefaultBackgroundSupervisor(),
         state_root=tmp_path / "state",
@@ -126,7 +126,7 @@ async def test_supervisor_opens_once_replays_and_releases_each_owned_permit(tmp_
 @pytest.mark.anyio
 async def test_unresolved_recovery_debt_keeps_managed_route_closed(tmp_path) -> None:
     capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
-    service = ManagedFixedBatchSupervisor(
+    service = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
         background=DefaultBackgroundSupervisor(),
         state_root=tmp_path / "state",
@@ -150,7 +150,7 @@ async def test_owner_cleanup_precedes_settlement_and_permit_release(tmp_path) ->
             super().release(permit)
 
     capacity = RecordingCapacity(max_concurrent=1)
-    service = ManagedFixedBatchSupervisor(
+    service = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
         background=DefaultBackgroundSupervisor(),
         state_root=tmp_path / "state",
@@ -195,7 +195,7 @@ async def test_owner_cleanup_precedes_settlement_and_permit_release(tmp_path) ->
 @pytest.mark.anyio
 async def test_unadmitted_settlement_failure_does_not_leak_capacity(tmp_path, monkeypatch) -> None:
     capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
-    service = ManagedFixedBatchSupervisor(
+    service = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
         background=DefaultBackgroundSupervisor(),
         state_root=tmp_path / "state",
@@ -228,7 +228,7 @@ async def test_capacity_acquisition_failure_terminalizes_assignment(tmp_path, mo
         raise RuntimeError("capacity unavailable")
 
     monkeypatch.setattr(capacity, "acquire", fail_acquire)
-    service = ManagedFixedBatchSupervisor(
+    service = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
         background=DefaultBackgroundSupervisor(),
         state_root=tmp_path / "state",

@@ -513,7 +513,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "remove_transaction",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/hooks/_exploration_request_record.py",
+        "src/autoskillit/hooks/_runtime/_exploration_request_record.py",
         "_cleanup_expired",
     ): _SEPARATE_LIFECYCLE_REASON,
     (

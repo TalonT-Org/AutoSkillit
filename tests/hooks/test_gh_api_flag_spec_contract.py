@@ -64,7 +64,7 @@ def _assert_spec_covers_parsed_flags(
     missing = parsed_flags - spec_value_flags
     assert not missing, (
         f"{cli_label} --help lists value-taking flags absent from its spec table: "
-        f"{sorted(missing)} -- add them in src/autoskillit/hooks/_command_classification.py"
+        f"{sorted(missing)} -- add them in src/autoskillit/hooks/_runtime/_command_classification.py"
     )
 
 
@@ -287,7 +287,7 @@ def test_curl_flag_spec_covers_this_rectifys_named_flags() -> None:
         "curl --help all no longer lists flags this rectify's investigation named "
         f"(possibly renamed/removed upstream): {sorted(named_but_removed)} -- update "
         "_CURL_FLAG_SPEC and this set together in "
-        "src/autoskillit/hooks/_command_classification.py"
+        "src/autoskillit/hooks/_runtime/_command_classification.py"
     )
 
     spec_value_flags = {

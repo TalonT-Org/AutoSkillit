@@ -6,54 +6,37 @@ from .declaration import OUTCOME_PENDING, WAVE_PENDING
 
 OUTCOME_SUCCESS = "success"
 
-
 OUTCOME_FAILURE = "failure"
-
 
 OUTCOME_LAUNCH_FAILED = "launch-failed"
 
-
 OUTCOME_TIMEOUT = "timeout"
-
 
 OUTCOME_CANCELLED = "cancelled"
 
-
 OUTCOME_INTERRUPTION = "interruption"
-
 
 OUTCOME_MISSING = "missing"
 
-
 OUTCOME_REAPED = "reaped"
-
 
 WAVE_COMPLETE = "complete"
 
-
 WAVE_PARTIAL_TIMEOUT = "partial_timeout"
-
 
 WAVE_FAILURE = "failure"
 
-
 WAVE_LAUNCH_FAILED = "launch_failed"
-
 
 WAVE_CANCELLED = "cancelled"
 
-
 WAVE_INTERRUPTION = "interruption"
-
 
 WAVE_MISSING_CHILD = "missing_child"
 
-
 WAVE_REAPED = "reaped"
 
-
 WAVE_PARTIAL = "partial"
-
 
 _NON_SUCCESS_WAVE_OUTCOMES: frozenset[str] = frozenset(
     {
@@ -68,7 +51,6 @@ _NON_SUCCESS_WAVE_OUTCOMES: frozenset[str] = frozenset(
     }
 )
 
-
 _TERMINAL_OUTCOMES: frozenset[str] = frozenset(
     {
         OUTCOME_SUCCESS,
@@ -81,7 +63,6 @@ _TERMINAL_OUTCOMES: frozenset[str] = frozenset(
         OUTCOME_REAPED,
     }
 )
-
 
 _COMPLETED_OUTCOMES: frozenset[str] = frozenset({OUTCOME_SUCCESS})
 

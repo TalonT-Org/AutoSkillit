@@ -11,9 +11,7 @@ from typing import Any
 
 OUTCOME_PENDING = "pending"
 
-
 WAVE_PENDING = "pending"
-
 
 _BATCH_ID_ALPHABET = string.ascii_lowercase + string.digits
 

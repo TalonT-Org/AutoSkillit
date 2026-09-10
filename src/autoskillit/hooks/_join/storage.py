@@ -77,12 +77,9 @@ def write_join_ledger(ledger_path: Path, payload: dict[str, Any]) -> None:
 
 LEDGER_FILENAME = "join_ledger.json"
 
-
 LOCK_FILENAME = "join_ledger.lock"
 
-
 _LOCK_ACQUIRE_TIMEOUT_SECONDS = 2.0
-
 
 _LOCK_RETRY_INTERVAL_SECONDS = 0.01
 

@@ -259,32 +259,6 @@ def admit_assignment(
         attempt_id=attempt_id,
         run_id=run_id,
         evidence=evidence or {},
-        retry=False,
-        now=now,
-    )
-
-
-def append_retry_attempt(
-    flag_dir: Path,
-    *,
-    batch_id: str,
-    assignment_id: str,
-    prior_attempt_id: str,
-    attempt_id: str,
-    run_id: str,
-    evidence: Mapping[str, object] | None = None,
-    now: float | None = None,
-) -> dict[str, Any]:
-    """Append a new attempt only after the recorded prior attempt is terminal."""
-    return _mutate_attempt(
-        flag_dir,
-        batch_id=batch_id,
-        assignment_id=assignment_id,
-        attempt_id=attempt_id,
-        run_id=run_id,
-        evidence=evidence or {},
-        retry=True,
-        prior_attempt_id=prior_attempt_id,
         now=now,
     )
 
@@ -666,7 +640,7 @@ OUTCOME_CANCELLED OUTCOME_FAILURE OUTCOME_INTERRUPTION OUTCOME_LAUNCH_FAILED
 OUTCOME_MISSING OUTCOME_PENDING OUTCOME_REAPED OUTCOME_SUCCESS OUTCOME_TIMEOUT
 WAVE_CANCELLED WAVE_COMPLETE WAVE_FAILURE WAVE_INTERRUPTION WAVE_LAUNCH_FAILED
 WAVE_MISSING_CHILD WAVE_PARTIAL WAVE_PARTIAL_TIMEOUT WAVE_PENDING WAVE_REAPED
-active_batch admit_assignment aggregate_batch append_retry_attempt can_release_stop
+active_batch admit_assignment aggregate_batch can_release_stop
 cancel_batch claim_assignment declare_batch ledger_paths mark_assignment_running
 open_or_replay reconcile_batch resolve_flag_dir settle_assignment
 settle_unadmitted_assignment write_join_ledger

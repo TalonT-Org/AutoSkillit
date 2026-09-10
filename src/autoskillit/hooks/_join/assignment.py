@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .declaration import JoinLedgerError, _digest
-from .model import OUTCOME_PENDING, _aggregate_wave_outcome, is_terminal_outcome
+from .model import OUTCOME_PENDING, _aggregate_wave_outcome
 from .storage import (
     _CorruptedLedger,
     _flock,
@@ -96,8 +96,6 @@ def _mutate_attempt(
     attempt_id: str,
     run_id: str,
     evidence: Mapping[str, object],
-    retry: bool,
-    prior_attempt_id: str | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
     ledger_path, lock_path = ledger_paths(flag_dir)
@@ -108,16 +106,6 @@ def _mutate_attempt(
             batch, assignment = _batch_and_assignment(
                 payload, batch_id=batch_id, assignment_id=assignment_id
             )
-            if retry:
-                if assignment.get("current_attempt_id") != prior_attempt_id:
-                    raise JoinLedgerError("retry does not name the current prior attempt")
-                if not is_terminal_outcome(assignment.get("outcome")):
-                    raise JoinLedgerError("retry requires a terminal prior attempt")
-                assignment["current_attempt_id"] = None
-                assignment["current_run_id"] = None
-                assignment["outcome"] = OUTCOME_PENDING
-                assignment["terminal_event_id"] = None
-                assignment["terminal_payload_digest"] = None
             record = _append_attempt(
                 assignment,
                 attempt_id=attempt_id,

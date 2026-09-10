@@ -410,3 +410,21 @@ def test_skill_session_config_importable_from_protocols_backend() -> None:
     from autoskillit.core.types._type_protocols_backend import SkillSessionConfig
 
     assert SkillSessionConfig is SkillSessionConfigDirect
+
+
+def test_snapshot_restore_preserves_explicit_home_ownership_contract() -> None:
+    from pathlib import Path
+    from typing import get_type_hints
+
+    from autoskillit.core import (
+        SessionSkillManager,
+        SkillProjectionContextAuthority,
+        ValidatedAddDir,
+    )
+
+    assert get_type_hints(SessionSkillManager.restore_snapshot_session) == {
+        "session_id": str,
+        "snapshot_dir": Path,
+        "projection_context": SkillProjectionContextAuthority,
+        "return": ValidatedAddDir,
+    }

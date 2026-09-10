@@ -713,7 +713,13 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
 
     from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, SkillResult
     from autoskillit.execution.backends.codex import CodexBackend
-    from autoskillit.workspace import DefaultSessionSkillManager, SkillsDirectoryProvider
+    from autoskillit.server.tools._execution_helpers import rehydrate_skill_invocation
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+        build_skill_projection_binding,
+        project_agent_skill_document,
+    )
     from tests.conftest import bind_test_skill_resume_contract
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -741,7 +747,27 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
         session_id="codex-restored",
         cwd=tmp_path,
     )
-    stored = tool_ctx_kitchen_open.skill_session_contract_store.load("codex-restored")
+    contract_store = tool_ctx_kitchen_open.skill_session_contract_store
+    initial_stored = contract_store.load("codex-restored")
+    invocation, projection_context = rehydrate_skill_invocation(initial_stored.contract, backend)
+    projected_binding = build_skill_projection_binding(projection_context)
+    projected_document = project_agent_skill_document(invocation.root, projection_context)
+    assert projected_document.projected_digest == projected_binding.projected_digests["implement"]
+    projected_contract = replace(
+        initial_stored.contract,
+        canonical_digests=projected_binding.canonical_digests,
+        projected_digests=projected_binding.projected_digests,
+        semantic_digests=projected_binding.semantic_digests,
+        adaptation_digests=projected_binding.adaptation_digests,
+    )
+    snapshot_path = (backend.conventions.skills_subdir / "implement" / "SKILL.md").as_posix()
+    contract_store.delete("codex-restored")
+    correlation_key = contract_store.create_provisional(
+        contract=projected_contract,
+        snapshot={snapshot_path: projected_document.content},
+    )
+    contract_store.finalize(correlation_key, "codex-restored")
+    stored = contract_store.load("codex-restored")
 
     async def _inspect_restored_launch(*args: object, **kwargs: object) -> SkillResult:
         add_dir = kwargs["add_dirs"][0]
@@ -757,14 +783,12 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
                 manager._session_leases,  # noqa: SLF001
             )
         )
-        assert (
-            catalog_skill.read_text(encoding="utf-8")
-            == stored.contract.canonical_contents["implement"]
-        )
+        assert catalog_skill.read_text(encoding="utf-8") == projected_document.content
         assert (
             hashlib.sha256(catalog_skill.read_bytes()).hexdigest()
-            == (stored.contract.projected_digests["implement"])
+            == stored.contract.projected_digests["implement"]
         )
+        assert kwargs["capability_contract"].projected_digests == stored.contract.projected_digests
         spec = backend.build_skill_session_cmd(
             kwargs["skill_command"],
             kwargs["cwd"],

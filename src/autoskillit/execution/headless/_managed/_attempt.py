@@ -2,25 +2,33 @@
 
 from __future__ import annotations
 
+import dataclasses
+import os
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 from autoskillit.core import (
     SESSION_TYPE_ENV_VAR,
     CmdSpec,
     CodingAgentBackend,
+    ExecutionIdentity,
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineage,
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionLineageStore,
     ManagedHeadlessSessionTerminalState,
+    NamedResume,
     NativeShellCaptureDecision,
     NativeShellCaptureDiagnostic,
     NativeShellCaptureMode,
     NativeShellCaptureReason,
+    NoResume,
     PluginLaunchBinding,
     PluginLoadMode,
+    SessionAttemptHandle,
     SessionType,
     SkillResult,
     SubprocessResult,
@@ -36,6 +44,52 @@ _BuildSpec = Callable[
     [PluginLaunchBinding | None, Mapping[str, str] | None, str | None],
     CmdSpec,
 ]
+
+
+def _bind_effective_execution_identity(
+    skill_result: SkillResult,
+    backend: CodingAgentBackend,
+    requested: ExecutionIdentity,
+) -> SkillResult:
+    effective = requested
+    if requested.children and skill_result.session_id:
+        try:
+            effective = backend.resolve_effective_execution_identity(
+                requested=requested,
+                session_id=skill_result.session_id,
+            )
+        except (OSError, ValueError):
+            logger.warning(
+                "effective_execution_identity_resolution_failed",
+                session_id=skill_result.session_id,
+                exc_info=True,
+            )
+    return dataclasses.replace(skill_result, execution_identity=effective)
+
+
+def _generated_home_attempt(
+    backend: CodingAgentBackend,
+    spec: CmdSpec,
+    *,
+    plugin_load_mode: PluginLoadMode,
+    managed_attempt_id: str | None,
+    attempt: int,
+    resume_session_id: str,
+    ceiling_seconds: float,
+) -> AbstractContextManager[SessionAttemptHandle | None]:
+    if plugin_load_mode is not PluginLoadMode.GENERATED_HOME:
+        return nullcontext(None)
+    session_home = spec.env.get("CODEX_HOME")
+    if not session_home:
+        raise ValueError("A managed Codex attempt requires its generated session home")
+    return backend.session_attempt_context(
+        session_home=Path(session_home),
+        project_dir=Path(spec.cwd).resolve(strict=True),
+        launch_id=(managed_attempt_id or uuid4().hex)[:16],
+        attempt=attempt,
+        current_resume_spec=NamedResume(resume_session_id) if resume_session_id else NoResume(),
+        ceiling_seconds=ceiling_seconds,
+    )
 
 
 class _ManagedLineageObserver:
@@ -421,3 +475,24 @@ __all__ = [
     "log_launch",
     "should_flush",
 ]
+
+
+def _resolve_idle_output_timeout(override: float | None, configured: float) -> float | None:
+    """Resolve the shared caller, environment, and configured idle timeout policy."""
+    if override is not None:
+        raw_idle = override
+    else:
+        env_idle = os.environ.get("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT")
+        if env_idle is not None:
+            try:
+                raw_idle = float(env_idle)
+            except ValueError:
+                logger.warning(
+                    "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT: invalid float — falling back to config",
+                    env_value=env_idle,
+                    fallback=configured,
+                )
+                raw_idle = float(configured)
+        else:
+            raw_idle = float(configured)
+    return raw_idle if raw_idle > 0.0 else None

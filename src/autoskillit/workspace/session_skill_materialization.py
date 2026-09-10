@@ -526,7 +526,9 @@ def _copy_restored_skill_catalog(
     skills_subdir: Path,
 ) -> None:
     """Validate a retained closure and copy it without accepting symlinks."""
-    if snapshot_dir.is_symlink() or not snapshot_dir.is_dir():
+    if snapshot_dir.is_symlink():
+        raise ValueError(f"restored skill snapshot root must not be a symlink: {snapshot_dir}")
+    if not snapshot_dir.is_dir():
         raise ValueError(f"restored skill snapshot root must be a real directory: {snapshot_dir}")
     _validate_restored_snapshot(snapshot_dir)
     source_catalog = snapshot_dir / skills_subdir

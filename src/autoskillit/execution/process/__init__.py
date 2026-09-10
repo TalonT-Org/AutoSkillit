@@ -45,6 +45,11 @@ from autoskillit.execution.process._daemon_orphans import (
     find_orphaned_autoskillit_daemons,
     reap_orphaned_autoskillit_daemons,
 )
+from autoskillit.execution.process._lifecycle.runner import (
+    DefaultSubprocessRunner,
+    _coalesce_returncode,
+    run_managed_sync,
+)
 from autoskillit.execution.process._process_io import (
     CaptureReadError,
     CaptureSetupError,
@@ -104,11 +109,6 @@ from autoskillit.execution.process._process_tether import (
     sweep_orphaned_tethers_async,
     update_tether_workload,
     wrap_systemd_scope,
-)
-from autoskillit.execution.process._runner import (
-    DefaultSubprocessRunner,
-    _coalesce_returncode,
-    run_managed_sync,
 )
 from autoskillit.execution.process._termination import (
     decide_termination_action,

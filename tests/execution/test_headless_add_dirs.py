@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+from pathlib import Path
+
 import pytest
 
-from autoskillit.core import ValidatedAddDir
+from autoskillit.core import NoResume, ValidatedAddDir
+from autoskillit.core.types import SessionAttemptHandle
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -72,6 +76,7 @@ async def test_run_headless_core_two_add_dirs(minimal_ctx, tmp_path):
 async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
     minimal_ctx,
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.execution.headless import run_headless_core
     from tests.conftest import _make_result
@@ -84,14 +89,51 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
             pytest.fail(f"Codex add-dir must not acquire {load_mode.value} artifact authority")
 
     generated_home = tmp_path / "codex-home"
-    generated_home.mkdir()
+    catalog = generated_home / "add-dir" / "skills" / "test-skill"
+    catalog.mkdir(parents=True)
+    (catalog / "SKILL.md").write_text("# Test")
+    (generated_home / "skills").symlink_to("add-dir/skills")
     authority = NoArtifactAuthority()
     captured_kwargs = {}
+    lifecycle_events = []
+    context_requests = []
 
     async def mock_runner(_cmd, **kwargs):
         captured_kwargs.update(kwargs)
+        kwargs["on_process_spawned"](101, 101)
+        kwargs["on_process_reaped"](101, 101)
         return _make_result()
 
+    def session_attempt_context(
+        _self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec,
+        ceiling_seconds: float,
+    ):
+        context_requests.append(
+            (
+                session_home,
+                project_dir,
+                launch_id,
+                attempt,
+                current_resume_spec,
+                ceiling_seconds,
+            )
+        )
+        return nullcontext(
+            SessionAttemptHandle(
+                view_id="test-view",
+                pass_fds=(37,),
+                _record_spawn=lambda pid, pgid: lifecycle_events.append(("spawn", pid, pgid)),
+                _record_reaped=lambda pid, pgid: lifecycle_events.append(("reap", pid, pgid)),
+            )
+        )
+
+    monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
     minimal_ctx.runner = mock_runner
     minimal_ctx.backend = CodexBackend()
     minimal_ctx.plugin_authority = authority
@@ -99,9 +141,21 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
         "/autoskillit:investigate foo",
         str(tmp_path),
         minimal_ctx,
-        add_dirs=[ValidatedAddDir(path=str(generated_home))],
+        add_dirs=[
+            ValidatedAddDir(
+                path=str(generated_home / "add-dir"),
+                session_home=str(generated_home),
+            )
+        ],
     )
 
     assert authority.acquired is False
-    assert captured_kwargs["pass_fds"] == ()
+    assert captured_kwargs["pass_fds"] == (37,)
     assert captured_kwargs["env"]["CODEX_HOME"] == str(generated_home)
+    assert captured_kwargs["env"]["CODEX_SQLITE_HOME"] == str(generated_home)
+    assert len(context_requests) == 1
+    session_home, project_dir, launch_id, attempt, resume_spec, _ceiling = context_requests[0]
+    assert (session_home, project_dir, attempt) == (generated_home, tmp_path.resolve(), 1)
+    assert len(launch_id) == 16
+    assert isinstance(resume_spec, NoResume)
+    assert lifecycle_events == [("spawn", 101, 101), ("reap", 101, 101)]

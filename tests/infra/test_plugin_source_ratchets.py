@@ -454,7 +454,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Contract nudge forwards its rebuilt command and separate generated-home "
         "view and thread leases until that physical invocation has settled.",
     ),
-    ("execution/process/_runner.py", "__call__", "pass_fds"): (
+    ("execution/process/_lifecycle/runner.py", "__call__", "pass_fds"): (
         1,
         "The generic subprocess runner forwards its protocol-owned descriptor tuple.",
     ),

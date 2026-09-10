@@ -307,7 +307,9 @@ class TestCodexLayoutValidation:
     def test_codex_profile_only_discovery_root_is_a_valid_session_layout(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        profile_skill = _write_codex_catalog(tmp_path, skill_name="my-profile-skill")
+        profile_skill = (
+            _write_codex_catalog(tmp_path, skill_name="my-profile-skill") / "my-profile-skill"
+        )
         (profile_skill / "SKILL.md").write_text(
             "---\nname: my-profile-skill\ndescription: Profile skill.\n---\n# MY PROFILE SKILL\n"
         )

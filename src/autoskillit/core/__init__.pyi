@@ -475,7 +475,6 @@ from .types import (
     CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR as CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR,
 )
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
-from .types import CODEX_RESERVED_HOME_ENV_VARS as CODEX_RESERVED_HOME_ENV_VARS
 from .types import (
     CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET as CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET,
 )
@@ -490,6 +489,7 @@ from .types import CODEX_INTERACTIVE_REQUIRED_ENV as CODEX_INTERACTIVE_REQUIRED_
 from .types import CODEX_MCP_ENV_FORWARD_VARS as CODEX_MCP_ENV_FORWARD_VARS
 from .types import CODEX_MODEL_ALIASES as CODEX_MODEL_ALIASES
 from .types import CODEX_MODEL_ALIASES_LAST_VERIFIED as CODEX_MODEL_ALIASES_LAST_VERIFIED
+from .types import CODEX_RESERVED_HOME_ENV_VARS as CODEX_RESERVED_HOME_ENV_VARS
 from .types import (
     CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET as CODEX_SCOPE_DISCIPLINE_BYTE_BUDGET,
 )
@@ -892,7 +892,6 @@ from .types import ContextLineage as ContextLineage
 from .types import ContextSessionId as ContextSessionId
 from .types import ContextThreadId as ContextThreadId
 from .types import ContextWindowSnapshot as ContextWindowSnapshot
-from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
 from .types import CoverageState as CoverageState
@@ -1171,6 +1170,7 @@ from .types import SemanticAdaptationContext as SemanticAdaptationContext
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import SerializedChars as SerializedChars
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot
+from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import SessionCheckpoint as SessionCheckpoint
 from .types import SessionEvent as SessionEvent
 from .types import SessionLocator as SessionLocator

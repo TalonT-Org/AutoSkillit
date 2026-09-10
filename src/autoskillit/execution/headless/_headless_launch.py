@@ -4,27 +4,22 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
-    ExecutionIdentity,
     InfrastructureFaultError,
     LaunchPreparation,
     LaunchResolver,
-    NamedResume,
-    NoResume,
     OutputFormat,
     PluginArtifactAuthority,
     PluginLaunchBinding,
     PluginLoadMode,
     ResolvedLaunchContract,
     RetryReason,
-    SessionAttemptHandle,
     SkillContractView,
     SkillResult,
     StreamParser,
@@ -45,6 +40,7 @@ from autoskillit.execution.headless._managed import (
     _headless_plugin_load_mode,
     _ManagedLineageObserver,
 )
+from autoskillit.execution.headless._managed._attempt import _generated_home_attempt
 from autoskillit.execution.headless._managed._launch_adapter import (
     _binding_identity,
     _food_truck_launch_spec_builder,
@@ -60,27 +56,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
-
-
-def _bind_effective_execution_identity(
-    skill_result: SkillResult,
-    backend: CodingAgentBackend,
-    requested: ExecutionIdentity,
-) -> SkillResult:
-    effective = requested
-    if requested.children and skill_result.session_id:
-        try:
-            effective = backend.resolve_effective_execution_identity(
-                requested=requested,
-                session_id=skill_result.session_id,
-            )
-        except (OSError, ValueError):
-            logger.warning(
-                "effective_execution_identity_resolution_failed",
-                session_id=skill_result.session_id,
-                exc_info=True,
-            )
-    return dataclasses.replace(skill_result, execution_identity=effective)
 
 
 def _report_plugin_binding_close_failure(
@@ -106,31 +81,6 @@ def _plugin_launch_binding(
         backend=backend,
         load_mode=load_mode,
         on_suppressed_close_error=_report_plugin_binding_close_failure,
-    )
-
-
-def _generated_home_attempt(
-    backend: CodingAgentBackend,
-    spec: CmdSpec,
-    *,
-    plugin_load_mode: PluginLoadMode,
-    managed_attempt_id: str | None,
-    attempt: int,
-    resume_session_id: str,
-    ceiling_seconds: float,
-) -> AbstractContextManager[SessionAttemptHandle | None]:
-    if plugin_load_mode is not PluginLoadMode.GENERATED_HOME:
-        return nullcontext(None)
-    session_home = spec.env.get("CODEX_HOME")
-    if not session_home:
-        raise ValueError("A managed Codex attempt requires its generated session home")
-    return backend.session_attempt_context(
-        session_home=Path(session_home),
-        project_dir=Path(spec.cwd).resolve(strict=True),
-        launch_id=(managed_attempt_id or uuid4().hex)[:16],
-        attempt=attempt,
-        current_resume_spec=NamedResume(resume_session_id) if resume_session_id else NoResume(),
-        ceiling_seconds=ceiling_seconds,
     )
 
 

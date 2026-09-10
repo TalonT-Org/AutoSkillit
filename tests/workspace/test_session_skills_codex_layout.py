@@ -337,14 +337,14 @@ def test_codex_session_home_has_exactly_one_managed_catalog(
     ) as managed:
         home = managed.generated_home
         catalog = Path(managed.skills_dir.path) / "skills"
-        skill_directories = [
-            Path(directory)
+        skill_catalogs = {
+            Path(directory).parent
             for directory, _children, files in os.walk(home, followlinks=False)
             if "SKILL.md" in files
             and not any(part.startswith(".") for part in Path(directory).relative_to(home).parts)
-        ]
+        }
 
-        assert skill_directories == [catalog]
+        assert skill_catalogs == {catalog}
         assert not backend.validate_session_layout(home)
 
 
@@ -1140,9 +1140,10 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         "error",
         lambda event, **kwargs: error_events.append((event, kwargs)),
     )
-    expected_names = {"unrelated-skill"}
+    expected_catalog_names = {"helper-skill", "unrelated-skill"}
+    expected_record_names = {"unrelated-skill"}
     if helper_available:
-        expected_names.add("helper-skill")
+        expected_record_names.add("helper-skill")
 
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
     with manager.managed_session(
@@ -1160,8 +1161,8 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         unavailable = metadata["unavailable"]
         unavailable_by_skill = {record["skill"]: record for record in unavailable}
 
-        assert projected_names == expected_names
-        assert set(manager._session_skill_infos[session_id]) == expected_names
+        assert projected_names == expected_catalog_names
+        assert set(manager._session_skill_infos[session_id]) == expected_record_names
         assert (managed.generated_home / "skills").is_symlink()
         assert (projected_root / "unrelated-skill").is_dir()
         assert unavailable == list(managed.unavailability_payload["unavailable"])

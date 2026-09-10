@@ -86,6 +86,7 @@ class _RolloutRunner:
         self.required_staged_calls = required_staged_calls
         self.calls: list[dict[str, object]] = []
         self.callback_events: list[tuple[str, int, int]] = []
+        self.pass_fd_sets: list[tuple[int, ...]] = []
 
     async def __call__(
         self,
@@ -113,6 +114,7 @@ class _RolloutRunner:
                 "ceiling_seconds": kwargs.get("ceiling_seconds"),
             }
         )
+        self.pass_fd_sets.append(pass_fds)
         if self.fail_spawn:
             raise OSError("injected spawn failure")
 
@@ -139,7 +141,7 @@ class _RolloutRunner:
 
 
 def _generated_home_spec(home: Path, cwd: Path):
-    def build(_binding, _extras, _attempt_id) -> CmdSpec:
+    def build(_binding, _extras, _attempt_id=None) -> CmdSpec:
         return CmdSpec(
             cmd=("codex", "exec", "/autoskillit:test"),
             cwd=str(cwd),
@@ -147,6 +149,13 @@ def _generated_home_spec(home: Path, cwd: Path):
         )
 
     return build
+
+
+def _assert_attempt_leases_are_closed(pass_fd_sets: list[tuple[int, ...]]) -> None:
+    for pass_fds in pass_fd_sets:
+        for fd in pass_fds:
+            with pytest.raises(OSError):
+                os.fstat(fd)
 
 
 async def _run_generated_attempt(
@@ -333,8 +342,15 @@ async def test_generated_home_attempt_retains_rollout_before_nudge_and_named_res
         _EXECUTION_CEILING_SECONDS,
     ]
     assert all(re.fullmatch(r"[0-9a-f]{16}", call.kwargs["launch_id"]) for call in attempt_calls)
+    assert attempt_calls[0].kwargs["launch_id"] == "a" * 16
+    assert attempt_calls[2].kwargs["launch_id"] == "b" * 16
     assert [call["home"] for call in runner.calls] == [first_home, first_home, resumed_home]
-    assert all(call["pass_fds"] for call in runner.calls)
+    assert all(runner.pass_fd_sets)
+    assert [call["ceiling_seconds"] for call in runner.calls] == [
+        _EXECUTION_CEILING_SECONDS,
+        _EXECUTION_CEILING_SECONDS,
+        _EXECUTION_CEILING_SECONDS,
+    ]
     assert [event[0] for event in runner.callback_events] == [
         "spawned",
         "reaped",
@@ -343,6 +359,8 @@ async def test_generated_home_attempt_retains_rollout_before_nudge_and_named_res
         "spawned",
         "reaped",
     ]
+    assert all(pid > 0 and pgid > 0 for _event, pid, pgid in runner.callback_events)
+    _assert_attempt_leases_are_closed(runner.pass_fd_sets)
 
 
 @pytest.mark.anyio
@@ -415,4 +433,5 @@ async def test_generated_home_attempt_requires_confirmed_spawn_reap_and_rollout(
         else:
             assert len(retained) == 1
 
-    assert runner.calls[0]["pass_fds"]
+    assert runner.pass_fd_sets[0]
+    _assert_attempt_leases_are_closed(runner.pass_fd_sets)

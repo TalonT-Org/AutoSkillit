@@ -17,6 +17,7 @@ import pytest
 
 from autoskillit.core import pkg_root
 from autoskillit.hooks import HOOK_REGISTRY, generate_hooks_json
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
@@ -33,6 +34,24 @@ def _extract_hook_commands() -> list[str]:
                 if cmd:
                     commands.append(cmd)
     return commands
+
+
+@pytest.mark.parametrize("module_name", ["_flags", "_interpreters"])
+def test_classification_submodule_imports_standalone(module_name: str) -> None:
+    hooks_dir = pkg_root() / "hooks"
+    code = (
+        f"import sys; sys.path.insert(0, {str(hooks_dir)!r}); import _classification.{module_name}"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        capture_output=True,
+        env=production_interpreter_env(),
+        text=True,
+        timeout=10,
+    )
+
+    assert proc.returncode == 0, proc.stderr
 
 
 @pytest.mark.parametrize("command", _extract_hook_commands(), ids=_extract_hook_commands())

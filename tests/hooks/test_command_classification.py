@@ -234,6 +234,44 @@ class TestTokenizeCommandSegments:
         assert len(result) == 2
         assert result[1] == ["pip", "install", "-e", "."]
 
+    @pytest.mark.parametrize(
+        ("command", "expected"),
+        [
+            ("printf foo\\\nbar", [["printf", "foobar"]]),
+            ('printf "foo\\\nbar"', [["printf", "foobar"]]),
+            ("printf 'foo\\\nbar'", [["printf", "foo\\\nbar"]]),
+            (r"printf foo\\bar", [["printf", r"foo\bar"]]),
+            (r"printf \"quoted\"", [["printf", '"quoted"']]),
+            (r"printf \$HOME", [["printf", "$HOME"]]),
+            ("echo one\necho two", [["echo", "one"], ["echo", "two"]]),
+            (
+                "gh api repos/O/R/rulesets/13702255 \\\n--jq '.rules'",
+                [["gh", "api", "repos/O/R/rulesets/13702255", "--jq", ".rules"]],
+            ),
+        ],
+        ids=[
+            "unquoted-continuation",
+            "double-quoted-continuation",
+            "single-quoted-literal",
+            "escaped-backslash",
+            "escaped-double-quote",
+            "escaped-dollar",
+            "bare-newline",
+            "continued-gh-api-get",
+        ],
+    )
+    def test_line_continuation_quote_and_escape_contexts(
+        self,
+        command: str,
+        expected: list[list[str]],
+    ) -> None:
+        command_segments = command_classification._tokenize_command_segments_with_redirects(
+            command
+        )
+
+        assert [segment.tokens for segment in command_segments] == expected
+        assert command_classification._tokenize_protected_read_segments(command) == expected
+
     def test_quoted_operator_remains_argument(self):
         result = tokenize_command_segments("echo 'pip && install -e .'")
         assert result == [["echo", "pip && install -e ."]]
@@ -997,6 +1035,18 @@ class TestAnalyzeGitHubMutations:
                 reason_code="",
                 reason="",
             )
+        )
+
+    def test_continued_read_only_gh_api_has_exact_empty_analysis(self) -> None:
+        command = "gh api repos/O/R/rulesets/13702255 \\\n--jq '.rules'"
+
+        assert analyze_github_mutations(command) == GitHubMutationAnalysis(
+            status=GitHubMutationStatus.NONE,
+            mutations=(),
+            request_count=0,
+            review_comment_count=None,
+            reason_code="",
+            reason="",
         )
 
     def test_simple_rest_review_has_exact_record(self) -> None:

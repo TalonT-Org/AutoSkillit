@@ -7,15 +7,49 @@ _INTERPRETER_LINE_RE.
 
 from __future__ import annotations
 
-import ast
-import io
 import os
 import re
-import shlex
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from enum import StrEnum, auto
-from typing import Protocol, cast
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
+        ArgvToken,
+        _CommandSegment,
+        _normalize_newlines_for_tokenize,
+        _tokenize_command_segments_with_redirects,
+    )
+    from autoskillit.hooks._classification._tokenizer import (
+        strip_heredoc_bodies as _strip_heredoc_bodies_impl,
+    )
+    from autoskillit.hooks._classification._tokenizer import (
+        tokenize_command_segments as _tokenize_command_segments_impl,
+    )
+else:
+    if __package__:
+        from ._classification import _tokenizer
+    else:
+        from _classification import _tokenizer
+
+    ArgvToken = _tokenizer.ArgvToken
+    _CommandSegment = _tokenizer._CommandSegment
+    _normalize_newlines_for_tokenize = _tokenizer._normalize_newlines_for_tokenize
+    _tokenize_command_segments_with_redirects = (
+        _tokenizer._tokenize_command_segments_with_redirects
+    )
+    _strip_heredoc_bodies_impl = _tokenizer.strip_heredoc_bodies
+    _tokenize_command_segments_impl = _tokenizer.tokenize_command_segments
+
+
+def strip_heredoc_bodies(command: str) -> str:
+    """Strip heredoc bodies while preserving opening lines and terminators."""
+    return _strip_heredoc_bodies_impl(command)
+
+
+def tokenize_command_segments(command: str) -> list[list[str]]:
+    """Split a shell command into segments of verb-and-argument tokens."""
+    return _tokenize_command_segments_impl(command)
+
 
 PROTECTED_SOURCE_PATH_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"(?:\.autoskillit|src/autoskillit)/recipes/.*\.ya?ml"),
@@ -59,16 +93,6 @@ _WRITE_CALL_SITE_RE = re.compile(
     r"|shutil\.(?:copy|move|copyfile|copytree)\s*\("
 )
 
-# Operators that terminate a shlex token and split command segments.
-# Parentheses are tracked by the lexer as fused tokens (`(cmd` or `cmd)`)
-# and handled separately in extract_redirect_targets.
-_SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
-# Single-character shell operators that shlex.shlex(punctuation_chars=True)
-# leaves sitting inside the previous token's source range. Used as the
-# trailing-strip set for tokenizer span capture so a token followed
-# immediately by an operator (no separating whitespace) does not appear to
-# contain that operator in its raw_span.
-_SHELL_OPERATOR_CHARS: str = ";|&"
 
 # Boundary-adjacency operator set for guards that scan raw shlex.split token
 # streams (pr_create, git_ops, planner_gh_discovery, artifact_download,
@@ -184,15 +208,6 @@ _FD_DUPLICATION_RE = re.compile(r"^\d*>&\d+$")
 _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
-_HEREDOC_BODY_RE = re.compile(
-    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
-    re.DOTALL,
-)
-
-# After strip_heredoc_bodies() a heredoc collapses to "<<WORD ...\nWORD".
-# This removes the marker and terminator, keeping the rest of the opening
-# line (real redirects), so segments carry only executable tokens.
-_HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
 
 _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
 
@@ -250,15 +265,6 @@ class SearchPattern(Protocol):
     def search(self, string: str, /): ...
 
 
-def strip_heredoc_bodies(command: str) -> str:
-    """Strip heredoc body content, preserving the opening line and terminator.
-
-    The opening line (containing << and any real redirects) is kept intact.
-    Only the body lines between the opening and terminator are removed.
-    """
-    return _HEREDOC_BODY_RE.sub(r"\1\n\3", command)
-
-
 def resolve_write_target(path: str, cwd: str = "") -> str | None:
     if not path:
         return None
@@ -273,214 +279,6 @@ def resolve_write_target(path: str, cwd: str = "") -> str | None:
     if cwd:
         return os.path.join(cwd, path)
     return None
-
-
-def _normalize_newlines_for_tokenize(command: str) -> str:
-    """Replace bare (unquoted) newlines with ' ; ' so shlex treats them as boundaries."""
-    result: list[str] = []
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        c = command[i]
-        if c == "\\" and not in_single and i + 1 < len(command):
-            result.append(c)
-            result.append(command[i + 1])
-            i += 2
-            continue
-        if c == "'" and not in_double:
-            in_single = not in_single
-        elif c == '"' and not in_single:
-            in_double = not in_double
-        elif c == "\n" and not in_single and not in_double:
-            result.append(" ; ")
-            i += 1
-            continue
-        result.append(c)
-        i += 1
-    return "".join(result)
-
-
-@dataclass(frozen=True, slots=True)
-class ArgvToken:
-    """One argv token plus whether it was provably shell-inert.
-
-    `fully_single_quoted` is True only when the token's entire source span in
-    the shell command sat inside one unbroken `'...'` run -- nothing else
-    (unquoted text, a second quote group) contributed to it. A substring of
-    a token that was fully single-quoted end-to-end is itself still fully
-    single-quoted (the quotes bounded the whole token, not part of it), so
-    callers that slice `.text` (e.g. an `=`-form or bundled-short flag
-    value) inherit provenance unchanged rather than re-deriving it.
-
-    `raw_span` is the token's own rstripped source span in the shell command
-    (e.g. `"'value'"` for a single-quoted token) -- kept alongside the
-    coarser whole-token `fully_single_quoted` so a caller splitting `.text`
-    on a *bareword* boundary it independently knows about (e.g. gh's
-    `key=value` field syntax, where `key` is never itself quoted) can
-    re-derive the finer-grained provenance of the part *after* that
-    boundary, rather than inheriting the whole token's flag: a `key=` prefix
-    sitting outside any quotes does not disqualify a separately-quoted
-    value (see `_argv_token_value_after_key`).
-    """
-
-    text: str
-    fully_single_quoted: bool
-    raw_span: str
-
-
-@dataclass(frozen=True, slots=True)
-class _CommandSegment:
-    tokens: list[str]
-    redirect_syntax: list[bool]
-    argv_tokens: list[ArgvToken]
-
-
-def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
-    """Replace recognized redirect operators with shlex-stable placeholders."""
-    rendered: list[str] = []
-    redirects: dict[str, str] = {}
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(command):
-        char = command[i]
-        if char == "\\" and not in_single and i + 1 < len(command):
-            rendered.extend((char, command[i + 1]))
-            i += 2
-            continue
-        if char == "'" and not in_double:
-            in_single = not in_single
-            rendered.append(char)
-            i += 1
-            continue
-        if char == '"' and not in_single:
-            in_double = not in_double
-            rendered.append(char)
-            i += 1
-            continue
-        if in_single or in_double:
-            rendered.append(char)
-            i += 1
-            continue
-
-        start = i
-        if char.isdecimal() and (i == 0 or command[i - 1].isspace() or command[i - 1] in ";&|("):
-            while i < len(command) and command[i].isdecimal():
-                i += 1
-            if i >= len(command) or command[i] != ">":
-                rendered.append(command[start])
-                i = start + 1
-                continue
-        elif char != ">":
-            rendered.append(char)
-            i += 1
-            continue
-
-        operator_start = start
-        operator_end = i + 1
-        if operator_end < len(command) and command[operator_end] == ">":
-            operator_end += 1
-        if operator_end < len(command) and command[operator_end] == "(":
-            rendered.append(command[start])
-            i = start + 1
-            continue
-        if (
-            operator_end < len(command)
-            and command[operator_end] == "&"
-            and (not command[operator_start:i] or command[operator_start:i].isdecimal())
-        ):
-            fd_end = operator_end + 1
-            while fd_end < len(command) and command[fd_end].isdecimal():
-                fd_end += 1
-            if fd_end == operator_end + 1:
-                rendered.append(command[start])
-                i = start + 1
-                continue
-            operator_end = fd_end
-
-        marker = f"__AUTOSKILLIT_REDIRECT_{len(redirects)}__"
-        redirects[marker] = command[operator_start:operator_end]
-        rendered.extend((" ", marker, " "))
-        i = operator_end
-    return ("".join(rendered), redirects)
-
-
-def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegment]:
-    """Tokenize commands while retaining which redirect-shaped tokens are syntax."""
-    try:
-        stripped = _HEREDOC_MARKER_RE.sub(r"\2", strip_heredoc_bodies(command))
-        marked, redirects = _mark_unquoted_output_redirects(
-            _normalize_newlines_for_tokenize(stripped)
-        )
-        lexer = shlex.shlex(
-            marked,
-            posix=True,
-            punctuation_chars=";&|",
-        )
-        lexer.whitespace_split = True
-        # Drive the lexer token-by-token (rather than `list(lexer)`) so each
-        # token's own source span in *marked* can be read via instream.tell().
-        # The span must be exactly the characters this lexer itself consumed
-        # to produce the token, so comparing it against `'<token>'` tells us
-        # whether the token was one unbroken single-quote run with nothing
-        # else contributing, independent of shlex's own dequoting.
-        #
-        # With punctuation_chars=True, shlex does not consume operator
-        # characters (`;|&`) as their own tokens until the next call -- it
-        # leaves them sitting in the previous token's source range, so a
-        # naive `marked[start:end]` slice captures e.g. `'foo'` followed by
-        # an unseparated `;` as the single-quote token's span. Strip the
-        # trailing operator chars to recover the real span; this is the
-        # only place that knows about punctuation_chars' bundling quirk,
-        # so it lives here rather than at every consumer. shlex.shlex(str)
-        # always wraps a str instream in io.StringIO; the stub's Protocol
-        # just doesn't declare .tell().
-        instream = cast(io.StringIO, lexer.instream)
-        tokens: list[str] = []
-        fully_single_quoted: list[bool] = []
-        raw_spans: list[str] = []
-        while True:
-            start = instream.tell()
-            token = lexer.get_token()
-            if token is None:
-                break
-            span = marked[start : instream.tell()].rstrip(_SHELL_OPERATOR_CHARS)
-            tokens.append(token)
-            fully_single_quoted.append(span == f"'{token}'")
-            raw_spans.append(span)
-    except (ValueError, TypeError):
-        return []
-
-    segments: list[_CommandSegment] = []
-    current_tokens: list[str] = []
-    current_redirect_syntax: list[bool] = []
-    current_argv_tokens: list[ArgvToken] = []
-    for token, quoted, raw_span in zip(tokens, fully_single_quoted, raw_spans, strict=True):
-        if token in _SHELL_OPERATORS:
-            if current_tokens:
-                segments.append(
-                    _CommandSegment(current_tokens, current_redirect_syntax, current_argv_tokens)
-                )
-                current_tokens = []
-                current_redirect_syntax = []
-                current_argv_tokens = []
-        else:
-            redirect = redirects.get(token)
-            restored = redirect if redirect is not None else token
-            current_tokens.append(restored)
-            current_redirect_syntax.append(redirect is not None)
-            current_argv_tokens.append(ArgvToken(restored, quoted, raw_span))
-    if current_tokens:
-        segments.append(
-            _CommandSegment(current_tokens, current_redirect_syntax, current_argv_tokens)
-        )
-    return segments
-
-
-def tokenize_command_segments(command: str) -> list[list[str]]:
-    """Split a shell command into segments of (verb, args...) token lists."""
-    return [segment.tokens for segment in _tokenize_command_segments_with_redirects(command)]
 
 
 def _partition_output_redirect_indices(
@@ -792,12 +590,6 @@ def is_git_command(segment: list[str]) -> bool:
     return verb == "git" or verb.endswith("/git")
 
 
-_GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
-    {"-C", "--work-tree", "--git-dir", "--no-pager", "--bare", "-c"}
-)
-_GIT_GLOBAL_FLAGS_WITH_VALUE: frozenset[str] = frozenset({"-C", "--work-tree", "--git-dir", "-c"})
-
-
 def extract_git_subcommand_and_flags(
     segment: list[str],
 ) -> tuple[str, list[str]] | None:
@@ -840,724 +632,60 @@ def extract_git_subcommand_and_flags(
     return None
 
 
-class _FlagArity(StrEnum):
-    """Per-flag arity classification used by every {flag: arity} spec table.
-
-    BOOLEAN — the flag takes no value; the next token is its own argument.
-    VALUE — the flag takes exactly one value in the next token (or joined via
-    `=` for long forms, or glued onto a short form like -XPOST).
-
-    A StrEnum, not a plain Enum: this module is loaded under two different
-    names in the same process (the dotted `autoskillit.hooks.
-    _command_classification` package import, and the bare-name
-    `_command_classification` sys.path import _github_mutation_analysis.py's
-    module-scope cross-import uses -- see that module's docstring). The two
-    loads produce two distinct `_FlagArity` class objects, so an `is`
-    comparison between a value sourced from one and `_FlagArity.VALUE`
-    sourced from the other silently fails even though both represent the
-    same arity. StrEnum members compare equal by their underlying str value
-    across class identities (`A.VALUE == B.VALUE` is True even when `A is
-    not B`), so every comparison against `_FlagArity.VALUE`/`.BOOLEAN`
-    anywhere in the codebase must use `==`, never `is`.
-    """
-
-    BOOLEAN = auto()
-    VALUE = auto()
-
-
-def _argv_token_after_prefix(token: ArgvToken, prefix: str, value_text: str) -> ArgvToken:
-    """Return an ArgvToken for *value_text*, a known suffix of `token.text`
-
-    after a literal *prefix* the caller already knows (a flag name like
-    `--method=`/`-X`, or a gh field's `key=` bareword), with correctly
-    re-derived provenance rather than inheriting the whole token's coarser
-    `fully_single_quoted` flag: a *prefix* sitting outside any quotes does
-    not disqualify a separately-quoted value that follows it (e.g. the
-    common `-f query='...'` or `--jq='.id'` shapes). If the whole token is
-    already provably inert (fully_single_quoted, or an argv-payload/literal
-    token that never passed through shell parsing at all), the value
-    trivially inherits that. Otherwise, re-derive from the value's own raw
-    span directly: this can only ever *undershoot* (return False when the
-    value actually was safely quoted, in unusual prefix-quoting edge cases)
-    since a True result requires the exact bytes `'<value_text>'` to appear
-    literally in the raw command -- only possible if that span really was
-    one unbroken single-quote run, regardless of where *prefix* was assumed
-    to end.
-    """
-    if token.fully_single_quoted:
-        return ArgvToken(value_text, True, token.raw_span)
-    value_raw_span = token.raw_span[len(prefix) :].rstrip()
-    return ArgvToken(value_text, value_raw_span == f"'{value_text}'", value_raw_span)
-
-
-def _argv_token_value_after_key(token: ArgvToken, key: str) -> ArgvToken:
-    """Split `token.text` on its first '=' (with `key` already known to be
-
-    the part before it, e.g. from `token.text.partition("=")`) -- gh's
-    `-f`/`-F key=value` field syntax, where `key` is a bareword the caller
-    already knows. See `_argv_token_after_prefix` for the provenance rule.
-    """
-    _, _, value_text = token.text.partition("=")
-    return _argv_token_after_prefix(token, f"{key}=", value_text)
-
-
-def _consume_argv_flag(
-    tokens: Sequence[ArgvToken], i: int, spec: Mapping[str, _FlagArity]
-) -> tuple[ArgvToken | None, int, bool]:
-    """Consume the flag at tokens[i] against *spec*.
-
-    Returns (value_or_None, next_index, recognized). Handles the same three
-    forms _flag_value already supports for a single named flag -- space
-    (`--flag value`), `=`-joined long form (`--flag=value`), and bundled
-    short form (`-Xvalue`) -- but spec-driven across every flag in *spec* at
-    once, and CLI-agnostic: any consumer with its own {flag: arity} spec
-    table (gh api, curl, git's global flags, pip's global flags) shares this
-    one engine rather than hand-rolling its own argv-walking loop. If the
-    token at i is not '-'-prefixed, or not in spec (in any of its
-    recognized forms), recognized=False and next_index==i -- the caller
-    decides how to handle an unresolved token.
-    """
-    token = tokens[i]
-    if not token.text.startswith("-"):
-        return (None, i, False)
-
-    arity = spec.get(token.text)
-    if arity == _FlagArity.BOOLEAN:
-        return (None, i + 1, True)
-    if arity == _FlagArity.VALUE:
-        if i + 1 >= len(tokens):
-            return (None, i + 1, True)
-        return (tokens[i + 1], i + 2, True)
-
-    if token.text.startswith("--") and "=" in token.text:
-        long_flag, _, value = token.text.partition("=")
-        if spec.get(long_flag) == _FlagArity.VALUE:
-            return (
-                _argv_token_after_prefix(token, f"{long_flag}=", value),
-                i + 1,
-                True,
-            )
-
-    for flag, flag_arity in spec.items():
-        if (
-            flag_arity == _FlagArity.VALUE
-            and len(flag) == 2
-            and not flag.startswith("--")
-            and token.text.startswith(flag)
-            and token.text != flag
-        ):
-            value_text = token.text[len(flag) :]
-            return (
-                _argv_token_after_prefix(token, flag, value_text),
-                i + 1,
-                True,
-            )
-
-    return (None, i, False)
-
-
-def _consume_str_flag(
-    tokens: Sequence[str], i: int, spec: Mapping[str, _FlagArity]
-) -> tuple[str | None, int, bool]:
-    """String-only convenience wrapper around _consume_argv_flag for consumers
-
-    (git global-flag skipping, curl's non-dynamic-value-checked flags, pip's
-    global flags) that only need flag recognition/arity to correctly skip
-    past a flag (and its value, if any) -- not ArgvToken's quote-provenance
-    tracking, since these values never feed a dynamic-value check. Delegates
-    the actual algorithm entirely to _consume_argv_flag rather than
-    re-implementing it for plain strings.
-    """
-    argv_tokens = [ArgvToken(t, False, t) for t in tokens]
-    value, next_i, recognized = _consume_argv_flag(argv_tokens, i, spec)
-    return (value.text if value is not None else None, next_i, recognized)
-
-
-# Complete git global-flag allowlist, verified against a live `git --help`
-# read (its usage synopsis is git's own authoritative, exhaustive list of
-# top-level global options: `git [-v | --version] [-h | --help] [-C <path>]
-# [-c <name>=<value>] [--exec-path[=<path>]] [--html-path] [--man-path]
-# [--info-path] [-p | --paginate | -P | --no-pager] [--no-replace-objects]
-# [--bare] [--git-dir=<path>] [--work-tree=<path>] [--namespace=<name>]
-# [--config-env=<name>=<envvar>] <command> [<args>]`). Sourced from
-# _GIT_GLOBAL_FLAGS/_GIT_GLOBAL_FLAGS_WITH_VALUE above rather than
-# re-entering their members with a possibly-conflicting arity: 4 of
-# _GIT_GLOBAL_FLAGS's 6 members duplicate _GIT_GLOBAL_FLAGS_WITH_VALUE's
-# value-taking flags -- only --no-pager/--bare are genuinely boolean.
-_GIT_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
-    **{flag: _FlagArity.VALUE for flag in _GIT_GLOBAL_FLAGS_WITH_VALUE},
-    **{flag: _FlagArity.BOOLEAN for flag in (_GIT_GLOBAL_FLAGS - _GIT_GLOBAL_FLAGS_WITH_VALUE)},
-    "--namespace": _FlagArity.VALUE,
-    "--config-env": _FlagArity.VALUE,
-    # --exec-path[=<path>] is optional-value (usable bare, or with `=`); this
-    # module's binary arity model can't express "optional". BOOLEAN is the
-    # correct default for its common bare usage; the rare `=`-form
-    # invocation instead fails closed via the unrecognized-flag sentinel
-    # rather than being silently misparsed -- an acceptable trade-off for a
-    # flag that in practice is essentially never used in automation.
-    "--exec-path": _FlagArity.BOOLEAN,
-    "--html-path": _FlagArity.BOOLEAN,
-    "--man-path": _FlagArity.BOOLEAN,
-    "--info-path": _FlagArity.BOOLEAN,
-    "-p": _FlagArity.BOOLEAN,
-    "--paginate": _FlagArity.BOOLEAN,
-    "-P": _FlagArity.BOOLEAN,
-    "--no-replace-objects": _FlagArity.BOOLEAN,
-    "-v": _FlagArity.BOOLEAN,
-    "--version": _FlagArity.BOOLEAN,
-    "-h": _FlagArity.BOOLEAN,
-    "--help": _FlagArity.BOOLEAN,
-}
-
-# pip global-flag spec (flags accepted before the `install` subcommand),
-# verified against a live `pip --help` read. Covers the flags named by this
-# rectify's investigation (--index-url, --proxy, --retries, --timeout,
-# --cache-dir, --log) plus the pre-existing -r/-c/-t/-b/--requirement/
-# --constraint set _find_pip_install already recognized, plus pip's other
-# common general options, to correctly skip past a global flag (and its
-# value) to find the `install` token. Exposed for unsafe_install_guard.py
-# to import (see _find_pip_install).
-_PIP_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
-    "-r": _FlagArity.VALUE,
-    "--requirement": _FlagArity.VALUE,
-    "-c": _FlagArity.VALUE,
-    "--constraint": _FlagArity.VALUE,
-    "-t": _FlagArity.VALUE,
-    "-b": _FlagArity.VALUE,
-    "--index-url": _FlagArity.VALUE,
-    "--proxy": _FlagArity.VALUE,
-    "--retries": _FlagArity.VALUE,
-    "--timeout": _FlagArity.VALUE,
-    "--cache-dir": _FlagArity.VALUE,
-    "--log": _FlagArity.VALUE,
-    "--python": _FlagArity.VALUE,
-    "--keyring-provider": _FlagArity.VALUE,
-    "--exists-action": _FlagArity.VALUE,
-    "--trusted-host": _FlagArity.VALUE,
-    "--cert": _FlagArity.VALUE,
-    "--client-cert": _FlagArity.VALUE,
-    "--use-feature": _FlagArity.VALUE,
-    "--use-deprecated": _FlagArity.VALUE,
-    "--resume-retries": _FlagArity.VALUE,
-    "-h": _FlagArity.BOOLEAN,
-    "--help": _FlagArity.BOOLEAN,
-    "--debug": _FlagArity.BOOLEAN,
-    "--isolated": _FlagArity.BOOLEAN,
-    "--require-virtualenv": _FlagArity.BOOLEAN,
-    "-v": _FlagArity.BOOLEAN,
-    "--verbose": _FlagArity.BOOLEAN,
-    "-V": _FlagArity.BOOLEAN,
-    "--version": _FlagArity.BOOLEAN,
-    "-q": _FlagArity.BOOLEAN,
-    "--quiet": _FlagArity.BOOLEAN,
-    "--no-input": _FlagArity.BOOLEAN,
-    "--no-cache-dir": _FlagArity.BOOLEAN,
-    "--disable-pip-version-check": _FlagArity.BOOLEAN,
-    "--no-color": _FlagArity.BOOLEAN,
-}
-
-
-def _is_allowed_wc_flag(token: str) -> bool:
-    """Return True when *token* is a wc flag that does not reveal file contents.
-
-    Allows ``-l``, repeated ``-l`` (e.g. ``-ll``), and the long form ``--lines``
-    only. Any value-bearing variant (``--lines=10``) or compound form
-    (``-lL``) is rejected because those are not used for metadata-only reads.
-    """
-    return bool(_WC_FLAG_RE.fullmatch(token))
-
-
-def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
-    """Return True for protected-path commands that inspect metadata or VCS state.
-
-    Protected recipe/skill/agent paths are normally deny-by-default because most
-    commands that mention them are content reads. These narrow exceptions support
-    legitimate pipeline work on files already in scope.
-    """
-    verb = command_verb(segment)
-    if verb == "git" or verb.endswith("/git"):
-        git_parts = extract_git_subcommand_and_flags(segment)
-        if git_parts is None:
-            return False
-        subcommand, flags = git_parts
-        if subcommand not in _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS:
-            return False
-        if subcommand == "add":
-            return not any(
-                flag in _GIT_ADD_CONTENT_FLAGS or flag.startswith("--pathspec-from-file=")
-                for flag in flags
-            )
-        if subcommand == "status":
-            return not any(flag in _GIT_STATUS_CONTENT_FLAGS for flag in flags)
-        if subcommand == "diff":
-            if any(
-                flag in _GIT_DIFF_CONTENT_FLAGS
-                or flag.startswith("-U")
-                or flag.startswith("--unified")
-                or flag.startswith("--word-diff")
-                or flag.startswith("--color-words")
-                or flag.startswith("--patch-with-stat")
-                or flag.startswith("--patch-with-raw")
-                for flag in flags
-            ):
-                return False
-            return any(
-                flag in _GIT_DIFF_METADATA_FLAGS or flag.startswith("--stat=") for flag in flags
-            )
-        return False
-    if verb == "wc" or verb.endswith("/wc"):
-        start = _command_start_index(segment)
-        if start is None:
-            return False
-        flags = [token for token in segment[start + 1 :] if token.startswith("-")]
-        return bool(flags) and all(_is_allowed_wc_flag(token) for token in flags)
-    return False
-
-
-def _tokenize_protected_read_segments(command: str) -> list[list[str]]:
-    try:
-        lexer = shlex.shlex(
-            _normalize_newlines_for_tokenize(command), posix=True, punctuation_chars=";&|()"
-        )
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except (ValueError, TypeError):
-        return []
-
-    segments: list[list[str]] = []
-    current: list[str] = []
-    for token in tokens:
-        if token in _PROTECTED_READ_SHELL_OPS:
-            if current:
-                segments.append(current)
-                current = []
-        else:
-            current.append(token)
-    if current:
-        segments.append(current)
-    return segments
-
-
-def command_has_blocked_protected_path_read(
-    command: str, protected_path_patterns: Sequence[SearchPattern]
-) -> bool:
-    """Return True when a command reads a protected recipe/skill/agent path."""
-    if not any(pattern.search(command) for pattern in protected_path_patterns):
-        return False
-
-    if "<<" in command or _SHELL_SUBSTITUTION_RE.search(command):
-        return True
-
-    segments = _tokenize_protected_read_segments(command)
-    if not segments:
-        return True
-
-    if len(segments) > 1 and _SHELL_STATE_VAR_RE.search(command):
-        return True
-
-    for segment in segments:
-        segment_text = " ".join(segment)
-        if any(pattern.search(segment_text) for pattern in protected_path_patterns):
-            if not is_allowed_protected_path_metadata_command(segment):
-                return True
-    return False
-
-
-def has_interpreter_write(command: str) -> bool:
-    if not _INTERPRETER_RE.search(command):
-        return False
-    return bool(_WRITE_APIS_RE.search(command))
-
-
-def extract_interpreter_write_paths(command: str) -> list[str] | None:
-    """Extract literal file paths from an interpreter write command.
-
-    Returns:
-        None    — command is not an interpreter write (no prefix or no write API).
-        []      — interpreter write detected but not all paths are static literals
-                  (dynamic variable, f-string, shutil two-arg, or mixed).
-        [paths] — all write target paths are static literals (may be relative).
-    """
-    if not _INTERPRETER_RE.search(command):
-        return None
-    if not _WRITE_APIS_RE.search(command):
-        return None
-
-    call_site_count = len(_WRITE_CALL_SITE_RE.findall(command))
-
-    paths: list[str] = []
-    for m in _LITERAL_OPEN_PATH_RE.finditer(command):
-        paths.append(m.group(2))
-    for m in _LITERAL_PATH_CONSTRUCTOR_RE.finditer(command):
-        paths.append(m.group(2))
-
-    if len(paths) < call_site_count:
-        return []
-
-    return paths if paths else []
-
-
-def has_interpreter_wrapped_command(command: str, *, target_commands: Sequence[str]) -> bool:
-    if not _INTERPRETER_RE.search(command):
-        return False
-    if not _SUBPROCESS_APIS_RE.search(command):
-        return False
-    cmd_lower = command.lower()
-    return any(tc.lower() in cmd_lower for tc in target_commands)
-
-
-def has_nested_shell(command: str) -> bool:
-    return bool(_NESTED_SHELL_RE.search(command))
-
-
-_SHELL_INTERPRETERS: frozenset[str] = frozenset({"bash", "sh", "zsh", "dash"})
-
-
-def _normalize_executable(token: str) -> str:
-    return os.path.basename(token).lower()
-
-
-def _is_shell_interpreter(token: str) -> bool:
-    base = _normalize_executable(token)
-    if base in _SHELL_INTERPRETERS:
-        return True
-    # Versioned forms: bash5, sh4, dash0.5, zsh5
-    for name in _SHELL_INTERPRETERS:
-        if base.startswith(name) and base[len(name) :].isdigit():
-            return True
-    return False
-
-
-def extract_shell_command_payloads(command: str) -> list[str]:
-    """Return shell text payloads that will actually be evaluated.
-
-    Includes the argument following `-c` for path-normalized bash/sh/zsh/dash
-    invocations, the joined argument payload for `eval`, balanced `$(...)`
-    payloads and backtick payloads occurring outside single quotes (including
-    those inside double quotes). Nested payloads are extracted recursively.
-    Single-quoted text, escaped substitutions, and heredoc bodies are inert.
-    """
-    payloads: list[str] = []
-    segments = tokenize_command_segments(command)
-    for segment in segments:
-        verb, args = command_verb_and_args(segment)
-        if not verb:
-            continue
-        if _is_shell_interpreter(verb) and args and args[0] == "-c" and len(args) >= 2:
-            payloads.append(args[1])
-            continue
-        if verb == "eval" and args:
-            payloads.append(" ".join(args))
-            continue
-    # Substitution scan
-    for sub in _extract_substitution_payloads(command):
-        payloads.append(sub)
-    return payloads
-
-
-def _segment_evaluates_shell_payload(tokens: list[str], payload: str) -> bool:
-    """Return whether *tokens* structurally evaluate *payload* as shell text."""
-    verb, args = command_verb_and_args(tokens)
-    if _is_shell_interpreter(verb) and args and args[0] == "-c" and len(args) >= 2:
-        return args[1] == payload
-    if verb == "eval" and args:
-        return " ".join(args) == payload
-    rendered = " ".join(tokens)
-    return f"$({payload})" in rendered or f"`{payload}`" in rendered
-
-
-def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
-    """Return tokenized segments for every evaluated shell payload in *command*.
-
-    Walks the outer command and every distinct extracted payload recursively.
-    Each successfully parsed
-    segment of every payload is appended to the result so callers can apply
-    verb-position policies like ``command_verb_and_args`` to each segment.
-
-    Returns ``None`` when the outer command or any non-empty evaluated
-    payload cannot be tokenized; callers interpret ``None`` as no deny
-    match (fail-open). Returns ``[]`` when the command has no evaluated
-    shell payload to traverse.
-    """
-    outer = tokenize_command_segments(command)
-    if not outer and command.strip():
-        return None
-
-    result: list[list[str]] = []
-    seen: set[str] = set()
-    queue: list[str] = list(extract_shell_command_payloads(command))
-    while queue:
-        payload = queue.pop(0)
-        if payload in seen:
-            continue
-        seen.add(payload)
-        if not payload.strip():
-            continue
-        segments = tokenize_command_segments(payload)
-        if not segments and payload.strip():
-            return None
-        result.extend(segments)
-        queue.extend(extract_shell_command_payloads(payload))
-    return result
-
-
-def _find_substitution_end(command: str, start: int) -> int:
-    """Return the index of the ``)`` closing a ``$(`` whose body starts at *start*.
-
-    Quotes open a fresh quoting context inside a substitution, so a literal
-    ``)`` within a quoted span must not terminate the scan. Returns
-    ``len(command)`` when the substitution is unclosed.
-    """
-    depth = 1
-    n = len(command)
-    k = start
-    while k < n:
-        ch = command[k]
-        if ch == "\\" and k + 1 < n:
-            k += 2
-            continue
-        if ch == "'":
-            k += 1
-            while k < n and command[k] != "'":
-                k += 1
-            k += 1
-            continue
-        if ch == '"':
-            k += 1
-            while k < n and command[k] != '"':
-                if command[k] == "\\" and k + 1 < n:
-                    k += 2
-                    continue
-                k += 1
-            k += 1
-            continue
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-            if depth == 0:
-                return k
-        k += 1
-    return n
-
-
-def _extract_substitution_payloads(command: str) -> list[str]:
-    """Quote/escape-aware state machine returning immediate substitution bodies."""
-    payloads: list[str] = []
-    i = 0
-    n = len(command)
-    while i < n:
-        c = command[i]
-        if c == "\\" and i + 1 < n:
-            i += 2
-            continue
-        if c == "'":
-            # Skip single-quoted span
-            j = i + 1
-            while j < n and command[j] != "'":
-                j += 1
-            i = j + 1
-            continue
-        if c == '"':
-            # Walk inside double quotes; substitutions are still active here.
-            j = i + 1
-            while j < n and command[j] != '"':
-                if command[j] == "\\" and j + 1 < n:
-                    j += 2
-                    continue
-                if command[j] == "`":
-                    inner_end = j + 1
-                    while inner_end < n and command[inner_end] != "`":
-                        inner_end += 1
-                    inner = command[j + 1 : inner_end]
-                    payloads.append(inner)
-                    j = inner_end + 1
-                    continue
-                if command[j] == "$" and j + 1 < n and command[j + 1] == "(":
-                    k = _find_substitution_end(command, j + 2)
-                    inner = command[j + 2 : k]
-                    payloads.append(inner)
-                    j = k + 1
-                    continue
-                j += 1
-            i = j + 1
-            continue
-        if c == "`":
-            j = i + 1
-            while j < n and command[j] != "`":
-                if command[j] == "\\" and j + 1 < n:
-                    j += 2
-                    continue
-                j += 1
-            inner = command[i + 1 : j]
-            payloads.append(inner)
-            i = j + 1
-            continue
-        if c == "$" and i + 1 < n and command[i + 1] == "(":
-            j = _find_substitution_end(command, i + 2)
-            inner = command[i + 2 : j]
-            payloads.append(inner)
-            i = j + 1
-            continue
-        i += 1
-    return payloads
-
-
-_PYTHON_SUBPROCESS_FUNCS: frozenset[str] = frozenset(
-    {
-        "subprocess.run",
-        "subprocess.call",
-        "subprocess.Popen",
-        "subprocess.check_call",
-        "subprocess.check_output",
-    }
-)
-_PYTHON_OS_EXEC_FUNCS: frozenset[str] = frozenset(
-    {
-        "os.system",
-        "os.popen",
-        "os.execl",
-        "os.execle",
-        "os.execlp",
-        "os.execv",
-        "os.execvp",
-        "os.execvpe",
-        "os.execve",
-    }
-)
-
-
-def _parse_python_program_literals(program: str) -> list[ast.Call]:
-    """Return subprocess/os call AST nodes found in a Python -c program."""
-    try:
-        tree = ast.parse(program, mode="exec")
-    except SyntaxError:
-        return []
-    calls: list[ast.Call] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            func = node.func
-            dotted: str | None = None
-            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-                dotted = f"{func.value.id}.{func.attr}"
-            if dotted in _PYTHON_SUBPROCESS_FUNCS or dotted in _PYTHON_OS_EXEC_FUNCS:
-                calls.append(node)
-    return calls
-
-
-def _literal_to_argv(node: ast.AST) -> list[str] | None:
-    """Return a literal argv list from a list/tuple literal AST node, else None."""
-    if isinstance(node, ast.List):
-        elements = node.elts
-    elif isinstance(node, ast.Tuple):
-        elements = node.elts
-    else:
-        return None
-    out: list[str] = []
-    for elt in elements:
-        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-            out.append(elt.value)
-        else:
-            return None
-    return out
-
-
-def _literal_to_string(node: ast.AST) -> str | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    return None
-
-
-@dataclass(frozen=True, slots=True)
-class _InterpreterCommandSpec:
-    payload: str | list[str]
-    cwd: str | None
-
-
-def _python_program_command_specs(
-    program: str,
-) -> tuple[list[_InterpreterCommandSpec], bool]:
-    specs: list[_InterpreterCommandSpec] = []
-    has_unresolved = False
-    for call in _parse_python_program_literals(program):
-        args = call.args
-        if not args:
-            continue
-        cwd_nodes = [keyword.value for keyword in call.keywords if keyword.arg == "cwd"]
-        if len(cwd_nodes) > 1:
-            has_unresolved = True
-            continue
-        cwd: str | None = None
-        if cwd_nodes:
-            cwd_node = cwd_nodes[0]
-            if isinstance(cwd_node, ast.Constant) and cwd_node.value is None:
-                cwd = None
-            else:
-                cwd = _literal_to_string(cwd_node)
-                if cwd is None:
-                    has_unresolved = True
-                    continue
-        first = args[0]
-        shell_arg = next((kw.value for kw in call.keywords if kw.arg == "shell"), None)
-        is_shell_true = bool(
-            shell_arg is not None
-            and isinstance(shell_arg, ast.Constant)
-            and shell_arg.value is True
-        )
-        if is_shell_true:
-            cmd_str = _literal_to_string(first)
-            if cmd_str is not None:
-                specs.append(_InterpreterCommandSpec(cmd_str, cwd))
-                continue
-            has_unresolved = True
-            continue
-        argv = _literal_to_argv(first)
-        if argv is not None:
-            specs.append(_InterpreterCommandSpec(argv, cwd))
-            continue
-        cmd_str = _literal_to_string(first)
-        if cmd_str is not None:
-            specs.append(_InterpreterCommandSpec(cmd_str, cwd))
-            continue
-        has_unresolved = True
-    return (specs, has_unresolved)
-
-
-def _extract_interpreter_command_specs(
-    command: str,
-) -> tuple[list[_InterpreterCommandSpec], bool]:
-    specs: list[_InterpreterCommandSpec] = []
-    has_unresolved = False
-    if not _INTERPRETER_RE.search(command) or not _SUBPROCESS_APIS_RE.search(command):
-        return (specs, has_unresolved)
-    py_re = re.compile(
-        r"(?:^|&&|\|\||;)\s*(?:env\s+)?(?:python3?(?:\.\d+)?)\s+-c\s+(['\"])(.*?)\1",
-        re.DOTALL,
+if TYPE_CHECKING:
+    from autoskillit.hooks._classification._flags import (  # noqa: F401
+        _GIT_GLOBAL_FLAG_SPEC,
+        _GIT_GLOBAL_FLAGS,
+        _GIT_GLOBAL_FLAGS_WITH_VALUE,
+        _PIP_GLOBAL_FLAG_SPEC,
+        _argv_token_after_prefix,
+        _argv_token_value_after_key,
+        _consume_argv_flag,
+        _consume_str_flag,
+        _FlagArity,
+        _tokenize_protected_read_segments,
+        command_has_blocked_protected_path_read,
+        is_allowed_protected_path_metadata_command,
     )
-    for match in py_re.finditer(command):
-        found, unresolved = _python_program_command_specs(match.group(2))
-        specs.extend(found)
-        has_unresolved = has_unresolved or unresolved
-    return (specs, has_unresolved)
+    from autoskillit.hooks._classification._interpreters import (  # noqa: F401
+        _extract_interpreter_command_specs,
+        _extract_interpreter_segment_specs,
+        _normalize_executable,
+        _segment_evaluates_shell_payload,
+        extract_interpreter_command_payloads,
+        extract_interpreter_write_paths,
+        extract_shell_command_payloads,
+        has_interpreter_wrapped_command,
+        has_interpreter_write,
+        has_nested_shell,
+        tokenize_shell_payload_segments,
+    )
+else:
+    if __package__:
+        from ._classification import _flags, _interpreters
+    else:
+        from _classification import _flags, _interpreters
 
-
-def _extract_interpreter_segment_specs(
-    segment: Sequence[str],
-) -> tuple[list[_InterpreterCommandSpec], bool]:
-    verb, args = command_verb_and_args(list(segment))
-    executable = os.path.basename(verb).casefold()
-    if re.fullmatch(r"python(?:3(?:\.\d+)?)?", executable) is None:
-        return ([], False)
-    try:
-        command_index = args.index("-c")
-    except ValueError:
-        return ([], False)
-    if command_index + 1 >= len(args):
-        return ([], True)
-    return _python_program_command_specs(args[command_index + 1])
-
-
-def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[str]], bool]:
-    """Return literal subprocess payloads and whether any were unresolved."""
-    specs, has_unresolved = _extract_interpreter_command_specs(command)
-    return ([spec.payload for spec in specs], has_unresolved)
+    _GIT_GLOBAL_FLAG_SPEC = _flags._GIT_GLOBAL_FLAG_SPEC
+    _GIT_GLOBAL_FLAGS = _flags._GIT_GLOBAL_FLAGS
+    _GIT_GLOBAL_FLAGS_WITH_VALUE = _flags._GIT_GLOBAL_FLAGS_WITH_VALUE
+    _PIP_GLOBAL_FLAG_SPEC = _flags._PIP_GLOBAL_FLAG_SPEC
+    _argv_token_after_prefix = _flags._argv_token_after_prefix
+    _argv_token_value_after_key = _flags._argv_token_value_after_key
+    _consume_argv_flag = _flags._consume_argv_flag
+    _consume_str_flag = _flags._consume_str_flag
+    _FlagArity = _flags._FlagArity
+    _tokenize_protected_read_segments = _flags._tokenize_protected_read_segments
+    command_has_blocked_protected_path_read = _flags.command_has_blocked_protected_path_read
+    is_allowed_protected_path_metadata_command = _flags.is_allowed_protected_path_metadata_command
+    _extract_interpreter_command_specs = _interpreters._extract_interpreter_command_specs
+    _extract_interpreter_segment_specs = _interpreters._extract_interpreter_segment_specs
+    _normalize_executable = _interpreters._normalize_executable
+    _segment_evaluates_shell_payload = _interpreters._segment_evaluates_shell_payload
+    extract_interpreter_command_payloads = _interpreters.extract_interpreter_command_payloads
+    extract_interpreter_write_paths = _interpreters.extract_interpreter_write_paths
+    extract_shell_command_payloads = _interpreters.extract_shell_command_payloads
+    has_interpreter_wrapped_command = _interpreters.has_interpreter_wrapped_command
+    has_interpreter_write = _interpreters.has_interpreter_write
+    has_nested_shell = _interpreters.has_nested_shell
+    tokenize_shell_payload_segments = _interpreters.tokenize_shell_payload_segments

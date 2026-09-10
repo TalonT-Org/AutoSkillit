@@ -26,6 +26,11 @@ from tests.arch._acceptance_policy_surfaces import (
 )
 from tests.arch._policy_gate_plumbing import BaseRefContext, require_base_ref_or_skip
 
+# test_stashed_base_end_to_end needs the pytester fixture. Declared per-module
+# because pytest_plugins is an error in a non-rootdir conftest, and tests/conftest.py
+# is not the rootdir conftest.
+pytest_plugins = ["pytester"]
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

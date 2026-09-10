@@ -708,7 +708,7 @@ def _bind_managed_parent_route(
 ) -> SessionBinding:
     """Mint or verify the server-owned parent route under the binding lock."""
     expected_guards = tuple(sorted(MANAGED_CODEX_PARENT_GUARD_SET))
-    config_digest = getattr(attestation, "hook_registry_digest", "")
+    config_digest = attestation.hook_registry_digest
     if not isinstance(config_digest, str) or not config_digest:
         raise SkillContractError("run_fixed_batch attestation lacks a managed config digest")
     with binding_lock(binding_path):

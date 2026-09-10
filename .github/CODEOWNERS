@@ -1,0 +1,9 @@
+# autoskillit: policy-authority -- repository acceptance policy. Humans edit these files;
+# automated repair sessions must not. A change here needs the code owner's review.
+
+/tests/arch/_acceptance_policy_surfaces.py @Trecek
+/scripts/check_policy_relaxation.py @Trecek
+/tests/arch/test_acceptance_policy_relaxation_gate.py @Trecek
+/tests/arch/_policy_gate_plumbing.py @Trecek
+/.github/CODEOWNERS @Trecek
+/.github/workflows/tests.yml @Trecek

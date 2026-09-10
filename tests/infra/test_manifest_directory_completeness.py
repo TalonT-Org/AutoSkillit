@@ -53,7 +53,13 @@ _SOURCE_DEPENDENCIES: dict[str, frozenset[str]] = {
         }
     ),
     "server": frozenset({"src/autoskillit/agents/**"}),
-    "arch": frozenset({"src/autoskillit/agents/**"}),
+    "arch": frozenset(
+        {
+            "src/autoskillit/agents/**",
+            ".github/CODEOWNERS",
+            "scripts/check_policy_relaxation.py",
+        }
+    ),
     "contracts": frozenset({"src/autoskillit/assets/**/*", "src/autoskillit/agents/**"}),
     "recipe": frozenset(
         {

@@ -109,6 +109,13 @@ repos:
         files: ^src/autoskillit/.*\.py$
         pass_filenames: false
 
+      - id: check-policy-relaxation
+        name: Check acceptance-policy relaxation (staged vs HEAD)
+        language: system
+        entry: python scripts/check_policy_relaxation.py --staged
+        files: ^(tests/arch/|tests/infra/|scripts/check_file_lengths\.py)
+        pass_filenames: false
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

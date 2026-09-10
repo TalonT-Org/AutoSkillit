@@ -14,9 +14,8 @@ import os
 
 import pytest
 
+from scripts.ci_target_policy import BASE_SHA_EVENTS
 from tests._test_filter import resolve_test_base_ref_from_env
-
-_GATE_REQUIRED_EVENTS = frozenset({"pull_request", "merge_group"})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -34,7 +33,7 @@ class BaseRefContext:
     def from_env(cls, explicit: str | None) -> BaseRefContext:
         return cls(
             resolve_test_base_ref_from_env(explicit),
-            os.environ.get("GITHUB_EVENT_NAME") in _GATE_REQUIRED_EVENTS,
+            os.environ.get("GITHUB_EVENT_NAME") in BASE_SHA_EVENTS,
         )
 
 

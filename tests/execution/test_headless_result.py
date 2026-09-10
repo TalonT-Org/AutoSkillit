@@ -573,8 +573,7 @@ class TestStaleTokenUsagePropagation:
 
 
 class TestTurnUsagePropagation:
-    def test_public_result_omits_a_long_turn_series(self) -> None:
-        turn_usage = [_turn_usage_entry(message_id=f"message-{index}") for index in range(501)]
+    def test_public_result_omits_turn_usage(self) -> None:
         result = SkillResult(
             success=True,
             result="done",
@@ -585,7 +584,7 @@ class TestTurnUsagePropagation:
             needs_retry=False,
             retry_reason=RetryReason.NONE,
             stderr="",
-            turn_usage=turn_usage,
+            turn_usage=[_turn_usage_entry(message_id="message-1")],
         )
 
         serialized = json.loads(result.to_json())

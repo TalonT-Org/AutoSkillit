@@ -1,91 +1,13 @@
-"""Feature flag resolution — IL-0 (zero autoskillit imports outside core/).
+"""Backward-compat shim for feature_flags — see core.claude_env.feature_flags."""
 
-is_feature_enabled() is the single gating primitive for all feature-gated
-code paths. Callers pass config.features (a dict[str, bool]) rather than the
-full AutomationConfig to keep core/ free of config/ imports.
-"""
+from autoskillit.core.claude_env.feature_flags import (
+    FEATURE_REGISTRY,
+    _collect_disabled_feature_tags,
+    is_feature_enabled,
+)
 
-from __future__ import annotations
-
-import warnings
-
-from .types._type_constants_features import FEATURE_REGISTRY
-from .types._type_enums import FeatureLifecycle
-
-
-def is_feature_enabled(
-    name: str,
-    features: dict[str, bool],
-    *,
-    experimental_enabled: bool = False,
-) -> bool:
-    """Check whether a named feature is enabled.
-
-    Parameters
-    ----------
-    name:
-        Feature name — must exist in FEATURE_REGISTRY. Raises KeyError otherwise.
-    features:
-        Resolved features dict from ``AutomationConfig.features``. Typically
-        passed as ``config.features`` at call sites; never pass the full config.
-    experimental_enabled:
-        When True, all EXPERIMENTAL lifecycle features are enabled unless explicitly
-        overridden by a per-feature entry in ``features``.
-
-    Returns
-    -------
-    bool
-        Resolution order:
-        DISABLED hard-off → explicit override → experimental blanket
-        (with requires_backend_alignment bypass → default_enabled) → default_enabled.
-
-    Raises
-    ------
-    KeyError
-        If ``name`` is not a registered feature in FEATURE_REGISTRY.
-    """
-    defn = FEATURE_REGISTRY.get(name)
-    if defn is None:
-        raise KeyError(f"Unknown feature: {name!r}")
-    if defn.lifecycle == FeatureLifecycle.DISABLED:
-        return False
-    if name in features:
-        result = features[name]
-    elif experimental_enabled and defn.lifecycle == FeatureLifecycle.EXPERIMENTAL:
-        if defn.requires_backend_alignment:
-            result = defn.default_enabled
-        else:
-            result = True
-    else:
-        result = defn.default_enabled
-    if result and defn.lifecycle == FeatureLifecycle.DEPRECATED:
-        warnings.warn(
-            f"Feature {name!r} has lifecycle DEPRECATED"
-            f" (sunset: {defn.sunset_date}). "
-            "It will be removed in a future release.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-    return result
-
-
-def _collect_disabled_feature_tags(
-    features: dict[str, bool],
-    *,
-    experimental_enabled: bool = False,
-) -> frozenset[str]:
-    """Return feature tags that should be suppressed.
-
-    Single source of truth used by _fleet_auto_gate_boot and _redisable_subsets.
-    The registry is the sole authority on which tags belong to which feature.
-    """
-    enabled_tags: set[str] = set()
-    disabled_tags: set[str] = set()
-    for name, defn in FEATURE_REGISTRY.items():
-        if not defn.tool_tags:
-            continue
-        if is_feature_enabled(name, features, experimental_enabled=experimental_enabled):
-            enabled_tags |= defn.tool_tags
-        else:
-            disabled_tags |= defn.tool_tags
-    return frozenset(disabled_tags - enabled_tags)
+__all__ = [
+    "FEATURE_REGISTRY",
+    "_collect_disabled_feature_tags",
+    "is_feature_enabled",
+]

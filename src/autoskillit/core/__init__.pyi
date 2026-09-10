@@ -15,14 +15,14 @@ from ._capacity import MIN_FREE_BYTES_THRESHOLD as MIN_FREE_BYTES_THRESHOLD
 from ._capacity import SpaceProbe as SpaceProbe
 from ._capacity import default_space_probe as default_space_probe
 from ._capacity import platform_temp_root as platform_temp_root
-from ._claude_env import build_agent_env as build_agent_env
-from ._claude_env import build_claude_env as build_claude_env
-from ._claude_env import build_maintenance_env as build_maintenance_env
-from ._claude_env import resolve_dbus_session_bus_address as resolve_dbus_session_bus_address
-from ._cmd_runner import CmdRunner as CmdRunner
-from ._cmd_runner import default_cmd_runner as default_cmd_runner
-from ._cmd_runner import run_gh as run_gh
-from ._cmd_runner import run_git as run_git
+from .claude_env.claude_env import build_agent_env as build_agent_env
+from .claude_env.claude_env import build_claude_env as build_claude_env
+from .claude_env.claude_env import build_maintenance_env as build_maintenance_env
+from .claude_env.claude_env import resolve_dbus_session_bus_address as resolve_dbus_session_bus_address
+from .install.cmd_runner import CmdRunner as CmdRunner
+from .install.cmd_runner import default_cmd_runner as default_cmd_runner
+from .install.cmd_runner import run_gh as run_gh
+from .install.cmd_runner import run_git as run_git
 from ._delivery_bounds import recipe_delivery_request_digest as recipe_delivery_request_digest
 from ._delivery_bounds import (
     resolve_general_output_token_limit as resolve_general_output_token_limit,
@@ -43,12 +43,12 @@ from ._install_binding import (
     install_binding_matches_current_state as install_binding_matches_current_state,
 )
 from ._install_binding import resolve_install_binding as resolve_install_binding
-from ._install_detect import DirectUrlInfo as DirectUrlInfo
-from ._install_detect import _is_release_tag as _is_release_tag
-from ._install_detect import _is_stable_track as _is_stable_track
-from ._install_detect import distribution_version_at as distribution_version_at
-from ._install_detect import is_dev_install as is_dev_install
-from ._install_detect import parse_direct_url as parse_direct_url
+from .install.install_detect import DirectUrlInfo as DirectUrlInfo
+from .install.install_detect import _is_release_tag as _is_release_tag
+from .install.install_detect import _is_stable_track as _is_stable_track
+from .install.install_detect import distribution_version_at as distribution_version_at
+from .install.install_detect import is_dev_install as is_dev_install
+from .install.install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
 from ._managed_worker_capacity import DefaultManagedWorkerCapacity as DefaultManagedWorkerCapacity
@@ -182,10 +182,10 @@ from .audit_semantic_codec import (
 from .bash_write_targets import contains_test_gate_command as contains_test_gate_command
 from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
 from .branch_guard import is_protected_branch as is_protected_branch
-from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
-from .claude_conventions import LayoutError as LayoutError
-from .claude_conventions import validate_add_dir as validate_add_dir
-from .claude_conventions import validate_worktree_path as validate_worktree_path
+from .claude_env.conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
+from .claude_env.conventions import LayoutError as LayoutError
+from .claude_env.conventions import validate_add_dir as validate_add_dir
+from .claude_env.conventions import validate_worktree_path as validate_worktree_path
 from .closure_hashing import HASH_RE as HASH_RE
 from .closure_hashing import canonical_json_bytes as canonical_json_bytes
 from .closure_hashing import compute_bytes_hash as compute_bytes_hash
@@ -221,8 +221,8 @@ from .context_admission import (
 from .context_admission import (
     resolve_context_admission_coverage as resolve_context_admission_coverage,
 )
-from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
-from .feature_flags import is_feature_enabled as is_feature_enabled
+from .claude_env.feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
+from .claude_env.feature_flags import is_feature_enabled as is_feature_enabled
 from .fs_observation import VANISHED_ERRORS as VANISHED_ERRORS
 from .fs_observation import ObservedEntry as ObservedEntry
 from .fs_observation import observe_path_mode as observe_path_mode

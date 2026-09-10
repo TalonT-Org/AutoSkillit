@@ -13,11 +13,25 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # sub-packages. The arch test excludes these from the file count because they
 # contribute no real module surface; only the underlying real modules are counted.
 # Populated by Phase A (core/) and Phase D (recipe/) of issue #4671.
-_SHIM_FILENAMES: frozenset[str] = frozenset()
+_SHIM_FILENAMES: frozenset[str] = frozenset(
+    {
+        # Phase A: core/install/, core/claude_env/ sub-packages.
+        # The 7-file core/io/ move is deferred: core/io.py exceeds the diff-scoped
+        # 750-line hard cap (REQ-CNST-010), and the core/io.py vs core/io/ sub-package
+        # name collision requires renaming the sub-package or splitting io.py first.
+        "_install_detect.py",
+        "_cmd_runner.py",
+        "_claude_env.py",
+        "claude_conventions.py",
+        "feature_flags.py",
+    }
+)
 _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset()
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 49,  # +_managed_worker_capacity shared fleet/fixed-batch authority
+    "core": 44,  # Phase A: 49 - 5 moved files (issue #4671); 7 io/ files deferred
+    "core/install": 4,  # 2 files + __init__ + buffer
+    "core/claude_env": 4,  # 3 files + __init__ + buffer
     # _type_truth replaces the retired _type_tradition_manifest shard.
     "core/types": 76,
     "core/runtime": 11,

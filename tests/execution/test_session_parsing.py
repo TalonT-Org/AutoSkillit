@@ -256,17 +256,17 @@ class TestExtractTokenUsage:
         assert usage["input_tokens"] == 150
         assert usage["output_tokens"] == 60
 
-    def test_no_usage_data_returns_none(self):
-        """Stdout with no usage records at all returns None."""
+    def test_no_usage_data_returns_empty_usage_and_rows(self):
+        """Stdout with no usage records returns no aggregate and an empty row series."""
         stdout = json.dumps({"type": "user", "message": {"content": "hello"}})
         assert extract_token_usage(stdout) == (None, [])
 
-    def test_empty_stdout_returns_none(self):
-        """Empty string returns None."""
+    def test_empty_stdout_returns_empty_usage_and_rows(self):
+        """Empty stdout returns no aggregate and an empty row series."""
         assert extract_token_usage("") == (None, [])
 
-    def test_non_json_stdout_returns_none(self):
-        """Non-parseable stdout returns None."""
+    def test_non_json_stdout_returns_empty_usage_and_rows(self):
+        """Non-parseable stdout returns no aggregate and an empty row series."""
         assert extract_token_usage("not json at all\nstill not json") == (None, [])
 
     def test_cache_tokens_default_to_zero(self):

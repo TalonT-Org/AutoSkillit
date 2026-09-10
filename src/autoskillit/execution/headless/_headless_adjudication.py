@@ -83,7 +83,7 @@ def _parse_stdout(result: SubprocessResult, backend: CodingAgentBackend) -> Clau
     agent_result = backend.result_parser().parse_stdout(result.stdout)
     rows = extract_codex_turn_usage(
         backend.session_locator(),
-        agent_result.session_id or result.session_id or result.channel_b_session_id,
+        agent_result.session_id or result.session_id,
         result.start_ts,
         result.end_ts,
     )

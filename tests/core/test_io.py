@@ -170,11 +170,17 @@ class TestDumpYamlStr:
 
 class TestYamlConsolidationArchitecture:
     def test_only_yaml_imports_yaml_directly(self):
-        """Only core/io/io.py may contain 'import yaml' at any scope.
+        """Only core/io/yaml_io.py may contain 'import yaml' at any scope.
 
-        After Phase A decomposition of core/io.py (issue #4671), the YAML
-        loader was extracted to core/io/yaml_io.py; both files together own
-        the package's sole pyyaml import surface.
+        Phase A of issue #4671 decomposed core/io.py and extracted the YAML
+        loader into core/io/yaml_io.py, which is now the package's sole pyyaml
+        import surface — no yaml import remains in core/io/io.py.
+
+        The allowlist is deliberately tight: permitting core/io/io.py as well
+        would let a yaml import creep back into it without failing, which is
+        exactly the consolidation this test exists to protect. This matches the
+        allowlist in tests/arch/test_subpackage_isolation_module_boundaries.py
+        so the two guards cannot disagree about the invariant.
         """
         import ast
         from pathlib import Path
@@ -182,10 +188,7 @@ class TestYamlConsolidationArchitecture:
         from autoskillit.core.paths import pkg_root
 
         src_dir = pkg_root()
-        allowed_rels = {
-            str(Path("core") / "io" / "io.py"),
-            str(Path("core") / "io" / "yaml_io.py"),
-        }
+        allowed_rels = {str(Path("core") / "io" / "yaml_io.py")}
         violations = []
         for py_file in sorted(src_dir.rglob("*.py")):
             rel = str(py_file.relative_to(src_dir))
@@ -200,7 +203,9 @@ class TestYamlConsolidationArchitecture:
                 elif isinstance(node, ast.ImportFrom):
                     if (node.module or "").startswith("yaml"):
                         violations.append(f"{rel}: from {node.module} import ...")
-        assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"
+        assert not violations, (
+            f"Direct yaml imports found outside core/io/yaml_io.py: {violations}"
+        )
 
 
 def test_atomic_write_is_canonical_public_name():

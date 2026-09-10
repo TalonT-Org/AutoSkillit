@@ -1,11 +1,13 @@
 """Data-flow analysis for recipe pipelines.
 
-Extracted from validator.py to break the circular import between
-validator.py and rules.py (which needed to defer-import analyze_dataflow
-and _build_step_graph to avoid the cycle).
+Owns the dataflow pass over a bound recipe: validation-context construction,
+step-graph traversal, and the warnings surfaced to recipe validation.
 
-Import chain: _analysis.py → contracts.py, io.py, schema.py
-Neither contracts.py nor io.py imports _analysis.py, so no cycle exists.
+Originally extracted from validator.py to break a validator/rules cycle, and
+moved here by the Part D decomposition (#4671). The cycle is still live but now
+runs the other way: recipe/contracts/_contracts_card.py defer-imports
+_build_step_graph and extract_blocks from this module at call time rather than
+at module load, so callers must keep that import deferred.
 """
 
 from __future__ import annotations

@@ -429,26 +429,31 @@ def test_phase_b_closure_hashing_behavior_snapshot() -> None:
 
 
 # ── Phase D Test 4: semantic-rule registry populated after sub-package moves ─
-# Per the Phase D plan, every @semantic_rule decorator must register in the
-# canonical _RULE_REGISTRY. The plan asserted a minimum of 80 rules; the
-# actual count is 242 (measured 2026-09-10). If the count ever drops below 80,
-# a follow-up is required to migrate missing rule modules into the
-# recipe/rules/ sub-tree.
+# Every @semantic_rule decorator must register in the canonical _RULE_REGISTRY.
+# The registry is populated purely as an import side effect of recipe/__init__.py
+# pulling in each rule module, so a dropped import silently removes rules rather
+# than raising. The floor below is therefore a regression detector, and it is set
+# just under the measured count (242 on 2026-09-10) rather than at the Phase D
+# plan's original 80: a floor of 80 would let two thirds of the registry vanish
+# while still reporting green.
+_RULE_REGISTRY_FLOOR = 240
 
 
 def test_phase_d_semantic_rule_registry_populated() -> None:
-    """Phase D Test 4: _RULE_REGISTRY (private symbol in recipe/registry.py)
-    contains ≥80 entries after the sub-package moves.
+    """Phase D Test 4: _RULE_REGISTRY keeps its full rule population.
 
     The registry is populated as a side effect of recipe/__init__.py importing
     every rule module for its @semantic_rule decorator. If a future commit
     removes an import from recipe/__init__.py, that rule module's decorator
     would not fire and this count would drop.
+
+    When rules are intentionally added or retired, update _RULE_REGISTRY_FLOOR
+    to sit just under the new measured count.
     """
     from autoskillit.recipe.registry import _RULE_REGISTRY
 
-    assert len(_RULE_REGISTRY) >= 80, (
-        f"_RULE_REGISTRY has {len(_RULE_REGISTRY)} entries; "
-        f"expected ≥80 after Phase D sub-package moves. "
-        f"A rule module may have been removed from recipe/__init__.py."
+    assert len(_RULE_REGISTRY) >= _RULE_REGISTRY_FLOOR, (
+        f"_RULE_REGISTRY has {len(_RULE_REGISTRY)} entries; expected "
+        f"≥{_RULE_REGISTRY_FLOOR}. A rule module may have lost its import in "
+        f"recipe/__init__.py, so its @semantic_rule decorators never fired."
     )

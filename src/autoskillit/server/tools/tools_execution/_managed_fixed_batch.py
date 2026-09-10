@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
@@ -20,8 +20,6 @@ from autoskillit.core import (
     ManagedWorkerPermit,
     SkillContractError,
     get_logger,
-    read_versioned_json,
-    write_versioned_json,
 )
 from autoskillit.hooks import (
     OUTCOME_CANCELLED,
@@ -39,6 +37,12 @@ from autoskillit.hooks import (
     reconcile_batch,
     settle_assignment,
     settle_unadmitted_assignment,
+)
+from autoskillit.server.tools.tools_execution._managed_fixed_batch_recovery import (
+    _RecoveryDebt,
+    _UnadmittedSettlementDebt,
+    read_managed_recovery_state,
+    write_managed_recovery_state,
 )
 from autoskillit.server.tools.tools_execution._managed_fixed_batch_results import (
     ManagedFixedBatchLaunchBinding,
@@ -59,41 +63,6 @@ from autoskillit.server.tools.tools_execution._managed_leaf import (
 
 logger = get_logger(__name__)
 
-_RECOVERY_SCHEMA_VERSION = 1
-
-
-@dataclass(frozen=True, slots=True)
-class _RecoveryDebt:
-    owner: tuple[str, str, str]
-    permit_id: str
-    flag_dir: str
-    request_session_id: str
-    managed_parent_id: str
-    batch_id: str
-    assignment_id: str
-    attempt_id: str
-    run_id: str
-
-    def __post_init__(self) -> None:
-        if len(self.owner) != 3 or any(
-            not isinstance(component, str) or not component for component in self.owner
-        ):
-            raise ValueError("managed recovery owner must contain three non-empty strings")
-        for field_name in (
-            "permit_id",
-            "flag_dir",
-            "request_session_id",
-            "managed_parent_id",
-            "batch_id",
-            "assignment_id",
-            "attempt_id",
-            "run_id",
-        ):
-            value = getattr(self, field_name)
-            if not isinstance(value, str) or not value:
-                raise ValueError(f"managed recovery {field_name} must be a non-empty string")
-
-
 RecoveryVerifier = Callable[[_RecoveryDebt], Awaitable[bool | None]]
 
 
@@ -111,7 +80,6 @@ class DefaultManagedFixedBatchSupervisor:
     ) -> None:
         self._capacity = capacity
         self._background = background
-        self._temp_state_root = state_root
         self._state_path = state_root / "recovery.json"
         self._result_store = ManagedFixedBatchResultStore(state_root)
         self._recovery_verifier = recovery_verifier
@@ -120,6 +88,7 @@ class DefaultManagedFixedBatchSupervisor:
         self._recovery_diagnostic = "managed recovery has not completed"
         self._tasks: dict[str, asyncio.Task[ManagedFixedBatchResult]] = {}
         self._debt: dict[str, _RecoveryDebt] = {}
+        self._unadmitted_settlement_debt: dict[str, _UnadmittedSettlementDebt] = {}
         self._lock = asyncio.Lock()
 
     @property
@@ -134,15 +103,37 @@ class DefaultManagedFixedBatchSupervisor:
         """Restore capacity debt, then fail closed until every owner is verified."""
         async with self._lock:
             try:
-                self._debt = self._read_debt()
+                self._debt, self._unadmitted_settlement_debt = read_managed_recovery_state(
+                    self._state_path
+                )
             except SkillContractError as exc:
                 self._recovery_ready = False
                 self._recovery_diagnostic = str(exc)
                 return False
-            recovered: dict[str, ManagedWorkerPermit] = {}
-            for permit_id, debt in self._debt.items():
+            for assignment_id, settlement_debt in tuple(self._unadmitted_settlement_debt.items()):
                 try:
-                    recovered[permit_id] = self._capacity.restore_owner_debt(debt.owner, permit_id)
+                    settle_unadmitted_assignment(
+                        Path(settlement_debt.flag_dir),
+                        batch_id=settlement_debt.batch_id,
+                        assignment_id=settlement_debt.assignment_id,
+                        terminal_event_id=settlement_debt.terminal_event_id,
+                        terminal_payload_digest=settlement_debt.terminal_payload_digest,
+                    )
+                except (OSError, JoinLedgerError, SkillContractError) as exc:
+                    self._recovery_ready = False
+                    self._recovery_diagnostic = (
+                        f"managed unadmitted settlement recovery failed: {exc}"
+                    )
+                    self._write_debt()
+                    return False
+                del self._unadmitted_settlement_debt[assignment_id]
+            self._write_debt()
+            recovered: dict[str, ManagedWorkerPermit] = {}
+            for permit_id, recovery_debt in self._debt.items():
+                try:
+                    recovered[permit_id] = self._capacity.restore_owner_debt(
+                        recovery_debt.owner, permit_id
+                    )
                 except Exception as exc:
                     logger.warning(
                         "managed_capacity_debt_restore_failed",
@@ -160,29 +151,29 @@ class DefaultManagedFixedBatchSupervisor:
                     self._recovery_ready = False
                     self._recovery_diagnostic = f"managed capacity debt restore failed: {exc}"
                     return False
-            for permit_id, debt in tuple(self._debt.items()):
-                verified_absent = await self._verified_absent(debt)
+            for permit_id, recovery_debt in tuple(self._debt.items()):
+                verified_absent = await self._verified_absent(recovery_debt)
                 if verified_absent is not True:
                     self._recovery_ready = False
                     self._recovery_diagnostic = (
                         "unresolved managed worker debt; retry recovery after verifying "
-                        f"process/session identity for {debt.assignment_id}"
+                        f"process/session identity for {recovery_debt.assignment_id}"
                     )
                     self._write_debt()
                     return False
                 try:
                     settle_assignment(
-                        Path(debt.flag_dir),
-                        session_id=debt.request_session_id,
-                        top_level_parent=debt.managed_parent_id,
-                        tool_use_id=debt.assignment_id,
+                        Path(recovery_debt.flag_dir),
+                        session_id=recovery_debt.request_session_id,
+                        top_level_parent=recovery_debt.managed_parent_id,
+                        tool_use_id=recovery_debt.assignment_id,
                         outcome=OUTCOME_REAPED,
-                        batch_id=debt.batch_id,
-                        assignment_id=debt.assignment_id,
-                        attempt_id=debt.attempt_id,
-                        run_id=debt.run_id,
-                        terminal_event_id=f"recovery-reaped:{debt.run_id}",
-                        terminal_payload_digest=_digest(asdict(debt)),
+                        batch_id=recovery_debt.batch_id,
+                        assignment_id=recovery_debt.assignment_id,
+                        attempt_id=recovery_debt.attempt_id,
+                        run_id=recovery_debt.run_id,
+                        terminal_event_id=f"recovery-reaped:{recovery_debt.run_id}",
+                        terminal_payload_digest=_digest(asdict(recovery_debt)),
                         cleanup_outcome=OUTCOME_REAPED,
                     )
                 except JoinLedgerError:
@@ -499,15 +490,36 @@ class DefaultManagedFixedBatchSupervisor:
                 # entry has no current_attempt_id/current_run_id yet — admit_assignment
                 # never ran for this run, so the attempt/run guard in settle_assignment
                 # would always raise.
+                terminal_event_id = f"launch-failed:{identity.first_run_id}"
+                terminal_payload_digest = _digest({"outcome": OUTCOME_LAUNCH_FAILED})
                 try:
                     settle_unadmitted_assignment(
                         binding.flag_dir,
                         batch_id=batch_id,
                         assignment_id=ledger_assignment_id,
-                        terminal_event_id=f"launch-failed:{identity.first_run_id}",
-                        terminal_payload_digest=_digest({"outcome": OUTCOME_LAUNCH_FAILED}),
+                        terminal_event_id=terminal_event_id,
+                        terminal_payload_digest=terminal_payload_digest,
                     )
                 except (OSError, JoinLedgerError, SkillContractError):
+                    if permit is not None:
+                        self._debt.pop(permit.permit_id, None)
+                    self._unadmitted_settlement_debt[ledger_assignment_id] = (
+                        _UnadmittedSettlementDebt(
+                            flag_dir=str(binding.flag_dir),
+                            batch_id=batch_id,
+                            assignment_id=ledger_assignment_id,
+                            terminal_event_id=terminal_event_id,
+                            terminal_payload_digest=terminal_payload_digest,
+                        )
+                    )
+                    try:
+                        self._write_debt()
+                    except OSError:
+                        logger.warning(
+                            "managed_fixed_batch_unadmitted_debt_persist_failed",
+                            assignment_id=ledger_assignment_id,
+                            exc_info=True,
+                        )
                     logger.warning(
                         "managed_fixed_batch_unadmitted_settle_failed",
                         assignment_id=ledger_assignment_id,
@@ -680,37 +692,9 @@ class DefaultManagedFixedBatchSupervisor:
             logger.warning("managed_recovery_liveness_check_failed", exc_info=True)
             return None
 
-    def _read_debt(self) -> dict[str, _RecoveryDebt]:
-        if not self._state_path.exists():
-            return {}
-        try:
-            payload = read_versioned_json(
-                self._state_path,
-                _RECOVERY_SCHEMA_VERSION,
-                raise_io_errors=True,
-            )
-            if payload is None:
-                raise ValueError("unsupported managed recovery schema")
-            return {
-                item["permit_id"]: _RecoveryDebt(
-                    owner=tuple(item["owner"]),
-                    permit_id=item["permit_id"],
-                    flag_dir=item["flag_dir"],
-                    request_session_id=item["request_session_id"],
-                    managed_parent_id=item["managed_parent_id"],
-                    batch_id=item["batch_id"],
-                    assignment_id=item["assignment_id"],
-                    attempt_id=item["attempt_id"],
-                    run_id=item["run_id"],
-                )
-                for item in payload.get("debt", [])
-            }
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise SkillContractError(f"managed recovery state is unreadable: {exc}") from exc
-
     def _write_debt(self) -> None:
-        write_versioned_json(
-            self._temp_state_root / "recovery.json",
-            {"debt": [asdict(item) for item in self._debt.values()]},
-            _RECOVERY_SCHEMA_VERSION,
+        write_managed_recovery_state(
+            self._state_path,
+            self._debt,
+            self._unadmitted_settlement_debt,
         )

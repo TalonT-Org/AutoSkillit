@@ -194,7 +194,11 @@ async def test_owner_cleanup_precedes_settlement_and_permit_release(tmp_path) ->
 
 
 @pytest.mark.anyio
-async def test_unadmitted_settlement_failure_does_not_leak_capacity(tmp_path, monkeypatch) -> None:
+async def test_unadmitted_settlement_failure_is_reconciled_on_restart(
+    tmp_path, monkeypatch
+) -> None:
+    from autoskillit.server.tools.tools_execution import _managed_fixed_batch
+
     capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
     service = DefaultManagedFixedBatchSupervisor(
         capacity=capacity,
@@ -208,17 +212,72 @@ async def test_unadmitted_settlement_failure_does_not_leak_capacity(tmp_path, mo
     def fail_settlement(*_args, **_kwargs):
         raise SkillContractError("settlement failed")
 
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._managed_fixed_batch."
-        "settle_unadmitted_assignment",
-        fail_settlement,
-    )
+    original_settlement = _managed_fixed_batch.settle_unadmitted_assignment
+    monkeypatch.setattr(_managed_fixed_batch, "settle_unadmitted_assignment", fail_settlement)
     assert await service.reconcile_startup()
 
     result = await service.run(_binding(tmp_path, launch_leaf))
 
     assert result.wave_outcome == "pending"
     assert capacity.active_count == 0
+
+    monkeypatch.setattr(
+        _managed_fixed_batch,
+        "settle_unadmitted_assignment",
+        original_settlement,
+    )
+    recovered_capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
+    recovered_service = DefaultManagedFixedBatchSupervisor(
+        capacity=recovered_capacity,
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+
+    assert await recovered_service.reconcile_startup()
+    assert aggregate_batch(tmp_path / "channel", batch_id=result.batch_id) == "launch_failed"
+    assert recovered_capacity.active_count == 0
+
+
+@pytest.mark.anyio
+async def test_unadmitted_settlement_debt_persists_without_a_permit(tmp_path, monkeypatch) -> None:
+    from autoskillit.server.tools.tools_execution import _managed_fixed_batch
+
+    capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
+
+    async def fail_acquire(_owner):
+        raise RuntimeError("capacity unavailable")
+
+    def fail_settlement(*_args, **_kwargs):
+        raise SkillContractError("settlement failed")
+
+    monkeypatch.setattr(capacity, "acquire", fail_acquire)
+    original_settlement = _managed_fixed_batch.settle_unadmitted_assignment
+    monkeypatch.setattr(_managed_fixed_batch, "settle_unadmitted_assignment", fail_settlement)
+    service = DefaultManagedFixedBatchSupervisor(
+        capacity=capacity,
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+    assert await service.reconcile_startup()
+
+    def launch_leaf(_projection, _permit):
+        raise AssertionError("launch must not run without capacity")
+
+    result = await service.run(_binding(tmp_path, launch_leaf))
+
+    assert result.wave_outcome == "pending"
+    monkeypatch.setattr(
+        _managed_fixed_batch,
+        "settle_unadmitted_assignment",
+        original_settlement,
+    )
+    recovered_service = DefaultManagedFixedBatchSupervisor(
+        capacity=DefaultManagedWorkerCapacity(max_concurrent=2),
+        background=DefaultBackgroundSupervisor(),
+        state_root=tmp_path / "state",
+    )
+    assert await recovered_service.reconcile_startup()
+    assert aggregate_batch(tmp_path / "channel", batch_id=result.batch_id) == "launch_failed"
 
 
 @pytest.mark.anyio
@@ -266,7 +325,7 @@ async def test_recovery_rejects_malformed_persisted_string_fields(tmp_path) -> N
                 }
             ]
         },
-        1,
+        2,
     )
     service = DefaultManagedFixedBatchSupervisor(
         capacity=DefaultManagedWorkerCapacity(),
@@ -276,3 +335,32 @@ async def test_recovery_rejects_malformed_persisted_string_fields(tmp_path) -> N
 
     assert not await service.reconcile_startup()
     assert "request_session_id must be a non-empty string" in service.recovery_diagnostic
+
+
+@pytest.mark.anyio
+async def test_recovery_rejects_malformed_unadmitted_settlement_debt(tmp_path) -> None:
+    state_root = tmp_path / "state"
+    write_versioned_json(
+        state_root / "recovery.json",
+        {
+            "debt": [],
+            "unadmitted_settlement_debt": [
+                {
+                    "flag_dir": str(tmp_path / "channel"),
+                    "batch_id": "batch",
+                    "assignment_id": "assignment",
+                    "terminal_event_id": 7,
+                    "terminal_payload_digest": "digest",
+                }
+            ],
+        },
+        2,
+    )
+    service = DefaultManagedFixedBatchSupervisor(
+        capacity=DefaultManagedWorkerCapacity(),
+        background=DefaultBackgroundSupervisor(),
+        state_root=state_root,
+    )
+
+    assert not await service.reconcile_startup()
+    assert "terminal_event_id must be a non-empty string" in service.recovery_diagnostic

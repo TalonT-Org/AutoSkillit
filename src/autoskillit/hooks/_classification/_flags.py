@@ -40,12 +40,10 @@ class _FlagArity(StrEnum):
     VALUE — the flag takes exactly one value in the next token (or joined via
     `=` for long forms, or glued onto a short form like -XPOST).
 
-    A StrEnum, not a plain Enum: this module is loaded under two different
-    names in the same process (the dotted `autoskillit.hooks.
-    _command_classification` package import, and the bare-name
-    `_command_classification` sys.path import _github_mutation_analysis.py's
-    module-scope cross-import uses -- see that module's docstring). The two
-    loads produce two distinct `_FlagArity` class objects, so an `is`
+    A StrEnum, not a plain Enum: this module can be loaded under the dotted
+    `autoskillit.hooks._classification._flags` package name and the bare
+    `_classification._flags` standalone name. The two loads produce distinct
+    `_FlagArity` class objects, so an `is`
     comparison between a value sourced from one and `_FlagArity.VALUE`
     sourced from the other silently fails even though both represent the
     same arity. StrEnum members compare equal by their underlying str value
@@ -59,23 +57,11 @@ class _FlagArity(StrEnum):
 
 
 def _argv_token_after_prefix(token: ArgvToken, prefix: str, value_text: str) -> ArgvToken:
-    """Return an ArgvToken for *value_text*, a known suffix of `token.text`
+    """Return a suffix token with quote provenance narrowed past *prefix*.
 
-    after a literal *prefix* the caller already knows (a flag name like
-    `--method=`/`-X`, or a gh field's `key=` bareword), with correctly
-    re-derived provenance rather than inheriting the whole token's coarser
-    `fully_single_quoted` flag: a *prefix* sitting outside any quotes does
-    not disqualify a separately-quoted value that follows it (e.g. the
-    common `-f query='...'` or `--jq='.id'` shapes). If the whole token is
-    already provably inert (fully_single_quoted, or an argv-payload/literal
-    token that never passed through shell parsing at all), the value
-    trivially inherits that. Otherwise, re-derive from the value's own raw
-    span directly: this can only ever *undershoot* (return False when the
-    value actually was safely quoted, in unusual prefix-quoting edge cases)
-    since a True result requires the exact bytes `'<value_text>'` to appear
-    literally in the raw command -- only possible if that span really was
-    one unbroken single-quote run, regardless of where *prefix* was assumed
-    to end.
+    Fully single-quoted tokens inherit their provenance. Otherwise, only an
+    exact single-quoted raw value is marked safe; unusual prefix quoting may
+    conservatively produce False but cannot create a false-safe result.
     """
     if token.fully_single_quoted:
         return ArgvToken(value_text, True, token.raw_span)
@@ -208,8 +194,8 @@ _GIT_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
 # --cache-dir, --log) plus the pre-existing -r/-c/-t/-b/--requirement/
 # --constraint set _find_pip_install already recognized, plus pip's other
 # common general options, to correctly skip past a global flag (and its
-# value) to find the `install` token. Exposed for unsafe_install_guard.py
-# to import (see _find_pip_install).
+# value) to find the `install` token. Imported by unsafe_install_guard.py's
+# _find_pip_install helper.
 _PIP_GLOBAL_FLAG_SPEC: Mapping[str, _FlagArity] = {
     "-r": _FlagArity.VALUE,
     "--requirement": _FlagArity.VALUE,

@@ -87,7 +87,7 @@ def _make_mock_backend_class(
             return []
 
         @contextmanager
-        def session_attempt_context(self, **kwargs):
+        def session_attempt_context(self, **kwargs: object):
             yield SessionAttemptHandle(
                 view_id="profile-view",
                 pass_fds=(),

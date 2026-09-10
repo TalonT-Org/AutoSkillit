@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import NoResume, ValidatedAddDir
-from autoskillit.core.types import SessionAttemptHandle
+from autoskillit.core.types import ResumeSpec, SessionAttemptHandle
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -115,7 +115,7 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
         project_dir: Path,
         launch_id: str,
         attempt: int,
-        current_resume_spec,
+        current_resume_spec: ResumeSpec,
         ceiling_seconds: float,
     ):
         context_requests.append(

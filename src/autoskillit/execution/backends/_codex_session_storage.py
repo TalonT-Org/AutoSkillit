@@ -1,4 +1,4 @@
-"""Private durable storage for interactive Codex rollout views."""
+"""Private durable storage for Codex session attempt rollout views."""
 
 from __future__ import annotations
 

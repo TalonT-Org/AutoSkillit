@@ -766,7 +766,9 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
     contract_store.finalize(correlation_key, "codex-restored")
     stored = contract_store.load("codex-restored")
 
-    async def _inspect_restored_launch(*args: object, **kwargs: object) -> SkillResult:
+    async def _inspect_restored_launch(
+        skill_command: str, cwd: str, **kwargs: object
+    ) -> SkillResult:
         add_dir = kwargs["add_dirs"][0]
         assert add_dir.session_home
         session_home = Path(add_dir.session_home)
@@ -787,8 +789,8 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
         )
         assert kwargs["capability_contract"].projected_digests == stored.contract.projected_digests
         spec = backend.build_skill_session_cmd(
-            kwargs["skill_command"],
-            kwargs["cwd"],
+            skill_command,
+            cwd,
             add_dirs=kwargs["add_dirs"],
             resume_session_id=kwargs["resume_session_id"],
         )
@@ -798,7 +800,7 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
         observed["session_home"] = session_home
         if executor_raises:
             raise RuntimeError("executor failure after restored launch preparation")
-        return await original_run(*args, **kwargs)  # type: ignore[arg-type]
+        return await original_run(skill_command, cwd, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(executor, "run", _inspect_restored_launch)
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
@@ -816,8 +818,8 @@ async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
         )
     )
 
-    assert result["success"] == (not executor_raises), result
-    assert "session_home" in observed, result
+    assert result["success"] == (not executor_raises), result.get("result")
+    assert "session_home" in observed, result.get("result")
     restored_home = observed["session_home"]
     assert isinstance(restored_home, Path)
     assert not restored_home.exists()

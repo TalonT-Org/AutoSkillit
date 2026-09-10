@@ -9,7 +9,7 @@ __all__ = ["CanonicalTokenUsage", "TurnTokenEntry"]
 
 
 class TurnTokenEntry(TypedDict):
-    """One provider-observed parent model request."""
+    """Dict-shaped sidecar row; aggregate totals use ``CanonicalTokenUsage``."""
 
     backend: str
     message_id: str | None

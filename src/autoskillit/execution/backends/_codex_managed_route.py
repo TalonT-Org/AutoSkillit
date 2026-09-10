@@ -48,13 +48,15 @@ def _managed_codex_config_errors(
     hooks = config.get("hooks")
     rendered_scripts = (
         {
-            hook.get("command", "").rsplit(" ", 1)[-1].removeprefix("guards/")
+            command.rsplit(" ", 1)[-1].removeprefix("guards/")
             for entries in hooks.values()
             if isinstance(entries, list)
             for entry in entries
             if isinstance(entry, dict)
             for hook in entry.get("hooks", [])
             if isinstance(hook, dict)
+            for command in (hook.get("command"),)
+            if isinstance(command, str)
         }
         if isinstance(hooks, dict)
         else set()

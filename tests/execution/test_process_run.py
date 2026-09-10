@@ -416,6 +416,7 @@ class TestManagedProcessOwnership:
             task_group.cancel_scope.cancel()
 
         assert settled
+        assert isinstance(settled[0], anyio.get_cancelled_exc_class())
 
 
 class TestOuterCancelRaceGuard:

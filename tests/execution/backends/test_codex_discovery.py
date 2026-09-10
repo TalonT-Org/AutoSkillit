@@ -240,6 +240,7 @@ def test_parse_skills_instructions_rejects_duplicate_names_and_truncated_entries
     with pytest.raises(ValueError, match="duplicate skill name"):
         discovery.parse_skills_instructions(_with_skills_text(document, duplicated))
 
+    document = _fixture_document("discovery_prompt_input_v0153.json")
     truncated = _skills_text(document).replace("(file: `r0/beta/SKILL.md`)", "")
     with pytest.raises(ValueError, match="has no path"):
         discovery.parse_skills_instructions(_with_skills_text(document, truncated))

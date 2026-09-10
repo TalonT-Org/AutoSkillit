@@ -1264,6 +1264,7 @@ def test_managed_codex_home_uses_private_empty_inert_rollout_links(
         assert managed.skills_dir == ValidatedAddDir(
             path=str(managed.generated_home / "add-dir"),
             session_home=str(managed.generated_home),
+            skill_entries=(("make-arch-diag", "make-arch-diag/SKILL.md"),),
         )
 
         targets: list[Path] = []

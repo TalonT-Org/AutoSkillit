@@ -9,7 +9,12 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
-from autoskillit.core import AUTOSKILLIT_ATTESTED_META_SUPPORT, SessionAttemptHandle, atomic_write
+from autoskillit.core import (
+    AUTOSKILLIT_ATTESTED_META_SUPPORT,
+    PreLaunchReadiness,
+    SessionAttemptHandle,
+    atomic_write,
+)
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from tests.cli._cook_launch_helpers import arrange_cook
 
@@ -105,7 +110,7 @@ def test_cook_rejects_executable_drift_before_spawn(
     assert captured == []
 
 
-def test_codex_cook_does_not_resolve_or_run_prelaunch(
+def test_codex_cook_resolves_and_runs_exact_binding_prelaunch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -115,14 +120,16 @@ def test_codex_cook_does_not_resolve_or_run_prelaunch(
     monkeypatch.setenv("PATH", str(tmp_path))
     captured = arrange_cook(monkeypatch, tmp_path)
     backend = CodexBackend()
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch.resolve_executable_launch_binding",
-        lambda **_kwargs: pytest.fail("Codex cook must not resolve an executable binding"),
-    )
+    prelaunch_bindings: list[object] = []
+
+    def ensure_pre_launch(_self, **kwargs):  # type: ignore[no-untyped-def]
+        prelaunch_bindings.append(kwargs.get("executable"))
+        return PreLaunchReadiness((), {})
+
     monkeypatch.setattr(
         CodexBackend,
         "ensure_pre_launch",
-        lambda _self, **_kwargs: pytest.fail("Codex cook must not run prelaunch"),
+        ensure_pre_launch,
     )
     monkeypatch.setattr(
         CodexBackend,
@@ -149,4 +156,6 @@ def test_codex_cook_does_not_resolve_or_run_prelaunch(
     cli.cook(backend=backend)
 
     assert len(captured) == 1
-    assert captured[0].cmd[0] == "codex"
+    assert captured[0].cmd[0] == str(codex)
+    assert len(prelaunch_bindings) == 1
+    assert prelaunch_bindings[0] is not None

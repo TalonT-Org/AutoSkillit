@@ -37,6 +37,7 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    observe_path_mode,
     strict_walk,
 )
 from autoskillit.workspace.session_skill_catalog import (
@@ -225,19 +226,14 @@ def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
         if skill_dir.is_symlink() or not skill_dir.is_dir():
             raise SkillContractError(f"managed skill entry must be a real directory: {skill_dir}")
         skill_file = skill_dir / "SKILL.md"
-        try:
-            file_stat = skill_file.lstat()
-        except OSError as exc:
-            raise SkillContractError(
-                f"managed skill entry is missing SKILL.md: {skill_dir}"
-            ) from exc
-        if skill_file.is_symlink() or not stat.S_ISREG(file_stat.st_mode):
+        file_mode = observe_path_mode(skill_file)
+        if file_mode is None:
+            raise SkillContractError(f"managed skill entry is missing SKILL.md: {skill_dir}")
+        if stat.S_ISLNK(file_mode) or not stat.S_ISREG(file_mode):
             raise SkillContractError(
                 f"managed skill SKILL.md must be a regular file: {skill_file}"
             )
         entries.append((skill_dir.name, f"{skill_dir.name}/SKILL.md"))
-    if not entries:
-        raise SkillContractError(f"managed skill catalog has no managed skills: {catalog_dir}")
     return tuple(entries)
 
 

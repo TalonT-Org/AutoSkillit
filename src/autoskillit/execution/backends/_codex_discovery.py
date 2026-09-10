@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import stat
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
+
+import regex as re
 
 from autoskillit.core import normalize_codex_cli_version
 from autoskillit.execution.backends._codex_probes import (

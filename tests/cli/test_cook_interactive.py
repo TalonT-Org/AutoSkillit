@@ -325,13 +325,12 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
     assert len(backend.build_calls) == 2
     assert backend.build_calls[0].get("executable") is None
     assert backend.build_calls[1]["executable"] is not None
-    assert spec.managed_skill_catalog is captured["skills_dir"]
+    assert spec.managed_skill_catalog is backend.build_calls[-1]["add_dirs"][0]
 
 
 def test_cook_aborts_before_spawn_when_skill_discovery_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Discovery diagnostics must reject the managed launch before the child starts."""
     diagnostic = "Codex skill discovery is missing managed names ['expected-skill']"
@@ -345,10 +344,9 @@ def test_cook_aborts_before_spawn_when_skill_discovery_fails(
     backend = _DiscoveryFailureBackend()
     captured = _install_harness(monkeypatch, tmp_path)
 
-    with pytest.raises(SystemExit, match="1"):
+    with pytest.raises(RuntimeError, match="Codex skill discovery is missing managed names"):
         cli.cook(backend=backend)
 
-    assert diagnostic in capsys.readouterr().err
     events = captured["events"]
     assert isinstance(events, list)
     event_names = [event[0] for event in events]
@@ -432,6 +430,11 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         lambda _project: None,
     )
     monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
+    monkeypatch.setattr(
+        CodexBackend,
+        "ensure_pre_launch",
+        lambda _self, **_kwargs: PreLaunchReadiness((), {}),
+    )
     monkeypatch.setattr(
         CodexBackend,
         "validate_interactive_invocation",

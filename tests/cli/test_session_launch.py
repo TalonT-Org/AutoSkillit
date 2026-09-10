@@ -1722,11 +1722,11 @@ if sys.argv[-2:] == ["debug", "prompt-input"]:
     skills_instructions = "\\n".join(
         (
             "<skills_instructions>",
-            "## Skill roots",
+            "### Skill roots",
             "",
             f"- `r0` = `{skills_dir}`",
             "",
-            "## Available skills",
+            "### Available skills",
             "",
             skill_lines,
             "</skills_instructions>",
@@ -1744,7 +1744,13 @@ if sys.argv[-2:] == ["debug", "prompt-input"]:
     )
     raise SystemExit(0)
 
-config = tomllib.loads((Path(os.environ["CODEX_HOME"]) / "config.toml").read_text())
+home_value = os.environ.get("CODEX_HOME")
+if not home_value:
+    sqlite_override = next(
+        value for value in sys.argv if value.startswith("sqlite_home=")
+    )
+    home_value = tomllib.loads(sqlite_override)["sqlite_home"]
+config = tomllib.loads((Path(home_value) / "config.toml").read_text())
 transport = dict(config["mcp_servers"]["autoskillit"])
 project_config = Path.cwd() / ".codex" / "config.toml"
 if project_config.is_file():
@@ -2113,6 +2119,9 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     class _LifecycleCodexBackend(CodexBackend):
         def binary_name(self) -> str:
             return "true"
+
+        def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
 
         def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
             built_prompts.append(kwargs["system_prompt"])

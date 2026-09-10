@@ -64,7 +64,7 @@ def test_interactive_codex_discovery_contract_is_documented() -> None:
     for phrase in (
         "`ManagedSessionHome.generated_home`",
         "`ValidatedAddDir`",
-        "scoped\n+`CODEX_HOME`",
+        "scoped\n`CODEX_HOME`",
         "`<generated_home>/add-dir/skills`",
         "`<generated_home>/skills`",
     ):

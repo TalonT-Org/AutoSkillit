@@ -615,6 +615,24 @@ class TestGitChangedFiles:
         assert mock_run.call_count == 3
         first_call_args = list(mock_run.call_args_list[0][0][0])
         assert first_call_args[:3] == ["git", "merge-base", "HEAD"]
+        assert first_call_args[3] == "origin/main"
+
+    def test_git_changed_files_explicit_base_ref_is_not_prefixed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("GITHUB_BASE_REF", "main")
+
+        mock_run = Mock(
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n"),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout=""),
+            ]
+        )
+        monkeypatch.setattr(subprocess, "run", mock_run)
+        git_changed_files("/fake", base_ref="main")
+        first_call_args = list(mock_run.call_args_list[0][0][0])
         assert first_call_args[3] == "main"
 
     def test_git_changed_files_includes_unstaged_tracked(

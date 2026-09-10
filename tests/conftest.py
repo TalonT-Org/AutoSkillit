@@ -28,6 +28,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
+from tests.arch._policy_gate_plumbing import TEST_BASE_KEY, BaseRefContext
 
 _AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
 
@@ -793,6 +794,9 @@ def pytest_configure(config: pytest.Config) -> None:
     config.stash[_filter_mode_key] = None
     config.stash[_full_run_reason_key] = None
     config.stash[_feature_scope_key] = None
+    config.stash[TEST_BASE_KEY] = BaseRefContext.from_env(
+        config.getoption("--filter-base-ref", default=None)
+    )
 
     cli_mode = config.getoption("--filter-mode", default=None)
     env_val = os.environ.get("AUTOSKILLIT_TEST_FILTER", "")
@@ -822,17 +826,11 @@ def pytest_configure(config: pytest.Config) -> None:
         if mode == FilterMode.NONE:
             return
 
-        cli_base_ref = config.getoption("--filter-base-ref", default=None)
+        resolved_base_ref = config.stash[TEST_BASE_KEY].base_ref
         if mode == FilterMode.AGGRESSIVE:
             changed = git_changed_files_local(config.rootpath)
         else:
-            changed = git_changed_files(config.rootpath, base_ref=cli_base_ref)
-
-        # Resolve the actual base_ref used (env fallback mirrors git_changed_files logic)
-        resolved_base_ref = cli_base_ref or os.environ.get(
-            "AUTOSKILLIT_TEST_BASE_REF",
-            os.environ.get("GITHUB_BASE_REF"),
-        )
+            changed = git_changed_files(config.rootpath, base_ref=resolved_base_ref)
 
         manifest = load_manifest(config.rootpath)
         coverage_map_path = config.rootpath / ".autoskillit" / "test-source-map.json"
@@ -859,6 +857,12 @@ def pytest_configure(config: pytest.Config) -> None:
             f"Test filter setup failed, running all tests: {exc}",
             stacklevel=1,
         )
+
+
+@pytest.fixture(scope="session")
+def resolved_test_base(request: pytest.FixtureRequest) -> BaseRefContext:
+    """The base ref stashed at configure time, before any autouse env scrub."""
+    return request.config.stash[TEST_BASE_KEY]
 
 
 # ---------------------------------------------------------------------------

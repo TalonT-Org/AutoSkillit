@@ -136,7 +136,10 @@ print(json.dumps(results))
 def test_stage_a_canonical_recipe_imports_resolve_and_old_paths_are_gone() -> None:
     """New `server/recipe/` imports resolve; every old `server/_recipe_*` path is gone."""
     results = _run_cold_import(_STAGE_A_SCRIPT)
-    assert results["recipe_delivery_first_import"] == "autoskillit.server.recipe._recipe_delivery"
+    assert (
+        results["recipe_delivery_first_import"]
+        == "autoskillit.server.recipe._recipe_delivery._finalize"
+    )
     assert results["artifact_identity_ok"] is True
     assert results["canonical_imports_ok"] is True
     assert results["response_budget_import_ok"] is True

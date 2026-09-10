@@ -25,6 +25,10 @@ from typing import Any
 _HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402

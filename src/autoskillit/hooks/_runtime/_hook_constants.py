@@ -3,7 +3,7 @@
 Importable in two contexts:
 1. Standalone subprocess hook scripts — `from _hook_constants import …` after
    the `sys.path.insert(0, _HOOKS_DIR)` bootstrap.
-2. Inside the autoskillit package — `from autoskillit.hooks._hook_constants import …`.
+2. Inside the autoskillit package — `from autoskillit.hooks._runtime._hook_constants import …`.
 
 Both contexts resolve to the same module object, so the constants are a
 single source of truth.

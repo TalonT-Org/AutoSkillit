@@ -19,7 +19,7 @@ from autoskillit.core import (
     render_intake_digest,
 )
 from autoskillit.execution.backends._claude_prompt import CODEX_CO_INJECTED_POLICIES
-from autoskillit.hooks._command_classification import (
+from autoskillit.hooks._runtime._command_classification import (
     PROTECTED_SOURCE_PATH_PATTERNS,
     command_has_blocked_protected_path_read,
 )

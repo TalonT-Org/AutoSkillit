@@ -11,7 +11,7 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.execution import get_backend
-from autoskillit.hooks._hook_settings import validate_session_id, write_join_diagnostic
+from autoskillit.hooks._runtime._hook_settings import validate_session_id, write_join_diagnostic
 from autoskillit.hooks._join_ledger import JoinLedgerError, declare_batch
 from autoskillit.hooks._session_binding import (
     SessionBindingError,

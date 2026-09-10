@@ -28,6 +28,10 @@ import sys
 _HOOKS_DIR = str(__file__).rsplit("/", 1)[0].rsplit("/", 1)[0]
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = _HOOKS_DIR + "/_runtime"
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402

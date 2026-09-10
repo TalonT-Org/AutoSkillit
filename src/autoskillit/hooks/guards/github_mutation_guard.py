@@ -25,14 +25,18 @@ from typing import TYPE_CHECKING, NamedTuple, NoReturn
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._github_mutation_analysis import (
+    from autoskillit.hooks._runtime._github_mutation_analysis import (
         GitHubMutationKind,
         GitHubMutationStatus,
         analyze_github_mutations,
     )
-    from autoskillit.hooks._hook_payload import (
+    from autoskillit.hooks._runtime._hook_payload import (
         ParsedHookCommand,
         PayloadAnomaly,
         parse_hook_command,

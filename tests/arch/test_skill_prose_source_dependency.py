@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import pkg_root
-from autoskillit.hooks._command_classification import DECLARABLE_SOURCE_PATH_PATTERNS
+from autoskillit.hooks._runtime._command_classification import DECLARABLE_SOURCE_PATH_PATTERNS
 from autoskillit.workspace.skills import bundled_skills_dir, bundled_skills_extended_dir
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]

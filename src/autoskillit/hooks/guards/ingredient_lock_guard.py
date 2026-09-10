@@ -14,7 +14,10 @@ import os
 import sys
 
 # Sibling import bootstrap (same pattern as quota_guard.py)
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_HOOKS_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = os.path.join(_HOOKS_DIR, "_runtime")
+sys.path.insert(0, _RUNTIME_DIR)
 from _hook_settings import read_merged_hook_config  # noqa: E402
 
 INGREDIENT_LOCK_DENY_TRIGGER: str = "INGREDIENT LOCK ENFORCED"

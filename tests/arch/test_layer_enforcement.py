@@ -1123,7 +1123,7 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
         ),
         (
             "server/tools/tools_kitchen/_declare_join_batch.py",
-            "autoskillit.hooks._hook_settings",
+            "autoskillit.hooks._runtime._hook_settings",
         ),
         (
             "server/tools/tools_kitchen/_declare_join_batch.py",
@@ -1131,7 +1131,7 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
         ),
         (
             "server/tools/tools_execution/_fixed_batch_handlers.py",
-            "autoskillit.hooks._hook_settings",
+            "autoskillit.hooks._runtime._hook_settings",
         ),
         (
             "server/tools/tools_execution/_fixed_batch_handlers.py",
@@ -1516,7 +1516,7 @@ def test_hook_config_filename_and_dir_match_quota_check():
         f"_fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS={expected!r}"
     )
 
-    settings_mod = importlib.import_module("autoskillit.hooks._hook_settings")
+    settings_mod = importlib.import_module("autoskillit.hooks._runtime._hook_settings")
 
     assert settings_mod.HOOK_CONFIG_FILENAME == _HOOK_CONFIG_FILENAME, (
         f"_hook_settings.HOOK_CONFIG_FILENAME={settings_mod.HOOK_CONFIG_FILENAME!r} "

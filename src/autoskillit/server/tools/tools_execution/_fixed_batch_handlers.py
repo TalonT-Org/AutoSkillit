@@ -40,7 +40,7 @@ from autoskillit.execution import (
     MANAGED_CODEX_PARENT_GUARD_SET,
 )
 from autoskillit.hooks import OUTCOME_FAILURE, OUTCOME_SUCCESS, JoinLedgerError
-from autoskillit.hooks._hook_settings import validate_session_id
+from autoskillit.hooks._runtime._hook_settings import validate_session_id
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,

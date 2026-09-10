@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 import pytest
 
-from autoskillit.hooks._command_classification import (
+from autoskillit.hooks._runtime._command_classification import (
     DECLARABLE_SOURCE_PATH_PATTERNS,
     PROTECTED_SOURCE_PATH_PATTERNS,
 )

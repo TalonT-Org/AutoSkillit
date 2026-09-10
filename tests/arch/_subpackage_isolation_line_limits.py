@@ -89,7 +89,7 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "which must stay co-located with the rest of the envelope schema they extend "
         "(issue #4479).",
     ),
-    "hooks/_command_classification.py": LineLimitExemption(
+    "hooks/_runtime/_command_classification.py": LineLimitExemption(
         1600,
         "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
         "command-inspecting guards — tokenization, shell-payload extraction, "
@@ -109,6 +109,27 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "_github_mutation_analysis.py, which imports this engine rather than "
         "duplicating it), so they stay adjacent to the tokenizer they extend rather "
         "than the gh-specific consumer module the split already separated them from.",
+    ),
+    "hooks/_runtime/_github_mutation_analysis.py": LineLimitExemption(
+        1600,
+        "REQ-CNST-010-E26: #4665 decomposes the GitHub mutation cardinality/route "
+        "analysis out of _command_classification.py into this sibling module — the "
+        "gh/curl possible-exec token check, gh issue edit's target/flag grammar, "
+        "statically proven fan-out count, gh mutation subcommand classification, and "
+        "the recursive cardinality aggregator all share the same mutation authority "
+        "and must stay adjacent to one another for test inspection (test_command_"
+        "classification.py::TestAnalyzeGitHubMutations). Cap set to 1300 to bound "
+        "the shared mutation authority after decomposition. Bumped to 1600 for Issue "
+        "#4655's rectify: _GH_API_FLAG_SPEC and _CURL_FLAG_SPEC (this module's own "
+        "gh-api/curl flag tables, consuming _command_classification's shared "
+        "_FlagArity/_consume_argv_flag engine via a module-scope import) replace "
+        "_analyze_gh_api/_analyze_curl_segment's ad-hoc if/elif flag chains so an "
+        "unrecognized flag fails closed with a distinguishable reason code instead of "
+        "being silently misparsed as a second route; and ArgvToken-typed "
+        "_flag_value/_analyze_gh_api/_analyze_curl_segment/_is_dynamic_shell_value/"
+        "_is_static_issue_edit_target/_issue_edit_request_count prove GraphQL "
+        "documents and flag values shell-inert from quote provenance rather than "
+        "content alone -- must stay adjacent to the mutation authority they feed.",
     ),
     "hooks/guards/git_ops_guard.py": LineLimitExemption(
         1050,

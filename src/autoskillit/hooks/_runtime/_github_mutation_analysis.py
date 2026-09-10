@@ -18,19 +18,19 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from autoskillit.hooks._classification import _github_mutation_cli_analysis as _cli
     from autoskillit.hooks._classification import _github_mutation_request_analysis as _request
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._runtime._command_classification import (
         ArgvToken,
         _select_executable_argv_tokens,
         _verb_start_index,
     )
 else:
-    if __package__ == "autoskillit.hooks":
-        from ._classification import _github_mutation_cli_analysis as _cli
-        from ._classification import _github_mutation_request_analysis as _request
+    if __package__ == "autoskillit.hooks._runtime":
+        from .._classification import _github_mutation_cli_analysis as _cli
+        from .._classification import _github_mutation_request_analysis as _request
     else:
         from _classification import _github_mutation_cli_analysis as _cli
         from _classification import _github_mutation_request_analysis as _request
-    from _command_classification import (  # noqa: E402
+    from autoskillit.hooks._runtime._command_classification import (  # noqa: E402
         ArgvToken,
         _select_executable_argv_tokens,
         _verb_start_index,
@@ -50,19 +50,19 @@ _analyze_curl_segment = _cli._analyze_curl_segment
 
 
 def _command_verb_and_args(segment: Sequence[str]) -> tuple[str, list[str]]:
-    from _command_classification import command_verb_and_args
+    from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
     return command_verb_and_args(list(segment))
 
 
 def _tokenize_with_redirects(command: str) -> list[Any]:
-    from _command_classification import _tokenize_command_segments_with_redirects
+    from autoskillit.hooks._runtime._command_classification import _tokenize_command_segments_with_redirects
 
     return _tokenize_command_segments_with_redirects(command)
 
 
 def _normalize_executable_call(token: str) -> str:
-    from _command_classification import _normalize_executable
+    from autoskillit.hooks._runtime._command_classification import _normalize_executable
 
     return _normalize_executable(token)
 
@@ -70,13 +70,15 @@ def _normalize_executable_call(token: str) -> str:
 def _partition_output_redirects_call(
     tokens: Sequence[str], *, cwd: str, redirect_syntax: Sequence[bool] | None = None
 ) -> tuple[list[str], list[str], int]:
-    from _command_classification import _partition_output_redirects
+    from autoskillit.hooks._runtime._command_classification import _partition_output_redirects
 
     return _partition_output_redirects(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
 
 
-def _extract_interpreter_segment_specs_call(segment: Sequence[str]) -> tuple[list[Any], bool]:
-    from _command_classification import _extract_interpreter_segment_specs
+def _extract_interpreter_segment_specs_call(
+    segment: Sequence[str],
+) -> tuple[list[Any], bool]:
+    from autoskillit.hooks._runtime._command_classification import _extract_interpreter_segment_specs
 
     return _extract_interpreter_segment_specs(segment)
 
@@ -98,13 +100,13 @@ def _extract_process_substitution_occurrences_call(
 
 
 def _segment_evaluates_shell_payload_call(tokens: list[str], payload: str) -> bool:
-    from _command_classification import _segment_evaluates_shell_payload
+    from autoskillit.hooks._runtime._command_classification import _segment_evaluates_shell_payload
 
     return _segment_evaluates_shell_payload(tokens, payload)
 
 
 def _extract_shell_command_payloads_call(command: str) -> list[str]:
-    from _command_classification import extract_shell_command_payloads
+    from autoskillit.hooks._runtime._command_classification import extract_shell_command_payloads
 
     return extract_shell_command_payloads(command)
 

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.hooks._exploration_request_record as records
-from autoskillit.hooks._exploration_request_record import (
+import autoskillit.hooks._runtime._exploration_request_record as records
+from autoskillit.hooks._runtime._exploration_request_record import (
     consume_exploration_request_record,
     write_exploration_request_record,
 )

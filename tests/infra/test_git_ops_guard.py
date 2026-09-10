@@ -28,7 +28,7 @@ _HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "
 if _HOOKS_SRC not in sys.path:
     sys.path.insert(0, _HOOKS_SRC)
 
-from autoskillit.hooks._command_classification import _FlagArity  # noqa: E402
+from autoskillit.hooks._runtime._command_classification import _FlagArity  # noqa: E402
 from autoskillit.hooks.guards._git_command_classification import (  # noqa: E402
     _GIT_FETCH_FLAG_SPEC,
     _classify_fetch,

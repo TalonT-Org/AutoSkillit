@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks._exploration_request_record import (
+from autoskillit.hooks._runtime._exploration_request_record import (
     SUPPORTED_EXPLORATION_REQUEST_TOOLS,
     consume_exploration_request_record,
 )

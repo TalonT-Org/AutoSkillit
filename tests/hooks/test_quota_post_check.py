@@ -440,7 +440,7 @@ def test_resolve_quota_log_dir_prints_to_stderr_on_exception(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """resolve_quota_log_dir() must print to stderr when caller= is provided."""
-    from autoskillit.hooks._hook_settings import resolve_quota_log_dir
+    from autoskillit.hooks._runtime._hook_settings import resolve_quota_log_dir
 
     def _raise() -> None:
         raise OSError("boom")
@@ -462,7 +462,7 @@ def test_write_quota_log_event_prints_to_stderr_on_write_failure(
     """write_quota_log_event() must print to stderr when caller= is provided. The write path
     is _atomic_write_marker's tempfile.mkstemp + os.fdopen + os.replace, not
     Path.write_text/builtins.open."""
-    from autoskillit.hooks._hook_settings import write_quota_log_event
+    from autoskillit.hooks._runtime._hook_settings import write_quota_log_event
 
     with patch("tempfile.mkstemp", side_effect=OSError("disk full")):
         write_quota_log_event({}, tmp_path, caller="quota_post_hook")

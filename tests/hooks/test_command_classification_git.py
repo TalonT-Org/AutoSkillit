@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.hooks._command_classification import (
+from autoskillit.hooks._runtime._command_classification import (
     extract_git_subcommand_and_flags,
     is_git_command,
 )

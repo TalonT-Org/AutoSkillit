@@ -46,6 +46,14 @@ RETIRED_SCRIPT_BASENAMES: frozenset[str] = frozenset(
         "pretty_output_hook.py",
         "output_budget_guard.py",
         "pipeline_step_post_hook.py",
+        "_hook_constants.py",
+        "_hook_payload.py",
+        "_hook_settings.py",
+        "_hook_utils.py",
+        "_policy_event.py",
+        "_exploration_request_record.py",
+        "_command_classification.py",
+        "_github_mutation_analysis.py",
         # Append any future retired basenames here, atomically with the rename commit.
     }
 )

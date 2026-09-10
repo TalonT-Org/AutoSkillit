@@ -588,7 +588,7 @@ def test_log_dir_resolvers_stay_in_sync(monkeypatch):
     """
     from autoskillit.core.paths import default_log_dir
     from autoskillit.execution.evidence.session_log import resolve_log_dir
-    from autoskillit.hooks._hook_settings import resolve_quota_log_dir as _resolve_quota_log_dir
+    from autoskillit.hooks._runtime._hook_settings import resolve_quota_log_dir as _resolve_quota_log_dir
     from autoskillit.hooks.token_summary_hook import _log_root
 
     def assert_defaults_match(expected: Path) -> None:

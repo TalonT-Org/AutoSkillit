@@ -36,6 +36,10 @@ from pathlib import Path
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,

@@ -24,7 +24,7 @@ from autoskillit.core import (
     RepositoryIdentity,
     RepositorySnapshot,
 )
-from autoskillit.hooks._exploration_request_record import write_exploration_request_record
+from autoskillit.hooks._runtime._exploration_request_record import write_exploration_request_record
 from autoskillit.pipeline import CapabilityResolutionStatus
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 

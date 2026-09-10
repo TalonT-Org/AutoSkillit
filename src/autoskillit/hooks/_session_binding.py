@@ -23,7 +23,7 @@ _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
 
 if __package__:
-    from . import _hook_payload as _hook_payload_module
+    from autoskillit.hooks._runtime import _hook_payload as _hook_payload_module
 else:
     import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
 

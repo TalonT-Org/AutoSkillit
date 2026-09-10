@@ -31,22 +31,22 @@ from autoskillit.hooks._capture_artifacts import (
     capture_store_stats,
     reconcile_capture_store,
 )
-from autoskillit.hooks._command_classification import (
+from autoskillit.hooks._runtime._command_classification import (
     _INTERPRETER_LINE_RE,
     _WRITE_APIS_RE,
     PROTECTED_SOURCE_PATH_PATTERNS,
     command_has_blocked_protected_path_read,
 )
-from autoskillit.hooks._exploration_request_record import (
+from autoskillit.hooks._runtime._exploration_request_record import (
     consume_exploration_request_record,
 )
-from autoskillit.hooks._github_mutation_analysis import analyze_github_mutations
+from autoskillit.hooks._runtime._github_mutation_analysis import analyze_github_mutations
 
 # Re-export the shared stdlib-only hook constants at the package level so
 # consumers can import them without going through the canonical submodule.
 # ``_hook_constants`` itself remains the canonical authority and is still
 # importable directly by standalone guard scripts (via ``_HOOKS_DIR`` bootstrap).
-from autoskillit.hooks._hook_constants import (  # noqa: E402,F401
+from autoskillit.hooks._runtime._hook_constants import (  # noqa: E402,F401
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SESSION_TYPES_BY_GUARD,

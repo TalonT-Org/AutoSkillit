@@ -112,7 +112,7 @@ def test_risky_git_operations_authority_is_hook_constants() -> None:
     bare name; the registry uses the package-qualified name), so we assert
     on value equality rather than identity — they must be the same frozenset.
     """
-    from autoskillit.hooks._hook_constants import RISKY_GIT_OPERATIONS
+    from autoskillit.hooks._runtime._hook_constants import RISKY_GIT_OPERATIONS
     from autoskillit.hooks.guards.git_ops_guard import _BLOCKED_GIT_OPS  # noqa: PLC0415
 
     assert _BLOCKED_GIT_OPS == RISKY_GIT_OPERATIONS

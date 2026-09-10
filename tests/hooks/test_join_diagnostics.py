@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.hooks._hook_settings import (
+from autoskillit.hooks._runtime._hook_settings import (
     DIAGNOSTIC_KEYS,
     write_join_diagnostic,
 )

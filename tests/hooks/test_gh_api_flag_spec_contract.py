@@ -27,12 +27,12 @@ from collections.abc import Mapping
 
 import pytest
 
-from autoskillit.hooks._command_classification import (
+from autoskillit.hooks._runtime._command_classification import (
     _GIT_GLOBAL_FLAG_SPEC,
     _PIP_GLOBAL_FLAG_SPEC,
     _FlagArity,
 )
-from autoskillit.hooks._github_mutation_analysis import (
+from autoskillit.hooks._runtime._github_mutation_analysis import (
     _CURL_FLAG_SPEC,
     _GH_API_FLAG_SPEC,
 )

@@ -227,7 +227,7 @@ class TestPrepareResumeIsUniversal:
         )
 
     def test_prepare_resume_is_called_by_resume_campaign_from_state(self) -> None:
-        from autoskillit.fleet import state_recovery
+        from autoskillit.fleet.campaign_state import state_recovery
 
         self._assert_function_calls_prepare_resume(
             state_recovery.resume_campaign_from_state, "resume_campaign_from_state"

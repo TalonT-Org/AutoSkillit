@@ -17,7 +17,7 @@ from types import FunctionType
 
 import pytest
 
-from autoskillit.fleet import state as state_module
+from autoskillit.fleet.campaign_state import state as state_module
 from autoskillit.fleet.campaign_state.state_effects import (
     DispatchAggregatePhase,
     DispatchEffectName,

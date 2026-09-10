@@ -255,6 +255,15 @@ def test_base_revision_emitted_for_every_event_with_base_sha(
     assert ci_target_policy._COMMIT_SHA_PATTERN.fullmatch(base_revision)
 
 
+def test_events_requiring_a_base_sha_are_exact() -> None:
+    """A reviewed event with no base SHA must fail, not emit an empty base.
+
+    An empty test-base-revision makes every diff-scoped gate skip, which is the
+    silent-skip failure the relaxation gate exists to prevent.
+    """
+    assert ci_target_policy.BASE_SHA_EVENTS == frozenset({"pull_request", "merge_group"})
+
+
 def test_policy_registry_is_exact_and_deeply_immutable() -> None:
     policy_type = ci_target_policy.CiTargetPolicyDef
     assert dataclasses.is_dataclass(policy_type)
@@ -322,6 +331,12 @@ def test_resolver_rejects_unsupported_event_before_payload_access() -> None:
         (
             "merge_group",
             {"merge_group": {"base_ref": "refs/heads/develop"}},
+        ),
+        ("pull_request", {"pull_request": {"base": {"ref": "main"}}}),
+        ("pull_request", {"pull_request": {"base": {"ref": "stable"}}}),
+        (
+            "merge_group",
+            {"merge_group": {"base_ref": "refs/heads/main"}},
         ),
         ("push", {"ref": "main"}),
         ("push", {"ref": "refs/tags/main"}),

@@ -32,6 +32,11 @@ CI_TARGET_POLICIES: Mapping[str, CiTargetPolicyDef] = MappingProxyType(
     }
 )
 
+#: Events whose payload carries the base commit the change is measured against.
+#: Every one of them must produce a base revision, or the diff-scoped gates that
+#: consume it would silently skip.
+BASE_SHA_EVENTS: frozenset[str] = frozenset({"pull_request", "merge_group"})
+
 ALLOWED_TARGETS_BY_EVENT: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "pull_request": frozenset({"develop", "main", "stable"}),
@@ -114,7 +119,7 @@ def resolve_ci_profile(
         )
 
     base_revision = ""
-    if base_sha is not None:
+    if event_name in BASE_SHA_EVENTS:
         base_revision = _require_commit_sha(base_sha, "base SHA")
     return policy, base_revision
 

@@ -288,6 +288,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             prompt: str,
             output_format: OutputFormat = OutputFormat.JSON,
             plugin_binding: PluginLaunchBinding | None = None,
+            session_home: str | None = None,
             env_extras: Mapping[str, str] | None = None,
         ) -> CmdSpec: ...
 

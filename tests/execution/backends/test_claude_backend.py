@@ -197,6 +197,14 @@ class TestResumePromptPreservation:
         assert CODEX_INTAKE_DISCIPLINE_DIGEST not in prompt
         assert CODEX_SCOPE_DISCIPLINE_DIGEST not in prompt
 
+    def test_claude_resume_cmd_ignores_session_home(self) -> None:
+        spec = ClaudeCodeBackend().build_resume_cmd(
+            resume_session_id="sess-789",
+            prompt="continue the task",
+            session_home="/codex-only-home",
+        )
+        assert "CODEX_HOME" not in spec.env
+
 
 class TestOutputDisciplineDelivery:
     @staticmethod

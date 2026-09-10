@@ -384,6 +384,26 @@ class TestCodexBackendCommands:
         )
         assert spec.env.get("FOO") == "bar"
 
+    def test_build_resume_cmd_pins_explicit_session_home(self) -> None:
+        spec = CodexBackend().build_resume_cmd(
+            resume_session_id="sess-123",
+            prompt="continue",
+            plugin_binding=plugin_binding(Path("/plugin")),
+            env_extras={"CODEX_HOME": "/caller-home", "CODEX_SQLITE_HOME": "/caller-home"},
+            session_home="/session-home",
+        )
+        assert spec.env["CODEX_HOME"] == "/session-home"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/session-home"
+
+    def test_build_resume_cmd_falls_back_to_plugin_home_without_session_home(self) -> None:
+        spec = CodexBackend().build_resume_cmd(
+            resume_session_id="sess-123",
+            prompt="continue",
+            plugin_binding=plugin_binding(Path("/plugin")),
+        )
+        assert spec.env["CODEX_HOME"] == "/plugin"
+        assert "CODEX_SQLITE_HOME" not in spec.env
+
     def test_build_resume_cmd_env_uses_filtered_base(self, monkeypatch) -> None:
         monkeypatch.setenv("PATH", "/usr/bin")
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
@@ -731,14 +751,30 @@ class TestCodexBuildSkillSessionCmd:
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" not in spec4.env
 
     def test_codex_home_env_set(self) -> None:
-        dirs = [ValidatedAddDir(path="/extra")]
+        dirs = [ValidatedAddDir(path="/extra/add-dir", session_home="/extra")]
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "add_dirs": dirs},
         )
         assert spec.env["CODEX_HOME"] == "/extra"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/extra"
         assert not spec.env["CODEX_HOME"].startswith("/dev/shm"), (
             "CODEX_HOME must not point to volatile tmpfs"
         )
+
+    def test_skill_session_rejects_add_dir_without_session_home(self) -> None:
+        with pytest.raises(ValueError, match="session_home"):
+            CodexBackend().build_skill_session_cmd(
+                **{**self.BASE, "add_dirs": [ValidatedAddDir(path="/extra/add-dir")]},
+            )
+
+    def test_skill_session_home_vars_are_required_env(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(
+            **{
+                **self.BASE,
+                "add_dirs": [ValidatedAddDir(path="/extra/add-dir", session_home="/extra")],
+            },
+        )
+        assert {"CODEX_HOME", "CODEX_SQLITE_HOME"} <= spec.env.keys()
 
     def test_codex_capabilities_session_dir_persistent(self) -> None:
         """CodexBackend declares session_dir_persistent=True for persistent roots."""
@@ -751,7 +787,7 @@ class TestCodexBuildSkillSessionCmd:
         assert "CODEX_HOME" not in spec.env
 
     def test_no_add_dir_flag_with_add_dirs(self) -> None:
-        dirs = [ValidatedAddDir(path="/extra")]
+        dirs = [ValidatedAddDir(path="/extra/add-dir", session_home="/extra")]
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "add_dirs": dirs},
         )

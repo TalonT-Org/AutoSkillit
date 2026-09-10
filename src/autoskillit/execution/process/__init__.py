@@ -219,6 +219,8 @@ async def run_managed_async(
     linux_tracing_config: LinuxTracingConfig | None = None,
     idle_output_timeout: float | None = None,
     max_suppression_seconds: float | None = None,
+    on_process_spawned: Callable[[int, int], None] | None = None,
+    on_process_reaped: Callable[[int, int], None] | None = None,
     on_pid_resolved: Callable[[int, int], None] | None = None,
     enable_deadline_extension: bool = False,
     max_extension_seconds: float = 7200,
@@ -278,6 +280,7 @@ async def run_managed_async(
         stdin_handle = None
         if stdin_path is not None:
             stdin_handle = open(stdin_path)  # noqa: SIM115
+        reap_callback_attempted = False
 
         try:
             # uvloop's Cython layer requires type(env) is dict — coerce at
@@ -322,6 +325,8 @@ async def run_managed_async(
             proc = owner.process
             root_pid = owner.pid
             process_group_id = owner.pgid
+            if on_process_spawned is not None:
+                on_process_spawned(root_pid, process_group_id)
 
             # Resolve the workload TraceTarget — the PID that should be observed.
             # The spawn PID is the script(1) wrapper in PTY mode, not claude.
@@ -660,6 +665,9 @@ async def run_managed_async(
                 process_observation_snapshot=signals.process_observation_snapshot,
             )
             _coalesced_returncode = _coalesce_returncode(final_returncode)
+            if cleanup_result.complete and on_process_reaped is not None:
+                reap_callback_attempted = True
+                on_process_reaped(root_pid, process_group_id)
 
             # Flush and close before reading
             stdout_file.close()
@@ -720,10 +728,17 @@ async def run_managed_async(
                 if "tracing_handle" in locals() and tracing_handle is not None:
                     tracing_handle.stop()
                 if "owner" in locals():
-                    await anyio.to_thread.run_sync(
+                    cleanup_result = await anyio.to_thread.run_sync(
                         functools.partial(owner.settle_preserving, exc, escalate=True),
                         abandon_on_cancel=False,
                     )
+                    if (
+                        cleanup_result.complete
+                        and on_process_reaped is not None
+                        and not reap_callback_attempted
+                    ):
+                        reap_callback_attempted = True
+                        on_process_reaped(root_pid, process_group_id)
             raise
         finally:
             if stdin_handle is not None:

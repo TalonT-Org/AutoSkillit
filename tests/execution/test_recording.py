@@ -1072,6 +1072,56 @@ async def test_nonpty_result_passthrough(tmp_path):
     assert result.stdout == "raw codex out"
 
 
+@pytest.mark.anyio
+async def test_recording_runner_forwards_process_lifecycle_callbacks(tmp_path: Path) -> None:
+    """The recording wrapper preserves process lifecycle callbacks for live runs."""
+    recorder = Mock()
+    inner = MockSubprocessRunner()
+    runner = RecordingSubprocessRunner(
+        recorder=recorder,
+        inner=inner,
+        scenario_dir=tmp_path,
+        capabilities=_NON_PTY_CAPABILITIES,
+    )
+    on_spawned = Mock()
+    on_reaped = Mock()
+
+    await runner(
+        ["codex", "exec", "do something"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "recorded"},
+        on_process_spawned=on_spawned,
+        on_process_reaped=on_reaped,
+    )
+
+    forwarded = inner.call_args_list[0][3]
+    assert forwarded["on_process_spawned"] is on_spawned
+    assert forwarded["on_process_reaped"] is on_reaped
+
+
+@pytest.mark.anyio
+async def test_replay_runner_never_invokes_process_lifecycle_callbacks(tmp_path: Path) -> None:
+    """Replay results have no owned live process to report."""
+    runner = ReplayingSubprocessRunner(
+        {}, {"recorded": {"exit_code": 0, "stdout_head": "", "stderr": ""}}
+    )
+    on_spawned = Mock()
+    on_reaped = Mock()
+
+    await runner(
+        ["codex", "exec", "do something"],
+        cwd=tmp_path,
+        timeout=30,
+        env={"SCENARIO_STEP_NAME": "recorded"},
+        on_process_spawned=on_spawned,
+        on_process_reaped=on_reaped,
+    )
+
+    on_spawned.assert_not_called()
+    on_reaped.assert_not_called()
+
+
 # --- T-PTY-UNAFFECTED: PTY path unchanged by new non-PTY branch ---
 
 

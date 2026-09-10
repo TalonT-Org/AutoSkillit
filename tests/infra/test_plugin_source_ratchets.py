@@ -203,21 +203,30 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     ),
     (
         "workspace/session_skill_materialization.py",
-        "_remove_generated_home_skill_entry",
-        "path.unlink",
-    ): (
-        1,
-        "Reachability filtering removes only the exact generated-home profile-skill "
-        "symlink selected by the finalized catalog; the source profile is untouched.",
-    ),
-    (
-        "workspace/session_skill_materialization.py",
-        "_remove_generated_home_skill_entry",
+        "_remove_profile_staging",
         "shutil.rmtree",
     ): (
         1,
-        "Reachability filtering removes only the exact generated-home profile-skill "
-        "directory selected by the finalized catalog; the source profile is untouched.",
+        "Profile projection cleanup removes only its private staging directory; "
+        "the enclosing generated-home transaction owns rollback on failure.",
+    ),
+    (
+        "workspace/session_skill_materialization.py",
+        "_merge_profile_projection",
+        "shutil.rmtree",
+    ): (
+        1,
+        "The admitted profile projection replaces a colliding real SESSION directory "
+        "inside the owned catalog after preflighting every ORCHESTRATOR collision.",
+    ),
+    (
+        "workspace/session_skill_materialization.py",
+        "_merge_profile_projection",
+        "source.rename",
+    ): (
+        1,
+        "An admitted profile entry moves from private staging into the owned catalog "
+        "only after the complete collision preflight succeeds.",
     ),
     ("workspace/session_skill_provider.py", "resolve_ephemeral_root", "probe.unlink"): (
         1,
@@ -433,7 +442,8 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "spec.inherited_fds",
     ): (
         1,
-        "Each provider attempt forwards its freshly built command descriptor tuple.",
+        "Each provider attempt forwards command descriptors plus its owned generated-home "
+        "view and thread leases through proved subprocess cleanup.",
     ),
     (
         "execution/headless/_headless_launch.py",
@@ -441,7 +451,8 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "spec.inherited_fds",
     ): (
         1,
-        "Contract nudge forwards the freshly acquired binding through its rebuilt command.",
+        "Contract nudge forwards its rebuilt command and separate generated-home "
+        "view and thread leases until that physical invocation has settled.",
     ),
     ("execution/process/_runner.py", "__call__", "pass_fds"): (
         1,

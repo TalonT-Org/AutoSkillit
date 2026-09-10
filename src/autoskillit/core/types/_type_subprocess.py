@@ -233,6 +233,8 @@ class SubprocessRunner(Protocol):
         linux_tracing_config: Any | None = None,
         idle_output_timeout: float | None = None,
         max_suppression_seconds: float | None = None,
+        on_process_spawned: Callable[[int, int], None] | None = None,
+        on_process_reaped: Callable[[int, int], None] | None = None,
         on_pid_resolved: Callable[[int, int], None] | None = None,
         enable_deadline_extension: bool = False,
         max_extension_seconds: float = 7200,

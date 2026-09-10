@@ -243,6 +243,7 @@ class CodingAgentBackend(Protocol):
         prompt: str,
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
+        session_home: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,

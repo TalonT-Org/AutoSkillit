@@ -1506,16 +1506,28 @@ class MockSubprocessRunner(SubprocessRunner):
         *,
         cwd: Path,
         timeout: float,
+        on_process_spawned: Callable[[int, int], None] | None = None,
+        on_process_reaped: Callable[[int, int], None] | None = None,
         pass_fds: tuple[int, ...] = (),
         **kwargs: object,
     ) -> SubprocessResult:
         kwargs["pass_fds"] = pass_fds
+        kwargs["on_process_spawned"] = on_process_spawned
+        kwargs["on_process_reaped"] = on_process_reaped
         self.call_args_list.append((cmd, cwd, timeout, kwargs))
         self.last_pty_mode = bool(kwargs.get("pty_mode", False))
         result = self._queue.popleft() if self._queue else self._default
+        if callable(on_process_spawned) and result.pid > 0:
+            on_process_spawned(result.pid, result.process_group_id or result.pid)
         on_pid_resolved = kwargs.get("on_pid_resolved")
         if callable(on_pid_resolved) and result.pid > 0:
             on_pid_resolved(result.pid, 0)
+        if (
+            callable(on_process_reaped)
+            and result.cleanup_evidence is not None
+            and result.cleanup_evidence.complete
+        ):
+            on_process_reaped(result.pid, result.process_group_id or result.pid)
         capture_dir = kwargs.get("capture_dir")
         if capture_dir is not None:
             capture_dir_path = Path(capture_dir)  # type: ignore[arg-type]

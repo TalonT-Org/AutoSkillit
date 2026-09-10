@@ -22,7 +22,6 @@ from autoskillit.core import (
     WORKTREE_SKILLS,
     SkillContractError,
     SkillResult,
-    ValidatedAddDir,
     WriteBehaviorSpec,
     get_logger,
 )
@@ -89,11 +88,9 @@ def _mint_fresh_explorer_binding(
 def _prepare_dispatch_session(state: _RunSkillDispatchState) -> None:
     """Select the session branch and reserve its identity without allocating it."""
     assert state.resolved_command is not None
-    state._cleanup_session_id = None
+    state._cleanup_session_id = f"headless-{uuid4().hex[:12]}"
     state._generated_home_cleanup_required = False
     state._copied_snapshot_dir = None
-    if state._stored_contract_entry is None:
-        state._cleanup_session_id = f"headless-{uuid4().hex[:12]}"
 
 
 def _rebuild_owned_dispatch_context(
@@ -170,10 +167,33 @@ async def _prepare_owned_dispatch_session(
     state._ephemeral_root = None
     state._restored = None
     if state._stored_contract_entry is not None:
-        state.skill_add_dirs.append(
-            ValidatedAddDir(path=str(state._stored_contract_entry.snapshot_dir))
+        manager = state.tool_ctx.session_skill_manager
+        if manager is None:
+            return SkillResult.crashed(
+                exception=SkillContractError(
+                    f"Cannot materialize direct skill {state.target_name!r}: "
+                    "session skill manager is unavailable"
+                ),
+                skill_command=state.resolved_command,
+                session_id=state.resume_session_id,
+                order_id=state.effective_order_id,
+            ).to_json()
+        session_id = state._cleanup_session_id
+        assert session_id is not None
+        if state.projection_context is None:
+            raise SkillContractError("Projection context was not prepared")
+
+        # restore_snapshot_session may create the home before failing, so reserve
+        # cleanup ownership before invoking it.
+        state._generated_home_cleanup_required = True
+        state._restored = manager.restore_snapshot_session(
+            session_id,
+            state._stored_contract_entry.snapshot_dir,
+            state.projection_context,
         )
-        state.replay_snapshot_used = True
+        if not state._restored.session_home:
+            raise SkillContractError("Restored session lacks a bound generated home")
+        state.skill_add_dirs.append(state._restored)
     elif (
         state.step_name
         and state._runner is not None
@@ -219,33 +239,31 @@ async def _prepare_owned_dispatch_session(
                 session_id=session_id,
             )
 
-    if not state.replay_snapshot_used and state.tool_ctx.session_skill_manager is not None:
-        if state._stored_contract_entry is not None:
-            assert state.resume_session_id is not None
-            session_root = ValidatedAddDir(path=str(state._stored_contract_entry.snapshot_dir))
-            session_id = state.resume_session_id
-        elif state.invocation is not None:
-            session_id = state._cleanup_session_id
-            assert session_id is not None
-            if state.projection_context is None:
-                raise SkillContractError("Projection context was not prepared")
-
-            # materialize_invocation may create the home before failing, so its
-            # reserved identity is cleanup-owned before the call begins.
-            state._generated_home_cleanup_required = True
-            session_root = state.tool_ctx.session_skill_manager.materialize_invocation(
-                session_id,
-                state.invocation,
-                state.projection_context,
-                explorer_binding_env_factory=functools.partial(
-                    _mint_fresh_explorer_binding, state, session_id
-                ),
-            )
-        else:
+    if (
+        state._stored_contract_entry is None
+        and not state.replay_snapshot_used
+        and state.tool_ctx.session_skill_manager is not None
+    ):
+        if state.invocation is None:
             raise SkillContractError("Fresh execution requires a resolved skill invocation")
-        if state._stored_contract_entry is None and (
-            not session_id
-            or not state.tool_ctx.session_skill_manager.validate_session_exists(session_id)
+        session_id = state._cleanup_session_id
+        assert session_id is not None
+        if state.projection_context is None:
+            raise SkillContractError("Projection context was not prepared")
+
+        # materialize_invocation may create the home before failing, so its
+        # reserved identity is cleanup-owned before the call begins.
+        state._generated_home_cleanup_required = True
+        session_root = state.tool_ctx.session_skill_manager.materialize_invocation(
+            session_id,
+            state.invocation,
+            state.projection_context,
+            explorer_binding_env_factory=functools.partial(
+                _mint_fresh_explorer_binding, state, session_id
+            ),
+        )
+        if not session_id or not state.tool_ctx.session_skill_manager.validate_session_exists(
+            session_id
         ):
             logger.warning(
                 "stale_session_path",
@@ -264,11 +282,12 @@ async def _prepare_owned_dispatch_session(
         state.skill_add_dirs.append(session_root)
 
     if state._stored_contract_entry is not None and state._explorer_parent_identity is not None:
-        restored_session_root = Path(state.skill_add_dirs[0].path)
-        if not restored_session_root.is_dir():
+        restored_add_dir = state.skill_add_dirs[0]
+        restored_session_home = Path(restored_add_dir.session_home)
+        if not restored_session_home.is_dir():
             return SkillResult.crashed(
                 exception=RuntimeError(
-                    f"Restored session path {str(restored_session_root)!r} does not exist."
+                    f"Restored session home {str(restored_session_home)!r} does not exist."
                 ),
                 skill_command=state.resolved_command,
                 session_id=state.resume_session_id,
@@ -281,18 +300,18 @@ async def _prepare_owned_dispatch_session(
             session_id=state.resume_session_id,
             projection_context=state.projection_context,
             identity=state._explorer_parent_identity,
-            authority_home=restored_session_root.parent,
+            authority_home=restored_session_home,
         )
         if _explorer_binding_env is not None:
             assert state.resume_session_id is not None
             bound_backend = _te_pkg._record_explorer_launch_lease(
                 state,
                 bound_session_id=state.resume_session_id,
-                session_home=restored_session_root.parent,
+                session_home=restored_session_home,
                 operation="resume",
             )
             bound_backend.refresh_explorer_binding_env(
-                restored_session_root.parent,
+                restored_session_home,
                 _explorer_binding_env,
             )
 

@@ -312,6 +312,7 @@ async def _execute_claude_headless(
             on_launch_resolved(contract)
 
     sink = LocalOtlpSink.start(ctx.config.linux_tracing.log_dir)
+    physical_attempt = 0
     sink_env = dict(sink.env)
     current_provider_extras.update(sink_env)
     try:
@@ -325,6 +326,7 @@ async def _execute_claude_headless(
                 if not launch_logged:
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
+                physical_attempt += 1
                 _result, spec = await _run_headless_attempt(
                     build_spec,
                     runner=runner,
@@ -358,6 +360,7 @@ async def _execute_claude_headless(
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
                     on_launch_resolved=observe_launch,
                     managed_attempt_id=managed_attempt_id,
+                    attempt=physical_attempt,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     **lineage_callbacks.launch_kwargs,
                 )
@@ -439,6 +442,7 @@ async def _execute_claude_headless(
                 in (RetryReason.CONTRACT_RECOVERY, RetryReason.EARLY_STOP)
             ):
                 try:
+                    physical_attempt += 1
                     nudge_success = await _attempt_contract_nudge(
                         skill_result,
                         result,
@@ -461,6 +465,8 @@ async def _execute_claude_headless(
                         on_launch_resolved=observe_launch,
                         on_session_id_resolved=capture_resolved_session_id,
                         natural_exit_grace_seconds=natural_exit_grace_seconds,
+                        attempt=physical_attempt,
+                        ceiling_seconds=ceiling_seconds,
                         **lineage_callbacks.attempt_kwargs,
                     )
                 except InfrastructureFaultError:

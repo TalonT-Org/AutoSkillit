@@ -409,6 +409,13 @@ class SessionSkillManager(Protocol):
         projection_context: SkillProjectionContextAuthority,
     ) -> ValidatedAddDir: ...
 
+    def restore_snapshot_session(
+        self,
+        session_id: str,
+        snapshot_dir: Path,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> ValidatedAddDir: ...
+
     def cleanup_session(self, session_id: str) -> bool: ...
 
     def validate_session_exists(self, session_id: str) -> bool: ...

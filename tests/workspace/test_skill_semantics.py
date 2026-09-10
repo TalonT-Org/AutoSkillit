@@ -636,10 +636,7 @@ def test_projection_threads_one_adaptation_context_into_catalog_and_document(
     from dataclasses import replace
 
     from autoskillit.core import (
-        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
         BackendConventions,
-        ManagedJoinAttestation,
-        SemanticAdaptationContext,
         SkillExecutionRole,
     )
     from autoskillit.workspace import (
@@ -649,7 +646,7 @@ def test_projection_threads_one_adaptation_context_into_catalog_and_document(
         compile_session_skill_catalog,
         project_agent_skill_document,
     )
-    from tests.fakes import adapt_test_skill_semantics
+    from tests.fakes import adapt_test_skill_semantics, make_managed_codex_context
 
     skill_path = tmp_path / "portable" / "SKILL.md"
     _write_skill(skill_path)
@@ -660,24 +657,7 @@ def test_projection_threads_one_adaptation_context_into_catalog_and_document(
         skills=(entry,),
         execution_role=SkillExecutionRole.SESSION,
     )
-    adaptation_context = SemanticAdaptationContext(
-        managed_join_attestation=ManagedJoinAttestation(
-            schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
-            backend="codex",
-            launch_context="direct",
-            parent_session_id="parent-1",
-            activation_epoch=0,
-            direct_tool_mode=True,
-            resolved_model="gpt-5.6-sol",
-            resolved_reasoning_effort="high",
-            codex_catalog_digest="c" * 64,
-            fixed_batch_tool_registry_digest="a" * 64,
-            hook_registry_digest="b" * 64,
-            skill_load_applies=True,
-            guards_apply=True,
-            provenance="autoskillit-server",
-        )
-    )
+    adaptation_context = make_managed_codex_context("parent-1")
     observed_contexts: list[object] = []
 
     def adapt(plan, supplied_context):

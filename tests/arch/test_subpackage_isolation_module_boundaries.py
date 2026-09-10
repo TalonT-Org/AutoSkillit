@@ -74,7 +74,7 @@ def test_no_yaml_safe_load_in_migration_engine() -> None:
 
 def test_severity_not_defined_locally_in_recipe_validator() -> None:
     """Severity must be imported from types, not locally defined in recipe sub-modules."""
-    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+    for filename in ("recipe/validator.py", "recipe/contracts/contracts.py"):
         ast_module = _get_module_ast(filename)
         class_names = _top_level_class_names(ast_module)
         assert "Severity" not in class_names, (
@@ -102,7 +102,7 @@ def test_skill_tools_not_defined_in_recipe_io() -> None:
 
 def test_skill_tools_not_defined_in_recipe_validator() -> None:
     """SKILL_TOOLS must not be defined locally in recipe/validator.py or recipe/contracts.py."""
-    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+    for filename in ("recipe/validator.py", "recipe/contracts/contracts.py"):
         ast_module = _get_module_ast(filename)
         assigns = _top_level_assign_targets(ast_module)
         assert "SKILL_TOOLS" not in assigns and "_SKILL_TOOLS" not in assigns, (
@@ -120,15 +120,19 @@ def test_contract_validator_module_deleted() -> None:
 
 def test_recipe_validator_has_regex_patterns() -> None:
     """recipe/contracts.py must define context/input regex patterns."""
-    ast_module = _get_module_ast("recipe/_contracts_types.py")
+    ast_module = _get_module_ast("recipe/contracts/_contracts_types.py")
     assigns = _top_level_assign_targets(ast_module)
-    assert "_CONTEXT_REF_RE" in assigns, "recipe/_contracts_types.py must define _CONTEXT_REF_RE"
-    assert "INPUT_REF_RE" in assigns, "recipe/_contracts_types.py must define INPUT_REF_RE"
+    assert "_CONTEXT_REF_RE" in assigns, (
+        "recipe/contracts/_contracts_types.py must define _CONTEXT_REF_RE"
+    )
+    assert "INPUT_REF_RE" in assigns, (
+        "recipe/contracts/_contracts_types.py must define INPUT_REF_RE"
+    )
 
 
 def test_recipe_validator_no_process_lifecycle_import() -> None:
     """recipe/validator.py and recipe/contracts.py must not import from process_lifecycle."""
-    for filename in ("recipe/validator.py", "recipe/contracts.py"):
+    for filename in ("recipe/validator.py", "recipe/contracts/contracts.py"):
         import_pairs = _extract_module_level_internal_imports(SRC_ROOT / filename)
         import_stems = [stem for stem, _ in import_pairs]
         assert "process_lifecycle" not in import_stems, (
@@ -320,7 +324,7 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     not SkillLister. That is checked separately below.
     """
     lister_targets = {
-        "src/autoskillit/recipe/_skill_helpers.py",
+        "src/autoskillit/recipe/helpers/_skill_helpers.py",
         "src/autoskillit/recipe/_api_orchestration.py",
     }
     src_root = Path(__file__).resolve().parents[2]
@@ -333,7 +337,9 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
         f"These files still consume SkillResolver without SkillLister Protocol typing: {missing}"
     )
     # contracts.py uses .resolve() — must reference SkillResolver, not SkillLister
-    contracts_text = (src_root / "src/autoskillit/recipe/_contracts_staleness.py").read_text()
+    contracts_text = (
+        src_root / "src/autoskillit/recipe/contracts/_contracts_staleness.py"
+    ).read_text()
     assert "SkillResolver" in contracts_text, (
         "_contracts_staleness.py must reference SkillResolver for the resolver parameter"
     )

@@ -2517,7 +2517,7 @@ def test_enumeration_stat_allowlist_regression_tests_resolve(
 # Issue #4770: directory_tree_digest silently dropped subtrees whose scandir()
 # failed mid-walk because os.walk(followlinks=False) received no onerror callback.
 # Path.rglob() has the identical silent-suppression contract. strict_walk()
-# (core/io.py) is the one funnel that fails loudly on a race instead; every raw
+# (core/io/io.py) is the one funnel that fails loudly on a race instead; every raw
 # os.walk/os.fwalk/Path.rglob() call used for identity- or tamper-evidence
 # enumeration must go through it. (path, rationale) rows, matching
 # _DETACHED_SPAWN_ALLOWLIST's shape — each entry documents the specific

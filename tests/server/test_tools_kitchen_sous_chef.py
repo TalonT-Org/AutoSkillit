@@ -99,7 +99,7 @@ async def test_open_kitchen_result_keys_match_typed_dict(tmp_path, monkeypatch):
     undeclared = set(result.keys()) - declared
     assert undeclared == set(), (
         f"open_kitchen returned keys not declared in OpenKitchenResult: {sorted(undeclared)}. "
-        "Add each to OpenKitchenResult in recipe/_recipe_ingredients.py."
+        "Add each to OpenKitchenResult in recipe/ingredients/_recipe_ingredients.py."
     )
     for key in ("success", "kitchen", "version"):
         assert key in result, (

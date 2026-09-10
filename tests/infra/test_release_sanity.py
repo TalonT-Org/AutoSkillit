@@ -66,5 +66,5 @@ def test_autoskillit_root_files_are_all_registered():
         f"Session-scoped runtime files belong in .autoskillit/temp/ where they "
         f"are auto-gitignored by temp/.gitignore ('*'). Persistent files that "
         f"belong in .autoskillit/ root need an entry added to "
-        f"_AUTOSKILLIT_GITIGNORE_ENTRIES in src/autoskillit/core/io.py."
+        f"_AUTOSKILLIT_GITIGNORE_ENTRIES in src/autoskillit/core/io/io.py."
     )

@@ -2,7 +2,7 @@
 
 Re-exports the public surface of the io/ sub-package through the
 ``autoskillit.core.io`` namespace. Backward-compat shims at
-``core/io.py``, ``core/paths.py``, ``core/path_containment.py``,
+``core/paths.py``, ``core/path_containment.py``,
 ``core/_json.py``, ``core/_terminal_table.py``,
 ``core/_version_snapshot.py``, and ``core/_delivery_bounds.py`` preserve
 old import paths (issue #4671 Phase A decomposition).

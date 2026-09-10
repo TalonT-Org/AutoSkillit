@@ -49,7 +49,10 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         "_execution_marker.py",
         "_step_context.py",
         # Phase C: core/context_admission/ sub-package
-        "context_admission.py",
+        # NOTE: ``context_admission.py`` was moved into the
+        # ``core/context_admission/`` sub-package itself, which re-exports
+        # every symbol through its ``__init__.py``. ``from autoskillit.core.context_admission import X``
+        # resolves through the sub-package, so no top-level shim is needed.
         "context_admission_helpers.py",
         "context_admission_accept_release.py",
         "context_admission_expiry_rollover.py",
@@ -101,7 +104,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core": 13,  # Phase C: 21 - 8 moved files (issue #4671)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
-    "core/io": 8,  # 7 files + __init__ + buffer
+    "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
     "core/git": 5,  # 4 files + __init__ + buffer
     "core/audit": 5,  # 4 files + __init__ + buffer
     "core/plugins": 5,  # 4 files + __init__ + buffer
@@ -376,9 +379,12 @@ def test_no_subpackage_exceeds_10_files() -> None:
     for sub_dir in dirs_to_check:
         rel_key = str(sub_dir.relative_to(SRC_ROOT))
         # Pick the correct shim registry based on package (issue #4671).
-        if rel_key.startswith("recipe/"):
+        # Match both the top-level package (``recipe``) and any sub-package
+        # (``recipe/analysis``). The top-level package's rel_key has no
+        # trailing slash; the sub-package paths do.
+        if rel_key == "recipe" or rel_key.startswith("recipe/"):
             shim_set = _RECIPE_SHIM_FILENAMES
-        elif rel_key.startswith("core/") or rel_key == "core":
+        elif rel_key == "core" or rel_key.startswith("core/"):
             shim_set = _SHIM_FILENAMES
         else:
             shim_set = frozenset()
@@ -388,4 +394,55 @@ def test_no_subpackage_exceeds_10_files() -> None:
             violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+# ── Phase B Test 8: closure_hashing behavior snapshot ────────────────────────
+# Captured on 2026-09-10 against the post-Phase-B state of
+# ``core/audit/closure_hashing.py``. If the hash value changes after a
+# future move or refactor of closure_hashing.py, the test fails — meaning
+# behavior has drifted and a snapshot re-capture is required.
+
+
+def test_phase_b_closure_hashing_behavior_snapshot() -> None:
+    """Phase B Test 8: closure_hashing.compute_bytes_hash output is byte-stable.
+
+    Captured value: ``sha256:7e3849047077040f30bbab03278adefccd7beba842425cb3b35dee4b9299baa9``
+    against the input ``b"phase_b_capture_v1_known_input"``.
+
+    If a future move (Phase B → core/audit/, or any further refactor) changes
+    the closure-hashing algorithm, this test fails. The expected behavior is
+    SHA-256 of the input bytes, prefixed with ``"sha256:"``.
+    """
+    from autoskillit.core.audit.closure_hashing import compute_bytes_hash
+
+    assert (
+        compute_bytes_hash(b"phase_b_capture_v1_known_input")
+        == "sha256:7e3849047077040f30bbab03278adefccd7beba842425cb3b35dee4b9299baa9"
+    )
+
+
+# ── Phase D Test 4: semantic-rule registry populated after sub-package moves ─
+# Per the Phase D plan, every @semantic_rule decorator must register in the
+# canonical _RULE_REGISTRY. The plan asserted a minimum of 80 rules; the
+# actual count is 242 (measured 2026-09-10). If the count ever drops below 80,
+# a follow-up is required to migrate missing rule modules into the
+# recipe/rules/ sub-tree.
+
+
+def test_phase_d_semantic_rule_registry_populated() -> None:
+    """Phase D Test 4: _RULE_REGISTRY (private symbol in recipe/registry.py)
+    contains ≥80 entries after the sub-package moves.
+
+    The registry is populated as a side effect of recipe/__init__.py importing
+    every rule module for its @semantic_rule decorator. If a future commit
+    removes an import from recipe/__init__.py, that rule module's decorator
+    would not fire and this count would drop.
+    """
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    assert len(_RULE_REGISTRY) >= 80, (
+        f"_RULE_REGISTRY has {len(_RULE_REGISTRY)} entries; "
+        f"expected ≥80 after Phase D sub-package moves. "
+        f"A rule module may have been removed from recipe/__init__.py."
     )

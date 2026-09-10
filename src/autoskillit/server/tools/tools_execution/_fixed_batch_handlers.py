@@ -25,6 +25,7 @@ from autoskillit.core import (
     BackendAuthorityTier,
     EffectiveSkillInvocationAuthority,
     ManagedJoinAttestation,
+    ManagedWorkerPermit,
     SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
@@ -145,7 +146,9 @@ class _ManagedLeafLaunchAdapter:
 
     @asynccontextmanager
     async def __call__(
-        self, projection, _permit
+        self,
+        projection: ManagedLeafProjection,
+        _permit: ManagedWorkerPermit,
     ) -> AsyncIterator[ManagedLeafPreparedLaunch[ManagedLeafLaunchResult]]:
         manager = self.tool_ctx.session_skill_manager
         executor = self.tool_ctx.executor

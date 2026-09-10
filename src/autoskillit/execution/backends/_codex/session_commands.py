@@ -341,8 +341,8 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
-        # Codex has its own timeout mechanism (see comment above
-        # _codex_home_from_plugin_binding); param is intentionally ignored.
+        # Codex uses ensure_codex_mcp_registered and CODEX_MCP_TOOL_TIMEOUT_FLOOR;
+        # this shared-Protocol parameter is intentionally ignored.
         del mcp_tool_timeout_sec
         projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.STREAM_JSON:
@@ -464,8 +464,8 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
-        # Codex has its own timeout mechanism (see comment above
-        # _codex_home_from_plugin_binding); param is intentionally ignored.
+        # Codex uses ensure_codex_mcp_registered and CODEX_MCP_TOOL_TIMEOUT_FLOOR;
+        # this shared-Protocol parameter is intentionally ignored.
         del mcp_tool_timeout_sec
         if tools:
             logger.warning(
@@ -586,8 +586,8 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         project_root: Path | str | None = None,
         mcp_tool_timeout_sec: float | None = None,
     ) -> CmdSpec:
-        # Codex has its own timeout mechanism (see comment above
-        # _codex_home_from_plugin_binding); param is intentionally ignored.
+        # Codex uses ensure_codex_mcp_registered and CODEX_MCP_TOOL_TIMEOUT_FLOOR;
+        # this shared-Protocol parameter is intentionally ignored.
         del skill_session, mcp_tool_timeout_sec
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"

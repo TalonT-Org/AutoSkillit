@@ -94,9 +94,6 @@ from autoskillit.execution.backends._explorer_dispatch import (
 )
 from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
-# Codex has its own timeout mechanism (``ensure_codex_mcp_registered`` /
-# ``CODEX_MCP_TOOL_TIMEOUT_FLOOR``); ``mcp_tool_timeout_sec`` on Codex builders
-# exists only to satisfy the shared Protocol and is intentionally ignored.
 _CODEX_HOME_ENV_VAR = "CODEX_HOME"
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 

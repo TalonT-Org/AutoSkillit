@@ -1487,7 +1487,10 @@ class TestContractNudge:
         assert result.success is True
         assert result.needs_retry is False
         assert "plan_path = /tmp/out.md" in result.result
-        assert len(result.turn_usage) == 2
+        assert [(row["message_id"], row["cache_read_tokens"]) for row in result.turn_usage] == [
+            ("main-message", 10),
+            ("nudge-message", 20),
+        ]
 
     @pytest.mark.anyio
     async def test_nudge_failure_falls_through(self, tool_ctx):
@@ -1917,7 +1920,10 @@ class TestEarlyStopRecovery:
         )
         assert result.success is True
         assert len(tool_ctx.runner.call_args_list) == 2
-        assert len(result.turn_usage) == 2
+        assert [(row["message_id"], row["cache_read_tokens"]) for row in result.turn_usage] == [
+            ("main-message", 10),
+            ("nudge-message", 20),
+        ]
 
     @pytest.mark.anyio
     async def test_early_stop_nudge_bypasses_hints_guard(self, tool_ctx):

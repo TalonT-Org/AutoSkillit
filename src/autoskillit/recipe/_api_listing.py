@@ -13,11 +13,11 @@ from autoskillit.core import (
     get_logger,
     load_yaml,
 )
-from autoskillit.recipe._analysis import make_validation_context
-from autoskillit.recipe._recipe_composition import _prune_skipped_steps
-from autoskillit.recipe._recipe_ingredients import RecipeListItem
-from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
-from autoskillit.recipe.contracts import load_recipe_card, validate_recipe_cards
+from autoskillit.recipe.analysis._analysis import make_validation_context
+from autoskillit.recipe.contracts.contracts import load_recipe_card, validate_recipe_cards
+from autoskillit.recipe.helpers._rule_helpers import filter_pruning_false_positives
+from autoskillit.recipe.ingredients._recipe_composition import _prune_skipped_steps
+from autoskillit.recipe.ingredients._recipe_ingredients import RecipeListItem
 from autoskillit.recipe.io import (
     RecipeInfo,
     _parse_recipe,

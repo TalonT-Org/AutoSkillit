@@ -48,15 +48,15 @@ from autoskillit.recipe._api_orchestration_validate import (
     _record_pipeline_error,
     _run_validation_pipeline,
 )
-from autoskillit.recipe._io_loading import (
-    load_recipe_dict_with_declarations,  # noqa: F401 — monkeypatch
-)
-from autoskillit.recipe._recipe_ingredients import LoadRecipeResult
-from autoskillit.recipe.contracts import (  # noqa: F401 — monkeypatch targets
+from autoskillit.recipe.contracts.contracts import (  # noqa: F401 — monkeypatch targets
     check_contract_staleness,
     load_recipe_card,
     validate_recipe_cards,
 )
+from autoskillit.recipe.helpers._io_loading import (
+    load_recipe_dict_with_declarations,  # noqa: F401 — monkeypatch
+)
+from autoskillit.recipe.ingredients._recipe_ingredients import LoadRecipeResult
 from autoskillit.recipe.io import (  # noqa: F401 — monkeypatch targets
     _parse_recipe,
     list_recipes,

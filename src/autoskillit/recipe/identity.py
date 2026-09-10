@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import get_logger
-from autoskillit.recipe.contracts import compute_skill_hash, resolve_skill_name
+from autoskillit.recipe.contracts.contracts import compute_skill_hash, resolve_skill_name
+from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash
 from autoskillit.recipe.io import find_sub_recipe_by_name
 from autoskillit.recipe.schema import Recipe
-from autoskillit.recipe.staleness_cache import compute_recipe_hash
 
 logger = get_logger(__name__)
 

@@ -240,15 +240,15 @@ def _refresh_staleness_baseline() -> None:
 def _clear_stale_caches() -> None:
     """Clear all caches and the load cache when staleness is detected."""
     global _STALENESS_CACHES_CLEARED  # noqa: PLW0603
-    from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
-    from autoskillit.recipe._io_loading import (  # noqa: PLC0415
+    from autoskillit.recipe.contracts._contracts_manifest import _MANIFEST_CACHE  # noqa: PLC0415
+    from autoskillit.recipe.helpers._io_loading import (  # noqa: PLC0415
         clear_recipe_discovery_caches,
     )
-    from autoskillit.recipe._skill_helpers import (  # noqa: PLC0415
+    from autoskillit.recipe.helpers._skill_helpers import (  # noqa: PLC0415
         _SKILL_CATEGORY_CACHE,
         _SKILL_NAMES_CACHE,
     )
-    from autoskillit.recipe.methodology_venue_appendix import (  # noqa: PLC0415
+    from autoskillit.recipe.methodology.methodology_venue_appendix import (  # noqa: PLC0415
         _ML_SUB_AREA_CACHE,
     )
     from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE  # noqa: PLC0415

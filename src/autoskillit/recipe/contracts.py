@@ -1,35 +1,12 @@
-"""Recipe contract types, manifest loading, card generation, and staleness detection.
+"""Backward-compat shim for ``recipe/contracts.py``.
 
-Re-export facade. Implementation: _contracts_types.py, _contracts_manifest.py,
-_contracts_card.py, _contracts_staleness.py.
+Real implementation: ``autoskillit.recipe.contracts.contracts`` (#4671 D).
+Preserves old import path ``autoskillit.recipe.contracts``.
 """
 
-from autoskillit.core import resolve_skill_name as resolve_skill_name  # noqa: F401
-from autoskillit.recipe._contracts_card import (  # noqa: F401
-    _generate_recipe_card_for_recipe,
-    generate_recipe_card,
-    load_recipe_card,
-    validate_recipe_cards,
-)
-from autoskillit.recipe._contracts_manifest import (  # noqa: F401
-    classify_step_arg_style,
-    compute_skill_hash,
-    count_positional_args,
-    extract_context_refs,
-    extract_input_refs,
-    extract_skill_cmd_refs,
-    get_callable_contract,
-    get_skill_contract,
-    get_tool_output_contract,
-    load_bundled_manifest,
-    resolve_input_specs,
-    select_audit_output_contract,
-)
-from autoskillit.recipe._contracts_staleness import (  # noqa: F401
-    check_contract_staleness,
-    stale_to_suggestions,
-)
-from autoskillit.recipe._contracts_types import (  # noqa: F401
+from __future__ import annotations
+
+from autoskillit.recipe.contracts.contracts import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
@@ -49,4 +26,64 @@ from autoskillit.recipe._contracts_types import (  # noqa: F401
     SuccessQualifierEntry,
     ToolOutputContractSpec,
     ToolOutputFieldSpec,
+    _generate_recipe_card_for_recipe,
+    check_contract_staleness,
+    classify_step_arg_style,
+    compute_skill_hash,
+    count_positional_args,
+    extract_context_refs,
+    extract_input_refs,
+    extract_skill_cmd_refs,
+    generate_recipe_card,
+    get_callable_contract,
+    get_skill_contract,
+    get_tool_output_contract,
+    load_bundled_manifest,
+    load_recipe_card,
+    resolve_input_specs,
+    resolve_skill_name,
+    select_audit_output_contract,
+    stale_to_suggestions,
+    validate_recipe_cards,
 )
+
+__all__ = [
+    "AuditAuthorityPublicationSpec",
+    "AuditOutputContract",
+    "AuditOutputMode",
+    "BlockFingerprint",
+    "DataFlowEntry",
+    "INPUT_REF_RE",
+    "OutcomeInvariantEntry",
+    "RESULT_CAPTURE_RE",
+    "RecipeCard",
+    "ResultFieldSpec",
+    "SkillContract",
+    "SkillInput",
+    "SkillOutput",
+    "StaleItem",
+    "SuccessQualifierEntry",
+    "ToolOutputContractSpec",
+    "ToolOutputFieldSpec",
+    "_CONTEXT_REF_RE",
+    "_TEMPLATE_REF_RE",
+    "_generate_recipe_card_for_recipe",
+    "check_contract_staleness",
+    "classify_step_arg_style",
+    "compute_skill_hash",
+    "count_positional_args",
+    "extract_context_refs",
+    "extract_input_refs",
+    "extract_skill_cmd_refs",
+    "generate_recipe_card",
+    "get_callable_contract",
+    "get_skill_contract",
+    "get_tool_output_contract",
+    "load_bundled_manifest",
+    "load_recipe_card",
+    "resolve_input_specs",
+    "resolve_skill_name",
+    "select_audit_output_contract",
+    "stale_to_suggestions",
+    "validate_recipe_cards",
+]

@@ -61,10 +61,10 @@ def _resolve_cache_inputs(
     pkg_version = _api_cache._get_pkg_version()
     project_recipes_dir = _pdir / ".autoskillit" / "recipes"
     builtin_dir = builtin_recipes_dir()
-    from autoskillit.recipe.experiment_type_registry import (  # noqa: PLC0415
+    from autoskillit.recipe.methodology.experiment_type_registry import (  # noqa: PLC0415
         BUNDLED_EXPERIMENT_TYPES_DIR,
     )
-    from autoskillit.recipe.methodology_tradition_registry import (  # noqa: PLC0415
+    from autoskillit.recipe.methodology.methodology_tradition_registry import (  # noqa: PLC0415
         BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     )
 

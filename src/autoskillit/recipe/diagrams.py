@@ -15,7 +15,7 @@ from pathlib import Path
 
 import regex as re
 
-from autoskillit.recipe.staleness_cache import compute_recipe_hash
+from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash
 
 # Diagram format version — bump when the render-recipe skill spec changes
 # so that existing diagrams are flagged stale.

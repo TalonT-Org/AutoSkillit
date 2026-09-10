@@ -34,31 +34,7 @@ from autoskillit.recipe._api_listing import (  # noqa: F401
 )
 from autoskillit.recipe._api_orchestration import load_and_validate  # noqa: F401
 from autoskillit.recipe._binding import bind_recipe  # noqa: F401
-from autoskillit.recipe._io_loading import (
-    assert_no_raw_placeholders,  # noqa: F401
-    load_recipe_dict_with_declarations,  # noqa: F401
-)
-from autoskillit.recipe._recipe_composition import (  # noqa: F401
-    _assert_content_integrity,
-    _build_active_recipe,
-    _derive_rate_limit_routes,
-    _prune_skipped_steps,
-    _resolve_hidden_inputs_in_content,
-    _validate_no_dangling_routes,
-    _validate_route_consistency,
-)
-from autoskillit.recipe._recipe_ingredients import (
-    DeferredGuard,  # noqa: F401
-    ListRecipesResult,  # noqa: F401
-    LoadRecipeResult,  # noqa: F401 — preserved for tests
-    OpenKitchenResult,  # noqa: F401
-    RecipeListItem,  # noqa: F401
-    build_ingredient_rows,  # noqa: F401
-    format_ingredients_table,  # noqa: F401 — preserved for tests
-)
-from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content  # noqa: F401
-from autoskillit.recipe._rule_helpers import filter_pruning_false_positives  # noqa: F401
-from autoskillit.recipe.contracts import (  # noqa: F401
+from autoskillit.recipe.contracts.contracts import (  # noqa: F401
     check_contract_staleness,
     load_recipe_card,
     stale_to_suggestions,
@@ -69,6 +45,32 @@ from autoskillit.recipe.diagrams import (  # noqa: F401
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     load_recipe_diagram,
+)
+from autoskillit.recipe.helpers._io_loading import (
+    assert_no_raw_placeholders,  # noqa: F401
+    load_recipe_dict_with_declarations,  # noqa: F401
+)
+from autoskillit.recipe.helpers._rule_helpers import filter_pruning_false_positives  # noqa: F401
+from autoskillit.recipe.ingredients._recipe_composition import (  # noqa: F401
+    _assert_content_integrity,
+    _build_active_recipe,
+    _derive_rate_limit_routes,
+    _prune_skipped_steps,
+    _resolve_hidden_inputs_in_content,
+    _validate_no_dangling_routes,
+    _validate_route_consistency,
+)
+from autoskillit.recipe.ingredients._recipe_ingredients import (
+    DeferredGuard,  # noqa: F401
+    ListRecipesResult,  # noqa: F401
+    LoadRecipeResult,  # noqa: F401 — preserved for tests
+    OpenKitchenResult,  # noqa: F401
+    RecipeListItem,  # noqa: F401
+    build_ingredient_rows,  # noqa: F401
+    format_ingredients_table,  # noqa: F401 — preserved for tests
+)
+from autoskillit.recipe.ingredients._recipe_raw_repair import (
+    _resolve_skip_guards_in_content,  # noqa: F401
 )
 from autoskillit.recipe.io import (  # noqa: F401
     RecipeInfo,

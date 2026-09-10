@@ -13,14 +13,14 @@ if TYPE_CHECKING:
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 import autoskillit.recipe._api as _api
-from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest
-from autoskillit.recipe.io import list_recipes, load_recipe
-from autoskillit.recipe.staleness_cache import (
+from autoskillit.recipe.contracts.contracts import StaleItem, load_bundled_manifest
+from autoskillit.recipe.contracts.staleness_cache import (
     StalenessEntry,
     compute_recipe_hash,
     read_staleness_cache,
     write_staleness_cache,
 )
+from autoskillit.recipe.io import list_recipes, load_recipe
 
 
 class DefaultRecipeRepository:

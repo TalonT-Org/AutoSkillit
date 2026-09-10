@@ -1,4 +1,4 @@
-"""IL-0 plugin-cache lifecycle facade, artifact identity, MCP prefix detection, and agent-definition catalog.
+"""IL-0 plugin-cache facade, artifact identity, MCP prefix, and agent catalog.
 
 Exposes the canonical public surface of ``_plugin_cache`` (facade over
 ``_active_kitchens`` / ``_plugin_artifact_retirement`` / ``_retiring_cache``),

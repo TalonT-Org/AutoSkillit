@@ -59,7 +59,43 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         "context_admission_propose_reserve.py",
     }
 )
-_RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset()
+_RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
+    {
+        # Phase D: recipe/analysis/, recipe/helpers/, recipe/ingredients/,
+        # recipe/cmd_rpc/, recipe/contracts/, recipe/methodology/ sub-packages.
+        # Each entry below is a 2-line forwarding shim preserving the pre-Phase-D
+        # import path (``from autoskillit.recipe.<old_name> import X``).
+        "_analysis.py",
+        "_analysis_bfs.py",
+        "_analysis_blocks.py",
+        "_analysis_detectors.py",
+        "_analysis_graph.py",
+        "_git_helpers.py",
+        "_io_loading.py",
+        "_rule_helpers.py",
+        "_skill_helpers.py",
+        "_skill_placeholder_parser.py",
+        "_registry_utils.py",
+        "_recipe_composition.py",
+        "_recipe_ingredients.py",
+        "_recipe_raw_repair.py",
+        "_cmd_rpc.py",
+        "_cmd_rpc_guards.py",
+        "_cmd_rpc_issues.py",
+        "_cmd_rpc_merge.py",
+        "contracts.py",
+        "_contracts_card.py",
+        "_contracts_manifest.py",
+        "_contracts_staleness.py",
+        "_contracts_types.py",
+        "staleness_cache.py",
+        "methodology_disambiguation.py",
+        "methodology_tradition_registry.py",
+        "methodology_tradition_router.py",
+        "methodology_venue_appendix.py",
+        "experiment_type_registry.py",
+    }
+)
 
 FILE_COUNT_LIMITS: dict[str, int] = {
     "core": 13,  # Phase C: 21 - 8 moved files (issue #4671)
@@ -75,7 +111,13 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/types": 76,
     "core/runtime": 11,
     "config": 20,
-    "recipe": 53,  # +7 shards added by issue #4905 decomposition of _api_orchestration.py
+    "recipe": 23,  # Phase D: 52 - 29 moved files (issue #4671)
+    "recipe/analysis": 6,  # 5 moved files + __init__
+    "recipe/helpers": 7,  # 6 moved files + __init__
+    "recipe/ingredients": 5,  # 3 moved files + 1 file extracted to fit 750-line cap + __init__
+    "recipe/cmd_rpc": 5,  # 4 moved files + __init__
+    "recipe/contracts": 7,  # 6 moved files + __init__
+    "recipe/methodology": 6,  # 5 moved files + __init__
     "recipe/rules": 66,
     "server": 20,
     "execution": 23,

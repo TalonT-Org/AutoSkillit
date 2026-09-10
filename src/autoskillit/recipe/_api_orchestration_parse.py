@@ -18,7 +18,7 @@ import hashlib
 from pathlib import Path
 
 import autoskillit.recipe._api_orchestration as _orch
-from autoskillit.recipe._recipe_composition import _build_active_recipe
+from autoskillit.recipe.ingredients._recipe_composition import _build_active_recipe
 from autoskillit.recipe.io import RecipeInfo
 from autoskillit.recipe.schema import Recipe
 

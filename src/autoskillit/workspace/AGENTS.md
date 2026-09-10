@@ -36,8 +36,8 @@ admission helpers, and the durable unavailability writer), `session_skill_provid
 (`SkillsDirectoryProvider`, ephemeral-root discovery, closure write-dir resolution),
 `session_skill_lifecycle.py` (lock path, `_SessionLease`, persistent-root resolution,
 stateless lease/removal primitives), `session_skill_materialization.py` (the
-ordering-sensitive `_materialize_session` transaction, profile projection, persistent
-discovery links, layout validation), and `session_skill_manager.py`
+ordering-sensitive `_materialize_session` transaction, single catalog merge, legacy
+discovery alias, layout validation), and `session_skill_manager.py`
 (`DefaultSessionSkillManager`, `_InitializedSession`, and `_materialize_bound_records`).
 Shards import each other directly and must never import the `session_skills.py`
 facade at runtime; `TYPE_CHECKING`-guarded imports are exempt, and

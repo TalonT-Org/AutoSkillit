@@ -9,7 +9,7 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
-from autoskillit.core import AUTOSKILLIT_ATTESTED_META_SUPPORT, CookSessionHandle, atomic_write
+from autoskillit.core import AUTOSKILLIT_ATTESTED_META_SUPPORT, SessionAttemptHandle, atomic_write
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from tests.cli._cook_launch_helpers import arrange_cook
 
@@ -126,9 +126,9 @@ def test_codex_cook_does_not_resolve_or_run_prelaunch(
     )
     monkeypatch.setattr(
         CodexBackend,
-        "cook_session_context",
+        "session_attempt_context",
         lambda _self, **_kwargs: nullcontext(
-            CookSessionHandle(
+            SessionAttemptHandle(
                 view_id="codex",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,

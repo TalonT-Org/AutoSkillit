@@ -24,7 +24,6 @@ from autoskillit.core import (
     CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
     CmdSpec,
-    CookSessionHandle,
     ExecutableLaunchBinding,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
@@ -32,6 +31,7 @@ from autoskillit.core import (
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
+    SessionAttemptHandle,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
@@ -354,12 +354,27 @@ class CodexBackend(CodexSessionCommandMixin):
             / ClaudeDirectoryConventions.PLUGIN_DIR_SKILLS_SUBDIR
         )
         discovery_skills_dir = session_dir / self.conventions.skills_subdir
-        if not skills_dir.is_dir():
-            errors.append(f"skills directory does not exist: {skills_dir}")
-        elif not any(skills_dir.iterdir()) and not (
-            discovery_skills_dir.is_dir() and any(discovery_skills_dir.iterdir())
-        ):
-            errors.append(f"skills directory is empty: {skills_dir}")
+        if skills_dir.is_symlink() or not skills_dir.is_dir():
+            errors.append(f"managed skills catalog must be a real directory: {skills_dir}")
+        else:
+            managed_entries = [
+                entry for entry in skills_dir.iterdir() if not entry.name.startswith(".")
+            ]
+            if not managed_entries:
+                errors.append(f"managed skills catalog has no managed skills: {skills_dir}")
+            elif any(
+                entry.is_symlink() or not entry.is_dir() or not (entry / "SKILL.md").is_file()
+                for entry in managed_entries
+            ):
+                errors.append(
+                    f"managed skills catalog must contain real skill directories: {skills_dir}"
+                )
+        if not discovery_skills_dir.is_symlink():
+            errors.append(f"skills must be a symlink: {discovery_skills_dir}")
+        elif os.readlink(discovery_skills_dir) != "add-dir/skills":
+            errors.append(f"skills alias must be add-dir/skills: {discovery_skills_dir}")
+        elif discovery_skills_dir.resolve(strict=False) != skills_dir.resolve(strict=False):
+            errors.append(f"skills alias must resolve to managed catalog: {discovery_skills_dir}")
         config_path = session_dir / "config.toml"
         if not config_path.is_file():
             errors.append(f"config.toml does not exist: {config_path}")
@@ -619,7 +634,7 @@ class CodexBackend(CodexSessionCommandMixin):
     def recover_cook_history(self) -> None:
         CodexSessionStore(log_dir=default_log_dir()).recover()
 
-    def cook_session_context(
+    def session_attempt_context(
         self,
         *,
         session_home: Path,
@@ -628,7 +643,7 @@ class CodexBackend(CodexSessionCommandMixin):
         attempt: int,
         current_resume_spec: ResumeSpec,
         ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
-    ) -> AbstractContextManager[CookSessionHandle]:
+    ) -> AbstractContextManager[SessionAttemptHandle]:
         return CodexSessionStore(log_dir=default_log_dir()).prepare_attempt(
             session_home=session_home,
             project_dir=project_dir,

@@ -15,8 +15,8 @@ from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
     CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION,
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
-    CookSessionHandle,
     ResumeSpec,
+    SessionAttemptHandle,
     atomic_write,
     build_agent_env,
 )
@@ -38,7 +38,7 @@ class ClaudeCookSupportMixin:
     def recover_cook_history(self) -> None:
         return None
 
-    def cook_session_context(
+    def session_attempt_context(
         self,
         *,
         session_home: Path,
@@ -47,10 +47,10 @@ class ClaudeCookSupportMixin:
         attempt: int,
         current_resume_spec: ResumeSpec,
         ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
-    ) -> AbstractContextManager[CookSessionHandle]:
+    ) -> AbstractContextManager[SessionAttemptHandle]:
         del session_home, project_dir, launch_id, attempt, current_resume_spec, ceiling_seconds
         return nullcontext(
-            CookSessionHandle(
+            SessionAttemptHandle(
                 view_id="",
                 pass_fds=(),
                 _record_spawn=_ignore_child_identity,

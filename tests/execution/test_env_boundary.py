@@ -303,13 +303,13 @@ def test_orchestrator_session_required_env_hygiene_coverage() -> None:
 def test_codex_cook_reserved_state_never_crosses_into_headless_children() -> None:
     from autoskillit.core import (
         AUTOSKILLIT_PRIVATE_ENV_VARS,
-        CODEX_COOK_RESERVED_ENV_VARS,
+        CODEX_RESERVED_HOME_ENV_VARS,
         CODEX_STARTUP_TRACE_ENV_VAR,
     )
 
     assert {
         CODEX_STARTUP_TRACE_ENV_VAR,
-        *CODEX_COOK_RESERVED_ENV_VARS,
+        *CODEX_RESERVED_HOME_ENV_VARS,
     } <= AUTOSKILLIT_PRIVATE_ENV_VARS
 
 

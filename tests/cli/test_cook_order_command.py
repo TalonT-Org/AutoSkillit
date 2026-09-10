@@ -484,7 +484,7 @@ class TestCLIOrderCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """order() produces a valid command for each registered backend."""
-        from autoskillit.core import CookSessionHandle
+        from autoskillit.core import SessionAttemptHandle
         from autoskillit.execution.backends import get_backend as _real_get_backend
         from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
@@ -529,9 +529,9 @@ class TestCLIOrderCommand:
         monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda *_: [])
         monkeypatch.setattr(
             CodexBackend,
-            "cook_session_context",
+            "session_attempt_context",
             lambda _self, **_kwargs: nullcontext(
-                CookSessionHandle(
+                SessionAttemptHandle(
                     view_id="test-view",
                     pass_fds=(),
                     _record_spawn=lambda _pid, _pgid: None,

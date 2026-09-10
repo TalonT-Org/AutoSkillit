@@ -110,11 +110,11 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     from autoskillit.core import (
         CmdSpec,
         CodingAgentBackend,
-        CookSessionHandle,
         ExecutableLaunchBinding,
         ExecutionIdentity,
         PreLaunchReadiness,
         ResumeSpec,
+        SessionAttemptHandle,
     )
 
     layout = inspect.signature(CodingAgentBackend.validate_session_layout)
@@ -153,7 +153,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     assert tuple(recovery.parameters) == ("self",)
     assert typing.get_type_hints(CodingAgentBackend.recover_cook_history) == {"return": type(None)}
 
-    context = inspect.signature(CodingAgentBackend.cook_session_context)
+    context = inspect.signature(CodingAgentBackend.session_attempt_context)
     assert tuple(context.parameters) == (
         "self",
         "session_home",
@@ -166,7 +166,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     for name in tuple(context.parameters)[1:]:
         assert context.parameters[name].kind is inspect.Parameter.KEYWORD_ONLY
     assert context.parameters["ceiling_seconds"].default == 172800.0
-    hints = typing.get_type_hints(CodingAgentBackend.cook_session_context)
+    hints = typing.get_type_hints(CodingAgentBackend.session_attempt_context)
     assert hints == {
         "session_home": Path,
         "project_dir": Path,
@@ -174,7 +174,7 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
         "attempt": int,
         "current_resume_spec": ResumeSpec,
         "ceiling_seconds": float,
-        "return": AbstractContextManager[CookSessionHandle],
+        "return": AbstractContextManager[SessionAttemptHandle],
     }
 
     identity = inspect.signature(CodingAgentBackend.resolve_effective_execution_identity)
@@ -288,6 +288,7 @@ def test_stub_class_satisfies_coding_agent_backend():
             prompt: str,
             output_format: OutputFormat = OutputFormat.JSON,
             plugin_binding: PluginLaunchBinding | None = None,
+            session_home: str | None = None,
             env_extras: Mapping[str, str] | None = None,
         ) -> CmdSpec: ...
 
@@ -344,7 +345,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         def recover_cook_history(self) -> None:
             return None
 
-        def cook_session_context(
+        def session_attempt_context(
             self,
             *,
             session_home: Path,
@@ -356,10 +357,10 @@ def test_stub_class_satisfies_coding_agent_backend():
             del project_dir
             from contextlib import nullcontext
 
-            from autoskillit.core import CookSessionHandle
+            from autoskillit.core import SessionAttemptHandle
 
             return nullcontext(
-                CookSessionHandle(
+                SessionAttemptHandle(
                     view_id=f"{launch_id}-{attempt}",
                     pass_fds=(),
                     _record_spawn=lambda _pid, _pgid: None,

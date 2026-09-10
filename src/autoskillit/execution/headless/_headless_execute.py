@@ -69,7 +69,6 @@ from autoskillit.execution.headless._headless_helpers import (
 )
 from autoskillit.execution.headless._headless_launch import (
     _attempt_contract_nudge,
-    _bind_effective_execution_identity,
     _run_headless_attempt,
 )
 from autoskillit.execution.headless._headless_model_evidence import (
@@ -167,23 +166,9 @@ async def _execute_claude_headless(
     cfg = ctx.config.run_skill
     # Share the spec-builder authority for adapter digest and inactive-team policy.
     force_inactive_agent_teams = ctx.config.agent_backend.force_inactive_agent_teams
-    if idle_output_timeout is not None:
-        _raw_idle = idle_output_timeout
-    else:
-        env_idle = os.environ.get("AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT")
-        if env_idle is not None:
-            try:
-                _raw_idle = float(env_idle)
-            except ValueError:
-                logger.warning(
-                    "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT: invalid float — falling back to config",
-                    env_value=env_idle,
-                    fallback=cfg.idle_output_timeout,
-                )
-                _raw_idle = float(cfg.idle_output_timeout)
-        else:
-            _raw_idle = float(cfg.idle_output_timeout)
-    base_effective_idle: float | None = _raw_idle if _raw_idle > 0.0 else None
+    base_effective_idle = _diag._resolve_idle_output_timeout(
+        idle_output_timeout, cfg.idle_output_timeout
+    )
 
     current_provider_name: str = provider_name
     current_provider_extras: dict[str, str] = dict(provider_extras or {})
@@ -312,6 +297,7 @@ async def _execute_claude_headless(
             on_launch_resolved(contract)
 
     sink = LocalOtlpSink.start(ctx.config.linux_tracing.log_dir)
+    physical_attempt = 0
     sink_env = dict(sink.env)
     current_provider_extras.update(sink_env)
     try:
@@ -325,6 +311,7 @@ async def _execute_claude_headless(
                 if not launch_logged:
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
+                physical_attempt += 1
                 _result, spec = await _run_headless_attempt(
                     build_spec,
                     runner=runner,
@@ -358,6 +345,7 @@ async def _execute_claude_headless(
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
                     on_launch_resolved=observe_launch,
                     managed_attempt_id=managed_attempt_id,
+                    attempt=physical_attempt,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     **lineage_callbacks.launch_kwargs,
                 )
@@ -439,6 +427,7 @@ async def _execute_claude_headless(
                 in (RetryReason.CONTRACT_RECOVERY, RetryReason.EARLY_STOP)
             ):
                 try:
+                    physical_attempt += 1
                     nudge_success = await _attempt_contract_nudge(
                         skill_result,
                         result,
@@ -461,6 +450,8 @@ async def _execute_claude_headless(
                         on_launch_resolved=observe_launch,
                         on_session_id_resolved=capture_resolved_session_id,
                         natural_exit_grace_seconds=natural_exit_grace_seconds,
+                        attempt=physical_attempt,
+                        ceiling_seconds=ceiling_seconds,
                         **lineage_callbacks.attempt_kwargs,
                     )
                 except InfrastructureFaultError:
@@ -516,7 +507,7 @@ async def _execute_claude_headless(
             break
 
         assert skill_result is not None
-        skill_result = _bind_effective_execution_identity(
+        skill_result = _diag._bind_effective_execution_identity(
             skill_result,
             _step_backend,
             execution_identity,

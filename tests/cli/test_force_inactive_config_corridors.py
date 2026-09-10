@@ -23,9 +23,9 @@ from autoskillit.core import (
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
-    CookSessionHandle,
     ManagedSessionHome,
     PreLaunchReadiness,
+    SessionAttemptHandle,
     ValidatedAddDir,
 )
 
@@ -73,7 +73,7 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             captured_kwargs.append(kwargs)
             return CmdSpec(cmd=("codex",), env={})
 
-        def cook_session_context(
+        def session_attempt_context(
             self,
             *,
             session_home: Path,
@@ -87,7 +87,7 @@ def _make_non_probe_backend() -> tuple[object, list[dict[str, object]]]:
             del session_home, project_dir, current_resume_spec, ceiling_seconds
             del systemd_scope_enabled
             return nullcontext(
-                CookSessionHandle(
+                SessionAttemptHandle(
                     view_id=f"{launch_id}-{attempt}",
                     pass_fds=(),
                     _record_spawn=lambda _pid, _pgid: None,

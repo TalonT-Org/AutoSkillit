@@ -29,7 +29,7 @@ def test_cook_lifecycle_contracts_are_explicitly_exported_by_stub() -> None:
         for alias in node.names
     }
     assert {
-        "CookSessionHandle",
+        "SessionAttemptHandle",
         "HookTrustPolicy",
         "ManagedSessionHome",
         "SessionSummary",

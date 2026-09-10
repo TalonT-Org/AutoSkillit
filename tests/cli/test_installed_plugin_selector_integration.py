@@ -25,11 +25,11 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
-    CookSessionHandle,
     ManagedSessionHome,
     PluginLaunchBinding,
     PluginLoadMode,
     PreLaunchReadiness,
+    SessionAttemptHandle,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
     ValidatedAddDir,
@@ -131,7 +131,7 @@ class _RecordingBackend:
         del spec
         return []
 
-    def cook_session_context(
+    def session_attempt_context(
         self,
         *,
         session_home: Path,
@@ -145,7 +145,7 @@ class _RecordingBackend:
         del session_home, project_dir, current_resume_spec, ceiling_seconds
         del systemd_scope_enabled
         return nullcontext(
-            CookSessionHandle(
+            SessionAttemptHandle(
                 view_id=f"{launch_id}-{attempt}",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,

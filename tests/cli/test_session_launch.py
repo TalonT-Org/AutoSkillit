@@ -109,7 +109,7 @@ class _BackendLifecycleStub:
     def recover_cook_history(self) -> None:
         return None
 
-    def cook_session_context(
+    def session_attempt_context(
         self,
         *,
         session_home: Path,
@@ -121,10 +121,10 @@ class _BackendLifecycleStub:
         systemd_scope_enabled: bool = False,
     ):
         del project_dir, ceiling_seconds, systemd_scope_enabled
-        from autoskillit.core import CookSessionHandle
+        from autoskillit.core import SessionAttemptHandle
 
         return nullcontext(
-            CookSessionHandle(
+            SessionAttemptHandle(
                 view_id=f"{launch_id}-{attempt}",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
@@ -1944,12 +1944,12 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     from autoskillit.core import (
         CmdSpec,
         CompiledSessionSkillCatalogAuthority,
-        CookSessionHandle,
         InfraExitCategory,
         ManagedSessionHome,
         NamedResume,
         NoResume,
         PluginLoadMode,
+        SessionAttemptHandle,
         SkillExecutionRole,
         SkillProjectionContextAuthority,
         SkillUnavailabilityPayload,
@@ -2045,7 +2045,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
             return []
 
         @contextmanager
-        def cook_session_context(
+        def session_attempt_context(
             self,
             *,
             session_home: Path,
@@ -2068,7 +2068,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
                 )
             )
             try:
-                yield CookSessionHandle(
+                yield SessionAttemptHandle(
                     view_id=f"{launch_id}-{attempt}",
                     pass_fds=(11,),
                     _record_spawn=lambda pid, pgid: events.append(("spawn", attempt, pid, pgid)),

@@ -306,6 +306,19 @@ def test_session_manager_materializes_exact_catalog(tmp_path: Path) -> None:
     _assert_agent_safe(projected.read_text())
 
 
+def test_snapshot_restore_preserves_explicit_home_ownership_contract() -> None:
+    from typing import get_type_hints
+
+    from autoskillit.core import SkillProjectionContextAuthority, ValidatedAddDir
+
+    assert get_type_hints(SessionSkillManager.restore_snapshot_session) == {
+        "session_id": str,
+        "snapshot_dir": Path,
+        "projection_context": SkillProjectionContextAuthority,
+        "return": ValidatedAddDir,
+    }
+
+
 def test_skill_write_failure_rolls_back_unpublished_codex_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from autoskillit.core import SESSION_ADD_DIR_SUBDIR
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _write_codex_catalog(session_home: Path, *, skill_name: str = "some-skill") -> Path:
+    catalog = session_home / SESSION_ADD_DIR_SUBDIR / "skills"
+    skill_dir = catalog / skill_name
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# Skill\n")
+    return catalog
 
 
 class TestClaudeCodeLayoutValidation:
@@ -70,6 +80,14 @@ class TestClaudeCodeLayoutValidation:
 
 
 class TestCodexLayoutValidation:
+    def test_codex_catalog_relative_path(self):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        assert SESSION_ADD_DIR_SUBDIR == "add-dir"
+        assert str(Path(SESSION_ADD_DIR_SUBDIR) / CodexBackend().conventions.skills_subdir) == (
+            "add-dir/skills"
+        )
+
     def test_codex_conventions_expose_the_injected_profile_skills_source(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
@@ -83,9 +101,8 @@ class TestCodexLayoutValidation:
     def test_codex_valid_layout_returns_empty(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
-        skills_dir.mkdir(parents=True)
-        (skills_dir / "some-skill").mkdir()
+        _write_codex_catalog(tmp_path)
+        (tmp_path / "skills").symlink_to("add-dir/skills")
         config_content = "[mcp_servers.autoskillit]\nname = 'autoskillit'\n"
         (tmp_path / "config.toml").write_text(config_content)
         auth_target = tmp_path / "auth-source.json"
@@ -102,13 +119,67 @@ class TestCodexLayoutValidation:
         errors = backend.validate_session_layout(tmp_path, project_dir=tmp_path)
         assert errors == []
 
+    def test_codex_layout_rejects_real_discovery_directory(self, tmp_path):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        catalog = _write_codex_catalog(tmp_path)
+        discovery = tmp_path / "skills"
+        discovery.mkdir()
+        (discovery / "some-skill").symlink_to(catalog / "some-skill")
+
+        errors = CodexBackend().validate_session_layout(tmp_path)
+
+        assert any("skills must be a symlink" in error for error in errors)
+
+    def test_codex_layout_rejects_missing_discovery_alias(self, tmp_path):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        _write_codex_catalog(tmp_path)
+
+        errors = CodexBackend().validate_session_layout(tmp_path)
+
+        assert any("skills must be a symlink" in error for error in errors)
+
+    def test_codex_layout_rejects_wrong_discovery_alias(self, tmp_path):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        catalog = _write_codex_catalog(tmp_path)
+        (tmp_path / "skills").symlink_to(catalog)
+
+        errors = CodexBackend().validate_session_layout(tmp_path)
+
+        assert any("add-dir/skills" in error for error in errors)
+
+    def test_codex_layout_rejects_catalog_with_only_native_system_skills(self, tmp_path):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        native_skill = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills" / ".system" / "native"
+        native_skill.mkdir(parents=True)
+        (native_skill / "SKILL.md").write_text("# Native Skill\n")
+        (tmp_path / "skills").symlink_to("add-dir/skills")
+
+        errors = CodexBackend().validate_session_layout(tmp_path)
+
+        assert any("catalog has no managed skills" in error for error in errors)
+
+    def test_codex_layout_rejects_symlinked_managed_catalog_entry(self, tmp_path):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        catalog = _write_codex_catalog(tmp_path)
+        (catalog / "linked-skill").symlink_to(catalog / "some-skill")
+        (tmp_path / "skills").symlink_to("add-dir/skills")
+
+        errors = CodexBackend().validate_session_layout(tmp_path)
+
+        assert any("real skill directories" in error for error in errors)
+
     def test_codex_missing_skills_dir_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
         backend = CodexBackend()
         errors = backend.validate_session_layout(tmp_path)
         assert len(errors) > 0
-        assert any("does not exist" in e for e in errors)
+        assert any("catalog" in e for e in errors)
 
     def test_codex_empty_skills_dir_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
@@ -119,7 +190,7 @@ class TestCodexLayoutValidation:
         backend = CodexBackend()
         errors = backend.validate_session_layout(tmp_path)
         assert len(errors) > 0
-        assert any("empty" in e for e in errors)
+        assert any("catalog has no managed skills" in e for e in errors)
 
     def test_codex_missing_config_toml_returns_error(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
@@ -187,9 +258,8 @@ class TestCodexLayoutValidation:
 
         from autoskillit.execution.backends.codex import CodexBackend
 
-        skills_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
-        skills_dir.mkdir(parents=True)
-        (skills_dir / "some-skill").mkdir()
+        _write_codex_catalog(tmp_path)
+        (tmp_path / "skills").symlink_to("add-dir/skills")
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         for name in ("sessions", "archived_sessions"):
             target = tmp_path / f".inert-{name}"
@@ -245,13 +315,13 @@ class TestCodexLayoutValidation:
     def test_codex_profile_only_discovery_root_is_a_valid_session_layout(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 
-        staging_skills = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills"
-        staging_skills.mkdir(parents=True)
-        profile_skill = tmp_path / "skills" / "my-profile-skill"
-        profile_skill.mkdir(parents=True)
+        profile_skill = (
+            _write_codex_catalog(tmp_path, skill_name="my-profile-skill") / "my-profile-skill"
+        )
         (profile_skill / "SKILL.md").write_text(
             "---\nname: my-profile-skill\ndescription: Profile skill.\n---\n# MY PROFILE SKILL\n"
         )
+        (tmp_path / "skills").symlink_to("add-dir/skills")
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         for name in ("sessions", "archived_sessions"):
             target = tmp_path / f".inert-{name}"

@@ -207,7 +207,7 @@ Three paths remain separate throughout the launch:
 The backend builds one immutable `CmdSpec`, including profile, trust, root, and
 `sqlite_home` overrides. Cook replaces only its `cwd` with the canonical
 project path and passes that exact instance to
-`validate_interactive_invocation()`, `cook_session_context()`, and the child.
+`validate_interactive_invocation()`, `session_attempt_context()`, and the child.
 Ambient and profile-supplied `CODEX_HOME` or `CODEX_SQLITE_HOME` values cannot
 override the generated home.
 

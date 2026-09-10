@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CmdSpec,
     CodingAgentBackend,
-    ExecutionIdentity,
     InfrastructureFaultError,
     LaunchPreparation,
     LaunchResolver,
@@ -41,6 +40,7 @@ from autoskillit.execution.headless._managed import (
     _headless_plugin_load_mode,
     _ManagedLineageObserver,
 )
+from autoskillit.execution.headless._managed._attempt import _generated_home_attempt
 from autoskillit.execution.headless._managed._launch_adapter import (
     _binding_identity,
     _food_truck_launch_spec_builder,
@@ -56,27 +56,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _NUDGE_TIMEOUT: float = 60.0
-
-
-def _bind_effective_execution_identity(
-    skill_result: SkillResult,
-    backend: CodingAgentBackend,
-    requested: ExecutionIdentity,
-) -> SkillResult:
-    effective = requested
-    if requested.children and skill_result.session_id:
-        try:
-            effective = backend.resolve_effective_execution_identity(
-                requested=requested,
-                session_id=skill_result.session_id,
-            )
-        except (OSError, ValueError):
-            logger.warning(
-                "effective_execution_identity_resolution_failed",
-                session_id=skill_result.session_id,
-                exc_info=True,
-            )
-    return dataclasses.replace(skill_result, execution_identity=effective)
 
 
 def _report_plugin_binding_close_failure(
@@ -142,6 +121,7 @@ async def _run_headless_attempt(
     on_spec_built: Callable[[CmdSpec], None] | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
+    attempt: int = 1,
 ) -> tuple[SubprocessResult, CmdSpec]:
     """Build and execute one provider attempt under one owned plugin binding."""
     with _plugin_launch_binding(
@@ -179,45 +159,63 @@ async def _run_headless_attempt(
             adapter.secret_environment,
             inherited_fds=adapter.inherited_fds,
         )
-        if on_spec_built is not None:
-            on_spec_built(spec)
         effective_idle = idle_output_timeout
         if spec.process_idle_timeout_ms > 0:
             spec_idle = spec.process_idle_timeout_ms / 1000.0
             if effective_idle is None or spec_idle < effective_idle:
                 effective_idle = spec_idle
-        result = await runner(
-            list(spec.cmd),
-            cwd=Path(spec.cwd),
-            timeout=timeout,
-            env=spec.env,
-            pty_mode=(pty_override if pty_override is not None else _resolve_pty_mode(backend)),
-            session_log_dir=_resolve_session_log_dir(spec.cwd, backend),
-            completion_marker=completion_marker,
-            stale_threshold=stale_threshold,
-            completion_drain_timeout=completion_drain_timeout,
-            natural_exit_grace_seconds=natural_exit_grace_seconds,
-            linux_tracing_config=linux_tracing_config,
-            idle_output_timeout=effective_idle,
-            max_suppression_seconds=max_suppression_seconds,
-            child_deferral_ceiling=child_deferral_ceiling,
-            on_pid_resolved=on_spawn,
-            enable_deadline_extension=enable_deadline_extension,
-            max_extension_seconds=max_extension_seconds,
+        with _generated_home_attempt(
+            backend,
+            spec,
+            plugin_load_mode=plugin_load_mode,
+            managed_attempt_id=managed_attempt_id,
+            attempt=attempt,
+            resume_session_id=backend_resume_session_id,
             ceiling_seconds=ceiling_seconds,
-            systemd_scope_enabled=systemd_scope_enabled,
-            marker_dir=marker_dir,
-            session_id=session_id,
-            on_session_id_resolved=on_session_id_resolved,
-            stream_parser=stream_parser,
-            completion_record_types=backend.capabilities.completion_record_types,
-            session_record_types=backend.capabilities.session_record_types,
-            inspector_callback=None,
-            workload_basenames=backend.capabilities.process_name_aliases or None,
-            pass_fds=spec.inherited_fds,
-            backend_resume_session_id=backend_resume_session_id,
-            lifecycle_observation_enabled=lifecycle_observation_enabled,
-        )
+        ) as handle:
+            if handle is not None:
+                spec = dataclasses.replace(
+                    spec,
+                    inherited_fds=tuple(dict.fromkeys((*spec.inherited_fds, *handle.pass_fds))),
+                )
+            if on_spec_built is not None:
+                on_spec_built(spec)
+            result = await runner(
+                list(spec.cmd),
+                cwd=Path(spec.cwd),
+                timeout=timeout,
+                env=spec.env,
+                pty_mode=(
+                    pty_override if pty_override is not None else _resolve_pty_mode(backend)
+                ),
+                session_log_dir=_resolve_session_log_dir(spec.cwd, backend),
+                completion_marker=completion_marker,
+                stale_threshold=stale_threshold,
+                completion_drain_timeout=completion_drain_timeout,
+                natural_exit_grace_seconds=natural_exit_grace_seconds,
+                linux_tracing_config=linux_tracing_config,
+                idle_output_timeout=effective_idle,
+                max_suppression_seconds=max_suppression_seconds,
+                child_deferral_ceiling=child_deferral_ceiling,
+                on_pid_resolved=on_spawn,
+                on_process_spawned=handle.record_spawn if handle is not None else None,
+                on_process_reaped=handle.record_reaped if handle is not None else None,
+                enable_deadline_extension=enable_deadline_extension,
+                max_extension_seconds=max_extension_seconds,
+                ceiling_seconds=ceiling_seconds,
+                systemd_scope_enabled=systemd_scope_enabled,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                on_session_id_resolved=on_session_id_resolved,
+                stream_parser=stream_parser,
+                completion_record_types=backend.capabilities.completion_record_types,
+                session_record_types=backend.capabilities.session_record_types,
+                inspector_callback=None,
+                workload_basenames=backend.capabilities.process_name_aliases or None,
+                pass_fds=spec.inherited_fds,
+                backend_resume_session_id=backend_resume_session_id,
+                lifecycle_observation_enabled=lifecycle_observation_enabled,
+            )
         return result, spec
 
 
@@ -246,6 +244,8 @@ async def _attempt_contract_nudge(
     on_session_id_resolved: Callable[[str], None] | None = None,
     force_inactive_agent_teams: bool = False,
     natural_exit_grace_seconds: float,
+    attempt: int = 2,
+    ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker."""
     if backend is None or not backend.capabilities.session_resume_capable:
@@ -299,12 +299,6 @@ async def _attempt_contract_nudge(
         patterns_to_check = list(expected_output_patterns)
 
     effective_extras = dict(provider_extras or {})
-    if (
-        plugin_load_mode is PluginLoadMode.GENERATED_HOME
-        and session_env is not None
-        and (generated_home := session_env.get("CODEX_HOME"))
-    ):
-        effective_extras["CODEX_HOME"] = generated_home
     if plugin_load_mode.consumes_artifact and plugin_authority is None:
         logger.warning("nudge_skip_missing_plugin_authority")
         return None
@@ -345,6 +339,7 @@ async def _attempt_contract_nudge(
                     skill_session=True,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     project_root=cwd,
+                    session_home=(session_env.get("CODEX_HOME") if session_env else None),
                 )
 
             plugin_identity = _binding_identity(binding)
@@ -386,17 +381,36 @@ async def _attempt_contract_nudge(
                 adapter.secret_environment,
                 inherited_fds=adapter.inherited_fds,
             )
-            nudge_result = await runner(
-                list(spec.cmd),
-                cwd=Path(spec.cwd),
-                timeout=_NUDGE_TIMEOUT,
-                env=spec.env,
-                pty_mode=(
-                    pty_override if pty_override is not None else _resolve_pty_mode(backend)
-                ),
-                pass_fds=spec.inherited_fds,
-                natural_exit_grace_seconds=natural_exit_grace_seconds,
-            )
+            with _generated_home_attempt(
+                backend,
+                spec,
+                plugin_load_mode=plugin_load_mode,
+                managed_attempt_id=managed_attempt_id,
+                attempt=attempt,
+                resume_session_id=skill_result.session_id,
+                ceiling_seconds=ceiling_seconds,
+            ) as handle:
+                if handle is not None:
+                    spec = dataclasses.replace(
+                        spec,
+                        inherited_fds=tuple(
+                            dict.fromkeys((*spec.inherited_fds, *handle.pass_fds))
+                        ),
+                    )
+                nudge_result = await runner(
+                    list(spec.cmd),
+                    cwd=Path(spec.cwd),
+                    timeout=_NUDGE_TIMEOUT,
+                    env=spec.env,
+                    pty_mode=(
+                        pty_override if pty_override is not None else _resolve_pty_mode(backend)
+                    ),
+                    pass_fds=spec.inherited_fds,
+                    on_process_spawned=handle.record_spawn if handle is not None else None,
+                    on_process_reaped=handle.record_reaped if handle is not None else None,
+                    ceiling_seconds=ceiling_seconds,
+                    natural_exit_grace_seconds=natural_exit_grace_seconds,
+                )
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)
         return None

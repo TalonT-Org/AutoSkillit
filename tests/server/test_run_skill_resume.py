@@ -569,6 +569,7 @@ async def test_resume_rejects_unbound_contract_before_downstream_work(
 async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_reads(
     tool_ctx_kitchen_open, monkeypatch, tmp_path
 ) -> None:
+    from autoskillit.core import ValidatedAddDir
     from tests.conftest import bind_test_skill_resume_contract
     from tests.fakes import InMemoryHeadlessExecutor
 
@@ -596,6 +597,14 @@ async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_rea
         cwd=tmp_path,
         resolved_command="/implement original",
     )
+    stored = tool_ctx_kitchen_open.skill_session_contract_store.load("source-isolated")
+    restored_home = tmp_path / "restored-home"
+    restored_home.mkdir()
+    restored_add_dir = ValidatedAddDir(
+        path=str(stored.snapshot_dir),
+        session_home=str(restored_home),
+    )
+    manager.restore_snapshot_session.return_value = restored_add_dir
     current_source = (
         tool_ctx_kitchen_open.project_dir / ".claude" / "skills" / "implement" / "SKILL.md"
     )
@@ -616,9 +625,195 @@ async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_rea
     write_resolver.assert_not_called()
     contract_resolver.assert_not_called()
     manager.materialize_invocation.assert_not_called()
+    restore_args = manager.restore_snapshot_session.call_args.args
+    assert restore_args[0].startswith("headless-")
+    assert restore_args[0] != "source-isolated"
+    assert restore_args[1] == stored.snapshot_dir
     assert len(executor.calls) == 1
+    assert executor.calls[0].add_dirs == (restored_add_dir,)
+    manager.cleanup_session.assert_called_once_with(restore_args[0])
     closure_write_resolver.assert_called_once()
     assert executor.calls[0].write_watch_dirs == (closure_write_dir,)
+
+
+@pytest.mark.anyio
+async def test_resume_requires_session_skill_manager(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.session_skill_manager = None
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id="manager-unavailable",
+        cwd=tmp_path,
+    )
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(
+        await run_skill(
+            "/implement",
+            str(tmp_path),
+            resume_session_id="manager-unavailable",
+        )
+    )
+
+    assert result["success"] is False
+    assert "session skill manager is unavailable" in result["result"]
+    assert executor.calls == []
+
+
+@pytest.mark.anyio
+async def test_resume_restoration_failure_cleans_fresh_physical_home(
+    tool_ctx_kitchen_open, monkeypatch, tmp_path: Path
+) -> None:
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    executor = InMemoryHeadlessExecutor()
+    manager = MagicMock()
+    manager.restore_snapshot_session.side_effect = RuntimeError("restore failed")
+    tool_ctx_kitchen_open.executor = executor
+    tool_ctx_kitchen_open.session_skill_manager = manager
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id="restore-failure",
+        cwd=tmp_path,
+    )
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+
+    result = json.loads(
+        await run_skill(
+            "/implement",
+            str(tmp_path),
+            resume_session_id="restore-failure",
+        )
+    )
+
+    assert result["success"] is False
+    restore_id = manager.restore_snapshot_session.call_args.args[0]
+    assert restore_id.startswith("headless-")
+    assert restore_id != "restore-failure"
+    manager.cleanup_session.assert_called_once_with(restore_id)
+    assert executor.calls == []
+
+
+@pytest.mark.parametrize("executor_raises", [False, True], ids=("success", "exception"))
+@pytest.mark.anyio
+async def test_codex_resume_uses_restored_home_for_catalog_and_launch_env(
+    tool_ctx_kitchen_open,
+    monkeypatch,
+    tmp_path: Path,
+    executor_raises: bool,
+) -> None:
+    import hashlib
+
+    from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, SkillResult
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.server.tools._execution_helpers import rehydrate_skill_invocation
+    from autoskillit.workspace import (
+        DefaultSessionSkillManager,
+        SkillsDirectoryProvider,
+        build_skill_projection_binding,
+        project_agent_skill_document,
+    )
+    from tests.conftest import bind_test_skill_resume_contract
+    from tests.fakes import InMemoryHeadlessExecutor
+
+    source_home = tmp_path / "source-codex-home"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n',
+        encoding="utf-8",
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = DefaultSessionSkillManager(
+        SkillsDirectoryProvider(),
+        ephemeral_root=tmp_path / "ephemeral-sessions",
+        persistent_roots={"codex": tmp_path / "persistent-sessions"},
+    )
+    executor = InMemoryHeadlessExecutor()
+    original_run = executor.run
+    observed: dict[str, object] = {}
+    tool_ctx_kitchen_open.backend = backend
+    tool_ctx_kitchen_open.session_skill_manager = manager
+    tool_ctx_kitchen_open.executor = executor
+    bind_test_skill_resume_contract(
+        tool_ctx_kitchen_open,
+        session_id="codex-restored",
+        cwd=tmp_path,
+    )
+    contract_store = tool_ctx_kitchen_open.skill_session_contract_store
+    initial_stored = contract_store.load("codex-restored")
+    invocation, projection_context = rehydrate_skill_invocation(initial_stored.contract, backend)
+    projected_binding = build_skill_projection_binding(projection_context)
+    projected_document = project_agent_skill_document(invocation.root, projection_context)
+    assert projected_document.projected_digest == projected_binding.projected_digests["implement"]
+    projected_contract = replace(
+        initial_stored.contract,
+        projected_digests=projected_binding.projected_digests,
+    )
+    snapshot_path = (backend.conventions.skills_subdir / "implement" / "SKILL.md").as_posix()
+    contract_store.delete("codex-restored")
+    correlation_key = contract_store.create_provisional(
+        contract=projected_contract,
+        snapshot={snapshot_path: projected_document.content},
+    )
+    contract_store.finalize(correlation_key, "codex-restored")
+    stored = contract_store.load("codex-restored")
+
+    async def _inspect_restored_launch(
+        skill_command: str, cwd: str, **kwargs: object
+    ) -> SkillResult:
+        add_dir = kwargs["add_dirs"][0]
+        assert add_dir.session_home
+        session_home = Path(add_dir.session_home)
+        catalog_skill = Path(add_dir.path) / "skills" / "implement" / "SKILL.md"
+        assert catalog_skill.read_text(encoding="utf-8") == projected_document.content
+        assert (
+            hashlib.sha256(catalog_skill.read_bytes()).hexdigest()
+            == stored.contract.projected_digests["implement"]
+        )
+        assert kwargs["capability_contract"].projected_digests == stored.contract.projected_digests
+        spec = backend.build_skill_session_cmd(
+            skill_command,
+            cwd,
+            add_dirs=kwargs["add_dirs"],
+            resume_session_id=kwargs["resume_session_id"],
+        )
+        assert {key: spec.env[key] for key in CODEX_RESERVED_HOME_ENV_VARS} == {
+            key: str(session_home) for key in CODEX_RESERVED_HOME_ENV_VARS
+        }
+        observed["session_home"] = session_home
+        if executor_raises:
+            raise RuntimeError("executor failure after restored launch preparation")
+        return await original_run(skill_command, cwd, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(executor, "run", _inspect_restored_launch)
+    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(
+        tool_ctx_kitchen_open.launch_resolver,
+        "backend_for_authority",
+        lambda _authority: backend,
+    )
+
+    result = json.loads(
+        await run_skill(
+            "/implement",
+            str(tmp_path),
+            resume_session_id="codex-restored",
+        )
+    )
+
+    assert result["success"] == (not executor_raises), result.get("result")
+    assert "session_home" in observed, result.get("result")
+    restored_home = observed["session_home"]
+    assert isinstance(restored_home, Path)
+    assert not restored_home.exists()
 
 
 @pytest.mark.parametrize(

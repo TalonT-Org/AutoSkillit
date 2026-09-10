@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -53,20 +54,6 @@ def _prepare_codex_profile_source(tmp_path: Path) -> Path:
         'cli_auth_credentials_store = "keyring"\n', encoding="utf-8"
     )
     return source_home
-
-
-def test_generated_home_skill_removal_rejects_non_child_path(tmp_path: Path) -> None:
-    discovery_root = tmp_path / "skills"
-    discovery_root.mkdir()
-    outside = tmp_path / "outside"
-    outside.mkdir()
-
-    with pytest.raises(SkillContractError, match="one exact child entry"):
-        session_skill_materialization._remove_generated_home_skill_entry(
-            discovery_root, "../outside"
-        )
-
-    assert outside.is_dir()
 
 
 def test_codex_init_session_creates_skills_subdir(make_session_skill_manager, codex_env) -> None:
@@ -276,7 +263,7 @@ def test_materialization_rejects_multiple_explorer_binding_authorities_before_se
     assert "sid" not in manager._session_roots
 
 
-def test_codex_generated_home_links_projected_catalog_into_discovery_root(
+def test_codex_generated_home_skills_is_single_alias_to_catalog(
     make_session_skill_manager,
     codex_env,
 ) -> None:
@@ -289,12 +276,14 @@ def test_codex_generated_home_links_projected_catalog_into_discovery_root(
     )
 
     add_dir_path = Path(str(add_dir))
-    projected = add_dir_path / "skills" / "make-arch-diag"
-    discoverable = add_dir_path.parent / "skills" / "make-arch-diag"
+    catalog = add_dir_path / "skills"
+    discovery_root = add_dir_path.parent / "skills"
 
-    assert discoverable.is_symlink()
-    assert not discoverable.readlink().is_absolute()
-    assert discoverable.resolve() == projected.resolve()
+    assert discovery_root.is_symlink()
+    assert os.readlink(discovery_root) == "add-dir/skills"
+    assert discovery_root.resolve() == catalog.resolve()
+    assert (catalog / "make-arch-diag").is_dir()
+    assert not (catalog / "make-arch-diag").is_symlink()
 
 
 def test_codex_discovery_root_uses_admitted_profile_union_with_profile_precedence(
@@ -320,19 +309,43 @@ def test_codex_discovery_root_uses_admitted_profile_union_with_profile_precedenc
         backend=backend,
         names=frozenset({"make-arch-diag"}),
     ) as managed:
-        discovery_root = managed.generated_home / "skills"
-        staged_skill = Path(managed.skills_dir.path) / "skills" / "make-arch-diag"
-        profile_skill = discovery_root / "make-arch-diag"
+        catalog = Path(managed.skills_dir.path) / "skills"
+        profile_skill = catalog / "make-arch-diag"
 
-        assert {entry.name for entry in discovery_root.iterdir()} == {
+        assert {entry.name for entry in catalog.iterdir()} == {
             "make-arch-diag",
             "profile-only",
         }
         assert not profile_skill.is_symlink()
         assert "PROFILE_COPY_SENTINEL" in (profile_skill / "SKILL.md").read_text(encoding="utf-8")
-        assert "PROFILE_COPY_SENTINEL" not in (staged_skill / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
+
+
+def test_codex_session_home_has_exactly_one_managed_catalog(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    backend = CodexBackend(source_codex_home=_prepare_codex_profile_source(tmp_path))
+    manager = make_session_skill_manager()
+
+    with _managed(
+        manager,
+        "single-catalog",
+        backend=backend,
+        names=frozenset({"make-arch-diag"}),
+    ) as managed:
+        home = managed.generated_home
+        catalog = Path(managed.skills_dir.path) / "skills"
+        skill_catalogs = {
+            Path(directory).parent
+            for directory, _children, files in os.walk(home, followlinks=False)
+            if "SKILL.md" in files
+            and not any(part.startswith(".") for part in Path(directory).relative_to(home).parts)
+        }
+
+        assert skill_catalogs == {catalog}
+        assert not backend.validate_session_layout(home)
 
 
 def test_codex_init_session_delegates_to_setup_session_dir(
@@ -501,6 +514,30 @@ def test_invocation_only_roles_are_forwarded_and_reachability_checked(
         )
 
 
+def test_materialize_invocation_binds_add_dir_to_session_home(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.workspace import DefaultSkillResolver, SkillProjectionContext
+
+    manager = make_session_skill_manager()
+    backend = _make_codex_backend()
+    invocation = DefaultSkillResolver().resolve_invocation(
+        "make-arch-diag",
+        tmp_path,
+        SkillExecutionRole.SESSION,
+    )
+    result = manager.materialize_invocation(
+        "bound-invocation",
+        invocation,
+        SkillProjectionContext(cwd=tmp_path, invocation=invocation, backend=backend),
+    )
+
+    assert result.path == str(tmp_path / "codex-root" / "bound-invocation" / "add-dir")
+    assert result.session_home == str(tmp_path / "codex-root" / "bound-invocation")
+    assert manager.cleanup_session("bound-invocation") is True
+
+
 def test_codex_managed_orchestrator_materializes_exact_catalog(
     make_session_skill_manager,
     codex_env,
@@ -520,16 +557,52 @@ def test_codex_managed_orchestrator_materializes_exact_catalog(
         names=frozenset({"sous-chef"}),
         role=SkillExecutionRole.ORCHESTRATOR,
     ) as managed:
-        projected_root = Path(managed.skills_dir.path) / "skills"
+        catalog_root = Path(managed.skills_dir.path) / "skills"
         discovery_root = managed.generated_home / "skills"
-        assert {entry.name for entry in projected_root.iterdir()} == {
+        assert {entry.name for entry in catalog_root.iterdir()} == {
             member.name for member in catalog.skills
         }
+        assert discovery_root.is_symlink()
+        assert discovery_root.resolve() == catalog_root.resolve()
         for member in catalog.skills:
-            discovery = discovery_root / member.name
-            assert discovery.is_symlink()
-            assert (discovery.resolve() / "SKILL.md").is_file()
-            assert not (discovery.resolve() / "SKILL.md").is_symlink()
+            skill_dir = catalog_root / member.name
+            assert skill_dir.is_dir()
+            assert not skill_dir.is_symlink()
+            assert (skill_dir / "SKILL.md").is_file()
+
+
+def test_codex_orchestrator_profile_collision_raises_during_catalog_merge(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    profile_skills = source_home / "skills"
+    _write_profile_skill(profile_skills, "a-profile-only")
+    _write_profile_skill(profile_skills, "sous-chef")
+    catalog_root = tmp_path / "generated-home" / "add-dir" / "skills"
+    _write_profile_skill(catalog_root, "sous-chef")
+    backend = CodexBackend(source_codex_home=source_home)
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        EffectiveSkillCatalog((), execution_role=SkillExecutionRole.ORCHESTRATOR),
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
+
+    from autoskillit.workspace import materialize_profile_skills
+
+    with pytest.raises(SkillContractError, match=str(catalog_root / "sous-chef")):
+        materialize_profile_skills(
+            catalog_root,
+            profile_skills,
+            backend,
+            context,
+            finalized_native_roles=None,
+        )
+
+    assert {entry.name for entry in catalog_root.iterdir()} == {"sous-chef"}
 
 
 def test_codex_managed_orchestrator_rejects_discovery_collision(
@@ -537,28 +610,12 @@ def test_codex_managed_orchestrator_rejects_discovery_collision(
     codex_env,
 ) -> None:
     mgr = make_session_skill_manager()
-    catalog, _ = _catalog_context(
-        mgr,
-        backend=codex_env.backend,
-        names=frozenset({"sous-chef"}),
-        role=SkillExecutionRole.ORCHESTRATOR,
-    )
-    collision_name = catalog.skills[0].name
 
-    def setup_session_dir(
-        session_dir: Path,
-        *,
-        parent_sandbox_mode: str = "workspace-write",
-        agent_defs: tuple[object, ...] | None = None,
-        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-    ) -> None:
-        del agent_defs, parent_sandbox_mode, execution_role
-        collision = session_dir / "skills" / collision_name
-        collision.mkdir(parents=True)
-        (collision / "SKILL.md").write_text("profile collision")
+    def setup_session_dir(session_dir: Path, **_kwargs: object) -> None:
+        (session_dir / "skills").mkdir(parents=True)
 
     codex_env.backend.setup_session_dir.side_effect = setup_session_dir
-    with pytest.raises(SkillContractError, match="orchestrator skill discovery collision"):
+    with pytest.raises(SkillContractError, match="legacy discovery alias path already exists"):
         with _managed(
             mgr,
             "orchestrator",
@@ -584,6 +641,82 @@ def test_codex_init_session_returns_validated_add_dir(
     )
     assert isinstance(result, ValidatedAddDir)
     assert str(result).endswith("/sid/add-dir")
+
+
+def test_restore_snapshot_session_rebuilds_home_around_retained_closure(
+    make_session_skill_manager,
+    tmp_path: Path,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+    snapshot = tmp_path / "snapshot"
+    source_skill = _write_profile_skill(snapshot / "skills", "resumed-skill")
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION),
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
+
+    add_dir = manager.restore_snapshot_session("restored", snapshot, context)
+    home = Path(add_dir.session_home)
+    restored_skill = Path(add_dir.path) / "skills" / "resumed-skill" / "SKILL.md"
+
+    assert add_dir.path == str(home / "add-dir")
+    assert (home / "config.toml").is_file()
+    assert (home / "auth.json").is_symlink()
+    assert any((home / "agents").glob("*.toml"))
+    assert os.readlink(home / "skills") == "add-dir/skills"
+    assert restored_skill.read_bytes() == source_skill.read_bytes()
+    assert manager.cleanup_session("restored") is True
+    assert not home.exists()
+
+
+@pytest.mark.parametrize("symlink_shape", ("root", "catalog", "descendant"))
+def test_restore_snapshot_session_refuses_snapshot_symlinks(
+    make_session_skill_manager,
+    tmp_path: Path,
+    symlink_shape: str,
+) -> None:
+    from autoskillit.execution.backends.codex import CodexBackend
+    from autoskillit.workspace import EffectiveSkillCatalog, SkillsDirectoryProvider
+
+    source_home = _prepare_codex_profile_source(tmp_path)
+    backend = CodexBackend(source_codex_home=source_home)
+    manager = make_session_skill_manager()
+    snapshot = tmp_path / "snapshot"
+    _write_profile_skill(snapshot / "skills", "resumed-skill")
+    if symlink_shape == "root":
+        linked_snapshot = tmp_path / "linked-snapshot"
+        linked_snapshot.symlink_to(snapshot, target_is_directory=True)
+        snapshot = linked_snapshot
+    elif symlink_shape == "catalog":
+        catalog = snapshot / "skills"
+        linked_catalog = snapshot / "linked-skills"
+        catalog.rename(linked_catalog)
+        catalog.symlink_to(linked_catalog.name, target_is_directory=True)
+    else:
+        (snapshot / "skills" / "resumed-skill" / "nested-link").symlink_to("SKILL.md")
+
+    context = SkillsDirectoryProvider().catalog_projection_context(
+        EffectiveSkillCatalog((), execution_role=SkillExecutionRole.SESSION),
+        tmp_path,
+        backend=backend,
+        durable_scripts_root=pkg_root(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"restored skill snapshot (?:root must not be|contains) a symlink",
+    ):
+        manager.restore_snapshot_session(f"refuse-{symlink_shape}", snapshot, context)
+
+    assert f"refuse-{symlink_shape}" not in manager._session_roots  # noqa: SLF001
+    assert not (tmp_path / "codex-root" / f"refuse-{symlink_shape}").exists()
 
 
 def test_claude_backend_still_uses_dot_claude_layout(make_session_skill_manager) -> None:
@@ -666,16 +799,17 @@ def test_profile_skills_are_projected_from_the_declared_source(tmp_path: Path) -
         durable_scripts_root=pkg_root(),
     )
 
-    generated_home = tmp_path / "generated-home"
+    catalog_root = tmp_path / "generated-home" / "add-dir" / "skills"
+    catalog_root.mkdir(parents=True)
     compilation = materialize_profile_skills(
-        generated_home,
+        catalog_root,
         source_skills,
         backend,
         context,
         finalized_native_roles=None,
     )
 
-    target = generated_home / "skills" / "my-skill"
+    target = catalog_root / "my-skill"
     assert target.is_dir()
     assert not target.is_symlink()
     content = (target / "SKILL.md").read_text()
@@ -690,7 +824,7 @@ def test_profile_skills_are_projected_from_the_declared_source(tmp_path: Path) -
     assert "## Backend-adapted semantic execution contract" in content
     assert [skill.name for skill in compilation.catalog.skills] == ["my-skill"]
     assert compilation.unavailable == ()
-    assert not (generated_home / "skills" / "orchestrator-only").exists()
+    assert not (catalog_root / "orchestrator-only").exists()
 
 
 def test_profile_materialization_applies_semantic_and_finalized_native_role_admission(
@@ -733,8 +867,10 @@ def test_profile_materialization_applies_semantic_and_finalized_native_role_admi
         durable_scripts_root=pkg_root(),
     )
 
+    catalog_root = tmp_path / "generated-home" / "add-dir" / "skills"
+    catalog_root.mkdir(parents=True)
     compilation = materialize_profile_skills(
-        tmp_path / "generated-home",
+        catalog_root,
         source_skills,
         backend,
         context,
@@ -746,8 +882,8 @@ def test_profile_materialization_applies_semantic_and_finalized_native_role_admi
         "join-required": "required_join",
         "profile-helper": "child_spawn",
     }
-    assert not (tmp_path / "generated-home" / "skills" / "join-required").exists()
-    assert not (tmp_path / "generated-home" / "skills" / "profile-helper").exists()
+    assert not (catalog_root / "join-required").exists()
+    assert not (catalog_root / "profile-helper").exists()
 
 
 def test_profile_native_role_is_provisioned_before_setup_and_remains_projected(
@@ -781,7 +917,9 @@ def test_profile_native_role_is_provisioned_before_setup_and_remains_projected(
         names=frozenset(),
     ) as managed:
         assert (managed.generated_home / "agents" / "session-log-reader.toml").is_file()
-        assert (managed.generated_home / "skills" / "profile-log-reader" / "SKILL.md").is_file()
+        assert (
+            Path(managed.skills_dir.path) / "skills" / "profile-log-reader" / "SKILL.md"
+        ).is_file()
         assert not any(
             record["skill"] == "profile-log-reader"
             for record in managed.unavailability_payload["unavailable"]
@@ -813,7 +951,7 @@ def test_managed_codex_session_surfaces_profile_refusals_after_materialization(
         backend=backend,
         names=frozenset({"make-arch-diag"}),
     ) as managed:
-        generated_skills = managed.generated_home / "skills"
+        catalog_root = Path(managed.skills_dir.path) / "skills"
         payload = managed.unavailability_payload
         persisted = json.loads(
             (Path(managed.skills_dir.path) / "skill-unavailability.json").read_text(
@@ -821,8 +959,8 @@ def test_managed_codex_session_surfaces_profile_refusals_after_materialization(
             )
         )
 
-        assert (generated_skills / "profile-admitted" / "SKILL.md").is_file()
-        assert not (generated_skills / "profile-refused").exists()
+        assert (catalog_root / "profile-admitted" / "SKILL.md").is_file()
+        assert not (catalog_root / "profile-refused").exists()
         assert payload["backend"] == "codex"
         assert {record["skill"]: record["operation"] for record in payload["unavailable"]} == {
             "profile-refused": "required_join"
@@ -852,10 +990,11 @@ def test_refused_profile_collision_leaves_the_admitted_ordinary_skill_discoverab
         backend=backend,
         names=frozenset({"make-arch-diag"}),
     ) as managed:
-        discovery = managed.generated_home / "skills" / "make-arch-diag"
+        catalog_skill = Path(managed.skills_dir.path) / "skills" / "make-arch-diag"
 
-        assert discovery.is_symlink()
-        assert (discovery.resolve() / "SKILL.md").is_file()
+        assert catalog_skill.is_dir()
+        assert not catalog_skill.is_symlink()
+        assert (catalog_skill / "SKILL.md").is_file()
         assert {
             record["skill"]: record["operation"]
             for record in managed.unavailability_payload["unavailable"]
@@ -879,8 +1018,10 @@ def test_profile_only_managed_codex_session_has_a_valid_discovery_root(
         backend=backend,
         names=frozenset(),
     ) as managed:
-        assert list((Path(managed.skills_dir.path) / "skills").iterdir()) == []
-        assert (managed.generated_home / "skills" / "profile-only" / "SKILL.md").is_file()
+        catalog_root = Path(managed.skills_dir.path) / "skills"
+        assert {entry.name for entry in catalog_root.iterdir()} == {"profile-only"}
+        assert (catalog_root / "profile-only" / "SKILL.md").is_file()
+        assert (managed.generated_home / "skills").is_symlink()
 
 
 @pytest.mark.parametrize(
@@ -1002,9 +1143,10 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         "error",
         lambda event, **kwargs: error_events.append((event, kwargs)),
     )
-    expected_names = {"unrelated-skill"}
+    expected_catalog_names = {"helper-skill", "unrelated-skill"}
+    expected_record_names = {"unrelated-skill"}
     if helper_available:
-        expected_names.add("helper-skill")
+        expected_record_names.add("helper-skill")
 
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
     with manager.managed_session(
@@ -1022,13 +1164,15 @@ def test_manager_filters_child_spawn_skill_by_finalized_ambient_role(
         unavailable = metadata["unavailable"]
         unavailable_by_skill = {record["skill"]: record for record in unavailable}
 
-        assert projected_names == expected_names
-        assert set(manager._session_skill_infos[session_id]) == expected_names
-        assert (managed.generated_home / "skills" / "unrelated-skill").is_symlink()
+        assert projected_names == expected_catalog_names
+        assert set(manager._session_skill_infos[session_id]) == expected_record_names
+        assert (managed.generated_home / "skills").is_symlink()
+        assert (projected_root / "unrelated-skill").is_dir()
         assert unavailable == list(managed.unavailability_payload["unavailable"])
         assert unavailable_by_skill["profile-refused"]["operation"] == "required_join"
-        assert not (managed.generated_home / "skills" / "profile-refused").exists()
-        profile_helper = managed.generated_home / "skills" / "helper-skill"
+        assert not (projected_root / "profile-refused").exists()
+        profile_helper = projected_root / "helper-skill"
+        assert profile_helper.is_dir()
         assert not profile_helper.is_symlink()
         assert "PROFILE_HELPER_SENTINEL" in (profile_helper / "SKILL.md").read_text(
             encoding="utf-8"
@@ -1081,8 +1225,10 @@ def test_missing_declared_profile_skills_dir_returns_an_empty_compilation(tmp_pa
         durable_scripts_root=pkg_root(),
     )
 
+    catalog_root = tmp_path / "generated-home" / "add-dir" / "skills"
+    catalog_root.mkdir(parents=True)
     compilation = materialize_profile_skills(
-        tmp_path / "generated-home",
+        catalog_root,
         source_skills,
         backend,
         context,
@@ -1106,7 +1252,10 @@ def test_managed_codex_home_uses_private_empty_inert_rollout_links(
     ) as managed:
         assert isinstance(managed, ManagedSessionHome)
         assert managed.generated_home == codex_root / "0123456789abcdef"
-        assert managed.skills_dir == ValidatedAddDir(path=str(managed.generated_home / "add-dir"))
+        assert managed.skills_dir == ValidatedAddDir(
+            path=str(managed.generated_home / "add-dir"),
+            session_home=str(managed.generated_home),
+        )
 
         targets: list[Path] = []
         for public_name in ("sessions", "archived_sessions"):

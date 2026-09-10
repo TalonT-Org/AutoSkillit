@@ -1,4 +1,4 @@
-"""Private bounded file lease for interactive Codex session storage."""
+"""Private bounded file lease for Codex session storage."""
 
 from __future__ import annotations
 

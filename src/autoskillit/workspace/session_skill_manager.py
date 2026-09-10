@@ -54,6 +54,7 @@ from autoskillit.workspace.session_skill_materialization import (
     _ExplorerBindingEnv,
     _ExplorerBindingEnvFactory,
     _materialize_session,
+    _restore_session,
 )
 from autoskillit.workspace.session_skill_provider import SkillsDirectoryProvider
 from autoskillit.workspace.skills import render_skill_invalidities
@@ -174,6 +175,89 @@ class DefaultSessionSkillManager:
             catalog.skills,
             projection_context,
         )
+
+    def restore_snapshot_session(
+        self,
+        session_id: str,
+        snapshot_dir: Path,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> ValidatedAddDir:
+        """Restore one retained skill closure into a fresh generated home."""
+        self._validate_session_id(session_id)
+        backend = projection_context.backend
+        if (
+            session_id in self._session_roots
+            or session_id in self._session_leases
+            or session_id in self._session_skills_subdirs
+            or session_id in self._session_skill_infos
+        ):
+            raise RuntimeError(f"Session is already owned by this manager: {session_id}")
+
+        conventions = projection_context.conventions
+        skills_subdir = (
+            conventions.skills_subdir
+            if conventions is not None
+            else ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
+        )
+        configured_root = (
+            self._persistent_roots.get(backend.name)
+            if backend is not None and backend.capabilities.session_dir_persistent
+            else self._root
+        )
+        if configured_root is None:
+            selected_backend = backend.name if backend is not None else None
+            raise RuntimeError(
+                "A persistent_root is required for persistent generated-home sessions; "
+                f"selected_backend={selected_backend!r}; "
+                f"configured_backend_keys={sorted(self._persistent_roots)!r}"
+            )
+        try:
+            effective_root = configured_root.resolve()
+        except OSError as exc:
+            raise RuntimeError(f"Invalid generated-home root {configured_root}: {exc}") from exc
+        if effective_root.exists() and not effective_root.is_dir():
+            raise RuntimeError(f"Generated-home root is not a directory: {effective_root}")
+
+        generated_home = effective_root / session_id
+        lease: _SessionLease | None = None
+        try:
+            lease_path = effective_root / _SESSION_LEASES_SUBDIR / f"{session_id}.lock"
+            lease = _SessionLease.acquire(lease_path, blocking=True)
+            if lease is None:
+                raise RuntimeError(f"Failed to acquire generated-home lease: {lease_path}")
+            _remove_and_verify(generated_home)
+            skills_dir = _restore_session(
+                generated_home,
+                snapshot_dir,
+                projection_context,
+                skills_subdir=skills_subdir,
+            )
+            self._session_roots[session_id] = effective_root
+            self._session_skills_subdirs[session_id] = Path(SESSION_ADD_DIR_SUBDIR) / skills_subdir
+            self._session_skill_infos[session_id] = {}
+            self._session_leases[session_id] = lease
+            return skills_dir
+        except BaseException as exc:
+            logger.error("session_restore_failed", exc_info=True)
+            failures: list[BaseException] = [exc]
+            self._session_roots.pop(session_id, None)
+            self._session_skills_subdirs.pop(session_id, None)
+            self._session_skill_infos.pop(session_id, None)
+            self._session_leases.pop(session_id, None)
+            if lease is not None and os.path.lexists(generated_home):
+                try:
+                    _remove_and_verify(generated_home)
+                except BaseException as cleanup_exc:
+                    logger.error("session_restore_rollback_failed", exc_info=True)
+                    failures.append(cleanup_exc)
+            if lease is not None:
+                try:
+                    lease.release()
+                except BaseException as release_exc:
+                    logger.error("session_restore_lease_release_failed", exc_info=True)
+                    failures.append(release_exc)
+            _raise_failures("Session restore and rollback failed", failures)
+            raise AssertionError("unreachable")
 
     @contextmanager
     def managed_session(
@@ -428,7 +512,10 @@ class DefaultSessionSkillManager:
             generated_home = effective_root / session_id
             initialized = _InitializedSession(
                 generated_home=generated_home,
-                skills_dir=ValidatedAddDir(path=str(generated_home)),
+                skills_dir=ValidatedAddDir(
+                    path=str(generated_home / SESSION_ADD_DIR_SUBDIR),
+                    session_home=str(generated_home),
+                ),
                 skills_subdir=self._session_skills_subdirs.get(
                     session_id,
                     ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR,

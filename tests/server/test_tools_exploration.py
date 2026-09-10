@@ -741,7 +741,7 @@ async def test_fresh_run_skill_projects_real_codex_binding_before_execution_and_
     async def _inspect_projected_launch(*args: object, **kwargs: object) -> SkillResult:
         add_dirs = kwargs["add_dirs"]
         assert isinstance(add_dirs, list)
-        session_home = Path(add_dirs[0].path).parent
+        session_home = Path(add_dirs[0].session_home)
         shared_binding = next(iter(issued_bindings.values()))
         parent = tomllib.loads((session_home / "config.toml").read_text(encoding="utf-8"))
         assert parent["mcp_servers"]["autoskillit"]["env"] == shared_binding
@@ -873,7 +873,14 @@ async def test_resumed_run_skill_revokes_replacement_authority_after_refresh_fai
     from autoskillit.server.tools import tools_execution
     from tests.conftest import bind_test_skill_resume_contract
 
-    concrete_backend = CodexBackend()
+    source_home = tmp_path / "source-codex-home"
+    source_home.mkdir()
+    (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+    (source_home / "config.toml").write_text(
+        'cli_auth_credentials_store = "keyring"\n',
+        encoding="utf-8",
+    )
+    concrete_backend = CodexBackend(source_codex_home=source_home)
     backend = MagicMock(wraps=concrete_backend)
     backend.name = concrete_backend.name
     backend.conventions = concrete_backend.conventions

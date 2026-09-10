@@ -15,8 +15,8 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     BUNDLED_EXPLORER_ROLES,
-    CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_INTERACTIVE_REQUIRED_ENV,
+    CODEX_RESERVED_HOME_ENV_VARS,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
@@ -258,7 +258,13 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
         if add_dirs:
-            extras["CODEX_HOME"] = add_dirs[0].path
+            session_home = add_dirs[0].session_home
+            if not session_home:
+                raise ValueError(
+                    "Codex skill sessions require an add-dir bound to its session_home"
+                )
+            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+                extras[reserved_key] = session_home
         elif projected_codex_home is not None:
             extras["CODEX_HOME"] = projected_codex_home
         if exit_after_stop_delay_ms:
@@ -273,7 +279,11 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             filtered_base,
             extras=extras,
-            required=SKILL_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
+            required=(
+                SKILL_SESSION_REQUIRED_ENV
+                | {MCP_CLIENT_BACKEND_ENV_VAR}
+                | (CODEX_RESERVED_HOME_ENV_VARS if add_dirs else frozenset())
+            ),
         )
         env.update(
             _managed_native_shell_env(
@@ -543,7 +553,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
         if generated_home is not None:
-            for reserved_key in CODEX_COOK_RESERVED_ENV_VARS:
+            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
                 merged_extras[reserved_key] = str(generated_home)
         else:
             projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
@@ -551,7 +561,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
                 merged_extras.setdefault("CODEX_HOME", projected_codex_home)
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         if generated_home is not None:
-            effective_required |= CODEX_COOK_RESERVED_ENV_VARS
+            effective_required |= CODEX_RESERVED_HOME_ENV_VARS
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
         )
@@ -576,6 +586,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         prompt: str,
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
+        session_home: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
@@ -607,13 +618,21 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         cmd.append(
             f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
         )
-        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
-        if projected_codex_home is not None:
-            resume_extras["CODEX_HOME"] = projected_codex_home
+        if session_home is not None:
+            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+                resume_extras[reserved_key] = session_home
+        else:
+            projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
+            if projected_codex_home is not None:
+                resume_extras["CODEX_HOME"] = projected_codex_home
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,
-            required=RESUME_SESSION_BASELINE_KEYS | {MCP_CLIENT_BACKEND_ENV_VAR},
+            required=(
+                RESUME_SESSION_BASELINE_KEYS
+                | {MCP_CLIENT_BACKEND_ENV_VAR}
+                | (CODEX_RESERVED_HOME_ENV_VARS if session_home is not None else frozenset())
+            ),
         )
         env.update(
             _managed_native_shell_env(

@@ -17,8 +17,8 @@ from ._type_backend import (
     BackendCapabilities,
     BackendConventions,
     CmdSpec,
-    CookSessionHandle,
     ExecutableLaunchBinding,
+    SessionAttemptHandle,
     SessionEvent,
     SessionSummary,
     SkillSessionConfig,
@@ -243,6 +243,7 @@ class CodingAgentBackend(Protocol):
         prompt: str,
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
+        session_home: str | None = None,
         env_extras: Mapping[str, str] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
@@ -353,7 +354,7 @@ class CodingAgentBackend(Protocol):
 
     def recover_cook_history(self) -> None: ...
 
-    def cook_session_context(
+    def session_attempt_context(
         self,
         *,
         session_home: Path,
@@ -365,7 +366,7 @@ class CodingAgentBackend(Protocol):
         # execution.process.INTERACTIVE_TETHER_CEILING_SECONDS — core (IL-0)
         # cannot import execution (IL-1). Kept equal by a parity test.
         ceiling_seconds: float = 172800.0,
-    ) -> AbstractContextManager[CookSessionHandle]: ...
+    ) -> AbstractContextManager[SessionAttemptHandle]: ...
 
     def translate_model(self, model: str) -> str: ...
 

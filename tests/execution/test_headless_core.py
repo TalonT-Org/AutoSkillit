@@ -76,7 +76,7 @@ def _make_locator_backend(project_log_dir_return: Path) -> Mock:
 
 
 def test_effective_execution_identity_dispatches_through_backend_protocol() -> None:
-    from autoskillit.execution.headless._headless_launch import (
+    from autoskillit.execution.headless._managed._attempt import (
         _bind_effective_execution_identity,
     )
 
@@ -113,7 +113,7 @@ def test_effective_execution_identity_dispatches_through_backend_protocol() -> N
 def test_effective_execution_identity_falls_back_on_backend_evidence_errors(
     error: Exception,
 ) -> None:
-    from autoskillit.execution.headless._headless_launch import (
+    from autoskillit.execution.headless._managed._attempt import (
         _bind_effective_execution_identity,
     )
 
@@ -141,7 +141,7 @@ def test_effective_execution_identity_skips_incomplete_resolution_inputs(
     children: tuple[ChildExecutionIdentity, ...],
     session_id: str,
 ) -> None:
-    from autoskillit.execution.headless._headless_launch import (
+    from autoskillit.execution.headless._managed._attempt import (
         _bind_effective_execution_identity,
     )
 

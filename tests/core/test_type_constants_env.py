@@ -142,7 +142,7 @@ def test_codex_cook_storage_and_environment_constants_are_pinned() -> None:
         CODEX_ARCHIVED_SESSIONS_SUBDIR,
         CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR,
         CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR,
-        CODEX_COOK_RESERVED_ENV_VARS,
+        CODEX_RESERVED_HOME_ENV_VARS,
         CODEX_SESSIONS_SUBDIR,
         CODEX_STARTUP_TRACE_ENV_VAR,
     )
@@ -160,9 +160,9 @@ def test_codex_cook_storage_and_environment_constants_are_pinned() -> None:
         "codex-attempt-reconciliations",
         "codex-attempt-reconciliation-tombstones",
     )
-    assert CODEX_COOK_RESERVED_ENV_VARS == frozenset({"CODEX_HOME", "CODEX_SQLITE_HOME"})
+    assert CODEX_RESERVED_HOME_ENV_VARS == frozenset({"CODEX_HOME", "CODEX_SQLITE_HOME"})
     assert CODEX_STARTUP_TRACE_ENV_VAR == "AUTOSKILLIT_CODEX_STARTUP_TRACE"
     assert {
         CODEX_STARTUP_TRACE_ENV_VAR,
-        *CODEX_COOK_RESERVED_ENV_VARS,
+        *CODEX_RESERVED_HOME_ENV_VARS,
     } <= AUTOSKILLIT_PRIVATE_ENV_VARS

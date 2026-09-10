@@ -27,11 +27,11 @@ def test_new_coding_agent_backend_names_importable() -> None:
     from autoskillit.core import (
         CmdSpec,
         CodingAgentBackend,
-        CookSessionHandle,
         EnvPolicy,
         HookTrustPolicy,
         ManagedSessionHome,
         ResultParser,
+        SessionAttemptHandle,
         SessionEvent,
         SessionLocator,
         SessionSummary,
@@ -41,7 +41,7 @@ def test_new_coding_agent_backend_names_importable() -> None:
     for public_type in (
         CmdSpec,
         CodingAgentBackend,
-        CookSessionHandle,
+        SessionAttemptHandle,
         EnvPolicy,
         HookTrustPolicy,
         ManagedSessionHome,
@@ -58,7 +58,7 @@ def test_cook_lifecycle_contracts_are_in_core_all() -> None:
     import autoskillit.core as core
 
     assert {
-        "CookSessionHandle",
+        "SessionAttemptHandle",
         "HookTrustPolicy",
         "ManagedSessionHome",
         "SessionSummary",

@@ -250,7 +250,7 @@ def test_backend_implementations_expose_cook_lifecycle_protocol_methods(backend_
         "validate_interactive_invocation",
         "ensure_pre_launch",
         "recover_cook_history",
-        "cook_session_context",
+        "session_attempt_context",
     )
     for method_name in method_names:
         protocol_method = getattr(CodingAgentBackend, method_name)

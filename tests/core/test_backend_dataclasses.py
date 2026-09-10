@@ -265,23 +265,23 @@ def test_session_summary_frozen_slots_and_exact_fields():
 def test_cook_session_handle_contract_and_callback_delegation():
     from collections.abc import Callable
 
-    from autoskillit.core import CookSessionHandle
+    from autoskillit.core import SessionAttemptHandle
 
     calls: list[tuple[str, int, int]] = []
-    handle = CookSessionHandle(
+    handle = SessionAttemptHandle(
         view_id="launch-1-attempt-2",
         pass_fds=(7, 11),
         _record_spawn=lambda pid, pgid: calls.append(("spawn", pid, pgid)),
         _record_reaped=lambda pid, pgid: calls.append(("reaped", pid, pgid)),
     )
 
-    assert tuple(field.name for field in dataclasses.fields(CookSessionHandle)) == (
+    assert tuple(field.name for field in dataclasses.fields(SessionAttemptHandle)) == (
         "view_id",
         "pass_fds",
         "_record_spawn",
         "_record_reaped",
     )
-    hints = typing.get_type_hints(CookSessionHandle)
+    hints = typing.get_type_hints(SessionAttemptHandle)
     assert hints == {
         "view_id": str,
         "pass_fds": tuple[int, ...],
@@ -289,9 +289,9 @@ def test_cook_session_handle_contract_and_callback_delegation():
         "_record_reaped": Callable[[int, int], None],
     }
     assert not hasattr(handle, "__dict__")
-    assert repr(handle) == "CookSessionHandle(view_id='launch-1-attempt-2', pass_fds=(7, 11))"
+    assert repr(handle) == "SessionAttemptHandle(view_id='launch-1-attempt-2', pass_fds=(7, 11))"
 
-    equivalent = CookSessionHandle(
+    equivalent = SessionAttemptHandle(
         view_id=handle.view_id,
         pass_fds=handle.pass_fds,
         _record_spawn=lambda _pid, _pgid: None,
@@ -322,7 +322,7 @@ def test_backend_module_all_exhaustive():
         "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
-        "CookSessionHandle",
+        "SessionAttemptHandle",
         "ExecutableLaunchBinding",
         "ModelTranslation",
         "SessionSummary",

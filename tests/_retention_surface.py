@@ -448,7 +448,11 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     ): _DELEGATED_MUTATION_REASON,
     (
         "src/autoskillit/workspace/session_skill_materialization.py",
-        "_remove_generated_home_skill_entry",
+        "_remove_profile_staging",
+    ): _DELEGATED_MUTATION_REASON,
+    (
+        "src/autoskillit/workspace/session_skill_materialization.py",
+        "_merge_profile_projection",
     ): _DELEGATED_MUTATION_REASON,
     # Commands and composition boundaries.
     ("src/autoskillit/cli/_workspace.py", "run_workspace_clean"): _COMMAND_BOUNDARY_REASON,
@@ -488,8 +492,8 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "snapshot_skill_dir",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/execution/backends/_codex_session_storage.py",
-        "CodexSessionStore.recover",
+        "src/autoskillit/execution/backends/_codex/session_reconciliation.py",
+        "_CodexSessionReconciliationMixin.recover",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
         "src/autoskillit/fleet/state.py",
@@ -678,29 +682,29 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
     # -- workspace.session_skill_manager::cleanup_stale --
-    f"{_CS}::L507": _self_limiting(
+    f"{_CS}::L594": _self_limiting(
         "The candidate root vanished or was replaced before its scan; nothing there to reclaim."
     ),
-    f"{_CS}::L510": _self_limiting(
+    f"{_CS}::L597": _self_limiting(
         "The session-leases bookkeeping subdirectory itself is not a session; a structural "
         "exclusion, not an eligibility decision."
     ),
-    f"{_CS}::L512": _self_limiting(
+    f"{_CS}::L599": _self_limiting(
         "A non-directory entry under the candidate root is a type guard, never a session "
         "directory this function reclaims."
     ),
-    f"{_CS}::L515": RetentionDecision(
+    f"{_CS}::L602": RetentionDecision(
         Revocability.REVOCABLE,
         "An entry with an in-process session lease held by this process is retained -- "
         "self-held-lease evidence overrides the age threshold, the domain equivalent of a "
         "live owner reference.",
     ),
-    f"{_CS}::L521": RetentionDecision(
+    f"{_CS}::L608": RetentionDecision(
         Revocability.REVOCABLE,
         "Failure to acquire the non-blocking lease means another process currently holds "
         "a live lock on this entry, a directly observed live-owner reference.",
     ),
-    f"{_CS}::L538": RetentionDecision(
+    f"{_CS}::L625": RetentionDecision(
         Revocability.REVOCABLE,
         "Removal did not occur because the re-checked mtime under lease is fresh again or "
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"

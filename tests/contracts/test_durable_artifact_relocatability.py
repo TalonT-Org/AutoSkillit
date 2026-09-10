@@ -192,7 +192,7 @@ class TestNonMachineLocalWritersAreRelocatable:
         assert captured["schema_version"] == 1
 
     def test_codex_reconciliation_audit_output_is_relocatable(self, tmp_path: Path) -> None:
-        from autoskillit.execution.backends._codex_session_storage import (
+        from autoskillit.execution.backends._codex_fs_atomic import (
             _write_reconciliation_audit,
         )
 

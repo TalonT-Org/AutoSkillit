@@ -15,7 +15,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -165,6 +165,8 @@ class FleetTestRunner:
         cwd: Any,
         timeout: float,
         env: Any = None,
+        on_process_spawned: Callable[[int, int], None] | None = None,
+        on_process_reaped: Callable[[int, int], None] | None = None,
         on_pid_resolved: Any = None,
         pass_fds: tuple[int, ...] = (),
         **kwargs: Any,

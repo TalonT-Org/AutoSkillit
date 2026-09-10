@@ -173,7 +173,7 @@ class TestBackendCompliance:
             for method_name in (
                 "validate_interactive_invocation",
                 "recover_cook_history",
-                "cook_session_context",
+                "session_attempt_context",
             ):
                 assert callable(getattr(backend, method_name))
 
@@ -224,6 +224,7 @@ class TestBackendCompliance:
         skill_dir = tmp_path / SESSION_ADD_DIR_SUBDIR / "skills" / "test-skill"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
+        (tmp_path / "skills").symlink_to("add-dir/skills")
         (tmp_path / "config.toml").write_text("[mcp_servers.autoskillit]\n")
         _create_inert_rollout_links(tmp_path)
         assert CodexBackend().validate_session_layout(tmp_path) == []
@@ -250,6 +251,7 @@ class TestBackendCompliance:
             skill_dir.mkdir(parents=True)
             (skill_dir / "SKILL.md").write_text("---\nname: test-skill\n---\n")
             if issubclass(cls, CodexBackend):
+                (work_dir / "skills").symlink_to("add-dir/skills")
                 (work_dir / "config.toml").write_text("[mcp_servers.autoskillit]\n")
                 _create_inert_rollout_links(work_dir)
             errors = cls().validate_session_layout(work_dir)

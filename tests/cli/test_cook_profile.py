@@ -16,10 +16,10 @@ from autoskillit.core import (
     BackendConventions,
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
-    CookSessionHandle,
     HookTrustPolicy,
     ManagedSessionHome,
     RepositoryProfileId,
+    SessionAttemptHandle,
     SkillExecutionRole,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
@@ -87,8 +87,8 @@ def _make_mock_backend_class(
             return []
 
         @contextmanager
-        def cook_session_context(self, **kwargs):
-            yield CookSessionHandle(
+        def session_attempt_context(self, **kwargs: object):
+            yield SessionAttemptHandle(
                 view_id="profile-view",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
@@ -464,10 +464,10 @@ def _run_finalized_profile_cook(
             return []
 
         @contextmanager
-        def cook_session_context(self, **kwargs: object):
+        def session_attempt_context(self, **kwargs: object):
             captured["context"] = kwargs
             captured["launch_id"] = kwargs["launch_id"]
-            yield CookSessionHandle(
+            yield SessionAttemptHandle(
                 view_id="view-1",
                 pass_fds=(5,),
                 _record_spawn=lambda _pid, _pgid: None,

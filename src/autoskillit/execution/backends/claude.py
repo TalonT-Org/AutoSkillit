@@ -520,7 +520,12 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         adaptation_context: SemanticAdaptationContext | None = None,
     ) -> SkillSemanticAdaptationResult:
         """Adapt portable skill requirements to Claude Code instructions."""
-        if required_join_is_unsupported(plan, self.capabilities, adaptation_context):
+        if required_join_is_unsupported(
+            plan,
+            self.capabilities,
+            self.name,
+            adaptation_context,
+        ):
             return SkillSemanticAdaptationResult(
                 unsupported_operation=SkillSemanticOperation.REQUIRED_JOIN,
                 diagnostic=(

@@ -435,6 +435,7 @@ class SkillSemanticPlan:
 def required_join_is_unsupported(
     plan: SkillSemanticPlan,
     capabilities: BackendCapabilities,
+    backend_name: str,
     adaptation_context: SemanticAdaptationContext | None = None,
 ) -> bool:
     """Return whether a required fixed-set join exceeds backend capabilities."""
@@ -443,7 +444,8 @@ def required_join_is_unsupported(
         and plan.join.required
         and not capabilities.fixed_set_join_capable
         and not (
-            adaptation_context is not None and adaptation_context.admits_managed_join_for("codex")
+            adaptation_context is not None
+            and adaptation_context.admits_managed_join_for(backend_name)
         )
     )
 

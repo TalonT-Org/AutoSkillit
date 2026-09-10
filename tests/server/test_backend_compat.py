@@ -59,33 +59,6 @@ def test_managed_join_attestation_is_server_issued_and_admits_preflight() -> Non
     )
 
 
-def test_codex_managed_join_attestation_does_not_admit_claude_preflight() -> None:
-    from autoskillit.core import JoinSpec, SkillSemanticOperation, SkillSemanticPlan
-    from autoskillit.execution.backends import ClaudeCodeBackend
-    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
-
-    context = DefaultManagedJoinAttestationAuthority().issue(
-        backend="codex",
-        launch_context="direct",
-        parent_session_id="parent-1",
-        direct_tool_mode=True,
-        resolved_model="gpt-5.6-sol",
-        resolved_reasoning_effort="high",
-        codex_catalog_digest="c" * 64,
-        fixed_batch_tool_registry_digest="a" * 64,
-        hook_registry_digest="b" * 64,
-        skill_load_applies=True,
-        guards_apply=True,
-    )
-
-    result = ClaudeCodeBackend().adapt_skill_semantics(
-        SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True)),
-        context,
-    )
-
-    assert result.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
-
-
 def test_backend_compat_admits_a_join_required_root_only_with_managed_context() -> None:
     from autoskillit.core import JoinSpec, SkillSemanticPlan
     from autoskillit.execution.backends import CodexBackend

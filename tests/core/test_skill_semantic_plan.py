@@ -162,8 +162,12 @@ def test_skill_semantic_adaptation_result_enforces_exact_diagnostic_boundary() -
 def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
     from autoskillit.core import (
         MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        BackendCapabilities,
+        JoinSpec,
         ManagedJoinAttestation,
         SemanticAdaptationContext,
+        SkillSemanticPlan,
+        required_join_is_unsupported,
     )
 
     attestation = ManagedJoinAttestation(
@@ -186,6 +190,10 @@ def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
 
     assert context.admits_managed_join_for("codex")
     assert not context.admits_managed_join_for("claude")
+    required_join = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
+    capabilities = BackendCapabilities(fixed_set_join_capable=False)
+    assert not required_join_is_unsupported(required_join, capabilities, "codex", context)
+    assert required_join_is_unsupported(required_join, capabilities, "claude-code", context)
     assert context.digest == SemanticAdaptationContext(managed_join_attestation=attestation).digest
     with pytest.raises(FrozenInstanceError):
         context.managed_join_attestation = None  # type: ignore[misc]

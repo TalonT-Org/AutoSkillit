@@ -225,6 +225,8 @@ def _approval_row(node: ast.expr, context: str) -> PolicyRelaxationApproval:
     issue = fields["issue"]
     assert key is None or isinstance(key, str)
     assert isinstance(issue, int)
+    if issue <= 0:
+        raise UnsupportedSurfaceShape(f"{context}: approval issue must be positive")
     return PolicyRelaxationApproval(
         path=str(fields["path"]),
         symbol=str(fields["symbol"]),

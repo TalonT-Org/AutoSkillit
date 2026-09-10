@@ -249,6 +249,16 @@ def test_extract_reads_annotated_assignment() -> None:
     assert values == {None: check.SurfaceValue(limit=156)}
 
 
+def test_extract_approvals_rejects_nonpositive_issue() -> None:
+    source = """
+POLICY_RELAXATION_APPROVALS = (
+    PolicyRelaxationApproval("p.py", "LIMITS", None, "1", "2", 0, "reviewer"),
+)
+"""
+    with pytest.raises(check.UnsupportedSurfaceShape, match="approval issue must be positive"):
+        check.extract_approvals(source)
+
+
 # --- 11: approvals match exactly -------------------------------------------
 
 

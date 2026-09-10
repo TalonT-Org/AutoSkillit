@@ -18,6 +18,15 @@ from .storage import (
 )
 
 
+def _optional_evidence_string(evidence: Mapping[str, object], field: str) -> str | None:
+    value = evidence.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise JoinLedgerError(f"{field} must be a non-empty string when provided")
+    return value
+
+
 def _assignment(batch: dict[str, Any], assignment_id: str) -> dict[str, Any]:
     assignments = batch.get("assignments")
     if not isinstance(assignments, list):
@@ -46,11 +55,13 @@ def _append_attempt(
     record = {
         "attempt_id": attempt_id,
         "run_id": run_id,
-        "generated_home_id": evidence.get("generated_home_id"),
-        "leaf_projection_artifact_digest": evidence.get("leaf_projection_artifact_digest"),
-        "backend_session_id": evidence.get("backend_session_id"),
-        "process_id": evidence.get("process_id"),
-        "permit_id": evidence.get("permit_id"),
+        "generated_home_id": _optional_evidence_string(evidence, "generated_home_id"),
+        "leaf_projection_artifact_digest": _optional_evidence_string(
+            evidence, "leaf_projection_artifact_digest"
+        ),
+        "backend_session_id": _optional_evidence_string(evidence, "backend_session_id"),
+        "process_id": _optional_evidence_string(evidence, "process_id"),
+        "permit_id": _optional_evidence_string(evidence, "permit_id"),
         "admitted_at": ts,
         "running_at": None,
         "terminal_at": None,

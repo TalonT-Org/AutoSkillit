@@ -660,6 +660,28 @@ def test_open_or_replay_retains_immutable_batch_for_exact_declaration(tmp_path: 
         )
 
 
+def test_admission_rejects_malformed_attempt_evidence(tmp_path: Path) -> None:
+    batch = declare_batch(
+        tmp_path,
+        session_id="s1",
+        top_level_parent="p1",
+        skill_name="skill",
+        artifact_digest="artifact",
+        assignments=("a1",),
+    )
+    assignment = batch["assignments"][0]
+
+    with pytest.raises(JoinLedgerError, match="permit_id must be a non-empty string"):
+        admit_assignment(
+            tmp_path,
+            batch_id=batch["join_batch_id"],
+            assignment_id=assignment["assignment_id"],
+            attempt_id="attempt-1",
+            run_id="run-1",
+            evidence={"permit_id": 123},
+        )
+
+
 def test_settlement_rejects_changed_event_payload_or_stale_attempt(tmp_path: Path) -> None:
     """Terminal evidence is idempotent only for the same current attempt and payload."""
     batch = open_or_replay(

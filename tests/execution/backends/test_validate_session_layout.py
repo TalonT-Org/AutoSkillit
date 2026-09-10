@@ -80,6 +80,14 @@ class TestClaudeCodeLayoutValidation:
 
 
 class TestCodexLayoutValidation:
+    def test_codex_catalog_relative_path(self):
+        from autoskillit.execution.backends.codex import CodexBackend
+
+        assert SESSION_ADD_DIR_SUBDIR == "add-dir"
+        assert str(Path(SESSION_ADD_DIR_SUBDIR) / CodexBackend().conventions.skills_subdir) == (
+            "add-dir/skills"
+        )
+
     def test_codex_conventions_expose_the_injected_profile_skills_source(self, tmp_path):
         from autoskillit.execution.backends.codex import CodexBackend
 

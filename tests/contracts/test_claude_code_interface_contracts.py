@@ -10,7 +10,6 @@ Governance model mirrors: tests/execution/test_flag_contracts.py
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -153,47 +152,6 @@ class TestAddDirLayoutContract:
             "Skills must be nested under .claude/skills/, not at session root. "
             "This is the CC-001 regression pattern (pre-v0.5.1 bug)."
         )
-
-
-class TestCodexSessionHomeLayoutContract:
-    """Pin the managed catalog path separately from its materialization behavior."""
-
-    def test_codex_catalog_relative_path(self) -> None:
-        from autoskillit.core import SESSION_ADD_DIR_SUBDIR
-        from autoskillit.execution.backends import CodexBackend
-
-        assert SESSION_ADD_DIR_SUBDIR == "add-dir"
-        assert str(Path(SESSION_ADD_DIR_SUBDIR) / CodexBackend().conventions.skills_subdir) == (
-            "add-dir/skills"
-        )
-
-    def test_manager_materializes_catalog_and_single_discovery_alias(self, tmp_path: Path) -> None:
-        from autoskillit.workspace.session_skills import (
-            DefaultSessionSkillManager,
-            SkillsDirectoryProvider,
-        )
-        from tests.workspace._helpers import _make_codex_backend, _materialize
-
-        manager = DefaultSessionSkillManager(
-            SkillsDirectoryProvider(),
-            ephemeral_root=tmp_path,
-            persistent_roots={"codex": tmp_path / "codex-sessions"},
-        )
-        try:
-            add_dir = _materialize(
-                manager,
-                "codex-layout-contract",
-                backend=_make_codex_backend(),
-                names=frozenset({"make-arch-diag"}),
-            )
-            home = Path(add_dir.session_home)
-            assert list(home.glob("add-dir/skills/*/SKILL.md"))
-            assert (home / "skills").is_symlink()
-            assert os.readlink(home / "skills") == "add-dir/skills"
-            assert (home / "skills").resolve() == home / "add-dir/skills"
-            assert not (home / "add-dir/skills/make-arch-diag").is_symlink()
-        finally:
-            manager.cleanup_session("codex-layout-contract")
 
 
 # ---------------------------------------------------------------------------

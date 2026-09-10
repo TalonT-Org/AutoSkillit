@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from autoskillit.core import (
@@ -62,6 +64,11 @@ class TestManagedWorkerCapacityConstructorGuard:
         with pytest.raises(ValueError):
             DefaultManagedWorkerCapacity(max_concurrent=-1)
 
+    @pytest.mark.parametrize("timeout", [0, -0.1])
+    def test_non_positive_timeout_raises(self, timeout: float) -> None:
+        with pytest.raises(ValueError):
+            DefaultManagedWorkerCapacity(timeout=timeout)
+
 
 @pytest.mark.anyio
 async def test_capacity_acquire_raises_timeout():
@@ -76,8 +83,6 @@ async def test_capacity_acquire_raises_timeout():
 @pytest.mark.anyio
 async def test_capacity_acquire_succeeds_within_timeout():
     """acquire() succeeds when slot becomes available before timeout."""
-    import asyncio
-
     s = DefaultManagedWorkerCapacity(max_concurrent=1, timeout=5.0)
     first = await s.acquire("first")
 
@@ -135,3 +140,42 @@ async def test_capacity_reconfigures_without_orphaning_held_permit():
     assert capacity.at_capacity()
     capacity.release(permit)
     assert not capacity.at_capacity()
+
+
+def test_capacity_restores_exact_owner_debt() -> None:
+    capacity = DefaultManagedWorkerCapacity(max_concurrent=2)
+    owner = ("batch", "assignment", "run")
+
+    permit = capacity.restore_owner_debt(owner, "persisted-permit")
+
+    assert capacity.active_count == 1
+    assert capacity.restore_owner_debt(owner, "persisted-permit") is permit
+    with pytest.raises(ManagedWorkerCapacityError, match="owner conflicts"):
+        capacity.restore_owner_debt("different-owner", "persisted-permit")
+    with pytest.raises(ManagedWorkerCapacityError, match="owner already holds"):
+        capacity.restore_owner_debt(owner, "different-permit")
+    capacity.release(permit)
+    assert capacity.active_count == 0
+
+
+@pytest.mark.anyio
+async def test_capacity_reclaims_a_grant_that_races_timeout(monkeypatch) -> None:
+    capacity = DefaultManagedWorkerCapacity(max_concurrent=1, timeout=0.1)
+    held = await capacity.acquire("held")
+
+    async def timeout_after_grant(future, *, timeout):
+        assert timeout == 0.1
+        capacity.release(held)
+        await asyncio.sleep(0)
+        assert future.done() and not future.cancelled()
+        raise TimeoutError
+
+    monkeypatch.setattr(
+        "autoskillit.core._managed_worker_capacity.asyncio.wait_for",
+        timeout_after_grant,
+    )
+
+    with pytest.raises(TimeoutError):
+        await capacity.acquire("raced")
+
+    assert capacity.active_count == 0

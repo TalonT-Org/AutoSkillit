@@ -322,9 +322,10 @@ def select_overflow(
 ) -> list[BoundedCandidate]:
     """Oldest-first selection of unprotected candidates whose removal would satisfy `bound`.
 
-    Mirrors execution/evidence/session_log.py's _MAX_SESSIONS co-retention model: sort by mtime, then
-    walk oldest-first, selecting candidates for removal only while the ceiling remains
-    exceeded. A protected candidate is never selected -- it does not count as "removable" even
+    Mirrors execution/evidence/session_log.py's _MAX_SESSIONS co-retention model:
+    sort by mtime, then walk oldest-first, selecting candidates for removal only
+    while the ceiling remains exceeded. A protected candidate is never selected
+    -- it does not count as "removable" even
     if selecting it would satisfy the bound, so bound_unsatisfied can report the ceiling as
     un-satisfiable rather than the bound silently deleting live work.
     """
@@ -382,8 +383,9 @@ def trim_jsonl_lines(lines: Sequence[str], *, max_lines: int) -> list[str]:
 def append_and_trim_jsonl(path: Path, line: str, *, max_lines: int) -> None:
     """Append one JSON line to `path`, then trim to at most `max_lines`, oldest-first.
 
-    Mirrors execution/evidence/session_log.py's count-bound retention model, applied to a flat JSONL
-    file instead of a directory tree. Not atomic across the read-modify-write (matches the
+    Mirrors execution/evidence/session_log.py's count-bound retention model,
+    applied to a flat JSONL file instead of a directory tree. Not atomic across
+    the read-modify-write (matches the
     existing writers' posture -- reaper_events.jsonl, session_provenance.jsonl -- which are
     also plain appends without file locking); an interleaved concurrent append from another
     process could be dropped by the trim. Acceptable for best-effort operational event logs.

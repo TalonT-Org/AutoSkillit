@@ -79,8 +79,8 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
             raise RuntimeError("Cannot record spawn outside an active Codex attempt")
         if self.manifest.get("child_pid") is not None:
             raise RuntimeError("Codex attempt spawn was already recorded")
-        if pid <= 0 or pgid <= 0:
-            raise ValueError("Child pid and pgid must be positive")
+        if isinstance(pid, bool) or isinstance(pgid, bool) or pid <= 0 or pgid <= 0:
+            raise ValueError("Child pid and pgid must be positive integers")
         spawner_pid = os.getpid()
         self.manifest.update(
             state="running",

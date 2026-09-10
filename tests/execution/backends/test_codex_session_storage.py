@@ -103,6 +103,28 @@ def _retained_empty_unknown_view(
     return store, lease.view_path
 
 
+@pytest.mark.parametrize(("pid", "pgid"), [(True, 1), (1, True)])
+def test_attempt_spawn_rejects_boolean_process_ids(
+    tmp_path: Path,
+    pid: int,
+    pgid: int,
+) -> None:
+    store = CodexSessionStore(log_dir=tmp_path / "log-root")
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+
+    with pytest.raises(RuntimeError, match="no rollout data"):
+        with lease as handle:
+            with pytest.raises(ValueError, match="positive integers"):
+                handle.record_spawn(pid, pgid)
+
+
 def test_file_lease_rejects_non_lock_path(tmp_path: Path) -> None:
     invalid_path = tmp_path / "lease"
 

@@ -433,3 +433,140 @@ def test_root_module_allowlist() -> None:
         f"{sorted(missing)}. "
         "Remove the file from the allowlist in test_root_module_allowlist()."
     )
+
+
+# ── REQ-GATEWAY-PARITY: gateway re-exports pre-move names ──────────────────────
+
+
+def _gateway_pre_move_names(init_path: Path, parent_pkg: str, move_set: set[str]) -> set[str]:
+    """Collect every name the gateway re-exports whose source module is in the move set.
+
+    Parses ``init_path`` with ``ast.parse`` and walks every ``ImportFrom`` node whose
+    ``module`` is an intra-package import under ``parent_pkg`` whose final path segment
+    matches one of the move-set basenames. For each match, every ``alias.name`` from
+    that node contributes to the expected-name set.
+    """
+    import ast
+
+    tree = ast.parse(init_path.read_text(encoding="utf-8"))
+    expected: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if not node.module or not node.module.startswith(f"{parent_pkg}."):
+            continue
+        last = node.module.rsplit(".", 1)[-1]
+        if last not in move_set:
+            continue
+        for alias in node.names:
+            expected.add(alias.asname if alias.asname else alias.name)
+    return expected
+
+
+def test_execution_github_ops_gateway_reexports_pre_move_names() -> None:
+    """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
+    modules destined for ``execution/github_ops/`` must resolve post-move via
+    ``autoskillit.execution.github_ops.<name>``.
+    """
+    import importlib
+
+    init_path = SRC_ROOT / "execution" / "__init__.py"
+    move_set = {
+        "_github_http",
+        "ci",
+        "github",
+        "pr_analysis",
+        "diff_annotator",
+        "remote_resolver",
+    }
+    expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
+    missing: list[str] = []
+    for name in expected:
+        try:
+            importlib.import_module(f"autoskillit.execution.github_ops.{name}")
+        except ModuleNotFoundError:
+            missing.append(name)
+    assert not missing, f"execution/github_ops/ gateway missing re-exports: {sorted(missing)}"
+
+
+def test_execution_evidence_gateway_reexports_pre_move_names() -> None:
+    """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
+    modules destined for ``execution/evidence/`` must resolve post-move via
+    ``autoskillit.execution.evidence.<name>``.
+    """
+    import importlib
+
+    init_path = SRC_ROOT / "execution" / "__init__.py"
+    move_set = {
+        "session_log",
+        "_session_log_recovery",
+        "_session_retention",
+        "session_index",
+        "anomaly_detection",
+        "linux_tracing",
+        "otlp_sink",
+        "recording",
+        "_recording_skills",
+    }
+    expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
+    missing: list[str] = []
+    for name in expected:
+        try:
+            importlib.import_module(f"autoskillit.execution.evidence.{name}")
+        except ModuleNotFoundError:
+            missing.append(name)
+    assert not missing, f"execution/evidence/ gateway missing re-exports: {sorted(missing)}"
+
+
+def test_execution_runtime_gateway_reexports_pre_move_names() -> None:
+    """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
+    modules destined for ``execution/runtime/`` must resolve post-move via
+    ``autoskillit.execution.runtime.<name>``.
+    """
+    import importlib
+
+    init_path = SRC_ROOT / "execution" / "__init__.py"
+    move_set = {
+        "launch_resolution",
+        "commands",
+        "clone_guard",
+        "testing",
+        "db",
+    }
+    expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
+    missing: list[str] = []
+    for name in expected:
+        try:
+            importlib.import_module(f"autoskillit.execution.runtime.{name}")
+        except ModuleNotFoundError:
+            missing.append(name)
+    assert not missing, f"execution/runtime/ gateway missing re-exports: {sorted(missing)}"
+
+
+def test_hooks_runtime_gateway_reexports_pre_move_names() -> None:
+    """REQ-GATEWAY-PARITY: every name the gateway re-exports from hooks move-set
+    modules destined for ``hooks/_runtime/`` must resolve post-move via
+    ``autoskillit.hooks._runtime.<name>``. ``_session_binding`` and ``_join_ledger``
+    are NOT in the move set and are excluded.
+    """
+    import importlib
+
+    init_path = SRC_ROOT / "hooks" / "__init__.py"
+    move_set = {
+        "_hook_constants",
+        "_hook_payload",
+        "_hook_settings",
+        "_hook_utils",
+        "_policy_event",
+        "_command_classification",
+        "_github_mutation_analysis",
+        "_exploration_request_record",
+    }
+    expected = _gateway_pre_move_names(init_path, "autoskillit.hooks", move_set)
+    missing: list[str] = []
+    for name in expected:
+        try:
+            importlib.import_module(f"autoskillit.hooks._runtime.{name}")
+        except ModuleNotFoundError:
+            missing.append(name)
+    assert not missing, f"hooks/_runtime/ gateway missing re-exports: {sorted(missing)}"

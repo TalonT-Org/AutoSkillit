@@ -47,6 +47,9 @@ def _normalize_newlines_for_tokenize(command: str) -> str:
     while i < len(command):
         c = command[i]
         if c == "\\" and not in_single and i + 1 < len(command):
+            if command[i + 1] == "\n":
+                i += 2
+                continue
             result.append(c)
             result.append(command[i + 1])
             i += 2
@@ -56,7 +59,7 @@ def _normalize_newlines_for_tokenize(command: str) -> str:
         elif c == '"' and not in_single:
             in_double = not in_double
         elif c == "\n" and not in_single and not in_double:
-            result.append(" ; ")
+            result.append(" ; \n")
             i += 1
             continue
         result.append(c)

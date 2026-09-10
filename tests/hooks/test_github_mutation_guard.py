@@ -687,6 +687,17 @@ def test_previously_unrecognized_gh_api_flags_no_longer_deny_at_guard_level(
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) != "deny"
 
 
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_continued_read_only_gh_api_is_allowed(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    command = "gh api repos/O/R/rulesets/13702255 \\\n--jq '.rules'"
+
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
 def test_unrecognized_gh_api_flag_denies_with_a_distinguishable_reason(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -10,7 +10,7 @@ import pytest
 import structlog.testing
 
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler, _open_kitchen_handler
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -338,7 +338,8 @@ class TestOpenKitchenVersionReporting:
     ):
         from unittest.mock import AsyncMock, MagicMock
 
-        from autoskillit.server import _state, version_info
+        from autoskillit.server import version_info
+        from autoskillit.server.lifecycle import _state
         from autoskillit.server.tools import tools_kitchen as tools_kitchen_mod
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -462,7 +463,7 @@ def test_initialize_applies_subset_disables(monkeypatch):
 
     with patch("autoskillit.server._ctx", None):
         with patch("autoskillit.server.mcp", mock_mcp):
-            from autoskillit.server._state import _initialize
+            from autoskillit.server.lifecycle._state import _initialize
 
             _initialize(ctx)
 
@@ -486,7 +487,7 @@ def test_initialize_skips_subset_disable_when_empty(monkeypatch):
     ctx.runner = None
 
     with patch("autoskillit.server.mcp", mock_mcp):
-        from autoskillit.server._state import _initialize
+        from autoskillit.server.lifecycle._state import _initialize
 
         _initialize(ctx)
 

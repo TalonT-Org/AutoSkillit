@@ -387,7 +387,7 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("vertex", {"ANTHROPIC_API_KEY": "test-key-xyz"}),
     )
 
@@ -435,7 +435,7 @@ async def test_run_skill_provider_extras_none_when_default_profile(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),
     )
 

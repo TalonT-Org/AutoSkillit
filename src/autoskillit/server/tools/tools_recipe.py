@@ -24,14 +24,14 @@ from autoskillit.core import (
     temp_dir_display_str,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import (
     _apply_triage_gate,
     resolve_log_dir,
     strip_ingredients_only_keys,
 )
 from autoskillit.server._notify import _notify, track_response_size
-from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._state import _get_ctx_or_none
 from autoskillit.server.recipe._recipe_delivery import (
     document_recipe_delivery_contract,
     finalize_recipe_delivery,

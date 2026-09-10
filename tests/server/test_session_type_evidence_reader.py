@@ -32,7 +32,8 @@ class TestEvidenceReaderBindingVisibility:
 
         from autoskillit.core import EVIDENCE_READER_TOOLS, SessionType
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server import mcp
+        from autoskillit.server.lifecycle import _lifespan
         from autoskillit.server.tools import _evidence_reader
 
         self._set_complete_identity(monkeypatch)
@@ -81,7 +82,7 @@ class TestEvidenceReaderBindingVisibility:
         from unittest.mock import Mock
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import _lifespan
+        from autoskillit.server.lifecycle import _lifespan
         from autoskillit.server.tools import _evidence_reader
 
         self._set_complete_identity(monkeypatch)
@@ -106,7 +107,8 @@ class TestEvidenceReaderBindingVisibility:
         from unittest.mock import Mock
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server import mcp
+        from autoskillit.server.lifecycle import _lifespan
         from autoskillit.server.tools import _evidence_reader
 
         self._set_complete_identity(monkeypatch)
@@ -162,7 +164,8 @@ class TestEvidenceReaderBindingVisibility:
             SessionType,
         )
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server import mcp
+        from autoskillit.server.lifecycle import _lifespan
 
         for name in EVIDENCE_READER_ENV_FORWARD_VARS:
             monkeypatch.delenv(name, raising=False)
@@ -199,7 +202,8 @@ class TestEvidenceReaderBindingVisibility:
             SessionType,
         )
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import _lifespan, mcp
+        from autoskillit.server import mcp
+        from autoskillit.server.lifecycle import _lifespan
 
         for name in EVIDENCE_READER_ENV_FORWARD_VARS:
             monkeypatch.delenv(name, raising=False)

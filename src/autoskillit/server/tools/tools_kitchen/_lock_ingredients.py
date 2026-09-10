@@ -15,9 +15,9 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import _hook_config_path
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 
 # Late-binding for monkeypatch reach: tests patch
 # "autoskillit.server.tools.tools_kitchen.<name>" (the package facade), so

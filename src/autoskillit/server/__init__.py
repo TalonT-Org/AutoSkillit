@@ -38,10 +38,10 @@ from autoskillit.pipeline import (  # noqa: F401
     ToolContext,
     gate_error_result,
 )
-from autoskillit.server._lifespan import (  # noqa: F401
+from autoskillit.server.lifecycle._lifespan import (  # noqa: F401
     _autoskillit_lifespan,
 )
-from autoskillit.server._state import (  # noqa: E402, F401
+from autoskillit.server.lifecycle._state import (  # noqa: E402, F401
     _ctx,
     _get_config,
     _get_ctx,
@@ -86,7 +86,9 @@ from autoskillit.server import (  # noqa: E402, F401
 )
 from autoskillit.server._factory import make_context  # noqa: E402, F401
 from autoskillit.server._misc import resolve_backend_override  # noqa: E402, F401
-from autoskillit.server._session_type import _apply_session_type_visibility  # noqa: E402, F401
+from autoskillit.server.lifecycle._session_type import (  # noqa: E402, F401
+    _apply_session_type_visibility,
+)
 from autoskillit.server.tools import (  # noqa: E402, F401
     _recipe_section_handler as _recipe_section_handler,
 )

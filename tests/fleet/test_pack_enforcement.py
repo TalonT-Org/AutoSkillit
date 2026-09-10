@@ -42,7 +42,7 @@ def _reset_mcp_tags():
 
 @pytest.fixture(autouse=True)
 def _reset_server_state(monkeypatch):
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     monkeypatch.setattr(_state, "_ctx", None)
 
@@ -275,7 +275,7 @@ class TestSyntheticPackScenarios:
 
         mock_mcp = MagicMock()
         with patch("autoskillit.server.mcp", mock_mcp):
-            from autoskillit.server._session_type import _apply_session_type_visibility
+            from autoskillit.server.lifecycle._session_type import _apply_session_type_visibility
 
             _apply_session_type_visibility()
 

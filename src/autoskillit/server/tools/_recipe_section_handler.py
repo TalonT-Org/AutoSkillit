@@ -24,9 +24,9 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import InitializingRecipe, ReadyRecipe
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._state import _get_ctx_or_none
+from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.lifecycle._state import _get_ctx_or_none
 from autoskillit.server.recipe._recipe_artifact import (
     RecipeStepExtractionError as _RecipeSectionError,
 )

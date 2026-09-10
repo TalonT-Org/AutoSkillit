@@ -16,14 +16,14 @@ from autoskillit.core import TerminationReason, contains_test_gate_command, get_
 from autoskillit.execution import CaptureSetupError, build_sanitized_env
 from autoskillit.pipeline import ReadyRecipe, gate_error_result
 from autoskillit.server import mcp
-from autoskillit.server._guards import (
+from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
+from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import (
     _check_recipe_read_prohibition,
     _check_write_target_boundary,
     _require_enabled,
     _require_orchestrator_or_higher,
 )
-from autoskillit.server._misc import SCENARIO_STEP_NAME_ENV
-from autoskillit.server._notify import track_response_size
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield

@@ -273,7 +273,7 @@ async def test_non_notification_backend_gets_kitchen_pre_reveal(build_ctx, monke
     )
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import mcp
-    from autoskillit.server._lifespan import _skill_auto_gate_boot
+    from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
     monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
 
@@ -284,7 +284,7 @@ async def test_non_notification_backend_gets_kitchen_pre_reveal(build_ctx, monke
 
     with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
         with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-            with patch("autoskillit.server._lifespan.register_active_kitchen"):
+            with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                 await _skill_auto_gate_boot(ctx)
 
     assert ctx.gate.enabled is True, "gate must be enabled after _skill_auto_gate_boot pre-reveal"
@@ -304,7 +304,7 @@ async def test_non_notification_backend_plan_review_pre_revealed(build_ctx, monk
     from autoskillit.core import HEADLESS_ENV_VAR
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import mcp
-    from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+    from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
     monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
 
@@ -315,7 +315,7 @@ async def test_non_notification_backend_plan_review_pre_revealed(build_ctx, monk
 
     with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
         with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-            with patch("autoskillit.server._lifespan.register_active_kitchen"):
+            with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                 await _food_truck_auto_gate_boot(ctx)
 
     assert ctx.gate.enabled is True, (

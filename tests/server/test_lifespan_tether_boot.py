@@ -41,17 +41,26 @@ async def test_boot_gate_sweeps_orphaned_tethers(boot_fn_name, extra_env, tool_c
     tool_ctx.gate = DefaultGateState(enabled=False)
     tool_ctx.quota_refresh_task = None
 
-    boot_fn = getattr(importlib.import_module("autoskillit.server._lifespan"), boot_fn_name)
+    boot_fn = getattr(
+        importlib.import_module("autoskillit.server.lifecycle._lifespan"), boot_fn_name
+    )
     mock_sweep = AsyncMock(return_value=_tether_report())
 
     with (
         patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
         patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-        patch("autoskillit.server._lifespan.create_background_task", return_value=MagicMock()),
-        patch("autoskillit.server._lifespan.register_active_kitchen"),
-        patch("autoskillit.server._lifespan.sweep_orphaned_tethers_async", mock_sweep),
-        patch("autoskillit.server._lifespan._reap_self_excluded_codex_and_daemon_orphans"),
-        patch("autoskillit.server._lifespan.discover_campaign_state_files", return_value=[]),
+        patch(
+            "autoskillit.server.lifecycle._lifespan.create_background_task",
+            return_value=MagicMock(),
+        ),
+        patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+        patch("autoskillit.server.lifecycle._lifespan.sweep_orphaned_tethers_async", mock_sweep),
+        patch(
+            "autoskillit.server.lifecycle._lifespan._reap_self_excluded_codex_and_daemon_orphans"
+        ),
+        patch(
+            "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files", return_value=[]
+        ),
     ):
         await boot_fn(tool_ctx)
 
@@ -82,23 +91,30 @@ async def test_fleet_and_food_truck_gates_reap_codex_and_daemon_orphans(
     tool_ctx.gate = DefaultGateState(enabled=False)
     tool_ctx.quota_refresh_task = None
 
-    boot_fn = getattr(importlib.import_module("autoskillit.server._lifespan"), boot_fn_name)
+    boot_fn = getattr(
+        importlib.import_module("autoskillit.server.lifecycle._lifespan"), boot_fn_name
+    )
     mock_reap_helper = MagicMock()
 
     with (
         patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
         patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-        patch("autoskillit.server._lifespan.create_background_task", return_value=MagicMock()),
-        patch("autoskillit.server._lifespan.register_active_kitchen"),
         patch(
-            "autoskillit.server._lifespan.sweep_orphaned_tethers_async",
+            "autoskillit.server.lifecycle._lifespan.create_background_task",
+            return_value=MagicMock(),
+        ),
+        patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+        patch(
+            "autoskillit.server.lifecycle._lifespan.sweep_orphaned_tethers_async",
             new=AsyncMock(return_value=_tether_report()),
         ),
         patch(
-            "autoskillit.server._lifespan._reap_self_excluded_codex_and_daemon_orphans",
+            "autoskillit.server.lifecycle._lifespan._reap_self_excluded_codex_and_daemon_orphans",
             mock_reap_helper,
         ),
-        patch("autoskillit.server._lifespan.discover_campaign_state_files", return_value=[]),
+        patch(
+            "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files", return_value=[]
+        ),
     ):
         await boot_fn(tool_ctx)
 
@@ -109,7 +125,7 @@ async def test_fleet_and_food_truck_gates_reap_codex_and_daemon_orphans(
 async def test_skill_gate_does_not_reap_codex_and_daemon_orphans(tool_ctx, monkeypatch):
     """SKILL sessions are short-lived — no codex/daemon reap, tether sweep only."""
     from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server._lifespan import _skill_auto_gate_boot
+    from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS_AUTO_GATE", "1")
@@ -121,13 +137,13 @@ async def test_skill_gate_does_not_reap_codex_and_daemon_orphans(tool_ctx, monke
     with (
         patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
         patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-        patch("autoskillit.server._lifespan.register_active_kitchen"),
+        patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
         patch(
-            "autoskillit.server._lifespan.sweep_orphaned_tethers_async",
+            "autoskillit.server.lifecycle._lifespan.sweep_orphaned_tethers_async",
             new=AsyncMock(return_value=_tether_report()),
         ),
         patch(
-            "autoskillit.server._lifespan._reap_self_excluded_codex_and_daemon_orphans",
+            "autoskillit.server.lifecycle._lifespan._reap_self_excluded_codex_and_daemon_orphans",
             mock_reap_helper,
         ),
     ):
@@ -164,19 +180,28 @@ async def test_boot_gate_fails_open_on_tether_sweep_error(
     tool_ctx.gate = DefaultGateState(enabled=False)
     tool_ctx.quota_refresh_task = None
 
-    boot_fn = getattr(importlib.import_module("autoskillit.server._lifespan"), boot_fn_name)
+    boot_fn = getattr(
+        importlib.import_module("autoskillit.server.lifecycle._lifespan"), boot_fn_name
+    )
 
     with (
         patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
         patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-        patch("autoskillit.server._lifespan.create_background_task", return_value=MagicMock()),
-        patch("autoskillit.server._lifespan.register_active_kitchen"),
         patch(
-            "autoskillit.server._lifespan.sweep_orphaned_tethers_async",
+            "autoskillit.server.lifecycle._lifespan.create_background_task",
+            return_value=MagicMock(),
+        ),
+        patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+        patch(
+            "autoskillit.server.lifecycle._lifespan.sweep_orphaned_tethers_async",
             new=AsyncMock(side_effect=RuntimeError("tether sweep exploded")),
         ),
-        patch("autoskillit.server._lifespan._reap_self_excluded_codex_and_daemon_orphans"),
-        patch("autoskillit.server._lifespan.discover_campaign_state_files", return_value=[]),
+        patch(
+            "autoskillit.server.lifecycle._lifespan._reap_self_excluded_codex_and_daemon_orphans"
+        ),
+        patch(
+            "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files", return_value=[]
+        ),
     ):
         await boot_fn(tool_ctx)
 
@@ -199,7 +224,7 @@ async def test_open_kitchen_handler_calls_tether_sweep_and_reaper():
         patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()),
         patch("autoskillit.server.tools.tools_kitchen.sweep_orphaned_tethers_async", mock_sweep),
         patch(
-            "autoskillit.server._lifespan._reap_self_excluded_codex_and_daemon_orphans",
+            "autoskillit.server.lifecycle._lifespan._reap_self_excluded_codex_and_daemon_orphans",
             mock_reap_helper,
         ),
     ):

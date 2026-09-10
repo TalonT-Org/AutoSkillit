@@ -13,9 +13,9 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import RetryReason, _parse_issue_ref, get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools._backend_compat import _prepare_direct_skill_dispatch
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 

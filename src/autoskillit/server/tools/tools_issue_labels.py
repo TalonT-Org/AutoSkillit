@@ -15,8 +15,8 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled, _require_no_infrastructure_fault
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled, _require_no_infrastructure_fault
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,

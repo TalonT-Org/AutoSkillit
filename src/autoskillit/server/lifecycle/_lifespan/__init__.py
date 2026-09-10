@@ -44,7 +44,7 @@ from autoskillit.hook_registry import (  # noqa: F401  (mock.patch reachability)
     validate_plugin_cache_hooks,
 )
 from autoskillit.pipeline import create_background_task  # noqa: F401  (mock.patch reachability)
-from autoskillit.server._lifespan._lifespan import (
+from autoskillit.server.lifecycle._lifespan._lifespan import (
     _autoskillit_lifespan,
     _run_backend_mcp_registration_async,
     _run_deferred_init,
@@ -54,7 +54,7 @@ from autoskillit.server._lifespan._lifespan import (
     _run_lifespan_session_boot,
     _run_retiring_sweep_async,
 )
-from autoskillit.server._lifespan._session_boots import (
+from autoskillit.server.lifecycle._lifespan._session_boots import (
     _LIFESPAN_BOOT_REGISTRY,
     _cleanup_stale_loop,
     _evidence_reader_auto_gate_boot,
@@ -65,7 +65,7 @@ from autoskillit.server._lifespan._session_boots import (
     _reap_self_excluded_codex_and_daemon_orphans,
     _skill_auto_gate_boot,
 )
-from autoskillit.server._lifespan._startup_checks import (
+from autoskillit.server.lifecycle._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _finalize_recorder,
     _retain_context_tracker_authority,
@@ -75,7 +75,9 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_install_state_check,
     run_startup_join_guard_coverage_check,
 )
-from autoskillit.server._state import _get_ctx_or_none  # noqa: F401  (mock.patch reachability)
+from autoskillit.server.lifecycle._state import (
+    _get_ctx_or_none,  # noqa: F401  (mock.patch reachability)
+)
 from autoskillit.workspace import repair_broken_plugin_cache_hooks  # noqa: F401
 
 __all__ = [

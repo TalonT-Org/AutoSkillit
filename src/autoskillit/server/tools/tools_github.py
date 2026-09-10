@@ -15,9 +15,9 @@ from fastmcp.dependencies import CurrentContext
 from autoskillit.core import atomic_write, get_logger, is_feature_enabled
 from autoskillit.pipeline import write_status
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import _extract_block, resolve_log_dir
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools._backend_compat import (
     DirectSkillDispatch,
     _prepare_direct_skill_dispatch,
@@ -250,7 +250,7 @@ async def report_bug(
                 config.features,
                 experimental_enabled=config.experimental_enabled,
             ):
-                from autoskillit.server._guards import (  # circular-break: server.__init__ cycle
+                from autoskillit.server.lifecycle._guards import (  # circular-break
                     _resolve_model_as_profile,
                     _resolve_provider_profile,
                 )

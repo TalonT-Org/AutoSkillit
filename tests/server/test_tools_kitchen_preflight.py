@@ -598,7 +598,7 @@ class TestPreflightGateClosure:
             return result
 
         with (
-            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
                 return_value=None,
@@ -658,7 +658,7 @@ class TestPreflightGateClosure:
 
         synthetic = _make_fix_required_hook()
         with (
-            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
             patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",

@@ -33,7 +33,7 @@ class TestInputContractRealContracts:
         """Gate must accept the correct filesystem entity for every declared path input."""
 
         from autoskillit.core import InputSpec
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         narrowed = cast("Literal['file_path', 'directory_path', 'file_path_list']", declared_type)
         if narrowed == "file_path":
@@ -70,7 +70,7 @@ class TestInputContractRealContracts:
         import json
 
         from autoskillit.core import InputSpec
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         narrowed = cast("Literal['file_path', 'directory_path', 'file_path_list']", declared_type)
         if narrowed == "file_path":
@@ -110,7 +110,7 @@ class TestFilePathListRealResolver:
     ) -> None:
         """For every file_path_list spec, the real resolver must validate comma-joined members."""
         from autoskillit.recipe._contracts_manifest import resolve_input_specs
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         assert declared_type == "file_path_list", "parametrize filter precondition"
         specs = resolve_input_specs(f"/autoskillit:{skill_name}")

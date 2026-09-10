@@ -602,7 +602,7 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(
     )
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
+        with patch("autoskillit.server.lifecycle._state._get_ctx", return_value=mock_ctx):
             with patch("autoskillit.server.logger"):
                 await prepare_issue(
                     title="Test issue",

@@ -23,7 +23,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution import read_session_index_rows, resolve_log_dir
 from autoskillit.server import _get_ctx, mcp
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)

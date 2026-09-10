@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from autoskillit.core import get_logger, sweep_stale_markers
 from autoskillit.pipeline import transition_ambiguous, transition_confirm, transition_degraded
-from autoskillit.server._guards import _backend_supports_quota
+from autoskillit.server.lifecycle._guards import _backend_supports_quota
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools.tools_kitchen._open_kitchen_errors import (
     _kitchen_failure_envelope,
@@ -149,7 +149,7 @@ async def _open_kitchen_handler(*, preserve_active_recipe: bool = False) -> str 
 
     if _transition_start(ctx, "tether_sweep"):
         try:
-            from autoskillit.server._lifespan import (  # circular-break
+            from autoskillit.server.lifecycle._lifespan import (  # circular-break
                 _reap_self_excluded_codex_and_daemon_orphans,
             )
 

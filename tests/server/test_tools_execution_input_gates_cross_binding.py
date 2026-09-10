@@ -19,7 +19,7 @@ class TestPreparePrCrossBinding:
     def test_prepare_pr_actual_recipe_shape_accepts_comma_plan_paths(self, tmp_path) -> None:
         """Bundled recipe shape with comma-joined plans must clear the gate."""
         from autoskillit.recipe._contracts_manifest import resolve_input_specs
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         plan_a = tmp_path / "plan_a.md"
         plan_a.write_text("plan a")
@@ -33,7 +33,7 @@ class TestPreparePrCrossBinding:
     def test_prepare_pr_plan_list_and_conflict_report_bind_separately(self, tmp_path) -> None:
         """Comma-joined plans plus optional conflict-report must bind as two path specs."""
         from autoskillit.recipe._contracts_manifest import resolve_input_specs
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         plan_a = tmp_path / "plan_a.md"
         plan_a.write_text("plan a")
@@ -49,7 +49,7 @@ class TestPreparePrCrossBinding:
     def test_prepare_pr_missing_conflict_report_is_rejected(self, tmp_path) -> None:
         """When conflict-report is missing, the scalar spec at path position 1 fails."""
         from autoskillit.recipe._contracts_manifest import resolve_input_specs
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         plan_a = tmp_path / "plan_a.md"
         plan_a.write_text("plan a")
@@ -81,7 +81,7 @@ class TestOpenIntegrationPrExactShape:
     def test_open_integration_pr_recipe_shape_accepts_conflict_list(self, tmp_path: Path) -> None:
         """Comma-joined conflict reports + named domain partitions must validate."""
         from autoskillit.recipe._contracts_manifest import resolve_input_specs
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         pr_order, conflict_a, conflict_b, domain_partitions = self._make_recipe_shape_files(
             tmp_path
@@ -96,7 +96,7 @@ class TestOpenIntegrationPrExactShape:
     def test_open_integration_pr_missing_conflict_member_rejected(self, tmp_path: Path) -> None:
         """Missing conflict-report member must be rejected as conflict_report_paths."""
         from autoskillit.recipe._contracts_manifest import resolve_input_specs
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         pr_order, conflict_a, _conflict_b, domain_partitions = self._make_recipe_shape_files(
             tmp_path

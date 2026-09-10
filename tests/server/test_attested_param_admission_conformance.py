@@ -145,7 +145,7 @@ async def test_step_provider_delivered_from_recipe_step_without_caller_forwardin
     step_provider; the call must still succeed (never denied), proving the
     with: mapped field (provider), not the parameter name (step_provider),
     is what a recipe author writes."""
-    from autoskillit.server import _guards
+    from autoskillit.server.lifecycle import _guards
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
 

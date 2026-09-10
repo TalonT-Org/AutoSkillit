@@ -29,13 +29,13 @@ from autoskillit.hook_registry import (
 )
 
 # Late-binding for monkeypatch reach: tests patch
-# "autoskillit.server._lifespan.iter_all_scope_paths",
-# "autoskillit.server._lifespan.validate_plugin_cache_hooks",
-# "autoskillit.server._lifespan.repair_broken_plugin_cache_hooks", and
-# "autoskillit.server._lifespan._get_ctx_or_none" (the package facade), so
+# "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
+# "autoskillit.server.lifecycle._lifespan.validate_plugin_cache_hooks",
+# "autoskillit.server.lifecycle._lifespan.repair_broken_plugin_cache_hooks", and
+# "autoskillit.server.lifecycle._lifespan._get_ctx_or_none" (the package facade), so
 # these must be resolved via attribute access on the package at call time
 # rather than imported by name into this submodule.
-from autoskillit.server import _lifespan as _lifespan_pkg
+from autoskillit.server.lifecycle import _lifespan as _lifespan_pkg
 from autoskillit.workspace import (
     PluginHookRepairStatus,
     read_obligation,

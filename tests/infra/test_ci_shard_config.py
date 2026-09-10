@@ -582,7 +582,7 @@ class TestConservativeFilterShardIntersection:
         (tests_root / "pipeline" / "test_context.py").write_text("")
 
         scope = build_test_scope(
-            {"src/autoskillit/server/_state.py"},
+            {"src/autoskillit/server/lifecycle/_state.py"},
             FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

@@ -551,7 +551,7 @@ class TestServerStateCrossLayerCascade:
             (tests_root / directory).mkdir(parents=True)
 
         result = build_test_scope(
-            changed_files={"src/autoskillit/server/_state.py"},
+            changed_files={"src/autoskillit/server/lifecycle/_state.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

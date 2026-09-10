@@ -420,7 +420,7 @@ def test_startup_repair_heals_a_stale_cache(
     """
     from autoskillit.core import directory_tree_digest, installed_plugin_artifact_manifest_path
     from autoskillit.hook_registry import validate_plugin_cache_hooks
-    from autoskillit.server._lifespan import run_startup_hook_health_check
+    from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
 
     home = tmp_path
     cache_dir = home / ".claude" / "plugins" / "cache" / "autoskillit-local" / "autoskillit"
@@ -430,7 +430,7 @@ def test_startup_repair_heals_a_stale_cache(
 
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(
-        "autoskillit.server._lifespan.iter_all_scope_paths",
+        "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
         lambda project_root=None: iter([]),
     )
 

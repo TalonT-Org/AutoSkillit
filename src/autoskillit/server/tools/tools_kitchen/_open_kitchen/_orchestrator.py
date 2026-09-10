@@ -36,8 +36,8 @@ from autoskillit.pipeline import (
     transition_degraded,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _backend_supports_quota
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _backend_supports_quota
 from autoskillit.server.recipe._recipe_delivery import document_recipe_delivery_contract
 from autoskillit.server.tools import tools_kitchen as _tk_pkg
 from autoskillit.server.tools._authority_feedback import build_authority_rejection_envelope

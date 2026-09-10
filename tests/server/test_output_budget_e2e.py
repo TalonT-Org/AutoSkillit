@@ -524,7 +524,7 @@ async def test_deep_investigate_completes_with_bounded_large_evidence(
     tool_ctx.config.linux_tracing.log_dir = str(tmp_path / "session-logs")
     tool_ctx.config.linux_tracing.tmpfs_path = str(tmp_path / "shm")
 
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     monkeypatch.setattr(_state, "_ctx", tool_ctx)
     monkeypatch.setattr(_state, "_startup_ready", None)

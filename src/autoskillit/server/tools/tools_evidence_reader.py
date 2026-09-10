@@ -42,7 +42,7 @@ from autoskillit.execution import (
 from autoskillit.pipeline import ToolContext, create_background_task
 from autoskillit.server import mcp
 from autoskillit.server._explorer_projection import _explorer_launch_identity
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._evidence_reader import (
     ArtifactCaptureError,

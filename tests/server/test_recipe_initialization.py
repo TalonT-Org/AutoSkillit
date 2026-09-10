@@ -8,7 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
-import autoskillit.server._state as server_state
+import autoskillit.server.lifecycle._state as server_state
 import autoskillit.server.recipe._recipe_initialization as recipe_initialization
 from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,

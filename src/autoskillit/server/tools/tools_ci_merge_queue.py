@@ -11,9 +11,9 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_repo_from_remote
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,

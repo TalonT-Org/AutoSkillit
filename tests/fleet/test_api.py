@@ -787,7 +787,7 @@ class TestEffectiveDispatchConfig:
         expected_timeout,
     ) -> None:
         from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
         from autoskillit.server.tools.tools_config import configure_fleet
 
         _setup_dispatch(tool_ctx, monkeypatch)
@@ -823,7 +823,7 @@ class TestEffectiveDispatchConfig:
         monkeypatch,
     ) -> None:
         from autoskillit.core import DISPATCH_ID_ENV_VAR, FLEET_INSPECTOR_MODEL_ENV_VAR
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
         from autoskillit.server.tools.tools_config import configure_fleet
         from autoskillit.server.tools.tools_execution import run_skill
         from tests.fakes import InMemoryHeadlessExecutor

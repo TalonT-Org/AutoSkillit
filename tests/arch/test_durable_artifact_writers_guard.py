@@ -52,10 +52,10 @@ _SCOPED_MODULES: tuple[str, ...] = (
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
     "hooks/_session_binding.py",
-    "server/_lifespan/__init__.py",
-    "server/_lifespan/_startup_checks.py",
-    "server/_lifespan/_session_boots.py",
-    "server/_lifespan/_lifespan.py",
+    "server/lifecycle/_lifespan/__init__.py",
+    "server/lifecycle/_lifespan/_startup_checks.py",
+    "server/lifecycle/_lifespan/_session_boots.py",
+    "server/lifecycle/_lifespan/_lifespan.py",
 )
 
 #: Names of persistence functions/methods whose call sites count as a durable
@@ -102,7 +102,7 @@ _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # Drift-check re-renders hooks.json from the registry hash; same content
         # unless the registry changes, so this is the canonical hook-config writer,
         # not a hook-artifact writer.
-        ("server/_lifespan/_startup_checks.py", "run_startup_drift_check"),
+        ("server/lifecycle/_lifespan/_startup_checks.py", "run_startup_drift_check"),
     }
 )
 

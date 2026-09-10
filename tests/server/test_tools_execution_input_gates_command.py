@@ -106,17 +106,17 @@ class TestValidateSkillCommand:
     """Unit tests for _validate_skill_command helper."""
 
     def test_returns_none_for_slash_command(self, tool_ctx):
-        from autoskillit.server._guards import _validate_skill_command
+        from autoskillit.server.lifecycle._guards import _validate_skill_command
 
         assert _validate_skill_command("/autoskillit:investigate") is None
 
     def test_returns_none_for_bare_slash_command(self, tool_ctx):
-        from autoskillit.server._guards import _validate_skill_command
+        from autoskillit.server.lifecycle._guards import _validate_skill_command
 
         assert _validate_skill_command("/audit-arch") is None
 
     def test_returns_error_json_for_prose(self, tool_ctx):
-        from autoskillit.server._guards import _validate_skill_command
+        from autoskillit.server.lifecycle._guards import _validate_skill_command
 
         result = _validate_skill_command("Fix the bug")
         assert result is not None
@@ -125,13 +125,13 @@ class TestValidateSkillCommand:
         assert parsed["subtype"] == "gate_error"
 
     def test_returns_error_json_for_empty_string(self, tool_ctx):
-        from autoskillit.server._guards import _validate_skill_command
+        from autoskillit.server.lifecycle._guards import _validate_skill_command
 
         result = _validate_skill_command("")
         assert result is not None
 
     def test_strips_whitespace_before_check(self, tool_ctx):
-        from autoskillit.server._guards import _validate_skill_command
+        from autoskillit.server.lifecycle._guards import _validate_skill_command
 
         # Leading whitespace before slash → valid
         assert _validate_skill_command("  /autoskillit:investigate") is None

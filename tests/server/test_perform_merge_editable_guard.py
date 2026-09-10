@@ -14,7 +14,7 @@ from autoskillit.core.types import (
     TerminationReason,
     TestResult,
 )
-from autoskillit.server._editable_guard import EditableScanResult
+from autoskillit.server.lifecycle._editable_guard import EditableScanResult
 from autoskillit.server.tools.tools_git import merge_worktree
 from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
 

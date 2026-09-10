@@ -52,7 +52,8 @@ async def test_verified_explorer_authority_reveals_only_broker_tools(
     from autoskillit.core import RepositoryIdentity, RepositorySnapshot, SessionType
     from autoskillit.pipeline import OwnerBoundExplorationContextStore
     from autoskillit.pipeline.gate import DefaultGateState
-    from autoskillit.server import _lifespan, mcp
+    from autoskillit.server import mcp
+    from autoskillit.server.lifecycle import _lifespan
 
     project = tmp_path / "project"
     cwd = project / "worktree"
@@ -127,7 +128,7 @@ async def test_missing_explorer_authority_fails_closed(
     from autoskillit.pipeline import OwnerBoundExplorationContextStore
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import mcp
-    from autoskillit.server._lifespan import (
+    from autoskillit.server.lifecycle._lifespan import (
         _LIFESPAN_BOOT_REGISTRY,
         _run_lifespan_session_boot,
     )

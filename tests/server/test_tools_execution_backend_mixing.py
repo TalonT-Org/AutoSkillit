@@ -82,7 +82,7 @@ async def test_provider_profile_cannot_override_global_backend_authority(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {
@@ -126,7 +126,7 @@ async def test_global_backend_authority_is_explicit_without_provider_override(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {"BASE_URL": "https://api.minimax.chat/v1"},
@@ -168,7 +168,7 @@ async def test_provider_profile_does_not_emit_backend_authority_log(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {
@@ -224,7 +224,7 @@ async def test_provider_profile_preserves_authoritative_backend_for_materializat
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {

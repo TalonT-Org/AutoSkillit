@@ -57,7 +57,7 @@ returns a `MergeFailedStep` value to the orchestrator and aborts the merge:
 
 ## Editable install guard
 
-`server/_editable_guard.py:scan_editable_installs_for_worktree` runs after
+`server/lifecycle/_editable_guard.py:scan_editable_installs_for_worktree` runs after
 the merge but before any cleanup. It scans the user's Python tools for
 editable installs that point inside the worktree directory. If any are
 found, the merge result is `MERGE_SUCCEEDED_CLEANUP_BLOCKED` and the

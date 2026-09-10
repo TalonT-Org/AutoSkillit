@@ -183,7 +183,7 @@ class TestExplicitOverrideProviderPrecedence:
 
         # Provider profile metadata cannot compete with explicit backend authority.
         monkeypatch.setattr(
-            "autoskillit.server._guards._resolve_provider_profile",
+            "autoskillit.server.lifecycle._guards._resolve_provider_profile",
             lambda *a, **kw: (
                 "minimax",
                 {
@@ -225,7 +225,7 @@ class TestExplicitOverrideProviderPrecedence:
 
 class TestBothRoutingDirections:
     def test_codex_to_claude_explicit_override(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(
             backend="codex",
@@ -236,7 +236,7 @@ class TestBothRoutingDirections:
         assert result.backend == "claude-code"
 
     def test_claude_to_codex_explicit_override(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(
             backend="claude-code",

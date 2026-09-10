@@ -49,7 +49,7 @@ def get_recipe(name: str) -> str:
     A name defined as both a recipe and a skill is rejected until one artifact
     is renamed.
     """
-    from autoskillit.server._state import _get_ctx_or_none  # circular-break
+    from autoskillit.server.lifecycle._state import _get_ctx_or_none  # circular-break
 
     ctx = _get_ctx_or_none()
     if ctx is None or ctx.recipes is None:
@@ -182,7 +182,7 @@ def _render_ingredients_only_response(
     warnings = _check_override_keys(overrides, declared_ingredients, session_keys)
     if warnings:
         inspection["warnings"] = warnings
-    from autoskillit.server._state import _get_ctx_or_none  # circular-break
+    from autoskillit.server.lifecycle._state import _get_ctx_or_none  # circular-break
 
     tool_ctx = _get_ctx_or_none()
     if tool_ctx is not None:

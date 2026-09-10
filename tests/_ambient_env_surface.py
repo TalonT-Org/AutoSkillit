@@ -820,23 +820,23 @@ DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
     ),
-    "server/_guards.py:398": (
+    "server/lifecycle/_guards.py:398": (
         "`profile.api_key_env` is a per-provider-profile instance attribute resolved at runtime"
         "from config, not a module-level constant this AST scanner can resolve."
     ),
-    "server/_lifespan/_session_boots.py:537": (
+    "server/lifecycle/_lifespan/_session_boots.py:537": (
         "Dict-comprehension key bound by `for name in EVIDENCE_READER_ENV_FORWARD_VARS`; the three"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/_session_type.py:49": (
+    "server/lifecycle/_session_type.py:49": (
         "Set-comprehension key bound by `for key in EVIDENCE_READER_ENV_FORWARD_VARS`; the"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/_session_type.py:54": (
+    "server/lifecycle/_session_type.py:54": (
         "Generator-expression key bound by `for key in EVIDENCE_READER_ENV_FORWARD_VARS`; the"
         "forwarded names are already captured directly via that collection's own R4 scan."
     ),
-    "server/_session_type.py:61": (
+    "server/lifecycle/_session_type.py:61": (
         "Dict-comprehension key bound by `for key in _EXPLORER_BINDING_ENV_KEYS`; the four"
         "explorer-binding names are already captured directly via that collection's own R4 scan."
     ),

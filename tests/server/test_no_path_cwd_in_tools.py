@@ -23,7 +23,7 @@ TOOLS_FILES: dict[str, list[int] | None] = {
 }
 
 LIFESPAN_FILES: dict[str, list[int] | None] = {
-    "src/autoskillit/server/_lifespan/_lifespan.py": [],
+    "src/autoskillit/server/lifecycle/_lifespan/_lifespan.py": [],
 }
 
 ALL_FILES: dict[str, list[int] | None] = {**TOOLS_FILES, **LIFESPAN_FILES}

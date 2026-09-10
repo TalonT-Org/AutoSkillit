@@ -23,9 +23,9 @@ from autoskillit.core import (
 )
 from autoskillit.pipeline import canonical_step_name
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled, _require_orchestrator_exact
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._run_skill_completion import _request_session_identity
+from autoskillit.server.lifecycle._guards import _require_enabled, _require_orchestrator_exact
 from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import (
     tools_pipeline_tracker,  # noqa: F401 — late-binding for monkeypatch reach

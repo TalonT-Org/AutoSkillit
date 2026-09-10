@@ -19,7 +19,7 @@ async def test_fleet_tools_visible_when_feature_enabled(monkeypatch):
     """SESSION_TYPE=fleet → fleet tools visible (session-type dispatch only)."""
     from autoskillit.core import FLEET_TOOLS
     from autoskillit.server import mcp
-    from autoskillit.server._session_type import _apply_session_type_visibility
+    from autoskillit.server.lifecycle._session_type import _apply_session_type_visibility
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     _apply_session_type_visibility()
@@ -34,7 +34,7 @@ def test_apply_session_type_visibility_sole_calling_convention():
     """No feature_gates parameter exists — session-type dispatch only."""
     import inspect
 
-    from autoskillit.server._session_type import _apply_session_type_visibility
+    from autoskillit.server.lifecycle._session_type import _apply_session_type_visibility
 
     sig = inspect.signature(_apply_session_type_visibility)
     assert "feature_gates" not in sig.parameters
@@ -45,7 +45,7 @@ async def test_session_type_fleet_enables_fleet_tags(monkeypatch):
     """FLEET session activates fleet tool visibility (no feature gate needed)."""
     from autoskillit.core import FLEET_TOOLS
     from autoskillit.server import mcp
-    from autoskillit.server._session_type import _apply_session_type_visibility
+    from autoskillit.server.lifecycle._session_type import _apply_session_type_visibility
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")

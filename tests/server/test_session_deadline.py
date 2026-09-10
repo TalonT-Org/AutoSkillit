@@ -28,7 +28,7 @@ async def test_reconfiguration_recomputes_order_deadline_without_environment_cac
     tmp_path,
     monkeypatch,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
     from autoskillit.server.tools.tools_execution import run_skill
 
@@ -61,7 +61,7 @@ async def test_valid_inherited_deadline_wins_without_server_environment_mutation
     tmp_path,
     monkeypatch,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
     from autoskillit.server.tools.tools_execution import run_skill
 
@@ -85,7 +85,7 @@ async def test_invalid_inherited_deadline_falls_back_to_effective_timeout(
     tmp_path,
     monkeypatch,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
     from autoskillit.server.tools.tools_execution import run_skill
 
@@ -110,7 +110,7 @@ async def test_close_reopen_rebuilds_deadline_from_new_configuration(
     tmp_path,
     monkeypatch,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
     from autoskillit.server.tools.tools_execution import run_skill
     from autoskillit.server.tools.tools_kitchen import (

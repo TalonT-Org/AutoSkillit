@@ -35,7 +35,7 @@ def _reset_server_state():
     Clear before and after each test instead of restoring the previous value,
     because the previous value may itself be leaked state from an earlier test.
     """
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.recipe._recipe_generation import get_recipe_generation_store
 
     _state._ctx = None
@@ -67,7 +67,7 @@ def _reset_mcp_tags():
     mcp._transforms.clear()
     for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools._serve_helpers import reset_session_serve_overrides
 
     if _state._ctx is not None:
@@ -76,7 +76,7 @@ def _reset_mcp_tags():
     mcp._transforms.clear()
     for tag in sorted(ALL_VISIBILITY_TAGS):
         mcp.disable(tags={tag})
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools._serve_helpers import reset_session_serve_overrides
 
     if _state._ctx is not None:

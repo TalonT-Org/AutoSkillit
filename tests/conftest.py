@@ -524,8 +524,8 @@ def make_tool_ctx(monkeypatch, tmp_path):
     """
     from autoskillit.config import AutomationConfig
     from autoskillit.core.types import SubprocessRunner
-    from autoskillit.server import _state
     from autoskillit.server._factory import make_context
+    from autoskillit.server.lifecycle import _state
     from tests.fakes import FakePluginArtifactAuthority, MockSubprocessRunner
 
     created_authorities: list[FakePluginArtifactAuthority] = []

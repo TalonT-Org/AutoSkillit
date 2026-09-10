@@ -46,7 +46,7 @@ Controls whether the tool succeeds when called (independent of visibility):
 
 - Most kitchen tools call `_require_enabled()` as their first statement, which checks `ctx.gate.enabled`
 - Returns a `gate_error` JSON envelope if the kitchen hasn't been opened
-- `_require_enabled()` is defined in `server/_guards.py`; the error envelope is defined in `pipeline/gate.py`
+- `_require_enabled()` is defined in `server/lifecycle/_guards.py`; the error envelope is defined in `pipeline/gate.py`
 - Enforcement is validated by `test_gated_tools_call_require_enabled_first` in `tests/arch/test_layer_enforcement.py`
 
 ### The Anomalies

@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING
 
 from autoskillit.core import ManagedWorkerCapacity, get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import _hook_config_path
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._overlay_state import (
     OverlayStateError,

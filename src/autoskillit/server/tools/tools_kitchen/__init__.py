@@ -52,7 +52,6 @@ from autoskillit.pipeline import (
     create_background_task,
     release_kitchen_request,
 )
-from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._misc import (
     _apply_triage_gate,
     _build_hook_diagnostic_warning,
@@ -61,6 +60,7 @@ from autoskillit.server._misc import (
     _quota_refresh_loop,
     resolve_log_dir,
 )
+from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 from autoskillit.server.recipe._recipe_delivery import finalize_recipe_delivery
 from autoskillit.server.recipe._recipe_execution import clear_recipe_execution
 from autoskillit.server.recipe._recipe_segment_delivery import prepare_recipe_segment_delivery

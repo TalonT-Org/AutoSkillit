@@ -32,7 +32,7 @@ from autoskillit.server._explorer_projection import (
     _resolve_exploration_applicabilities,
     _resolve_exploration_profile,
 )
-from autoskillit.server._guards import _check_dry_walkthrough, _check_input_contracts
+from autoskillit.server.lifecycle._guards import _check_dry_walkthrough, _check_input_contracts
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._execution_helpers import (
     aggregate_sandbox_overrides as _aggregate_sandbox_overrides,
@@ -147,7 +147,7 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
     if _te_pkg.is_feature_enabled(
         "providers", state._cfg.features, experimental_enabled=state._cfg.experimental_enabled
     ):
-        from autoskillit.server._guards import (  # circular-break
+        from autoskillit.server.lifecycle._guards import (  # circular-break
             _resolve_model_as_profile,
             _resolve_provider_profile,
         )
@@ -203,7 +203,7 @@ async def _prepare_dispatch_backend(state: _RunSkillDispatchState) -> str | None
     # Config pins and the global configured backend are the only fresh
     # launch authorities. Provider/model/capability metadata is never
     # permitted to select a backend.
-    from autoskillit.server._guards import _resolve_backend_override  # circular-break
+    from autoskillit.server.lifecycle._guards import _resolve_backend_override  # circular-break
 
     state._explicit_resolution = _resolve_backend_override(
         state.step_name or "",

@@ -32,9 +32,9 @@ from autoskillit.core import (
     spill_output,
     truncate_text,
 )
-from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
 from autoskillit.server._misc import condense_test_output
 from autoskillit.server._subprocess import _process_runner_result
+from autoskillit.server.lifecycle._editable_guard import scan_editable_installs_for_worktree
 from autoskillit.workspace import remove_git_worktree, remove_worktree_sidecar
 
 if TYPE_CHECKING:

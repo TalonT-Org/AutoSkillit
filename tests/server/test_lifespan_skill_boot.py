@@ -19,7 +19,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -27,7 +27,7 @@ class TestSkillAutoGateBoot:
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
@@ -42,7 +42,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -61,7 +61,7 @@ class TestSkillAutoGateBoot:
         """HEADLESS=1 without HEADLESS_AUTO_GATE=1: gate remains closed."""
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -77,7 +77,7 @@ class TestSkillAutoGateBoot:
     ):
         """gate is None: warning logged and early return (gate stays closed)."""
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = None
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -98,19 +98,19 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
         monkeypatch.setenv(HEADLESS_AUTO_GATE_ENV_VAR, "1")
 
         with patch(
-            "autoskillit.server._lifespan._collect_disabled_feature_tags",
+            "autoskillit.server.lifecycle._lifespan._collect_disabled_feature_tags",
             side_effect=RuntimeError("feature error"),
         ):
             with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                 with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _skill_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
@@ -124,7 +124,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -135,7 +135,7 @@ class TestSkillAutoGateBoot:
             side_effect=OSError("disk full"),
         ):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
@@ -149,7 +149,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -160,7 +160,7 @@ class TestSkillAutoGateBoot:
                 "autoskillit.server._misc._prime_quota_cache",
                 new=AsyncMock(side_effect=RuntimeError("quota cache error")),
             ):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
@@ -172,7 +172,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -181,7 +181,7 @@ class TestSkillAutoGateBoot:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.register_active_kitchen",
+                    "autoskillit.server.lifecycle._lifespan.register_active_kitchen",
                     side_effect=OSError("registry write error"),
                 ):
                     await _skill_auto_gate_boot(tool_ctx)
@@ -195,7 +195,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -204,10 +204,10 @@ class TestSkillAutoGateBoot:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ) as mock_create_bg_task:
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _skill_auto_gate_boot(tool_ctx)
 
         quota_loop_calls = [
@@ -229,7 +229,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         monkeypatch.chdir(tmp_path)
         different_dir = tmp_path / "project_root"
@@ -242,7 +242,7 @@ class TestSkillAutoGateBoot:
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                _rk = "autoskillit.server._lifespan.register_active_kitchen"
+                _rk = "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
                 with patch(_rk) as mock_register_kitchen:
                     await _skill_auto_gate_boot(ctx)
 
@@ -262,7 +262,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -270,7 +270,7 @@ class TestSkillAutoGateBoot:
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     with structlog.testing.capture_logs() as logs:
                         await _skill_auto_gate_boot(tool_ctx)
 
@@ -288,7 +288,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv(HEADLESS_ENV_VAR, "1")
@@ -298,7 +298,7 @@ class TestSkillAutoGateBoot:
             "autoskillit.server.tools.tools_kitchen._write_hook_config"
         ) as mock_write_hook_config:
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(tool_ctx)
 
         mock_write_hook_config.assert_called_once_with()
@@ -311,7 +311,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_AUTO_GATE_ENV_VAR, HEADLESS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -324,7 +324,7 @@ class TestSkillAutoGateBoot:
         with patch(
             "autoskillit.server.tools.tools_kitchen._write_hook_config"
         ) as mock_write_hook_config:
-            _rk = "autoskillit.server._lifespan.register_active_kitchen"
+            _rk = "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
             with patch(_rk) as mock_register_kitchen:
                 await _skill_auto_gate_boot(tool_ctx)
 
@@ -339,7 +339,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
@@ -351,7 +351,7 @@ class TestSkillAutoGateBoot:
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(ctx)
 
         assert ctx.gate.enabled is True, "Gate should be open for non-notification backend"
@@ -368,7 +368,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
@@ -380,7 +380,7 @@ class TestSkillAutoGateBoot:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.register_active_kitchen",
+                    "autoskillit.server.lifecycle._lifespan.register_active_kitchen",
                     side_effect=OSError("registry unavailable"),
                 ):
                     await _skill_auto_gate_boot(ctx)
@@ -408,7 +408,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
@@ -423,7 +423,7 @@ class TestSkillAutoGateBoot:
         with patch("autoskillit.server.mcp") as mock_mcp:
             with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                 with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _skill_auto_gate_boot(ctx)
 
         mock_mcp.enable.assert_any_call(tags={"exploration"})
@@ -440,7 +440,7 @@ class TestSkillAutoGateBoot:
 
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
@@ -455,7 +455,7 @@ class TestSkillAutoGateBoot:
         with patch("autoskillit.server.mcp") as mock_mcp:
             with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                 with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _skill_auto_gate_boot(ctx)
 
         assert call(tags={"exploration"}) not in mock_mcp.enable.call_args_list
@@ -471,7 +471,7 @@ class TestSkillAutoGateBoot:
         from autoskillit.core import HEADLESS_ENV_VAR, MCP_CLIENT_BACKEND_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server import mcp
-        from autoskillit.server._lifespan import _skill_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
 
         monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
         monkeypatch.setenv(MCP_CLIENT_BACKEND_ENV_VAR, "codex")
@@ -485,7 +485,7 @@ class TestSkillAutoGateBoot:
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await _skill_auto_gate_boot(ctx)
 
         # plan-review resources should remain hidden
@@ -503,7 +503,7 @@ class TestSkillAutoGateBootRegistry:
     def test_lifespan_boot_registry_maps_skill_to_handler(self):
         """SessionType.SKILL maps to _skill_auto_gate_boot in _LIFESPAN_BOOT_REGISTRY."""
         from autoskillit.core import SessionType
-        from autoskillit.server._lifespan import (
+        from autoskillit.server.lifecycle._lifespan import (
             _LIFESPAN_BOOT_REGISTRY,
             _skill_auto_gate_boot,
         )
@@ -513,7 +513,7 @@ class TestSkillAutoGateBootRegistry:
     def test_lifespan_boot_registry_covers_all_session_types(self):
         """_LIFESPAN_BOOT_REGISTRY has no None values (all session types wired)."""
         from autoskillit.core import SessionType
-        from autoskillit.server._lifespan import _LIFESPAN_BOOT_REGISTRY
+        from autoskillit.server.lifecycle._lifespan import _LIFESPAN_BOOT_REGISTRY
 
         for session_type in SessionType:
             assert _LIFESPAN_BOOT_REGISTRY.get(session_type) is not None, (

@@ -490,8 +490,8 @@ async def test_get_token_summary_not_contaminated_by_prior_pipeline(
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     from unittest.mock import patch
 
-    from autoskillit.server import _state
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.lifecycle._state import _initialize
 
     # tool_ctx_kitchen_open fixture sets log_dir to tmp_path/"session_logs" — write sessions there
     # so _initialize reads from the same directory it is configured to use.
@@ -566,7 +566,7 @@ class TestOrderIdFilterOnSummaryTools:
         self, tool_ctx_kitchen_open, monkeypatch
     ) -> None:
         """D-1: get_token_summary(order_id='issue-185') returns only that order's steps."""
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
 
@@ -589,7 +589,7 @@ class TestOrderIdFilterOnSummaryTools:
         self, tool_ctx_kitchen_open, monkeypatch
     ) -> None:
         """D-2: get_token_summary() without order_id returns aggregated data for all orders."""
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
 
@@ -612,7 +612,7 @@ class TestOrderIdFilterOnSummaryTools:
         self, tool_ctx_kitchen_open, monkeypatch
     ) -> None:
         """D-3: get_timing_summary(order_id='issue-185') returns only that order's steps."""
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
         from autoskillit.server.tools.tools_status import get_timing_summary
 
         monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)

@@ -67,7 +67,7 @@ class TestServerToolSurfaceContract:
     @pytest.fixture(autouse=True)
     def _close_kitchen(self, minimal_ctx, monkeypatch):
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(minimal_ctx, "gate", DefaultGateState(enabled=False))
         monkeypatch.setattr(_state, "_ctx", minimal_ctx)

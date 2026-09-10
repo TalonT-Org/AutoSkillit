@@ -328,7 +328,7 @@ async def _serve_named_recipe(
         logger.warning("open_kitchen_failure", stage="update_hook_config", exc_info=True)
 
     composite = result.get("composite_hash", "")
-    from autoskillit.server._state import _check_rerun  # circular-break
+    from autoskillit.server.lifecycle._state import _check_rerun  # circular-break
 
     rerun_suggestion = _check_rerun(tool_ctx.config.linux_tracing.log_dir, composite)
     if rerun_suggestion:

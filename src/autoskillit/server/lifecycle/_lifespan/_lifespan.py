@@ -31,17 +31,17 @@ from autoskillit.core import (
 from autoskillit.pipeline import create_background_task
 
 # Late-binding for monkeypatch reach: tests patch
-# "autoskillit.server._lifespan._get_ctx_or_none" (the package facade), so
+# "autoskillit.server.lifecycle._lifespan._get_ctx_or_none" (the package facade), so
 # _get_ctx_or_none must be resolved via attribute access on the package at
 # call time rather than imported by name into this submodule.
-from autoskillit.server import _lifespan as _lifespan_pkg
-from autoskillit.server._lifespan._session_boots import (
+from autoskillit.server.lifecycle import _lifespan as _lifespan_pkg
+from autoskillit.server.lifecycle._lifespan._session_boots import (
     _LIFESPAN_BOOT_REGISTRY,
     _cleanup_stale_loop,
     _evidence_reader_auto_gate_boot,
     _explorer_auto_gate_boot,
 )
-from autoskillit.server._lifespan._startup_checks import (
+from autoskillit.server.lifecycle._lifespan._startup_checks import (
     _finalize_recorder,
     run_startup_drift_check,
     run_startup_fix_required_coverage_check,
@@ -49,7 +49,7 @@ from autoskillit.server._lifespan._startup_checks import (
     run_startup_install_state_check,
     run_startup_join_guard_coverage_check,
 )
-from autoskillit.server._state import deferred_initialize
+from autoskillit.server.lifecycle._state import deferred_initialize
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend
@@ -148,7 +148,7 @@ async def _autoskillit_lifespan(server: Any) -> Any:
 
     bg_tasks: list[_asyncio.Task[None]] = []
     try:
-        from autoskillit.server import _state  # circular-break
+        from autoskillit.server.lifecycle import _state  # circular-break
 
         run_startup_fix_required_coverage_check()
         run_startup_join_guard_coverage_check()

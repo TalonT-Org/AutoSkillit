@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
 
 @pytest.mark.anyio
 async def test_configure_order_sets_model_override(tmp_path, monkeypatch) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)
@@ -30,7 +30,7 @@ async def test_configure_order_sets_model_override(tmp_path, monkeypatch) -> Non
 
 @pytest.mark.anyio
 async def test_configure_fleet_sets_model_override(tmp_path, monkeypatch) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_fleet
 
     ctx = _open_context(tmp_path)
@@ -48,7 +48,7 @@ async def test_configure_fleet_sets_model_override(tmp_path, monkeypatch) -> Non
 async def test_configure_rejects_malformed_model_override(
     tmp_path, monkeypatch, model_override
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)
@@ -69,7 +69,7 @@ async def test_model_override_beats_providers_model_overrides(
     outrank providers.model_overrides[recipe][step], asserted on the
     effective_model handed to the executor."""
     from autoskillit.config.settings import ProvidersConfig
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
     from autoskillit.server.tools.tools_execution import run_skill
     from tests.fakes import InMemoryHeadlessExecutor
@@ -106,7 +106,7 @@ async def test_model_override_beats_config_model_recipe_overrides(tmp_path, monk
         resolve_model_identity,
         resolve_model_pin,
     )
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)
@@ -140,7 +140,7 @@ async def test_model_override_clear_semantics(tmp_path, monkeypatch) -> None:
     """ "" is the explicit clear sentinel, distinguishable from "not supplied"
     (None, the default) — CoreRunConfig.model_override treats both as falsy
     downstream, but the clear must be a genuine, deliberate call."""
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)
@@ -162,7 +162,7 @@ async def test_model_override_clear_semantics(tmp_path, monkeypatch) -> None:
 
 @pytest.mark.anyio
 async def test_close_kitchen_restores_baseline_model_override(tmp_path, monkeypatch) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
     from autoskillit.server.tools.tools_kitchen import close_kitchen
 

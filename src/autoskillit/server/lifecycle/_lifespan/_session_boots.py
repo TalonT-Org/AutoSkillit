@@ -47,12 +47,12 @@ from autoskillit.pipeline import (
 )
 
 # Late-binding for monkeypatch reach: tests patch
-# "autoskillit.server._lifespan._get_ctx_or_none" (the package facade), so
+# "autoskillit.server.lifecycle._lifespan._get_ctx_or_none" (the package facade), so
 # _get_ctx_or_none must be resolved via attribute access on the package at
 # call time rather than imported by name into this submodule.
-from autoskillit.server import _lifespan as _lifespan_pkg
-from autoskillit.server._guards import _backend_supports_quota
-from autoskillit.server._lifespan._startup_checks import (
+from autoskillit.server.lifecycle import _lifespan as _lifespan_pkg
+from autoskillit.server.lifecycle._guards import _backend_supports_quota
+from autoskillit.server.lifecycle._lifespan._startup_checks import (
     _activate_recipe_kitchen,
     _retain_context_tracker_authority,
 )
@@ -521,7 +521,7 @@ async def _explorer_auto_gate_boot(ctx: Any) -> bool:
 async def _evidence_reader_auto_gate_boot(ctx: Any) -> bool:
     """Reveal exactly the reader brokers for one complete startup identity."""
     from autoskillit.server import mcp  # circular-break
-    from autoskillit.server._session_type import (  # circular-break
+    from autoskillit.server.lifecycle._session_type import (  # circular-break
         _evidence_reader_binding_state,
     )
 

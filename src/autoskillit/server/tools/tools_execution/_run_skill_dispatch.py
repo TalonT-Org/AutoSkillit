@@ -27,12 +27,12 @@ from autoskillit.core import current_order_id as _current_order_id
 from autoskillit.core import current_step_name as _current_step_name
 from autoskillit.fleet import warm_failure_path_imports
 from autoskillit.server import mcp
-from autoskillit.server._guards import (
+from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import (
     _require_enabled,
     _require_orchestrator_exact,
     _validate_skill_command,
 )
-from autoskillit.server._notify import track_response_size
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield

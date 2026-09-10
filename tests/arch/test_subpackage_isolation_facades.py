@@ -123,7 +123,7 @@ def test_tools_execution_decomposition_has_expected_siblings() -> None:
 
 
 def test_lifespan_decomposition_has_expected_siblings() -> None:
-    pkg = SRC_ROOT / "server" / "_lifespan"
+    pkg = SRC_ROOT / "server" / "lifecycle" / "_lifespan"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_startup_checks",

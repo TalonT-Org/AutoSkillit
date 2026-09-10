@@ -53,10 +53,10 @@ from autoskillit.hooks._session_binding import (
     write_binding,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import project_agent_skill_document
 from autoskillit.server._notify import track_response_size
 from autoskillit.server._run_skill_completion import _request_session_identity
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (

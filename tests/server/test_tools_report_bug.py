@@ -809,7 +809,7 @@ async def test_report_bug_model_as_profile_resolves_provider(
     _is_feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
     monkeypatch.setattr(_is_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_model_as_profile",
+        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
         lambda *a: (
             "MiniMax-M2.7",
             "minimax",
@@ -873,7 +873,9 @@ async def test_report_bug_config_model_as_profile(tool_ctx_kitchen_open, tmp_pat
 
     _is_feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
     monkeypatch.setattr(_is_feat, lambda *a, **kw: True)
-    monkeypatch.setattr("autoskillit.server._guards._resolve_model_as_profile", fake_resolve)
+    monkeypatch.setattr(
+        "autoskillit.server.lifecycle._guards._resolve_model_as_profile", fake_resolve
+    )
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("report text")

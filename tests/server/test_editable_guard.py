@@ -1,4 +1,4 @@
-"""Unit tests for server/_editable_guard.py — scan_editable_installs_for_worktree."""
+"""Unit tests for server/lifecycle/_editable_guard.py — scan_editable_installs_for_worktree."""
 
 import json
 import subprocess
@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import structlog.testing
 
-from autoskillit.server import _editable_guard
-from autoskillit.server._editable_guard import scan_editable_installs_for_worktree
+from autoskillit.server.lifecycle import _editable_guard
+from autoskillit.server.lifecycle._editable_guard import scan_editable_installs_for_worktree
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

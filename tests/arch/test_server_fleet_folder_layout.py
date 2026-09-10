@@ -190,3 +190,133 @@ def test_stage_a_package_exists_within_file_limit_with_docs(rel_path: str, max_f
     assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
         f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
     )
+
+
+# ---------------------------------------------------------------------------
+# T1 -- Stage B: canonical imports and removed old locations
+# ---------------------------------------------------------------------------
+
+_STAGE_B_SCRIPT = """
+import importlib
+import json
+
+results = {}
+
+# The new lifecycle lifespan package is the first real import in this process.
+from autoskillit.server.lifecycle._lifespan import _autoskillit_lifespan
+results["lifespan_first_import"] = _autoskillit_lifespan.__module__
+
+# Representative real `from ... import ...` and identity check.
+from autoskillit.server.lifecycle._state import _get_ctx
+_state_mod = importlib.import_module("autoskillit.server.lifecycle._state")
+results["state_identity_ok"] = _get_ctx is getattr(_state_mod, "_get_ctx")
+
+# Every relocated module resolves by its full canonical name, including the
+# moved lifespan package's descendants.
+canonical_modules = [
+    "autoskillit.server.lifecycle._state",
+    "autoskillit.server.lifecycle._guards",
+    "autoskillit.server.lifecycle._session_type",
+    "autoskillit.server.lifecycle._editable_guard",
+    "autoskillit.server.lifecycle._lifespan",
+    "autoskillit.server.lifecycle._lifespan._lifespan",
+    "autoskillit.server.lifecycle._lifespan._session_boots",
+    "autoskillit.server.lifecycle._lifespan._startup_checks",
+]
+for _name in canonical_modules:
+    importlib.import_module(_name)
+results["canonical_imports_ok"] = True
+
+# The interacting recipe (Stage A) implementation and the still-unmoved
+# response-budget (Stage C) implementation, imported afterward.
+from autoskillit.server.recipe._recipe_artifact import (
+    build_canonical_recipe_artifact_payload,
+)
+results["recipe_import_ok"] = (
+    build_canonical_recipe_artifact_payload.__name__
+    == "build_canonical_recipe_artifact_payload"
+)
+from autoskillit.server._response_budget import enforce_response_budget
+results["response_budget_import_ok"] = (
+    enforce_response_budget.__name__ == "enforce_response_budget"
+)
+
+# Every corresponding old full module name must be gone.
+old_names = [
+    "autoskillit.server._state",
+    "autoskillit.server._guards",
+    "autoskillit.server._session_type",
+    "autoskillit.server._editable_guard",
+    "autoskillit.server._lifespan",
+]
+old_name_results = {}
+for _name in old_names:
+    try:
+        importlib.import_module(_name)
+        old_name_results[_name] = "IMPORTED"
+    except ModuleNotFoundError:
+        old_name_results[_name] = "ModuleNotFoundError"
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        old_name_results[_name] = f"{type(exc).__name__}: {exc}"
+results["old_name_results"] = old_name_results
+
+print(json.dumps(results))
+"""
+
+
+def test_stage_b_canonical_lifecycle_imports_resolve_and_old_paths_are_gone() -> None:
+    """New `server/lifecycle/` imports resolve; every old `server/_state`-family path is gone."""
+    results = _run_cold_import(_STAGE_B_SCRIPT)
+    assert results["lifespan_first_import"] == "autoskillit.server.lifecycle._lifespan._lifespan"
+    assert results["state_identity_ok"] is True
+    assert results["canonical_imports_ok"] is True
+    assert results["recipe_import_ok"] is True
+    assert results["response_budget_import_ok"] is True
+    old_name_results = results["old_name_results"]
+    assert isinstance(old_name_results, dict)
+    not_removed = {
+        name: outcome
+        for name, outcome in old_name_results.items()
+        if outcome != "ModuleNotFoundError"
+    }
+    assert not not_removed, f"old lifecycle module path(s) still importable: {not_removed}"
+
+
+# ---------------------------------------------------------------------------
+# T2 -- Stage B: layout, documentation, and real ceilings
+# ---------------------------------------------------------------------------
+
+_STAGE_B_PACKAGES: tuple[tuple[str, int], ...] = (
+    ("server/lifecycle", 10),
+    ("server/lifecycle/_lifespan", 10),
+)
+
+
+@pytest.mark.parametrize("rel_path,max_files", _STAGE_B_PACKAGES)
+def test_stage_b_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
+    """Each new Stage B package exists, stays within its nested-file ceiling, and is documented.
+
+    `server/lifecycle/_lifespan/` sits two directory levels below `server/`
+    and is underscore-prefixed, so it is reached by neither
+    `test_server_file_count_under_limit` (root only) nor
+    `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
+    names only) -- this parameterized case is what actually keeps it covered.
+    """
+    pkg_dir = SRC_ROOT / rel_path
+    assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
+
+    py_files = list(pkg_dir.glob("*.py"))
+    assert len(py_files) <= max_files, (
+        f"{rel_path}/ has {len(py_files)} direct Python files, max is {max_files}"
+    )
+
+    agents_md = pkg_dir / "AGENTS.md"
+    assert agents_md.is_file(), f"{rel_path}/AGENTS.md is missing"
+    agents_text = agents_md.read_text(encoding="utf-8")
+    assert agents_text.strip(), f"{rel_path}/AGENTS.md is empty"
+
+    claude_md = pkg_dir / "CLAUDE.md"
+    assert claude_md.is_file(), f"{rel_path}/CLAUDE.md is missing"
+    assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
+        f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
+    )

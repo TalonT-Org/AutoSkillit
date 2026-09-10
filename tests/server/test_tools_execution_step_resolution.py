@@ -259,7 +259,7 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
         captured_kwargs.update(kwargs)
         return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
 
-    monkeypatch.setattr("autoskillit.server._guards._resolve_provider_profile", spy)
+    monkeypatch.setattr("autoskillit.server.lifecycle._guards._resolve_provider_profile", spy)
 
     await run_skill(
         "/eval-agent --agent-name test",
@@ -294,7 +294,7 @@ async def test_run_skill_llm_step_provider_overrides_recipe_step(
         captured_kwargs.update(kwargs)
         return ("bedrock", {"AWS_REGION": "us-east-1"})
 
-    monkeypatch.setattr("autoskillit.server._guards._resolve_provider_profile", spy)
+    monkeypatch.setattr("autoskillit.server.lifecycle._guards._resolve_provider_profile", spy)
 
     await run_skill(
         "/eval-agent --agent-name test",
@@ -325,7 +325,7 @@ async def test_run_skill_logs_warning_when_step_provider_resolved_from_recipe(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
     )
 

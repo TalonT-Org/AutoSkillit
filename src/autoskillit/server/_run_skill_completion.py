@@ -131,7 +131,7 @@ class RunSkillCompletionMiddleware(Middleware):
         context: MiddlewareContext[mt.CallToolRequestParams],
         call_next: CallNext[mt.CallToolRequestParams, ToolResult],
     ) -> ToolResult:
-        from autoskillit.server._state import (  # circular-break
+        from autoskillit.server.lifecycle._state import (  # circular-break
             _get_ctx_or_none,
         )
 

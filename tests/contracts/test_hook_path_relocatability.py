@@ -96,7 +96,7 @@ def test_self_healed_bundled_hooks_json_is_relocatable(
     machine-independent: relocatable-token form only, no process-local path.
     """
     import autoskillit.core.paths as _paths
-    from autoskillit.server._lifespan import run_startup_drift_check
+    from autoskillit.server.lifecycle._lifespan import run_startup_drift_check
 
     fake_pkg_root = tmp_path / "pkg"
     hooks_dir = fake_pkg_root / "hooks"
@@ -129,7 +129,7 @@ def test_content_complete_drift_healing_catches_hash_matching_staleness(
     """
     import autoskillit.core.paths as _paths
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH, render_hooks_json_text
-    from autoskillit.server._lifespan import run_startup_drift_check
+    from autoskillit.server.lifecycle._lifespan import run_startup_drift_check
 
     fake_pkg_root = tmp_path / "pkg"
     hooks_dir = fake_pkg_root / "hooks"
@@ -180,8 +180,8 @@ def test_startup_drift_check_leaves_hooks_json_untouched_on_render_failure(
     import structlog
 
     import autoskillit.core.paths as _paths
-    import autoskillit.server._lifespan._startup_checks as _startup_checks_mod
-    from autoskillit.server._lifespan import run_startup_drift_check
+    import autoskillit.server.lifecycle._lifespan._startup_checks as _startup_checks_mod
+    from autoskillit.server.lifecycle._lifespan import run_startup_drift_check
     from tests._helpers import _flush_structlog_proxy_caches
 
     fake_pkg_root = tmp_path / "pkg"

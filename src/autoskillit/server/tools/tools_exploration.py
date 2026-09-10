@@ -32,7 +32,7 @@ from autoskillit.pipeline import (
     resolve_exploration_store_failure_code,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 _MAX_QUERY_LENGTH = 4_096

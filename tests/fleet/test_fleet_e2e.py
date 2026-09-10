@@ -1086,7 +1086,7 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
     from unittest.mock import MagicMock, patch
 
     from autoskillit.fleet import DispatchRecord, DispatchStatus, read_state, write_initial_state
-    from autoskillit.server._lifespan import _fleet_auto_gate_boot
+    from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
     proc = subprocess.Popen(["sleep", "999"])
     try:
@@ -1124,12 +1124,15 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
-            patch("autoskillit.server._lifespan.resolve_kitchen_id", return_value="kitchen-test"),
             patch(
-                "autoskillit.server._lifespan.discover_campaign_state_files",
+                "autoskillit.server.lifecycle._lifespan.resolve_kitchen_id",
+                return_value="kitchen-test",
+            ),
+            patch(
+                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
                 return_value=[sp],
             ),
-            patch("autoskillit.server._lifespan.register_active_kitchen"),
+            patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
         ):
             await _fleet_auto_gate_boot(ctx)
 

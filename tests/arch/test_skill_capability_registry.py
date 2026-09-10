@@ -155,7 +155,7 @@ def test_test_check_and_run_skill_work_on_codex() -> None:
 @pytest.mark.anyio
 async def test_test_check_and_run_skill_are_runtime_visible_on_codex(monkeypatch) -> None:
     from autoskillit.server import mcp
-    from autoskillit.server._session_type import _apply_session_type_visibility
+    from autoskillit.server.lifecycle._session_type import _apply_session_type_visibility
 
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")

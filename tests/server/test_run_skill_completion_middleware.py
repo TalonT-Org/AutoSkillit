@@ -14,7 +14,7 @@ from fastmcp.tools.function_tool import FunctionTool
 from mcp.types import CallToolRequestParams, ImageContent, TextContent
 
 from autoskillit.pipeline import DefaultRunSkillCompletionAuthority
-from autoskillit.server._run_skill_completion import (
+from autoskillit.server.response._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
     RunSkillCompletionMiddleware,
     _compact_response,

@@ -8,7 +8,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def test_response_budget_decomposition_has_expected_siblings() -> None:
-    pkg = SRC_ROOT / "server" / "_response_budget"
+    pkg = SRC_ROOT / "server" / "response" / "_response_budget"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_primitives",

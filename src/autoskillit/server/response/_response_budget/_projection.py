@@ -11,7 +11,7 @@ from autoskillit.core import (
     atomic_write,
     get_logger,
 )
-from autoskillit.server._response_budget._primitives import (
+from autoskillit.server.response._response_budget._primitives import (
     RESPONSE_SPILL_METADATA_KEY,
     _bounded_tool_name,
     _emit_response_budget_event,
@@ -19,7 +19,7 @@ from autoskillit.server._response_budget._primitives import (
     _preview_string,
     _ProjectionNonconvergentError,
 )
-from autoskillit.server._response_budget._spill import (
+from autoskillit.server.response._response_budget._spill import (
     _artifact_path,
     _finalize_envelope,
     _plain_spill_envelope,

@@ -174,7 +174,7 @@ for tag in sorted(ALL_VISIBILITY_TAGS):
 
 # Wire-format sanitization: strip fields that trigger Claude Code #25081
 # (silent full-tool-list rejection when outputSchema/annotations are present).
-from autoskillit.server._run_skill_completion import (  # noqa: E402
+from autoskillit.server.response._run_skill_completion import (  # noqa: E402
     RunSkillCompletionMiddleware,
 )
 
@@ -184,7 +184,7 @@ from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware  # noqa: 
 
 mcp.add_middleware(ClaudeCodeCompatMiddleware())
 
-from autoskillit.server._response_conformance import (  # noqa: E402
+from autoskillit.server.response._response_conformance import (  # noqa: E402
     ResponseConformanceMiddleware,
 )
 

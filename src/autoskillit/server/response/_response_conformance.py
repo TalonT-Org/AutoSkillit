@@ -14,7 +14,7 @@ from jsonschema.exceptions import SchemaError, ValidationError
 from jsonschema.validators import validator_for
 from mcp.types import TextContent
 
-from autoskillit.server._response_budget import emit_response_budget_failure
+from autoskillit.server.response._response_budget import emit_response_budget_failure
 
 if TYPE_CHECKING:
     import mcp.types as mt

@@ -70,7 +70,7 @@ def test_response_spill_schema_mirror_matches_server_contract():
         _RESPONSE_SPILL_SCHEMA_DIGEST,
         _RESPONSE_SPILL_SCHEMA_VERSION,
     )
-    from autoskillit.server._response_budget import (
+    from autoskillit.server.response._response_budget import (
         RESPONSE_SPILL_METADATA_KEY,
         RESPONSE_SPILL_METADATA_KEYS,
         RESPONSE_SPILL_REASONS,

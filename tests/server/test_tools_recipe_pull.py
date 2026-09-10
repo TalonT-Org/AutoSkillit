@@ -53,7 +53,6 @@ from autoskillit.pipeline import (
     start_kitchen_effect,
 )
 from autoskillit.recipe import load_and_validate
-from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.recipe import _recipe_artifact as recipe_artifact
 from autoskillit.server.recipe import _recipe_delivery as recipe_delivery
 from autoskillit.server.recipe import _recipe_section_pagination as pagination
@@ -88,6 +87,7 @@ from autoskillit.server.recipe._recipe_section_pagination import (
     select_recipe_section,
 )
 from autoskillit.server.recipe.section import _lifecycle as recipe_section_lifecycle
+from autoskillit.server.response._response_budget import enforce_response_budget
 from autoskillit.server.tools._recipe_section_handler import _inject_initialization_counters
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 

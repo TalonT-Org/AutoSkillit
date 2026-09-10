@@ -1,7 +1,8 @@
 # server/
 
 IL-3 FastMCP server — MCP tools, kitchen gating, session-type dispatch.
-Sub-packages: tools/ (see tools/AGENTS.md), recipe/ (see recipe/AGENTS.md).
+Sub-packages: tools/ (see tools/AGENTS.md), recipe/ (see recipe/AGENTS.md),
+lifecycle/ (see lifecycle/AGENTS.md), response/ (see response/AGENTS.md).
 
 The composition root `make_context()` is the sole legal instantiation point for all
 service contracts.

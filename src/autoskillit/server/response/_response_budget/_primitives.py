@@ -8,10 +8,10 @@ from typing import Any
 from autoskillit.core import ASCII_YAML_POLICY, Utf8ByteLimit
 
 # Late-binding for monkeypatch reach: tests patch
-# "autoskillit.server._response_budget.logger" (the package facade), so the
+# "autoskillit.server.response._response_budget.logger" (the package facade), so the
 # logger must be resolved via attribute access on the package at call time
 # rather than a separate logger instance owned by this submodule.
-from autoskillit.server import _response_budget as _response_budget_pkg
+from autoskillit.server.response import _response_budget as _response_budget_pkg
 
 RESPONSE_SPILL_METADATA_KEY = "_autoskillit_response_spill"
 RESPONSE_SPILL_SCHEMA_VERSION = 1

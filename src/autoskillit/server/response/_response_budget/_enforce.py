@@ -12,31 +12,31 @@ from autoskillit.core import (
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     TokenLimit,
 )
+from autoskillit.server.recipe._recipe_segment_delivery import (
+    RECIPE_SEGMENT_MAX_BYTES,
+    RecipeSegmentDeliveryError,
+)
 
 # Late-binding for monkeypatch reach: tests patch several symbols via the
-# "autoskillit.server._response_budget" package facade (e.g. `logger`,
+# "autoskillit.server.response._response_budget" package facade (e.g. `logger`,
 # `atomic_write`, `_artifact_path`, `_project_json_object`,
 # `_emit_response_budget_event`, `build_post_effect_segment_failure`), so
 # they must be resolved via attribute access on the package at call time
 # rather than imported by name into this submodule.
-from autoskillit.server import _response_budget as _response_budget_pkg
-from autoskillit.server._response_budget._primitives import (
+from autoskillit.server.response import _response_budget as _response_budget_pkg
+from autoskillit.server.response._response_budget._primitives import (
     _bounded_tool_name,
     _canonical_json,
     _estimated_tokens,
     _ProjectionNonconvergentError,
     _serialized,
 )
-from autoskillit.server._response_budget._projection import (
+from autoskillit.server.response._response_budget._projection import (
     _spill_for_delivery_bound,
 )
-from autoskillit.server._response_budget._spill import (
+from autoskillit.server.response._response_budget._spill import (
     _plain_spill_envelope,
     bounded_response_budget_failure,
-)
-from autoskillit.server.recipe._recipe_segment_delivery import (
-    RECIPE_SEGMENT_MAX_BYTES,
-    RecipeSegmentDeliveryError,
 )
 
 if TYPE_CHECKING:

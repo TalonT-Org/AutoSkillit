@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from autoskillit.server._response_budget._primitives import (
+from autoskillit.server.response._response_budget._primitives import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_SCHEMA_VERSION,
     _bounded_tool_name,

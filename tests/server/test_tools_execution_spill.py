@@ -14,7 +14,7 @@ import pytest
 
 from autoskillit.core import CapturedStream, SubprocessResult, TerminationReason
 from autoskillit.execution.process import CaptureReadError, CaptureSetupError, summarize_capture
-from autoskillit.server._response_budget import RESPONSE_SPILL_METADATA_KEY
+from autoskillit.server.response._response_budget import RESPONSE_SPILL_METADATA_KEY
 from autoskillit.server.tools import _execution_helpers as execution_helpers
 from autoskillit.server.tools.tools_execution import run_cmd, run_python, run_skill
 from tests.conftest import _make_result

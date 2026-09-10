@@ -25,13 +25,13 @@ from autoskillit.pipeline import (
     confirm_kitchen_effect,
     mark_kitchen_effect_ambiguous,
 )
-from autoskillit.server._response_budget import enforce_response_budget
 from autoskillit.server.recipe._recipe_artifact import _qualified_sha256
 from autoskillit.server.recipe._recipe_execution import (
     install_recipe_execution,
     prepare_recipe_execution,
 )
 from autoskillit.server.recipe._recipe_initialization import stage_recipe_initialization
+from autoskillit.server.response._response_budget import enforce_response_budget
 
 if TYPE_CHECKING:
     from autoskillit.pipeline import ToolContext

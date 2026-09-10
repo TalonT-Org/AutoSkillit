@@ -285,7 +285,7 @@ class TestTrackResponseSize:
                 "autoskillit.server._notify.enforce_response_budget",
                 side_effect=RuntimeError("/private/project/enforcement.log"),
             ),
-            patch("autoskillit.server._response_budget.logger.info") as log_info,
+            patch("autoskillit.server.response._response_budget.logger.info") as log_info,
         ):
             result = await fake_handler()
 

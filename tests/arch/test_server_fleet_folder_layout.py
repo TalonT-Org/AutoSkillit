@@ -100,7 +100,7 @@ for _name in canonical_modules:
 results["canonical_imports_ok"] = True
 
 # The interacting response-budget implementation, imported afterward.
-from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.response._response_budget import enforce_response_budget
 results["response_budget_import_ok"] = (
     enforce_response_budget.__name__ == "enforce_response_budget"
 )
@@ -227,8 +227,8 @@ for _name in canonical_modules:
     importlib.import_module(_name)
 results["canonical_imports_ok"] = True
 
-# The interacting recipe (Stage A) implementation and the still-unmoved
-# response-budget (Stage C) implementation, imported afterward.
+# The interacting recipe (Stage A) implementation and the response-budget
+# (Stage C) implementation, imported afterward.
 from autoskillit.server.recipe._recipe_artifact import (
     build_canonical_recipe_artifact_payload,
 )
@@ -236,7 +236,7 @@ results["recipe_import_ok"] = (
     build_canonical_recipe_artifact_payload.__name__
     == "build_canonical_recipe_artifact_payload"
 )
-from autoskillit.server._response_budget import enforce_response_budget
+from autoskillit.server.response._response_budget import enforce_response_budget
 results["response_budget_import_ok"] = (
     enforce_response_budget.__name__ == "enforce_response_budget"
 )
@@ -298,6 +298,130 @@ def test_stage_b_package_exists_within_file_limit_with_docs(rel_path: str, max_f
 
     `server/lifecycle/_lifespan/` sits two directory levels below `server/`
     and is underscore-prefixed, so it is reached by neither
+    `test_server_file_count_under_limit` (root only) nor
+    `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
+    names only) -- this parameterized case is what actually keeps it covered.
+    """
+    pkg_dir = SRC_ROOT / rel_path
+    assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
+
+    py_files = list(pkg_dir.glob("*.py"))
+    assert len(py_files) <= max_files, (
+        f"{rel_path}/ has {len(py_files)} direct Python files, max is {max_files}"
+    )
+
+    agents_md = pkg_dir / "AGENTS.md"
+    assert agents_md.is_file(), f"{rel_path}/AGENTS.md is missing"
+    agents_text = agents_md.read_text(encoding="utf-8")
+    assert agents_text.strip(), f"{rel_path}/AGENTS.md is empty"
+
+    claude_md = pkg_dir / "CLAUDE.md"
+    assert claude_md.is_file(), f"{rel_path}/CLAUDE.md is missing"
+    assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
+        f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T1 -- Stage C: canonical imports and removed old locations
+# ---------------------------------------------------------------------------
+
+_STAGE_C_SCRIPT = """
+import importlib
+import json
+
+results = {}
+
+# The new response-budget enforcement module is the first real import in this process.
+from autoskillit.server.response._response_budget._enforce import enforce_response_budget
+results["response_budget_enforce_first_import"] = enforce_response_budget.__module__
+
+# Representative real `from ... import ...` and identity check.
+from autoskillit.server.response._response_conformance import decide_response_conformance
+_conformance_mod = importlib.import_module("autoskillit.server.response._response_conformance")
+results["conformance_identity_ok"] = (
+    decide_response_conformance is getattr(_conformance_mod, "decide_response_conformance")
+)
+
+# Every relocated module resolves by its full canonical name, including the
+# moved response-budget package's descendants.
+canonical_modules = [
+    "autoskillit.server.response._response_conformance",
+    "autoskillit.server.response._run_skill_completion",
+    "autoskillit.server.response._response_budget",
+    "autoskillit.server.response._response_budget._enforce",
+    "autoskillit.server.response._response_budget._primitives",
+    "autoskillit.server.response._response_budget._projection",
+    "autoskillit.server.response._response_budget._spill",
+]
+for _name in canonical_modules:
+    importlib.import_module(_name)
+results["canonical_imports_ok"] = True
+
+# The interacting recipe (Stage A) implementation, imported afterward -- it
+# depends on response-budget for its own delivery finalization.
+from autoskillit.server.recipe._recipe_delivery import finalize_recipe_delivery
+results["recipe_delivery_import_ok"] = (
+    finalize_recipe_delivery.__name__ == "finalize_recipe_delivery"
+)
+
+# Every corresponding old full module name must be gone.
+old_names = [
+    "autoskillit.server._response_conformance",
+    "autoskillit.server._run_skill_completion",
+    "autoskillit.server._response_budget",
+]
+old_name_results = {}
+for _name in old_names:
+    try:
+        importlib.import_module(_name)
+        old_name_results[_name] = "IMPORTED"
+    except ModuleNotFoundError:
+        old_name_results[_name] = "ModuleNotFoundError"
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        old_name_results[_name] = f"{type(exc).__name__}: {exc}"
+results["old_name_results"] = old_name_results
+
+print(json.dumps(results))
+"""
+
+
+def test_stage_c_canonical_response_imports_resolve_and_old_paths_are_gone() -> None:
+    """New `server/response/` imports resolve; every old `server/_response_*` path is gone."""
+    results = _run_cold_import(_STAGE_C_SCRIPT)
+    assert (
+        results["response_budget_enforce_first_import"]
+        == "autoskillit.server.response._response_budget._enforce"
+    )
+    assert results["conformance_identity_ok"] is True
+    assert results["canonical_imports_ok"] is True
+    assert results["recipe_delivery_import_ok"] is True
+    old_name_results = results["old_name_results"]
+    assert isinstance(old_name_results, dict)
+    not_removed = {
+        name: outcome
+        for name, outcome in old_name_results.items()
+        if outcome != "ModuleNotFoundError"
+    }
+    assert not not_removed, f"old response module path(s) still importable: {not_removed}"
+
+
+# ---------------------------------------------------------------------------
+# T2 -- Stage C: layout, documentation, and real ceilings
+# ---------------------------------------------------------------------------
+
+_STAGE_C_PACKAGES: tuple[tuple[str, int], ...] = (
+    ("server/response", 10),
+    ("server/response/_response_budget", 10),
+)
+
+
+@pytest.mark.parametrize("rel_path,max_files", _STAGE_C_PACKAGES)
+def test_stage_c_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
+    """Each new Stage C package exists, stays within its nested-file ceiling, and is documented.
+
+    `server/response/_response_budget/` sits two directory levels below
+    `server/` and is underscore-prefixed, so it is reached by neither
     `test_server_file_count_under_limit` (root only) nor
     `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
     names only) -- this parameterized case is what actually keeps it covered.

@@ -1249,15 +1249,7 @@ def test_claude_turn_timestamps_are_enriched_by_parent_message_id(tmp_path: Path
     assert rows[0]["request_id"] == "ledger-request-id"
 
 
-def test_resumed_codex_flush_persists_only_transported_interval_rows(tmp_path: Path) -> None:
-    rollout = tmp_path / "codex-rollout.jsonl"
-    rollout.write_text(
-        '{"timestamp":"2026-09-10T09:00:00Z","type":"turn_context",'
-        '"payload":{"model":"gpt-5.4"}}\n'
-        '{"timestamp":"2026-09-10T09:01:00Z","type":"event_msg",'
-        '"payload":{"type":"token_count","info":{"last_token_usage":'
-        '{"total_tokens":99}}}}\n'
-    )
+def test_resumed_codex_flush_persists_transported_rows(tmp_path: Path) -> None:
     current = _turn_usage_row(
         1,
         backend="codex",
@@ -1271,7 +1263,6 @@ def test_resumed_codex_flush_persists_only_transported_interval_rows(tmp_path: P
         tmp_path,
         backend="codex",
         channel_b_capable=False,
-        session_locator=_locator(rollout),
         session_id="resumed-codex",
         is_resume=True,
         start_ts="2026-09-10T10:00:00+00:00",

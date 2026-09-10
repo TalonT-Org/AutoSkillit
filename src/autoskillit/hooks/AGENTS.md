@@ -1,7 +1,8 @@
 # hooks/
 
 Claude Code `PreToolUse`/`PostToolUse`/`SessionStart` scripts.
-Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS.md).
+Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS.md),
+_runtime/ (see _runtime/AGENTS.md).
 
 The package initializer remains import-free.
 

@@ -124,14 +124,14 @@ def test_agents_md_session_diagnostics_mentions_hyphen_convention(agents_md: str
 def test_claude_md_no_stale_fidelity_reference(claude_md: str) -> None:
     """CLAUDE.md pipeline/ section must not list fidelity.py — it does not exist (P2-5).
 
-    The module was folded into execution/pr_analysis.py during refactor bcafe54f.
-    The correct documentation is already present at the execution/pr_analysis.py entry.
+    The module was folded into execution/github_ops/pr_analysis.py during refactor bcafe54f.
+    The correct documentation is already present at the execution/github_ops/pr_analysis.py entry.
     A stale reference misleads agents into searching for a file that does not exist.
     """
     assert "fidelity.py" not in claude_md, (
         "CLAUDE.md references 'fidelity.py' under pipeline/ but this module does not exist. "
         "The helpers extract_linked_issues and is_valid_fidelity_finding live in "
-        "execution/pr_analysis.py. Remove the stale pipeline/fidelity.py entry (P2-5)."
+        "execution/github_ops/pr_analysis.py. Remove the stale pipeline/fidelity.py entry (P2-5)."
     )
 
 

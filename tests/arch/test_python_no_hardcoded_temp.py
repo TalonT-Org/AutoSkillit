@@ -52,7 +52,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: sidecar path for worktree base branch detection; reads from
     # <project_root>/.autoskillit/temp/worktrees/<wt_name>/base-branch which is
     # written by implement-worktree skills and must match the canonical layout.
-    "execution/testing.py": "sidecar path for worktree base branch detection",
+    "execution/runtime/testing.py": "sidecar path for worktree base branch detection",
     # Justification: reads fleet dispatch state files from the canonical temp dir
     # (<project_root>/.autoskillit/temp/dispatches/) to determine which campaign IDs
     # have active dispatches; owned by the fleet layer after the IL-1→IL-2 refactor.

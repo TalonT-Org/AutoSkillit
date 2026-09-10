@@ -1,4 +1,4 @@
-"""Tests for execution/pr_analysis.py."""
+"""Tests for execution/github_ops/pr_analysis.py."""
 
 from __future__ import annotations
 

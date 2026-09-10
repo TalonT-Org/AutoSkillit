@@ -1,4 +1,4 @@
-"""L1 unit tests for execution/ci.py — CIWatcher service."""
+"""L1 unit tests for execution/github_ops/ci.py — CIWatcher service."""
 
 from __future__ import annotations
 

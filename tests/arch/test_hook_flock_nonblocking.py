@@ -109,7 +109,7 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("execution/session/_session_state.py", "acquire", "flock"),
     (
-        "execution/session_log.py",
+        "execution/evidence/session_log.py",
         "flush_session_log",
         "ArtifactLease.acquire_exclusive",
     ),

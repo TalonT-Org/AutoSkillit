@@ -14,7 +14,7 @@ superset of both via the V4 subsumption test in
 ``tests/contracts/test_ambient_env_surface.py``), so there is now only one
 symbol for the mechanism-guard to check. The legacy constants remain live
 production symbols in their own right (imported directly by
-``execution/testing.py``, ``execution/backends/claude.py``,
+``execution/runtime/testing.py``, ``execution/backends/claude.py``,
 ``execution/backends/codex.py``, etc.), so their own non-emptiness is still
 checked directly, not just via the registry, in
 ``test_scrub_ambient_env_registry_is_nonempty`` below.

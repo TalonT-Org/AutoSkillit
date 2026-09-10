@@ -77,7 +77,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Closing the kitchen removes only an inactive project-owned review gate state; "
         "an active review loop is detected and preserved.",
     ),
-    ("execution/session_log.py", "flush_session_log", "shutil.rmtree"): (
+    ("execution/evidence/session_log.py", "flush_session_log", "shutil.rmtree"): (
         1,
         "The exclusive session-index transaction removes only an abandoned summary-less "
         "recovery directory for the same dir_name being committed.",
@@ -466,16 +466,16 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The physical anyio spawn receives the normalized generic runner tuple.",
     ),
-    ("execution/recording.py", "__call__", "pass_fds"): (
+    ("execution/evidence/recording.py", "__call__", "pass_fds"): (
         3,
         "Recording delegates physical spawns to FD-aware inner runners without "
         "dropping ownership.",
     ),
-    ("execution/recording.py", "_record_non_pty_session", "pass_fds"): (
+    ("execution/evidence/recording.py", "_record_non_pty_session", "pass_fds"): (
         1,
         "The recording helper forwards ownership to its FD-aware physical runner.",
     ),
-    ("execution/testing.py", "run", "lease.inherited_fds"): (
+    ("execution/runtime/testing.py", "run", "lease.inherited_fds"): (
         1,
         "The test gate forwards its exclusive worktree lease to the managed process tree.",
     ),

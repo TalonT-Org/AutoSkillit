@@ -1,4 +1,4 @@
-"""Behavioral tests for execution/diff_annotator.py."""
+"""Behavioral tests for execution/github_ops/diff_annotator.py."""
 
 from __future__ import annotations
 

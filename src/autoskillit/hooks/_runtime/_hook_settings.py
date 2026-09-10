@@ -410,7 +410,7 @@ def resolve_quota_log_dir(*, caller: str = "") -> Path | None:
     """Resolve the autoskillit log root directory. Returns None on any error.
 
     Priority: AUTOSKILLIT_LOG_DIR env var > platform default.
-    Mirrors the logic in execution/session_log.py:resolve_log_dir().
+    Mirrors the logic in execution/evidence/session_log.py:resolve_log_dir().
     """
     try:
         override = os.environ.get(_AUTOSKILLIT_LOG_DIR_ENV)

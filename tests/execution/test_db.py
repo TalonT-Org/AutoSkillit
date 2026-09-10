@@ -1,4 +1,4 @@
-"""L1 unit tests for execution/db.py — SQL validation and authorizer."""
+"""L1 unit tests for execution/runtime/db.py — SQL validation and authorizer."""
 
 from __future__ import annotations
 

@@ -41,7 +41,7 @@ class TestNoInlineJsonlRequestIdDedup:
         tree = ast.parse(SESSION_LOG.read_text(encoding="utf-8"))
         hits = _function_scoped_names(tree, "seen_request_ids")
         assert not hits, (
-            "execution/session_log.py re-introduced an inline requestId dedup set.\n"
+            "execution/evidence/session_log.py re-introduced an inline requestId dedup set.\n"
             "Use _resolve_turn_id() (called by iter_merged_assistant_turns()) instead.\n"
             "Offending lines: " + ", ".join(str(ln) for ln in hits)
         )

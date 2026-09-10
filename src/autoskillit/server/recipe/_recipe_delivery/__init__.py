@@ -45,6 +45,7 @@ from autoskillit.server.recipe._recipe_delivery._finalize import (
 from autoskillit.server.recipe._recipe_delivery._response import FinalizedRecipeResponse
 from autoskillit.server.recipe._recipe_delivery_helpers import (
     _attested_render,  # noqa: F401  (not public API; reachable off the flat pre-#4673 module)
+    _initialization_requirements,  # noqa: F401  (mock.patch reachability)
     initialize_host_client_attestation,
     validate_compiled_recipe_delivery_budget,
     validate_recipe_exemption_fitness,

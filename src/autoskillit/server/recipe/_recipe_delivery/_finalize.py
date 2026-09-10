@@ -43,6 +43,12 @@ from autoskillit.pipeline import (
     KitchenTransitionToken,
     RecipeInitializationRequirement,
 )
+
+# Late-binding for monkeypatch reach: tests patch
+# "autoskillit.server.recipe._recipe_delivery._initialization_requirements"
+# (the package facade), so it must be resolved via attribute access on the
+# package at call time rather than imported by name into this submodule.
+from autoskillit.server.recipe import _recipe_delivery as _recipe_delivery_pkg
 from autoskillit.server.recipe._recipe_artifact import (
     RecipeArtifactError,
     persist_recipe_artifact,
@@ -52,7 +58,6 @@ from autoskillit.server.recipe._recipe_delivery_helpers import (
     _attested_render,
     _conservative_token_upper_bound,
     _failure_decision,
-    _initialization_requirements,
     _recipe_exemption_admitted_chars,
 )
 from autoskillit.server.recipe._recipe_generation import (
@@ -342,7 +347,7 @@ def finalize_recipe_delivery(
         if surface_definition.response_exemption_tool is None:
             envelope_bound_bytes = min(envelope_bound_bytes, response_ceiling_bytes)
         try:
-            initialization_requirements = _initialization_requirements(
+            initialization_requirements = _recipe_delivery_pkg._initialization_requirements(
                 tool_ctx=tool_ctx,
                 generation=generation,
                 payload=candidate_payload,

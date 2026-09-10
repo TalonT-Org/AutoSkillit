@@ -200,12 +200,10 @@ class ManagedFixedBatchSupervisor:
                 "managed_leaf_id": "",
             },
             selected_source={
-                "skill_name": getattr(binding.launch.selected_source, "skill_name", ""),
-                "source_artifact_digest": getattr(
-                    binding.launch.selected_source, "source_artifact_digest", ""
-                ),
-                "source_artifact_incarnation_id": getattr(
-                    binding.launch.selected_source, "source_artifact_incarnation_id", ""
+                "skill_name": binding.launch.selected_source.skill_name,
+                "source_artifact_digest": binding.launch.selected_source.source_artifact_digest,
+                "source_artifact_incarnation_id": (
+                    binding.launch.selected_source.source_artifact_incarnation_id
                 ),
             },
             key=binding.launch.caller_key,

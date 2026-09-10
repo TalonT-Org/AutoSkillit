@@ -46,7 +46,7 @@ def test_autoskillit_version_is_nonempty_string():
 
 
 def test_claude_code_version_graceful_on_subprocess_error(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     def _raise(*args, **kwargs):
         raise FileNotFoundError("claude not found")
@@ -57,7 +57,7 @@ def test_claude_code_version_graceful_on_subprocess_error(monkeypatch):
 
 
 def test_claude_code_version_graceful_on_timeout(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     def _raise(*args, **kwargs):
         raise subprocess.TimeoutExpired("claude", 5)
@@ -68,7 +68,7 @@ def test_claude_code_version_graceful_on_timeout(monkeypatch):
 
 
 def test_plugins_graceful_when_file_absent(monkeypatch, tmp_path):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     monkeypatch.setattr(mod.Path, "home", classmethod(lambda cls: tmp_path))
     result = collect_version_snapshot()
@@ -76,7 +76,7 @@ def test_plugins_graceful_when_file_absent(monkeypatch, tmp_path):
 
 
 def test_plugins_reads_version(monkeypatch, tmp_path):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
@@ -97,7 +97,7 @@ def test_plugins_reads_version(monkeypatch, tmp_path):
 
 
 def test_plugins_graceful_on_corrupt_json(monkeypatch, tmp_path):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     plugins_dir = tmp_path / ".claude" / "plugins"
     plugins_dir.mkdir(parents=True)
@@ -126,7 +126,7 @@ def test_plugins_skipped_for_codex_backend():
 
 
 def test_subprocess_path_exercised_without_backend_env(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
     called = []

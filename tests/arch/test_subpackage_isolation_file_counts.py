@@ -15,23 +15,28 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 # Populated by Phase A (core/) and Phase D (recipe/) of issue #4671.
 _SHIM_FILENAMES: frozenset[str] = frozenset(
     {
-        # Phase A: core/install/, core/claude_env/ sub-packages.
-        # The 7-file core/io/ move is deferred: core/io.py exceeds the diff-scoped
-        # 750-line hard cap (REQ-CNST-010), and the core/io.py vs core/io/ sub-package
-        # name collision requires renaming the sub-package or splitting io.py first.
+        # Phase A: core/install/, core/claude_env/, core/io/ sub-packages
         "_install_detect.py",
         "_cmd_runner.py",
         "_claude_env.py",
         "claude_conventions.py",
         "feature_flags.py",
+        "io.py",
+        "paths.py",
+        "path_containment.py",
+        "_json.py",
+        "_terminal_table.py",
+        "_version_snapshot.py",
+        "_delivery_bounds.py",
     }
 )
 _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset()
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 44,  # Phase A: 49 - 5 moved files (issue #4671); 7 io/ files deferred
+    "core": 37,  # Phase A: 49 - 12 moved files (issue #4671)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
+    "core/io": 8,  # 7 files + __init__ + buffer
     # _type_truth replaces the retired _type_tradition_manifest shard.
     "core/types": 76,
     "core/runtime": 11,

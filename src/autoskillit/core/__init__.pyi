@@ -23,15 +23,15 @@ from .install.cmd_runner import CmdRunner as CmdRunner
 from .install.cmd_runner import default_cmd_runner as default_cmd_runner
 from .install.cmd_runner import run_gh as run_gh
 from .install.cmd_runner import run_git as run_git
-from ._delivery_bounds import recipe_delivery_request_digest as recipe_delivery_request_digest
-from ._delivery_bounds import (
+from .io.delivery_bounds import recipe_delivery_request_digest as recipe_delivery_request_digest
+from .io.delivery_bounds import (
     resolve_general_output_token_limit as resolve_general_output_token_limit,
 )
-from ._delivery_bounds import resolve_recipe_delivery_decision as resolve_recipe_delivery_decision
-from ._delivery_bounds import (
+from .io.delivery_bounds import resolve_recipe_delivery_decision as resolve_recipe_delivery_decision
+from .io.delivery_bounds import (
     resolve_recipe_envelope_byte_limit as resolve_recipe_envelope_byte_limit,
 )
-from ._delivery_bounds import (
+from .io.delivery_bounds import (
     resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
 )
 from ._entrypoint_shim import ENTRYPOINT_SHIM_SOURCE as ENTRYPOINT_SHIM_SOURCE
@@ -49,8 +49,8 @@ from .install.install_detect import _is_stable_track as _is_stable_track
 from .install.install_detect import distribution_version_at as distribution_version_at
 from .install.install_detect import is_dev_install as is_dev_install
 from .install.install_detect import parse_direct_url as parse_direct_url
-from ._json import fast_dumps as fast_dumps
-from ._json import fast_loads as fast_loads
+from .io.json import fast_dumps as fast_dumps
+from .io.json import fast_loads as fast_loads
 from ._managed_worker_capacity import DefaultManagedWorkerCapacity as DefaultManagedWorkerCapacity
 from ._managed_worker_capacity import ManagedWorkerCapacityError as ManagedWorkerCapacityError
 from ._managed_worker_capacity import ManagedWorkerPermit as ManagedWorkerPermit
@@ -136,10 +136,10 @@ from ._retiring_cache import remove_retiring_records as remove_retiring_records
 from ._retiring_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from ._step_context import current_order_id as current_order_id
 from ._step_context import current_step_name as current_step_name
-from ._terminal_table import TerminalColumn as TerminalColumn
-from ._terminal_table import _render_gfm_table as _render_gfm_table
-from ._terminal_table import _render_terminal_table as _render_terminal_table
-from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
+from .io.terminal_table import TerminalColumn as TerminalColumn
+from .io.terminal_table import _render_gfm_table as _render_gfm_table
+from .io.terminal_table import _render_terminal_table as _render_terminal_table
+from .io.version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
 from .agent_definition import AGENT_PROVISIONING_BASELINE as AGENT_PROVISIONING_BASELINE
 from .agent_definition import (
@@ -240,11 +240,46 @@ from .git_remote import (
 from .github_url import _parse_issue_ref as _parse_issue_ref
 from .github_url import normalize_owner_repo as normalize_owner_repo
 from .github_url import parse_github_repo as parse_github_repo
-from .io import _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES
-from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
+from .io import ContainmentError as ContainmentError
+from .io import GENERATED_FILES as GENERATED_FILES
 from .io import ReadResult as ReadResult
+from .io import TerminalColumn as TerminalColumn
 from .io import TreeEntry as TreeEntry
 from .io import TreeVanishedError as TreeVanishedError
+from .io import YAMLError as YAMLError
+from .io import _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES
+from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
+from .io import _render_gfm_table as _render_gfm_table
+from .io import _render_terminal_table as _render_terminal_table
+from .io import atomic_write as atomic_write
+from .io import check_metadata_stable as check_metadata_stable
+from .io import claude_code_log_path as claude_code_log_path
+from .io import claude_code_project_dir as claude_code_project_dir
+from .io import collect_version_snapshot as collect_version_snapshot
+from .io import compose_yaml as compose_yaml
+from .io import default_log_dir as default_log_dir
+from .io import destination_location as destination_location
+from .io import dump_yaml_str as dump_yaml_str
+from .io import fast_dumps as fast_dumps
+from .io import fast_loads as fast_loads
+from .io import find_latest_session_id as find_latest_session_id
+from .io import github_review_ledger_path as github_review_ledger_path
+from .io import is_generated_path as is_generated_path
+from .io import is_git_main_checkout as is_git_main_checkout
+from .io import is_git_worktree as is_git_worktree
+from .io import is_in_git_repo as is_in_git_repo
+from .io import load_yaml as load_yaml
+from .io import pkg_root as pkg_root
+from .io import read_stable_contained_bytes as read_stable_contained_bytes
+from .io import read_stable_contained_range as read_stable_contained_range
+from .io import recipe_delivery_request_digest as recipe_delivery_request_digest
+from .io import resolve_contained_path as resolve_contained_path
+from .io import resolve_general_output_token_limit as resolve_general_output_token_limit
+from .io import resolve_main_worktree as resolve_main_worktree
+from .io import resolve_project_dir as resolve_project_dir
+from .io import resolve_recipe_delivery_decision as resolve_recipe_delivery_decision
+from .io import resolve_recipe_envelope_byte_limit as resolve_recipe_envelope_byte_limit
+from .io import resolve_recipe_section_response_bound as resolve_recipe_section_response_bound
 from .io import YAMLError as YAMLError
 from .io import atomic_write as atomic_write
 from .io import compose_yaml as compose_yaml
@@ -269,25 +304,25 @@ from .logging import PluginArtifactLifecycleLease as PluginArtifactLifecycleLeas
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
 from .logging import log_plugin_artifact_lifecycle as log_plugin_artifact_lifecycle
-from .path_containment import ContainmentError as ContainmentError
-from .path_containment import check_metadata_stable as check_metadata_stable
-from .path_containment import read_stable_contained_bytes as read_stable_contained_bytes
-from .path_containment import read_stable_contained_range as read_stable_contained_range
-from .path_containment import resolve_contained_path as resolve_contained_path
-from .paths import GENERATED_FILES as GENERATED_FILES
-from .paths import claude_code_log_path as claude_code_log_path
-from .paths import claude_code_project_dir as claude_code_project_dir
-from .paths import default_log_dir as default_log_dir
-from .paths import destination_location as destination_location
-from .paths import find_latest_session_id as find_latest_session_id
-from .paths import github_review_ledger_path as github_review_ledger_path
-from .paths import is_generated_path as is_generated_path
-from .paths import is_git_main_checkout as is_git_main_checkout
-from .paths import is_git_worktree as is_git_worktree
-from .paths import is_in_git_repo as is_in_git_repo
-from .paths import pkg_root as pkg_root
-from .paths import resolve_main_worktree as resolve_main_worktree
-from .paths import resolve_project_dir as resolve_project_dir
+from .io.path_containment import ContainmentError as ContainmentError
+from .io.path_containment import check_metadata_stable as check_metadata_stable
+from .io.path_containment import read_stable_contained_bytes as read_stable_contained_bytes
+from .io.path_containment import read_stable_contained_range as read_stable_contained_range
+from .io.path_containment import resolve_contained_path as resolve_contained_path
+from .io.paths import GENERATED_FILES as GENERATED_FILES
+from .io.paths import claude_code_log_path as claude_code_log_path
+from .io.paths import claude_code_project_dir as claude_code_project_dir
+from .io.paths import default_log_dir as default_log_dir
+from .io.paths import destination_location as destination_location
+from .io.paths import find_latest_session_id as find_latest_session_id
+from .io.paths import github_review_ledger_path as github_review_ledger_path
+from .io.paths import is_generated_path as is_generated_path
+from .io.paths import is_git_main_checkout as is_git_main_checkout
+from .io.paths import is_git_worktree as is_git_worktree
+from .io.paths import is_in_git_repo as is_in_git_repo
+from .io.paths import pkg_root as pkg_root
+from .io.paths import resolve_main_worktree as resolve_main_worktree
+from .io.paths import resolve_project_dir as resolve_project_dir
 from .pipeline_tracker import TrackerAuthorityReadResult as TrackerAuthorityReadResult
 from .pipeline_tracker import TrackerAuthorityTarget as TrackerAuthorityTarget
 from .pipeline_tracker import TrackerParticipantKey as TrackerParticipantKey

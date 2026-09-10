@@ -1,5 +1,9 @@
 """Backward-compat shim for _plugin_cache — see core.plugins._plugin_cache."""
 
+import os  # noqa: F401 — re-exported for monkeypatch.setattr("autoskillit.core._plugin_cache.os", ...)
+import shutil  # noqa: F401 — re-exported for monkeypatch.setattr("autoskillit.core._plugin_cache.shutil", ...)
+import psutil  # noqa: F401 — re-exported for monkeypatch.setattr("autoskillit.core._plugin_cache.psutil", ...)
+
 from autoskillit.core.plugins._plugin_cache import (
     _RETIRING_CACHE_SCHEMA_VERSION,
     ActiveKitchensReadResult,

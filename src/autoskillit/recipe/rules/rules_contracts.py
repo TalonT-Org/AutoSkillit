@@ -5,6 +5,7 @@ from __future__ import annotations
 import regex as re
 
 from autoskillit.core import (
+    EXTERNAL_EFFECT_CHOICES,
     SKILL_TOOLS,
     BoundValueOrigin,
     Severity,
@@ -12,6 +13,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._contracts_types import VALID_EXTERNAL_EFFECTS
 from autoskillit.recipe._skill_helpers import bound_skill_name
 from autoskillit.recipe.contracts import (
     get_skill_contract,
@@ -281,6 +283,7 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
 
         wb = contract.write_behavior
         wew = contract.write_expected_when
+        external_effect = contract.external_effect
 
         if wb is not None and wb not in _VALID_WRITE_BEHAVIORS:
             findings.append(
@@ -311,6 +314,17 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                         "write_expected_when (contradictory)."
                     ),
                     severity=Severity.WARNING,
+                )
+            )
+        if external_effect not in VALID_EXTERNAL_EFFECTS:
+            findings.append(
+                make_finding(
+                    rule_name="write-behavior-consistency",
+                    step_name=step_name,
+                    message=(
+                        f"Invalid external_effect '{external_effect}'. Must be "
+                        f"{EXTERNAL_EFFECT_CHOICES}."
+                    ),
                 )
             )
         for pattern in wew:

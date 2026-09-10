@@ -603,14 +603,14 @@ class TestStaleGeneratorRefusal:
         has no generation store to lease at all) and for external tampering,
         which no lease can prevent.
         """
-        import autoskillit.workspace._projected_artifact.authority as _auth
-        from autoskillit.workspace._projected_artifact.authority import (
-            StaleGeneratorError,
+        import autoskillit.workspace._projected_artifact._generator_freshness as _freshness
+        from autoskillit.core import StaleGeneratorError
+        from autoskillit.workspace._projected_artifact._generator_freshness import (
             assert_generator_process_fresh,
         )
 
         # Monkeypatch pkg_root where assert_generator_process_fresh imports it
-        monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
+        monkeypatch.setattr(_freshness, "pkg_root", lambda: tmp_path / "nonexistent")
         with pytest.raises(StaleGeneratorError, match="no longer exists"):
             assert_generator_process_fresh()
 
@@ -629,7 +629,7 @@ class TestStaleGeneratorRefusal:
         left to disagree with -- the mismatch this test used to construct is
         now unconstructible.
         """
-        from autoskillit.workspace._projected_artifact.authority import (
+        from autoskillit.workspace._projected_artifact._generator_freshness import (
             assert_generator_process_fresh,
         )
 
@@ -647,7 +647,7 @@ class TestStaleGeneratorRefusal:
         assert_generator_process_fresh()  # must NOT raise
 
     def test_fresh_generator_passes(self) -> None:
-        from autoskillit.workspace._projected_artifact.authority import (
+        from autoskillit.workspace._projected_artifact._generator_freshness import (
             assert_generator_process_fresh,
         )
 
@@ -692,13 +692,12 @@ class TestStaleGeneratorRefusal:
         from typing import Any, cast
         from unittest.mock import Mock
 
-        import autoskillit.workspace._projected_artifact.authority as _auth
+        import autoskillit.workspace._projected_artifact._generator_freshness as _freshness
         from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactAuthority
-        from autoskillit.core import PluginLoadMode, managed_home_for
-        from autoskillit.workspace._projected_artifact.authority import StaleGeneratorError
+        from autoskillit.core import PluginLoadMode, StaleGeneratorError, managed_home_for
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
+        monkeypatch.setattr(_freshness, "pkg_root", lambda: tmp_path / "nonexistent")
 
         version = "1.2.3"
         root = tmp_path / "fake-root-parent" / version

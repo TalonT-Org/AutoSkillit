@@ -26,6 +26,99 @@ def test_semantic_preflight_returns_real_codex_refusal_diagnostic() -> None:
     )
 
 
+def test_managed_join_attestation_is_server_issued_and_admits_preflight() -> None:
+    from autoskillit.core import JoinSpec, SkillSemanticPlan
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+    from autoskillit.server.tools._preflight import check_skill_semantic_feasibility
+
+    authority = DefaultManagedJoinAttestationAuthority()
+    context = authority.issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-sol",
+        resolved_reasoning_effort="high",
+        codex_catalog_digest="c" * 64,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+    plan = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
+
+    assert authority.verify(context, backend="codex", parent_session_id="parent-1") == context
+    assert (
+        check_skill_semantic_feasibility(
+            plan,
+            CodexBackend(),
+            adaptation_context=context,
+        )
+        is None
+    )
+
+
+def test_backend_compat_admits_a_join_required_root_only_with_managed_context() -> None:
+    from autoskillit.core import JoinSpec, SkillSemanticPlan
+    from autoskillit.execution.backends import CodexBackend
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+    from autoskillit.server.tools._backend_compat import _check_backend_compat
+
+    context = DefaultManagedJoinAttestationAuthority().issue(
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-sol",
+        resolved_reasoning_effort="high",
+        codex_catalog_digest="c" * 64,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+    )
+    root = SimpleNamespace(
+        semantic_plan=SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
+    )
+
+    assert (
+        _check_backend_compat(
+            skill_command="$audit-tests",
+            resolved_command="$audit-tests",
+            effective_order_id="order-123",
+            target_name="audit-tests",
+            skill_info=SimpleNamespace(root=root, closure=(root,)),
+            effective_backend_obj=CodexBackend(),
+            skill_resolver=object(),
+            adaptation_context=context,
+        )
+        is None
+    )
+
+
+def test_managed_join_attestation_refuses_until_recovery_gate_is_open() -> None:
+    from autoskillit.server._managed_join_attestation import DefaultManagedJoinAttestationAuthority
+
+    authority = DefaultManagedJoinAttestationAuthority()
+    authority.set_recovery_gate(lambda: False)
+
+    with pytest.raises(RuntimeError, match="blocked by recovery"):
+        authority.issue(
+            backend="codex",
+            launch_context="direct",
+            parent_session_id="parent-1",
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            resolved_reasoning_effort="high",
+            codex_catalog_digest="c" * 64,
+            fixed_batch_tool_registry_digest="a" * 64,
+            hook_registry_digest="b" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+        )
+
+
 def test_shared_backend_compat_serializes_root_refusal_as_infeasible() -> None:
     from autoskillit.core import JoinSpec, SkillSemanticPlan
     from autoskillit.execution.backends import CodexBackend
@@ -84,7 +177,10 @@ def test_shared_backend_compat_checks_only_supported_root_not_refused_dependency
     dependency_plan = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
     adapted_plans: list[SkillSemanticPlan] = []
 
-    def adapt(plan: SkillSemanticPlan) -> SkillSemanticAdaptationResult:
+    def adapt(
+        plan: SkillSemanticPlan,
+        _adaptation_context=None,
+    ) -> SkillSemanticAdaptationResult:
         adapted_plans.append(plan)
         if plan is dependency_plan:
             return SkillSemanticAdaptationResult.unsupported(
@@ -162,7 +258,7 @@ def test_semantic_preflight_propagates_malformed_adapter_result(
         result = SkillSemanticAdaptationResult()
     backend = SimpleNamespace(
         name="test-backend",
-        adapt_skill_semantics=lambda _plan: result,
+        adapt_skill_semantics=lambda _plan, _adaptation_context=None: result,
     )
 
     with pytest.raises(SkillContractError, match=f"^{expected}$"):

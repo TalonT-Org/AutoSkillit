@@ -29,6 +29,7 @@ from _session_binding import (  # type: ignore[import-not-found]  # noqa: E402
     SESSION_BINDING_SCHEMA_VERSION,
     SessionBinding,
     SessionBindingError,
+    binding_lock,
     loaded_skill_from_manifest,
     merge_binding,
     normalize_skill_name,
@@ -81,21 +82,6 @@ def main() -> None:
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
     flag_path = resolve_binding_path(payload_cwd, session_id)
 
-    try:
-        existing = read_binding(flag_path)
-    except SessionBindingError as exc:
-        sys.stderr.write(
-            f"skill_load_post_hook: failed to read existing flag {flag_path}: {exc}\n"
-        )
-        existing = SessionBinding(
-            schema_version=SESSION_BINDING_SCHEMA_VERSION,
-            session_id=session_id,
-            join_required=True,
-            binding_valid=False,
-            artifact_digest="",
-            loaded_skills=(),
-        )
-
     ts = datetime.now(UTC).isoformat()
     artifact_digest = ""
     binding_error: str | None = None
@@ -110,16 +96,33 @@ def main() -> None:
         binding_error = str(exc)
         new_entry = unresolved_loaded_skill(skill_name, ts, binding_error)
 
-    merged = merge_binding(
-        existing,
-        session_id=session_id,
-        new_entry=new_entry,
-        artifact_digest=artifact_digest,
-    )
     binding_written = False
     try:
-        write_binding(flag_path, merged)
-        binding_written = True
+        with binding_lock(flag_path):
+            try:
+                existing = read_binding(flag_path)
+            except SessionBindingError as exc:
+                sys.stderr.write(
+                    f"skill_load_post_hook: failed to read existing flag {flag_path}: {exc}\n"
+                )
+                existing = SessionBinding(
+                    schema_version=SESSION_BINDING_SCHEMA_VERSION,
+                    session_id=session_id,
+                    join_required=True,
+                    binding_valid=False,
+                    artifact_digest="",
+                    loaded_skills=(),
+                )
+            write_binding(
+                flag_path,
+                merge_binding(
+                    existing,
+                    session_id=session_id,
+                    new_entry=new_entry,
+                    artifact_digest=artifact_digest,
+                ),
+            )
+            binding_written = True
     except Exception:
         sys.stderr.write(
             f"skill_load_post_hook: failed to write flag {flag_path}:\n{traceback.format_exc()}"

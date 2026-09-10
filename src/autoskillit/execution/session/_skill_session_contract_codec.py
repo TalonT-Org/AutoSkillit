@@ -431,6 +431,7 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
         "write_behavior": {
             "mode": contract.write_behavior.mode,
             "expected_when": list(contract.write_behavior.expected_when),
+            "external_effect": contract.write_behavior.external_effect,
         },
         "read_only": contract.read_only,
         "scope_discipline": contract.scope_discipline,
@@ -617,6 +618,7 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
                     str(pattern)
                     for pattern in data.get("write_behavior", {}).get("expected_when", [])
                 ),
+                external_effect=str(data.get("write_behavior", {}).get("external_effect", "none")),
             ),
             read_only=read_only,
             scope_discipline=scope_discipline,

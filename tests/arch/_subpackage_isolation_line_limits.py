@@ -142,47 +142,15 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "this guard's own destructive-op/fetch/checked-out-ref classification room "
         "without re-tripping the limit on the next small addition.",
     ),
-    "execution/backends/codex.py": LineLimitExemption(
-        1300,
-        "REQ-CNST-010-E9-narrowed: CodexBackend class alone is 1062 lines "
-        "(cmd/cmd-spec grammar with build_skill_session_cmd/"
-        "build_food_truck_cmd/build_interactive_cmd/"
-        "validate_interactive_invocation/setup_session_dir), "
-        "with the four cmd-builder methods tightly coupled to CodexBackend "
-        "state. CodexBackend retains all five cmd-builder methods because each "
-        "touches instance state (capabilities, env policy, flag vocabulary, "
-        "session locator) and the cmd-spec grammar is the backend's authority "
-        "boundary — splitting these would force a separate mutable state object "
-        "and break the protocol. The remaining slimmed file is 1242 "
-        "lines; cap lowered from 2500 to 1300 to acknowledge the architectural seam that "
-        "the decomposition could not cross without breaking the backend "
-        "dataclass invariant.",
-    ),
-    "execution/backends/claude.py": LineLimitExemption(
-        1600,
-        "REQ-CNST-010-E19: Claude backend protocol parity keeps managed native-shell "
-        "decision/reference disposition beside executable launch-binding validation; "
-        "both are shared builder-interface obligations even though Claude deliberately "
-        "does not inject the Codex-only controls; REQ-SEM-ADAPT-001 semantic-plan "
-        "adaptation remains on this registered backend so native child syntax and model "
-        "alias resolution cannot drift into a second adapter registry; #4443 also threads "
-        "parent sandbox authority through the shared no-op setup boundary and explorer "
-        "dispatch rendering preserves the same backend-owned syntax authority; #4480 adds "
-        "the plugin_dir launch-binding validation parameter for cross-backend signature "
-        "parity; #4507 renders one named child per runtime topic (+6 net lines); "
-        "#4233 keeps Claude task lifecycle normalization and immutable skill-session "
-        "async hardening beside the backend parser and command builder that own them. "
-        "#4557 adds Claude-only host-attestation env, version-derived annotation support, "
-        "and frozen attestation env at all 4 launch sites; #4566 "
-        "adds execution-role protocol parity while preserving Claude behavior (+3 net lines). "
-        "Threads mcp_tool_timeout_sec through build_interactive_cmd, "
-        "build_skill_session_cmd, build_food_truck_cmd, and build_resume_cmd to give Claude "
-        "Code's client-side idle-abort timeout parity with the server-side anyio.fail_after "
-        "ceiling (+2 net lines). REQ-017 (resolve-failures iteration 1) also adds an "
-        "explicit mcp_tool_timeout_sec parameter to build_headless_cmd and injects the "
-        "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT env var when given, plus hardens all four "
-        "existing boundary checks with isinstance(mcp_tool_timeout_sec, (int, float)) "
-        "so MagicMock-bearing test mocks no longer raise at the builder (+19 net lines).",
+    "execution/headless/_headless_result.py": LineLimitExemption(
+        900,
+        "REQ-CNST-010-E25-narrowed: #4233 keeps the async-obligation success gate adjacent to "
+        "the existing stale, idle, timeout, and content adjudication order it must preempt. "
+        "After #4664 decomposition, adjudication helpers live in _headless_adjudication.py "
+        "— including the #4641/#4644 _should_flag_cleanup_incomplete diagnostic shared by "
+        "both SkillResult construction seams; _build_skill_result remains here as the "
+        "headless orchestration authority. The 827-line residual is dominated by that "
+        "single 741-line function, which owns the success-gate adjacency rule.",
     ),
     "execution/backends/_codex_session_storage.py": LineLimitExemption(
         1500,

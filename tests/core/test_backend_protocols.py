@@ -229,6 +229,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         PreLaunchReadiness,
         ResultParser,
         ResumeSpec,
+        SemanticAdaptationContext,
         SessionLocator,
         SkillExecutionRole,
         SkillSemanticAdaptationResult,
@@ -369,7 +370,9 @@ def test_stub_class_satisfies_coding_agent_backend():
         def translate_model(self, model: str) -> str: ...
 
         def adapt_skill_semantics(
-            self, plan: SkillSemanticPlan
+            self,
+            plan: SkillSemanticPlan,
+            adaptation_context: SemanticAdaptationContext | None = None,
         ) -> SkillSemanticAdaptationResult: ...
 
         def model_config_overrides(self, model: str) -> tuple[str, ...]:

@@ -142,9 +142,13 @@ class TestCampaignDisciplineSection:
         prompt = _build()
         assert "cross-dispatch token aggregation" in prompt or "NO cross-dispatch" in prompt
 
-    def test_fleet_lock_mentioned(self) -> None:
-        prompt = _build()
-        assert "fleet_lock" in prompt
+    def test_worker_capacity_mentioned(self) -> None:
+        prompt = " ".join(_build().split())
+        assert (
+            "Static manifest dispatches use the worker_capacity authority and are "
+            "SEQUENTIAL — do NOT issue static manifest calls in parallel, regardless "
+            "of the worker capacity's max_concurrent setting."
+        ) in prompt
 
 
 # --- K-6: TestFailureRecoverySection ---

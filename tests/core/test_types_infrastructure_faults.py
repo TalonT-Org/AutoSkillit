@@ -46,6 +46,21 @@ def test_write_behavior_spec_dataclass() -> None:
     assert cond.expected_when == ("pat",)
 
 
+def test_write_behavior_spec_preserves_mode_for_upstream_semantic_validation() -> None:
+    from autoskillit.core import WriteBehaviorSpec
+
+    spec = WriteBehaviorSpec(mode="invalid")
+
+    assert spec.mode == "invalid"
+
+
+def test_write_behavior_spec_rejects_invalid_external_effect() -> None:
+    from autoskillit.core import WriteBehaviorSpec
+
+    with pytest.raises(ValueError, match="external_effect"):
+        WriteBehaviorSpec(external_effect="invalid")
+
+
 def test_infrastructure_fault_exceptions_share_marker_base() -> None:
     """InfrastructureFaultError is the shared marker base for environment faults.
 

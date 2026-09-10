@@ -423,7 +423,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Generated Codex home construction forwards its independent storage leases.",
     ),
-    ("execution/backends/claude.py", "cook_session_context", "()"): (
+    ("execution/backends/_claude/environment.py", "cook_session_context", "()"): (
         1,
         "The context probe is not a physical artifact-consuming agent launch.",
     ),

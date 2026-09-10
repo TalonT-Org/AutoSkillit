@@ -19,6 +19,7 @@ def test_backend_protocols_importable_from_core():
     from autoskillit.core import (  # noqa: F401
         CodingAgentBackend,
         ResultParser,
+        SemanticAdaptationContext,
         StreamParser,
     )
 
@@ -56,14 +57,16 @@ def test_backend_protocol_consumes_il0_skill_semantic_plan() -> None:
 
     from autoskillit.core import (
         CodingAgentBackend,
+        SemanticAdaptationContext,
         SkillSemanticAdaptationResult,
         SkillSemanticPlan,
     )
 
     signature = inspect.signature(CodingAgentBackend.adapt_skill_semantics)
-    assert tuple(signature.parameters) == ("self", "plan")
+    assert tuple(signature.parameters) == ("self", "plan", "adaptation_context")
     hints = typing.get_type_hints(CodingAgentBackend.adapt_skill_semantics)
     assert hints["plan"] is SkillSemanticPlan
+    assert hints["adaptation_context"] == SemanticAdaptationContext | None
     assert hints["return"] is SkillSemanticAdaptationResult
 
 
@@ -122,6 +125,20 @@ def test_registered_backends_adapt_every_skill_semantic_operation() -> None:
             )
             assert result.model_effort_policy["reviewer"][0], backend_name
             assert result.model_effort_policy["reviewer"][1] == "high", backend_name
+
+
+def test_codex_protocol_admits_required_join_with_a_managed_context() -> None:
+    from autoskillit.core import JoinSpec, SkillSemanticPlan
+    from autoskillit.execution.backends import CodexBackend
+    from tests.contracts._skill_admission_ledger import _production_managed_codex_context
+
+    result = CodexBackend().adapt_skill_semantics(
+        SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True)),
+        _production_managed_codex_context(),
+    )
+
+    assert result.unsupported_operation is None
+    assert "server-owned managed fixed-batch route" in "\n".join(result.instruction_fragments)
 
 
 def test_codex_adaptation_maps_namespaced_role_to_registered_agent() -> None:

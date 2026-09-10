@@ -7,7 +7,12 @@ from enum import StrEnum
 
 import regex as re
 
-from autoskillit.core import BoundScalar, PreflightKind
+from autoskillit.core import (
+    EXTERNAL_EFFECT_CHOICES,
+    VALID_EXTERNAL_EFFECTS,
+    BoundScalar,
+    PreflightKind,
+)
 
 _CONTEXT_REF_RE = re.compile(r"\$\{\{\s*context\.([A-Za-z_]\w*)\s*\}\}")
 INPUT_REF_RE = re.compile(r"\$\{\{\s*inputs\.([A-Za-z_]\w*)\s*\}\}")
@@ -111,6 +116,7 @@ class SkillContract:
     pattern_examples: list[str] = dataclasses.field(default_factory=list)
     write_behavior: str | None = None
     write_expected_when: list[str] = dataclasses.field(default_factory=list)
+    external_effect: str = "none"
     read_only: bool = False
     scope_discipline: bool = False
     completion_required: bool = False
@@ -125,6 +131,8 @@ class SkillContract:
     audit_output_mode: AuditOutputMode | None = None
 
     def __post_init__(self) -> None:
+        if self.external_effect not in VALID_EXTERNAL_EFFECTS:
+            raise ValueError(f"external_effect must be {EXTERNAL_EFFECT_CHOICES}")
         if self.input_preflight is None:
             return
         try:

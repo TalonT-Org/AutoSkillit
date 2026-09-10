@@ -19,6 +19,7 @@ from typing import Any
 
 from autoskillit.core import SpaceProbe, default_space_probe
 from autoskillit.core.types import (
+    MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
     BackendAuthority,
     CIRunScope,
     CIWatcher,
@@ -35,6 +36,7 @@ from autoskillit.core.types import (
     ManagedHeadlessSessionLineage,
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionTerminalState,
+    ManagedJoinAttestation,
     MergeQueueWatcher,
     NativeShellCaptureDecision,
     NativeShellCaptureObservation,
@@ -46,6 +48,7 @@ from autoskillit.core.types import (
     RecipeNotFoundError,
     RecipeRepository,
     ResolvedLaunchContract,
+    SemanticAdaptationContext,
     SessionCheckpoint,  # noqa: F401, TC001
     SkillProjectionPreparation,
     SkillResult,
@@ -60,8 +63,31 @@ from autoskillit.core.types import (
 )
 
 
+def make_managed_codex_context(parent_session_id: str) -> SemanticAdaptationContext:
+    """Return the canonical direct-mode managed Codex test context."""
+    return SemanticAdaptationContext(
+        managed_join_attestation=ManagedJoinAttestation(
+            schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+            backend="codex",
+            launch_context="direct",
+            parent_session_id=parent_session_id,
+            activation_epoch=0,
+            direct_tool_mode=True,
+            resolved_model="gpt-5.6-sol",
+            resolved_reasoning_effort="high",
+            codex_catalog_digest="c" * 64,
+            fixed_batch_tool_registry_digest="a" * 64,
+            hook_registry_digest="b" * 64,
+            skill_load_applies=True,
+            guards_apply=True,
+            provenance="autoskillit-server",
+        )
+    )
+
+
 def adapt_test_skill_semantics(
     plan: SkillSemanticPlan,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> SkillSemanticAdaptationResult:
     """Return a deterministic protocol-complete adaptation for backend test doubles."""
     logical_roles = {role.name: role.name for role in plan.logical_roles}

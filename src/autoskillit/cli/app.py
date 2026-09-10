@@ -39,7 +39,7 @@ from autoskillit.core import (
 from autoskillit.execution import _has_active_execution_marker
 
 if TYPE_CHECKING:
-    from autoskillit.core import FleetLock, SkillResult
+    from autoskillit.core import ManagedWorkerCapacity, SkillResult
 
 logger = get_logger(__name__)
 
@@ -68,9 +68,9 @@ app.command(order)
 
 def is_server_active(
     marker_dir: Path | None,
-    fleet_lock: FleetLock | None,
+    worker_capacity: ManagedWorkerCapacity | None,
 ) -> bool:
-    if fleet_lock is not None and fleet_lock.active_count > 0:
+    if worker_capacity is not None and worker_capacity.active_count > 0:
         return True
     if marker_dir is not None and _has_active_execution_marker(marker_dir):
         return True
@@ -183,7 +183,7 @@ def serve(*, verbose: Annotated[bool, Parameter(name=["--verbose", "-v"])] = Fal
         async def _guarded_serve() -> None:
             await serve_with_signal_guard(
                 mcp,
-                activity_check=lambda: is_server_active(_marker_dir, ctx.fleet_lock),
+                activity_check=lambda: is_server_active(_marker_dir, ctx.worker_capacity),
             )
 
         anyio.run(

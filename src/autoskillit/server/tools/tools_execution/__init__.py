@@ -86,12 +86,20 @@ from autoskillit.server.tools.tools_pipeline_tracker import (
     _select_tracker_authority,  # noqa: F401 — re-exported for facade completeness
     mark_step_skipped,  # noqa: F401
 )
+from autoskillit.workspace import (  # noqa: F401
+    create_git_worktree,
+    remove_git_worktree,
+)
 
 from ._audit_response import (  # noqa: F401
     _audit_response,
     _complete_resumed_audit,
     _materialization_outcome_status,
     _reject_missing_semantic_result,
+)
+from ._fixed_batch_handlers import (  # noqa: F401
+    read_fixed_batch_result,
+    run_fixed_batch,
 )
 from ._gates import (  # noqa: F401
     DEPENDENCY_DENY_PREFIX,
@@ -103,6 +111,7 @@ from ._gates import (  # noqa: F401
     _finalize_run_skill_completion,
     _has_active_locks,
 )
+from ._managed_leaf import scoped_child_resource_owner  # noqa: F401
 from ._run_cmd import _PURE_SLEEP_RE, run_cmd  # noqa: F401
 from ._run_python import run_python  # noqa: F401
 from ._run_skill_admission import (  # noqa: F401
@@ -137,7 +146,6 @@ __all__ = [
     "_RunSkillContractLifecycle",
     "_RunSkillDispatchState",
     "_admit_recipe_execution",
-    "mark_step_skipped",
     "_audit_preflight_step_names",
     "_audit_response",
     "_begin_run_skill_completion",
@@ -169,19 +177,25 @@ __all__ = [
     "_resolve_step_name_from_recipe",
     "_run_subprocess_captured",
     "_select_tracker_authority",
+    "create_git_worktree",
     "execution_marker",
     "find_caller_session_id",
     "get_tool_def",
     "is_feature_enabled",
     "logger",
+    "mark_step_skipped",
     "prepare_recipe_segment_delivery",
     "progress_heartbeat",
+    "read_fixed_batch_result",
     "read_overlay",
     "read_registry",
+    "remove_git_worktree",
     "resolve_closure_write_dirs",
     "run_cmd",
+    "run_fixed_batch",
     "run_python",
     "run_skill",
+    "scoped_child_resource_owner",
     "shape_execution_response",
     "shutil",
 ]

@@ -730,7 +730,7 @@ tasks:
   sync-hooks-hash:
     desc: "Regenerate src/autoskillit/hooks/registry.sha256 from the live HOOK_REGISTRY"
     cmds:
-      - uv run python -c "from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR; (HOOKS_DIR / 'registry.sha256').write_text(HOOK_REGISTRY_HASH + '\n')"
+      - uv run python -c "import autoskillit.hooks; from autoskillit.hook_registry import HOOK_REGISTRY_HASH, HOOKS_DIR; (HOOKS_DIR / 'registry.sha256').write_text(HOOK_REGISTRY_HASH + '\n')"
 
   refresh-codex-hook-fixture:
     desc: Regenerate the deterministic Codex hook-event snapshot

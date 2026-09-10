@@ -20,6 +20,15 @@ ROOT_PUBLIC_NAMES = (
     "CloneResult",
     "ModelTotalEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
+    "LoadReport",
+    "LoadResult",
+    "ManagedSessionHome",
+    "PreLaunchReadiness",
+    "SkillUnavailabilityPayload",
+    "SkillUnavailabilityRecord",
+    "TestResult",
+    "ValidatedAddDir",
+    "ValidatedWorktreePath",
 )
 INTERNAL_INDEX_NAMES = (
     "TokenUsageFileEntry",

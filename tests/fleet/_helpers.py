@@ -76,11 +76,11 @@ def _setup_dispatch(
 ):
     """Wire tool_ctx for dispatch tests."""
     from autoskillit.execution.session import DefaultManagedHeadlessSessionLineageStore
-    from autoskillit.fleet import FleetSemaphore
     from autoskillit.recipe.schema import Recipe, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
+    from tests.fleet.conftest import worker_capacity_from_ctx
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    worker_capacity_from_ctx(tool_ctx)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info(recipe_name)
     repo.add_recipe(recipe_name, recipe_info)

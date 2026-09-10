@@ -6,16 +6,59 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from .._managed_worker_capacity import ManagedWorkerPermit
+from ._type_skill_semantics import SemanticAdaptationContext
+
 __all__ = [
     "GateState",
     "BackgroundSupervisor",
-    "FleetLock",
+    "ManagedFixedBatchSupervisor",
+    "ManagedWorkerCapacity",
+    "ManagedJoinAttestationAuthority",
     "KitchenTransitionLock",
     "QuotaPolicy",
     "QuotaRefreshTask",
     "TokenFactory",
     "CampaignProtector",
 ]
+
+
+class ManagedJoinAttestationAuthority(Protocol):
+    """Server-owned issuer and verifier for managed-join adaptation evidence."""
+
+    @property
+    def activation_epoch(self) -> int: ...
+
+    def issue(
+        self,
+        *,
+        backend: str,
+        launch_context: str,
+        parent_session_id: str,
+        direct_tool_mode: bool,
+        resolved_model: str,
+        resolved_reasoning_effort: str,
+        codex_catalog_digest: str,
+        fixed_batch_tool_registry_digest: str,
+        hook_registry_digest: str,
+        skill_load_applies: bool,
+        guards_apply: bool,
+    ) -> SemanticAdaptationContext: ...
+
+    def verify(
+        self,
+        context: SemanticAdaptationContext | None,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None: ...
+
+    def find_verified_context(
+        self,
+        *,
+        backend: str,
+        parent_session_id: str,
+    ) -> SemanticAdaptationContext | None: ...
 
 
 @runtime_checkable
@@ -50,17 +93,44 @@ class BackgroundSupervisor(Protocol):
 
 
 @runtime_checkable
-class FleetLock(Protocol):
-    """Protocol for a semaphore-style fleet dispatch guard.
+class ManagedFixedBatchSupervisor(Protocol):
+    """Server-owned managed fixed-batch lifecycle and recovery authority."""
 
-    Default implementation is FleetSemaphore in server/_factory.py.
-    """
+    @property
+    def recovery_ready(self) -> bool: ...
+
+    @property
+    def recovery_diagnostic(self) -> str: ...
+
+    async def reconcile_startup(self) -> bool: ...
+
+    async def run(self, binding: Any) -> Any: ...
+
+    def read_result(
+        self,
+        *,
+        reference: str,
+        launch: Any,
+        batch_id: str,
+        assignment_id: str = "",
+    ) -> Any: ...
+
+    async def close(self) -> None: ...
+
+
+@runtime_checkable
+class ManagedWorkerCapacity(Protocol):
+    """Protocol for the process-wide owner-bound managed worker capacity."""
 
     def at_capacity(self) -> bool: ...
 
-    async def acquire(self) -> None: ...
+    async def acquire(self, owner: object) -> ManagedWorkerPermit: ...
 
-    def release(self) -> None: ...
+    def release(self, permit: ManagedWorkerPermit) -> None: ...
+
+    def reconfigure(self, *, max_concurrent: int, timeout: float | None) -> None: ...
+
+    def restore_owner_debt(self, owner: object, permit_id: str) -> ManagedWorkerPermit: ...
 
     @property
     def active_count(self) -> int: ...

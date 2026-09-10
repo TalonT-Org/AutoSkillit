@@ -110,7 +110,10 @@ def test_type_ignore_count_budget() -> None:
     # Merging in develop's own progress since this branch's fork point separately
     # brings in #4926's `hooks/_capture_spawn.py:215` (+1, `# type: ignore[has-type]`
     # on a module-level logger reassignment). Net of both: 153 (fork point) + 2 + 1 = 156.
-    budget = 156
+    # The managed fixed-batch route and its stdlib-only join shards add three net
+    # standalone-import suppressions; hook subprocesses resolve sibling modules
+    # through their runtime path bootstrap.
+    budget = 159
     assert count <= budget, (
         f"type: ignore count ({count}) exceeds budget ({budget}). "
         "Review new suppressions — they may indicate real type errors."

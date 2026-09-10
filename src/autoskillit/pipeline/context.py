@@ -34,7 +34,6 @@ from autoskillit.core import (
     ExplorationContextStoreProtocol,
     FinalizedRecipeProjection,
     FinalizedRecipeStep,
-    FleetLock,
     GateState,
     GitHubApiLog,
     GitHubFetcher,
@@ -45,7 +44,10 @@ from autoskillit.core import (
     KitchenProcessIdentity,
     KitchenTransitionLock,
     LaunchResolver,
+    ManagedFixedBatchSupervisor,
     ManagedHeadlessSessionLineageStore,
+    ManagedJoinAttestationAuthority,
+    ManagedWorkerCapacity,
     McpResponseLog,
     MergeQueueWatcher,
     MigrationService,
@@ -170,7 +172,8 @@ class ToolContext:
                           from skill contracts.
     quota_refresh_task:   QuotaRefreshTask — cancellable handle for the kitchen-scoped
                           quota refresh background task.
-    fleet_lock:           FleetLock — semaphore-style guard for concurrent fleet dispatch.
+    worker_capacity:      ManagedWorkerCapacity — shared owner-bound guard for fleet
+                          dispatch and managed fixed-batch leaves.
     build_protected_campaign_ids: CampaignProtector — resolves campaign IDs exempt from
                           log retention purge.
     session_skill_manager: SessionSkillManager — manages per-session ephemeral skill dirs
@@ -263,6 +266,9 @@ class ToolContext:
     managed_headless_session_lineage_store: ManagedHeadlessSessionLineageStore = field(
         default=_MISSING
     )
+    managed_join_attestation_authority: ManagedJoinAttestationAuthority | None = field(
+        default=None
+    )
     context_admission_ledger: ContextAdmissionLedger = field(default=_MISSING)
     audit_admission_ledger: AuditAdmissionLedger = field(default=_MISSING)
     audit_authority_materializer: AuditAuthorityMaterializer = field(default=_MISSING)
@@ -301,7 +307,10 @@ class ToolContext:
     session_serve_defer_unresolved: bool = field(default=False)
     quota_refresh_task: QuotaRefreshTask | None = field(default=None)
     token_factory: TokenFactory | None = field(default=None)
-    fleet_lock: FleetLock | None = field(default=None)
+    worker_capacity: ManagedWorkerCapacity | None = field(default=None)
+    managed_fixed_batch_supervisor: ManagedFixedBatchSupervisor | None = field(
+        default=None, repr=False
+    )
     build_protected_campaign_ids: CampaignProtector | None = field(default=None)
     ephemeral_root: Path | None = field(default_factory=lambda: None)
     recipe_initialization_state: RecipeInitializationState = field(default_factory=NoActiveRecipe)

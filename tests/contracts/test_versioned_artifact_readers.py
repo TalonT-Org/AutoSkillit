@@ -40,6 +40,20 @@ def test_join_ledger_refuses_an_unsupported_schema_version(tmp_path: Path) -> No
         )
 
 
+def test_join_ledger_refuses_the_replaced_v1_schema(tmp_path: Path) -> None:
+    """A v1 active-wave artifact cannot be silently upgraded into authority."""
+    ledger_path = tmp_path / _join_ledger.LEDGER_FILENAME
+    ledger_path.write_text(
+        json.dumps({"schema_version": 1, "sessions": {}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        _join_ledger._CorruptedLedger, match="unsupported join ledger schema_version"
+    ):
+        _join_ledger._read_locked(ledger_path)
+
+
 def test_projection_hook_repair_refuses_an_unsupported_manifest_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

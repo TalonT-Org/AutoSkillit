@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, assert_never, cast
 
 from autoskillit.core import (
+    EXTERNAL_EFFECT_CHOICES,
     VALID_INPUT_SPEC_TYPES,
     BoundScalar,
     InputSpec,
@@ -24,6 +25,7 @@ from autoskillit.recipe._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,
+    VALID_EXTERNAL_EFFECTS,
     AuditAuthorityPublicationSpec,
     AuditOutputContract,
     AuditOutputMode,
@@ -100,6 +102,13 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
     examples = skill_data.get("pattern_examples", [])
     write_behavior = skill_data.get("write_behavior")
     write_expected_when = skill_data.get("write_expected_when", [])
+    external_effect = skill_data.get("external_effect", "none")
+    if not isinstance(external_effect, str):
+        raise ValueError(f"external_effect for skill '{skill_name}' must be a string")
+    if external_effect not in VALID_EXTERNAL_EFFECTS:
+        raise ValueError(
+            f"external_effect for skill '{skill_name}' must be {EXTERNAL_EFFECT_CHOICES}"
+        )
     read_only = bool(skill_data.get("read_only", False))
     scope_discipline = skill_data.get("scope_discipline", False)
     if not isinstance(scope_discipline, bool):
@@ -234,6 +243,7 @@ def get_skill_contract(skill_name: str, manifest: dict[str, Any]) -> SkillContra
         pattern_examples=examples,
         write_behavior=write_behavior,
         write_expected_when=write_expected_when,
+        external_effect=external_effect,
         read_only=read_only,
         scope_discipline=scope_discipline,
         completion_required=completion_required,

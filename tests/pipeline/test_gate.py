@@ -13,6 +13,8 @@ def test_gated_tools_contains_expected_names():
         "run_python",
         "read_db",
         "run_skill",
+        "run_fixed_batch",
+        "read_fixed_batch_result",
         "merge_worktree",
         "reset_test_dir",
         "classify_fix",

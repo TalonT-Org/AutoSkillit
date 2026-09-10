@@ -110,9 +110,9 @@ def test_every_plugin_authority_refuses_a_deleted_generator_root(
     kind: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A deleted generator install root refuses launch identically across all three."""
-    import autoskillit.workspace._projected_artifact.authority as _auth
+    import autoskillit.workspace._projected_artifact._generator_freshness as _freshness
 
-    monkeypatch.setattr(_auth, "pkg_root", lambda: tmp_path / "nonexistent")
+    monkeypatch.setattr(_freshness, "pkg_root", lambda: tmp_path / "nonexistent")
     authority, backend, load_mode = _PLUGIN_AUTHORITY_FACTORIES[kind](tmp_path, monkeypatch)
 
     with pytest.raises(StaleGeneratorError, match="no longer exists"):

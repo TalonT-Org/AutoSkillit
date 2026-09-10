@@ -34,6 +34,7 @@ from autoskillit.core import (
     EffectiveSkillInvocationAuthority,
     PluginArtifactValidationError,
     PluginLaunchBinding,
+    SemanticAdaptationContext,
     SkillAuthority,
     SkillContractError,
     SkillExecutionRole,
@@ -89,6 +90,7 @@ class SkillProjectionPreparation:
     default_base_branch: str
     catalog: EffectiveSkillCatalogAuthority | None = None
     invocation: EffectiveSkillInvocationAuthority | None = None
+    adaptation_context: SemanticAdaptationContext | None = None
 
     def __post_init__(self) -> None:
         if (self.catalog is None) == (self.invocation is None):
@@ -127,7 +129,10 @@ def build_skill_projection_binding(
     for skill in projection_context.skills:
         adaptation = None
         if skill.semantic_plan is not None:
-            adaptation = backend.adapt_skill_semantics(skill.semantic_plan)
+            adaptation = backend.adapt_skill_semantics(
+                skill.semantic_plan,
+                projection_context.adaptation_context,
+            )
             unsupported_operation = adaptation.validate_refusal_for(
                 skill.semantic_plan,
                 backend=backend.name,
@@ -216,6 +221,7 @@ def _finalize_skill_projection_binding(
         invocation=preparation.invocation,
         backend=backend,
         conventions=backend.conventions,
+        adaptation_context=preparation.adaptation_context,
         substitutions={
             "{{AUTOSKILLIT_TEMP}}": temp_dir_display_str(None),
             "{{AUTOSKILLIT_SCRIPTS}}": str(destination / "recipes" / "scripts"),
@@ -244,6 +250,7 @@ def prepare_catalog_skill_projection(
     catalog: EffectiveSkillCatalogAuthority,
     default_base_branch: str,
     project_root: Path | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> tuple[ProjectedPluginArtifactAuthority, SkillProjectionPreparation]:
     """Prepare semantic dispatch state without acquiring or publishing an artifact."""
     default_base_branch = _default_base_branch(default_base_branch)
@@ -251,12 +258,14 @@ def prepare_catalog_skill_projection(
         cwd=cwd,
         base_branch=default_base_branch,
         catalog=catalog,
+        adaptation_context=adaptation_context,
     )
     preparation = SkillProjectionPreparation(
         cwd=cwd,
         project_root=project_root,
         default_base_branch=default_base_branch,
         catalog=catalog,
+        adaptation_context=adaptation_context,
     )
     return authority, preparation
 

@@ -25,12 +25,17 @@ _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
+from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
+    MANAGED_PARENT_ALLOWED_TOOL_SET,
+)
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,
     resolve_state_root,
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
+    session_managed_codex_route,
+    session_managed_scope,
     write_join_diagnostic,
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
@@ -85,10 +90,52 @@ def main() -> None:
         sys.exit(0)
 
     tool_name = data.get("tool_name")
+    managed_route = session_managed_codex_route(payload_cwd, session_id)
+    if managed_route is not None:
+        route, guards, _config_digest = managed_route
+        if route == "leaf":
+            sys.exit(0)
+        if "join_followup_guard" not in guards:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "decision": "block",
+                        "reason": "managed Codex parent binding omits join_followup_guard.",
+                    }
+                )
+                + "\n"
+            )
+            sys.exit(2)
+        if (
+            isinstance(tool_name, str)
+            and tool_name.split("__")[-1] in MANAGED_PARENT_ALLOWED_TOOL_SET
+        ):
+            sys.exit(0)
     if not isinstance(tool_name, str) or tool_name == "Agent":
         sys.exit(0)
 
-    top_level_parent = "top_level"
+    scope = session_managed_scope(payload_cwd, session_id)
+    if scope is None:
+        write_join_diagnostic(
+            {
+                "gate": "join_followup_guard",
+                "session_id": session_id,
+                "status": "block",
+                "denial_reason": "invalid_managed_scope",
+            },
+            caller="join_followup_guard",
+        )
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "decision": "block",
+                    "reason": "required-join binding has no valid managed scope.",
+                }
+            )
+            + "\n"
+        )
+        sys.exit(2)
+    top_level_parent, _managed_leaf_id = scope
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
     batch = active_batch(
         flag_dir,

@@ -157,3 +157,43 @@ def test_skill_semantic_adaptation_result_enforces_exact_diagnostic_boundary() -
     assert diagnostic.diagnostic == (
         "backend 'codex' does not support skill semantic operation 'git_metadata_write'"
     )
+
+
+def test_managed_join_adaptation_context_is_immutable_and_digestible() -> None:
+    from autoskillit.core import (
+        MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        BackendCapabilities,
+        JoinSpec,
+        ManagedJoinAttestation,
+        SemanticAdaptationContext,
+        SkillSemanticPlan,
+        required_join_is_unsupported,
+    )
+
+    attestation = ManagedJoinAttestation(
+        schema_version=MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
+        backend="codex",
+        launch_context="direct",
+        parent_session_id="parent-1",
+        activation_epoch=4,
+        direct_tool_mode=True,
+        resolved_model="gpt-5.6-sol",
+        resolved_reasoning_effort="high",
+        codex_catalog_digest="c" * 64,
+        fixed_batch_tool_registry_digest="a" * 64,
+        hook_registry_digest="b" * 64,
+        skill_load_applies=True,
+        guards_apply=True,
+        provenance="autoskillit-server",
+    )
+    context = SemanticAdaptationContext(managed_join_attestation=attestation)
+
+    assert context.admits_managed_join_for("codex")
+    assert not context.admits_managed_join_for("claude")
+    required_join = SkillSemanticPlan(schema_version=1, join=JoinSpec(required=True))
+    capabilities = BackendCapabilities(fixed_set_join_capable=False)
+    assert not required_join_is_unsupported(required_join, capabilities, "codex", context)
+    assert required_join_is_unsupported(required_join, capabilities, "claude-code", context)
+    assert context.digest == SemanticAdaptationContext(managed_join_attestation=attestation).digest
+    with pytest.raises(FrozenInstanceError):
+        context.managed_join_attestation = None  # type: ignore[misc]

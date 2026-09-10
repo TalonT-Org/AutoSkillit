@@ -80,3 +80,13 @@ DENY_REASON_BY_GUARD: Final[dict[str, str]] = {
         "bypasses mandatory arch-lens, annotation, and review steps."
     ),
 }
+
+# ── Managed Codex parent-route direct-tool surface ───────────────────────────
+# Single canonical ordered allow-list referenced by every guard that branches
+# on managed parent routes and by generated Codex homes.
+
+MANAGED_PARENT_ALLOWED_TOOLS: Final[tuple[str, ...]] = (
+    "run_fixed_batch",
+    "read_fixed_batch_result",
+)
+MANAGED_PARENT_ALLOWED_TOOL_SET: Final[frozenset[str]] = frozenset(MANAGED_PARENT_ALLOWED_TOOLS)

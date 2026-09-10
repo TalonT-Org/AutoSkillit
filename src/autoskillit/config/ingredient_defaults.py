@@ -26,6 +26,8 @@ _DISPLAY_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "run_cmd",
             "run_python",
             "run_skill",
+            "run_fixed_batch",
+            "read_fixed_batch_result",
             "recover_run_skill_result",
             "complete_run_skill_result",
             "delegate_evidence_reader",

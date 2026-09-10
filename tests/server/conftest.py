@@ -181,6 +181,7 @@ def _make_mock_ctx(config=None) -> MagicMock:
     ctx.recipe_execution_lock = RLock()
     ctx.recipe_initialization_state = NoActiveRecipe()
     ctx.recipe_execution_factory = make_recipe_execution
+    ctx.managed_fixed_batch_supervisor = None
     ctx.audit_admission_ledger.create_or_get_installation.return_value = InstallationVersion(
         "test-installation"
     )

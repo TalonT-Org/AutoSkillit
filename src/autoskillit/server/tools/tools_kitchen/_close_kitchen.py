@@ -15,7 +15,6 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
 )
-from autoskillit.fleet import FleetSemaphore
 from autoskillit.pipeline import closed_kitchen_open_state
 from autoskillit.server import mcp
 from autoskillit.server._notify import track_response_size
@@ -52,10 +51,6 @@ def _close_kitchen_handler() -> None:
         ctx.quota_refresh_task.cancel()
         ctx.quota_refresh_task = None
     baseline_config = deepcopy(ctx._baseline_config)
-    baseline_lock = FleetSemaphore(
-        max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
-        timeout=baseline_config.fleet.acquire_timeout_sec,
-    )
     hook_cfg_path = _tk_pkg._hook_config_path(ctx.project_dir)
     with _tk_pkg.locked_overlay(ctx.project_dir) as (overlay_path, _):
         ctx.gate.disable()
@@ -69,7 +64,14 @@ def _close_kitchen_handler() -> None:
             logger.warning("hook_config_overlay_remove_failed", path=str(overlay_path))
         ctx._session_config_overrides.clear()
         ctx.config = baseline_config
-        ctx.fleet_lock = baseline_lock
+        # Factory guarantees a non-None capacity on every ctx path; the local
+        # binding narrows the union type for mypy without a defensive raise.
+        capacity = ctx.worker_capacity
+        if capacity is not None:
+            capacity.reconfigure(
+                max_concurrent=baseline_config.fleet.max_concurrent_dispatches,
+                timeout=baseline_config.fleet.acquire_timeout_sec,
+            )
     try:
         _release_kitchen_tracker_authority(ctx, unregister=True, retire=True)
     except Exception:
@@ -156,8 +158,12 @@ async def close_kitchen(ctx: Context = CurrentContext()) -> str:
     try:
         if (h := _tk_pkg._require_orchestrator_exact("close_kitchen")) is not None:
             return h
-        _close_kitchen_handler()
         from autoskillit.server import _get_ctx  # circular-break: server lifecycle owner
+
+        service = _get_ctx().managed_fixed_batch_supervisor
+        if service is not None:
+            await service.close()
+        _close_kitchen_handler()
 
         exploration_store = _get_ctx().exploration_context_store
         if exploration_store is not None:

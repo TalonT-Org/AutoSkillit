@@ -37,6 +37,7 @@ from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
 )
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
     session_join_required,
+    session_managed_scope,
     write_join_diagnostic,
 )
 from _join_ledger import (  # type: ignore[import-not-found]  # noqa: E402
@@ -100,6 +101,18 @@ def main() -> None:
         sys.exit(0)
     if not session_join_required(payload_cwd, sid):
         sys.exit(0)
+    scope = session_managed_scope(payload_cwd, sid)
+    if scope is None:
+        write_join_diagnostic(
+            {
+                "gate": "join_settle_guard",
+                "session_id": sid,
+                "status": "settle_refused",
+                "denial_reason": "invalid_managed_scope",
+            },
+            caller="join_settle_guard",
+        )
+        sys.exit(2)
 
     tool_name = data.get("tool_name")
     if tool_name != "Agent":
@@ -114,7 +127,7 @@ def main() -> None:
         sys.exit(0)
 
     flag_dir = resolve_flag_dir(resolve_state_root(payload_cwd))
-    top_level_parent = "top_level"
+    top_level_parent, _managed_leaf_id = scope
     batch = None
     # Retry transient OSError up to 3 attempts with brief backoff. The
     # ledger acquires an exclusive fcntl.flock; contention surfaces as

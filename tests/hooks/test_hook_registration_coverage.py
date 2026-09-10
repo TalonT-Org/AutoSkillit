@@ -21,7 +21,8 @@ def _all_hook_script_relpaths() -> set[str]:
     return {
         str(p.relative_to(HOOKS_DIR))
         for p in HOOKS_DIR.rglob("*.py")
-        if p.name != "__init__.py" and not p.name.startswith("_")
+        if p.name != "__init__.py"
+        and not any(part.startswith("_") for part in p.relative_to(HOOKS_DIR).parts)
     }
 
 

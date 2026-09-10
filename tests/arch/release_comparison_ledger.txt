@@ -6,7 +6,7 @@ core/_release_identity.py::update_available::update-available
 # Release-presentation version comparison; not an availability criterion.
 core/_release_identity.py::version_advanced::release-presentation
 # Live-probed Claude Code version versus supported minima.
-execution/backends/claude.py::_claude_host_attestation_env::backend-feature-minimum
+execution/backends/_claude/environment.py::_claude_host_attestation_env::backend-feature-minimum
 execution/backends/claude.py::ensure_pre_launch::backend-minimum-version
 # Migration-note selection bounds.
 migration/loader.py::applicable_migrations::migration-applicability

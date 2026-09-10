@@ -248,6 +248,8 @@ class BackendCapabilities:
     # cannot realize exact-set fixed membership, so its `fixed_set_join_capable`
     # must remain False until the active harness exposes a real fixed-set primitive.
     fixed_set_join_capable: bool = False
+    # True when the backend can materialize an attested server-owned fixed-batch route.
+    managed_fixed_batch_route_capable: bool = False
     # Raw model identifiers only this backend can serve. Empty means this backend
     # declares no native models; see CODEX_MODEL_ALIASES_LAST_VERIFIED for freshness.
     native_model_ids: frozenset[str] = field(default_factory=frozenset)
@@ -431,6 +433,7 @@ CLAUDE_CODE_CAPABILITIES: BackendCapabilities = BackendCapabilities(
     recipe_delivery_budget=None,
     hook_trust_policy=HookTrustPolicy.AUTOMATED,
     fixed_set_join_capable=True,
+    managed_fixed_batch_route_capable=False,
     native_model_ids=frozenset(),
 )
 

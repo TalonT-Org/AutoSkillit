@@ -51,6 +51,9 @@ from ._install_detect import is_dev_install as is_dev_install
 from ._install_detect import parse_direct_url as parse_direct_url
 from ._json import fast_dumps as fast_dumps
 from ._json import fast_loads as fast_loads
+from ._managed_worker_capacity import DefaultManagedWorkerCapacity as DefaultManagedWorkerCapacity
+from ._managed_worker_capacity import ManagedWorkerCapacityError as ManagedWorkerCapacityError
+from ._managed_worker_capacity import ManagedWorkerPermit as ManagedWorkerPermit
 from ._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
 )
@@ -537,6 +540,7 @@ from .types import EVIDENCE_READER_ENV_FORWARD_VARS as EVIDENCE_READER_ENV_FORWA
 from .types import EVIDENCE_READER_TOOLS as EVIDENCE_READER_TOOLS
 from .types import EXPLORATION_FAILURE_CODES as EXPLORATION_FAILURE_CODES
 from .types import EXPLORATION_TOOLS as EXPLORATION_TOOLS
+from .types import EXTERNAL_EFFECT_CHOICES as EXTERNAL_EFFECT_CHOICES
 from .types import FEATURE_REGISTRY as FEATURE_REGISTRY
 from .types import FLEET_DISPATCH_MODE as FLEET_DISPATCH_MODE
 from .types import FLEET_DISPATCH_TOOLS as FLEET_DISPATCH_TOOLS
@@ -575,6 +579,9 @@ from .types import (
 from .types import MANAGED_ATTEMPT_ID_ENV_VAR as MANAGED_ATTEMPT_ID_ENV_VAR
 from .types import (
     MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION as MANAGED_HEADLESS_SESSION_LINEAGE_SCHEMA_VERSION,  # noqa: E501
+)
+from .types import (
+    MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION as MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
 )
 from .types import MANAGED_LAUNCH_ID_ENV_VAR as MANAGED_LAUNCH_ID_ENV_VAR
 from .types import MANAGED_LINEAGE_DIGEST_ENV_VAR as MANAGED_LINEAGE_DIGEST_ENV_VAR
@@ -705,6 +712,7 @@ from .types import (
 from .types import STEP_SKIP_SEMANTICS_CLAUSE as STEP_SKIP_SEMANTICS_CLAUSE
 from .types import TOOL_SUBSET_TAGS as TOOL_SUBSET_TAGS
 from .types import UNGATED_TOOLS as UNGATED_TOOLS
+from .types import VALID_EXTERNAL_EFFECTS as VALID_EXTERNAL_EFFECTS
 from .types import VALID_INPUT_SPEC_TYPES as VALID_INPUT_SPEC_TYPES
 from .types import VARIADIC_CLAUDE_FLAGS as VARIADIC_CLAUDE_FLAGS
 from .types import WORKTREE_SKILLS as WORKTREE_SKILLS
@@ -927,7 +935,6 @@ from .types import FinalizedRecipeProjection as FinalizedRecipeProjection
 from .types import FinalizedRecipeSegment as FinalizedRecipeSegment
 from .types import FinalizedRecipeStep as FinalizedRecipeStep
 from .types import FleetErrorCode as FleetErrorCode
-from .types import FleetLock as FleetLock
 from .types import FleetSessionEnv as FleetSessionEnv
 from .types import ForkOccurrenceId as ForkOccurrenceId
 from .types import GateState as GateState
@@ -991,6 +998,7 @@ from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec
 from .types import MaintenanceInstallArgv as MaintenanceInstallArgv
+from .types import ManagedFixedBatchSupervisor as ManagedFixedBatchSupervisor
 from .types import ManagedHeadlessSessionKind as ManagedHeadlessSessionKind
 from .types import ManagedHeadlessSessionLineage as ManagedHeadlessSessionLineage
 from .types import ManagedHeadlessSessionLineageRef as ManagedHeadlessSessionLineageRef
@@ -1004,7 +1012,10 @@ from .types import (
     ManagedHeadlessSessionTerminalState as ManagedHeadlessSessionTerminalState,
 )
 from .types import ManagedHome as ManagedHome
+from .types import ManagedJoinAttestation as ManagedJoinAttestation
+from .types import ManagedJoinAttestationAuthority as ManagedJoinAttestationAuthority
 from .types import ManagedSessionHome as ManagedSessionHome
+from .types import ManagedWorkerCapacity as ManagedWorkerCapacity
 from .types import MarkGenerationIndeterminateEvent as MarkGenerationIndeterminateEvent
 from .types import MarkIndeterminateEvent as MarkIndeterminateEvent
 from .types import McpResponseLog as McpResponseLog
@@ -1156,6 +1167,7 @@ from .types import RolloverEpochEvent as RolloverEpochEvent
 from .types import RunSkillCompletionAuthority as RunSkillCompletionAuthority
 from .types import RuntimeAdmission as RuntimeAdmission
 from .types import SecretEnvironmentBinding as SecretEnvironmentBinding
+from .types import SemanticAdaptationContext as SemanticAdaptationContext
 from .types import SemanticLaunchPlan as SemanticLaunchPlan
 from .types import SerializedChars as SerializedChars
 from .types import ServeOverridesSnapshot as ServeOverridesSnapshot

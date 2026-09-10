@@ -74,6 +74,7 @@ _ENV_BUILD_HANDOFFS = frozenset(
     {
         ("prepare_interactive_launch", "extra_env"),
         ("build_interactive_cmd", "env_extras"),
+        ("build_headless_cmd", "env_extras"),
         ("build_agent_env", "extras"),
         ("build_env", "extras"),
         ("dispatch_food_truck", "env_extras"),
@@ -871,35 +872,35 @@ FORWARDING_SITES: dict[str, str] = {
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_COOK_RESERVED_ENV_VARS overridden to the source home."
     ),
-    "execution/backends/claude.py:653": (
+    "execution/backends/claude.py:359": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
-    "execution/backends/claude.py:870": (
+    "execution/backends/_claude/session_commands.py:175": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/claude.py:982": (
+    "execution/backends/_claude/session_commands.py:287": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:414": (
+    "execution/backends/codex.py:337": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/codex.py:554": (
+    "execution/backends/_codex/session_commands.py:272": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/codex.py:690": (
+    "execution/backends/_codex/session_commands.py:408": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:810": (
+    "execution/backends/_codex/session_commands.py:528": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/codex.py:877": (
+    "execution/backends/_codex/session_commands.py:595": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

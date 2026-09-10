@@ -129,13 +129,27 @@ the join-bearing load.
 
 ### Can Codex run join-bearing skills?
 
-Not today. Codex's static capability attestation reports
-`fixed_set_join_capable=False`. When a skill declares
-`semantic_requirements.join.required: true`, the `declare_join_batch` MCP
-tool refuses with `unsupported_operation(REQUIRED_JOIN)` and the skill
-cannot be admitted. Codex support requires the harness to expose a
-fixed-set fan-in primitive; until then, the backend gate is the single
-honest source.
+Yes, but only through the AutoSkillit-managed route. Codex's native capability
+still reports `fixed_set_join_capable=False`, so an ordinary or unattested
+session cannot admit a skill with `semantic_requirements.join.required: true`;
+native `declare_join_batch` continues to refuse it. A managed direct-mode
+parent is admitted only after the server verifies current catalog, tool, hook,
+model, guard, parent-session, and recovery evidence. That parent uses
+`run_fixed_batch`; it cannot turn a native declaration into managed authority.
+
+Each managed worker runs in a separate leaf context with an explicit small tool
+surface. It cannot spawn more workers, run another batch, follow up on the
+parent, or finish the parent. Batch results are opaque references and remain
+authorized by the parent, selected skill artifact/incarnation, batch, and
+assignment. Recovery is fail closed: uncertain work remains unavailable until
+the server can record a verified terminal outcome.
+
+### Does Doctor attest a managed Codex session?
+
+No. Doctor reports observations for this project, such as configuration and
+conformance inputs. The server-owned managed attestation is the authorization
+boundary; Doctor neither issues it nor substitutes for a backend-provided
+attestation role.
 
 ### What happens when I try a named Claude dispatch in a join-bound session?
 
@@ -160,4 +174,3 @@ dispatch via `team_name` (the dispatch guard denies it), and a non-join
 parent that names a teammate under agent teams is not bound by the join
 contract at all — it is the legitimate team workflow path described
 above. The two surfaces never overlap in the same session.
-

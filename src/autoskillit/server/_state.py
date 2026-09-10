@@ -109,6 +109,14 @@ async def deferred_initialize(ctx: ToolContext, *, ready_event: asyncio.Event) -
     Sets ready_event when complete — tools needing audit data await this event.
     """
     try:
+        service = ctx.managed_fixed_batch_supervisor
+        if service is not None:
+            recovered = await service.reconcile_startup()
+            if not recovered:
+                logger.warning(
+                    "managed_fixed_batch_recovery_blocked",
+                    extra={"reason": service.recovery_diagnostic},
+                )
         audit_recovery = ctx.audit_admission_ledger.recover_all()
         if audit_recovery.store_health.status is not AuditAdmissionStorageHealthStatus.HEALTHY:
             logger.warning(

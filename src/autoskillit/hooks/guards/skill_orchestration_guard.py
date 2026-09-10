@@ -13,10 +13,37 @@ calling run_skill directly. Skill sessions use native Claude Code tools only.
 import json
 import os
 import sys
+from pathlib import Path
+
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+
+from _hook_constants import (  # noqa: E402  # type: ignore[import-not-found]
+    MANAGED_PARENT_ALLOWED_TOOL_SET,
+)
+from _hook_payload import normalize_payload_cwd  # noqa: E402
+from _hook_settings import payload_managed_codex_route  # noqa: E402
 
 SKILL_ORCHESTRATION_DENY_TRIGGER: str = "cannot be called from skill sessions"
 
 _ORCHESTRATION_TOOLS: frozenset[str] = frozenset({"run_skill", "run_cmd", "run_python"})
+
+
+def _deny(reason: str) -> None:
+    sys.stdout.write(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+        + "\n"
+    )
+    sys.exit(0)
 
 
 def main() -> None:
@@ -34,6 +61,19 @@ def main() -> None:
     # Check only the last __ segment — avoids false positives where a server
     # name coincidentally contains an orchestration tool name.
     tool = tool_name.split("__")[-1]
+    session_id = data.get("session_id")
+    payload_cwd = normalize_payload_cwd(data.get("cwd"))
+    managed_route = payload_managed_codex_route(payload_cwd, session_id)
+    if managed_route is not None:
+        route, guards, _config_digest = managed_route
+        if "skill_orchestration_guard" not in guards:
+            _deny("managed Codex binding omits skill_orchestration_guard")
+        if route == "parent" and tool in MANAGED_PARENT_ALLOWED_TOOL_SET:
+            sys.exit(0)
+        _deny(
+            f"{tool} is unavailable to the managed Codex {route}; "
+            "only the route's explicit direct-tool surface may be used"
+        )
     if tool not in _ORCHESTRATION_TOOLS:
         sys.exit(0)
 
@@ -65,17 +105,7 @@ def main() -> None:
                 f" (AUTOSKILLIT_SESSION_TYPE={raw_session_type!r} is not a recognized tier;"
                 " expected: orchestrator, fleet, or skill)"
             )
-    payload = json.dumps(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": denial_reason,
-            }
-        }
-    )
-    sys.stdout.write(payload + "\n")
-    sys.exit(0)
+    _deny(denial_reason)
 
 
 if __name__ == "__main__":

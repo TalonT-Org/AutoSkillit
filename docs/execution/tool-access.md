@@ -1,6 +1,6 @@
 # MCP Tool Access Control
 
-AutoSkillit provides 75 MCP tools across overlapping visibility surfaces that control which
+AutoSkillit provides 77 MCP tools across overlapping visibility surfaces that control which
 session types can see each tool. Visibility determines addressability; each tool still enforces
 its own authority contract.
 
@@ -17,8 +17,8 @@ its own authority contract.
 │  Revealed in headless sessions via mcp.enable(headless) │
 │  Seven also carry kitchen; one is headless-only         │
 ├─────────────────────────────────────────────────────────┤
-│  KITCHEN  (44 kitchen-only tools)                       │
-│  51 total when the seven headless overlaps are included │
+│  KITCHEN  (46 kitchen-only tools)                       │
+│  53 total when the seven headless overlaps are included │
 │  Hidden at startup; revealed when open_kitchen is called│
 ├─────────────────────────────────────────────────────────┤
 │  EVIDENCE READER  (2 authenticated broker tools)        │
@@ -54,6 +54,14 @@ identity fails closed.
 Visibility is not authority. At the application and hook layers, `run_skill` is restricted
 to exact L2 `ORCHESTRATOR` sessions. L3 `FLEET` sessions create L2 food trucks through
 `dispatch_food_truck`; they retain `run_cmd` and `run_python` but cannot call `run_skill`.
+
+For Codex, native `declare_join_batch` remains unavailable because the backend's
+native coordination surface is wait-any rather than fixed-set fan-in. A managed
+parent is admitted only with a server-issued direct-mode attestation and uses
+`run_fixed_batch` instead. Its leaf sessions are separate, bound contexts with a
+small direct-tool allow-list; they are not a delegated copy of the parent's
+orchestration surface. Doctor reports project-specific configuration and
+conformance observations. It does not act as an external attestation authority.
 
 ## Behavioral Evidence Readers
 
@@ -91,7 +99,7 @@ offer.
 | Tag | Meaning |
 |-----|---------|
 | `autoskillit` | Identifies the tool as belonging to AutoSkillit. Present on every tool. |
-| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 51 tools carry this tag. |
+| `kitchen` | Tool is hidden at startup via `mcp.disable(tags={'kitchen'})`. 53 tools carry this tag. |
 | `headless` | Tool is revealed in headless sessions via `mcp.enable(tags={'headless'})`. Most also carry `kitchen`; `post_pr_review` is headless-only and deliberately ungated. |
 | `evidence-reader` | Authenticated artifact brokers enabled only by a verified reader binding. |
 | `github` | Functional category: GitHub-interacting tools. Can be disabled as a subset. |
@@ -140,7 +148,7 @@ missing kitchen visibility.
 
 ## Complete MCP Tool Access Control Map
 
-All 75 tools with their access level, tags, source file, and functional category.
+All 77 tools with their access level, tags, source file, and functional category.
 
 **Tag abbreviations**: AS = `autoskillit`, K = `kitchen`, HL = `headless`,
 ER = `evidence-reader`, GH = `github`, CI = `ci`, CL = `clone`,
@@ -160,7 +168,9 @@ TL = `telemetry`, FL = `fleet`
 | `configure_fleet` | AS | `server/tools_config.py` |
 | `configure_order` | AS | `server/tools_config.py` |
 | `lock_ingredients` | AS | `server/tools_kitchen.py` |
-| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Opens one declared-batch JoinLedger for the next wave; see `JoinLedger` lifecycle. Claude-only when `fixed_set_join_capable`. |
+| `declare_join_batch` | AS, K | `server/tools_kitchen.py` | Native declared-batch gateway. It is Claude-only when `fixed_set_join_capable` and never mints managed Codex authority. |
+| `run_fixed_batch` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Attested managed-Codex parent route. It validates the current parent binding, exact loaded skill, recovery state, and fixed assignment declaration before the server supervises leaves. |
+| `read_fixed_batch_result` | AS, K | `server/tools/tools_execution/_fixed_batch_handlers.py` | Reads bounded pages from an opaque managed-batch result only after reauthorizing the request, parent, source artifact/incarnation, batch, assignment, and digest. |
 
 ---
 
@@ -300,7 +310,7 @@ dynamically gated until opening completes. The bounded client snapshot and
 fresh/resume behavior are documented in
 [Claude startup readiness](claude-startup-readiness.md).
 
-**Total: 75 registered tools**. The 51 kitchen-tagged tools include seven of the eight
+**Total: 77 registered tools**. The 53 kitchen-tagged tools include seven of the eight
 headless tools. The two authenticated evidence-reader brokers are excluded from the
 kitchen, free-range, and fleet counts.
 

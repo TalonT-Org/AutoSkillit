@@ -12,7 +12,7 @@ from autoskillit.core import (
     EXPLORATION_TOOLS,
     load_bundled_agent_definitions,
 )
-from autoskillit.execution.backends.codex import _generate_agent_tomls
+from autoskillit.execution.backends._codex_explorer_projection import _generate_agent_tomls
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]

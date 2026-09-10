@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from autoskillit.core import (
     CodingAgentBackend,
     FinalizedRecipeStep,
+    SemanticAdaptationContext,
     SkillContractError,
     SkillExecutionRole,
     SkillSemanticPlan,
@@ -39,11 +40,13 @@ def _get_fix_required_hook_matchers(applicable_guards: frozenset[str]) -> list[s
 def check_skill_semantic_feasibility(
     plan: SkillSemanticPlan | None,
     backend: CodingAgentBackend,
+    *,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str | None:
     """Return the selected backend's exact root-operation refusal diagnostic."""
     if plan is None:
         return None
-    adaptation = backend.adapt_skill_semantics(plan)
+    adaptation = backend.adapt_skill_semantics(plan, adaptation_context)
     unsupported_operation = adaptation.validate_refusal_for(
         plan,
         backend=backend.name,

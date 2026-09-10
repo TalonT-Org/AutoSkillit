@@ -33,7 +33,7 @@ FAIL_CLOSED_GUARDS = (
         "test_interactive_cmd_rejects_environment_changed_after_binding",
     ),
     GuardCoverage(
-        "src/autoskillit/execution/backends/codex.py",
+        "src/autoskillit/execution/backends/_codex/session_commands.py",
         "build_interactive_cmd",
         "interactive environment changed after executable binding",
         "tests/execution/backends/test_codex_config_validation.py",

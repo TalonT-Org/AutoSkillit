@@ -35,7 +35,7 @@ from ._type_skill_contract import (
     SkillSourceRef,
     SkillVisibilitySpec,
 )
-from ._type_skill_semantics import SkillSemanticPlan
+from ._type_skill_semantics import SemanticAdaptationContext, SkillSemanticPlan
 
 __all__ = [
     "WorkspaceManager",
@@ -321,6 +321,12 @@ class SkillProjectionContextAuthority(Protocol):
 
     @property
     def parent_sandbox_mode(self) -> str: ...
+
+    @property
+    def adaptation_context(self) -> SemanticAdaptationContext | None: ...
+
+    @property
+    def managed_codex_route(self) -> str | None: ...
 
     @property
     def explorer_provisioning_eligible(self) -> bool | None: ...

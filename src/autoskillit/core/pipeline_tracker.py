@@ -210,6 +210,10 @@ class _TrackerLock:
         fd = self._fd
         self._fd = None
         if fd is not None:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
             os.close(fd)
 
 

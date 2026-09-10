@@ -12,7 +12,8 @@ from autoskillit.core import (
     MCP_CLIENT_BACKEND_ENV_VAR,
     OutputFormat,
 )
-from autoskillit.execution.backends.codex import _IMAGE_GENERATION_DISABLED, CodexBackend
+from autoskillit.execution.backends._codex_cmd_builders import _IMAGE_GENERATION_DISABLED
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding

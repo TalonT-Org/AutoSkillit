@@ -27,6 +27,7 @@ from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     AgentDef,
     EffectiveSkillCatalogAuthority,
+    SemanticAdaptationContext,
     SkillExecutionRole,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
@@ -165,6 +166,7 @@ def compile_session_skill_catalog(
     backend: CodingAgentBackend,
     *,
     finalized_native_roles: frozenset[str] | None = None,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> CompiledSessionSkillCatalog:
     """Publish only skills whose mandatory semantics adapt on the selected backend."""
     supported: list[SkillCatalogEntry] = []
@@ -176,7 +178,7 @@ def compile_session_skill_catalog(
             supported.append(cast(SkillCatalogEntry, skill))
             required_native_roles[skill.name] = ()
             continue
-        adaptation = backend.adapt_skill_semantics(plan)
+        adaptation = backend.adapt_skill_semantics(plan, adaptation_context)
         unsupported_operation = adaptation.validate_refusal_for(
             plan,
             backend=backend.name,

@@ -33,6 +33,7 @@ _INSPECTION_TOOLS = frozenset(
         "list_recipes",
         "load_recipe",
         "read_authorized_artifact",
+        "read_fixed_batch_result",
         "read_db",
         "resume_exploration_context",
         "submit_exploration_query",
@@ -49,7 +50,14 @@ _RECOVERY_TOOLS = frozenset(
     }
 )
 _EXECUTION_TOOLS = frozenset(
-    {"delegate_evidence_reader", "run_cmd", "run_python", "run_skill", "test_check"}
+    {
+        "delegate_evidence_reader",
+        "run_cmd",
+        "run_fixed_batch",
+        "run_python",
+        "run_skill",
+        "test_check",
+    }
 )
 _MUTATION_TOOLS = frozenset(
     {

@@ -241,7 +241,7 @@ def _write_session_binding(
         write_binding(
             binding_path,
             SessionBinding(
-                schema_version=2,
+                schema_version=3,
                 session_id="bind",
                 join_required=join_required,
                 binding_valid=binding_valid,

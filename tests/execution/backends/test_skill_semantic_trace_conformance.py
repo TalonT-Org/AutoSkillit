@@ -25,7 +25,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
-from autoskillit.execution.backends.codex import _generate_agent_tomls
+from autoskillit.execution.backends._codex_explorer_projection import _generate_agent_tomls
 from autoskillit.workspace import (
     EffectiveSkillCatalog,
     SkillCatalogEntry,
@@ -424,6 +424,22 @@ def test_compose_pr_real_codex_trace_spawns_then_joins_registered_roles() -> Non
     assert adaptation.unsupported_operation is SkillSemanticOperation.REQUIRED_JOIN
     assert adaptation.diagnostic == _CODEX_JOIN_REFUSAL_DIAGNOSTIC
     assert adaptation.instruction_fragments == ()
+
+
+def test_compose_pr_managed_codex_trace_uses_the_fixed_batch_route() -> None:
+    from tests.contracts._skill_admission_ledger import _production_managed_codex_context
+
+    skill_md = pkg_root() / "skills_extended" / "compose-pr" / "SKILL.md"
+    info = _skill_info_from_frontmatter("compose-pr", SkillSource.BUNDLED, skill_md)
+    assert info.semantic_plan is not None
+
+    adaptation = CodexBackend().adapt_skill_semantics(
+        info.semantic_plan,
+        _production_managed_codex_context(),
+    )
+
+    assert adaptation.unsupported_operation is None
+    assert "server-owned managed fixed-batch route" in "\n".join(adaptation.instruction_fragments)
 
 
 def test_dynamic_child_spawn_adapters_preserve_runtime_cardinality() -> None:

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
+    SemanticAdaptationContext,
     detect_autoskillit_mcp_prefix,
     get_logger,
 )
@@ -168,6 +169,8 @@ def _get_food_truck_prompt_builder(
 def _project_food_truck_sous_chef(
     tool_ctx: Any,
     backend: CodingAgentBackend | None,
+    *,
+    adaptation_context: SemanticAdaptationContext | None = None,
 ) -> str:
     """Project L2 orchestration guidance before crossing into the fleet layer."""
     return _project_orchestrator_sous_chef(
@@ -176,6 +179,7 @@ def _project_food_truck_sous_chef(
         cwd=tool_ctx.project_dir.resolve(),
         no_backend_event="food_truck_guidance_no_backend",
         unavailable_event="food_truck_guidance_skill_unavailable",
+        adaptation_context=adaptation_context,
     )
 
 

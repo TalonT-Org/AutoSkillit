@@ -16,11 +16,11 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 
 def _setup_dispatch_with_ingredients(tool_ctx, ingredients: dict):
     """Wire tool_ctx with a recipe that has specific ingredients."""
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.core import DefaultManagedWorkerCapacity
     from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)
@@ -165,10 +165,10 @@ class TestMissingRequiredIngredient:
 
 def _setup_config_authority_recipe(tool_ctx, recipe):
     """Wire tool_ctx with the given Recipe for config-authority injection tests."""
-    from autoskillit.fleet import FleetSemaphore
+    from autoskillit.core import DefaultManagedWorkerCapacity
     from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 
-    tool_ctx.fleet_lock = FleetSemaphore(max_concurrent=1)
+    tool_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=1)
     repo = InMemoryRecipeRepository()
     recipe_info = _make_recipe_info("test-recipe")
     repo.add_recipe("test-recipe", recipe_info)

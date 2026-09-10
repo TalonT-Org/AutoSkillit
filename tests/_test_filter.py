@@ -405,6 +405,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # core/_capacity.py (S2-3): SpaceProbe/default_space_probe/StoreCapacityExhaustedError
     # consumed by execution.testing's check_infrastructure and cli.doctor's capacity check.
     "_capacity": frozenset({"cli", "core", "execution"}),
+    # One process-wide owner/token-bound capacity authority shared by fleet
+    # dispatch and the managed fixed-batch service.
+    "_managed_worker_capacity": frozenset({"cli", "core", "fleet", "server"}),
     "tool_sequence_analysis": frozenset({"core", "execution", "server", "cli"}),
     "_type_checkpoint": frozenset({"core", "execution", "fleet", "server"}),
     "_type_results": _TYPE_RESULTS_CASCADE,
@@ -1110,6 +1113,8 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_declare_join_batch_handler.py",
             "server/test_explicit_backend_override.py",
             "server/test_factory_context_construction.py",
+            "server/test_managed_fixed_batch.py",
+            "server/test_managed_leaf.py",
             "server/test_tools_agents.py",
             "server/test_tools_issue_lifecycle_handlers.py",
             "server/test_tools_issue_lifecycle_helpers.py",
@@ -1251,6 +1256,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
         {
             "server",
             "cli",
+            "server/test_fixed_batch_results.py",
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
             "fleet/test_dispatch_backend_override.py",
@@ -1293,6 +1299,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_enable_exploration_failure_codes.py",
             "server/test_declare_join_batch.py",
             "server/test_declare_join_batch_handler.py",
+            "server/test_managed_fixed_batch.py",
+            "server/test_fixed_batch_results.py",
+            "server/test_managed_leaf.py",
             "server/test_tools_exploration.py",
             # file-level: formatter-renders-real-content test imports pretty_output_hook
             # directly to exercise the _fmt_open_kitchen contract — see #4399 criterion 4

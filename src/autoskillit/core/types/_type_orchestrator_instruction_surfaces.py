@@ -86,6 +86,9 @@ _KITCHEN_TOOL_MODULE_PATHS: Mapping[str, str] = MappingProxyType(
         "server.tools.tools_clone": "server/tools/tools_clone.py",
         "server.tools.tools_evidence_reader": "server/tools/tools_evidence_reader.py",
         "server.tools.tools_execution._run_cmd": "server/tools/tools_execution/_run_cmd.py",
+        "server.tools.tools_execution._fixed_batch_handlers": (
+            "server/tools/tools_execution/_fixed_batch_handlers.py"
+        ),
         "server.tools.tools_execution._run_python": "server/tools/tools_execution/_run_python.py",
         "server.tools.tools_execution._run_skill_dispatch": (
             "server/tools/tools_execution/_run_skill_dispatch.py"

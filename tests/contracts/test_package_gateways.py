@@ -465,8 +465,8 @@ def _gateway_pre_move_names(init_path: Path, parent_pkg: str, move_set: set[str]
 
 def test_execution_github_ops_gateway_reexports_pre_move_names() -> None:
     """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
-    modules destined for ``execution/github_ops/`` must resolve post-move via
-    ``autoskillit.execution.github_ops.<name>``.
+    modules destined for ``execution/github_ops/`` must resolve post-move as an
+    attribute of ``autoskillit.execution.github_ops``.
     """
     import importlib
 
@@ -480,19 +480,15 @@ def test_execution_github_ops_gateway_reexports_pre_move_names() -> None:
         "remote_resolver",
     }
     expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
-    missing: list[str] = []
-    for name in expected:
-        try:
-            importlib.import_module(f"autoskillit.execution.github_ops.{name}")
-        except ModuleNotFoundError:
-            missing.append(name)
-    assert not missing, f"execution/github_ops/ gateway missing re-exports: {sorted(missing)}"
+    pkg = importlib.import_module("autoskillit.execution.github_ops")
+    missing = sorted(name for name in expected if not hasattr(pkg, name))
+    assert not missing, f"execution/github_ops/ gateway missing re-exports: {missing}"
 
 
 def test_execution_evidence_gateway_reexports_pre_move_names() -> None:
     """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
-    modules destined for ``execution/evidence/`` must resolve post-move via
-    ``autoskillit.execution.evidence.<name>``.
+    modules destined for ``execution/evidence/`` must resolve post-move as an
+    attribute of ``autoskillit.execution.evidence``.
     """
     import importlib
 
@@ -509,19 +505,15 @@ def test_execution_evidence_gateway_reexports_pre_move_names() -> None:
         "_recording_skills",
     }
     expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
-    missing: list[str] = []
-    for name in expected:
-        try:
-            importlib.import_module(f"autoskillit.execution.evidence.{name}")
-        except ModuleNotFoundError:
-            missing.append(name)
-    assert not missing, f"execution/evidence/ gateway missing re-exports: {sorted(missing)}"
+    pkg = importlib.import_module("autoskillit.execution.evidence")
+    missing = sorted(name for name in expected if not hasattr(pkg, name))
+    assert not missing, f"execution/evidence/ gateway missing re-exports: {missing}"
 
 
 def test_execution_runtime_gateway_reexports_pre_move_names() -> None:
     """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
-    modules destined for ``execution/runtime/`` must resolve post-move via
-    ``autoskillit.execution.runtime.<name>``.
+    modules destined for ``execution/runtime/`` must resolve post-move as an
+    attribute of ``autoskillit.execution.runtime``.
     """
     import importlib
 
@@ -534,19 +526,15 @@ def test_execution_runtime_gateway_reexports_pre_move_names() -> None:
         "db",
     }
     expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
-    missing: list[str] = []
-    for name in expected:
-        try:
-            importlib.import_module(f"autoskillit.execution.runtime.{name}")
-        except ModuleNotFoundError:
-            missing.append(name)
-    assert not missing, f"execution/runtime/ gateway missing re-exports: {sorted(missing)}"
+    pkg = importlib.import_module("autoskillit.execution.runtime")
+    missing = sorted(name for name in expected if not hasattr(pkg, name))
+    assert not missing, f"execution/runtime/ gateway missing re-exports: {missing}"
 
 
 def test_hooks_runtime_gateway_reexports_pre_move_names() -> None:
     """REQ-GATEWAY-PARITY: every name the gateway re-exports from hooks move-set
-    modules destined for ``hooks/_runtime/`` must resolve post-move via
-    ``autoskillit.hooks._runtime.<name>``. ``_session_binding`` and ``_join_ledger``
+    modules destined for ``hooks/_runtime/`` must resolve post-move as an attribute
+    of ``autoskillit.hooks._runtime``. ``_session_binding`` and ``_join_ledger``
     are NOT in the move set and are excluded.
     """
     import importlib
@@ -563,10 +551,6 @@ def test_hooks_runtime_gateway_reexports_pre_move_names() -> None:
         "_exploration_request_record",
     }
     expected = _gateway_pre_move_names(init_path, "autoskillit.hooks", move_set)
-    missing: list[str] = []
-    for name in expected:
-        try:
-            importlib.import_module(f"autoskillit.hooks._runtime.{name}")
-        except ModuleNotFoundError:
-            missing.append(name)
-    assert not missing, f"hooks/_runtime/ gateway missing re-exports: {sorted(missing)}"
+    pkg = importlib.import_module("autoskillit.hooks._runtime")
+    missing = sorted(name for name in expected if not hasattr(pkg, name))
+    assert not missing, f"hooks/_runtime/ gateway missing re-exports: {missing}"

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from autoskillit.core import CIRunScope, get_logger
-from autoskillit.execution.github import github_headers, make_tracked_httpx_client
+from autoskillit.execution.github_ops.github import github_headers, make_tracked_httpx_client
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubApiLog
@@ -158,7 +158,7 @@ class DefaultCIWatcher:
         """Resolve owner/repo from argument or git remote."""
         if not cwd and not repo:
             return None
-        from autoskillit.execution.remote_resolver import resolve_remote_repo
+        from autoskillit.execution.github_ops.remote_resolver import resolve_remote_repo
 
         return await resolve_remote_repo(cwd, hint=repo)
 

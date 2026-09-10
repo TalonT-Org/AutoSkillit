@@ -20,7 +20,7 @@ from autoskillit.core import (
     ReviewReconciliationResult,
     ReviewResponseClass,
 )
-from autoskillit.execution._github_http import (
+from autoskillit.execution.github_ops._github_http import (
     github_error_message,
     retry_after_seconds,
 )

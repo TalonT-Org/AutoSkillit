@@ -109,7 +109,11 @@ def _rebuild_owned_dispatch_context(
         if previous_projection is None:
             raise SkillContractError("Fresh execution lacks projection authority")
         state.projection_context = bind_projection_backend(
-            build_fresh_projection_context(state.cwd, state.invocation),
+            build_fresh_projection_context(
+                state.cwd,
+                state.invocation,
+                adaptation_context=previous_projection.adaptation_context,
+            ),
             state._effective_backend_obj,
             resolution=state._explicit_resolution,
             parent_sandbox_mode=state._fresh_parent_sandbox_mode or "workspace-write",

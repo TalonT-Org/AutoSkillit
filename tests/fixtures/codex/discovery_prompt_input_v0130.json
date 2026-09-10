@@ -1,0 +1,12 @@
+[
+  {
+    "type": "message",
+    "role": "developer",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "<skills_instructions>\n## Skills\n### Skill roots\n- `r0` = `/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills`\n- `r1` = `/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system`\n### Available skills\n- alpha: managed fixture skill (file: `/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/alpha/SKILL.md`)\n- beta: another managed fixture skill\n  (file: `/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/beta/SKILL.md`)\n- system-native: Codex-owned fixture skill (file: `/opt/autoskillit-fixtures/codex/discovery/v0130/home/skills/.system/system-native/SKILL.md`)\n</skills_instructions>"
+      }
+    ]
+  }
+]

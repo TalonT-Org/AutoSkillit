@@ -9,6 +9,7 @@ import pytest
 
 import autoskillit.workspace.session_skill_materialization as session_skill_materialization
 from autoskillit.core import (
+    SESSION_ADD_DIR_SUBDIR,
     ClaudeDirectoryConventions,
     ManagedSessionHome,
     PreLaunchReadiness,
@@ -267,6 +268,8 @@ def test_codex_generated_home_skills_is_single_alias_to_catalog(
     make_session_skill_manager,
     codex_env,
 ) -> None:
+    from autoskillit.execution.backends.codex import CODEX_SKILL_DISCOVERY_CONTRACT
+
     mgr = make_session_skill_manager()
     add_dir = _materialize(
         mgr,
@@ -276,11 +279,17 @@ def test_codex_generated_home_skills_is_single_alias_to_catalog(
     )
 
     add_dir_path = Path(str(add_dir))
-    catalog = add_dir_path / "skills"
-    discovery_root = add_dir_path.parent / "skills"
+    generated_home = add_dir_path.parent
+    skills_subdir = codex_env.backend.conventions.skills_subdir
+    catalog = generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
+    discovery_root = generated_home / skills_subdir
 
+    assert Path(CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath) == (
+        Path(SESSION_ADD_DIR_SUBDIR) / skills_subdir
+    )
+    assert catalog == add_dir_path / skills_subdir
     assert discovery_root.is_symlink()
-    assert os.readlink(discovery_root) == "add-dir/skills"
+    assert os.readlink(discovery_root) == CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
     assert discovery_root.resolve() == catalog.resolve()
     assert (catalog / "make-arch-diag").is_dir()
     assert not (catalog / "make-arch-diag").is_symlink()

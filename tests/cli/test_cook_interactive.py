@@ -24,6 +24,7 @@ from autoskillit.core import (
     ManagedSessionHome,
     NamedResume,
     NoResume,
+    PreLaunchReadiness,
     SessionAttemptHandle,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
@@ -288,6 +289,9 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
         ) -> SkillSemanticAdaptationResult:
             return self._command_backend.adapt_skill_semantics(plan, adaptation_context)
 
+        def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)
             return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]
@@ -318,6 +322,38 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
     assert "$<name>" in guidance and "/<name>" in guidance
     assert "skill name" in guidance and "recipe identities only" in guidance
     assert "defined as both" in guidance and "rejected" in guidance
+    assert len(backend.build_calls) == 2
+    assert backend.build_calls[0].get("executable") is None
+    assert backend.build_calls[1]["executable"] is not None
+    assert spec.managed_skill_catalog is captured["skills_dir"]
+
+
+def test_cook_aborts_before_spawn_when_skill_discovery_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Discovery diagnostics must reject the managed launch before the child starts."""
+    diagnostic = "Codex skill discovery is missing managed names ['expected-skill']"
+
+    class _DiscoveryFailureBackend(_Backend):
+        name = "codex"
+
+        def validate_interactive_invocation(self, _spec: CmdSpec) -> list[str]:
+            return [diagnostic]
+
+    backend = _DiscoveryFailureBackend()
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    with pytest.raises(SystemExit, match="1"):
+        cli.cook(backend=backend)
+
+    assert diagnostic in capsys.readouterr().err
+    events = captured["events"]
+    assert isinstance(events, list)
+    event_names = [event[0] for event in events]
+    assert "run" not in event_names
+    assert event_names[-1] == "managed-exit"
 
 
 def test_codex_cook_excludes_refused_compose_pr_roles(

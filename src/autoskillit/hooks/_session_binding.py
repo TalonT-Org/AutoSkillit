@@ -256,7 +256,7 @@ def binding_lock(path: Path) -> Generator[None, None, None]:
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600)
     try:
         # Bounded deadline retry on LOCK_NB contention — mirrors
-        # _codex_config_lock.py and the _join_ledger._flock helper.
+        # _codex_config_lock.py and the _join.storage._flock helper.
         deadline = time.monotonic() + _FLOCK_TIMEOUT_S
         while True:
             try:

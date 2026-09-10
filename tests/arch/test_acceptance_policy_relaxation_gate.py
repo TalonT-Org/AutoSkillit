@@ -12,6 +12,7 @@ import fnmatch
 import importlib.util
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -31,12 +32,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_policy_relaxation.py"
 
 
+_CHECK_MODULE_NAME = "_autoskillit_check_policy_relaxation"
+
+
 def _load_check_module():
-    spec = importlib.util.spec_from_file_location("check_policy_relaxation", _CHECK_SCRIPT)
+    spec = importlib.util.spec_from_file_location(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
     assert spec is not None
     assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    # dataclasses resolves string annotations through sys.modules[cls.__module__];
+    # an unregistered module makes every @dataclass in the script raise on definition.
+    sys.modules[_CHECK_MODULE_NAME] = mod
+    spec.loader.exec_module(mod)
     return mod
 
 
@@ -164,32 +171,26 @@ def _registry(source: str):
     return check.extract_registry(source)
 
 
-@pytest.mark.parametrize(
-    ("mutation", "expected_reason"),
-    [
-        ('    PolicySurface("b.py", "BUDGET", "int_scalar"),\n', "surface removed"),
-        ('"int_scalar")', "surface kind changed"),
-        ("default=10", "default raised"),
-        ("default_added", "default added"),
-        ('POLICY_AUTHORITY_PATHS = ("a.py", "b.py")', "authority path removed"),
-    ],
-)
-def test_surface_registry_relaxations_are_gated(mutation: str, expected_reason: str) -> None:
-    base = _registry(_REGISTRY_SOURCE)
-    if expected_reason == "surface removed":
-        head_source = _REGISTRY_SOURCE.replace(mutation, "")
-    elif expected_reason == "surface kind changed":
-        head_source = _REGISTRY_SOURCE.replace(mutation, '"int_map")')
-    elif expected_reason == "default raised":
-        head_source = _REGISTRY_SOURCE.replace(mutation, "default=1000")
-    elif expected_reason == "default added":
-        head_source = _REGISTRY_SOURCE.replace(
-            '"BUDGET", "int_scalar"', '"BUDGET", "int_scalar", default=5'
-        )
-    else:
-        head_source = _REGISTRY_SOURCE.replace(mutation, 'POLICY_AUTHORITY_PATHS = ("a.py",)')
-    found = check.classify_registry(base, _registry(head_source))
-    assert expected_reason in _reasons(found), _reasons(found)
+_REGISTRY_MUTATIONS = {
+    "surface removed": ('    PolicySurface("b.py", "BUDGET", "int_scalar"),\n', ""),
+    "surface kind changed": ('"BUDGET", "int_scalar"', '"BUDGET", "int_map"'),
+    "default raised": ("default=10", "default=1000"),
+    "default added": ('"BUDGET", "int_scalar"', '"BUDGET", "int_scalar", default=5'),
+    "authority path removed": ('("a.py", "b.py")', '("a.py",)'),
+}
+
+
+@pytest.mark.parametrize("expected_reason", sorted(_REGISTRY_MUTATIONS))
+def test_surface_registry_relaxations_are_gated(expected_reason: str) -> None:
+    """A candidate cannot narrow the registry that decides what the gate covers."""
+    before, after = _REGISTRY_MUTATIONS[expected_reason]
+    head_source = _REGISTRY_SOURCE.replace(before, after, 1)
+    assert head_source != _REGISTRY_SOURCE
+
+    found = check.classify_registry(_registry(_REGISTRY_SOURCE), _registry(head_source))
+
+    assert found, f"registry mutation went unreported: {expected_reason}"
+    assert set(_reasons(found)) == {expected_reason}
     assert all(item.path == "tests/arch/_acceptance_policy_surfaces.py" for item in found)
 
 
@@ -377,6 +378,7 @@ def _seed_repo(tmp_path: Path) -> Path:
     _git(repo.parent, "init", "-q", "repo")
     _git(repo, "config", "user.email", "gate@example.invalid")
     _git(repo, "config", "user.name", "gate")
+    _git(repo, "config", "commit.gpgsign", "false")
     (repo / check.SURFACES_PATH).write_text(_TMP_SURFACES.format(approvals=""), encoding="utf-8")
     (repo / "counts.py").write_text('LIMITS = {"execution": 23}\n', encoding="utf-8")
     _git(repo, "add", "-A")

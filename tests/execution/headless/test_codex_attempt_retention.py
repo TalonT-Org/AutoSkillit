@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -154,8 +155,9 @@ def _generated_home_spec(home: Path, cwd: Path):
 def _assert_attempt_leases_are_closed(pass_fd_sets: list[tuple[int, ...]]) -> None:
     for pass_fds in pass_fd_sets:
         for fd in pass_fds:
-            with pytest.raises(OSError):
+            with pytest.raises(OSError) as exc_info:
                 os.fstat(fd)
+            assert exc_info.value.errno == errno.EBADF
 
 
 async def _run_generated_attempt(
@@ -433,5 +435,6 @@ async def test_generated_home_attempt_requires_confirmed_spawn_reap_and_rollout(
         else:
             assert len(retained) == 1
 
-    assert runner.pass_fd_sets[0]
+    assert len(runner.pass_fd_sets[0]) == 1
+    assert runner.pass_fd_sets[0][0] >= 0
     _assert_attempt_leases_are_closed(runner.pass_fd_sets)

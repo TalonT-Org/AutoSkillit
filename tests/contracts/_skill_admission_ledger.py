@@ -17,6 +17,7 @@ inventory does not automatically discover future production call shapes.
 from __future__ import annotations
 
 from autoskillit.core import (
+    SemanticAdaptationContext,
     SkillExecutionRole,
     SkillVisibilitySpec,
 )
@@ -195,6 +196,11 @@ SKILL_ADMISSION_LEDGER: dict[CatalogCombination, AdmissionRows] = {
 }
 
 
+def _production_managed_codex_context() -> SemanticAdaptationContext:
+    """Return the attested direct-mode shape used for managed Codex admission."""
+    return make_managed_codex_context("managed-admission-ledger")
+
+
 def _live_admission_rows(combination: CatalogCombination) -> AdmissionRows:
     role, cook_session = combination
     source_catalog = DefaultSkillResolver().list_effective(
@@ -206,7 +212,7 @@ def _live_admission_rows(combination: CatalogCombination) -> AdmissionRows:
     source_names = {skill.name for skill in source_catalog.skills}
     rows: AdmissionRows = {name: {} for name in source_names}
 
-    managed_codex_context = make_managed_codex_context("managed-admission-ledger")
+    managed_codex_context = _production_managed_codex_context()
     for backend in all_backends():
         compilation = compile_session_skill_catalog(
             source_catalog,

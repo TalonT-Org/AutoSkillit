@@ -36,6 +36,34 @@ TEST_ALLOWLIST: dict[tuple[str, int], str] = {
     ("recipe/test_research_sub_recipe_rules.py", 9): "side-effect import for rule registration",
 }
 
+# The exploration identity guard has two standalone sibling imports that static
+# analysis cannot resolve through its runtime hooks-directory path bootstrap.
+# The join batch machinery (#4575) adds 14 site-bounded # type: ignore comments
+# across the declare_join_batch handler, the join ledger, and the Join-guard
+# hook scripts; the runtime join ledger is stdlib-only and the bridge layers
+# cannot be statically resolved from outside the hooks/ subtree.
+# Wavefront 1 (#4667) added 3 net # type: ignore comments elsewhere in the
+# codebase (rebinds via setattr make mypy unable to see methods on the class
+# at 5 site-bounded sites), bringing the count from 137 to 140.
+# Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
+# # type: ignore[import-not-found] suppressions on standalone guard scripts).
+# Bumped from 144 to 155 after rebase onto develop (#4851 adds 9 site-bounded
+# # type: ignore comments in fleet/dispatch/_*.py for cross-phase SpawnContext /
+# DispatchResult field threading that pyright cannot narrow through the
+# module-attribute indirection used for monkeypatch-friendly imports).
+# Bumped from 155 to 156. Issue #4349's rectify adds a
+# `from quota_constraints import (...)  # type: ignore[import-not-found]` block to
+# both quota_guard.py and quota_post_hook.py (+2), following the existing
+# `from quota import (...)` suppression already present in both files for the
+# same stdlib-only bare-module hook bootstrap that cannot be statically resolved.
+# Merging in develop's own progress since this branch's fork point separately
+# brings in #4926's `hooks/_capture_spawn.py:215` (+1, `# type: ignore[has-type]`
+# on a module-level logger reassignment). Net of both: 153 (fork point) + 2 + 1 = 156.
+# The managed fixed-batch route and its stdlib-only join shards add three net
+# standalone-import suppressions; hook subprocesses resolve sibling modules
+# through their runtime path bootstrap.
+TYPE_IGNORE_BUDGET = 159
+
 
 def _scan_pyright_ignores(root: Path) -> set[tuple[str, int]]:
     found: set[tuple[str, int]] = set()
@@ -87,34 +115,7 @@ def test_type_ignore_count_budget() -> None:
         for line in path.read_text(encoding="utf-8").splitlines():
             if "# type: ignore" in line:
                 count += 1
-    # The exploration identity guard has two standalone sibling imports that static
-    # analysis cannot resolve through its runtime hooks-directory path bootstrap.
-    # The join batch machinery (#4575) adds 14 site-bounded # type: ignore comments
-    # across the declare_join_batch handler, the join ledger, and the Join-guard
-    # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
-    # cannot be statically resolved from outside the hooks/ subtree.
-    # Wavefront 1 (#4667) added 3 net # type: ignore comments elsewhere in the
-    # codebase (rebinds via setattr make mypy unable to see methods on the class
-    # at 5 site-bounded sites), bringing the count from 137 to 140.
-    # Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
-    # # type: ignore[import-not-found] suppressions on standalone guard scripts).
-    # Bumped from 144 to 155 after rebase onto develop (#4851 adds 9 site-bounded
-    # # type: ignore comments in fleet/dispatch/_*.py for cross-phase SpawnContext /
-    # DispatchResult field threading that pyright cannot narrow through the
-    # module-attribute indirection used for monkeypatch-friendly imports).
-    # Bumped from 155 to 156. Issue #4349's rectify adds a
-    # `from quota_constraints import (...)  # type: ignore[import-not-found]` block to
-    # both quota_guard.py and quota_post_hook.py (+2), following the existing
-    # `from quota import (...)` suppression already present in both files for the
-    # same stdlib-only bare-module hook bootstrap that cannot be statically resolved.
-    # Merging in develop's own progress since this branch's fork point separately
-    # brings in #4926's `hooks/_capture_spawn.py:215` (+1, `# type: ignore[has-type]`
-    # on a module-level logger reassignment). Net of both: 153 (fork point) + 2 + 1 = 156.
-    # The managed fixed-batch route and its stdlib-only join shards add three net
-    # standalone-import suppressions; hook subprocesses resolve sibling modules
-    # through their runtime path bootstrap.
-    budget = 159
-    assert count <= budget, (
-        f"type: ignore count ({count}) exceeds budget ({budget}). "
+    assert count <= TYPE_IGNORE_BUDGET, (
+        f"type: ignore count ({count}) exceeds budget ({TYPE_IGNORE_BUDGET}). "
         "Review new suppressions — they may indicate real type errors."
     )

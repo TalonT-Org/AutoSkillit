@@ -22,6 +22,8 @@ PRECOMMIT_CONFIG = REPO_ROOT / ".pre-commit-config.yaml"
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 CONFTEST_PATH = REPO_ROOT / "tests" / "conftest.py"
 
+_E501_EXEMPTION_CAP = 19
+
 
 class TestPreCommitConfig:
     def test_lockfile_check_hook_present(self):
@@ -119,7 +121,6 @@ class TestPreCommitConfig:
             config.get("tool", {}).get("ruff", {}).get("lint", {}).get("per-file-ignores", {})
         )
         e501_count = sum(1 for rules in per_file_ignores.values() if "E501" in rules)
-        _E501_EXEMPTION_CAP = 19
         assert e501_count <= _E501_EXEMPTION_CAP, (
             f"E501 exemptions in per-file-ignores exceeded cap of {_E501_EXEMPTION_CAP}: "
             f"found {e501_count} entries. Refactor long lines instead of adding exemptions."

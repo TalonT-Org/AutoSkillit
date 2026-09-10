@@ -8,6 +8,7 @@ import enum
 import fnmatch
 import json
 import logging
+import os
 import re
 import subprocess
 import warnings
@@ -1607,18 +1608,30 @@ class ASTImportWalker(ast.NodeVisitor):
 # ---------------------------------------------------------------------------
 
 
+def resolve_test_base_ref_from_env(explicit: str | None = None) -> str | None:
+    """Resolve the base ref for changed-file detection, treating empty as unset.
+
+    CI sets AUTOSKILLIT_TEST_BASE_REF to an empty string for events that carry no
+    base revision, so that value must fall through rather than reach git as a ref.
+    GITHUB_BASE_REF names a branch that exists only under the remote in an actions
+    checkout, hence the origin/ prefix.
+    """
+    if explicit:
+        return explicit
+    explicit_base = os.environ.get("AUTOSKILLIT_TEST_BASE_REF")
+    if explicit_base:
+        return explicit_base
+    github_base = os.environ.get("GITHUB_BASE_REF")
+    return f"origin/{github_base}" if github_base else None
+
+
 def git_changed_files(
     cwd: str | Path,
     base_ref: str | None = None,
 ) -> set[str] | None:
     """Return set of changed files relative to base_ref, or None on failure."""
-    import os
-
     if base_ref is None:
-        base_ref = os.environ.get(
-            "AUTOSKILLIT_TEST_BASE_REF",
-            os.environ.get("GITHUB_BASE_REF"),
-        )
+        base_ref = resolve_test_base_ref_from_env()
     if base_ref is None:
         return None
 

@@ -1,21 +1,20 @@
 """REQ-CNST-010 diff-scoped gate for changed source files.
 
-Diff scope reuses tests._test_filter.git_changed_files. Local runs with no
-resolved base ref skip instead of falling back to the pre-existing full-tree
-violations. Base-ref resolution is kept here because CI can set
-AUTOSKILLIT_TEST_BASE_REF to an empty string; that value must fall through to
-GITHUB_BASE_REF before calling the shared helper.
+Diff scope reuses tests._test_filter.git_changed_files against the base ref
+resolved once at session configure time. Local runs with no resolved base ref
+skip instead of falling back to the pre-existing full-tree violations; a
+pull_request or merge_group event with no base ref fails instead of skipping.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import os
 from pathlib import Path
 
 import pytest
 
-from tests._test_filter import git_changed_files
+from tests._test_filter import git_changed_files, resolve_test_base_ref_from_env
+from tests.arch._policy_gate_plumbing import BaseRefContext, require_base_ref_or_skip
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 
@@ -32,28 +31,17 @@ def _load_check_module():
     return mod
 
 
-def _resolve_base_ref() -> str | None:
-    """Resolve the explicit test base, treating an empty value as unset."""
-    explicit_base = os.environ.get("AUTOSKILLIT_TEST_BASE_REF")
-    if explicit_base:
-        return explicit_base
-    github_base = os.environ.get("GITHUB_BASE_REF")
-    return f"origin/{github_base}" if github_base else None
-
-
-def _changed_files_or_skip() -> set[str]:
-    """Return changed files, skipping only when no base ref is available."""
-    base_ref = _resolve_base_ref()
-    if base_ref is None:
-        pytest.skip("no base ref resolved (AUTOSKILLIT_TEST_BASE_REF/GITHUB_BASE_REF unset)")
+def _changed_files_or_skip(ctx: BaseRefContext) -> set[str]:
+    """Return changed files, skipping only when skipping is permitted."""
+    base_ref = require_base_ref_or_skip(ctx)
     changed = git_changed_files(REPO_ROOT, base_ref=base_ref)
     assert changed is not None, f"could not compute changed files against base ref {base_ref!r}"
     return changed
 
 
-def test_no_diff_exceeds_line_limit() -> None:
+def test_no_diff_exceeds_line_limit(resolved_test_base: BaseRefContext) -> None:
     """REQ-CNST-010: changed src files must satisfy the diff-scoped cap."""
-    changed = _changed_files_or_skip()
+    changed = _changed_files_or_skip(resolved_test_base)
     check = _load_check_module()
     violations = []
     for rel in sorted(changed):
@@ -70,10 +58,16 @@ def test_no_diff_exceeds_line_limit() -> None:
     )
 
 
+def test_resolve_base_ref_prefers_explicit_argument(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "env-base")
+    monkeypatch.setenv("GITHUB_BASE_REF", "github-base")
+    assert resolve_test_base_ref_from_env("cli-base") == "cli-base"
+
+
 def test_resolve_base_ref_prefers_autoskillit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "explicit-base")
     monkeypatch.setenv("GITHUB_BASE_REF", "github-base")
-    assert _resolve_base_ref() == "explicit-base"
+    assert resolve_test_base_ref_from_env() == "explicit-base"
 
 
 def test_resolve_base_ref_falls_through_empty_to_github(
@@ -81,17 +75,46 @@ def test_resolve_base_ref_falls_through_empty_to_github(
 ) -> None:
     monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "")
     monkeypatch.setenv("GITHUB_BASE_REF", "github-base")
-    assert _resolve_base_ref() == "origin/github-base"
+    assert resolve_test_base_ref_from_env() == "origin/github-base"
 
 
 def test_resolve_base_ref_returns_none_without_refs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_TEST_BASE_REF", raising=False)
     monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
-    assert _resolve_base_ref() is None
+    assert resolve_test_base_ref_from_env() is None
+
+
+def test_gate_fails_instead_of_skipping_on_pull_request_event() -> None:
+    with pytest.raises(pytest.fail.Exception, match="pull_request/merge_group"):
+        require_base_ref_or_skip(BaseRefContext(base_ref=None, gate_required=True))
+    with pytest.raises(pytest.skip.Exception, match="no base ref resolved"):
+        require_base_ref_or_skip(BaseRefContext(base_ref=None, gate_required=False))
+
+
+@pytest.mark.parametrize(
+    ("event_name", "expected"),
+    [
+        ("pull_request", True),
+        ("merge_group", True),
+        ("push", False),
+        ("schedule", False),
+    ],
+)
+def test_gate_required_follows_github_event_name(
+    monkeypatch: pytest.MonkeyPatch,
+    event_name: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event_name)
+    assert BaseRefContext.from_env(None).gate_required is expected
+
+
+def test_gate_not_required_without_event_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+    assert BaseRefContext.from_env(None).gate_required is False
 
 
 def test_changed_files_failure_is_not_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AUTOSKILLIT_TEST_BASE_REF", "explicit-base")
     monkeypatch.setattr(f"{__name__}.git_changed_files", lambda *_args, **_kwargs: None)
     with pytest.raises(AssertionError, match="could not compute changed files"):
-        _changed_files_or_skip()
+        _changed_files_or_skip(BaseRefContext("explicit-base", False))

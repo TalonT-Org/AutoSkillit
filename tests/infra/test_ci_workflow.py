@@ -101,21 +101,21 @@ def _assert_cli_rejection(
     [
         ("pull_request", "develop", ("ubuntu-latest",), "conservative", _BASE_SHA),
         ("merge_group", "develop", ("ubuntu-latest",), "conservative", _BASE_SHA),
-        ("pull_request", "main", ("ubuntu-latest",), "none", ""),
-        ("merge_group", "main", ("ubuntu-latest",), "none", ""),
+        ("pull_request", "main", ("ubuntu-latest",), "none", _BASE_SHA),
+        ("merge_group", "main", ("ubuntu-latest",), "none", _BASE_SHA),
         (
             "pull_request",
             "stable",
             ("ubuntu-latest", "macos-15"),
             "none",
-            "",
+            _BASE_SHA,
         ),
         (
             "merge_group",
             "stable",
             ("ubuntu-latest", "macos-15"),
             "none",
-            "",
+            _BASE_SHA,
         ),
         ("push", "main", ("ubuntu-latest",), "none", ""),
         ("push", "stable", ("ubuntu-latest", "macos-15"), "none", ""),
@@ -165,7 +165,7 @@ def test_resolver_applies_exact_event_target_policy(
             (
                 'os-matrix=["ubuntu-latest"]',
                 "test-filter-mode=none",
-                "test-base-revision=",
+                f"test-base-revision={_BASE_SHA}",
             ),
         ),
         (
@@ -174,7 +174,7 @@ def test_resolver_applies_exact_event_target_policy(
             (
                 'os-matrix=["ubuntu-latest"]',
                 "test-filter-mode=none",
-                "test-base-revision=",
+                f"test-base-revision={_BASE_SHA}",
             ),
         ),
         (
@@ -183,7 +183,7 @@ def test_resolver_applies_exact_event_target_policy(
             (
                 'os-matrix=["ubuntu-latest","macos-15"]',
                 "test-filter-mode=none",
-                "test-base-revision=",
+                f"test-base-revision={_BASE_SHA}",
             ),
         ),
         (
@@ -192,7 +192,7 @@ def test_resolver_applies_exact_event_target_policy(
             (
                 'os-matrix=["ubuntu-latest","macos-15"]',
                 "test-filter-mode=none",
-                "test-base-revision=",
+                f"test-base-revision={_BASE_SHA}",
             ),
         ),
         (
@@ -230,6 +230,38 @@ def test_cli_emits_exact_profile_outputs(
     assert completed.returncode == 0
     assert completed.stdout.splitlines() == list(expected_lines)
     assert completed.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("event_name", "target"),
+    [
+        ("pull_request", "main"),
+        ("merge_group", "main"),
+        ("pull_request", "stable"),
+        ("merge_group", "stable"),
+    ],
+)
+def test_base_revision_emitted_for_every_event_with_base_sha(
+    event_name: str,
+    target: str,
+) -> None:
+    """The relaxation gate needs a trusted base on every reviewed event, not
+    only on the develop-target PRs that also run the conservative test filter."""
+    _, base_revision = ci_target_policy.resolve_ci_profile(
+        event_name,
+        _event_payload(event_name, target),
+    )
+
+    assert ci_target_policy._COMMIT_SHA_PATTERN.fullmatch(base_revision)
+
+
+def test_events_requiring_a_base_sha_are_exact() -> None:
+    """A reviewed event with no base SHA must fail, not emit an empty base.
+
+    An empty test-base-revision makes every diff-scoped gate skip, which is the
+    silent-skip failure the relaxation gate exists to prevent.
+    """
+    assert ci_target_policy.BASE_SHA_EVENTS == frozenset({"pull_request", "merge_group"})
 
 
 def test_policy_registry_is_exact_and_deeply_immutable() -> None:
@@ -299,6 +331,12 @@ def test_resolver_rejects_unsupported_event_before_payload_access() -> None:
         (
             "merge_group",
             {"merge_group": {"base_ref": "refs/heads/develop"}},
+        ),
+        ("pull_request", {"pull_request": {"base": {"ref": "main"}}}),
+        ("pull_request", {"pull_request": {"base": {"ref": "stable"}}}),
+        (
+            "merge_group",
+            {"merge_group": {"base_ref": "refs/heads/main"}},
         ),
         ("push", {"ref": "main"}),
         ("push", {"ref": "refs/tags/main"}),

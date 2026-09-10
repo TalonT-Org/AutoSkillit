@@ -8,6 +8,7 @@ import pytest
 
 from tests._test_filter import git_changed_files
 from tests.arch._deselection import deselect_arch_items
+from tests.arch._policy_gate_plumbing import TEST_BASE_KEY
 
 _ARCH_DIR = Path(__file__).parent
 _PROJECT_ROOT = _ARCH_DIR.parent.parent
@@ -26,7 +27,9 @@ def pytest_collection_modifyitems(
     if not filter_mode or filter_mode in ("0", "false", "no", "none"):
         return
     try:
-        changed = git_changed_files(cwd=_PROJECT_ROOT)
+        changed = git_changed_files(
+            cwd=_PROJECT_ROOT, base_ref=config.stash[TEST_BASE_KEY].base_ref
+        )
         if changed is None:
             return
         changed_abs = {(_PROJECT_ROOT / f).resolve() for f in changed}

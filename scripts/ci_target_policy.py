@@ -32,6 +32,11 @@ CI_TARGET_POLICIES: Mapping[str, CiTargetPolicyDef] = MappingProxyType(
     }
 )
 
+#: Events whose payload carries the base commit the change is measured against.
+#: Every one of them must produce a base revision, or the diff-scoped gates that
+#: consume it would silently skip.
+BASE_SHA_EVENTS: frozenset[str] = frozenset({"pull_request", "merge_group"})
+
 ALLOWED_TARGETS_BY_EVENT: Mapping[str, frozenset[str]] = MappingProxyType(
     {
         "pull_request": frozenset({"develop", "main", "stable"}),
@@ -73,7 +78,7 @@ def resolve_ci_profile(
     event_name: str,
     payload: Mapping[str, object],
 ) -> tuple[CiTargetPolicyDef, str]:
-    """Resolve the immutable target policy and conservative-filter base revision."""
+    """Resolve the immutable target policy and the event's trusted base revision."""
 
     allowed_targets = ALLOWED_TARGETS_BY_EVENT.get(event_name)
     if allowed_targets is None:
@@ -114,7 +119,7 @@ def resolve_ci_profile(
         )
 
     base_revision = ""
-    if policy.filter_mode == "conservative":
+    if event_name in BASE_SHA_EVENTS:
         base_revision = _require_commit_sha(base_sha, "base SHA")
     return policy, base_revision
 

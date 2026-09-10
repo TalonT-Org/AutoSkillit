@@ -68,7 +68,7 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `list_plugins` | (plugin enumeration) | Lists known plugins as dicts | Lists known plugins as dicts | — |
 | `ensure_pre_launch` | (pre-flight checks) | Pre-launch checks/setup | Pre-launch checks/setup | — |
 | `recover_cook_history` | ACP durable-session recovery | No-op | Explicitly recovers safely owned attempt views, then rebuilds the derived index before bare-resume selection | Recovery is never hidden in `SessionLocator.list_sessions`. |
-| `cook_session_context` | ACP attempt ownership | Null context | Acquires the per-attempt view/thread ownership contract and returns `CookSessionHandle` | Context exit requires durable spawn/reap proof before promotion. |
+| `session_attempt_context` | ACP attempt ownership | Null context | Acquires the per-attempt view/thread ownership contract and returns `SessionAttemptHandle` | Context exit requires durable spawn/reap proof before promotion. |
 | `translate_model` | (model alias resolution) | Translates canonical model name to backend-specific name | Translates canonical model name to backend-specific name | — |
 | `model_config_overrides` | (model-specific CLI overrides) | Returns CLI overrides tuple for a given model | Returns CLI overrides tuple for a given model | — |
 
@@ -104,7 +104,7 @@ ownership:
 |---|---|
 | `SessionSummary` | Read-only picker record. `session_id` is the backend's resumable ID, optional `launch_id` joins the AutoSkillit registry, `cwd` is the project discriminator, and `session_type_hint` is used only when no registry classification exists. |
 | `ManagedSessionHome` | One logical interactive launch: immutable `launch_id`, generated home, separately typed `skills_dir`, inherited generated-home lease descriptors in `pass_fds`, and the canonical skill-unavailability payload. Its context owns transactional setup, exactly-once verified cleanup, and unconditional lease release across all reload attempts. |
-| `CookSessionHandle` | One attempt view: store-derived `view_id`, inherited view/thread descriptors, and one-shot `record_spawn(pid, pgid)` / `record_reaped(pid, pgid)` callbacks. Reap proof is recorded only after the complete process group is empty and the direct child is reaped. |
+| `SessionAttemptHandle` | One attempt view: store-derived `view_id`, inherited view/thread descriptors, and one-shot `record_spawn(pid, pgid)` / `record_reaped(pid, pgid)` callbacks. Reap proof is recorded only after the complete process group is empty and the direct child is reaped. |
 | `HookTrustPolicy` | `REVIEW_EACH_SESSION` emits no hook-trust bypass for interactive fresh, named-resume, bare-resume, or reload commands. Automated skill and food-truck builders retain their explicit bypass. |
 
 ### Plugin load modes and descriptor ownership

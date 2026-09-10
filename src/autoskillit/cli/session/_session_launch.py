@@ -375,7 +375,7 @@ def _run_interactive_session(
 
         from autoskillit.cli.session._session_process import run_cook_attempt
 
-        with backend.cook_session_context(
+        with backend.session_attempt_context(
             session_home=managed_home.generated_home,
             project_dir=_project_dir,
             launch_id=managed_home.launch_id,

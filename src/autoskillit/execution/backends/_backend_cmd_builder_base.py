@@ -26,7 +26,7 @@ from autoskillit.core import (
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
-    CODEX_COOK_RESERVED_ENV_VARS,
+    CODEX_RESERVED_HOME_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     MANAGED_ATTEMPT_ID_ENV_VAR,
@@ -99,7 +99,7 @@ def _merge_caller_env_extras(
 ) -> None:
     """Merge caller extras without admitting Codex cook-owned controls."""
     if extras is not None:
-        blocked = denylist | CODEX_COOK_RESERVED_ENV_VARS | {CODEX_STARTUP_TRACE_ENV_VAR}
+        blocked = denylist | CODEX_RESERVED_HOME_ENV_VARS | {CODEX_STARTUP_TRACE_ENV_VAR}
         filtered_extras = _filter_protected_native_shell_env(extras)
         target.update({key: value for key, value in filtered_extras.items() if key not in blocked})
 

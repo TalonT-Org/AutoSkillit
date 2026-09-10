@@ -475,7 +475,7 @@ from .types import (
     CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR as CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR,
 )
 from .types import CODEX_CONTEXT_EXHAUSTION_MARKER as CODEX_CONTEXT_EXHAUSTION_MARKER
-from .types import CODEX_COOK_RESERVED_ENV_VARS as CODEX_COOK_RESERVED_ENV_VARS
+from .types import CODEX_RESERVED_HOME_ENV_VARS as CODEX_RESERVED_HOME_ENV_VARS
 from .types import (
     CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET as CODEX_DISCIPLINE_SUFFIX_BYTE_BUDGET,
 )
@@ -892,7 +892,7 @@ from .types import ContextLineage as ContextLineage
 from .types import ContextSessionId as ContextSessionId
 from .types import ContextThreadId as ContextThreadId
 from .types import ContextWindowSnapshot as ContextWindowSnapshot
-from .types import CookSessionHandle as CookSessionHandle
+from .types import SessionAttemptHandle as SessionAttemptHandle
 from .types import CoverageEvidence as CoverageEvidence
 from .types import CoverageEvidenceKind as CoverageEvidenceKind
 from .types import CoverageState as CoverageState

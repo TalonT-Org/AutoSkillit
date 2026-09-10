@@ -447,7 +447,7 @@ def cook(
                         "Interactive invocation validation failed: " + "; ".join(validation_errors)
                     )
 
-                with backend.cook_session_context(
+                with backend.session_attempt_context(
                     session_home=managed_home.generated_home,
                     project_dir=project_dir,
                     launch_id=launch_id,

@@ -381,9 +381,13 @@ class ValidatedAddDir:
     transparently with ``str(d)`` (used by ``build_interactive_cmd``),
     ``shutil.rmtree`` (used by cook), and ``d / "subdir"`` (path
     composition in tests and production code).
+
+    ``session_home`` names the generated home that owns this add-dir. Codex
+    skill launches require this explicit binding.
     """
 
     path: str
+    session_home: str = ""
 
     def __str__(self) -> str:
         return self.path

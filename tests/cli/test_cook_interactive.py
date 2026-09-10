@@ -13,18 +13,18 @@ import pytest
 
 from autoskillit import cli
 from autoskillit.core import (
-    CODEX_COOK_RESERVED_ENV_VARS,
+    CODEX_RESERVED_HOME_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
     SESSION_TYPE_ENV_VAR,
     BackendConventions,
     CmdSpec,
     CompiledSessionSkillCatalogAuthority,
-    CookSessionHandle,
     HookTrustPolicy,
     ManagedSessionHome,
     NamedResume,
     NoResume,
+    SessionAttemptHandle,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
@@ -141,9 +141,9 @@ class _Backend:
         return []
 
     @contextmanager
-    def cook_session_context(self, **kwargs: object):
+    def session_attempt_context(self, **kwargs: object):
         self.context_calls.append(kwargs)
-        yield CookSessionHandle(
+        yield SessionAttemptHandle(
             view_id="test-view",
             pass_fds=(9,),
             _record_spawn=lambda _pid, _pgid: None,
@@ -355,8 +355,8 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
     captured: dict[str, object] = {}
 
     @contextmanager
-    def cook_session_context(_self, **_kwargs: object):
-        yield CookSessionHandle(
+    def session_attempt_context(_self, **_kwargs: object):
+        yield SessionAttemptHandle(
             view_id="codex-view",
             pass_fds=(),
             _record_spawn=lambda _pid, _pgid: None,
@@ -395,7 +395,7 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         "autoskillit.cli.session._session_reload.consume_reload_sentinel",
         lambda _project: None,
     )
-    monkeypatch.setattr(CodexBackend, "cook_session_context", cook_session_context)
+    monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
     monkeypatch.setattr(
         CodexBackend,
         "validate_interactive_invocation",
@@ -633,9 +633,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
     """A declined final prompt must not leave a registry row or enter an attempt."""
     from autoskillit.core import (
         CmdSpec,
-        CookSessionHandle,
         HookTrustPolicy,
         ManagedSessionHome,
+        SessionAttemptHandle,
         ValidatedAddDir,
     )
 
@@ -695,9 +695,9 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             return []
 
         @contextmanager
-        def cook_session_context(self, **kwargs: object):
+        def session_attempt_context(self, **kwargs: object):
             events.append(("attempt-enter",))
-            yield CookSessionHandle(
+            yield SessionAttemptHandle(
                 view_id="view-1",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,
@@ -796,6 +796,6 @@ def test_cook_does_not_treat_persistent_sessions_as_codex(
 
     spec = captured["spec"]
     assert isinstance(spec, CmdSpec)
-    assert CODEX_COOK_RESERVED_ENV_VARS.isdisjoint(spec.env)
+    assert CODEX_RESERVED_HOME_ENV_VARS.isdisjoint(spec.env)
     assert CODEX_STARTUP_TRACE_ENV_VAR not in spec.env
     assert backend.context_calls[0]["session_home"] == captured["generated_home"]

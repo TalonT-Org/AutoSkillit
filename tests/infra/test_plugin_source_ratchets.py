@@ -416,14 +416,14 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "PTY launch adds only the slave descriptor to the owned descriptor tuple.",
     ),
     (
-        "execution/backends/_codex_session_storage.py",
+        "execution/backends/_codex/session_attempt_lease.py",
         "__enter__",
         "tuple((fd for fd in pass_fds if fd >= 0))",
     ): (
         1,
         "Generated Codex home construction forwards its independent storage leases.",
     ),
-    ("execution/backends/_claude/environment.py", "cook_session_context", "()"): (
+    ("execution/backends/_claude/environment.py", "session_attempt_context", "()"): (
         1,
         "The context probe is not a physical artifact-consuming agent launch.",
     ),
@@ -443,7 +443,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "Contract nudge forwards the freshly acquired binding through its rebuilt command.",
     ),
-    ("execution/process/__init__.py", "__call__", "pass_fds"): (
+    ("execution/process/_runner.py", "__call__", "pass_fds"): (
         1,
         "The generic subprocess runner forwards its protocol-owned descriptor tuple.",
     ),

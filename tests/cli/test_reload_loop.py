@@ -91,11 +91,11 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         BackendConventions,
         CmdSpec,
         CompiledSessionSkillCatalogAuthority,
-        CookSessionHandle,
         HookTrustPolicy,
         ManagedSessionHome,
         NamedResume,
         NoResume,
+        SessionAttemptHandle,
         SkillProjectionContextAuthority,
         SkillUnavailabilityPayload,
         ValidatedAddDir,
@@ -174,7 +174,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             return []
 
         @contextmanager
-        def cook_session_context(
+        def session_attempt_context(
             self,
             *,
             session_home: Path,
@@ -197,7 +197,7 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
                 )
             )
             try:
-                yield CookSessionHandle(
+                yield SessionAttemptHandle(
                     view_id=f"{launch_id}-{attempt}",
                     pass_fds=(11,),
                     _record_spawn=lambda pid, pgid: events.append(("spawn", attempt, pid, pgid)),
@@ -355,9 +355,9 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
         BackendConventions,
         CmdSpec,
         CompiledSessionSkillCatalogAuthority,
-        CookSessionHandle,
         HookTrustPolicy,
         ManagedSessionHome,
+        SessionAttemptHandle,
         SkillProjectionContextAuthority,
         ValidatedAddDir,
     )
@@ -416,9 +416,9 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
             return []
 
         @contextmanager
-        def cook_session_context(self, *, attempt: int, **kwargs: object):
+        def session_attempt_context(self, *, attempt: int, **kwargs: object):
             attempts.append(attempt)
-            yield CookSessionHandle(
+            yield SessionAttemptHandle(
                 view_id=f"view-{attempt}",
                 pass_fds=(),
                 _record_spawn=lambda _pid, _pgid: None,

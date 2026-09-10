@@ -173,7 +173,7 @@ class TestBackendCompliance:
             for method_name in (
                 "validate_interactive_invocation",
                 "recover_cook_history",
-                "cook_session_context",
+                "session_attempt_context",
             ):
                 assert callable(getattr(backend, method_name))
 

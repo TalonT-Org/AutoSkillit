@@ -488,8 +488,8 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "snapshot_skill_dir",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/execution/backends/_codex_session_storage.py",
-        "CodexSessionStore.recover",
+        "src/autoskillit/execution/backends/_codex/session_reconciliation.py",
+        "_CodexSessionReconciliationMixin.recover",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
         "src/autoskillit/fleet/state.py",

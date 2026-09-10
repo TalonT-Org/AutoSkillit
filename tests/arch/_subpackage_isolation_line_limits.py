@@ -152,18 +152,4 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "headless orchestration authority. The 827-line residual is dominated by that "
         "single 741-line function, which owns the success-gate adjacency rule.",
     ),
-    "execution/backends/_codex_session_storage.py": LineLimitExemption(
-        1500,
-        "REQ-CNST-010-E13-narrowed: CodexSessionStore + CodexInteractiveSessionLease + "
-        "_FileLease transaction-boundary core only; stateless FS primitives extracted to "
-        "_codex_fs_atomic.py (RE: #4664). The transaction-boundary core remains one "
-        "lock-coupled module — splitting _FileLease / CodexInteractiveSessionLease / "
-        "CodexSessionStore across multiple files would duplicate the inode-preserving "
-        "staging, process/thread/view leases, promotion, index publication, manifest "
-        "validation, crash recovery, and explicit legacy-view reconciliation invariants. "
-        "Cap lowered to 1500 lines to accommodate the core without the stateless helpers. "
-        "#4678 rectify adds spawn-identity capture to _record_spawn and verify-before-mark "
-        "identity checks to recover() — both belong to the same transaction boundary as "
-        "the leases they gate, and fit under this cap post-extraction.",
-    ),
 }

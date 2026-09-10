@@ -127,7 +127,7 @@ def test_all_backends_implement_ensure_pre_launch():
     [
         "validate_interactive_invocation",
         "recover_cook_history",
-        "cook_session_context",
+        "session_attempt_context",
     ],
 )
 def test_coding_agent_backend_protocol_includes_cook_lifecycle_method(
@@ -145,7 +145,7 @@ def test_coding_agent_backend_protocol_includes_cook_lifecycle_method(
     [
         "validate_interactive_invocation",
         "recover_cook_history",
-        "cook_session_context",
+        "session_attempt_context",
     ],
 )
 def test_all_backends_implement_cook_lifecycle_method(method_name: str) -> None:

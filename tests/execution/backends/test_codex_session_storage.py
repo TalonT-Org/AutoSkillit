@@ -28,8 +28,9 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import _codex_fs_atomic as atomic
 from autoskillit.execution.backends import _codex_session_storage as storage
+from autoskillit.execution.backends._codex import session_reconciliation as reconciliation
 from autoskillit.execution.backends._codex_session_storage import (
-    CodexInteractiveSessionLease,
+    CodexSessionAttemptLease,
     CodexSessionStore,
 )
 from tests._helpers import inject_vanishing_subtree_on_descent
@@ -179,7 +180,7 @@ def test_fresh_attempt_exposes_empty_view_and_no_child_abort_restores_inert_link
         current_resume_spec=NoResume(),
     )
 
-    assert isinstance(lease, CodexInteractiveSessionLease)
+    assert isinstance(lease, CodexSessionAttemptLease)
     with lease as handle:
         assert handle.view_id
         assert (home / "sessions").resolve().parent.name == handle.view_id
@@ -327,7 +328,7 @@ def test_attempt_cleanup_log_carries_context_without_owning_the_traceback(
     )
     lease.__enter__()
 
-    def fail_cleanup(_lease: CodexInteractiveSessionLease) -> None:
+    def fail_cleanup(_lease: CodexSessionAttemptLease) -> None:
         provider_secret = "cleanup-secret-4361"
         assert provider_secret
         raise RuntimeError("controlled cleanup failure")
@@ -486,12 +487,12 @@ def test_reconciliation_crash_boundaries_leave_a_retryable_authority(
     store, view_path = _retained_empty_unknown_view(tmp_path)
     audit_path = store.reconciliations_root / f"{view_path.name}.json"
     tombstone = store.reconciliation_tombstones_root / view_path.name
-    original_fsync = storage._fsync_directory
+    original_fsync = reconciliation._fsync_directory
 
     with monkeypatch.context() as scoped:
         if failure_point == "audit-publish":
             scoped.setattr(
-                storage,
+                reconciliation,
                 "_write_reconciliation_audit",
                 lambda _path, _payload: (_ for _ in ()).throw(
                     OSError("injected audit-publish failure")
@@ -499,7 +500,7 @@ def test_reconciliation_crash_boundaries_leave_a_retryable_authority(
             )
         elif failure_point == "rename":
             scoped.setattr(
-                storage.os,
+                reconciliation.os,
                 "rename",
                 lambda _source, _target: (_ for _ in ()).throw(OSError("injected rename failure")),
             )
@@ -515,7 +516,7 @@ def test_reconciliation_crash_boundaries_leave_a_retryable_authority(
                     raise OSError(f"injected {failure_point} failure")
                 original_fsync(path)
 
-            scoped.setattr(storage, "_fsync_directory", fail_target_fsync)
+            scoped.setattr(reconciliation, "_fsync_directory", fail_target_fsync)
 
         with pytest.raises(OSError, match=f"injected {failure_point} failure"):
             store.discard_attempt_view(view_path.name, "reviewed")
@@ -1095,7 +1096,7 @@ def test_named_resume_hard_links_only_selected_rollout_into_matching_view(
 
 def _prepared_lease(
     store: CodexSessionStore, home: Path, tmp_path: Path
-) -> CodexInteractiveSessionLease:
+) -> CodexSessionAttemptLease:
     return store.prepare_attempt(
         session_home=home,
         project_dir=tmp_path,
@@ -1206,7 +1207,11 @@ def test_recover_marks_dead_child_reaped_without_kill(
     lease.view_lease.release()
 
     kill_calls: list[object] = []
-    monkeypatch.setattr(storage, "kill_process_tree", lambda *a, **kw: kill_calls.append((a, kw)))
+    monkeypatch.setattr(
+        reconciliation,
+        "kill_process_tree",
+        lambda *a, **kw: kill_calls.append((a, kw)),
+    )
 
     store.recover()
 
@@ -1301,7 +1306,7 @@ def test_recover_kill_failure_leaves_view(tmp_path: Path, monkeypatch: pytest.Mo
         lease.view_lease.release()
 
         monkeypatch.setattr(
-            storage,
+            reconciliation,
             "kill_process_tree",
             lambda *a, **kw: ProcessCleanupResult(
                 root_pid=child.pid, survivor_pids=(child.pid,), observation_complete=False

@@ -22,6 +22,7 @@ class TestValidatedAddDir:
     def test_str_returns_path(self) -> None:
         vd = ValidatedAddDir(path="/some/dir")
         assert str(vd) == "/some/dir"
+        assert vd.session_home == ""
 
     def test_fspath_returns_path(self) -> None:
         vd = ValidatedAddDir(path="/some/dir")
@@ -44,6 +45,16 @@ class TestValidateAddDir:
         result = validate_add_dir(tmp_path)
         assert isinstance(result, ValidatedAddDir)
         assert result.path == str(tmp_path)
+
+    def test_binds_validated_add_dir_to_session_home(self, tmp_path: Path) -> None:
+        add_dir = tmp_path / "add-dir"
+        skill_dir = add_dir / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test")
+
+        result = validate_add_dir(add_dir, session_home=str(tmp_path))
+
+        assert result == ValidatedAddDir(path=str(add_dir), session_home=str(tmp_path))
 
     def test_missing_claude_skills_raises_layout_error(self, tmp_path: Path) -> None:
         with pytest.raises(LayoutError, match="does not contain .claude/skills/"):

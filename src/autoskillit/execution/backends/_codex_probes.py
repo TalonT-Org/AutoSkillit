@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoskillit.core import CODEX_COOK_RESERVED_ENV_VARS, get_logger
+from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, get_logger
 from autoskillit.execution.backends._codex_cmd_builders import CodexFlags
 from autoskillit.execution.backends._codex_config import _format_toml_value
 
@@ -343,7 +343,7 @@ def _validate_global_codex_home(
         CodexFlags.JSON,
     )
     env = dict(os.environ)
-    for key in CODEX_COOK_RESERVED_ENV_VARS:
+    for key in CODEX_RESERVED_HOME_ENV_VARS:
         env[key] = str(source_codex_home)
     return _validate_mcp_probe(
         command,

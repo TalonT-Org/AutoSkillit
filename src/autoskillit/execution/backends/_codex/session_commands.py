@@ -15,8 +15,8 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     BUNDLED_EXPLORER_ROLES,
-    CODEX_COOK_RESERVED_ENV_VARS,
     CODEX_INTERACTIVE_REQUIRED_ENV,
+    CODEX_RESERVED_HOME_ENV_VARS,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
     FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
@@ -543,7 +543,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
         if generated_home is not None:
-            for reserved_key in CODEX_COOK_RESERVED_ENV_VARS:
+            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
                 merged_extras[reserved_key] = str(generated_home)
         else:
             projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
@@ -551,7 +551,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
                 merged_extras.setdefault("CODEX_HOME", projected_codex_home)
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         if generated_home is not None:
-            effective_required |= CODEX_COOK_RESERVED_ENV_VARS
+            effective_required |= CODEX_RESERVED_HOME_ENV_VARS
         env = CodexEnvPolicy().build_env(
             base_env, extras=merged_extras, required=effective_required
         )

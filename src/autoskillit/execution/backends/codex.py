@@ -24,7 +24,6 @@ from autoskillit.core import (
     CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
     CmdSpec,
-    CookSessionHandle,
     ExecutableLaunchBinding,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
@@ -32,6 +31,7 @@ from autoskillit.core import (
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
+    SessionAttemptHandle,
     SkillSemanticAdaptationResult,
     SkillSemanticOperation,
     SkillSemanticPlan,
@@ -619,7 +619,7 @@ class CodexBackend(CodexSessionCommandMixin):
     def recover_cook_history(self) -> None:
         CodexSessionStore(log_dir=default_log_dir()).recover()
 
-    def cook_session_context(
+    def session_attempt_context(
         self,
         *,
         session_home: Path,
@@ -628,7 +628,7 @@ class CodexBackend(CodexSessionCommandMixin):
         attempt: int,
         current_resume_spec: ResumeSpec,
         ceiling_seconds: float = INTERACTIVE_TETHER_CEILING_SECONDS,
-    ) -> AbstractContextManager[CookSessionHandle]:
+    ) -> AbstractContextManager[SessionAttemptHandle]:
         return CodexSessionStore(log_dir=default_log_dir()).prepare_attempt(
             session_home=session_home,
             project_dir=project_dir,

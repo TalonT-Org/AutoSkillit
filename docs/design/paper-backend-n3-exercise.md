@@ -172,7 +172,7 @@ opencode classification).
 | 19 | CodingAgentBackend | `list_plugins` | TRIVIAL | Returns `[]`; no plugin system documented. |
 | 20 | CodingAgentBackend | `ensure_pre_launch` | SHIM-REQUIRED | Pre-launch check that the SQLite database is initialised and the configured provider env vars are present. |
 | 21 | CodingAgentBackend | `recover_cook_history` | SHIM-REQUIRED | Performs explicit SQLite/session-index recovery before bare-resume listing; listing itself remains read-only. |
-| 22 | CodingAgentBackend | `cook_session_context` | SHIM-REQUIRED | Adapts opencode's SQLite ownership into an attempt context returning spawn/reap callbacks and inherited ownership descriptors where required. |
+| 22 | CodingAgentBackend | `session_attempt_context` | SHIM-REQUIRED | Adapts opencode's SQLite ownership into an attempt context returning spawn/reap callbacks and inherited ownership descriptors where required. |
 | 23 | CodingAgentBackend | `translate_model` | SHIM-REQUIRED | AI SDK model identifiers differ from autoskillit's canonical aliases (`sonnet` / `opus` / `haiku`). Mapping table needed; precedent is `CODEX_MODEL_ALIASES` in `_type_backend.py:174–176`. |
 | 24 | CodingAgentBackend | `model_config_overrides` | TRIVIAL | Returns `()` or a minimal per-model override tuple (analogous to Codex's effort-mapping for `sonnet`/`opus`/`haiku`). |
 | 25 | CodingAgentBackend | `build_inspector_cmd` | TRIVIAL | Raises `CapabilityNotSupportedError` (same as both existing backends; `inspector_capable=False`). |
@@ -189,7 +189,7 @@ opencode classification).
 The candidate must also preserve the backend-neutral ownership records.
 `SessionSummary.session_id` remains the opencode `ses_<ulid>` while optional
 `launch_id` joins AutoSkillit classification. `ManagedSessionHome` owns one
-logical launch and its inherited lease descriptors; `CookSessionHandle` owns
+logical launch and its inherited lease descriptors; `SessionAttemptHandle` owns
 one attempt and exposes the only valid spawn/reap proof callbacks. A future
 adapter must keep `launch_id`, reload `attempt`, store-derived `view_id`, and
 backend session ID distinct even if SQLite could encode them in one row.
@@ -205,7 +205,7 @@ command construction, not inferred from `mcp_config_capable`.
 | Command builders (`build_cmd`, `build_skill_session_cmd`, `build_food_truck_cmd`, `build_interactive_cmd`, `build_resume_cmd`) | 0 | 1 | 4 |
 | Validation (`validate_session_layout`, `validate_interactive_invocation`, `validate_skill_content`, `ensure_pre_launch`) | 2 | 2 | 0 |
 | Parsing (`stream_parser`, `result_parser`) | 0 | 2 | 0 |
-| Session storage (`session_locator`, `setup_session_dir`, `write_tool_names`, `recover_cook_history`, `cook_session_context`) | 0 | 5 | 0 |
+| Session storage (`session_locator`, `setup_session_dir`, `write_tool_names`, `recover_cook_history`, `session_attempt_context`) | 0 | 5 | 0 |
 | Environment (`env_policy`) | 1 | 0 | 0 |
 | Sub-protocols (`StreamParser`, `ResultParser`, `EnvPolicy`, `SessionLocator`) | 1 | 7 | 0 |
 | **Total (34 rows)** | **12** | **18** | **4** |

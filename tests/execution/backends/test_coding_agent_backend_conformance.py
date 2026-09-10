@@ -269,7 +269,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_cook_lifecycle_boundaries_are_implemented(self) -> None:
         assert callable(self.backend.recover_cook_history)
-        assert callable(self.backend.cook_session_context)
+        assert callable(self.backend.session_attempt_context)
 
     def test_validate_skill_content_returns_list(self) -> None:
         """BackendCapabilities.hook_config_format and skills_subdir — skill content validation."""

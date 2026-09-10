@@ -40,7 +40,7 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
-    "CookSessionHandle",
+    "SessionAttemptHandle",
     "ExecutableLaunchBinding",
     "ModelTranslation",
     "SessionSummary",
@@ -455,8 +455,8 @@ class SessionSummary:
 
 
 @dataclass(frozen=True, slots=True)
-class CookSessionHandle:
-    """Ownership handle for one durable interactive-cook attempt."""
+class SessionAttemptHandle:
+    """Ownership handle for one durable session attempt."""
 
     view_id: str
     pass_fds: tuple[int, ...]

@@ -870,7 +870,7 @@ FORWARDING_SITES: dict[str, str] = {
     ),
     "execution/backends/_codex_probes.py:345": (
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
-        "probe subprocess, with CODEX_COOK_RESERVED_ENV_VARS overridden to the source home."
+        "probe subprocess, with CODEX_RESERVED_HOME_ENV_VARS overridden to the source home."
     ),
     "execution/backends/claude.py:359": (
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
@@ -1886,8 +1886,8 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "of an unrelated lookup collection; never set as a real OS environment variable."
         ),
     ),
-    "CODEX_COOK_RESERVED_ENV_VARS": AmbientEnvDisposition(
-        var="CODEX_COOK_RESERVED_ENV_VARS",
+    "CODEX_RESERVED_HOME_ENV_VARS": AmbientEnvDisposition(
+        var="CODEX_RESERVED_HOME_ENV_VARS",
         disposition="scrub",
         owner="autoskillit",
         justification=(
@@ -1910,7 +1910,7 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         owner="codex",
         justification=(
             "Codex CLI recursion-guard variable in the AUTOSKILLIT_PRIVATE_ENV_VARS baseline"
-            "(CODEX_COOK_RESERVED_ENV_VARS); must not leak between sessions."
+            "(CODEX_RESERVED_HOME_ENV_VARS); must not leak between sessions."
         ),
     ),
     "CODEX_INTAKE_DISCIPLINE_DIGEST": AmbientEnvDisposition(
@@ -1964,7 +1964,7 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         owner="codex",
         justification=(
             "Codex CLI recursion-guard variable in the AUTOSKILLIT_PRIVATE_ENV_VARS baseline"
-            "(CODEX_COOK_RESERVED_ENV_VARS); must not leak between sessions."
+            "(CODEX_RESERVED_HOME_ENV_VARS); must not leak between sessions."
         ),
     ),
     "CODEX_STARTUP_TRACE_ENV_VAR": AmbientEnvDisposition(

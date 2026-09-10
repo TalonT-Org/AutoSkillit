@@ -31,8 +31,8 @@ if _HOOKS_DIR not in sys.path:
 
 from _hook_payload import normalize_payload_cwd  # noqa: E402
 from _hook_settings import (  # type: ignore[import-not-found]  # noqa: E402
+    payload_managed_codex_route,
     session_join_required,
-    session_managed_codex_route,
 )
 
 BACKGROUND_EXEC_DENY_TRIGGER: str = "run_in_background=true is prohibited in skill sessions"
@@ -89,14 +89,7 @@ def main() -> None:
     tool_name = data.get("tool_name")
     session_id = data.get("session_id")
     payload_cwd = normalize_payload_cwd(data.get("cwd"))
-    managed_route = (
-        session_managed_codex_route(payload_cwd, session_id)
-        if os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip() == "codex"
-        and isinstance(session_id, str)
-        and session_id
-        and payload_cwd
-        else None
-    )
+    managed_route = payload_managed_codex_route(payload_cwd, session_id)
     if managed_route is not None:
         route, guards, _config_digest = managed_route
         if "background_exec_guard" not in guards:

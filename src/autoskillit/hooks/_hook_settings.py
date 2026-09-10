@@ -618,3 +618,15 @@ def session_managed_codex_route(
     ):
         return None
     return str(route), frozenset(guards), config_digest
+
+
+def payload_managed_codex_route(
+    payload_cwd: str,
+    session_id: object,
+) -> tuple[str, frozenset[str], str] | None:
+    """Resolve a managed Codex route only for an identified Codex payload."""
+    if os.environ.get("AUTOSKILLIT_AGENT_BACKEND", "").strip() != "codex":
+        return None
+    if not isinstance(session_id, str) or not session_id or not payload_cwd:
+        return None
+    return session_managed_codex_route(payload_cwd, session_id)

@@ -19,8 +19,10 @@ from types import SimpleNamespace
 
 import pytest
 
+import autoskillit.hooks._capture._artifact_setup as capture_setup
 import autoskillit.hooks._capture._authority as capture_authority
 import autoskillit.hooks._capture._failure_policy as capture_failure_policy
+import autoskillit.hooks._capture._publication as capture_publication
 import autoskillit.hooks._capture._reconcile as capture_reconcile
 import autoskillit.hooks._capture._replay as capture_replay
 import autoskillit.hooks._capture._runner as capture_runner
@@ -840,7 +842,7 @@ def test_policy_partial_open_failure_closes_autoskillit_fd(
     autoskillit_dir.mkdir(parents=True)
     anchor = open_project_anchor(str(project))
     opened_fds: list[int] = []
-    real_open_component = capture_runner._open_directory_component
+    real_open_component = capture_setup._open_directory_component
 
     def record_open_component(parent_fd, name, *, create):
         fd = real_open_component(parent_fd, name, create=create)
@@ -849,7 +851,7 @@ def test_policy_partial_open_failure_closes_autoskillit_fd(
         return fd
 
     monkeypatch.setattr(
-        capture_runner,
+        capture_setup,
         "_open_directory_component",
         record_open_component,
     )
@@ -953,7 +955,7 @@ def test_marker_directory_identity_failure_closes_partial_open_fd(
     autoskillit_dir.mkdir(parents=True)
     anchor = open_project_anchor(str(project))
     opened_fds: list[int] = []
-    real_open_component = capture_runner._open_directory_component
+    real_open_component = capture_setup._open_directory_component
 
     def record_open_component(parent_fd, name, *, create):
         fd = real_open_component(parent_fd, name, create=create)
@@ -964,15 +966,15 @@ def test_marker_directory_identity_failure_closes_partial_open_fd(
         raise OSError("fault injection")
 
     monkeypatch.setattr(
-        capture_runner,
+        capture_setup,
         "_open_directory_component",
         record_open_component,
     )
-    monkeypatch.setattr(capture_runner, "_same_identity", fail_identity)
+    monkeypatch.setattr(capture_setup, "_same_identity", fail_identity)
 
     try:
         with pytest.raises(OSError, match="fault injection"):
-            capture_runner._open_and_match_directory(
+            capture_setup._open_and_match_directory(
                 anchor.fd,
                 CAPTURE_PATH_COMPONENTS[0],
                 anchor.identity,
@@ -1898,7 +1900,7 @@ def test_post_duplication_failure_closes_all_fds_and_prevents_command(
         raise AssertionError("command must not spawn after fd duplication failure")
 
     monkeypatch.setattr(capture_runner.os, "dup", record_dup)
-    monkeypatch.setattr(capture_runner, "_same_identity", fail_duplicated_identity)
+    monkeypatch.setattr(capture_setup, "_same_identity", fail_duplicated_identity)
     monkeypatch.setattr(capture_runner, "_spawn_bash", unexpected_spawn)
     assert (
         capture_runner._main(_runner_args(command="printf ran > command_ran", cwd=str(project)))
@@ -3255,7 +3257,7 @@ def test_publication_binding_failure_emits_typed_failure(
         raise OSError("fault injection")
 
     monkeypatch.setattr(
-        capture_runner,
+        capture_publication,
         "verify_reference_publication_binding",
         fail_verification,
     )

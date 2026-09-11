@@ -377,7 +377,7 @@ class TestStateDecompositionImports:
 
         assert callable(resume_campaign_from_state)
 
-    def test_backward_compat_from_state_module(self) -> None:
+    def test_canonical_import_from_state_module(self) -> None:
         from autoskillit.fleet.campaign_state.state import (
             read_state,
         )

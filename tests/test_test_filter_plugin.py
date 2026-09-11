@@ -68,9 +68,11 @@ def pytest_collection_modifyitems(items, config):
     if scope is None:
         return
     try:
+        root = config.rootpath
+        scope_abs = {sp if sp.is_absolute() else root / sp for sp in scope}
         selected, deselected = [], []
         file_scopes, ancestor_scopes = set(), set()
-        for sp in scope:
+        for sp in scope_abs:
             (file_scopes if sp.is_file() else ancestor_scopes).add(sp)
         for item in items:
             matched = item.path in file_scopes or any(

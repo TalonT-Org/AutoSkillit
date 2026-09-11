@@ -23,10 +23,11 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SCANNED_FILES = (
-    tuple(sorted((SRC_ROOT / "server" / "recipe").glob("_recipe_*.py")))
-    + tuple(sorted((SRC_ROOT / "server" / "recipe" / "_recipe_delivery").glob("*.py")))
-    + tuple(sorted((SRC_ROOT / "server" / "tools").glob("*recipe*.py")))
+    tuple(sorted((SRC_ROOT / "server" / "recipe").rglob("_recipe_*.py")))
+    + tuple(sorted((SRC_ROOT / "server" / "recipe" / "_recipe_delivery").rglob("*.py")))
+    + tuple(sorted((SRC_ROOT / "server" / "tools").rglob("*recipe*.py")))
 )
+assert _SCANNED_FILES, "no recipe-delivery/pagination source files found for provenance scan"
 
 _BOUND_ATTRS = frozenset({"page_max_bytes", "response_max_bytes"})
 

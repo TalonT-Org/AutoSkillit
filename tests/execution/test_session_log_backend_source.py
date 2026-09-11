@@ -110,6 +110,7 @@ class TestBackendAuthorityInSessionsJsonl:
             "native_shell_capture": None,
             "session_type": None,
             "subagent_model_outcomes": [],
+            "child_outcomes": [],
             "schema_version": SESSION_INDEX_SCHEMA_VERSION,
         }
         assert entry["backend_authority"] is None
@@ -163,3 +164,85 @@ class TestBackendAuthorityInSessionsJsonl:
         assert entry["backend_authority"] is None
         assert entry["launch_contract_digest"] == ""
         assert entry["session_type"] is None
+
+
+class TestChildOutcomesProjection:
+    """child_outcomes (issue #4623) round-trips into summary.json and sessions.jsonl."""
+
+    _ROW_UNKNOWN = {
+        "child_id": "c1",
+        "launch_alias": "",
+        "backend": "claude_code",
+        "parent_session_id": "test-session-001",
+        "role": "",
+        "attribution_skill": "",
+        "effective_model": "",
+        "effective_provider": "",
+        "terminal_reason": "unknown",
+        "raw_reason": "",
+        "raw_subtype": "",
+        "raw_code": "",
+        "evidence_source": "subagent_start",
+        "transcript_locator": "",
+        "start_confirmed": True,
+    }
+
+    def test_child_outcomes_round_trip(self, tmp_path):
+        import json
+
+        from tests.execution.conftest import _flush
+
+        _flush(tmp_path, child_outcomes=[self._ROW_UNKNOWN])
+        summary = json.loads(
+            (tmp_path / "sessions" / "test-session-001" / "summary.json").read_text()
+        )
+        assert summary["child_outcomes"] == [self._ROW_UNKNOWN]
+        lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+        entry = json.loads(lines[-1])
+        assert entry["child_outcomes"] == [self._ROW_UNKNOWN]
+
+    def test_reused_recovery_refreshes_child_outcomes_in_committed_summary_and_index(
+        self, tmp_path
+    ):
+        """A reused-recovery flush (publish_artifacts=False) still refines unknown to
+        a known reason in the already-committed summary.json, and the index (which
+        rewrites unconditionally) reflects it too."""
+        import json
+
+        from tests.execution.conftest import _flush
+
+        _flush(tmp_path, child_outcomes=[self._ROW_UNKNOWN])
+        refined_row = {**self._ROW_UNKNOWN, "terminal_reason": "completed"}
+
+        _flush(tmp_path, child_outcomes=[refined_row], is_crash_recovery=True)
+
+        summary = json.loads(
+            (tmp_path / "sessions" / "test-session-001" / "summary.json").read_text()
+        )
+        assert summary["child_outcomes"] == [refined_row]
+        lines = (tmp_path / "sessions.jsonl").read_text().strip().split("\n")
+        entry = json.loads(lines[-1])
+        assert entry["child_outcomes"] == [refined_row]
+
+    def test_reused_recovery_leaves_other_summary_fields_untouched(self, tmp_path):
+        """The reuse-recovery refresh patches only child_outcomes, not the rest of
+        the already-committed summary (e.g. an unrelated field stays as first-flushed)."""
+        import json
+
+        from tests.execution.conftest import _flush
+
+        _flush(tmp_path, child_outcomes=[self._ROW_UNKNOWN], skill_command="/first:command")
+        refined_row = {**self._ROW_UNKNOWN, "terminal_reason": "completed"}
+
+        _flush(
+            tmp_path,
+            child_outcomes=[refined_row],
+            is_crash_recovery=True,
+            skill_command="/second:command",
+        )
+
+        summary = json.loads(
+            (tmp_path / "sessions" / "test-session-001" / "summary.json").read_text()
+        )
+        assert summary["child_outcomes"] == [refined_row]
+        assert summary["skill_command"] == "/first:command"

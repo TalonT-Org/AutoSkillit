@@ -64,6 +64,14 @@ def test_turn_limit_input_value_matches_cli_subtype_enum() -> None:
     assert snap._CLI_SUBTYPE_ERROR_MAX_TURNS == CliSubtype.ERROR_MAX_TURNS.value
 
 
+def test_wire_dict_fields_match_core_child_outcome_dict() -> None:
+    """``ChildOutcomeWireDict`` (stdlib-only) and ``core``'s ``ChildOutcomeDict`` must stay
+    field-for-field identical — this module cannot import ``core`` to share the type."""
+    from autoskillit.core.types._type_execution_identity import ChildOutcomeDict
+
+    assert set(snap.ChildOutcomeWireDict.__annotations__) == set(ChildOutcomeDict.__annotations__)
+
+
 def test_canonical_reasons_are_exactly_the_seven_named_values() -> None:
     assert snap.CANONICAL_TERMINAL_REASONS == {
         "completed",

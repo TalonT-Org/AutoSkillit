@@ -46,7 +46,7 @@ from autoskillit.core import (
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
 from autoskillit.execution.child_outcomes import (
     ManagedAttemptRecorder,
-    collect_native_children_for_backend,
+    collect_and_project_child_outcomes,
     normalize_backend_name,
 )
 from autoskillit.execution.clone_guard import (
@@ -561,7 +561,7 @@ async def _execute_claude_headless(
             captured_session_id=resolved_session_ids[0],
             model_identity=model_identity,
         )
-        collect_native_children_for_backend(
+        child_outcomes = collect_and_project_child_outcomes(
             step_backend=_step_backend,
             cwd=cwd,
             evidence_session_id=evidence_session_id,
@@ -613,6 +613,7 @@ async def _execute_claude_headless(
                 loc_deletions=_metrics.loc_deletions,
                 session_id=evidence_session_id,
                 subagent_model_outcomes=subagent_model_outcomes,
+                child_outcomes=child_outcomes,
                 step_name=step_name,
                 order_id=order_id,
             )
@@ -624,6 +625,7 @@ async def _execute_claude_headless(
                 order_id=order_id,
                 execution_identity=skill_result.execution_identity,
                 subagent_model_outcomes=subagent_model_outcomes,
+                child_outcomes=child_outcomes,
             )
 
         skill_result = dataclasses.replace(

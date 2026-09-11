@@ -13,6 +13,7 @@ from autoskillit.core import (
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     WORKTREE_SKILLS,
     AgentSessionResult,
+    ChildOutcomeDict,
     CliSubtype,
     ExecutionIdentity,
     FailureRecord,
@@ -262,6 +263,7 @@ def _build_session_telemetry(
     loc_deletions: int,
     session_id: str,
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...],
+    child_outcomes: tuple[ChildOutcomeDict, ...],
     step_name: str = "",
     order_id: str = "",
 ) -> SessionTelemetry:
@@ -279,6 +281,7 @@ def _build_session_telemetry(
         loc_insertions=loc_insertions,
         loc_deletions=loc_deletions,
         subagent_model_outcomes=subagent_model_outcomes,
+        child_outcomes=child_outcomes,
         execution_identity=skill_result.execution_identity,
     )
 
@@ -290,6 +293,7 @@ def _build_error_path_telemetry(
     order_id: str = "",
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...] = (),
+    child_outcomes: tuple[ChildOutcomeDict, ...] = (),
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
     if github_api_log is not None:
@@ -306,5 +310,6 @@ def _build_error_path_telemetry(
         loc_insertions=0,
         loc_deletions=0,
         subagent_model_outcomes=subagent_model_outcomes,
+        child_outcomes=child_outcomes,
         execution_identity=execution_identity,
     )

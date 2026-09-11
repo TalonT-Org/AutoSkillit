@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -42,11 +42,14 @@ from autoskillit.core import (
 )
 from autoskillit.core import fast_dumps as _fast_dumps
 from autoskillit.execution._session_retention import apply_session_retention
+from autoskillit.execution._session_summary_refresh import refresh_summary_child_outcomes
 from autoskillit.execution.anomaly_detection import (
+    api_retry_exhaustion_anomaly,
     detect_anomalies,
     detect_identity_drift,
     detect_model_drift,
     detect_outcome_anomalies,
+    ndjson_drift_anomaly,
 )
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 from autoskillit.execution.session._turn_usage import (
@@ -346,48 +349,11 @@ def flush_session_log(
 
         # API retry exhaustion anomaly — fires regardless of token_usage presence
         if api_retry_exhausted:
-            from autoskillit.execution.anomaly_detection import (
-                OUTCOME_ANOMALY_PID_SENTINEL,
-                OUTCOME_ANOMALY_SEQ_SENTINEL,
-                AnomalyKind,
-                AnomalySeverity,
-            )
-
-            anomalies.append(
-                {
-                    "ts": datetime.now(UTC).isoformat(),
-                    "seq": OUTCOME_ANOMALY_SEQ_SENTINEL,
-                    "event": "anomaly",
-                    "kind": str(AnomalyKind.API_RETRY_EXHAUSTION),
-                    "severity": str(AnomalySeverity.WARNING),
-                    "pid": OUTCOME_ANOMALY_PID_SENTINEL,
-                    "detail": {"subtype": subtype, "api_retry_count": api_retry_count},
-                    "snapshot": {},
-                }
-            )
+            anomalies.append(api_retry_exhaustion_anomaly(subtype, api_retry_count))
 
         if ndjson_unknown_event_count > 0 or ndjson_unknown_item_count > 0:
-            from autoskillit.execution.anomaly_detection import (
-                OUTCOME_ANOMALY_PID_SENTINEL,
-                OUTCOME_ANOMALY_SEQ_SENTINEL,
-                AnomalyKind,
-                AnomalySeverity,
-            )
-
             anomalies.append(
-                {
-                    "ts": datetime.now(UTC).isoformat(),
-                    "seq": OUTCOME_ANOMALY_SEQ_SENTINEL,
-                    "event": "anomaly",
-                    "kind": str(AnomalyKind.NDJSON_DRIFT),
-                    "severity": str(AnomalySeverity.WARNING),
-                    "pid": OUTCOME_ANOMALY_PID_SENTINEL,
-                    "detail": {
-                        "ndjson_unknown_event_count": ndjson_unknown_event_count,
-                        "ndjson_unknown_item_count": ndjson_unknown_item_count,
-                    },
-                    "snapshot": {},
-                }
+                ndjson_drift_anomaly(ndjson_unknown_event_count, ndjson_unknown_item_count)
             )
 
         observed_token_model = _primary_model_identifier(token_usage) if token_usage else ""
@@ -515,6 +481,7 @@ def flush_session_log(
             "ndjson_unknown_item_count": ndjson_unknown_item_count,
             "native_shell_capture": native_shell_capture_projection,
             "session_type": session_type_value,
+            "child_outcomes": list(telemetry.child_outcomes),
         }
         if versions is not None:
             summary["versions"] = {
@@ -611,6 +578,8 @@ def flush_session_log(
 
         if publish_artifacts:
             atomic_write(summary_path, _fast_dumps(summary, sort_keys=True, indent=True) + "\n")
+        elif summary_path.is_file():
+            refresh_summary_child_outcomes(summary_path, list(telemetry.child_outcomes))
 
         index_entry = {
             "session_id": session_id,
@@ -692,6 +661,7 @@ def flush_session_log(
             "native_shell_capture": native_shell_capture_projection,
             "session_type": session_type_value,
             "subagent_model_outcomes": list(telemetry.subagent_model_outcomes),
+            "child_outcomes": list(telemetry.child_outcomes),
             "model_identifier": effective_model_id,
             "configured_model": model_identity.configured_model,
             "profile_name": model_identity.profile_name,

@@ -62,6 +62,7 @@ class TestHeadlessEvidenceModuleExists:
             loc_deletions=0,
             session_id="session-1",
             subagent_model_outcomes=(),
+            child_outcomes=(),
         )
 
         assert telemetry.turn_usage == turn_usage

@@ -106,6 +106,33 @@ def collect_native_children_for_backend(
         logger.debug("child_outcome_collection_failed", exc_info=True)
 
 
+def collect_and_project_child_outcomes(
+    *,
+    step_backend: CodingAgentBackend,
+    cwd: str,
+    evidence_session_id: str,
+    diagnostic_log_dir: str,
+) -> tuple[ChildOutcomeDict, ...]:
+    """Observe this parent's native children, then read back its full projected snapshot.
+
+    Combines ``collect_native_children_for_backend`` (write) with
+    ``collect_child_outcomes`` (read) using the same resolved backend/log
+    root, for callers — ``_headless_execute.py``'s telemetry construction —
+    that need the final tuple rather than the write's side effect alone.
+    """
+    collect_native_children_for_backend(
+        step_backend=step_backend,
+        cwd=cwd,
+        evidence_session_id=evidence_session_id,
+        diagnostic_log_dir=diagnostic_log_dir,
+    )
+    return collect_child_outcomes(
+        backend=normalize_backend_name(step_backend.name),
+        parent_session_id=evidence_session_id,
+        log_root=resolve_log_dir(diagnostic_log_dir),
+    )
+
+
 def collect_child_outcomes(
     *, backend: str, parent_session_id: str, log_root: Path
 ) -> tuple[ChildOutcomeDict, ...]:

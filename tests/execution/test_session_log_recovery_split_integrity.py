@@ -22,11 +22,9 @@ class TestExecutionGatewayPreserved:
     """execution/ gateway still exports all session_log symbols."""
 
     def test_flush_session_log_importable(self):
-        from autoskillit.execution import (
-            flush_session_log,  # noqa: F401 — gateway re-export still works for this name
-        )
+        from autoskillit.execution import flush_session_log
 
-        assert flush_session_log is not None
+        assert callable(flush_session_log)
 
     def test_recover_crashed_sessions_importable(self):
         from autoskillit.execution import recover_crashed_sessions

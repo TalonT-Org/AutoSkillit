@@ -39,6 +39,27 @@ _AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
 #: body mocks out during its own run.
 _real_rmtree = shutil.rmtree
 
+#: Canonical tests/ layer directory names used to build synthetic test trees in
+#: test-filter fixtures (tests/test_test_filter.py, tests/test_test_filter_plugin.py).
+#: Single source of truth so the two fixture trees can't silently drift apart.
+TEST_TREE_LAYER_DIRS = (
+    "core",
+    "config",
+    "execution",
+    "pipeline",
+    "workspace",
+    "recipe",
+    "migration",
+    "server",
+    "cli",
+    "hooks",
+    "skills",
+    "arch",
+    "contracts",
+    "infra",
+    "docs",
+)
+
 
 def pytest_report_header(config: pytest.Config) -> list[str] | None:
     from tests._ambient_env_surface import AMBIENT_ENV_DISPOSITIONS

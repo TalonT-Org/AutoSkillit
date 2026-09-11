@@ -29,30 +29,13 @@ from tests._test_filter import (
     git_changed_files,
     load_manifest,
 )
-
-_SCOPE_TREE_DIRS = (
-    "core",
-    "config",
-    "execution",
-    "pipeline",
-    "workspace",
-    "recipe",
-    "migration",
-    "server",
-    "cli",
-    "hooks",
-    "skills",
-    "arch",
-    "contracts",
-    "infra",
-    "docs",
-)
+from tests.conftest import TEST_TREE_LAYER_DIRS
 
 
 def _make_tests_tree(tmp_path: Path) -> Path:
     """Build the standard temporary tests/ tree used by scope-building tests."""
     tests_root = tmp_path / "tests"
-    for d in _SCOPE_TREE_DIRS:
+    for d in TEST_TREE_LAYER_DIRS:
         (tests_root / d).mkdir(parents=True, exist_ok=True)
     return tests_root
 

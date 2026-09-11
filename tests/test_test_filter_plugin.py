@@ -561,23 +561,7 @@ def scope_is_file_calls(monkeypatch: pytest.MonkeyPatch) -> list[pathlib.Path]:
 class _HookTree:
     """A concrete tests/ tree plus the fixed scope used by the real-hook tests."""
 
-    LAYER_DIRS = (
-        "core",
-        "config",
-        "execution",
-        "pipeline",
-        "workspace",
-        "recipe",
-        "migration",
-        "server",
-        "cli",
-        "hooks",
-        "skills",
-        "arch",
-        "contracts",
-        "infra",
-        "docs",
-    )
+    LAYER_DIRS = production_conftest.TEST_TREE_LAYER_DIRS
     FILES = (
         "tests/core/test_io.py",
         "tests/core/test_other.py",

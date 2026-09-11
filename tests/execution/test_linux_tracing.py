@@ -156,7 +156,7 @@ def test_noop_on_non_linux(monkeypatch, tmp_path):
     """start_linux_tracing is a no-op when LINUX_TRACING_AVAILABLE is False."""
     import os
 
-    from autoskillit.execution import linux_tracing
+    from autoskillit.execution.evidence import linux_tracing
     from tests._helpers import make_tracing_config
 
     monkeypatch.setattr(linux_tracing, "LINUX_TRACING_AVAILABLE", False)

@@ -27,9 +27,9 @@ if TYPE_CHECKING:
     )
 else:
     if __package__:
-        from ._classification import _tokenizer
+        from autoskillit.hooks._classification import _tokenizer
     else:
-        from _classification import _tokenizer
+        from autoskillit.hooks._classification import _tokenizer
 
     ArgvToken = _tokenizer.ArgvToken
     _CommandSegment = _tokenizer._CommandSegment
@@ -686,9 +686,9 @@ if TYPE_CHECKING:
     )
 else:
     if __package__:
-        from ._classification import _flags, _interpreters
+        from autoskillit.hooks._classification import _flags, _interpreters
     else:
-        from _classification import _flags, _interpreters
+        from autoskillit.hooks._classification import _flags, _interpreters
 
     _GIT_GLOBAL_FLAG_SPEC = _flags._GIT_GLOBAL_FLAG_SPEC
     _GIT_GLOBAL_FLAGS = _flags._GIT_GLOBAL_FLAGS

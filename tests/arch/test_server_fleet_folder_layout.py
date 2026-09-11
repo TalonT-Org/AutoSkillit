@@ -46,11 +46,17 @@ def _run_cold_import(code: str) -> dict[str, object]:
     )
     last_line = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
     try:
-        return json.loads(last_line)
+        payload = json.loads(last_line)
     except json.JSONDecodeError:  # pragma: no cover - diagnostic path
         raise AssertionError(
             f"cold-import subprocess produced non-JSON stdout:\n{result.stdout[-4000:]}"
         ) from None
+    if not isinstance(payload, dict):
+        raise AssertionError(
+            f"cold-import subprocess produced non-dict JSON "
+            f"({type(payload).__name__}): {payload!r}"
+        )
+    return payload
 
 
 # ---------------------------------------------------------------------------

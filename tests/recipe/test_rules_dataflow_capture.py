@@ -158,13 +158,11 @@ def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
     """YamlFileCache in load_bundled_manifest re-reads skill_contracts.yaml on disk change."""
     import yaml
 
-    import autoskillit.recipe._contracts_manifest as manifest_mod
     import autoskillit.recipe.contracts._contracts_manifest as real_manifest_mod
     from autoskillit.recipe._api_cache import YamlFileCache
 
-    monkeypatch.setattr(manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
-    monkeypatch.setattr(manifest_mod, "pkg_root", lambda: tmp_path)
-    # Also patch the real module (consumer reads from real_manifest_mod._MANIFEST_CACHE).
+    # load_bundled_manifest reads _MANIFEST_CACHE/pkg_root from its own module's
+    # globals (contracts/_contracts_manifest.py); the old shim path is never read.
     monkeypatch.setattr(real_manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
     monkeypatch.setattr(real_manifest_mod, "pkg_root", lambda: tmp_path)
 

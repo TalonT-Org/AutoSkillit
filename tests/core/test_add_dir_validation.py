@@ -56,6 +56,15 @@ class TestValidateAddDir:
 
         assert result == ValidatedAddDir(path=str(add_dir), session_home=str(tmp_path))
 
+    def test_rejects_duplicate_managed_skill_names(self, tmp_path: Path) -> None:
+        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# Test")
+        duplicate = ("test-skill", "test-skill/SKILL.md")
+
+        with pytest.raises(LayoutError, match="duplicate managed skill name: test-skill"):
+            validate_add_dir(tmp_path, skill_entries=(duplicate, duplicate))
+
     def test_missing_claude_skills_raises_layout_error(self, tmp_path: Path) -> None:
         with pytest.raises(LayoutError, match="does not contain .claude/skills/"):
             validate_add_dir(tmp_path)

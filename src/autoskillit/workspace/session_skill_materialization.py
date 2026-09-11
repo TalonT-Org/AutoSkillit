@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict
 from uuid import uuid4
 
 from autoskillit.core import (
+    MANAGED_SKILL_FILENAME,
     SESSION_ADD_DIR_SUBDIR,
     AgentDef,
     CompiledSessionSkillCatalogAuthority,
@@ -225,7 +226,7 @@ def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
             continue
         if skill_dir.is_symlink() or not skill_dir.is_dir():
             raise SkillContractError(f"managed skill entry must be a real directory: {skill_dir}")
-        skill_file = skill_dir / "SKILL.md"
+        skill_file = skill_dir / MANAGED_SKILL_FILENAME
         file_mode = observe_path_mode(skill_file)
         if file_mode is None:
             raise SkillContractError(f"managed skill entry is missing SKILL.md: {skill_dir}")
@@ -233,7 +234,7 @@ def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
             raise SkillContractError(
                 f"managed skill SKILL.md must be a regular file: {skill_file}"
             )
-        entries.append((skill_dir.name, f"{skill_dir.name}/SKILL.md"))
+        entries.append((skill_dir.name, f"{skill_dir.name}/{MANAGED_SKILL_FILENAME}"))
     return tuple(entries)
 
 

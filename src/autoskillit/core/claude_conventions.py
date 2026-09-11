@@ -16,6 +16,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from .paths import is_git_worktree
+from .skill_entry_contract import (
+    MANAGED_SKILL_FILENAME,
+    validate_managed_skill_entries,
+)
 from .types import ValidatedAddDir, ValidatedWorktreePath
 
 
@@ -45,7 +49,7 @@ class ClaudeDirectoryConventions:
     PLUGIN_DIR_SKILLS_SUBDIR: Path = Path("skills")
 
     #: Filename expected inside each ``<name>/`` directory.
-    SKILL_FILENAME: str = "SKILL.md"
+    SKILL_FILENAME: str = MANAGED_SKILL_FILENAME
 
 
 def validate_add_dir(
@@ -65,14 +69,10 @@ def validate_add_dir(
     skill_files = list(skills_subdir.glob("*/SKILL.md"))
     if not skill_files:
         raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
-    for name, relative_path in skill_entries:
-        if not name or Path(name).name != name or name.startswith("."):
-            raise LayoutError(f"invalid managed skill name: {name!r}")
-        expected_path = Path(name) / ClaudeDirectoryConventions.SKILL_FILENAME
-        if Path(relative_path) != expected_path:
-            raise LayoutError(
-                f"managed skill entry {name!r} must use {expected_path.as_posix()!r}"
-            )
+    try:
+        validate_managed_skill_entries(skill_entries)
+    except ValueError as exc:
+        raise LayoutError(str(exc)) from exc
     return ValidatedAddDir(
         path=str(path),
         session_home=session_home,

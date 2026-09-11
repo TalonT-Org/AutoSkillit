@@ -13,7 +13,7 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import normalize_codex_cli_version
+from autoskillit.core import normalize_codex_cli_version, validate_managed_skill_entries
 from autoskillit.execution.backends._codex_probes import (
     _probe_diagnostic,
     _run_bounded_codex_probe,
@@ -198,19 +198,10 @@ def _validated_expected_paths(
     canonical_catalog = catalog_dir.resolve(strict=True)
     if catalog_dir != canonical_catalog or catalog_dir.is_symlink() or not catalog_dir.is_dir():
         raise ValueError("managed catalog must be a canonical real directory")
-    expected: dict[str, Path] = {}
-    for name, relative_path in expected_entries:
-        if not name or Path(name).name != name or name.startswith("."):
-            raise ValueError(f"invalid managed skill name: {name!r}")
-        if name in expected:
-            raise ValueError(f"duplicate managed skill name: {name}")
-        required_relative = Path(name) / "SKILL.md"
-        if Path(relative_path) != required_relative:
-            raise ValueError(
-                f"managed skill entry {name!r} must use {required_relative.as_posix()!r}"
-            )
-        expected[name] = canonical_catalog / required_relative
-    return expected
+    relative_paths = validate_managed_skill_entries(expected_entries)
+    return {
+        name: canonical_catalog / relative_path for name, relative_path in relative_paths.items()
+    }
 
 
 def _fingerprint_managed_files(

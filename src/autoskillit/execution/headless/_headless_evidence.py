@@ -108,12 +108,8 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         error_code == CODEX_CONTEXT_EXHAUSTION_MARKER
         or CODEX_CONTEXT_EXHAUSTION_MARKER in (agent_result.error or "")
     )
-    errors: list[str] = []
-    if agent_result.error:
-        errors.append(agent_result.error)
-
+    errors: list[str] = [agent_result.error] if agent_result.error else []
     api_error_status: int | None = _CODEX_ERROR_CODE_API_STATUS.get(error_code)
-
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
 
     command_executions: list[dict[str, Any]] = raw.get("command_executions", [])
@@ -125,7 +121,6 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     tool_uses = command_executions + mcp_tool_calls + file_change_entries
 
     assistant_messages: list[str] = raw.get("agent_messages", [])
-
     seen_ndjson_unknown_event_count: int = raw.get("ndjson_unknown_event_count", 0)
     seen_ndjson_unknown_item_count: int = raw.get("ndjson_unknown_item_count", 0)
 

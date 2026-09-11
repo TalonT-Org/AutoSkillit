@@ -37,7 +37,9 @@ HEADLESS_SIZE_BUDGETS = {
     # #4628: one run-scoped OTLP sink lifecycle spans attempts through final diagnostics.
     # #4626: terminal native-session capture and model-evidence consumption happen before
     # every token and persistence consumer.
-    "headless/_headless_execute.py": 711,
+    # #4623: ManagedAttemptRecorder wiring (Step 5) and child_outcomes telemetry (Step 6);
+    # approved relaxation, see _acceptance_policy_surfaces.py POLICY_RELAXATION_APPROVALS.
+    "headless/_headless_execute.py": 738,
     "headless/_headless_launch.py": 500,
     "headless/_headless_recovery.py": 540,
     "headless/_headless_path_tokens.py": 190,

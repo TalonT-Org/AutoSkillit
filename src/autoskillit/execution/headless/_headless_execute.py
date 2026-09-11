@@ -44,11 +44,7 @@ from autoskillit.core import (
     new_managed_attempt_id,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution.child_outcomes import (
-    ManagedAttemptRecorder,
-    collect_and_project_child_outcomes,
-    normalize_backend_name,
-)
+from autoskillit.execution.child_outcomes import collect_and_project_child_outcomes
 from autoskillit.execution.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
@@ -90,7 +86,6 @@ from autoskillit.execution.headless._managed import (
 from autoskillit.execution.otlp_sink import LocalOtlpSink
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 from autoskillit.execution.quota._quota_observed import record_skill_result_rate_limit
-from autoskillit.execution.session_log import resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -309,22 +304,17 @@ async def _execute_claude_headless(
     physical_attempt = 0
     sink_env = dict(sink.env)
     current_provider_extras.update(sink_env)
-    # Child-terminal-reason recording (#4623): a no-op when child_role is None.
-    recorder = ManagedAttemptRecorder(
-        log_root=resolve_log_dir(ctx.config.linux_tracing.log_dir)
-        if child_role is not None
-        else None,
-        backend=normalize_backend_name(_step_backend.name) if child_role is not None else "",
-        parent_session_id=session_id or "",
-        role=child_role or "",
-        attribution_skill=child_attribution_skill,
+    recorder, _observe_managed_spawn, _bind_managed_launch_alias = (
+        _diag.build_managed_attempt_wiring(
+            child_role=child_role,
+            child_attribution_skill=child_attribution_skill,
+            step_backend=_step_backend,
+            session_id=session_id,
+            diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
+            on_spawn=on_spawn,
+            on_candidate=lineage_callbacks.on_candidate,
+        )
     )
-
-    def _observe_managed_spawn(pid: int, extra: int) -> None:
-        recorder.on_spawn(pid, extra, downstream=on_spawn)
-
-    def _bind_managed_launch_alias(native_session_id: str) -> None:
-        recorder.bind_launch_alias(native_session_id, downstream=lineage_callbacks.on_candidate)
 
     try:
         while True:
@@ -342,7 +332,6 @@ async def _execute_claude_headless(
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
                 physical_attempt += 1
-
                 _result, spec = await _run_headless_attempt(
                     build_spec,
                     runner=runner,

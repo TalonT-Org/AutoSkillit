@@ -2,14 +2,10 @@
 
 The shims themselves must use **explicit re-exports**, not ``import *``,
 to avoid ambiguity: a wildcard import silently forwards a different surface
-than the shim author declared, and ``import *`` excludes underscore-prefixed
-names unless the source module declares ``__all__``.
-
-A shim using ``from <module> import *`` is fragile because the public surface
-of the source module can change without any test failure in the shim itself,
-and ``import *`` excludes underscore-prefixed names unless the source
-module declares ``__all__``. The shim author must enumerate the names they
-want to forward.
+than the shim author declared, the public surface of the source module can
+change without any test failure in the shim itself, and ``import *``
+excludes underscore-prefixed names unless the source module declares
+``__all__``. The shim author must enumerate the names they want to forward.
 
 This test scans every shim listed in ``_SHIM_FILENAMES`` (core) and
 ``_RECIPE_SHIM_FILENAMES`` (recipe) and fails on any ``import *`` pattern.

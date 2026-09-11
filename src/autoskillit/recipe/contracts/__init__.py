@@ -138,7 +138,7 @@ _LAZY_SYMBOL_TO_MODULE: dict[str, str] = {
     "ToolOutputFieldSpec": "_contracts_types",
     "_CONTEXT_REF_RE": "_contracts_types",
     "_TEMPLATE_REF_RE": "_contracts_types",
-    "_generate_recipe_card_for_recipe": "_contracts_staleness",
+    "_generate_recipe_card_for_recipe": "_contracts_card",
     "check_contract_staleness": "_contracts_staleness",
     "classify_step_arg_style": "_contracts_manifest",
     "compute_skill_hash": "_contracts_staleness",

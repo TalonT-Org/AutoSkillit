@@ -16,11 +16,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from .paths import is_git_worktree
-from .skill_entry_contract import (
+from .types import (
     MANAGED_SKILL_FILENAME,
+    ValidatedAddDir,
+    ValidatedWorktreePath,
     validate_managed_skill_entries,
 )
-from .types import ValidatedAddDir, ValidatedWorktreePath
 
 
 class LayoutError(ValueError):

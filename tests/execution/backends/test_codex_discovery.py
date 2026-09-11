@@ -332,10 +332,13 @@ def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path:
 def test_attest_catalog_discovery_reports_duplicate_legacy_root(tmp_path: Path) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
     legacy_root = catalog_dir.parent.parent / "skills"
-    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir).replace(
+    document = json.loads(_loader_output("discovery_prompt_input_v0153.json", catalog_dir))
+    assert isinstance(document, list)
+    text = _skills_text(document).replace(
         "### Available skills",
         f"- `r9` = `{legacy_root}`\n### Available skills",
     )
+    output = _with_skills_text(document, text)
     command, env = _install_prompt_stub(tmp_path, output)
 
     errors = discovery.attest_catalog_discovery(

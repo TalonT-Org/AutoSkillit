@@ -186,10 +186,6 @@ from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryCon
 from .claude_conventions import LayoutError as LayoutError
 from .claude_conventions import validate_add_dir as validate_add_dir
 from .claude_conventions import validate_worktree_path as validate_worktree_path
-from .skill_entry_contract import MANAGED_SKILL_FILENAME as MANAGED_SKILL_FILENAME
-from .skill_entry_contract import (
-    validate_managed_skill_entries as validate_managed_skill_entries,
-)
 from .closure_hashing import HASH_RE as HASH_RE
 from .closure_hashing import canonical_json_bytes as canonical_json_bytes
 from .closure_hashing import compute_bytes_hash as compute_bytes_hash
@@ -1195,6 +1191,8 @@ from .types import SkillContractError as SkillContractError
 from .types import SkillContractRemediationDef as SkillContractRemediationDef
 from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillContractView as SkillContractView
+from .types import MANAGED_SKILL_FILENAME as MANAGED_SKILL_FILENAME
+from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import SkillExclusionAuthority as SkillExclusionAuthority
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef

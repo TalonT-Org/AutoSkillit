@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -22,6 +22,7 @@ from ._type_results import WriteBehaviorSpec
 __all__ = [
     "AUTHORING_RESERVED_EXPLORATION_APPLICABILITIES",
     "MACHINE_ONLY_SKILL_FRONTMATTER_KEYS",
+    "MANAGED_SKILL_FILENAME",
     "PARENT_SANDBOX_MODES",
     "SKILL_PROJECTION_VERSION",
     "SKILL_SESSION_CONTRACT_SCHEMA_VERSION",
@@ -34,6 +35,7 @@ __all__ = [
     "SkillVisibilitySpec",
     "StoredSkillSessionContract",
     "normalize_parent_sandbox_mode",
+    "validate_managed_skill_entries",
 ]
 
 
@@ -48,12 +50,30 @@ MACHINE_ONLY_SKILL_FRONTMATTER_KEYS = frozenset(
         "uses_capabilities",
     }
 )
+MANAGED_SKILL_FILENAME = "SKILL.md"
 # Static resources are now compiled into projected SKILL.md bytes.
 SKILL_PROJECTION_VERSION = 8
 SKILL_SESSION_CONTRACT_SCHEMA_VERSION = 5
 PARENT_SANDBOX_MODES: frozenset[str] = frozenset({"read-only", "workspace-write"})
 _CANONICAL_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
 _VECTOR_MARKER_TOKEN = "autoskillit:exploration-vector"
+
+
+def validate_managed_skill_entries(
+    entries: Sequence[tuple[str, str]],
+) -> dict[str, Path]:
+    """Return canonical relative paths after validating managed entry identity."""
+    validated: dict[str, Path] = {}
+    for name, relative_path in entries:
+        if not name or Path(name).name != name or name.startswith("."):
+            raise ValueError(f"invalid managed skill name: {name!r}")
+        if name in validated:
+            raise ValueError(f"duplicate managed skill name: {name}")
+        expected_path = Path(name) / MANAGED_SKILL_FILENAME
+        if Path(relative_path) != expected_path:
+            raise ValueError(f"managed skill entry {name!r} must use {expected_path.as_posix()!r}")
+        validated[name] = expected_path
+    return validated
 
 
 class ExplorationVectorApplicabilityId(StrEnum):

@@ -534,11 +534,15 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
 ) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
     captured_timeouts: list[float] = []
+    captured_stream_limits: list[int] = []
 
     def run_probe(*_args: object, **kwargs: object) -> probes._BoundedProbeResult:
         timeout = kwargs["timeout_seconds"]
         assert isinstance(timeout, float)
         captured_timeouts.append(timeout)
+        stream_limit = kwargs.get("stream_limit_bytes", probes._CODEX_PROBE_STREAM_LIMIT)
+        assert isinstance(stream_limit, int)
+        captured_stream_limits.append(stream_limit)
         return probes._BoundedProbeResult(0, b"codex-cli 0.153.4\n", b"")
 
     monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
@@ -562,6 +566,10 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
     )
 
     assert captured_timeouts == [11.5, 12.5]
+    assert captured_stream_limits == [
+        probes._CODEX_PROBE_STREAM_LIMIT,
+        discovery._CODEX_DISCOVERY_STREAM_LIMIT,
+    ]
     timeout_parameter = inspect.signature(probes._run_bounded_codex_probe).parameters[
         "timeout_seconds"
     ]

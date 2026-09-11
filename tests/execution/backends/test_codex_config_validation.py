@@ -156,6 +156,21 @@ def test_bounded_codex_probe_enforces_stream_limit(
     assert len(result.stdout) == 128
 
 
+def test_bounded_codex_probe_accepts_explicit_larger_stream_limit(tmp_path: Path) -> None:
+    payload_size = 96 * 1024
+
+    result = probes._run_bounded_codex_probe(
+        (sys.executable, "-c", f"import os; os.write(1, b'x' * {payload_size})"),
+        env=os.environ,
+        cwd=str(tmp_path),
+        stream_limit_bytes=128 * 1024,
+    )
+
+    assert result.returncode == 0
+    assert result.failure is None
+    assert len(result.stdout) == payload_size
+
+
 def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -392,6 +407,7 @@ def test_real_interactive_validator_reaches_successful_native_probe(
         env: object,
         cwd: object,
         timeout_seconds: float = 15,
+        stream_limit_bytes: int | None = None,
     ) -> probes._BoundedProbeResult:
         calls.append(
             {
@@ -399,6 +415,7 @@ def test_real_interactive_validator_reaches_successful_native_probe(
                 "env": env,
                 "cwd": cwd,
                 "timeout_seconds": timeout_seconds,
+                "stream_limit_bytes": stream_limit_bytes,
             }
         )
         if command[-3:] == ("mcp", "list", codex.CodexFlags.JSON):
@@ -422,18 +439,21 @@ def test_real_interactive_validator_reaches_successful_native_probe(
             "env": spec.env,
             "cwd": spec.cwd,
             "timeout_seconds": 15,
+            "stream_limit_bytes": None,
         },
         {
             "command": (str(executable), "--version"),
             "env": spec.env,
             "cwd": spec.cwd,
             "timeout_seconds": 30,
+            "stream_limit_bytes": None,
         },
         {
             "command": (*probe_prefix, *discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe),
             "env": spec.env,
             "cwd": spec.cwd,
             "timeout_seconds": 30,
+            "stream_limit_bytes": discovery._CODEX_DISCOVERY_STREAM_LIMIT,
         },
     ]
     assert probe_prefix[0] == str(executable)

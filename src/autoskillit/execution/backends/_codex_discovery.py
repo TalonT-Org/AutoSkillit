@@ -38,6 +38,7 @@ class CodexSkillDiscoveryContractDef:
 # codex-rs/core-skills/src/render.rs:62-85 (rust-v0.130.0) and at
 # codex-rs/ext/skills/src/render.rs in the pinned revision above.
 CODEX_SKILL_DISCOVERY_CONTRACT = CodexSkillDiscoveryContractDef()
+_CODEX_DISCOVERY_STREAM_LIMIT = 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +297,7 @@ def attest_catalog_discovery(
         env=env,
         cwd=cwd,
         timeout_seconds=timeout_seconds,
+        stream_limit_bytes=_CODEX_DISCOVERY_STREAM_LIMIT,
     )
     errors: list[str] = []
     if result.failure is not None:

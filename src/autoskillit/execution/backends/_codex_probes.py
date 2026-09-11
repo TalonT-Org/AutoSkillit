@@ -69,9 +69,18 @@ def _run_bounded_codex_probe(
     env: Mapping[str, str],
     cwd: str,
     timeout_seconds: float = _CODEX_PROBE_TIMEOUT_SECONDS,
+    stream_limit_bytes: int | None = None,
 ) -> _BoundedProbeResult:
     if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
         raise ValueError("Codex probe timeout must be finite and positive")
+    if stream_limit_bytes is None:
+        stream_limit_bytes = _CODEX_PROBE_STREAM_LIMIT
+    if (
+        not isinstance(stream_limit_bytes, int)
+        or isinstance(stream_limit_bytes, bool)
+        or stream_limit_bytes <= 0
+    ):
+        raise ValueError("Codex probe stream limit must be a positive integer")
     try:
         from autoskillit.execution.process._process_kill import spawn_owned_process
         from autoskillit.execution.process._process_tether import TetherSpec
@@ -133,14 +142,14 @@ def _run_bounded_codex_probe(
                     continue
                 target = output[stream_name]
                 target.extend(chunk)
-                if len(target) > _CODEX_PROBE_STREAM_LIMIT:
-                    del target[_CODEX_PROBE_STREAM_LIMIT:]
+                if len(target) > stream_limit_bytes:
+                    del target[stream_limit_bytes:]
                     _terminate_probe(owner)
                     return _BoundedProbeResult(
                         returncode=None,
                         stdout=bytes(output["stdout"]),
                         stderr=bytes(output["stderr"]),
-                        failure=f"{stream_name} exceeded {_CODEX_PROBE_STREAM_LIMIT} bytes",
+                        failure=f"{stream_name} exceeded {stream_limit_bytes} bytes",
                     )
         returncode, cleanup_result = owner.settle_evidence(
             timeout=max(0.0, deadline - time.monotonic())

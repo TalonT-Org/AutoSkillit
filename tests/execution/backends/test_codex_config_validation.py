@@ -557,7 +557,7 @@ def test_global_codex_home_validation_uses_the_bound_executable_environment_and_
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.core import resolve_executable_launch_binding
+    from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, resolve_executable_launch_binding
     from autoskillit.execution.backends import codex
 
     source_home = tmp_path / "source-home"
@@ -601,6 +601,9 @@ def test_global_codex_home_validation_uses_the_bound_executable_environment_and_
         )
         == []
     )
+    expected_env = dict(binding.launch_environment)
+    for key in CODEX_RESERVED_HOME_ENV_VARS:
+        expected_env[key] = str(source_home)
     assert captured == {
         "command": (
             str(executable),
@@ -610,7 +613,7 @@ def test_global_codex_home_validation_uses_the_bound_executable_environment_and_
             "list",
             codex.CodexFlags.JSON,
         ),
-        "env": dict(binding.launch_environment),
+        "env": expected_env,
         "cwd": str(binding.cwd),
         "config_bytes": _VALID_CONFIG_BYTES,
     }

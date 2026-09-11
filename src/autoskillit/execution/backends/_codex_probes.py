@@ -356,9 +356,9 @@ def _validate_global_codex_home(
         cwd = str(executable.cwd)
     else:
         env = dict(os.environ)
-        for key in CODEX_RESERVED_HOME_ENV_VARS:
-            env[key] = str(source_codex_home)
         cwd = str(source_codex_home)
+    for key in CODEX_RESERVED_HOME_ENV_VARS:
+        env[key] = str(source_codex_home)
     return _validate_mcp_probe(
         command,
         env=env,

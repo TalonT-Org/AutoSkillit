@@ -24,7 +24,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _SCANNED_FILES = (
     tuple(sorted((SRC_ROOT / "server" / "recipe").glob("_recipe_*.py")))
-    + (SRC_ROOT / "server" / "recipe" / "_recipe_delivery" / "_finalize.py",)
+    + tuple(sorted((SRC_ROOT / "server" / "recipe" / "_recipe_delivery").glob("*.py")))
     + tuple(sorted((SRC_ROOT / "server" / "tools").glob("*recipe*.py")))
 )
 

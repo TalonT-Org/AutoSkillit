@@ -5,14 +5,14 @@ Python: 3.13.x (worktree venv)
 Platform: linux
 Command: python -c "import autoskillit.recipe; print(sorted(dir(autoskillit.recipe)))"
 
-This snapshot is the regression anchor for Phase D of issue #4671
-(recipe/ decomposition). Phase D must preserve every symbol listed
+This snapshot is the regression anchor for the recipe/ sub-package
+decomposition. The recipe/ sub-package phase must preserve every symbol listed
 here as a top-level attribute of the `autoskillit.recipe` package.
 
 Note: the snapshot is captured against the gateway recipe/__init__.py
 which now imports each submodule shim (e.g.,
 `from autoskillit.recipe import _analysis`) to ensure backward-compat
-module attribute access for pre-Phase-D callers. Every name in this
+module attribute access for pre-decomposition callers. Every name in this
 frozenset must remain accessible via `hasattr(autoskillit.recipe, name)`.
 """
 

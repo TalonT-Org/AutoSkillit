@@ -8,11 +8,10 @@ from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-# Per-issue #4671: shim files at core/ and recipe/ top level are 2-line forwarding
-# re-exports that preserve old import paths after moving real implementations into
+# Shim files at core/ and recipe/ top level are 2-line forwarding re-exports
+# that preserve old import paths after moving real implementations into
 # sub-packages. The arch test excludes these from the file count because they
 # contribute no real module surface; only the underlying real modules are counted.
-# Populated by Phase A (core/) and Phase D (recipe/) of issue #4671.
 _SHIM_FILENAMES: frozenset[str] = frozenset(
     {
         # Phase A: core/install/, core/claude_env/, core/io/ sub-packages
@@ -107,7 +106,7 @@ _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
 )
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 13,  # Phase C: 21 - 8 moved files (issue #4671)
+    "core": 13,  # context_admission phase: 21 - 8 moved files
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
@@ -120,7 +119,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/types": 76,
     "core/runtime": 11,
     "config": 20,
-    "recipe": 23,  # Phase D: 52 - 29 moved files (issue #4671)
+    "recipe": 23,  # recipe/ decomposition phase: 52 - 29 moved files
     "recipe/analysis": 6,  # 5 moved files + __init__
     "recipe/helpers": 7,  # 6 moved files + __init__
     "recipe/ingredients": 5,  # 3 moved files + 1 file extracted to fit 750-line cap + __init__

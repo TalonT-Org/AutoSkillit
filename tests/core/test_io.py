@@ -172,8 +172,8 @@ class TestYamlConsolidationArchitecture:
     def test_only_yaml_imports_yaml_directly(self):
         """Only core/io/yaml_io.py may contain 'import yaml' at any scope.
 
-        Phase A of issue #4671 decomposed core/io.py and extracted the YAML
-        loader into core/io/yaml_io.py, which is now the package's sole pyyaml
+        The core/io/ sub-package decomposition extracted the YAML loader
+        into core/io/yaml_io.py, which is now the package's sole pyyaml
         import surface — no yaml import remains in core/io/io.py.
 
         The allowlist is deliberately tight: permitting core/io/io.py as well

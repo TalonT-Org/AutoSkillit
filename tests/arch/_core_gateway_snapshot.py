@@ -5,12 +5,12 @@ Python: 3.13.x (worktree venv)
 Platform: linux
 Command: python -c "import autoskillit.core; print(sorted(dir(autoskillit.core)))"
 
-This snapshot is the regression anchor for all four phases of issue #4671
-(core/ + recipe/ decomposition). Each phase must preserve every symbol listed
-here as a top-level attribute of the `autoskillit.core` package.
+This snapshot is the regression anchor for the core/ and recipe/
+sub-package decomposition. Every sub-package phase must preserve every symbol
+listed here as a top-level attribute of the `autoskillit.core` package.
 
 Note: the snapshot is captured against the lazy_loader-driven core/__init__.py
-which filters `_PRIVATE_REEXPORTS` out of `__all__`. Per Phase A's gateway
+which filters `_PRIVATE_REEXPORTS` out of `__all__`. Per the gateway
 regression test, every name in this frozenset must remain accessible via
 `hasattr(autoskillit.core, name)`.
 """

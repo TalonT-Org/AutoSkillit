@@ -147,6 +147,21 @@ def _codex_exec_base(
     return cmd
 
 
+def _codex_app_server_base(*, extra_overrides: Sequence[str] = ()) -> list[str]:
+    """Base app-server command: the same process-level -c overrides the exec
+    builder emits (native OTLP + image-generation-disabled), nothing else.
+
+    Sandbox, hook-trust, and the prompt no longer live on argv for an
+    app-server launch — they flow through the JSON-RPC handshake instead
+    (see CodexAppServerDriver / CodexAppServerPlan).
+    """
+    cmd: list[str] = ["codex", "app-server", "--listen", "stdio://"]
+    for override in extra_overrides:
+        cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
+    cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
+    return cmd
+
+
 def _should_bypass_hook_trust(
     policy: HookTrustPolicy,
     *,

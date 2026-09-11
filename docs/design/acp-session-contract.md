@@ -339,7 +339,7 @@ future use and have no current production consumer outside the exemption set.
 | `required_session_files` | Session directory contract enforcement (Codex: `frozenset({"config.toml"})`; Claude: `frozenset()`) |
 | `session_dir_symlinks` | Session directory layout (Codex: `frozenset({"sessions", "archived_sessions"})`; Claude: `frozenset()`) |
 | `patch_format` | Write-guard path extraction (Claude: `"unified_diff"`; Codex: `"codex_star_update"`) |
-| `min_version` | Version validation in doctor (Codex: `"0.130.0"`; Claude: `""`) |
+| `min_version` | Version validation in doctor (Codex: `"0.136.0"`; Claude: `""`) |
 | `mcp_env_forward_vars` | MCP env forwarding (Codex: `CODEX_MCP_ENV_FORWARD_VARS`; Claude: `frozenset()`) |
 | `github_api_callable` | Future network-capability gate for outbound GitHub API writes |
 

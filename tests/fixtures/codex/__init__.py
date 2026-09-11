@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 CODEX_SCHEMA_VERSION: int = 2
-CODEX_FIXTURE_MIN_VERSION: str = "0.130.0"
+CODEX_FIXTURE_MIN_VERSION: str = "0.136.0"
 
 HAPPY_PATH_SINGLE_TURN: str = "happy_path_single_turn_v0133.ndjson"
 HAPPY_PATH_V0136: str = "happy_path_v0136.ndjson"

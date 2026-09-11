@@ -1,4 +1,10 @@
-"""Recursive GitHub-mutation cardinality analysis facade."""
+"""Recursive GitHub-mutation analysis facade.
+
+This module must remain importable both as part of ``autoskillit.hooks`` and by
+bare name from standalone hook scripts. Keep eager imports limited to the
+stdlib-only command-classification boundary; sibling analyzers are loaded
+through the dual package/bare-name branches below.
+"""
 
 from __future__ import annotations
 

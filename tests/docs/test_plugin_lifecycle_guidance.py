@@ -44,3 +44,28 @@ def test_backend_contract_documents_binding_load_modes_and_fd_ownership() -> Non
     )
     for phrase in obsolete:
         assert phrase not in contract
+
+
+def test_interactive_codex_discovery_contract_is_documented() -> None:
+    architecture = (DOCS_ROOT / "execution" / "architecture.md").read_text(encoding="utf-8")
+    overrides = (DOCS_ROOT / "skills" / "overrides.md").read_text(encoding="utf-8")
+    contract = (DOCS_ROOT / "design" / "acp-session-contract.md").read_text(encoding="utf-8")
+
+    for phrase in (
+        "`<generated_home>/add-dir/skills`",
+        "`<generated_home>/skills`",
+        "`debug prompt-input`",
+        "`CODEX_SKILL_DISCOVERY_CONTRACT`",
+        "Tracking issue #4717",
+    ):
+        assert phrase in architecture
+    for phrase in ("one managed catalog", "`add-dir/skills`", "legacy `skills`"):
+        assert phrase in overrides
+    for phrase in (
+        "`ManagedSessionHome.generated_home`",
+        "`ValidatedAddDir`",
+        "scoped\n`CODEX_HOME`",
+        "`<generated_home>/add-dir/skills`",
+        "`<generated_home>/skills`",
+    ):
+        assert phrase in contract

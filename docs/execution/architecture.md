@@ -202,7 +202,11 @@ Three paths remain separate throughout the launch:
   targets, and disposable state.
 - `project_dir` is the canonical working directory used by native validation
   and the child.
-- `skills_dir` is the interactive `--add-dir`.
+- `add_dir` is the interactive `--add-dir`. Its managed catalog is
+  `<generated_home>/add-dir/skills`.
+
+`<generated_home>/skills` is a legacy symlink alias to that catalog, not a
+fourth owned launch path.
 
 The backend builds one immutable `CmdSpec`, including profile, trust, root, and
 `sqlite_home` overrides. Cook replaces only its `cwd` with the canonical
@@ -210,6 +214,16 @@ project path and passes that exact instance to
 `validate_interactive_invocation()`, `session_attempt_context()`, and the child.
 Ambient and profile-supplied `CODEX_HOME` or `CODEX_SQLITE_HOME` values cannot
 override the generated home.
+
+### Codex skill discovery contract
+
+Interactive Codex Cook still requires the legacy `<generated_home>/skills`
+alias because the embedded TUI app server cannot accept an extra skill root.
+Before launch, AutoSkillit runs the exact bound executable's
+`debug prompt-input` renderer and verifies its model-visible catalog against
+the immutable `CODEX_SKILL_DISCOVERY_CONTRACT`. Tracking issue #4717 retains
+the unsupported TUI migration; the alias remains required until a supported
+interactive server connection preserves local-workspace semantics.
 
 Before an attempt is entered, `sessions` and `archived_sessions` are symlinks
 to private, empty inert directories within the generated home. Attempt entry

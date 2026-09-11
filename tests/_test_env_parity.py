@@ -85,6 +85,33 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "AUTOSKILLIT_CODEX_DISCOVERY_CANARY": HarnessEnvOverride(
+        var="AUTOSKILLIT_CODEX_DISCOVERY_CANARY",
+        value="1",
+        justification=(
+            "Enables the explicitly selected installed-Codex managed-skill discovery "
+            "canary; ordinary test tasks leave this real-loader gate disabled."
+        ),
+        parity_fixture=None,
+    ),
+    "AUTOSKILLIT_CODEX_CANARY_BINARY": HarnessEnvOverride(
+        var="AUTOSKILLIT_CODEX_CANARY_BINARY",
+        value="{{.CODEX_BINARY}}",
+        justification=(
+            "Forwards an operator-selected absolute Codex binary only to the opt-in "
+            "discovery canary, preventing PATH from silently selecting another release."
+        ),
+        parity_fixture=None,
+    ),
+    "AUTOSKILLIT_CODEX_CANARY_EXPECTED_VERSION": HarnessEnvOverride(
+        var="AUTOSKILLIT_CODEX_CANARY_EXPECTED_VERSION",
+        value="{{.EXPECTED_CODEX_VERSION}}",
+        justification=(
+            "Pins the opt-in discovery canary to the operator-requested normalized Codex "
+            "version so a binary replacement cannot silently change the exercised loader."
+        ),
+        parity_fixture=None,
+    ),
     "UV_PYTHON_INSTALL_DIR": HarnessEnvOverride(
         var="UV_PYTHON_INSTALL_DIR",
         value="{{.UV_CACHE_ROOT}}/python",

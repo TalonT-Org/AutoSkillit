@@ -47,6 +47,10 @@ Project-local skills are discovered from all four supported roots, in precedence
 3. `.codex/skills`
 4. `.agents/skills`
 
+An interactive Codex Cook generated home has one managed catalog at
+`add-dir/skills`. Its legacy `skills` discovery root is a symlink alias to that
+same catalog, so it does not create a second copy or another precedence tier.
+
 A same-name project-local skill remains the effective override, but precedence does not
 bypass admission. After resolution, the override is checked against the bundled skill's
 semantic contract and the selected backend's capabilities. An override rejected during

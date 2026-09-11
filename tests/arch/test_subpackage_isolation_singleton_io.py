@@ -85,6 +85,8 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_type_audit_admission_artifact_ownership",
         "_type_audit_admission_reference_identity",
         "_codex_config",  # Codex output ceiling derived from measured exemptions
+        # Immutable pinned upstream skill-discovery contract definition.
+        "_codex_discovery",
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
         "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests

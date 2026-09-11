@@ -298,6 +298,45 @@ tasks:
         echo "Codex smoke test output saved to: $TEST_OUTPUT"
         exit $PYTEST_EXIT
 
+  test-codex-discovery-canary:
+    desc: Run the opt-in real Codex managed-skill discovery canary
+    deps: [_tmpdir-setup]
+    vars:
+      CODEX_BINARY: ""
+      EXPECTED_CODEX_VERSION: ""
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      AUTOSKILLIT_CODEX_DISCOVERY_CANARY: "1"
+      AUTOSKILLIT_CODEX_CANARY_BINARY: "{{.CODEX_BINARY}}"
+      AUTOSKILLIT_CODEX_CANARY_EXPECTED_VERSION: "{{.EXPECTED_CODEX_VERSION}}"
+      TMPDIR: "{{.PYTEST_TMPDIR}}"
+      UV_PYTHON_INSTALL_DIR: "{{.UV_CACHE_ROOT}}/python"
+      UV_CACHE_DIR: "{{.UV_CACHE_ROOT}}/cache"
+    cmds:
+      - |
+        mkdir -p .autoskillit/temp
+        TEST_OUTPUT=".autoskillit/temp/codex-discovery-canary-$(date +%Y-%m-%d_%H%M%S).txt"
+        echo "Running Codex skill discovery canary"
+        echo "Output: $TEST_OUTPUT"
+
+        if [[ -d ".venv" ]]; then
+          PYTEST_CMD=".venv/bin/python -m pytest"
+        else
+          PYTEST_CMD="pytest"
+        fi
+
+        set -o pipefail
+        set +e
+        $PYTEST_CMD tests/integration/test_codex_skill_discovery_canary.py -m canary -v --tb=short -o "addopts=" --basetemp={{.PYTEST_TMPDIR}} -o "cache_dir={{.PYTEST_CACHEDIR}}" 2>&1 | tee "$TEST_OUTPUT"
+        PYTEST_EXIT=$?
+        set +o pipefail
+        set -e
+
+        echo ""
+        echo "Codex discovery canary output saved to: $TEST_OUTPUT"
+        exit $PYTEST_EXIT
+
   test-smoke-codex-explorer-gate:
     desc: Run the non-skippable Luna/max explorer child capability gate
     deps: [_tmpdir-setup]

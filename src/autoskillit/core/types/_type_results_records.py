@@ -391,6 +391,7 @@ class ValidatedAddDir:
 
     path: str
     session_home: str = ""
+    skill_entries: tuple[tuple[str, str], ...] = ()
 
     def __str__(self) -> str:
         return self.path

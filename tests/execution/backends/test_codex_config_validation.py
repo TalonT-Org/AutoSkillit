@@ -156,6 +156,21 @@ def test_bounded_codex_probe_enforces_stream_limit(
     assert len(result.stdout) == 128
 
 
+def test_bounded_codex_probe_accepts_explicit_larger_stream_limit(tmp_path: Path) -> None:
+    payload_size = 96 * 1024
+
+    result = probes._run_bounded_codex_probe(
+        (sys.executable, "-c", f"import os; os.write(1, b'x' * {payload_size})"),
+        env=os.environ,
+        cwd=str(tmp_path),
+        stream_limit_bytes=128 * 1024,
+    )
+
+    assert result.returncode == 0
+    assert result.failure is None
+    assert len(result.stdout) == payload_size
+
+
 def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_cleanup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -286,45 +301,376 @@ def test_validate_mcp_probe_returns_clean_result_when_cleanup_incomplete_but_pro
     assert errors == []
 
 
+def _interactive_discovery_spec(
+    tmp_path: Path,
+) -> tuple[Any, Any, Path, Path]:
+    from autoskillit.core import (
+        PROVIDER_PROFILE_ENV_VAR,
+        ValidatedAddDir,
+        resolve_executable_launch_binding,
+    )
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    generated_home = tmp_path / "generated-home"
+    catalog_dir = generated_home / "add-dir" / "skills"
+    managed_skill = catalog_dir / "managed-skill" / "SKILL.md"
+    managed_skill.parent.mkdir(parents=True)
+    managed_skill.write_text("managed skill", encoding="utf-8")
+    (generated_home / "config.toml").write_bytes(_VALID_CONFIG_BYTES)
+    (generated_home / "skills").symlink_to("add-dir/skills")
+    for name in ("sessions", "archived_sessions"):
+        target = generated_home / f".inert-{name}"
+        target.mkdir()
+        (generated_home / name).symlink_to(target)
+
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    (source_home / "config.toml").write_bytes(_VALID_CONFIG_BYTES)
+    executable = tmp_path / "codex-bound"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    catalog = ValidatedAddDir(
+        path=str(generated_home / "add-dir"),
+        session_home=str(generated_home),
+        skill_entries=(("managed-skill", "managed-skill/SKILL.md"),),
+    )
+    env_extras = {
+        "PATH": str(tmp_path),
+        PROVIDER_PROFILE_ENV_VAR: "test-profile",
+    }
+    backend = CodexBackend(source_codex_home=source_home)
+    candidate = backend.build_interactive_cmd(
+        add_dirs=(catalog,),
+        generated_home=generated_home,
+        env_extras=env_extras,
+    )
+    binding = resolve_executable_launch_binding(
+        binary_name=executable.name,
+        environment=candidate.env,
+        cwd=tmp_path,
+    )
+    spec = replace(
+        backend.build_interactive_cmd(
+            add_dirs=(catalog,),
+            executable=binding,
+            generated_home=generated_home,
+            env_extras=env_extras,
+        ),
+        cwd=str(tmp_path),
+    )
+    return backend, spec, generated_home, executable
+
+
+def _prompt_input_for_catalog(generated_home: Path) -> bytes:
+    skills_block = "\n".join(
+        (
+            "<skills_instructions>",
+            "### Skill roots",
+            f"- `r0` = `{generated_home / 'skills'}`",
+            "### Available skills",
+            "- managed-skill: managed skill (file: `r0/managed-skill/SKILL.md`)",
+            "</skills_instructions>",
+        )
+    )
+    return json.dumps(
+        [
+            {
+                "role": "developer",
+                "content": [{"type": "input_text", "text": skills_block}],
+            }
+        ]
+    ).encode()
+
+
 def test_real_interactive_validator_reaches_successful_native_probe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import _codex_discovery as discovery
+    from autoskillit.execution.backends import codex
+
+    backend, spec, generated_home, executable = _interactive_discovery_spec(tmp_path)
+    assert spec.origin is not None
+    calls: list[dict[str, object]] = []
+
+    def run_probe(
+        command: tuple[str, ...],
+        *,
+        env: object,
+        cwd: object,
+        timeout_seconds: float = 15,
+        stream_limit_bytes: int | None = None,
+    ) -> probes._BoundedProbeResult:
+        calls.append(
+            {
+                "command": command,
+                "env": env,
+                "cwd": cwd,
+                "timeout_seconds": timeout_seconds,
+                "stream_limit_bytes": stream_limit_bytes,
+            }
+        )
+        if command[-3:] == ("mcp", "list", codex.CodexFlags.JSON):
+            return probes._BoundedProbeResult(0, _VALID_INVENTORY_BYTES, b"")
+        if command == (str(executable), "--version"):
+            return probes._BoundedProbeResult(0, b"codex-cli 0.153.4\n", b"")
+        if command[-2:] == discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe:
+            return probes._BoundedProbeResult(0, _prompt_input_for_catalog(generated_home), b"")
+        pytest.fail(f"unexpected Codex probe command: {command}")
+
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
+
+    assert backend.validate_interactive_invocation(spec) == []
+
+    probe_prefix = codex._interactive_probe_prefix(spec.origin)
+    assert calls == [
+        {
+            "command": (*probe_prefix, "mcp", "list", codex.CodexFlags.JSON),
+            "env": spec.env,
+            "cwd": spec.cwd,
+            "timeout_seconds": 15,
+            "stream_limit_bytes": None,
+        },
+        {
+            "command": (str(executable), "--version"),
+            "env": spec.env,
+            "cwd": spec.cwd,
+            "timeout_seconds": 30,
+            "stream_limit_bytes": None,
+        },
+        {
+            "command": (*probe_prefix, *discovery.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe),
+            "env": spec.env,
+            "cwd": spec.cwd,
+            "timeout_seconds": 30,
+            "stream_limit_bytes": discovery._CODEX_DISCOVERY_STREAM_LIMIT,
+        },
+    ]
+    assert probe_prefix[0] == str(executable)
+    assert probe_prefix[1:3] == ("--profile", "test-profile")
+    assert probe_prefix.count("-c") >= 1
+
+
+def test_interactive_validator_returns_discovery_diagnostics_verbatim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.execution.backends import codex
 
-    generated_home = tmp_path / "generated-home"
-    generated_home.mkdir()
-    (generated_home / "config.toml").write_bytes(_VALID_CONFIG_BYTES)
-    for name in ("sessions", "archived_sessions"):
-        target = generated_home / f".inert-{name}"
-        target.mkdir()
-        (generated_home / name).symlink_to(target)
-    source_home = tmp_path / "source-home"
-    source_home.mkdir()
-    backend = codex.CodexBackend(source_codex_home=source_home)
-    spec = replace(
-        backend.build_interactive_cmd(generated_home=generated_home),
-        cwd=str(tmp_path),
+    backend, spec, _generated_home, executable = _interactive_discovery_spec(tmp_path)
+    assert spec.origin is not None
+    discovery_errors = ["exact discovery diagnostic"]
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(codex, "_validate_mcp_probe", lambda _command, **_kwargs: [])
+    monkeypatch.setattr(
+        codex,
+        "probe_codex_version",
+        lambda **_kwargs: ("codex-cli 0.153.4", "0.153.4", []),
     )
+
+    def attest(**kwargs: object) -> list[str]:
+        captured.update(kwargs)
+        return discovery_errors
+
+    monkeypatch.setattr(codex, "attest_catalog_discovery", attest)
+
+    assert backend.validate_interactive_invocation(spec) == discovery_errors
+    assert captured["probe_command"] == (
+        *codex._interactive_probe_prefix(spec.origin),
+        *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
+    )
+    assert captured["env"] == spec.env
+    assert captured["cwd"] == spec.cwd
+    assert captured["timeout_seconds"] == 30
+    assert str(executable) == spec.origin.binary
+
+
+def test_interactive_validator_skips_version_and_discovery_when_mcp_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.execution.backends import _codex_discovery as discovery
+    from autoskillit.execution.backends import codex
+
+    backend, spec, _generated_home, _executable = _interactive_discovery_spec(tmp_path)
     commands: list[tuple[str, ...]] = []
 
-    def run_probe(
-        command: tuple[str, ...],
-        **_kwargs: object,
-    ) -> probes._BoundedProbeResult:
+    def run_probe(command: tuple[str, ...], **_kwargs: object) -> probes._BoundedProbeResult:
         commands.append(command)
-        return probes._BoundedProbeResult(
-            returncode=0,
-            stdout=_VALID_INVENTORY_BYTES,
-            stderr=b"",
-        )
+        return probes._BoundedProbeResult(7, b"", b"mcp failed")
 
     monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
     monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
 
-    assert backend.validate_interactive_invocation(spec) == []
+    errors = backend.validate_interactive_invocation(spec)
+
+    assert len(errors) == 1
+    assert "Codex MCP validation exited with status 7" in errors[0]
     assert len(commands) == 1
     assert commands[0][-3:] == ("mcp", "list", codex.CodexFlags.JSON)
+
+
+@pytest.mark.parametrize(
+    ("version_result", "expected_diagnostic"),
+    [
+        pytest.param(
+            probes._BoundedProbeResult(8, b"", b"version failed"),
+            "Codex version probe exited with status 8",
+            id="nonzero",
+        ),
+        pytest.param(
+            probes._BoundedProbeResult(None, b"", b"", failure="timed out"),
+            "Codex version probe timed out",
+            id="timeout",
+        ),
+        pytest.param(
+            probes._BoundedProbeResult(0, b"not-a-version", b""),
+            "Codex version probe returned malformed output",
+            id="malformed",
+        ),
+    ],
+)
+def test_interactive_validator_stops_before_discovery_when_exact_version_probe_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version_result: probes._BoundedProbeResult,
+    expected_diagnostic: str,
+) -> None:
+    from autoskillit.execution.backends import _codex_discovery as discovery
+    from autoskillit.execution.backends import codex
+
+    backend, spec, _generated_home, executable = _interactive_discovery_spec(tmp_path)
+    commands: list[tuple[str, ...]] = []
+
+    def run_probe(command: tuple[str, ...], **_kwargs: object) -> probes._BoundedProbeResult:
+        commands.append(command)
+        if command[-3:] == ("mcp", "list", codex.CodexFlags.JSON):
+            return probes._BoundedProbeResult(0, _VALID_INVENTORY_BYTES, b"")
+        assert command == (str(executable), "--version")
+        return version_result
+
+    monkeypatch.setattr(probes, "_CODEX_VALIDATION_CACHE", {})
+    monkeypatch.setattr(probes, "_run_bounded_codex_probe", run_probe)
+    monkeypatch.setattr(discovery, "_run_bounded_codex_probe", run_probe)
+
+    errors = backend.validate_interactive_invocation(spec)
+
+    assert len(errors) == 1
+    assert expected_diagnostic in errors[0]
+    assert commands[-1] == (str(executable), "--version")
+    assert len(commands) == 2
+
+
+def test_global_codex_home_validation_uses_the_bound_executable_environment_and_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, resolve_executable_launch_binding
+    from autoskillit.execution.backends import codex
+
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    config_path = source_home / "config.toml"
+    config_path.write_bytes(_VALID_CONFIG_BYTES)
+    executable = tmp_path / "codex-bound"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    launch_environment = {"PATH": str(tmp_path), "BOUND_ENV": "present"}
+    binding = resolve_executable_launch_binding(
+        binary_name=executable.name,
+        environment=launch_environment,
+        cwd=tmp_path,
+    )
+    captured: dict[str, object] = {}
+
+    def validate_mcp(
+        command: tuple[str, ...],
+        *,
+        env: object,
+        cwd: object,
+        config_bytes: bytes,
+    ) -> list[str]:
+        captured.update(
+            command=command,
+            env=env,
+            cwd=cwd,
+            config_bytes=config_bytes,
+        )
+        return []
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "ambient-home"))
+    monkeypatch.setattr(probes, "_validate_mcp_probe", validate_mcp)
+
+    assert (
+        probes._validate_global_codex_home(
+            source_home,
+            config_path=config_path,
+            executable=binding,
+        )
+        == []
+    )
+    expected_env = dict(binding.launch_environment)
+    for key in CODEX_RESERVED_HOME_ENV_VARS:
+        expected_env[key] = str(source_home)
+    assert captured == {
+        "command": (
+            str(executable),
+            codex.CodexFlags.CONFIG_OVERRIDE,
+            f'sqlite_home="{source_home}"',
+            "mcp",
+            "list",
+            codex.CodexFlags.JSON,
+        ),
+        "env": expected_env,
+        "cwd": str(binding.cwd),
+        "config_bytes": _VALID_CONFIG_BYTES,
+    }
+
+
+def test_ensure_pre_launch_forwards_the_bound_executable_to_global_validation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from autoskillit.core import resolve_executable_launch_binding
+    from autoskillit.execution.backends import codex
+
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    (source_home / "config.toml").write_bytes(_VALID_CONFIG_BYTES)
+    executable = tmp_path / "codex-bound"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    binding = resolve_executable_launch_binding(
+        binary_name=executable.name,
+        environment={"PATH": str(tmp_path), "BOUND_ENV": "present"},
+        cwd=tmp_path,
+    )
+    captured: dict[str, object] = {}
+
+    def validate_global(
+        received_home: Path,
+        *,
+        config_path: Path,
+        executable: object,
+    ) -> list[str]:
+        captured.update(
+            source_home=received_home,
+            config_path=config_path,
+            executable=executable,
+        )
+        return []
+
+    monkeypatch.setattr(codex, "_validate_global_codex_home", validate_global)
+    backend = codex.CodexBackend(source_codex_home=source_home)
+
+    assert backend.ensure_pre_launch(executable=binding) == PreLaunchReadiness((), {})
+    assert captured["source_home"] == source_home
+    assert captured["config_path"] == source_home / "config.toml"
+    assert captured["executable"] is binding
 
 
 def _config_writer(

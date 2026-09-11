@@ -31,6 +31,7 @@ def test_cmd_spec_fields():
         "is_resume",
         "process_idle_timeout_ms",
         "inherited_fds",
+        "managed_skill_catalog",
         "force_inactive_agent_teams",
     }
 
@@ -54,6 +55,23 @@ def test_cmd_spec_inherited_fds_default():
 
     spec = CmdSpec(cmd=(), env={})
     assert spec.inherited_fds == ()
+
+
+def test_cmd_spec_managed_skill_catalog_default_and_type():
+    from autoskillit.core import CmdSpec, ValidatedAddDir
+
+    spec = CmdSpec(cmd=(), env={})
+
+    assert spec.managed_skill_catalog is None
+    assert typing.get_type_hints(CmdSpec)["managed_skill_catalog"] == ValidatedAddDir | None
+
+
+def test_cmd_spec_preserves_managed_skill_catalog():
+    from autoskillit.core import CmdSpec, ValidatedAddDir
+
+    catalog = ValidatedAddDir(path="/tmp/session/add-dir", session_home="/tmp/session")
+
+    assert CmdSpec(cmd=(), env={}, managed_skill_catalog=catalog).managed_skill_catalog == catalog
 
 
 def test_cmd_spec_normalizes_inherited_fds():

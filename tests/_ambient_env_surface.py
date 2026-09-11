@@ -868,7 +868,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Bare os.environ passed as `env=` to a read-only `git ls-remote` probe subprocess;"
         "unfiltered wholesale forward for a local diagnostic command."
     ),
-    "execution/backends/_codex_probes.py:345": (
+    "execution/backends/_codex_probes.py:367": (
         "Unfiltered dict(os.environ) base for the global-Codex-home MCP-inventory validation"
         "probe subprocess, with CODEX_RESERVED_HOME_ENV_VARS overridden to the source home."
     ),
@@ -884,7 +884,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:337": (
+    "execution/backends/codex.py:352": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
@@ -900,7 +900,7 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:606": (
+    "execution/backends/_codex/session_commands.py:611": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

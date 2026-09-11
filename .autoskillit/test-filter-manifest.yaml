@@ -204,6 +204,9 @@ tests/fixtures/codex/*.ndjson:
 tests/fixtures/codex/*.jsonl:
   - hooks/
 
+tests/fixtures/codex/discovery_prompt_input_*.json:
+  - execution/
+
 tests/fixtures/claude_code/*.jsonl:
   - execution/
 

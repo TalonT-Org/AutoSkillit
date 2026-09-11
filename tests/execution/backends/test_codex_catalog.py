@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -41,6 +42,15 @@ def _installed_catalog() -> dict[str, object]:
 
 def _catalog_bytes(catalog: object) -> bytes:
     return json.dumps(catalog).encode()
+
+
+def test_skill_discovery_contract_catalog_relpath_matches_codex_session_layout() -> None:
+    from autoskillit.core import SESSION_ADD_DIR_SUBDIR
+    from autoskillit.execution.backends.codex import CODEX_SKILL_DISCOVERY_CONTRACT, CodexBackend
+
+    assert Path(CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath) == (
+        Path(SESSION_ADD_DIR_SUBDIR) / CodexBackend().conventions.skills_subdir
+    )
 
 
 def test_reader_projection_preserves_the_complete_installed_catalog() -> None:

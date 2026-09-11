@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, NotRequired, TypeAlias, TypedDict
 from uuid import uuid4
 
 from autoskillit.core import (
+    MANAGED_SKILL_FILENAME,
     SESSION_ADD_DIR_SUBDIR,
     AgentDef,
     CompiledSessionSkillCatalogAuthority,
@@ -37,6 +38,8 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    managed_skill_relative_path,
+    observe_path_mode,
     strict_walk,
 )
 from autoskillit.workspace.session_skill_catalog import (
@@ -214,6 +217,26 @@ def _alias_legacy_discovery_root(
         raise SkillContractError(f"legacy discovery alias path already exists: {discovery_root}")
     target = Path(SESSION_ADD_DIR_SUBDIR) / skills_subdir
     os.symlink(str(target), discovery_root, target_is_directory=True)
+
+
+def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
+    """Freeze the managed catalog entries before discovery aliases are exposed."""
+    entries: list[tuple[str, str]] = []
+    for skill_dir in sorted(catalog_dir.iterdir(), key=lambda entry: entry.name):
+        if skill_dir.name.startswith("."):
+            continue
+        if skill_dir.is_symlink() or not skill_dir.is_dir():
+            raise SkillContractError(f"managed skill entry must be a real directory: {skill_dir}")
+        skill_file = skill_dir / MANAGED_SKILL_FILENAME
+        file_mode = observe_path_mode(skill_file)
+        if file_mode is None:
+            raise SkillContractError(f"managed skill entry is missing SKILL.md: {skill_dir}")
+        if stat.S_ISLNK(file_mode) or not stat.S_ISREG(file_mode):
+            raise SkillContractError(
+                f"managed skill SKILL.md must be a regular file: {skill_file}"
+            )
+        entries.append((skill_dir.name, managed_skill_relative_path(skill_dir.name).as_posix()))
+    return tuple(entries)
 
 
 def _materialize_session(
@@ -458,6 +481,7 @@ def _materialize_session(
             projection_context,
             execution_role=execution_role,
         )
+    skill_entries = _freeze_skill_entries(skills_base)
     if backend is not None and backend.capabilities.session_dir_persistent:
         _alias_legacy_discovery_root(
             generated_home,
@@ -476,7 +500,11 @@ def _materialize_session(
         if layout_errors:
             raise RuntimeError("Session layout validation failed: " + "; ".join(layout_errors))
     return (
-        ValidatedAddDir(path=str(add_dir), session_home=str(generated_home)),
+        ValidatedAddDir(
+            path=str(add_dir),
+            session_home=str(generated_home),
+            skill_entries=skill_entries,
+        ),
         records,
         unavailability_payload,
     )
@@ -494,6 +522,7 @@ def _restore_session(
     add_dir = generated_home / SESSION_ADD_DIR_SUBDIR
     catalog_dir = add_dir / skills_subdir
     _copy_restored_skill_catalog(snapshot_dir, catalog_dir, skills_subdir=skills_subdir)
+    skill_entries = _freeze_skill_entries(catalog_dir)
 
     if backend is not None and backend.capabilities.mcp_config_capable:
         readiness = backend.ensure_pre_launch(session_dir=generated_home)
@@ -516,7 +545,11 @@ def _restore_session(
         )
         if layout_errors:
             raise RuntimeError("Session layout validation failed: " + "; ".join(layout_errors))
-    return ValidatedAddDir(path=str(add_dir), session_home=str(generated_home))
+    return ValidatedAddDir(
+        path=str(add_dir),
+        session_home=str(generated_home),
+        skill_entries=skill_entries,
+    )
 
 
 def _copy_restored_skill_catalog(

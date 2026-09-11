@@ -16,7 +16,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from .paths import is_git_worktree
-from .types import ValidatedAddDir, ValidatedWorktreePath
+from .types import (
+    MANAGED_SKILL_FILENAME,
+    ValidatedAddDir,
+    ValidatedWorktreePath,
+)
 
 
 class LayoutError(ValueError):
@@ -45,10 +49,14 @@ class ClaudeDirectoryConventions:
     PLUGIN_DIR_SKILLS_SUBDIR: Path = Path("skills")
 
     #: Filename expected inside each ``<name>/`` directory.
-    SKILL_FILENAME: str = "SKILL.md"
+    SKILL_FILENAME: str = MANAGED_SKILL_FILENAME
 
 
-def validate_add_dir(path: Path, *, session_home: str = "") -> ValidatedAddDir:
+def validate_add_dir(
+    path: Path,
+    *,
+    session_home: str = "",
+) -> ValidatedAddDir:
     """Validate that a directory satisfies the --add-dir convention.
 
     Raises LayoutError if ``path/.claude/skills/`` does not exist or
@@ -60,7 +68,10 @@ def validate_add_dir(path: Path, *, session_home: str = "") -> ValidatedAddDir:
     skill_files = list(skills_subdir.glob("*/SKILL.md"))
     if not skill_files:
         raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
-    return ValidatedAddDir(path=str(path), session_home=session_home)
+    return ValidatedAddDir(
+        path=str(path),
+        session_home=session_home,
+    )
 
 
 def validate_worktree_path(

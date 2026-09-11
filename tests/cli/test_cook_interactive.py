@@ -24,6 +24,7 @@ from autoskillit.core import (
     ManagedSessionHome,
     NamedResume,
     NoResume,
+    PreLaunchReadiness,
     SessionAttemptHandle,
     SkillProjectionContextAuthority,
     SkillSemanticAdaptationResult,
@@ -288,6 +289,9 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
         ) -> SkillSemanticAdaptationResult:
             return self._command_backend.adapt_skill_semantics(plan, adaptation_context)
 
+        def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
         def build_interactive_cmd(self, **kwargs: object) -> CmdSpec:
             self.build_calls.append(kwargs)
             return self._command_backend.build_interactive_cmd(**kwargs)  # type: ignore[arg-type]
@@ -318,6 +322,36 @@ def test_codex_cook_adds_pre_reveal_developer_guidance(
     assert "$<name>" in guidance and "/<name>" in guidance
     assert "skill name" in guidance and "recipe identities only" in guidance
     assert "defined as both" in guidance and "rejected" in guidance
+    assert len(backend.build_calls) == 2
+    assert backend.build_calls[0].get("executable") is None
+    assert backend.build_calls[1]["executable"] is not None
+    assert spec.managed_skill_catalog is backend.build_calls[-1]["add_dirs"][0]
+
+
+def test_cook_aborts_before_spawn_when_skill_discovery_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Discovery diagnostics must reject the managed launch before the child starts."""
+    diagnostic = "Codex skill discovery is missing managed names ['expected-skill']"
+
+    class _DiscoveryFailureBackend(_Backend):
+        name = "codex"
+
+        def validate_interactive_invocation(self, _spec: CmdSpec) -> list[str]:
+            return [diagnostic]
+
+    backend = _DiscoveryFailureBackend()
+    captured = _install_harness(monkeypatch, tmp_path)
+
+    with pytest.raises(RuntimeError, match="Codex skill discovery is missing managed names"):
+        cli.cook(backend=backend)
+
+    events = captured["events"]
+    assert isinstance(events, list)
+    event_names = [event[0] for event in events]
+    assert "run" not in event_names
+    assert event_names[-1] == "managed-exit"
 
 
 def test_codex_cook_excludes_refused_compose_pr_roles(
@@ -375,9 +409,13 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
+    codex_shim = tmp_path / "codex"
+    atomic_write(codex_shim, "#!/bin/sh\nexit 0\n")
+    codex_shim.chmod(0o755)
+
     monkeypatch.chdir(project_root)
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
-    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(codex_shim))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "autoskillit.cli.session._session_onboarding.is_first_run", lambda _project: False
@@ -396,6 +434,30 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         lambda _project: None,
     )
     monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
+
+    original_ensure_pre_launch = CodexBackend.ensure_pre_launch
+
+    def ensure_pre_launch(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        session_dir=None,
+        executable=None,
+        plugin_dir=None,
+    ):
+        if session_dir is None:
+            return PreLaunchReadiness((), {})
+        return original_ensure_pre_launch(
+            self,
+            session_dir=session_dir,
+            executable=executable,
+            plugin_dir=plugin_dir,
+        )
+
+    monkeypatch.setattr(
+        CodexBackend,
+        "ensure_pre_launch",
+        ensure_pre_launch,
+    )
     monkeypatch.setattr(
         CodexBackend,
         "validate_interactive_invocation",

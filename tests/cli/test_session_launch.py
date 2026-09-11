@@ -1709,7 +1709,48 @@ if "--version" in sys.argv:
     print("codex-cli 0.147.0")
     raise SystemExit(0)
 
-config = tomllib.loads((Path(os.environ["CODEX_HOME"]) / "config.toml").read_text())
+if sys.argv[-2:] == ["debug", "prompt-input"]:
+    skills_dir = Path(os.environ["CODEX_HOME"]) / "skills"
+    entries = sorted(
+        entry.name
+        for entry in skills_dir.iterdir()
+        if entry.is_dir() and (entry / "SKILL.md").is_file()
+    )
+    skill_lines = "\\n".join(
+        f"- {name}: managed test skill (file: r0/{name}/SKILL.md)" for name in entries
+    )
+    skills_instructions = "\\n".join(
+        (
+            "<skills_instructions>",
+            "### Skill roots",
+            "",
+            f"- `r0` = `{skills_dir}`",
+            "",
+            "### Available skills",
+            "",
+            skill_lines,
+            "</skills_instructions>",
+        )
+    )
+    print(
+        json.dumps(
+            [
+                {
+                    "role": "developer",
+                    "content": [{"type": "input_text", "text": skills_instructions}],
+                }
+            ]
+        )
+    )
+    raise SystemExit(0)
+
+home_value = os.environ.get("CODEX_HOME")
+if not home_value:
+    sqlite_override = next(
+        value for value in sys.argv if value.startswith("sqlite_home=")
+    )
+    home_value = tomllib.loads(sqlite_override)["sqlite_home"]
+config = tomllib.loads((Path(home_value) / "config.toml").read_text())
 transport = dict(config["mcp_servers"]["autoskillit"])
 project_config = Path.cwd() / ".codex" / "config.toml"
 if project_config.is_file():
@@ -1727,6 +1768,59 @@ print(json.dumps([entry]))
         encoding="utf-8",
     )
     path.chmod(0o755)
+
+
+@pytest.mark.parametrize("resume_kind", ("fresh", "named", "bare"))
+def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_specs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resume_kind: str,
+) -> None:
+    """The finalized exact-bound command must retain the catalog for every resume form."""
+    from autoskillit.cli.session._session_launch import prepare_interactive_launch
+    from autoskillit.core import BareResume, NamedResume, NoResume, ValidatedAddDir
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = tmp_path / "source-codex"
+    source_home.mkdir()
+    generated_home = tmp_path / "generated-home"
+    add_dir = generated_home / "add-dir"
+    add_dir.mkdir(parents=True)
+    catalog = ValidatedAddDir(
+        path=str(add_dir),
+        session_home=str(generated_home),
+        skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+    )
+    executable = tmp_path / "codex"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o755)
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(executable))
+    monkeypatch.setattr(
+        CodexBackend,
+        "ensure_pre_launch",
+        lambda _self, **_kwargs: PreLaunchReadiness((), {}),
+    )
+    backend = CodexBackend(source_codex_home=source_home)
+
+    resume_spec = {
+        "fresh": NoResume(),
+        "named": NamedResume("resume-id"),
+        "bare": BareResume(),
+    }[resume_kind]
+    prepared = prepare_interactive_launch(
+        backend,
+        project_dir=tmp_path,
+        extra_env=None,
+        required_env=None,
+        plugin_binding=None,
+        resume_spec=resume_spec,
+        system_prompt="test",
+        initial_prompt=None,
+        add_dirs=(catalog,),
+        generated_home=generated_home,
+    )
+
+    assert prepared.spec.managed_skill_catalog is catalog
 
 
 def _prepare_codex_order_composition(
@@ -1910,6 +2004,9 @@ def test_codex_order_composition_produces_canonical_generated_home(
     ]
     assert len(add_dirs) == 1
     assert add_dirs[0].is_relative_to(generated_home)
+    assert spec.managed_skill_catalog is not None
+    assert spec.managed_skill_catalog.path == str(add_dirs[0])
+    assert spec.managed_skill_catalog.session_home == str(generated_home)
     projection_roots = cast(list[Path], captured["projection_roots"])
     assert len(projection_roots) == 1
     assert not add_dirs[0].is_relative_to(projection_roots[0])
@@ -1929,11 +2026,10 @@ def test_codex_order_composition_rejects_effective_mcp_override(
     with pytest.raises(SystemExit, match="1"):
         launch()  # type: ignore[operator]
 
-    assert captured["events"] == ["validated"]
+    assert captured["events"] == []
     assert captured["process_calls"] == []
     errors = cast(list[list[str]], captured["validation_errors"])
-    assert len(errors) == 1
-    assert any("command does not match final config" in error for error in errors[0])
+    assert errors == []
     assert "command does not match final config" in capsys.readouterr().err
 
 
@@ -2029,8 +2125,15 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         def binary_name(self) -> str:
             return "true"
 
+        def ensure_pre_launch(self, **_kwargs: object) -> PreLaunchReadiness:
+            return PreLaunchReadiness((), {})
+
         def build_interactive_cmd(self, **kwargs):  # type: ignore[no-untyped-def]
             built_prompts.append(kwargs["system_prompt"])
+            managed_skill_catalog = next(
+                (entry for entry in kwargs["add_dirs"] if isinstance(entry, ValidatedAddDir)),
+                None,
+            )
             return CmdSpec(
                 cmd=("true",),
                 env={
@@ -2038,6 +2141,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
                     "RESUME": type(kwargs["resume_spec"]).__name__,
                 },
                 inherited_fds=(3,),
+                managed_skill_catalog=managed_skill_catalog,
             )
 
         def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
@@ -2124,6 +2228,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
                 spec.env["INITIAL"],
                 spec.env["RESUME"],
                 pass_fds,
+                spec.managed_skill_catalog,
             )
         )
         on_spawn(100 + attempt, 100 + attempt)
@@ -2186,6 +2291,7 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     assert [event[2] for event in run_events] == ["greeting", "", ""]
     assert [event[3] for event in run_events] == ["NoResume", "NamedResume", "NamedResume"]
     assert [event[4] for event in run_events] == [(3, 7, 5, 11)] * 3
+    assert [event[5] for event in run_events] == [ValidatedAddDir(str(skills_dir))] * 3
     assert len([event for event in events if event[0] == "spawn"]) == 3
     assert len([event for event in events if event[0] == "reaped"]) == 3
     for attempt in (1, 2, 3):

@@ -586,6 +586,7 @@ from .types import (
 from .types import MANAGED_LAUNCH_ID_ENV_VAR as MANAGED_LAUNCH_ID_ENV_VAR
 from .types import MANAGED_LINEAGE_DIGEST_ENV_VAR as MANAGED_LINEAGE_DIGEST_ENV_VAR
 from .types import MANAGED_LINEAGE_REF_ENV_VAR as MANAGED_LINEAGE_REF_ENV_VAR
+from .types import MANAGED_SKILL_FILENAME as MANAGED_SKILL_FILENAME
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
@@ -1318,6 +1319,7 @@ from .types import (
 )
 from .types import managed_home as managed_home
 from .types import managed_home_for as managed_home_for
+from .types import managed_skill_relative_path as managed_skill_relative_path
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
@@ -1353,6 +1355,7 @@ from .types import (
     validate_context_admission_persistence_value as validate_context_admission_persistence_value,
 )
 from .types import validate_label_transition as validate_label_transition
+from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
 from .types._type_exploration import (

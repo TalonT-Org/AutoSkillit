@@ -50,6 +50,7 @@ class TestBackendRegistry:
             "BACKEND_REGISTRY",
             "CODEX_AUTO_COMPACT_LIMIT",
             "CODEX_EXEC_FLAGS",
+            "CODEX_SKILL_DISCOVERY_CONTRACT",
             "CODEX_LIMITS_LAST_VERIFIED_VERSION",
             "CODEX_MCP_REQUIRED_KEYS",
             "CODEX_MCP_STARTUP_TIMEOUT_SEC",

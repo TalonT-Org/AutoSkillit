@@ -1770,9 +1770,11 @@ print(json.dumps([entry]))
     path.chmod(0o755)
 
 
+@pytest.mark.parametrize("resume_kind", ("fresh", "named", "bare"))
 def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_specs(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    resume_kind: str,
 ) -> None:
     """The finalized exact-bound command must retain the catalog for every resume form."""
     from autoskillit.cli.session._session_launch import prepare_interactive_launch
@@ -1800,21 +1802,25 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_s
     )
     backend = CodexBackend(source_codex_home=source_home)
 
-    for resume_spec in (NoResume(), NamedResume("resume-id"), BareResume()):
-        prepared = prepare_interactive_launch(
-            backend,
-            project_dir=tmp_path,
-            extra_env=None,
-            required_env=None,
-            plugin_binding=None,
-            resume_spec=resume_spec,
-            system_prompt="test",
-            initial_prompt=None,
-            add_dirs=(catalog,),
-            generated_home=generated_home,
-        )
+    resume_spec = {
+        "fresh": NoResume(),
+        "named": NamedResume("resume-id"),
+        "bare": BareResume(),
+    }[resume_kind]
+    prepared = prepare_interactive_launch(
+        backend,
+        project_dir=tmp_path,
+        extra_env=None,
+        required_env=None,
+        plugin_binding=None,
+        resume_spec=resume_spec,
+        system_prompt="test",
+        initial_prompt=None,
+        add_dirs=(catalog,),
+        generated_home=generated_home,
+    )
 
-        assert prepared.spec.managed_skill_catalog is catalog
+    assert prepared.spec.managed_skill_catalog is catalog
 
 
 def test_codex_interactive_command_rejects_multiple_managed_catalogs(tmp_path: Path) -> None:

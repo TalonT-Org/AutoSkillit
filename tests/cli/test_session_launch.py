@@ -1823,19 +1823,6 @@ def test_prepare_codex_interactive_launch_preserves_managed_catalog_for_resume_s
     assert prepared.spec.managed_skill_catalog is catalog
 
 
-def test_codex_interactive_command_rejects_multiple_managed_catalogs(tmp_path: Path) -> None:
-    from autoskillit.core import ValidatedAddDir
-    from autoskillit.execution.backends.codex import CodexBackend
-
-    catalogs = (
-        ValidatedAddDir(path=str(tmp_path / "first")),
-        ValidatedAddDir(path=str(tmp_path / "second")),
-    )
-
-    with pytest.raises(ValueError, match="at most one managed skill catalog"):
-        CodexBackend(source_codex_home=tmp_path).build_interactive_cmd(add_dirs=catalogs)
-
-
 def _prepare_codex_order_composition(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

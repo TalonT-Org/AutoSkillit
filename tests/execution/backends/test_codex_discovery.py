@@ -307,6 +307,49 @@ def test_attest_catalog_discovery_reports_missing_managed_name_with_context(
     assert "version=0.153.4" in diagnostic
 
 
+def test_attest_catalog_discovery_preserves_unreadable_path_diagnostic(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir).replace(
+        "r0/beta/SKILL.md",
+        f"{tmp_path}/missing/beta/SKILL.md",
+    )
+    command, env = _install_prompt_stub(tmp_path, output)
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+
+    diagnostic = "\n".join(errors)
+    assert "unreadable: FileNotFoundError:" in diagnostic
+    assert str(tmp_path / "missing" / "beta" / "SKILL.md") in diagnostic
+
+
+def test_attest_catalog_discovery_reports_duplicate_legacy_root(tmp_path: Path) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    legacy_root = catalog_dir.parent.parent / "skills"
+    output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir).replace(
+        "### Available skills",
+        f"- `r9` = `{legacy_root}`\n### Available skills",
+    )
+    command, env = _install_prompt_stub(tmp_path, output)
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+
+    assert any("roots contain duplicate legacy root" in error for error in errors)
+
+
 def test_attest_catalog_discovery_rejects_catalog_absent_from_roots(tmp_path: Path) -> None:
     catalog_dir, expected_entries = _catalog(tmp_path)
     output = _loader_output("discovery_prompt_input_v0153.json", catalog_dir).replace(
@@ -436,6 +479,41 @@ def test_attest_catalog_discovery_rejects_in_probe_managed_catalog_edit(tmp_path
     )
 
     assert any("mutated the managed catalog" in error for error in errors)
+
+
+def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    catalog_dir, expected_entries = _catalog(tmp_path)
+    command, env = _install_prompt_stub(
+        tmp_path,
+        _loader_output("discovery_prompt_input_v0153.json", catalog_dir),
+    )
+    original_fingerprint = discovery._fingerprint_managed_files
+    calls = 0
+
+    def fingerprint(expected_paths: Mapping[str, Path]) -> tuple[tuple[object, ...], ...]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("catalog read failed")
+        return original_fingerprint(expected_paths)
+
+    monkeypatch.setattr(discovery, "_fingerprint_managed_files", fingerprint)
+
+    errors = discovery.attest_catalog_discovery(
+        probe_command=command,
+        env=env,
+        cwd=str(tmp_path),
+        catalog_dir=catalog_dir,
+        expected_entries=expected_entries,
+        version="0.153.4",
+    )
+
+    diagnostic = "\n".join(errors)
+    assert "could not revalidate the managed catalog: OSError: catalog read failed" in diagnostic
+    assert "mutated the managed catalog" not in diagnostic
 
 
 def test_discovery_contract_pins_supported_extra_roots_revision() -> None:

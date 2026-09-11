@@ -322,8 +322,10 @@ def attest_catalog_discovery(
                     continue
                 try:
                     actual_canonical = actual_path.resolve(strict=True)
-                except OSError:
-                    misplaced.append(f"{name}={actual_path} (unreadable)")
+                except OSError as exc:
+                    misplaced.append(
+                        f"{name}={actual_path} (unreadable: {type(exc).__name__}: {exc})"
+                    )
                     continue
                 if actual_canonical != expected_path:
                     misplaced.append(f"{name}={actual_path}")
@@ -341,9 +343,14 @@ def attest_catalog_discovery(
                 catalog_dir.parent.parent / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
             )
             legacy_matches = [root for root in discovered.roots if root == legacy_root]
-            if len(legacy_matches) != 1:
+            if not legacy_matches:
                 errors.append(
                     f"Codex skill discovery roots do not contain legacy root {legacy_root}; "
+                    f"roots={[str(root) for root in discovered.roots]}; {context}"
+                )
+            elif len(legacy_matches) > 1:
+                errors.append(
+                    f"Codex skill discovery roots contain duplicate legacy root {legacy_root}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
             else:
@@ -361,7 +368,12 @@ def attest_catalog_discovery(
                         )
     try:
         after_fingerprint = _fingerprint_managed_files(expected_paths)
-    except (OSError, ValueError) as exc:
+    except OSError as exc:
+        errors.append(
+            "Codex skill discovery could not revalidate the managed catalog: "
+            f"{type(exc).__name__}: {exc}; {context}"
+        )
+    except ValueError as exc:
         errors.append(f"Codex skill discovery mutated the managed catalog: {exc}; {context}")
     else:
         if after_fingerprint != before_fingerprint:

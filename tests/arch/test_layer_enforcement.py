@@ -1862,6 +1862,9 @@ _TEST_LAYER_ALLOWLIST: dict[str, frozenset[str]] = {
     # quota tests cross into config to validate the contract between vocab constants
     # (execution layer) and config defaults — intentional, documented cross-ref
     "tests/execution/test_quota_binding.py": frozenset({"autoskillit.config"}),
+    # exercises the hook-authored child-outcome snapshot module directly
+    # (issue #4623), via autoskillit.hooks's public re-export
+    "tests/execution/test_child_outcomes.py": frozenset({"autoskillit.hooks"}),
     "tests/execution/test_quota_io.py": frozenset({"autoskillit.config"}),
     "tests/execution/test_quota_sleep.py": frozenset({"autoskillit.hooks", "autoskillit.config"}),
     "tests/execution/test_quota_http.py": frozenset({"autoskillit.config"}),

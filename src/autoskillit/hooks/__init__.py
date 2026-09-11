@@ -31,6 +31,14 @@ from autoskillit.hooks._capture_artifacts import (
     capture_store_stats,
     reconcile_capture_store,
 )
+from autoskillit.hooks._child_outcome_snapshot import (
+    observe_child,
+    project_outcomes,
+    read_snapshot,
+    reconcile_ended_children,
+    record_terminal_evidence,
+    resolve_snapshot_path,
+)
 from autoskillit.hooks._command_classification import (
     _INTERPRETER_LINE_RE,
     _WRITE_APIS_RE,
@@ -142,4 +150,10 @@ __all__ = [
     "reconcile_capture_store",
     "settle_assignment",
     "settle_unadmitted_assignment",
+    "observe_child",
+    "project_outcomes",
+    "read_snapshot",
+    "reconcile_ended_children",
+    "record_terminal_evidence",
+    "resolve_snapshot_path",
 ]

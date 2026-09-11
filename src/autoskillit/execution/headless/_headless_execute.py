@@ -43,6 +43,7 @@ from autoskillit.core import (
     is_in_git_repo,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.execution.child_outcomes import collect_native_children_for_backend
 from autoskillit.execution.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
@@ -521,6 +522,12 @@ async def _execute_claude_headless(
             terminal_session_id=skill_result.session_id,
             captured_session_id=resolved_session_ids[0],
             model_identity=model_identity,
+        )
+        collect_native_children_for_backend(
+            step_backend=_step_backend,
+            cwd=cwd,
+            evidence_session_id=evidence_session_id,
+            diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
         )
         provider_outcome = ProviderOutcome(
             provider_used=current_provider_name,

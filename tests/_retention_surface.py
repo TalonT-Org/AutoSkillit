@@ -414,6 +414,10 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "flush_session_log",
     ): _DELEGATED_MUTATION_REASON,
     (
+        "src/autoskillit/execution/child_outcomes.py",
+        "reconcile_child_outcome_snapshots",
+    ): _SEPARATE_LIFECYCLE_REASON,
+    (
         "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
         "GenerationArtifactRetirementOwner.enqueue_retirement",
     ): _DELEGATED_MUTATION_REASON,
@@ -1064,49 +1068,51 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "retryable."
     ),
     # -- execution._session_log_recovery::recover_crashed_sessions --
-    f"{_SR}::L38": _retries_after_input_changes(
+    # Line numbers shifted +12 by the child-outcome snapshot reconciliation pass
+    # (issue #4623) added at the top of the function, before the tmpfs gates below.
+    f"{_SR}::L50": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SR}::L47": _retries_after_input_changes(
+    f"{_SR}::L59": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L49": _resolves_with_contention(
+    f"{_SR}::L61": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SR}::L62": _retries_after_input_changes(
+    f"{_SR}::L74": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SR}::L69": _self_limiting(
+    f"{_SR}::L81": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SR}::L80": _resolves_with_contention(
+    f"{_SR}::L92": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SR}::L91": _self_limiting(
+    f"{_SR}::L103": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SR}::L96": _self_limiting(
+    f"{_SR}::L108": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SR}::L99": _self_limiting(
+    f"{_SR}::L111": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SR}::L104": _retries_after_input_changes(
+    f"{_SR}::L116": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L114": _self_limiting(
+    f"{_SR}::L126": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SR}::L136": _self_limiting(
+    f"{_SR}::L148": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SR}::L142": _retries_after_input_changes(
+    f"{_SR}::L154": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SR}::L186": _retries_after_input_changes(
+    f"{_SR}::L198": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

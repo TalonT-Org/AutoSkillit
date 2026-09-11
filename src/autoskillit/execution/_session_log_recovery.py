@@ -16,8 +16,9 @@ from autoskillit.core import (
     read_boot_id,
     read_starttime_ticks,
 )
+from autoskillit.execution.child_outcomes import reconcile_child_outcome_snapshots
 from autoskillit.execution.linux_tracing import read_enrollment
-from autoskillit.execution.session_log import flush_session_log
+from autoskillit.execution.session_log import flush_session_log, resolve_log_dir
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,18 @@ def recover_crashed_sessions(
     """Scan tmpfs for orphaned trace files from SIGKILL'd sessions and finalize them.
 
     Returns the number of sessions recovered.
+
+    Also runs an independent child-outcome snapshot reconciliation pass
+    (issue #4623), unconditionally and before the tmpfs trace-file gates
+    below — canonical snapshots are logged directly by the hook observer and
+    have no tmpfs trace of their own, so they must not depend on enrollment.
+    A reconciliation failure never blocks trace-file recovery.
     """
+    try:
+        reconcile_child_outcome_snapshots(resolve_log_dir(log_dir))
+    except Exception:
+        logger.debug("child_outcome_snapshot_reconciliation_failed", exc_info=True)
+
     tmpfs = Path(tmpfs_path)
     if not tmpfs.is_dir():
         return 0

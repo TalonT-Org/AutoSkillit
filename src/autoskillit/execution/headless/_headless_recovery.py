@@ -14,7 +14,9 @@ import regex as re
 from autoskillit.core import (
     AgentSessionResult,
     CodingAgentBackend,
+    RetryReason,
     SkillContractView,
+    SkillResult,
     TurnTokenEntry,
     extract_bash_write_targets,
     get_logger,
@@ -477,3 +479,49 @@ def _with_native_turn_usage(
         return result
     rows = extract_codex_turn_usage(backend.session_locator(), session_id, start_ts, end_ts)
     return dataclasses.replace(result, raw={**result.raw, "turn_usage": rows})
+
+
+def _build_nudge_recovery_result(
+    skill_result: SkillResult,
+    nudge_session: AgentSessionResult,
+    retry_reason: RetryReason,
+    completion_marker: str,
+    patterns_to_check: Sequence[str],
+    combined_turn_usage: list[TurnTokenEntry],
+    combined_usage: dict[str, object] | None,
+) -> SkillResult | None:
+    """Validate a nudge response and construct its successful recovery result."""
+    combined_result = skill_result.result + "\n" + nudge_session.output
+    if retry_reason == RetryReason.EARLY_STOP:
+        if completion_marker not in nudge_session.output:
+            logger.debug(
+                "nudge_early_stop_marker_not_found",
+                nudge_result_len=len(nudge_session.output),
+            )
+            return None
+        if patterns_to_check and not _check_expected_patterns(combined_result, patterns_to_check):
+            logger.debug("nudge_early_stop_patterns_not_in_combined")
+            return None
+    elif not _check_expected_patterns(combined_result, patterns_to_check):
+        logger.debug(
+            "nudge_patterns_not_found",
+            nudge_result_len=len(nudge_session.output),
+        )
+        return None
+
+    nudge_usage = nudge_session.raw.get("token_usage")
+    logger.info(
+        "nudge_recovery_success",
+        session_id=skill_result.session_id,
+        nudge_output_count=nudge_usage.get("output_tokens", 0) if nudge_usage else 0,
+    )
+    return dataclasses.replace(
+        skill_result,
+        success=True,
+        result=combined_result,
+        subtype="success",
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        token_usage=combined_usage,
+        turn_usage=combined_turn_usage,
+    )

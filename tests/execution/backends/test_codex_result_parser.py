@@ -2,17 +2,93 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+import zstandard
 
-from autoskillit.core import BackendEventKind, CodexEventData, ResultParser, SessionEvent
+from autoskillit.core import (
+    BackendEventKind,
+    CodexEventData,
+    ResultParser,
+    SessionEvent,
+    SessionLocator,
+    TurnTokenEntry,
+)
 from autoskillit.execution.backends._codex_parse import (
     CodexResultParser,
     CodexStreamParser,
     _scan_codex_ndjson,
+    extract_codex_turn_usage,
 )
+from tests.fixtures.codex import fixture_path
 
-pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+_CURRENT_TURN_USAGE_FIXTURE = "turn_usage_native_v0153_4.ndjson"
+_COMPACTION_REGRESSION_FIXTURE = "turn_usage_compaction_regression_v0135_0.ndjson"
+_CURRENT_INTERVAL = ("2026-09-01T10:00:00Z", "2026-09-01T10:00:02Z")
+_LEGACY_INTERVAL = ("2026-06-03T10:00:00Z", "2026-06-03T10:00:01Z")
+
+
+def _locator(path: Path | None = None, *, raises: bool = False) -> SessionLocator:
+    locator = Mock(spec=SessionLocator)
+    if raises:
+        locator.locate_session.side_effect = OSError("sanitized locator failure")
+    else:
+        locator.locate_session.return_value = path
+    return locator
+
+
+def _extract_fixture(name: str, interval: tuple[str, str]) -> list[TurnTokenEntry]:
+    return extract_codex_turn_usage(
+        _locator(fixture_path(name)),
+        "sanitized-thread",
+        interval[0],
+        interval[1],
+    )
+
+
+def _fixture_version(name: str) -> str:
+    first_line = fixture_path(name).read_text().splitlines()[0]
+    return json.loads(first_line)["payload"]["cli_version"]
+
+
+def _token_count_record(
+    cumulative_total: object,
+    *,
+    timestamp: object = "2026-09-01T10:00:01Z",
+    input_tokens: object = 10,
+) -> dict[str, object]:
+    record: dict[str, object] = {
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {
+                "last_token_usage": dict(
+                    input_tokens=input_tokens,
+                    cached_input_tokens=2,
+                    output_tokens=3,
+                    total_tokens=13,
+                ),
+                "total_token_usage": {"total_tokens": cumulative_total},
+                "model_context_window": 100,
+            },
+            "rate_limits": None,
+        },
+    }
+    if timestamp is not None:
+        record["timestamp"] = timestamp
+    return record
+
+
+def _write_rollout(path: Path, records: list[object]) -> None:
+    path.write_text(
+        "\n".join(record if isinstance(record, str) else json.dumps(record) for record in records)
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _thread_started_line(thread_id: str) -> str:
@@ -852,3 +928,132 @@ class TestCodexResultParserV0136Schema:
         assert len(result.raw["agent_messages"]) > 0
         assert len(result.raw["command_executions"]) > 0
         assert len(result.raw["file_changes"]) > 0
+
+
+class TestExtractCodexTurnUsage:
+    def test_current_native_fixture_emits_ordered_rows_in_closed_interval(self) -> None:
+        assert _fixture_version(_CURRENT_TURN_USAGE_FIXTURE) == "0.153.4"
+
+        rows = _extract_fixture(_CURRENT_TURN_USAGE_FIXTURE, _CURRENT_INTERVAL)
+
+        assert [row["timestamp"] for row in rows] == [
+            "2026-09-01T10:00:00Z",
+            "2026-09-01T10:00:02Z",
+        ]
+        assert [row["model"] for row in rows] == ["codex-model-current-a", "codex-model-current-b"]
+        assert [
+            (row["input_tokens"], row["output_tokens"], row["cache_read_tokens"]) for row in rows
+        ] == [(75, 25, 25), (70, 20, 30)]
+        assert [row["cache_creation_tokens"] for row in rows] == [0, 0]
+        assert [row["context_window_tokens"] for row in rows] == [200_000, 128_000]
+        assert [row["context_fraction"] for row in rows] == [0.000125, 0.000234375]
+        assert all(
+            row["backend"] == "codex" and row["message_id"] is None and row["request_id"] is None
+            for row in rows
+        )
+
+    def test_legacy_compaction_duplicate_is_not_a_request(self) -> None:
+        assert _fixture_version(_COMPACTION_REGRESSION_FIXTURE) == "0.135.0"
+
+        rows = _extract_fixture(_COMPACTION_REGRESSION_FIXTURE, _LEGACY_INTERVAL)
+
+        assert len(rows) == 1
+        row = rows[0]
+        assert (row["input_tokens"], row["output_tokens"], row["cache_read_tokens"]) == (
+            640,
+            360,
+            220,
+        )
+        assert (row["timestamp"], row["model"]) == (
+            "2026-06-03T10:00:01Z",
+            "codex-model-legacy",
+        )
+        assert (row["context_window_tokens"], row["context_fraction"]) == (160_000, 0.001375)
+        assert row["cache_creation_tokens"] is None
+        assert row["message_id"] is row["request_id"] is None
+
+    @pytest.mark.parametrize(
+        ("records", "expected_inputs"),
+        [
+            (
+                [
+                    "{malformed",
+                    _token_count_record(1_100, timestamp=None),
+                    _token_count_record(1_200, timestamp="not-a-timestamp"),
+                    {
+                        "timestamp": "2026-09-01T10:00:01Z",
+                        "type": "event_msg",
+                        "payload": {"type": "token_count", "info": None, "rate_limits": {}},
+                    },
+                    _token_count_record(1_300, timestamp="2026-09-01T10:00:02Z"),
+                ],
+                [10],
+            ),
+            (
+                [
+                    _token_count_record(900, input_tokens=900),
+                    _token_count_record(950, input_tokens=950),
+                    _token_count_record(1_100, input_tokens=100),
+                ],
+                [100],
+            ),
+        ],
+        ids=["invalid-evidence", "cumulative-decrease"],
+    )
+    def test_only_valid_advancing_notifications_emit_rows(
+        self, tmp_path: Path, records: list[object], expected_inputs: list[int]
+    ) -> None:
+        rollout = tmp_path / "turn-usage-filtering.jsonl"
+        _write_rollout(
+            rollout,
+            [
+                {
+                    "timestamp": "2026-09-01T09:59:58Z",
+                    "type": "turn_context",
+                    "payload": {"model": "codex-model-current-a"},
+                },
+                _token_count_record(1_000, timestamp="2026-09-01T09:59:59Z"),
+                *records,
+            ],
+        )
+
+        rows = extract_codex_turn_usage(_locator(rollout), "sanitized-thread", *_CURRENT_INTERVAL)
+
+        assert [row["input_tokens"] for row in rows] == expected_inputs
+
+    def test_compressed_rollout_matches_plain_fixture(self, tmp_path: Path) -> None:
+        plain_path = fixture_path(_CURRENT_TURN_USAGE_FIXTURE)
+        compressed_path = tmp_path / "turn-usage.jsonl.zst"
+        compressed_path.write_bytes(zstandard.ZstdCompressor().compress(plain_path.read_bytes()))
+
+        compressed_rows = extract_codex_turn_usage(
+            _locator(compressed_path),
+            "sanitized-thread",
+            *_CURRENT_INTERVAL,
+        )
+
+        assert compressed_rows == _extract_fixture(_CURRENT_TURN_USAGE_FIXTURE, _CURRENT_INTERVAL)
+
+    @pytest.mark.parametrize(
+        "failure", ["not_found", "missing_path", "locator_error", "corrupt_zstd"]
+    )
+    def test_unavailable_rollout_returns_empty_series(self, tmp_path: Path, failure: str) -> None:
+        if failure == "not_found":
+            locator = _locator()
+        elif failure == "missing_path":
+            locator = _locator(tmp_path / "missing.jsonl")
+        elif failure == "locator_error":
+            locator = _locator(raises=True)
+        else:
+            corrupt = tmp_path / "turn-usage-corrupt.jsonl.zst"
+            corrupt.write_bytes(b"not-a-zstandard-frame")
+            locator = _locator(corrupt)
+
+        assert (
+            extract_codex_turn_usage(
+                locator,
+                "sanitized-thread",
+                *_CURRENT_INTERVAL,
+            )
+            == []
+        )

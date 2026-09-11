@@ -8,6 +8,8 @@ import stat
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from io import BufferedReader
 from pathlib import Path
 from typing import Any, BinaryIO
 
@@ -23,11 +25,20 @@ from autoskillit.core import (
     CodexEventType,
     CodexItemType,
     SessionEvent,
+    SessionLocator,
+    TurnTokenEntry,
     fast_loads,
     get_logger,
     strict_walk,
 )
 from autoskillit.execution.process import _marker_is_standalone
+from autoskillit.execution.session._turn_usage import (
+    build_turn_token_entry,
+    first_nonempty_string,
+    first_valid_token_count,
+    valid_context_window,
+    valid_token_count,
+)
 
 logger = get_logger(__name__)
 _ROLLOUT_METADATA_LIMIT = 64 * 1024
@@ -183,11 +194,143 @@ def _logical_rollout_reader(path: Path) -> Iterator[BinaryIO]:
         with os.fdopen(fd, "rb", closefd=False) as source:
             if path.name.endswith(".zst"):
                 with zstandard.ZstdDecompressor().stream_reader(source) as reader:
-                    yield reader
+                    with BufferedReader(reader) as buffered:
+                        yield buffered
             else:
                 yield source
     finally:
         os.close(fd)
+
+
+def _utc_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def extract_codex_turn_usage(
+    locator: SessionLocator,
+    thread_id: str,
+    start_ts: str,
+    end_ts: str,
+) -> list[TurnTokenEntry]:
+    """Extract interval-bounded request snapshots from a native Codex rollout."""
+    start = _utc_datetime(start_ts)
+    end = _utc_datetime(end_ts)
+    if not thread_id or start is None or end is None or start > end:
+        return []
+    try:
+        path = locator.locate_session(thread_id)
+    except (OSError, RuntimeError, ValueError):
+        logger.debug("codex_turn_usage_locator_failed", exc_info=True)
+        return []
+    if path is None:
+        return []
+
+    rows: list[TurnTokenEntry] = []
+    current_model: str | None = None
+    cumulative_high_water = 0
+    compacting = False
+    try:
+        with _logical_rollout_reader(path) as reader:
+            while raw_line := reader.readline():
+                try:
+                    record = json.loads(raw_line)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(record, Mapping):
+                    continue
+
+                record_type = record.get("type")
+                payload = record.get("payload")
+                if record_type == "turn_context" and isinstance(payload, Mapping):
+                    current_model = first_nonempty_string(payload.get("model"))
+                    continue
+                if record_type == "compacted":
+                    compacting = True
+                    continue
+                if not isinstance(payload, Mapping):
+                    continue
+                payload_type = payload.get("type")
+                if record_type == "event_msg" and payload_type == "context_compacted":
+                    compacting = False
+                    continue
+                if record_type != "event_msg" or payload_type != "token_count":
+                    continue
+
+                info = payload.get("info")
+                if not isinstance(info, Mapping):
+                    continue
+                total_usage = info.get("total_token_usage")
+                last_usage = info.get("last_token_usage")
+                if not isinstance(total_usage, Mapping) or not isinstance(last_usage, Mapping):
+                    continue
+                cumulative_total = valid_token_count(total_usage.get("total_tokens"))
+                if cumulative_total is None or cumulative_total <= cumulative_high_water:
+                    continue
+                cumulative_high_water = cumulative_total
+                if compacting:
+                    continue
+
+                timestamp = first_nonempty_string(record.get("timestamp"))
+                event_time = _utc_datetime(timestamp)
+                if event_time is None or event_time < start or event_time > end:
+                    continue
+                input_tokens = first_valid_token_count(last_usage, "input_tokens")
+                output_tokens = first_valid_token_count(last_usage, "output_tokens")
+                cache_read_tokens = first_valid_token_count(last_usage, "cached_input_tokens")
+                cache_creation_tokens = first_valid_token_count(
+                    last_usage,
+                    "cache_write_input_tokens",
+                    "cache_creation_input_tokens",
+                    "cache_creation_tokens",
+                )
+                if all(
+                    value is None
+                    for value in (
+                        input_tokens,
+                        output_tokens,
+                        cache_read_tokens,
+                        cache_creation_tokens,
+                    )
+                ):
+                    continue
+                rows.append(
+                    build_turn_token_entry(
+                        backend=AGENT_BACKEND_CODEX,
+                        message_id=first_nonempty_string(
+                            info.get("message_id"),
+                            payload.get("message_id"),
+                            record.get("message_id"),
+                        ),
+                        request_id=first_nonempty_string(
+                            info.get("request_id"),
+                            payload.get("request_id"),
+                            payload.get("requestId"),
+                            record.get("request_id"),
+                            record.get("requestId"),
+                        ),
+                        timestamp=timestamp,
+                        model=current_model,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_creation_tokens=cache_creation_tokens,
+                        context_window_tokens=valid_context_window(
+                            info.get("model_context_window")
+                        ),
+                    )
+                )
+    except (OSError, RuntimeError, ValueError, zstandard.ZstdError):
+        logger.debug("codex_turn_usage_read_failed", path=str(path), exc_info=True)
+        return []
+    return rows
 
 
 def _read_exact(reader: BinaryIO, size: int) -> bytes:

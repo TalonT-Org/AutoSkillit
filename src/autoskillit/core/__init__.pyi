@@ -1250,6 +1250,7 @@ from .types import ToolParamDef as ToolParamDef
 from .types import ToolParamRole as ToolParamRole
 from .types import ToolWireType as ToolWireType
 from .types import TurnId as TurnId
+from .types import TurnTokenEntry as TurnTokenEntry
 from .types import (
     UninitializedContextAdmissionState as UninitializedContextAdmissionState,
 )

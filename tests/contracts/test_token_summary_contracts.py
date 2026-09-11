@@ -130,7 +130,7 @@ def test_flush_to_hook_cross_seam(tmp_path):
     and consumer tests (test_token_summary_appender.py). Proves the hook can
     actually read what the producer writes.
     """
-    # Simulate what flush_session_log (session_log.py:384-399) writes to token_usage.json
+    # Simulate the current token_usage.json descriptor written by flush_session_log.
     session_dir_name = "test-session-abc123"
     # log_root is the sessions/ dir — _load_sessions reads sessions.jsonl from here
     # and looks for sessions/{dir_name}/token_usage.json
@@ -163,9 +163,14 @@ def test_flush_to_hook_cross_seam(tmp_path):
         "turn_count": 3,
         "provider_used": "test-provider",
         "model_identifier": "test-model",
+        "configured_model": "test-model-alias",
+        "profile_name": "test-profile",
         "dispatch_id": "test-dispatch",
         "campaign_id": "test-campaign",
-        "schema_version": 2,
+        "turn_usage_file": "turn_usage.jsonl",
+        "turn_usage_count": 3,
+        "turn_usage_schema_version": 1,
+        "schema_version": 3,
     }
     (session_dir / "token_usage.json").write_text(json.dumps(tu_data))
 

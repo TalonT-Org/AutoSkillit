@@ -10,6 +10,7 @@ import threading
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -24,9 +25,44 @@ from autoskillit.core import (
 from autoskillit.execution import read_telemetry_clear_marker, write_telemetry_clear_marker
 from autoskillit.execution.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session_log import resolve_log_dir
-from tests.execution.conftest import _flush, _snap
+from tests.execution.conftest import _flush, _make_cc_jsonl_record, _snap
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
+
+
+def _turn_usage_row(
+    index: int = 1,
+    *,
+    backend: str = "claude-code",
+    **overrides: Any,
+) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "backend": backend,
+        "message_id": f"message-{index}",
+        "request_id": f"request-{index}",
+        "timestamp": f"2026-09-10T10:00:{index % 60:02d}+00:00",
+        "model": "claude-sonnet-4-6" if backend == "claude-code" else "gpt-5.4",
+        "input_tokens": 100 + index,
+        "output_tokens": 20 + index,
+        "cache_read_tokens": 80,
+        "cache_creation_tokens": 5,
+        "context_window_tokens": 200_000,
+        "context_fraction": 0.0004,
+    }
+    row.update(overrides)
+    return row
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    with path.open(encoding="utf-8") as handle:
+        return [json.loads(line) for line in handle]
+
+
+def _locator(path: Path | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        session_log_path=lambda _cwd, _session_id: path,
+        locate_session=lambda _session_id: path,
+    )
 
 
 def test_flush_session_log_creates_directory_structure(tmp_path):
@@ -448,24 +484,38 @@ def test_summary_is_last_per_session_artifact(
 
     writes: list[Path] = []
     original_atomic_write = session_log.atomic_write
+    original_write_versioned_json = session_log.write_versioned_json
 
     def recording_atomic_write(path: Path, content: str) -> None:
         writes.append(path)
         original_atomic_write(path, content)
 
+    def recording_write_versioned_json(
+        path: Path,
+        payload: dict[str, Any],
+        schema_version: int,
+        **kwargs: Any,
+    ) -> None:
+        writes.append(path)
+        original_write_versioned_json(path, payload, schema_version, **kwargs)
+
     monkeypatch.setattr(session_log, "atomic_write", recording_atomic_write)
+    monkeypatch.setattr(session_log, "write_versioned_json", recording_write_versioned_json)
     _flush(
         tmp_path,
         session_id="summary-last",
         campaign_id="campaign",
         raw_stdout="raw",
+        turn_usage=[_turn_usage_row()],
         success=success,
     )
 
     session_dir = tmp_path / "sessions" / "summary-last"
     session_writes = [path for path in writes if path.parent == session_dir]
     if not success:
-        assert [path.name for path in session_writes[-2:]] == ["raw_stdout.jsonl", "summary.json"]
+        assert "raw_stdout.jsonl" in [path.name for path in session_writes]
+    assert [path.name for path in session_writes[-2:]] == ["token_usage.json", "summary.json"]
+    assert (session_dir / "turn_usage.jsonl").is_file()
     assert session_writes[-1].name == "summary.json"
 
 
@@ -1040,7 +1090,10 @@ def test_token_usage_json_schema(tmp_path):
     assert tu["turn_count"] == 0
     assert tu["dispatch_id"] == "disp-abc"
     assert tu["campaign_id"] == "camp-xyz"
-    assert tu["schema_version"] == 2
+    assert tu["turn_usage_file"] is None
+    assert tu["turn_usage_count"] == 0
+    assert tu["turn_usage_schema_version"] == 1
+    assert tu["schema_version"] == 3
 
 
 def test_token_usage_json_includes_peak_context_and_turn_count(tmp_path):
@@ -1083,6 +1136,222 @@ def test_token_usage_json_coerces_none_cache_fields_to_zero(tmp_path):
     tu = json.loads((tmp_path / "sessions" / "test-session-001" / "token_usage.json").read_text())
     assert tu["cache_write_tokens"] == 0
     assert tu["cache_read_tokens"] == 50
+
+
+@pytest.mark.parametrize(
+    (
+        "backend",
+        "token_usage",
+        "turn_usage",
+    ),
+    [
+        (
+            "claude-code",
+            {"input_tokens": 10, "output_tokens": 5},
+            [_turn_usage_row()],
+        ),
+        (
+            "codex",
+            {"input_tokens": 10, "output_tokens": 5},
+            [_turn_usage_row(backend="codex")],
+        ),
+        ("claude-code", {"input_tokens": 10, "output_tokens": 5}, []),
+        ("claude-code", None, [_turn_usage_row()]),
+        ("claude-code", None, []),
+    ],
+    ids=["claude-both", "codex-both", "aggregate-only", "rows-only", "no-evidence"],
+)
+def test_turn_usage_descriptor_states(
+    tmp_path: Path,
+    backend: str,
+    token_usage: dict[str, Any] | None,
+    turn_usage: list[dict[str, Any]],
+) -> None:
+    _flush(
+        tmp_path,
+        backend=backend,
+        channel_b_capable=backend == "claude-code",
+        session_locator=_locator(),
+        token_usage=token_usage,
+        turn_usage=turn_usage,
+    )
+
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    descriptor_path = session_dir / "token_usage.json"
+    sidecar_path = session_dir / "turn_usage.jsonl"
+    if token_usage is None and not turn_usage:
+        assert not descriptor_path.exists()
+        assert not sidecar_path.exists()
+        return
+
+    descriptor = json.loads(descriptor_path.read_text())
+    assert descriptor["schema_version"] == 3
+    assert descriptor["turn_usage_schema_version"] == 1
+    assert descriptor["turn_usage_file"] == ("turn_usage.jsonl" if turn_usage else None)
+    assert descriptor["turn_usage_count"] == len(turn_usage)
+    assert sidecar_path.exists() is bool(turn_usage)
+    if turn_usage:
+        assert _read_jsonl(sidecar_path) == turn_usage
+    if token_usage is None:
+        assert not any(
+            descriptor[key]
+            for key in (
+                "input_tokens",
+                "output_tokens",
+                "cache_write_tokens",
+                "cache_read_tokens",
+            )
+        )
+
+
+def test_claude_turn_timestamps_are_enriched_by_parent_message_id(tmp_path: Path) -> None:
+    transcript = tmp_path / "channel-b.jsonl"
+    cc = _make_cc_jsonl_record
+    message_id = "message-parent"
+    transcript.write_text(
+        "\n".join(
+            (
+                cc(message_id=message_id, timestamp="2026-09-10T09:00:00Z", subagent_type="x"),
+                cc(message_id=message_id, timestamp="2026-09-10T09:01:00Z", model="<synthetic>"),
+                cc(
+                    message_id=message_id,
+                    request_id="request-does-not-match-message",
+                    timestamp="2026-09-10T10:00:00Z",
+                ),
+                cc(message_id="message-existing", timestamp="2026-09-10T10:00:02Z"),
+            )
+        )
+        + "\n"
+    )
+    preexisting = "2026-09-10T08:00:00Z"
+
+    _flush(
+        tmp_path,
+        session_locator=_locator(transcript),
+        turn_usage=[
+            _turn_usage_row(
+                1,
+                message_id="message-parent",
+                request_id="ledger-request-id",
+                timestamp=None,
+            ),
+            _turn_usage_row(2, message_id="message-existing", timestamp=preexisting),
+            _turn_usage_row(3, message_id="message-unknown", timestamp=None),
+        ],
+    )
+
+    rows = _read_jsonl(tmp_path / "sessions" / "test-session-001" / "turn_usage.jsonl")
+    assert [row["timestamp"] for row in rows] == [
+        "2026-09-10T10:00:00Z",
+        preexisting,
+        None,
+    ]
+    assert rows[0]["request_id"] == "ledger-request-id"
+
+
+def test_resumed_codex_flush_persists_transported_rows(tmp_path: Path) -> None:
+    current = _turn_usage_row(
+        1,
+        backend="codex",
+        message_id=None,
+        request_id=None,
+        timestamp="2026-09-10T11:00:00+00:00",
+        model="gpt-5.4",
+    )
+
+    _flush(
+        tmp_path,
+        backend="codex",
+        channel_b_capable=False,
+        session_id="resumed-codex",
+        is_resume=True,
+        start_ts="2026-09-10T10:00:00+00:00",
+        turn_usage=[current],
+    )
+
+    sidecar = (
+        tmp_path / "sessions" / "resumed-codex_2026-09-10T10-00-00+00-00" / "turn_usage.jsonl"
+    )
+    assert _read_jsonl(sidecar) == [current]
+
+
+def test_turn_usage_stream_failure_publishes_no_sidecar_or_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import autoskillit.execution.session._turn_usage as turn_usage_module
+
+    original_dumps = turn_usage_module.fast_dumps
+    serialized_rows = 0
+
+    def fail_during_second_row(value: Any, *args: Any, **kwargs: Any) -> str:
+        nonlocal serialized_rows
+        if isinstance(value, dict) and "message_id" in value:
+            serialized_rows += 1
+            if serialized_rows == 2:
+                raise OSError("injected turn-usage stream failure")
+        return original_dumps(value, *args, **kwargs)
+
+    monkeypatch.setattr(turn_usage_module, "fast_dumps", fail_during_second_row)
+
+    _flush(
+        tmp_path,
+        token_usage={"input_tokens": 10, "output_tokens": 5},
+        turn_usage=[_turn_usage_row(1), _turn_usage_row(2)],
+    )
+
+    session_dir = tmp_path / "sessions" / "test-session-001"
+    assert serialized_rows == 2
+    assert (session_dir / "summary.json").is_file()
+    assert not (session_dir / "token_usage.json").exists()
+    assert not [path for path in session_dir.iterdir() if "turn_usage" in path.name]
+
+
+def test_long_turn_usage_series_is_complete_while_metadata_stays_bounded(tmp_path: Path) -> None:
+    rows_501 = [
+        _turn_usage_row(
+            index,
+            cache_read_tokens=0 if index == 250 else 80,
+            cache_creation_tokens=777 if index == 250 else 5,
+            context_fraction=0.0 if index == 250 else 0.0004,
+        )
+        for index in range(501)
+    ]
+    rows_5001 = [_turn_usage_row(index) for index in range(5_001)]
+    aggregate = {"input_tokens": 10, "output_tokens": 5}
+
+    for session_id, rows in (("long-501", rows_501), ("long-5001", rows_5001)):
+        _flush(tmp_path, session_id=session_id, token_usage=aggregate, turn_usage=rows)
+
+    session_501 = tmp_path / "sessions" / "long-501"
+    persisted_501 = _read_jsonl(session_501 / "turn_usage.jsonl")
+    assert len(persisted_501) == 501
+    assert persisted_501[250]["cache_read_tokens"] == 0
+    assert persisted_501[250]["cache_creation_tokens"] == 777
+
+    descriptors = []
+    for session_id, expected_count in (("long-501", 501), ("long-5001", 5_001)):
+        session_dir = tmp_path / "sessions" / session_id
+        descriptor_path = session_dir / "token_usage.json"
+        assert descriptor_path.stat().st_size < 4_096
+        descriptor = json.loads(descriptor_path.read_text())
+        assert descriptor["turn_usage_count"] == expected_count
+        descriptors.append(descriptor)
+        summary = json.loads((session_dir / "summary.json").read_text())
+        assert "turn_usage" not in summary
+        assert f"message-{expected_count - 1}" not in json.dumps(summary)
+
+    descriptors[0]["turn_usage_count"] = 0
+    descriptors[1]["turn_usage_count"] = 0
+    assert descriptors[0] == descriptors[1]
+
+    index_rows = [
+        json.loads(line) for line in (tmp_path / "sessions.jsonl").read_text().splitlines()
+    ]
+    long_rows = [row for row in index_rows if row["session_id"].startswith("long-")]
+    assert len(long_rows) == 2
+    assert all("turn_usage" not in row for row in long_rows)
+    assert "message-5000" not in json.dumps(long_rows)
 
 
 def test_step_timing_json_schema(tmp_path):
@@ -1205,7 +1474,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     # Patch the function at its source module so the local import picks up the mock.
     with mock.patch("autoskillit.execution.session_log.flush_session_log", side_effect=_capture):
         with tempfile.TemporaryDirectory() as td:
-            _flush(Path(td))
+            _flush(Path(td), turn_usage=[_turn_usage_row()])
 
     assert "telemetry" in captured, "_flush() must forward telemetry= to flush_session_log"
     telemetry = captured["telemetry"]
@@ -1215,6 +1484,7 @@ def test_flush_helper_builds_and_passes_session_telemetry():
     assert telemetry.loc_insertions == 0
     assert telemetry.loc_deletions == 0
     assert telemetry.subagent_model_outcomes == ()
+    assert telemetry.turn_usage == [_turn_usage_row()]
 
 
 def test_flush_writes_token_usage_with_dispatch_label(tmp_path):

@@ -65,9 +65,6 @@ from autoskillit.execution.process import (
 )
 from autoskillit.execution.session._exit_classification import classify_infra_exit
 from autoskillit.execution.session._session_content import _check_expected_patterns
-from autoskillit.execution.session._session_model import (
-    ClaudeSessionResult,
-)
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
 )
@@ -190,7 +187,7 @@ def _build_skill_result(
         TerminationReason.SIGNAL_DEATH,
     }
     if obligation_failure and not provenance_failure:
-        obligation_session = _parse_stdout(result.stdout, backend=backend)
+        obligation_session = _parse_stdout(result, backend=backend)
         obligation_evidence = _compute_write_evidence(
             obligation_session,
             fs_writes_detected,
@@ -364,21 +361,17 @@ def _build_skill_result(
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
-        if result.stdout.strip():
-            session = _parse_stdout(result.stdout, backend=backend)
-            if session.subtype != CliSubtype.TIMEOUT:
-                session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
-        else:
-            session = ClaudeSessionResult(
-                subtype=CliSubtype.TIMEOUT,
-                is_error=True,
-                result="",
-                session_id=_resolve_skill_session_id(None, result),
-                errors=[],
+        session = _parse_stdout(result, backend=backend)
+        if not session.session_id:
+            session = dataclasses.replace(
+                session,
+                session_id=_resolve_skill_session_id(session, result),
             )
+        if session.subtype != CliSubtype.TIMEOUT:
+            session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
     else:
         returncode = result.returncode if result.returncode is not None else -1
-        session = _parse_stdout(result.stdout, backend=backend)
+        session = _parse_stdout(result, backend=backend)
 
     evidence = _compute_write_evidence(
         session,
@@ -611,6 +604,7 @@ def _build_skill_result(
         retry_reason=retry_reason,
         stderr=result.stderr,
         token_usage=session.token_usage,
+        turn_usage=session.turn_usage,
         worktree_path=effective_worktree_path,
         branch_name=extracted_branch_name,
         cli_subtype=session.subtype,

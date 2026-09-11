@@ -84,6 +84,9 @@ TOKEN_USAGE_FILE_KEYS: frozenset[str] = frozenset(
         "profile_name",
         "dispatch_id",
         "campaign_id",
+        "turn_usage_file",
+        "turn_usage_count",
+        "turn_usage_schema_version",
         "schema_version",
     }
 )

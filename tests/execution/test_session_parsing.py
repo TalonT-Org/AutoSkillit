@@ -44,6 +44,29 @@ def _make_session_result(
     )
 
 
+def _assistant_usage_record(
+    *,
+    usage: dict[str, object] | None,
+    message_id: str | None = None,
+    request_id: str | None = None,
+    timestamp: str | None = None,
+    model: str | None = "claude-sonnet-4-6",
+) -> str:
+    message: dict[str, object] = {}
+    if message_id is not None:
+        message["id"] = message_id
+    if model is not None:
+        message["model"] = model
+    if usage is not None:
+        message["usage"] = usage
+    record: dict[str, object] = {"type": "assistant", "message": message}
+    if request_id is not None:
+        record["requestId"] = request_id
+    if timestamp is not None:
+        record["timestamp"] = timestamp
+    return json.dumps(record)
+
+
 class TestExtractTokenUsage:
     """Tests for extract_token_usage()."""
 
@@ -63,13 +86,13 @@ class TestExtractTokenUsage:
                 },
             }
         )
-        result = extract_token_usage(stdout)
-        assert result is not None
-        assert result["input_tokens"] == 100
-        assert result["output_tokens"] == 50
-        assert result["cache_write_tokens"] == 10
-        assert result["cache_read_tokens"] == 5
-        assert result["model_breakdown"] == {
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
+        assert usage["input_tokens"] == 100
+        assert usage["output_tokens"] == 50
+        assert usage["cache_write_tokens"] == 10
+        assert usage["cache_read_tokens"] == 5
+        assert usage["model_breakdown"] == {
             "claude-sonnet-4-6": {
                 "input_tokens": 100,
                 "output_tokens": 50,
@@ -109,14 +132,14 @@ class TestExtractTokenUsage:
             }
         )
         stdout = line1 + "\n" + line2
-        result = extract_token_usage(stdout)
-        assert result is not None
-        assert result["input_tokens"] == 300
-        assert result["output_tokens"] == 100
-        assert result["cache_write_tokens"] == 20
-        assert result["cache_read_tokens"] == 10
-        assert "claude-sonnet-4-6" in result["model_breakdown"]
-        assert result["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 300
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
+        assert usage["input_tokens"] == 300
+        assert usage["output_tokens"] == 100
+        assert usage["cache_write_tokens"] == 20
+        assert usage["cache_read_tokens"] == 10
+        assert "claude-sonnet-4-6" in usage["model_breakdown"]
+        assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 300
 
     def test_multiple_models(self):
         """Assistant records with different models produce per-model breakdown."""
@@ -149,15 +172,15 @@ class TestExtractTokenUsage:
             }
         )
         stdout = line1 + "\n" + line2
-        result = extract_token_usage(stdout)
-        assert result is not None
-        assert "claude-sonnet-4-6" in result["model_breakdown"]
-        assert "claude-opus-4-6" in result["model_breakdown"]
-        assert result["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 100
-        assert result["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == 200
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
+        assert "claude-sonnet-4-6" in usage["model_breakdown"]
+        assert "claude-opus-4-6" in usage["model_breakdown"]
+        assert usage["model_breakdown"]["claude-sonnet-4-6"]["input_tokens"] == 100
+        assert usage["model_breakdown"]["claude-opus-4-6"]["input_tokens"] == 200
         # totals summed from both models (no result record present)
-        assert result["input_tokens"] == 300
-        assert result["output_tokens"] == 100
+        assert usage["input_tokens"] == 300
+        assert usage["output_tokens"] == 100
 
     def test_result_record_usage_preferred_for_totals(self):
         """When result record has usage, it provides the top-level totals."""
@@ -191,15 +214,15 @@ class TestExtractTokenUsage:
             }
         )
         stdout = assistant_line + "\n" + result_line
-        result = extract_token_usage(stdout)
-        assert result is not None
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
         # result record totals take precedence over assistant sum
-        assert result["input_tokens"] == 999
-        assert result["output_tokens"] == 888
-        assert result["cache_write_tokens"] == 50
-        assert result["cache_read_tokens"] == 25
+        assert usage["input_tokens"] == 999
+        assert usage["output_tokens"] == 888
+        assert usage["cache_write_tokens"] == 50
+        assert usage["cache_read_tokens"] == 25
         # model breakdown still comes from assistant records
-        assert "claude-sonnet-4-6" in result["model_breakdown"]
+        assert "claude-sonnet-4-6" in usage["model_breakdown"]
 
     def test_fallback_to_assistant_sum_when_no_result_usage(self):
         """When result record lacks usage, top-level totals are summed from assistants."""
@@ -228,24 +251,23 @@ class TestExtractTokenUsage:
             }
         )
         stdout = assistant_line + "\n" + result_line
-        result = extract_token_usage(stdout)
-        assert result is not None
-        assert result["input_tokens"] == 150
-        assert result["output_tokens"] == 60
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
+        assert usage["input_tokens"] == 150
+        assert usage["output_tokens"] == 60
 
-    def test_no_usage_data_returns_none(self):
-        """Stdout with no usage records at all returns None."""
+    def test_no_usage_data_returns_empty_usage_and_rows(self):
+        """Stdout with no usage records returns no aggregate and an empty row series."""
         stdout = json.dumps({"type": "user", "message": {"content": "hello"}})
-        result = extract_token_usage(stdout)
-        assert result is None
+        assert extract_token_usage(stdout) == (None, [])
 
-    def test_empty_stdout_returns_none(self):
-        """Empty string returns None."""
-        assert extract_token_usage("") is None
+    def test_empty_stdout_returns_empty_usage_and_rows(self):
+        """Empty stdout returns no aggregate and an empty row series."""
+        assert extract_token_usage("") == (None, [])
 
-    def test_non_json_stdout_returns_none(self):
-        """Non-parseable stdout returns None."""
-        assert extract_token_usage("not json at all\nstill not json") is None
+    def test_non_json_stdout_returns_empty_usage_and_rows(self):
+        """Non-parseable stdout returns no aggregate and an empty row series."""
+        assert extract_token_usage("not json at all\nstill not json") == (None, [])
 
     def test_cache_tokens_default_to_zero(self):
         """Missing cache token fields default to 0, not omitted."""
@@ -262,11 +284,11 @@ class TestExtractTokenUsage:
                 },
             }
         )
-        result = extract_token_usage(stdout)
-        assert result is not None
-        assert result["cache_write_tokens"] == 0
-        assert result["cache_read_tokens"] == 0
-        breakdown = result["model_breakdown"]["claude-sonnet-4-6"]
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
+        assert usage["cache_write_tokens"] == 0
+        assert usage["cache_read_tokens"] == 0
+        breakdown = usage["model_breakdown"]["claude-sonnet-4-6"]
         assert breakdown["cache_write_tokens"] == 0
         assert breakdown["cache_read_tokens"] == 0
 
@@ -286,20 +308,126 @@ class TestExtractTokenUsage:
                 },
             }
         )
-        result = extract_token_usage(stdout)
-        assert result is not None
-        assert result["input_tokens"] == 100
-        assert result["output_tokens"] == 50
-        assert result["cache_write_tokens"] == 15
-        assert result["cache_read_tokens"] == 8
+        usage, _rows = extract_token_usage(stdout)
+        assert usage is not None
+        assert usage["input_tokens"] == 100
+        assert usage["output_tokens"] == 50
+        assert usage["cache_write_tokens"] == 15
+        assert usage["cache_read_tokens"] == 8
 
     def test_ignores_non_assistant_non_result_records(self):
         """user and system records are skipped."""
         user_line = json.dumps({"type": "user", "message": {"content": "do something"}})
         system_line = json.dumps({"type": "system", "subtype": "init"})
         stdout = user_line + "\n" + system_line
-        result = extract_token_usage(stdout)
-        assert result is None
+        assert extract_token_usage(stdout) == (None, [])
+
+
+class TestExtractTurnUsageSnapshots:
+    @pytest.mark.parametrize(
+        ("usage", "expected_output"),
+        [
+            ({"output_tokens": 0}, 0),
+            ({}, None),
+            ({"output_tokens": -1}, None),
+            ({"output_tokens": True}, None),
+            ({"output_tokens": 1.5}, None),
+            ({"output_tokens": "1"}, None),
+        ],
+    )
+    def test_only_non_boolean_non_negative_integer_counters_are_valid(
+        self,
+        usage: dict[str, object],
+        expected_output: int | None,
+    ):
+        _aggregate, rows = extract_token_usage(
+            _assistant_usage_record(usage=usage, message_id="message-1")
+        )
+
+        if expected_output is None:
+            assert rows == []
+        else:
+            assert rows[0]["output_tokens"] == expected_output
+
+    def test_snapshot_merge_alias_identity_and_missing_id_rules(self):
+        stdout = "\n".join(
+            [
+                _assistant_usage_record(usage=None, message_id="known"),
+                _assistant_usage_record(
+                    usage={
+                        "input_tokens": 5,
+                        "output_tokens": 2,
+                        "cache_read_tokens": 2,
+                        "cache_write_tokens": 3,
+                    },
+                    message_id="known",
+                    model="model-first",
+                ),
+                _assistant_usage_record(
+                    usage={
+                        "input_tokens": 10,
+                        "cache_read_input_tokens": 3,
+                        "cache_creation_input_tokens": 4,
+                        "cache_read_tokens": 99,
+                        "cache_write_tokens": 88,
+                    },
+                    message_id="known",
+                    request_id="request-filled",
+                    timestamp="2026-09-10T12:00:00Z",
+                    model="model-later",
+                ),
+                _assistant_usage_record(
+                    usage={
+                        "input_tokens": -1,
+                        "output_tokens": True,
+                        "cache_read_input_tokens": "invalid",
+                    },
+                    message_id="known",
+                    request_id="request-ignored",
+                    timestamp="2026-09-10T12:00:01Z",
+                    model="",
+                ),
+                _assistant_usage_record(
+                    usage={"input_tokens": 10, "output_tokens": 9},
+                    message_id="unknown-cache",
+                ),
+                _assistant_usage_record(usage={"output_tokens": 2}, request_id="missing-1"),
+                _assistant_usage_record(usage={"output_tokens": 3}, request_id="missing-2"),
+                _assistant_usage_record(
+                    usage={"output_tokens": 4}, message_id="", request_id="empty-1"
+                ),
+                _assistant_usage_record(
+                    usage={"output_tokens": 5}, message_id="", request_id="empty-2"
+                ),
+            ]
+        )
+
+        aggregate, rows = extract_token_usage(stdout)
+
+        assert aggregate is not None
+        assert aggregate["turn_count"] == 6
+        assert (
+            rows[0]["request_id"],
+            rows[0]["timestamp"],
+            rows[0]["model"],
+            rows[0]["input_tokens"],
+            rows[0]["output_tokens"],
+            rows[0]["cache_read_tokens"],
+            rows[0]["cache_creation_tokens"],
+        ) == ("request-filled", "2026-09-10T12:00:00Z", "model-later", 17, 2, 3, 4)
+        assert (
+            rows[1]["input_tokens"],
+            rows[1]["cache_read_tokens"],
+            rows[1]["cache_creation_tokens"],
+        ) == (None, None, None)
+        assert [(row["message_id"], row["request_id"]) for row in rows] == [
+            ("known", "request-filled"),
+            ("unknown-cache", None),
+            (None, "missing-1"),
+            (None, "missing-2"),
+            (None, "empty-1"),
+            (None, "empty-2"),
+        ]
 
 
 class TestParseSessionResult:
@@ -401,6 +529,9 @@ class TestParseSessionResult:
                 "result": "done",
                 "session_id": "abc",
                 "errors": [],
+                "modelUsage": {
+                    "claude-sonnet-4-6": {"contextWindow": 200_000},
+                },
             }
         )
         with structlog.testing.capture_logs() as logs:
@@ -471,14 +602,16 @@ class TestExtractTokenUsageArchitecture:
         stdout = assistant + "\n" + result_rec
 
         parsed = parse_session_result(stdout)
-        standalone = extract_token_usage(stdout)
+        standalone_usage, standalone_rows = extract_token_usage(stdout)
 
-        assert parsed.token_usage == standalone
+        assert parsed.token_usage == standalone_usage
+        assert parsed.turn_usage == standalone_rows
 
     def test_token_usage_none_when_no_usage_in_stdout(self):
         stdout = _result_ndjson()  # no usage key in result record
         parsed = parse_session_result(stdout)
         assert parsed.token_usage is None
+        assert parsed.turn_usage == []
 
 
 class TestApiErrorStatusParsing:
@@ -571,9 +704,10 @@ class TestApiErrorStatusParsing:
 class TestExtractTokenUsageMalformedInput:
     def test_skips_malformed_lines(self):
         malformed = "not json\n" + _assistant_ndjson(input_tokens=10, output_tokens=5)
-        result = extract_token_usage(malformed)
-        assert result is not None
-        assert result["input_tokens"] == 10
+        usage, rows = extract_token_usage(malformed)
+        assert usage is not None
+        assert usage["input_tokens"] == 10
+        assert len(rows) == 1
 
 
 class TestSkillResult:
@@ -1104,13 +1238,15 @@ class TestSubagentExclusion:
             }
         )
         stdout = f"{parent}\n{subagent}\n{synthetic}\n"
-        result = extract_token_usage(stdout)
-        assert result is not None
-        mb = result["model_breakdown"]
+        usage, rows = extract_token_usage(stdout)
+        assert usage is not None
+        mb = usage["model_breakdown"]
         assert "claude-opus-4-6" in mb
         assert "claude-sonnet-4-6" not in mb
         assert "<synthetic>" not in mb
-        assert result["turn_count"] == 1
+        assert usage["turn_count"] == 1
+        assert len(rows) == 1
+        assert rows[0]["model"] == "claude-opus-4-6"
 
     def test_parse_session_result_excludes_subagent_tool_uses(self):
         """Subagent tool uses must not appear in parent session's tool_uses."""

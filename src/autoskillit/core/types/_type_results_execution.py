@@ -16,6 +16,7 @@ from typing import Any, NotRequired, TypedDict
 
 from ._type_constants import KNOWN_CI_EVENTS
 from ._type_execution_identity import ExecutionIdentity
+from ._type_token import TurnTokenEntry
 
 __all__ = [
     "SubagentModelOutcomeDict",
@@ -71,6 +72,7 @@ class SessionTelemetry:
     loc_insertions: int
     loc_deletions: int
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...]
+    turn_usage: list[TurnTokenEntry] = field(default_factory=list)
     execution_identity: ExecutionIdentity = ExecutionIdentity.empty()
 
     @classmethod
@@ -78,6 +80,7 @@ class SessionTelemetry:
         """Zero-value sentinel for error paths where no telemetry is available."""
         return cls(
             token_usage=None,
+            turn_usage=[],
             timing_seconds=None,
             audit_record=None,
             github_api_usage=None,

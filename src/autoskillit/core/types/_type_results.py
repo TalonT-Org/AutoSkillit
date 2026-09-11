@@ -43,6 +43,7 @@ from ._type_results_records import (
     ValidatedAddDir,
     ValidatedWorktreePath,
 )
+from ._type_token import TurnTokenEntry
 
 T = TypeVar("T")
 _EXTERNAL_EFFECT_VALUES = ("none", "serialized-idempotent", "serialized-unknown-completion")
@@ -403,6 +404,7 @@ class SkillResult:
     retry_reason: RetryReason
     stderr: str
     token_usage: dict[str, Any] | None = None
+    turn_usage: list[TurnTokenEntry] = field(default_factory=list)
     worktree_path: str | None = None
     branch_name: str | None = None
     cli_subtype: str = field(default="")

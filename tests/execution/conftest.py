@@ -292,18 +292,24 @@ def _make_cc_jsonl_record(
     content: list[dict] | None = None,
     record_type: str = "assistant",
     message_id: str = "",
+    model: str = "",
+    subagent_type: str = "",
 ) -> str:
     rec: dict[str, object] = {"type": record_type}
+    if subagent_type:
+        rec["subagent_type"] = subagent_type
     if request_id:
         rec["requestId"] = request_id
     if timestamp:
         rec["timestamp"] = timestamp
-    if content is not None or message_id:
+    if content is not None or message_id or model:
         msg: dict[str, object] = {}
         if content is not None:
             msg["content"] = content
         if message_id:
             msg["id"] = message_id
+        if model:
+            msg["model"] = model
         rec["message"] = msg
     return json.dumps(rec)
 
@@ -480,6 +486,7 @@ def _flush(
         "caller_session_id": "",
         "github_api_log": None,
         "token_usage": None,
+        "turn_usage": [],
         "timing_seconds": None,
         "audit_record": None,
         "loc_insertions": 0,
@@ -511,6 +518,7 @@ def _flush(
     _api_usage = _github_api_log.drain(_session_id) if _github_api_log is not None else None
     telemetry = SessionTelemetry(
         token_usage=defaults.pop("token_usage"),
+        turn_usage=defaults.pop("turn_usage"),
         timing_seconds=defaults.pop("timing_seconds"),
         audit_record=defaults.pop("audit_record"),
         github_api_usage=_api_usage,

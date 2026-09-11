@@ -7,15 +7,21 @@ import json
 import os
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import regex as re
 
 from autoskillit.core import (
+    AgentSessionResult,
+    CodingAgentBackend,
+    RetryReason,
     SkillContractView,
+    SkillResult,
+    TurnTokenEntry,
     extract_bash_write_targets,
     get_logger,
 )
+from autoskillit.execution.backends._codex_parse import extract_codex_turn_usage
 from autoskillit.execution.headless._headless_path_tokens import (
     _RECOVERABLE_PATH_TOKENS,
     _is_path_outside_cwd,
@@ -27,6 +33,7 @@ from autoskillit.execution.session import (
 )
 from autoskillit.execution.session._session_content import _normalize_model_output
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
+from autoskillit.execution.session._turn_usage import merge_turn_usage, valid_token_count
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser
@@ -426,3 +433,95 @@ def _merge_token_usage(
         if legacy and legacy in merged:
             del merged[legacy]
     return merged
+
+
+def _merge_turn_usage_metrics(
+    base_rows: list[TurnTokenEntry],
+    nudge_rows: list[TurnTokenEntry],
+    base_usage: dict[str, Any] | None,
+    nudge_usage: dict[str, Any] | None,
+    main_session_id: str | None,
+    nudge_session_id: str | None,
+) -> tuple[list[TurnTokenEntry], dict[str, object] | None]:
+    """Combine nudge rows and keep aggregate parent metrics aligned."""
+    same_session = bool(
+        main_session_id and nudge_session_id and main_session_id == nudge_session_id
+    )
+    rows = merge_turn_usage(base_rows, nudge_rows) if same_session else [*base_rows, *nudge_rows]
+    usage = _merge_token_usage(base_usage, nudge_usage)
+    parent_metrics_present = any(
+        metric in item
+        for item in (base_usage, nudge_usage)
+        if item is not None
+        for metric in ("turn_count", "peak_context")
+    )
+    if usage is not None and parent_metrics_present:
+        usage = dict(usage)
+        usage["turn_count"] = len(rows)
+        cache_reads = [
+            count
+            for row in rows
+            if (count := valid_token_count(row["cache_read_tokens"])) is not None
+        ]
+        usage["peak_context"] = max(cache_reads, default=0)
+    return rows, usage
+
+
+def _with_native_turn_usage(
+    result: AgentSessionResult,
+    backend: CodingAgentBackend,
+    session_id: str,
+    start_ts: str,
+    end_ts: str,
+) -> AgentSessionResult:
+    """Attach interval-bounded native rows only for non-Claude-format backends."""
+    if backend.capabilities.supports_claude_format_stdout:
+        return result
+    rows = extract_codex_turn_usage(backend.session_locator(), session_id, start_ts, end_ts)
+    return dataclasses.replace(result, raw={**result.raw, "turn_usage": rows})
+
+
+def _build_nudge_recovery_result(
+    skill_result: SkillResult,
+    nudge_session: AgentSessionResult,
+    retry_reason: RetryReason,
+    completion_marker: str,
+    patterns_to_check: Sequence[str],
+    combined_turn_usage: list[TurnTokenEntry],
+    combined_usage: dict[str, object] | None,
+) -> SkillResult | None:
+    """Validate a nudge response and construct its successful recovery result."""
+    combined_result = skill_result.result + "\n" + nudge_session.output
+    if retry_reason == RetryReason.EARLY_STOP:
+        if completion_marker not in nudge_session.output:
+            logger.debug(
+                "nudge_early_stop_marker_not_found",
+                nudge_result_len=len(nudge_session.output),
+            )
+            return None
+        if patterns_to_check and not _check_expected_patterns(combined_result, patterns_to_check):
+            logger.debug("nudge_early_stop_patterns_not_in_combined")
+            return None
+    elif not _check_expected_patterns(combined_result, patterns_to_check):
+        logger.debug(
+            "nudge_patterns_not_found",
+            nudge_result_len=len(nudge_session.output),
+        )
+        return None
+
+    nudge_usage = nudge_session.raw.get("token_usage")
+    logger.info(
+        "nudge_recovery_success",
+        session_id=skill_result.session_id,
+        nudge_output_count=nudge_usage.get("output_tokens", 0) if nudge_usage else 0,
+    )
+    return dataclasses.replace(
+        skill_result,
+        success=True,
+        result=combined_result,
+        subtype="success",
+        needs_retry=False,
+        retry_reason=RetryReason.NONE,
+        token_usage=combined_usage,
+        turn_usage=combined_turn_usage,
+    )

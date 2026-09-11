@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -17,13 +18,120 @@ from autoskillit.core import (
     SkillResult,
     resolve_native_shell_capture_decision,
 )
-from autoskillit.core.types import KillReason, SubprocessResult, TerminationReason
+from autoskillit.core.types import (
+    AgentSessionResult,
+    KillReason,
+    SubprocessResult,
+    TerminationReason,
+)
 from autoskillit.core.types._type_results import WriteEvidence
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
+from autoskillit.execution.session._turn_usage import build_turn_token_entry
 from tests.execution.conftest import _launch_inputs, _mock_backend
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _turn_usage_entry(*, message_id: str | None, cache_read_tokens: int):
+    return build_turn_token_entry(
+        backend="codex",
+        message_id=message_id,
+        cache_read_tokens=cache_read_tokens,
+        context_window_tokens=200_000,
+    )
+
+
+async def _run_turn_usage_nudge(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    main_observed_id: str = "shared",
+    nudge_observed_id: str | None = "shared",
+    main_message_id: str | None = "main-message",
+    nudge_message_id: str | None = "nudge-message",
+) -> tuple[SkillResult, Mock]:
+    from autoskillit.execution.headless import _headless_recovery
+    from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
+    from tests.execution.conftest import _mock_backend
+    from tests.fakes import MockSubprocessRunner
+
+    marker = "%%NUDGE_DONE%%"
+    nudge_row = _turn_usage_entry(
+        message_id=nudge_message_id,
+        cache_read_tokens=30,
+    )
+    extractor = Mock(return_value=[nudge_row])
+    monkeypatch.setattr(_headless_recovery, "extract_codex_turn_usage", extractor)
+    backend = _mock_backend(
+        supports_claude_format_stdout=False,
+        session_resume_capable=True,
+    )
+    backend.name = "codex"
+    launch_resolver, launch_preparation = _launch_inputs(backend, cwd=str(tmp_path))
+    runner = MockSubprocessRunner()
+    runner.set_default(
+        SubprocessResult(
+            returncode=0,
+            stdout="nudge stdout",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=2,
+            session_id=nudge_observed_id or "",
+        )
+    )
+    nudge_session = AgentSessionResult(
+        success=True,
+        exit_code=0,
+        backend_name="codex",
+        elapsed_seconds=0.0,
+        session_id=nudge_observed_id,
+        output=f"plan_path = /tmp/plan.md\n{marker}",
+        error="",
+        raw={
+            "subtype": "success",
+            "token_usage": {"turn_count": 1, "peak_context": 30},
+        },
+    )
+    result_parser = Mock()
+    result_parser.parse_stdout.return_value = nudge_session
+    skill_result = SkillResult(
+        success=False,
+        result="done",
+        session_id=main_observed_id or "resume-only-session",
+        subtype="unparseable",
+        is_error=False,
+        exit_code=0,
+        needs_retry=True,
+        retry_reason=RetryReason.EARLY_STOP,
+        stderr="",
+        token_usage={"turn_count": 1, "peak_context": 10},
+        turn_usage=[_turn_usage_entry(message_id=main_message_id, cache_read_tokens=10)],
+    )
+    result = await _attempt_contract_nudge(
+        skill_result=skill_result,
+        subprocess_result=SubprocessResult(
+            returncode=0,
+            stdout="main stdout",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=1,
+            session_id=main_observed_id,
+            end_ts="2000-01-01T00:00:00+00:00",
+        ),
+        expected_output_patterns=[],
+        completion_marker=marker,
+        cwd=str(tmp_path),
+        runner=runner,
+        backend=backend,
+        result_parser=result_parser,
+        retry_reason=RetryReason.EARLY_STOP,
+        launch_resolver=launch_resolver,
+        launch_preparation=launch_preparation,
+        natural_exit_grace_seconds=3.0,
+    )
+    assert result is not None
+    return result, extractor
 
 
 def _managed_observer(tmp_path: Path):
@@ -330,6 +438,55 @@ class TestNudgePtyMode:
             nudge_attempt_id,
         )
         assert runner.call_args_list[0][3]["pass_fds"] == (91,)
+
+
+class TestNudgeTurnUsage:
+    @pytest.mark.anyio
+    @pytest.mark.parametrize(
+        (
+            "main_observed_id",
+            "nudge_observed_id",
+            "message_id",
+            "expected_cache_reads",
+        ),
+        [
+            pytest.param("shared", "shared", "message-1", [30], id="same-session"),
+            pytest.param("main", "nudge", "message-1", [10, 30], id="different-session"),
+            pytest.param("", None, "message-1", [10, 30], id="unobserved-sessions"),
+            pytest.param("shared", "shared", None, [10, 30], id="missing-message-ids"),
+        ],
+    )
+    async def test_nudge_row_merge_uses_independently_observed_session_identity(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        main_observed_id: str,
+        nudge_observed_id: str | None,
+        message_id: str | None,
+        expected_cache_reads: list[int],
+    ) -> None:
+        result, extractor = await _run_turn_usage_nudge(
+            monkeypatch,
+            tmp_path,
+            main_observed_id=main_observed_id,
+            nudge_observed_id=nudge_observed_id,
+            main_message_id=message_id,
+            nudge_message_id=message_id,
+        )
+
+        assert result.success is True
+        assert [row["cache_read_tokens"] for row in result.turn_usage] == expected_cache_reads
+        assert result.token_usage is not None
+        assert result.token_usage["turn_count"] == len(expected_cache_reads)
+        assert result.token_usage["peak_context"] == max(expected_cache_reads)
+        assert extractor.call_args.kwargs == {}
+        _, _, start_ts, end_ts = extractor.call_args.args
+        assert end_ts != "2000-01-01T00:00:00+00:00"
+        start = datetime.fromisoformat(start_ts)
+        end = datetime.fromisoformat(end_ts)
+        assert start.utcoffset() is not None
+        assert end.utcoffset() is not None
+        assert start <= end
 
 
 @pytest.mark.anyio

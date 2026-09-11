@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,9 +32,11 @@ from autoskillit.execution.headless._headless_helpers import (
     _resolve_session_log_dir,
 )
 from autoskillit.execution.headless._headless_recovery import (
+    _build_nudge_recovery_result,
     _EnumHint,
     _extract_missing_token_hints,
-    _merge_token_usage,
+    _merge_turn_usage_metrics,
+    _with_native_turn_usage,
 )
 from autoskillit.execution.headless._managed import (
     _BuildSpec,
@@ -48,7 +51,6 @@ from autoskillit.execution.headless._managed._launch_adapter import (
     _skill_launch_spec_builder,
 )
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
-from autoskillit.execution.session import _check_expected_patterns
 
 if TYPE_CHECKING:
     from autoskillit.core import ResultParser, SubprocessResult, SubprocessRunner
@@ -397,6 +399,7 @@ async def _attempt_contract_nudge(
                             dict.fromkeys((*spec.inherited_fds, *handle.pass_fds))
                         ),
                     )
+                nudge_start_ts = datetime.now(UTC).isoformat()
                 nudge_result = await runner(
                     list(spec.cmd),
                     cwd=Path(spec.cwd),
@@ -411,6 +414,7 @@ async def _attempt_contract_nudge(
                     ceiling_seconds=ceiling_seconds,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
                 )
+                nudge_end_ts = datetime.now(UTC).isoformat()
     except OSError:
         logger.debug("nudge_runner_failed", exc_info=True)
         return None
@@ -425,60 +429,36 @@ async def _attempt_contract_nudge(
     except Exception:
         logger.warning("nudge_parse_stdout_failed", exc_info=True)
         return None
+    nudge_observed_session_id = nudge_session.session_id or nudge_result.session_id
+    nudge_session = _with_native_turn_usage(
+        nudge_session,
+        backend,
+        nudge_observed_session_id or skill_result.session_id,
+        nudge_start_ts,
+        nudge_end_ts,
+    )
     if managed_lineage_observer is not None and nudge_session.session_id:
         managed_lineage_observer.bind_candidate(nudge_session.session_id)
     if on_session_id_resolved is not None and nudge_session.session_id:
         on_session_id_resolved(nudge_session.session_id)
-    combined_result = skill_result.result + "\n" + nudge_session.output
     nudge_usage = nudge_session.raw.get("token_usage")
-
-    if retry_reason == RetryReason.EARLY_STOP:
-        if completion_marker in nudge_session.output:
-            if patterns_to_check and not _check_expected_patterns(
-                combined_result, patterns_to_check
-            ):
-                logger.debug("nudge_early_stop_patterns_not_in_combined")
-                return None
-            logger.info(
-                "nudge_recovery_success",
-                session_id=skill_result.session_id,
-                nudge_output_count=nudge_usage.get("output_tokens", 0) if nudge_usage else 0,
-            )
-            return dataclasses.replace(
-                skill_result,
-                success=True,
-                result=combined_result,
-                subtype="success",
-                needs_retry=False,
-                retry_reason=RetryReason.NONE,
-                token_usage=_merge_token_usage(skill_result.token_usage, nudge_usage),
-            )
-        logger.debug(
-            "nudge_early_stop_marker_not_found",
-            nudge_result_len=len(nudge_session.output),
-        )
-        return None
-
-    if not _check_expected_patterns(combined_result, patterns_to_check):
-        logger.debug(
-            "nudge_patterns_not_found",
-            nudge_result_len=len(nudge_session.output),
-        )
-        return None
-
-    logger.info(
-        "nudge_recovery_success",
-        session_id=skill_result.session_id,
-        nudge_output_count=nudge_usage.get("output_tokens", 0) if nudge_usage else 0,
+    nudge_turn_usage = nudge_session.raw.get("turn_usage", []) or []
+    combined_turn_usage, combined_usage = _merge_turn_usage_metrics(
+        skill_result.turn_usage,
+        nudge_turn_usage,
+        skill_result.token_usage,
+        nudge_usage,
+        subprocess_result.session_id,
+        nudge_observed_session_id,
     )
-    return dataclasses.replace(
+    return _build_nudge_recovery_result(
         skill_result,
-        success=True,
-        result=combined_result,
-        subtype="success",
-        needs_retry=False,
-        retry_reason=RetryReason.NONE,
-        token_usage=_merge_token_usage(skill_result.token_usage, nudge_usage),
+        nudge_session,
+        retry_reason,
+        completion_marker,
+        patterns_to_check,
+        combined_turn_usage,
+        combined_usage,
     )
 
 

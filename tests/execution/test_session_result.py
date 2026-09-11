@@ -342,7 +342,12 @@ class TestClaudeSessionResultTokenUsage:
         session = ClaudeSessionResult(
             subtype="success", is_error=False, result="Done.", session_id="s1"
         )
+        other = ClaudeSessionResult(
+            subtype="success", is_error=False, result="Done.", session_id="s2"
+        )
         assert session.token_usage is None
+        assert session.turn_usage == other.turn_usage == []
+        assert session.turn_usage is not other.turn_usage
 
     def test_preserves_token_usage_dict(self):
         """token_usage dict is stored and accessible."""

@@ -73,3 +73,17 @@ class TestApplyManifestSignatureContract:
         assert param.default is None, (
             f"compiled_matchers must default to None, got {param.default!r}"
         )
+
+    def test_src_apply_manifest_lacks_compiled_matchers(self) -> None:
+        """The production apply_manifest must not silently grow a matcher-reuse argument.
+
+        Nothing else catches this drift: the contract is checked per module rather than
+        by comparing signatures, so a compiled_matchers parameter added to the src-side
+        apply_manifest would otherwise be dead, unenforced production code.
+        """
+        src_sig = inspect.signature(src_filter.apply_manifest)
+        assert "compiled_matchers" not in src_sig.parameters, (
+            "src/autoskillit/_test_filter.py apply_manifest unexpectedly accepts "
+            "compiled_matchers — update this contract to describe the new shared "
+            "behavior instead of silently allowing the drift"
+        )

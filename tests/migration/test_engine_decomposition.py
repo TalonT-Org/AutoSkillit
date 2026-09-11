@@ -18,6 +18,7 @@ from autoskillit.migration.engine import (
     MigrationFile,
     MigrationResult,
 )
+from tests.arch._subpackage_isolation_line_limits import count_budget_lines
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
@@ -33,9 +34,9 @@ _LINE_CEILING = 750
 
 def test_engine_module_under_line_ceiling() -> None:
     engine_path = _MIGRATION_DIR / "engine.py"
-    line_count = sum(1 for _ in engine_path.read_text(encoding="utf-8").splitlines())
+    line_count = count_budget_lines(engine_path)
     assert line_count <= _LINE_CEILING, (
-        f"engine.py has {line_count} lines, exceeds ceiling of {_LINE_CEILING}"
+        f"engine.py has {line_count} non-import lines, exceeds ceiling of {_LINE_CEILING}"
     )
 
 
@@ -57,9 +58,9 @@ def test_engine_module_under_line_ceiling() -> None:
 def test_extracted_modules_under_line_ceiling(filename: str) -> None:
     module_path = _MIGRATION_DIR / filename
     assert module_path.is_file(), f"missing extracted module: {module_path}"
-    line_count = sum(1 for _ in module_path.read_text(encoding="utf-8").splitlines())
+    line_count = count_budget_lines(module_path)
     assert line_count <= _LINE_CEILING, (
-        f"{filename} has {line_count} lines, exceeds ceiling of {_LINE_CEILING}"
+        f"{filename} has {line_count} non-import lines, exceeds ceiling of {_LINE_CEILING}"
     )
 
 

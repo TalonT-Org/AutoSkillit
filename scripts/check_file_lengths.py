@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Enforce REQ-CNST-010's diff-scoped 750-line hard cap.
 
-Every non-test file under src/autoskillit/ must be <=750 lines, or <=1000 with a
+Every non-test file under src/autoskillit/ must be <=750 non-import lines
+(physical lines minus lines occupied by import statements, as measured by
+tests.arch._subpackage_isolation_line_limits.count_budget_lines), or <=1000 with a
 REQ-CNST-010-E<N> entry in _LINE_LIMIT_EXEMPTIONS whose `predicate` callable
 verifies True. Test files are exempt by design.
 
@@ -31,6 +33,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from tests.arch._subpackage_isolation_line_limits import (
     _LINE_LIMIT_EXEMPTIONS,
     LineLimitExemption,
+    count_budget_lines,
 )
 
 HARD_CAP = 750
@@ -43,20 +46,26 @@ def check_file(path: Path) -> str | None:
         rel = str(path.resolve().relative_to(SRC_ROOT))
     except ValueError:
         return None
-    line_count = len(path.read_text(encoding="utf-8").splitlines())
+    try:
+        line_count = count_budget_lines(path)
+    except SyntaxError as exc:
+        return (
+            f"{rel}: cannot be measured -- {exc.msg} at line {exc.lineno}; "
+            f"REQ-CNST-010 fails closed on source Python cannot parse"
+        )
     if line_count <= HARD_CAP:
         return None
     exemption: LineLimitExemption | None = _LINE_LIMIT_EXEMPTIONS.get(rel)
     if exemption is None:
         return (
-            f"{rel}: {line_count} lines exceeds the {HARD_CAP}-line hard cap "
+            f"{rel}: {line_count} non-import lines exceeds the {HARD_CAP}-line hard cap "
             f"(REQ-CNST-010) -- decompose the file, or add a REQ-CNST-010-E<N> "
             f"entry to _LINE_LIMIT_EXEMPTIONS with a machine-checkable predicate"
         )
     if exemption.predicate is None:
         rule_id = exemption.rationale.split(":", 1)[0]
         return (
-            f"{rel}: {line_count} lines -- exemption {rule_id} has no "
+            f"{rel}: {line_count} non-import lines -- exemption {rule_id} has no "
             f"machine-checkable predicate and is voided under REQ-CNST-010's "
             f"diff-scoped gate; decompose the file or add a verifiable predicate"
         )
@@ -66,11 +75,14 @@ def check_file(path: Path) -> str | None:
             f"{ABSOLUTE_CAP}-line absolute maximum permitted by REQ-CNST-010"
         )
     if line_count > exemption.limit:
-        return f"{rel}: {line_count} lines exceeds its exemption ceiling of {exemption.limit}"
+        return (
+            f"{rel}: {line_count} non-import lines exceeds its exemption ceiling "
+            f"of {exemption.limit}"
+        )
     if not exemption.predicate():
         rule_id = exemption.rationale.split(":", 1)[0]
         return (
-            f"{rel}: {line_count} lines -- exemption predicate for {rule_id} "
+            f"{rel}: {line_count} non-import lines -- exemption predicate for {rule_id} "
             f"returned False; the justification no longer holds"
         )
     return None

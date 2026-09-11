@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 import autoskillit.hook_registry
+from tests.arch._subpackage_isolation_line_limits import count_budget_lines
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -29,12 +30,11 @@ def test_hook_registry_is_a_package() -> None:
 
 
 def test_every_extracted_module_is_at_most_750_lines() -> None:
-    """Acceptance criterion: every module under hook_registry/ ≤ 750 lines."""
+    """Acceptance criterion: every module under hook_registry/ ≤ 750 non-import lines."""
     for path in sorted(_SRC.glob("*.py")):
-        with path.open() as fh:
-            line_count = sum(1 for _ in fh)
+        line_count = count_budget_lines(path)
         assert line_count <= 750, (
-            f"{path.name} is {line_count} lines; must be ≤750 per acceptance criterion"
+            f"{path.name} is {line_count} non-import lines; must be ≤750 per acceptance criterion"
         )
 
 

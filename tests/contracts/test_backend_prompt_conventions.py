@@ -4,15 +4,33 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import CmdSpec, SkillSessionConfig
+from autoskillit.core import CmdSpec, SkillSessionConfig, ValidatedAddDir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
+def _codex_skill_add_dirs(cwd: str) -> tuple[ValidatedAddDir, ...]:
+    """A single ValidatedAddDir satisfying CodexBackend's app-server skill-session invariant."""
+    return (
+        ValidatedAddDir(
+            path=f"{cwd}/add-dir",
+            session_home=cwd,
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
+    )
+
+
 def _extract_prompt(spec: CmdSpec) -> str:
-    """Extract the prompt string from a CmdSpec, dispatching by backend command shape."""
+    """Extract the prompt string from a CmdSpec, dispatching by backend command shape.
+
+    A Codex skill session carries its fully composed prompt on
+    ``spec.app_server_plan.prompt`` instead of as a trailing ``cmd`` positional
+    (the app-server transport has no such positional).
+    """
+    if spec.app_server_plan is not None:
+        return spec.app_server_plan.prompt
     cmd = list(spec.cmd)
     if "-p" in cmd:
         return cmd[cmd.index("-p") + 1]
@@ -28,7 +46,8 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
 def test_skill_prompt_uses_backend_sigil(backend):
     """Prompt produced by build_skill_session_cmd must contain the backend's declared sigil."""
-    spec = backend.build_skill_session_cmd("/test-skill arg", "/tmp")
+    add_dirs = _codex_skill_add_dirs("/tmp") if isinstance(backend, CodexBackend) else ()
+    spec = backend.build_skill_session_cmd("/test-skill arg", "/tmp", add_dirs=add_dirs)
     prompt = _extract_prompt(spec)
     sigil = backend.capabilities.skill_sigil
     assert f"{sigil}test-skill" in prompt or f"{sigil}autoskillit:test-skill" in prompt
@@ -37,7 +56,8 @@ def test_skill_prompt_uses_backend_sigil(backend):
 @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
 def test_skill_prompt_does_not_contain_wrong_sigil(backend):
     """Prompt must not contain another backend's sigil prefix for the skill name."""
-    spec = backend.build_skill_session_cmd("/test-skill arg", "/tmp")
+    add_dirs = _codex_skill_add_dirs("/tmp") if isinstance(backend, CodexBackend) else ()
+    spec = backend.build_skill_session_cmd("/test-skill arg", "/tmp", add_dirs=add_dirs)
     prompt = _extract_prompt(spec)
     wrong_sigils = {"/", "$"} - {backend.capabilities.skill_sigil}
     for wrong in wrong_sigils:
@@ -53,8 +73,11 @@ def test_skill_prompt_does_not_contain_wrong_sigil(backend):
 )
 def test_narration_suppression_matches_preamble(backend, skill_cmd, expect_preamble_reference):
     """Narration suppression must reference 'loading skill instructions' only with preamble."""
+    config_kwargs: dict[str, object] = {"profile_name": "test-profile"}
+    if isinstance(backend, CodexBackend):
+        config_kwargs["add_dirs"] = _codex_skill_add_dirs("/tmp")
     spec = backend.build_skill_session_cmd(
-        skill_cmd, "/tmp", config=SkillSessionConfig(profile_name="test-profile")
+        skill_cmd, "/tmp", config=SkillSessionConfig(**config_kwargs)
     )
     prompt = _extract_prompt(spec)
     if expect_preamble_reference:

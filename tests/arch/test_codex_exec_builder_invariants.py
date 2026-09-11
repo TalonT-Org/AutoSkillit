@@ -11,6 +11,7 @@ from autoskillit.core import (
     CODEX_MCP_ENV_FORWARD_VARS,
     MCP_CLIENT_BACKEND_ENV_VAR,
     OutputFormat,
+    ValidatedAddDir,
 )
 from autoskillit.execution.backends._codex_cmd_builders import _IMAGE_GENERATION_DISABLED
 from autoskillit.execution.backends.codex import CodexBackend
@@ -33,6 +34,13 @@ def _build_skill_session():
         model=None,
         plugin_binding=None,
         output_format=OutputFormat.JSON,
+        add_dirs=(
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
         provider_extras=OTLP_EXTRAS,
     )
 
@@ -57,6 +65,11 @@ def _build_resume():
 ALL_BUILDERS = [_build_headless, _build_skill_session, _build_food_truck, _build_resume]
 BUILDER_IDS = ["headless", "skill_session", "food_truck", "resume"]
 
+# build_skill_session_cmd moved to the app-server transport in Part C; the
+# other three builders keep their exec invariants until Part D.
+EXEC_BUILDERS = [_build_headless, _build_food_truck, _build_resume]
+EXEC_BUILDER_IDS = ["headless", "food_truck", "resume"]
+
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,11 +77,25 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
 
 
-@pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
+@pytest.mark.parametrize("builder", EXEC_BUILDERS, ids=EXEC_BUILDER_IDS)
 def test_all_exec_builders_start_with_codex_exec(builder) -> None:
     spec = builder()
     assert spec.cmd[0] == "codex"
     assert spec.cmd[1] == "exec"
+
+
+def test_skill_session_builder_starts_with_codex_app_server() -> None:
+    spec = _build_skill_session()
+    assert spec.cmd[0] == "codex"
+    assert spec.cmd[1] == "app-server"
+    assert "--listen" in spec.cmd
+    assert "stdio://" in spec.cmd
+    assert "--json" not in spec.cmd
+    assert "--sandbox" not in spec.cmd
+    assert "--dangerously-bypass-hook-trust" not in spec.cmd
+    assert "resume" not in spec.cmd
+    assert spec.app_server_plan is not None
+    assert spec.app_server_plan.prompt not in spec.cmd
 
 
 @pytest.mark.parametrize(
@@ -108,6 +135,9 @@ _REINJECTED_BY_BUILDER: dict[str, set[str]] = {
         "MAX_MCP_OUTPUT_TOKENS",
         "AUTOSKILLIT_SKILL_NAME",
         "AUTOSKILLIT_CWD",
+        # Unconditionally re-injected from the mandatory add-dir's session_home,
+        # never read from ambient environment.
+        "CODEX_HOME",
     },
     "food_truck": {
         "AUTOSKILLIT_SESSION_TYPE",

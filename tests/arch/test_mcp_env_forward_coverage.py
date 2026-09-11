@@ -4,7 +4,17 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import ValidatedAddDir
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
+_SKILL_SESSION_ADD_DIRS = (
+    ValidatedAddDir(
+        path="/repo/add-dir",
+        session_home="/repo",
+        skill_entries=(("investigate", "investigate/SKILL.md"),),
+    ),
+)
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +35,10 @@ def test_mcp_env_forward_vars_in_skill_session_cmd() -> None:
         if not backend.capabilities.mcp_env_forward_vars:
             continue
         spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            add_dirs=_SKILL_SESSION_ADD_DIRS,
         )
         for var in backend.capabilities.mcp_env_forward_vars:
             assert var in spec.env, f"{name}: {var} missing from build_skill_session_cmd env"

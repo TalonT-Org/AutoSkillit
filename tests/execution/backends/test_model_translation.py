@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import SkillSessionConfig
+from autoskillit.core import SkillSessionConfig, ValidatedAddDir
 from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_CODEX_SKILL_ADD_DIRS = (
+    ValidatedAddDir(
+        path="/repo/add-dir",
+        session_home="/repo",
+        skill_entries=(("test", "test/SKILL.md"),),
+    ),
+)
 
 
 class TestCodexTranslateModel:
@@ -75,10 +83,12 @@ class TestClaudeTranslateModel:
 
 class TestCodexBuildCmdTranslatesModel:
     def test_build_skill_session_cmd(self) -> None:
-        config = SkillSessionConfig(model="sonnet", completion_marker="%%DONE%%")
+        config = SkillSessionConfig(
+            model="sonnet", completion_marker="%%DONE%%", add_dirs=_CODEX_SKILL_ADD_DIRS
+        )
         spec = CodexBackend().build_skill_session_cmd("/test", "/repo", config)
-        model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == CODEX_MODEL_ALIASES["sonnet"]
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.model == CODEX_MODEL_ALIASES["sonnet"]
 
     def test_build_food_truck_cmd(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -181,9 +191,12 @@ class TestCodexEffortInjectionInCmds:
         assert "model_reasoning_effort=high" in cmd
 
     def test_skill_session_cmd_has_effort(self) -> None:
-        config = SkillSessionConfig(model="sonnet", completion_marker="%%DONE%%")
+        config = SkillSessionConfig(
+            model="sonnet", completion_marker="%%DONE%%", add_dirs=_CODEX_SKILL_ADD_DIRS
+        )
         spec = CodexBackend().build_skill_session_cmd("/test", "/repo", config)
-        assert "model_reasoning_effort=medium" in list(spec.cmd)
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "medium"
 
     def test_food_truck_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(

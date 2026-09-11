@@ -39,11 +39,23 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
     """Every non-launch-scoped forward var is injected by Codex command builders."""
-    from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS, LAUNCH_ID_ENV_VAR, OutputFormat
+    from autoskillit.core import (
+        CODEX_MCP_ENV_FORWARD_VARS,
+        LAUNCH_ID_ENV_VAR,
+        OutputFormat,
+        ValidatedAddDir,
+    )
     from autoskillit.execution.backends.codex import CodexBackend
 
     backend = CodexBackend()
     launch_id = "0123456789abcdef"
+    add_dirs = (
+        ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
+    )
     skill_spec = backend.build_skill_session_cmd(
         skill_command="/test-skill",
         cwd="/work",
@@ -52,6 +64,7 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
         plugin_binding=None,
         output_format=OutputFormat.JSON,
         provider_extras={LAUNCH_ID_ENV_VAR: launch_id},
+        add_dirs=add_dirs,
     )
     with plugin_binding(Path("/projected-plugin")) as binding:
         food_truck_spec = backend.build_food_truck_cmd(

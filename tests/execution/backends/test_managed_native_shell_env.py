@@ -15,6 +15,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureMode,
     SkillSessionConfig,
+    ValidatedAddDir,
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
@@ -22,6 +23,13 @@ from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _ATTEMPT_ID = "c" * 32
+_CODEX_SKILL_ADD_DIRS = (
+    ValidatedAddDir(
+        path="/tmp/project/add-dir",
+        session_home="/tmp/project",
+        skill_entries=(("test", "test/SKILL.md"),),
+    ),
+)
 _PROTECTED_KEYS = frozenset(
     {
         NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
@@ -90,6 +98,7 @@ def test_codex_managed_skill_env_overrides_hostile_provider_extras() -> None:
             native_shell_capture_decision=decision,
             managed_lineage_ref=lineage_ref,
             managed_attempt_id=_ATTEMPT_ID,
+            add_dirs=_CODEX_SKILL_ADD_DIRS,
         ),
     )
 
@@ -139,7 +148,7 @@ def test_codex_unmanaged_builders_do_not_inject_managed_env() -> None:
         backend.build_skill_session_cmd(
             "/autoskillit:test",
             "/tmp/project",
-            SkillSessionConfig(provider_extras=hostile_env),
+            SkillSessionConfig(provider_extras=hostile_env, add_dirs=_CODEX_SKILL_ADD_DIRS),
         ),
         backend.build_food_truck_cmd(
             orchestrator_prompt="dispatch",
@@ -190,7 +199,7 @@ def test_codex_ambient_protected_controls_do_not_reach_any_builder(
         backend.build_skill_session_cmd(
             "/autoskillit:test",
             "/tmp/project",
-            SkillSessionConfig(),
+            SkillSessionConfig(add_dirs=_CODEX_SKILL_ADD_DIRS),
         ),
         backend.build_food_truck_cmd(
             orchestrator_prompt="dispatch",

@@ -20,13 +20,27 @@ from autoskillit.core import (
     SessionLocator,
     SkillSessionConfig,
     StreamParser,
+    ValidatedAddDir,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
+from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
 
 from .test_backend_contract_base import BackendContractBase
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+def _codex_skill_add_dirs(cwd: str) -> tuple[ValidatedAddDir, ...]:
+    """A single ValidatedAddDir satisfying CodexBackend's app-server skill-session invariant."""
+    return (
+        ValidatedAddDir(
+            path=f"{cwd}/add-dir",
+            session_home=cwd,
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
+    )
+
 
 NOT_YET_LIVE: frozenset[str] = frozenset(
     {
@@ -253,8 +267,9 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_build_skill_session_cmd_with_default_config_returns_cmd_spec(self) -> None:
         """BackendCapabilities.skill_injection_capable, required_skill_fields, skill_sigil."""
+        add_dirs = _codex_skill_add_dirs("/work") if isinstance(self.backend, CodexBackend) else ()
         result = self.backend.build_skill_session_cmd(
-            skill_command="/test-skill", cwd="/work", config=SkillSessionConfig()
+            skill_command="/test-skill", cwd="/work", config=SkillSessionConfig(add_dirs=add_dirs)
         )
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
@@ -372,11 +387,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert result.inherited_fds == (9, 3)
 
     def test_skill_cmd_carries_plugin_binding_descriptors(self) -> None:
+        add_dirs = _codex_skill_add_dirs("/tmp") if isinstance(self.backend, CodexBackend) else ()
         result = self.backend.build_skill_session_cmd(
             "/test",
             "/tmp",
             config=SkillSessionConfig(
-                plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3))
+                plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
+                add_dirs=add_dirs,
             ),
         )
         assert result.inherited_fds == (9, 3)

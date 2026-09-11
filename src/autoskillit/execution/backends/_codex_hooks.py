@@ -114,6 +114,14 @@ def _managed_route_hook_defs(route: ManagedCodexRoute) -> tuple[HookDef, ...]:
                     mechanism="deny",
                     enforcement_strength={"codex": "hard"},
                 ),
+                HookDef(
+                    matcher="",
+                    event_type="Stop",
+                    scripts=["lifecycle/child_outcome_hook.py"],
+                    session_scope="headless_only",
+                    mechanism="side-effect",
+                    enforcement_strength={"codex": "soft"},
+                ),
             )
         )
     return tuple(hooks)

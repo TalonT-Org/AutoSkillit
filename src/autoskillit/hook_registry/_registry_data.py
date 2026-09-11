@@ -78,6 +78,7 @@ NEW_SUBDIR_BASENAMES: frozenset[str] = frozenset(
         "join_stop_guard.py",  # NEW (#4575, #4520)
         "join_followup_guard.py",  # NEW (#4575, #4520)
         "resource_exhaustion_guard.py",  # NEW (#4678 rectify)
+        "child_outcome_hook.py",  # NEW (#4623)
     }
 )
 
@@ -535,6 +536,74 @@ def _build_hook_registry() -> list[HookDef]:
             session_scope="interactive_only",
             mechanism="additionalContext",
             enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        ),
+        # Child terminal-reason observation (issue #4623). Purely observational
+        # (mechanism="side-effect"): records durable child-outcome evidence,
+        # never denies. SubagentStart/SubagentStop/SessionEnd are Claude-only
+        # (Codex has no equivalents); the shared PostToolUse/PostToolUseFailure
+        # matcher covers both backends' child-spawning tool names. Matcher is
+        # ``.+`` rather than ``.*`` solely to avoid colliding, in
+        # generate_codex_hooks_config()'s matcher-string exclusion check, with
+        # the pre-existing works-as-is ``.*`` matcher on a different event
+        # type — functionally identical for a non-empty agent_type field.
+        HookDef(
+            matcher=r".+",
+            event_type="SubagentStart",
+            scripts=["lifecycle/child_outcome_hook.py"],
+            session_scope="any",
+            codex_status="not-applicable",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
+        ),
+        HookDef(
+            matcher=r".+",
+            event_type="SubagentStop",
+            scripts=["lifecycle/child_outcome_hook.py"],
+            session_scope="any",
+            codex_status="not-applicable",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
+        ),
+        HookDef(
+            matcher=r"Agent|Task|spawn_agent",
+            event_type="PostToolUse",
+            scripts=["lifecycle/child_outcome_hook.py"],
+            session_scope="any",
+            codex_status="works-as-is",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        ),
+        HookDef(
+            matcher=r"Agent|Task|spawn_agent",
+            event_type="PostToolUseFailure",
+            scripts=["lifecycle/child_outcome_hook.py"],
+            session_scope="any",
+            codex_status="works-as-is",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "works-as-is"},
+        ),
+        HookDef(
+            matcher=r".+",
+            event_type="SessionEnd",
+            scripts=["lifecycle/child_outcome_hook.py"],
+            session_scope="any",
+            codex_status="not-applicable",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
+        ),
+        # Codex's Stop reconciliation is injected only for the managed
+        # "parent" route (see execution/backends/_codex_hooks.py's
+        # _managed_route_hook_defs), matching the existing join_stop_guard.py
+        # precedent — Stop is a managed-parent-only concept for Codex in this
+        # codebase, never part of the general/interactive Codex hook surface.
+        HookDef(
+            matcher="",
+            event_type="Stop",
+            scripts=["lifecycle/child_outcome_hook.py"],
+            session_scope="any",
+            codex_status="not-applicable",
+            mechanism="side-effect",
+            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
         ),
     ]
 

@@ -1,7 +1,8 @@
 # Hooks
 
-AutoSkillit registers 52 Claude Code hook scripts: 38 PreToolUse, 11 PostToolUse,
-2 SessionStart, and 1 Stop. Every script is stdlib-only Python so it can run before the
+AutoSkillit registers 58 Claude Code hook scripts: 38 PreToolUse, 11 PostToolUse,
+2 PostToolUseFailure, 2 SessionStart, 2 Stop, 1 SubagentStart, 1 SubagentStop, and
+1 SessionEnd. Every script is stdlib-only Python so it can run before the
 project virtualenv is on the path. Scripts live in `src/autoskillit/hooks/`
 and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
@@ -432,7 +433,7 @@ closed when their identity is malformed or the record cannot be written, while
 malformed JSON and unrelated tools remain fail-open. Codex and headless terminal
 authority do not use this bridge.
 
-## PostToolUse hooks (10)
+## PostToolUse hooks (11)
 
 ### `pretty_output_hook.py`
 **Guarded tools:** all AutoSkillit MCP tools
@@ -486,6 +487,16 @@ Writes a `{session_id}_recipe_confirmed.json` marker to `kitchen_state/`
 after the first successful `run_skill` completes. This marker is read by
 `open_kitchen_guard.py` to block mid-run recipe reloads. Idempotent —
 skips writing if the marker already exists. Fails open on all error paths.
+
+### `lifecycle/child_outcome_hook.py`
+**Guarded tools:** `Agent`, `Task`, `spawn_agent` (also registered for
+`PostToolUseFailure`, `SubagentStart`, `SubagentStop`, `SessionEnd`, and
+Codex's `Stop`)
+Purely observational (mechanism `side-effect`): records every observed L0
+child run's terminal reason in the durable child-outcome snapshot. Never
+denies. See `docs/developer/diagnostics.md` for the full taxonomy and
+`core/types/_type_execution_identity.py`'s `ChildOutcomeDict` for the
+persisted shape.
 
 ## SessionStart hooks (2)
 

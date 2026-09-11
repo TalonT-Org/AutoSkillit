@@ -1,5 +1,5 @@
 {
-  "_registry_hash": "d683b220edd1fb757d5a6a5af34629ca1c5fcf9445d975f369f7f3f74f46c3d6",
+  "_registry_hash": "2f3cdbd3486d8f6764f0a38fb987cab7e6a4079bc066ca7ba65c0d4b18e1d909",
   "hooks": {
     "PostToolUse": [
       {
@@ -71,6 +71,28 @@
           }
         ],
         "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py lifecycle/child_outcome_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task|spawn_agent"
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "python3 -B SANITIZED_HOOKS_DIR/_dispatch.py lifecycle/child_outcome_hook",
+            "trusted_hash": "SANITIZED_FOR_DETERMINISM",
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task|spawn_agent"
       }
     ],
     "PreToolUse": [

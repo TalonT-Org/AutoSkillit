@@ -1168,6 +1168,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "between sibling or nested sessions."
         ),
     ),
+    "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR": AmbientEnvDisposition(
+        var="AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "AutoSkillit-owned diagnostic log-root channel for the child-terminal-reason"
+            "snapshot authority (issue #4623); distinct from the operator-owned"
+            "AUTOSKILLIT_LOG_DIR and must not leak across test boundaries."
+        ),
+    ),
     "AUTOSKILLIT_CODEX_STARTUP_TRACE": AmbientEnvDisposition(
         var="AUTOSKILLIT_CODEX_STARTUP_TRACE",
         disposition="scrub",

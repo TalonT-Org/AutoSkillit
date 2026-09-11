@@ -62,6 +62,15 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
         "Fleet dispatch binds child hook state to the owning campaign identity.",
     ),
     HookEnvVarDef(
+        "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        "operator",
+        None,
+        None,
+        "Operators may redirect the child-terminal-reason snapshot log root (issue #4623); "
+        "absent a producer, the diagnostic root falls back to the operator/default log root "
+        "like every other bounded hook diagnostic sink.",
+    ),
+    HookEnvVarDef(
         "AUTOSKILLIT_COMPLETION_MARKER",
         "autoskillit",
         "autoskillit.execution.backends._claude.session_commands:ClaudeSessionCommandMixin.build_skill_session_cmd",

@@ -1,25 +1,56 @@
 """Tests for the child-terminal-reason snapshot authority (issue #4623).
 
 Covers the stdlib-only classifier/merge/persistence module
-(``hooks/_child_outcome_snapshot.py``). Hook-replay tests against pinned
-native Claude/Codex fixtures are added alongside ``hooks/child_outcome_hook.py``
-in the same test file (see the "native coverage" section added in the
-following implementation step).
+(``hooks/_child_outcome_snapshot/``) and hook-replay tests against
+``hooks/lifecycle/child_outcome_hook.py``, exercised as a real subprocess
+matching ``test_hook_executability.py``'s invocation pattern.
 """
 
 from __future__ import annotations
 
 import fcntl
+import json
 import os
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
 from autoskillit.core import CliSubtype, InfraExitCategory
 from autoskillit.hooks import _child_outcome_snapshot as snap
 from autoskillit.hooks import _session_binding
+from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
+
+_HOOK_SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "autoskillit"
+    / "hooks"
+    / "lifecycle"
+    / "child_outcome_hook.py"
+)
+
+
+def _run_hook(payload: dict, *, log_dir: Path, backend: str = "claude_code") -> int:
+    env = production_interpreter_env()
+    env["AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR"] = str(log_dir)
+    if backend == "codex":
+        env["AUTOSKILLIT_AGENT_BACKEND"] = "codex"
+    else:
+        env.pop("AUTOSKILLIT_AGENT_BACKEND", None)
+    proc = subprocess.run(
+        [sys.executable, "-B", str(_HOOK_SCRIPT)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    return proc.returncode
 
 
 # --- Contract: canonical strings equal the existing core enum values ---------
@@ -494,3 +525,255 @@ def test_resolve_snapshot_path_is_namespaced_by_backend_and_parent(tmp_path) -> 
     assert claude_path != codex_path
     assert "claude_code" in str(claude_path)
     assert "codex" in str(codex_path)
+
+
+# --- Native coverage: hook replay (plan Tests §4) ----------------------------
+
+
+def _outcome(log_dir: Path, *, backend: str, parent_session_id: str, child_id: str) -> dict:
+    snapshot_path = snap.resolve_snapshot_path(
+        log_dir, backend=backend, parent_session_id=parent_session_id
+    )
+    document = snap.read_snapshot(snapshot_path)
+    return document["children"][child_id]["outcome"]
+
+
+def test_hook_script_is_executable_as_a_subprocess(tmp_path) -> None:
+    assert _HOOK_SCRIPT.is_file()
+    returncode = _run_hook({"hook_event_name": "SessionEnd", "session_id": "x"}, log_dir=tmp_path)
+    assert returncode == 0
+
+
+def test_replayed_subagent_start_confirms_a_durable_unknown_row(tmp_path) -> None:
+    payload = {
+        "hook_event_name": "SubagentStart",
+        "session_id": "parent-1",
+        "agent_id": "agent-1",
+        "agent_type": "Explore",
+        "transcript_path": "/fake/parent-1.jsonl",
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="agent-1"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_UNKNOWN
+    assert outcome["start_confirmed"] is True
+    assert outcome["role"] == "Explore"
+
+
+def test_replayed_subagent_stop_alone_stays_unknown_with_raw_reason_preserved(tmp_path) -> None:
+    start = {
+        "hook_event_name": "SubagentStart",
+        "session_id": "parent-1",
+        "agent_id": "agent-1",
+        "agent_type": "Explore",
+    }
+    stop = {
+        "hook_event_name": "SubagentStop",
+        "session_id": "parent-1",
+        "agent_id": "agent-1",
+        "agent_type": "Explore",
+        "reason": "completed",
+        "agent_transcript_path": "/fake/parent-1/subagents/agent-agent-1.jsonl",
+    }
+    assert _run_hook(start, log_dir=tmp_path) == 0
+    assert _run_hook(stop, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="agent-1"
+    )
+    # A generic SubagentStop "completed" reason is NOT promoted to the
+    # canonical completed reason (no Step 1 fixture pins that distinction).
+    assert outcome["terminal_reason"] == snap.REASON_UNKNOWN
+    assert outcome["raw_reason"] == "completed"
+    assert outcome["transcript_locator"] == "/fake/parent-1/subagents/agent-agent-1.jsonl"
+
+
+def test_replayed_subagent_stop_with_unpinned_reason_stays_unknown_and_preserves_raw_value(
+    tmp_path,
+) -> None:
+    """A SubagentStop reason value that Step 1 never pinned still stays unknown,
+    with the raw value preserved for diagnosis — never interpreted as a cause."""
+    stop = {
+        "hook_event_name": "SubagentStop",
+        "session_id": "parent-1",
+        "agent_id": "agent-1",
+        "reason": "some_future_undocumented_value",
+    }
+    assert _run_hook(stop, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="agent-1"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_UNKNOWN
+    assert outcome["raw_reason"] == "some_future_undocumented_value"
+
+
+def test_replayed_foreground_api_error_agent_result_classifies_error(tmp_path) -> None:
+    """The pinned harness literal (Step 1, sourced from official Claude Code
+    sub-agents documentation, v2.1.199+) matched exactly against a captured
+    Agent-tool PostToolUse result."""
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "session_id": "parent-1",
+        "tool_name": "Agent",
+        "tool_use_id": "tool-1",
+        "tool_response": {"result": "Agent terminated early due to an API error: 529 Overloaded"},
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="tool-1"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_ERROR
+    assert "Agent terminated early due to an API error" in outcome["raw_reason"]
+
+
+def test_replayed_generic_agent_result_without_the_pinned_literal_stays_unknown(tmp_path) -> None:
+    """A returned tool/task status is not automatically evidence that its child
+    loop ended normally — only the exact pinned harness literal classifies."""
+    payload = {
+        "hook_event_name": "PostToolUse",
+        "session_id": "parent-1",
+        "tool_name": "Agent",
+        "tool_use_id": "tool-2",
+        "tool_response": {"result": "Here are the findings from my exploration..."},
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="tool-2"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_UNKNOWN
+
+
+def test_replayed_post_tool_use_failure_agent_result_also_matches_the_pinned_literal(
+    tmp_path,
+) -> None:
+    payload = {
+        "hook_event_name": "PostToolUseFailure",
+        "session_id": "parent-1",
+        "tool_name": "Task",
+        "tool_use_id": "tool-3",
+        "reason": "Agent terminated early due to an API error: connection reset",
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-1", child_id="tool-3"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_ERROR
+
+
+def test_replayed_interrupt_request_without_confirmation_never_sets_interrupted(tmp_path) -> None:
+    """An interrupt tool call by itself (no confirmed child-bound interruption
+    evidence) must not set interrupted."""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "session_id": "parent-1",
+        "tool_name": "Agent",
+        "tool_use_id": "tool-4",
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    snapshot_path = snap.resolve_snapshot_path(
+        tmp_path, backend="claude_code", parent_session_id="parent-1"
+    )
+    document = snap.read_snapshot(snapshot_path)
+    assert "tool-4" not in document.get("children", {})
+
+
+def test_replayed_codex_spawn_agent_started_activity_adds_no_row_from_the_hook_alone(
+    tmp_path,
+) -> None:
+    """PreToolUse/PostToolUse on spawn_agent is a reservation the interactive
+    hook never persists — Codex child confirmation is the execution-layer
+    collector's job (structural rollout evidence), not duplicated here."""
+    pre = {
+        "hook_event_name": "PreToolUse",
+        "session_id": "codex-parent-1",
+        "tool_name": "spawn_agent",
+        "tool_use_id": "call-1",
+    }
+    post = {
+        "hook_event_name": "PostToolUse",
+        "session_id": "codex-parent-1",
+        "tool_name": "spawn_agent",
+        "tool_use_id": "call-1",
+        "tool_response": {"result": "spawned"},
+    }
+    assert _run_hook(pre, log_dir=tmp_path, backend="codex") == 0
+    assert _run_hook(post, log_dir=tmp_path, backend="codex") == 0
+    snapshot_path = snap.resolve_snapshot_path(
+        tmp_path, backend="codex", parent_session_id="codex-parent-1"
+    )
+    assert snap.read_snapshot(snapshot_path) == {}
+
+
+def test_replayed_rejected_codex_spawn_reservation_is_excluded(tmp_path) -> None:
+    payload = {
+        "hook_event_name": "PostToolUseFailure",
+        "session_id": "codex-parent-2",
+        "tool_name": "spawn_agent",
+        "tool_use_id": "call-2",
+        "reason": "capacity exceeded",
+    }
+    assert _run_hook(payload, log_dir=tmp_path, backend="codex") == 0
+    snapshot_path = snap.resolve_snapshot_path(
+        tmp_path, backend="codex", parent_session_id="codex-parent-2"
+    )
+    assert snap.read_snapshot(snapshot_path) == {}
+
+
+def test_replayed_session_end_reconciles_without_inventing_a_cause(tmp_path) -> None:
+    start = {
+        "hook_event_name": "SubagentStart",
+        "session_id": "parent-5",
+        "agent_id": "agent-5",
+        "agent_type": "general-purpose",
+    }
+    end = {"hook_event_name": "SessionEnd", "session_id": "parent-5", "reason": "other"}
+    assert _run_hook(start, log_dir=tmp_path) == 0
+    assert _run_hook(end, log_dir=tmp_path) == 0
+    outcome = _outcome(
+        tmp_path, backend="claude_code", parent_session_id="parent-5", child_id="agent-5"
+    )
+    assert outcome["terminal_reason"] == snap.REASON_UNKNOWN
+
+
+def test_replayed_codex_stop_reconciles_the_codex_parent(tmp_path) -> None:
+    payload = {"hook_event_name": "Stop", "session_id": "codex-parent-3"}
+    assert _run_hook(payload, log_dir=tmp_path, backend="codex") == 0
+    snapshot_path = snap.resolve_snapshot_path(
+        tmp_path, backend="codex", parent_session_id="codex-parent-3"
+    )
+    document = snap.read_snapshot(snapshot_path)
+    assert document["parent_session_id"] == "codex-parent-3"
+    assert document["backend"] == "codex"
+
+
+def test_hook_script_never_crashes_on_malformed_stdin(tmp_path) -> None:
+    env = production_interpreter_env()
+    env["AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR"] = str(tmp_path)
+    proc = subprocess.run(
+        [sys.executable, "-B", str(_HOOK_SCRIPT)],
+        input="not json{{{",
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    assert proc.returncode == 0
+
+
+def test_an_interacted_follow_up_style_event_adds_no_row(tmp_path) -> None:
+    """A follow-up to an existing child (Codex's `interacted` activity kind,
+    or an ordinary Claude follow-up message) belongs to the existing child;
+    the hook's own event surface has no dedicated follow-up event, so this
+    documents that PreToolUse observation alone (the only event a follow-up
+    tool call fires) never manufactures a new row."""
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "session_id": "parent-1",
+        "tool_name": "Agent",
+        "tool_use_id": "followup-tool-use",
+    }
+    assert _run_hook(payload, log_dir=tmp_path) == 0
+    snapshot_path = snap.resolve_snapshot_path(
+        tmp_path, backend="claude_code", parent_session_id="parent-1"
+    )
+    assert snap.read_snapshot(snapshot_path) == {}

@@ -83,7 +83,10 @@ def _expand_skill_path(token: str, aliases: Mapping[str, Path]) -> Path:
             root = aliases[alias]
         except KeyError as exc:
             raise ValueError(f"unknown skill-root alias: {alias}") from exc
-        path = root / relative
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise ValueError(f"skill path escapes skill root: {normalized!r}")
+        path = root / relative_path
     else:
         path = Path(normalized)
     if not path.is_absolute():

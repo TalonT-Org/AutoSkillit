@@ -199,6 +199,11 @@ def test_parse_skills_instructions_rejects_malformed_json_and_envelope(
             "skill path is not absolute",
         ),
         (
+            "(file: `r0/beta/SKILL.md`)",
+            "(file: `r0/../outside/SKILL.md`)",
+            "skill path escapes skill root",
+        ),
+        (
             "- beta:",
             "- alpha: duplicate fixture skill (file: `r0/alpha/SKILL.md`)\n- beta:",
             "duplicate skill name",

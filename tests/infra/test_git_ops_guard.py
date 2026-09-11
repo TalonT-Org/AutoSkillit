@@ -321,7 +321,26 @@ class TestGitOpsGuardAllowed:
         assert out.strip() == ""
 
     def test_allows_git_push_to_remote(self, tmp_path):
-        out = _run_guard("git push origin main", kitchen_open=True, tmpdir=tmp_path)
+        """Regression for #4937: `_same_repository` previously treated a
+        configured remote name as a filesystem path, so any push to a named
+        remote -- even a genuine network remote -- resolved to `None`
+        ("uncertain") and was denied via `_all_threatened`. Requires a real
+        repository topology: the original version of this test passed a
+        bare, non-git-inited tmp_path, which made `_repository_context`
+        return None and short-circuit the preflight before it ever reached
+        `_classify_git_segment`/`_classify_push`, so it never actually
+        exercised push classification.
+        """
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-b", "main")
+        _git(repo, "config", "user.name", "Guard Test")
+        _git(repo, "config", "user.email", "guard@example.invalid")
+        (repo / "tracked.txt").write_text("initial\n", encoding="utf-8")
+        _git(repo, "add", "tracked.txt")
+        _git(repo, "commit", "-m", "initial")
+        _git(repo, "remote", "add", "origin", "https://example.invalid/repo.git")
+        out = _run_guard("git push origin main", kitchen_open=True, tmpdir=repo)
         assert out.strip() == ""
 
     def test_allows_git_status(self, tmp_path):
@@ -764,6 +783,7 @@ class TestCheckedOutRefAmbiguity:
             "git branch -f develop $TARGET",
             "git fetch --stdin origin",
             "git push . HEAD:$TARGET",
+            "git push nonexistent-remote-name HEAD:develop",
             'printf x | tee "$TARGET"',
         ],
     )
@@ -917,6 +937,88 @@ class TestCheckedOutRefAllows:
             headless=False,
         )
         assert out.strip() == ""
+
+    def test_allows_push_to_configured_network_remote(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        """Regression for #4937: a push to a genuine network remote (SCP-like
+        syntax here; test_allows_git_push_to_remote covers the scheme-URL
+        form) must be allowed even when the refspec names a ref that IS
+        checked out locally -- pushing to another repository cannot mutate
+        this worktree's own checked-out ref.
+        """
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        _git(linked, "remote", "add", "upstream", "git@example.invalid:org/repo.git")
+        out = _run_guard("git push upstream develop", kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
+
+    def test_denies_push_to_remote_aliasing_linked_worktree(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        """Regression for #4937's stated boundary: resolving a remote name to
+        its URL must not become a blanket "any configured remote is a
+        different repo" shortcut. A remote aliasing another linked worktree
+        of the SAME repository (sharing the common git dir) must remain
+        protected.
+        """
+        linked = linked_repo["linked"]
+        primary = linked_repo["primary"]
+        assert isinstance(linked, Path) and isinstance(primary, Path)
+        _git(linked, "remote", "add", "mirror", str(primary))
+        out = _run_guard("git push mirror HEAD:develop", kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        threatened = result["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert any(row["target_ref"] == "refs/heads/develop" for row in threatened)
+        _assert_ref_unchanged(linked, "refs/heads/develop", str(linked_repo["old_sha"]))
+
+    def test_allows_push_to_remote_aliasing_unrelated_clone(
+        self, linked_repo: dict[str, Path | str], tmp_path: Path
+    ) -> None:
+        """Regression for #4937: a named remote pointing at an unrelated
+        local clone (different repository, different common git dir) must be
+        allowed. Paired with test_denies_push_to_remote_aliasing_linked_worktree
+        to prove the fix distinguishes the two cases by actually comparing
+        common git dirs, not by treating "candidate names a configured
+        remote" as sufficient on its own.
+        """
+        linked = linked_repo["linked"]
+        assert isinstance(linked, Path)
+        unrelated = tmp_path / "unrelated"
+        unrelated.mkdir()
+        _git(unrelated, "init", "-b", "develop")
+        _git(unrelated, "config", "user.name", "Guard Test")
+        _git(unrelated, "config", "user.email", "guard@example.invalid")
+        (unrelated / "tracked.txt").write_text("other\n", encoding="utf-8")
+        _git(unrelated, "add", "tracked.txt")
+        _git(unrelated, "commit", "-m", "initial")
+        _git(linked, "remote", "add", "other", str(unrelated))
+        out = _run_guard("git push other HEAD:develop", kitchen_open=True, tmpdir=linked)
+        assert out.strip() == ""
+
+    def test_denies_push_to_remote_aliasing_linked_worktree_via_file_url(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        """Regression for #4937: the file:// branch of `_local_path_from_remote_url`
+        (as opposed to the SCP-like or bare-path branches covered above) must also
+        resolve a same-repo alias correctly. A remote configured with an explicit
+        `file://` URL aliasing another linked worktree of the SAME repository must
+        remain protected -- a misclassified file:// URL would silently re-allow the
+        push instead of routing through the checked-out-ref deny path.
+        """
+        linked = linked_repo["linked"]
+        primary = linked_repo["primary"]
+        assert isinstance(linked, Path) and isinstance(primary, Path)
+        _git(linked, "remote", "add", "mirror-file", f"file://{primary}")
+        out = _run_guard("git push mirror-file HEAD:develop", kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        threatened = result["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert any(row["target_ref"] == "refs/heads/develop" for row in threatened)
+        _assert_ref_unchanged(linked, "refs/heads/develop", str(linked_repo["old_sha"]))
 
 
 class TestCheckedOutRefPreflightOrdering:

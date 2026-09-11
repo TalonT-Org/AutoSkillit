@@ -178,7 +178,6 @@ canonical_modules = [
     "autoskillit.server.lifecycle._state",
     "autoskillit.server.lifecycle._guards",
     "autoskillit.server.lifecycle._session_type",
-    "autoskillit.server.lifecycle._editable_guard",
     "autoskillit.server.lifecycle._lifespan",
     "autoskillit.server.lifecycle._lifespan._lifespan",
     "autoskillit.server.lifecycle._lifespan._session_boots",
@@ -202,12 +201,14 @@ results["response_budget_import_ok"] = (
     enforce_response_budget.__name__ == "enforce_response_budget"
 )
 
-# Every corresponding old full module name must be gone.
+# Every corresponding old full module name must be gone. server/_editable_guard.py
+# is deliberately absent here: it moved back out of lifecycle/ to server/ (a
+# merge-time filesystem guard, not a server-lifecycle concern) and its presence
+# at that path is correct, not a stale pre-decomposition leftover.
 old_names = [
     "autoskillit.server._state",
     "autoskillit.server._guards",
     "autoskillit.server._session_type",
-    "autoskillit.server._editable_guard",
     "autoskillit.server._lifespan",
 ]
 old_name_results = {}

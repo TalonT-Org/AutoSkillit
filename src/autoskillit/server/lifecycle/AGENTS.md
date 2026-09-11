@@ -8,14 +8,20 @@ relocated from `server/` (issue #4673) with no behavior change.
 The mutable singleton `_ctx` and its context accessors (`_get_ctx`,
 `_get_ctx_or_none`, `_get_config`, `_initialize`, `deferred_initialize`,
 `version_info`) live in `_state`. Orchestration-level gate functions that
-decide whether a tool call is permitted live in `_guards`. Session-type tag
-visibility dispatch — which kitchen-tagged tools are pre-revealed for a
-given `AUTOSKILLIT_SESSION_TYPE` — lives in `_session_type`. The
-pre-deletion editable-install scan that halts `perform_merge()` before a
-worktree is deleted lives in `_editable_guard`. The FastMCP lifespan boot
-sequence — the async context manager wired via `lifespan=`, per-session-type
+decide whether a tool call is permitted live in `_guards`; they are grouped
+here — rather than under `server/tools/` — because they read the `_ctx`/
+`_config` state `_state` owns directly. Session-type tag visibility
+dispatch — which kitchen-tagged tools are pre-revealed for a given
+`AUTOSKILLIT_SESSION_TYPE` — lives in `_session_type`. The FastMCP lifespan
+boot sequence — the async context manager wired via `lifespan=`, per-session-type
 auto-gate boots, and one-shot startup checks — lives in the `_lifespan/`
 sub-package.
+
+The pre-deletion editable-install scan that halts `perform_merge()` before a
+worktree is deleted lives at `server/_editable_guard.py`, one level up, not
+here: it is a merge-time filesystem check with a single call site in
+`git.py` and no relationship to this server process's own boot/shutdown or
+per-call admission state, so it does not belong under `lifecycle/`.
 
 ## Bootstrap order
 

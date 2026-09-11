@@ -15,7 +15,7 @@ from autoskillit.core import (
     TerminationReason,
     TestResult,
 )
-from autoskillit.server.lifecycle._editable_guard import EditableScanResult
+from autoskillit.server._editable_guard import EditableScanResult
 from tests.fakes import InMemoryTestRunner, MockSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

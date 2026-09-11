@@ -1,4 +1,4 @@
-"""Gateway regression tests for the #4671 core/ and recipe/ decomposition.
+"""Gateway regression tests for the core/ and recipe/ decomposition.
 
 The frozen snapshots in ``_core_gateway_snapshot.py`` and
 ``_recipe_gateway_snapshot.py`` each promise, in their module docstrings, that
@@ -40,8 +40,8 @@ def test_core_gateway_snapshot_symbols_all_resolve() -> None:
     missing = sorted(name for name in CORE_GATEWAY_SYMBOLS if not hasattr(autoskillit.core, name))
     assert not missing, (
         f"{len(missing)} symbol(s) frozen in CORE_GATEWAY_SYMBOLS no longer resolve on "
-        f"autoskillit.core — the #4671 decomposition dropped part of the public gateway "
-        f"surface. Either restore the re-export (likely a missing entry in "
+        f"autoskillit.core — the core/ and recipe/ decomposition dropped part of the public "
+        f"gateway surface. Either restore the re-export (likely a missing entry in "
         f"core/__init__.pyi) or, if the removal is intentional, update the snapshot: {missing}"
     )
 

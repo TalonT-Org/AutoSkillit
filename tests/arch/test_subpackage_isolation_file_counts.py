@@ -383,7 +383,7 @@ def test_no_subpackage_exceeds_10_files() -> None:
             dirs_to_check.append(nested_dir)
     for sub_dir in dirs_to_check:
         rel_key = str(sub_dir.relative_to(SRC_ROOT))
-        # Pick the correct shim registry based on package (issue #4671).
+        # Pick the correct shim registry based on package.
         # Match both the top-level package (``recipe``) and any sub-package
         # (``recipe/analysis``). The top-level package's rel_key has no
         # trailing slash; the sub-package paths do.

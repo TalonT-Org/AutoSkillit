@@ -1,8 +1,9 @@
 """Static-scan guard: every shim file must use explicit re-exports, not ``import *``.
 
-Per issue #4671 Risk Note 6 / foundation auditor Finding 6:
-    "The shims themselves should use **explicit re-exports**, not
-    ``import *``, to avoid ambiguity."
+The shims themselves must use **explicit re-exports**, not ``import *``,
+to avoid ambiguity: a wildcard import silently forwards a different surface
+than the shim author declared, and ``import *`` excludes underscore-prefixed
+names unless the source module declares ``__all__``.
 
 A shim using ``from <module> import *`` is fragile because the public surface
 of the source module can change without any test failure in the shim itself,
@@ -51,7 +52,7 @@ def _collect_shim_paths() -> list[tuple[str, str]]:
 
 
 def test_no_shim_uses_wildcard_import() -> None:
-    """REQ-CNST-003 (issue #4671 Risk Note 6): every shim must enumerate its re-exports.
+    """REQ-CNST-003: every shim must enumerate its re-exports.
 
     The test fails with a per-shim message identifying the package and the
     shim file. Empty ``__all__`` declarations are also flagged — they
@@ -75,9 +76,8 @@ def test_no_shim_uses_wildcard_import() -> None:
             violations.append(
                 f"{package_label}/{rel}: empty __all__ defeats wildcard-import surface"
             )
-    assert not violations, (
-        "Shims must use explicit re-exports (issue #4671 Risk Note 6):\n"
-        + "\n".join(f"  {v}" for v in violations)
+    assert not violations, "Shims must use explicit re-exports:\n" + "\n".join(
+        f"  {v}" for v in violations
     )
 
 

@@ -164,7 +164,7 @@ def test_core_has_no_autoskillit_imports() -> None:
     violations: list[str] = []
     for py_file in core_dir.glob("*.py"):
         if py_file.name in _SHIM_FILENAMES:
-            continue  # Issue #4671: shims re-export from sub-packages by definition
+            continue  # shims re-export from sub-packages by definition
         tree = ast.parse(py_file.read_text())
         tc_lines: set[int] = set()
         for node in ast.walk(tree):

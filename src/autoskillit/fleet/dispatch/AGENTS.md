@@ -49,10 +49,11 @@ import shards directly; per REQ-IMP-001, they import from
 
 ## REQ-CNST-010 budget
 
-Every file in this package is under 750 lines. See the
-`tests/arch/test_subpackage_isolation_size.py::test_no_src_module_exceeds_line_limit`
-guard. The legacy 1595-line exemption for `fleet/_api.py` (REQ-CNST-010-E6)
-was deleted as part of issue #4851.
+Every file in this package is under 750 non-import lines. Non-import lines are
+measured by `count_budget_lines` in
+`tests/arch/_subpackage_isolation_line_limits.py`. The legacy 1595-line
+exemption for `fleet/_api.py` (REQ-CNST-010-E6) was deleted as part of issue
+#4851.
 
 ## IL-009 layer notes
 

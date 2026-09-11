@@ -29,6 +29,7 @@ from autoskillit.core import (
     ExecutionIdentity,
     ExplorationDispatchRenderer,
     HookTrustPolicy,
+    LineDriver,
     PreLaunchReadiness,
     ResumeSpec,
     SemanticAdaptationContext,
@@ -48,6 +49,7 @@ from autoskillit.execution.backends._backend_cmd_builder_base import (
 from autoskillit.execution.backends._claude_prompt import (
     _HEADLESS_EXCLUSIVE_VARS,
 )
+from autoskillit.execution.backends._codex.app_server import CodexAppServerDriver
 from autoskillit.execution.backends._codex.session_commands import (
     CodexSessionCommandMixin,
 )
@@ -711,3 +713,8 @@ class CodexBackend(CodexSessionCommandMixin):
             raise CapabilityNotSupportedError("inspector_capable", self.name)
         msg = "inspector_capable is True but build_inspector_cmd has no implementation"
         raise AssertionError(msg)
+
+    def line_driver(self, spec: CmdSpec) -> LineDriver | None:
+        if spec.app_server_plan is None:
+            return None
+        return CodexAppServerDriver(spec.app_server_plan)

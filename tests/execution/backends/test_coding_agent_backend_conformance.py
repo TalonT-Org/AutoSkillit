@@ -203,6 +203,12 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         result = self.backend.model_config_overrides("sonnet")
         assert isinstance(result, tuple)
 
+    def test_line_driver_is_none_without_app_server_plan(self) -> None:
+        """CmdSpec.app_server_plan — no backend hands back a driver without one."""
+        spec = self.backend.build_cmd(skill_command="do stuff", cwd="/tmp")
+        assert spec.app_server_plan is None
+        assert self.backend.line_driver(spec) is None
+
     # --- Group 2: Sub-protocol Factories ---
 
     def test_stream_parser_no_marker_returns_stream_parser(self) -> None:

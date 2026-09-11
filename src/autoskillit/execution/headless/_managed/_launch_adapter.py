@@ -9,6 +9,7 @@ from collections.abc import Mapping
 
 from autoskillit.core import (
     CmdSpec,
+    CodexAppServerPlan,
     CodingAgentBackend,
     LaunchAdapterResult,
     LaunchPreparation,
@@ -38,6 +39,38 @@ def _is_secret_environment_key(key: str) -> bool:
         token in upper
         for token in ("API_KEY", "ACCESS_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
     )
+
+
+def _app_server_plan_digest_payload(
+    plan: CodexAppServerPlan | None,
+) -> Mapping[str, object] | None:
+    """Deterministic JSON-safe rendering of a CodexAppServerPlan for adapter_digest.
+
+    Once the prompt, catalog root, and resume thread id leave ``argv`` for a
+    driver-mode skill session, ``adapter_digest`` must still identify the
+    physical launch from these fields directly (the #4659 digest-divergence
+    class) — ``None`` is returned, not omitted, for every non-app-server
+    command so absence remains distinguishable from an empty plan.
+    """
+    if plan is None:
+        return None
+    return {
+        "session_home": plan.session_home,
+        "catalog_root": plan.catalog_root,
+        "expected_skill_names": sorted(plan.expected_skill_names),
+        "expected_skill_entries": [list(pair) for pair in plan.expected_skill_entries],
+        "cwd": plan.cwd,
+        "prompt": plan.prompt,
+        "model": plan.model,
+        "sandbox": plan.sandbox,
+        "approval_policy": plan.approval_policy,
+        "bypass_hook_trust": plan.bypass_hook_trust,
+        "developer_instructions": plan.developer_instructions,
+        "config_overrides": dict(plan.config_overrides),
+        "client_version": plan.client_version,
+        "resume_thread_id": plan.resume_thread_id,
+        "runtime_workspace_roots": list(plan.runtime_workspace_roots),
+    }
 
 
 def _binding_identity(binding: PluginLaunchBinding | None) -> Mapping[str, str]:
@@ -107,6 +140,7 @@ class _HeadlessLaunchAdapter:
             "process_idle_timeout_ms": spec.process_idle_timeout_ms,
             "inherited_fd_count": len(spec.inherited_fds),
             "force_inactive_agent_teams": self._force_inactive_agent_teams,
+            "app_server_plan": _app_server_plan_digest_payload(spec.app_server_plan),
         }
         adapter_digest = hashlib.sha256(
             json.dumps(adapter_payload, sort_keys=True, separators=(",", ":")).encode()

@@ -15,6 +15,7 @@ from ._type_enums import ChannelConfirmation, KillReason, TerminationReason
 from ._type_inspector import InspectorCallback, InspectorVerdict
 
 __all__ = [
+    "LineDriver",
     "ProcessCleanupResult",
     "SubprocessResult",
     "SubprocessRunner",
@@ -198,6 +199,30 @@ class SubprocessResult:
 
 
 @runtime_checkable
+class LineDriver(Protocol):
+    """Protocol for a stateful line-oriented request/response driver.
+
+    A ``LineDriver`` owns a request/response state machine layered over a
+    child process's piped stdin/stdout — e.g. the Codex app-server JSON-RPC
+    handshake. ``initial_lines()`` is emitted once, before the first stdout
+    line arrives; each subsequent stdout line (decoded, newline stripped) is
+    fed to ``on_line`` and any lines it returns are written back to the
+    child's stdin. ``finished`` becomes ``True`` on normal completion;
+    ``failure`` is set to a diagnostic string the moment the driver can no
+    longer make progress (an unsupported server request, a malformed frame,
+    a version/attestation mismatch). The runner treats a set ``failure`` as
+    a terminal condition regardless of ``finished``.
+    """
+
+    def initial_lines(self) -> tuple[str, ...]: ...
+
+    def on_line(self, line: str) -> tuple[str, ...]: ...
+
+    finished: bool
+    failure: str | None
+
+
+@runtime_checkable
 class SubprocessRunner(Protocol):
     """Protocol for async subprocess execution. Matches run_managed_async signature.
 
@@ -249,6 +274,7 @@ class SubprocessRunner(Protocol):
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
+        line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
         # Literal default, not an import of execution.process.DEFAULT_TETHER_CEILING_SECONDS —
         # core (IL-0) cannot import execution (IL-1). Kept equal by a parity test.

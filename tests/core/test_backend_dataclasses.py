@@ -32,8 +32,16 @@ def test_cmd_spec_fields():
         "process_idle_timeout_ms",
         "inherited_fds",
         "managed_skill_catalog",
+        "app_server_plan",
         "force_inactive_agent_teams",
     }
+
+
+def test_cmd_spec_app_server_plan_default_absent():
+    from autoskillit.core import CmdSpec
+
+    spec = CmdSpec(cmd=(), env={})
+    assert spec.app_server_plan is None
 
 
 def test_cmd_spec_is_resume_default():
@@ -72,6 +80,71 @@ def test_cmd_spec_preserves_managed_skill_catalog():
     catalog = ValidatedAddDir(path="/tmp/session/add-dir", session_home="/tmp/session")
 
     assert CmdSpec(cmd=(), env={}, managed_skill_catalog=catalog).managed_skill_catalog == catalog
+
+
+def test_codex_app_server_plan_frozen_slots_and_exact_fields():
+    from autoskillit.core import CodexAppServerPlan
+
+    plan = CodexAppServerPlan(
+        session_home="/tmp/session",
+        catalog_root="/tmp/session/add-dir/skills",
+        expected_skill_names=frozenset({"foo"}),
+        expected_skill_entries=(("foo", "foo/SKILL.md"),),
+        cwd="/tmp/session",
+        prompt="do the thing",
+        model="gpt-5.6-sol",
+        sandbox="workspace-write",
+        approval_policy="never",
+        bypass_hook_trust=True,
+        developer_instructions=None,
+        config_overrides={},
+        client_version="0.10.1109",
+    )
+
+    assert tuple(f.name for f in dataclasses.fields(CodexAppServerPlan)) == (
+        "session_home",
+        "catalog_root",
+        "expected_skill_names",
+        "expected_skill_entries",
+        "cwd",
+        "prompt",
+        "model",
+        "sandbox",
+        "approval_policy",
+        "bypass_hook_trust",
+        "developer_instructions",
+        "config_overrides",
+        "client_version",
+        "resume_thread_id",
+        "runtime_workspace_roots",
+    )
+    assert plan.resume_thread_id == ""
+    assert plan.runtime_workspace_roots == ()
+    assert not hasattr(plan, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        plan.session_home = "/other"  # type: ignore[misc]
+
+
+def test_cmd_spec_preserves_app_server_plan():
+    from autoskillit.core import CmdSpec, CodexAppServerPlan
+
+    plan = CodexAppServerPlan(
+        session_home="/tmp/session",
+        catalog_root="/tmp/session/add-dir/skills",
+        expected_skill_names=frozenset(),
+        expected_skill_entries=(),
+        cwd="/tmp/session",
+        prompt="p",
+        model=None,
+        sandbox="workspace-write",
+        approval_policy="never",
+        bypass_hook_trust=True,
+        developer_instructions=None,
+        config_overrides={},
+        client_version="0.10.1109",
+    )
+
+    assert CmdSpec(cmd=(), env={}, app_server_plan=plan).app_server_plan == plan
 
 
 def test_cmd_spec_normalizes_inherited_fds():
@@ -340,6 +413,7 @@ def test_backend_module_all_exhaustive():
         "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
+        "CodexAppServerPlan",
         "SessionAttemptHandle",
         "ExecutableLaunchBinding",
         "ModelTranslation",

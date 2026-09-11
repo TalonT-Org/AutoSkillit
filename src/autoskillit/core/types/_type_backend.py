@@ -40,6 +40,7 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
+    "CodexAppServerPlan",
     "SessionAttemptHandle",
     "ExecutableLaunchBinding",
     "ModelTranslation",
@@ -482,6 +483,34 @@ class CmdOrigin:
 
 
 @dataclass(frozen=True, slots=True)
+class CodexAppServerPlan:
+    """Per-launch driver plan for a managed Codex `app-server` skill session.
+
+    Carries every value the app-server JSON-RPC line driver needs that no
+    longer lives in ``argv`` once the transport moves off ``codex exec``:
+    the frozen catalog to register via ``skills/extraRoots/set``, the
+    prompt and thread-start/resume overrides, and the client identity used
+    to negotiate ``initialize``.
+    """
+
+    session_home: str
+    catalog_root: str
+    expected_skill_names: frozenset[str]
+    expected_skill_entries: tuple[tuple[str, str], ...]
+    cwd: str
+    prompt: str
+    model: str | None
+    sandbox: str
+    approval_policy: str
+    bypass_hook_trust: bool
+    developer_instructions: str | None
+    config_overrides: Mapping[str, object]
+    client_version: str
+    resume_thread_id: str = ""
+    runtime_workspace_roots: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class CmdSpec:
     """Fully-resolved subprocess command specification passed to the runner."""
 
@@ -493,6 +522,7 @@ class CmdSpec:
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
     managed_skill_catalog: ValidatedAddDir | None = None
+    app_server_plan: CodexAppServerPlan | None = None
     # Records that the builder was asked to keep Claude agent teams inactive
     # and honored that request at construction. Post-spawn checkpoints read
     # this intent rather than inferring policy from environment content.

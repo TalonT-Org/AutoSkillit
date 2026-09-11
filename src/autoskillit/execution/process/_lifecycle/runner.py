@@ -24,7 +24,7 @@ from autoskillit.execution.process._process_tether import (
 
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.core import InspectorCallback, StreamParser
+    from autoskillit.core import InspectorCallback, LineDriver, StreamParser
 
 logger = get_logger(__name__)
 
@@ -164,6 +164,7 @@ class DefaultSubprocessRunner:
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
+        line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
@@ -202,6 +203,7 @@ class DefaultSubprocessRunner:
             on_session_id_resolved=on_session_id_resolved,
             capture_dir=capture_dir,
             backend_resume_session_id=backend_resume_session_id,
+            line_driver=line_driver,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
             ceiling_seconds=ceiling_seconds,
             systemd_scope_enabled=systemd_scope_enabled,

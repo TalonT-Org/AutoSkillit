@@ -13,6 +13,7 @@ __all__ = [
     "ChildSpawnCardinalityError",
     "ExplorationBindingFailed",
     "InfrastructureFaultError",
+    "LineDriverError",
     "PluginArtifactContentionError",
     "PluginArtifactPublicationError",
     "PluginArtifactUnavailableError",
@@ -167,6 +168,20 @@ class BoundedDeliveryRoundTripBudgetExceededError(RecipeDeliveryBudgetError):
             f"{recipe}/{backend}: compiled bounded delivery needs {planned_calls} calls; "
             f"budget is {budget}"
         )
+
+
+class LineDriverError(RuntimeError):
+    """A ``LineDriver`` could not make further progress over a piped session.
+
+    Raised by the runner after it has terminated the process tree in
+    response to a driver-reported ``failure`` (an unsupported server
+    request, a malformed frame, a version or catalog-attestation mismatch).
+    Carries the driver's own diagnostic string verbatim.
+    """
+
+    def __init__(self, diagnostic: str) -> None:
+        self.diagnostic = diagnostic
+        super().__init__(diagnostic)
 
 
 class CapabilityNotSupportedError(Exception):

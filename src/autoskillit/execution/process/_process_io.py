@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
-from collections.abc import Generator
+import threading
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import IO
 
-from autoskillit.core import CapturedStream, SpillSpec, get_logger
+from autoskillit.core import CapturedStream, LineDriver, SpillSpec, get_logger
 
 logger = get_logger(__name__)
+
+_TEE_CHUNK_SIZE = 65536
 
 
 class CaptureSetupError(OSError):
@@ -111,6 +114,137 @@ def create_temp_io(
                 p.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def drive_process_io(
+    *,
+    stdout_pipe: IO[bytes],
+    stdin_pipe: IO[bytes],
+    capture_file: IO[bytes],
+    driver: LineDriver,
+    on_failure: Callable[[str], None],
+    tee_done: threading.Event,
+) -> None:
+    """Synchronous byte tee driving one ``LineDriver`` over a piped child.
+
+    Runs inside a worker thread (``anyio.to_thread.run_sync``). Every raw
+    chunk read from ``stdout_pipe`` is appended to ``capture_file`` and
+    flushed immediately — before any decoding — preserving the same
+    byte-exact, file-backed capture invariant every other transport relies
+    on, and unaffected by ``errors="replace"`` decoding used only for the
+    driver's own view of the stream. Complete newline-terminated frames are
+    decoded and passed to ``driver.on_line`` without their newline
+    terminator; every line the driver returns is written back to
+    ``stdin_pipe`` (one trailing newline each) and flushed *before* the
+    driver's ``failure`` is checked, so an unsupported-request error
+    response is never lost even when it is also the line that ends the
+    session.
+
+    On failure, stdin is closed and ``on_failure`` is called exactly once
+    with the driver's diagnostic — the caller is responsible for bridging
+    that call back onto the event loop (this function is anyio-agnostic).
+    Draining then continues, capture-only, through EOF: failure is
+    signalled the moment it is known rather than waiting for the child to
+    exit. On clean completion (``driver.finished``) stdin is likewise
+    closed and the remainder of stdout is drained the same way. A trailing
+    partial frame at EOF is left exactly as captured — never completed
+    with a synthetic newline or presented as a parsed event — and EOF
+    reached before the driver finished or failed is itself a failure
+    (the app-server exited without completing the handshake).
+
+    A read/write failure on the piped stdin/stdout is folded into
+    ``on_failure`` like any other driver-progress failure. A failure
+    writing the capture file itself is a different class of fault — an
+    infrastructure problem, not a protocol one — and is deliberately left
+    to propagate uncaught (the ``finally`` below still signals
+    ``tee_done`` first) so the caller's existing unhandled-exception
+    cleanup path surfaces it as incomplete evidence rather than folding it
+    into a driver diagnostic.
+
+    Never calls ``proc.wait()``, ``proc.kill()``, or closes
+    ``capture_file`` — those remain the enclosing runner's responsibility
+    once ``tee_done`` is set. EOF alone does not prove the process exited.
+    """
+    buffer = bytearray()
+    stdin_closed = False
+    failure_reported = False
+    decoding_done = False  # set once failed or finished: capture-only from here
+
+    def _close_stdin() -> None:
+        nonlocal stdin_closed
+        if not stdin_closed:
+            stdin_closed = True
+            try:
+                stdin_pipe.close()
+            except OSError:
+                pass
+
+    def _write_lines(lines: tuple[str, ...]) -> None:
+        if not lines:
+            return
+        for outgoing in lines:
+            stdin_pipe.write(outgoing.encode("utf-8") + b"\n")
+        stdin_pipe.flush()
+
+    def _fail(diagnostic: str) -> None:
+        nonlocal failure_reported, decoding_done
+        decoding_done = True
+        if failure_reported:
+            return
+        failure_reported = True
+        _close_stdin()
+        on_failure(diagnostic)
+
+    try:
+        try:
+            _write_lines(driver.initial_lines())
+        except Exception as exc:  # noqa: BLE001 — any driver/pipe fault here is a failure
+            _fail(f"line driver failed building the initial request: {exc}")
+
+        while True:
+            try:
+                chunk = stdout_pipe.read(_TEE_CHUNK_SIZE)
+            except OSError as exc:
+                _fail(f"stdout pipe read failed: {exc}")
+                break
+            if not chunk:
+                if not decoding_done and not driver.finished:
+                    _fail("app-server closed stdout before the handshake completed")
+                break
+
+            capture_file.write(chunk)
+            capture_file.flush()
+
+            if decoding_done:
+                continue
+
+            buffer.extend(chunk)
+            while not decoding_done:
+                newline_index = buffer.find(b"\n")
+                if newline_index == -1:
+                    break
+                frame = bytes(buffer[:newline_index])
+                del buffer[: newline_index + 1]
+                decoded_line = frame.decode("utf-8", errors="replace")
+                try:
+                    outgoing = driver.on_line(decoded_line)
+                except Exception as exc:  # noqa: BLE001 — a driver bug is a driver failure
+                    _fail(f"line driver raised in on_line: {exc}")
+                    break
+                try:
+                    _write_lines(outgoing)
+                except OSError as exc:
+                    _fail(f"stdin pipe write failed: {exc}")
+                    break
+                if driver.failure is not None:
+                    _fail(driver.failure)
+                    break
+                if driver.finished:
+                    decoding_done = True
+                    _close_stdin()
+    finally:
+        _close_stdin()
+        tee_done.set()
 
 
 def read_temp_output(stdout_path: Path, stderr_path: Path) -> tuple[str, str]:

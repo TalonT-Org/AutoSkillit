@@ -1,8 +1,8 @@
 """Subprocess lifecycle utilities providing pipe-blocking immunity.
 
 Shared building blocks for all subprocess-spawning code in the project.
-Uses temp file I/O (not pipes) to eliminate FD-inheritance blocking, and
-psutil-based process tree cleanup with SIGTERM→SIGKILL escalation.
+Uses temp file I/O (not pipes; a line_driver launch pipes it — see
+LineDriverSession) and psutil-based SIGTERM→SIGKILL process tree cleanup.
 
 Two composed functions wire the utilities together correctly:
 - ``run_managed_async`` for async callers
@@ -12,7 +12,6 @@ Two composed functions wire the utilities together correctly:
 from __future__ import annotations
 
 import functools
-import subprocess
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -45,6 +44,7 @@ from autoskillit.execution.process._daemon_orphans import (
     find_orphaned_autoskillit_daemons,
     reap_orphaned_autoskillit_daemons,
 )
+from autoskillit.execution.process._lifecycle.line_driver_tee import LineDriverSession
 from autoskillit.execution.process._lifecycle.runner import (
     DefaultSubprocessRunner,
     _coalesce_returncode,
@@ -117,7 +117,7 @@ from autoskillit.execution.process._termination import (
 
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
-    from autoskillit.core import InspectorCallback, StreamParser
+    from autoskillit.core import InspectorCallback, LineDriver, StreamParser
     from autoskillit.execution.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
@@ -238,6 +238,7 @@ async def run_managed_async(
     child_deferral_ceiling: float = 0.0,
     capture_dir: Path | None = None,
     backend_resume_session_id: str = "",
+    line_driver: LineDriver | None = None,
     lifecycle_observation_enabled: bool = False,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
     systemd_scope_enabled: bool = False,
@@ -253,6 +254,7 @@ async def run_managed_async(
     6. read_temp_output for results
     7. cleanup temp files via context manager
     """
+    line_driver_session = LineDriverSession(line_driver, pty_mode=pty_mode, input_data=input_data)
     lifecycle_observation_enabled = lifecycle_observation_enabled and stream_parser is not None
     # Capture workload basename before PTY wrapping rewrites cmd (#806)
     _workload_basename = Path(cmd[0]).name if cmd else ""
@@ -311,9 +313,9 @@ async def run_managed_async(
                 functools.partial(
                     spawn_owned_process,
                     cmd,
-                    stdout=stdout_file,
+                    stdout=line_driver_session.spawn_stdout_kwarg(stdout_file),
                     stderr=stderr_file,
-                    stdin=(stdin_handle if stdin_handle is not None else subprocess.DEVNULL),
+                    stdin=line_driver_session.spawn_stdin_kwarg(stdin_handle),
                     cwd=cwd,
                     env=_env,
                     start_new_session=True,
@@ -328,11 +330,8 @@ async def run_managed_async(
             if on_process_spawned is not None:
                 on_process_spawned(root_pid, process_group_id)
 
-            # Resolve the workload TraceTarget — the PID that should be observed.
-            # The spawn PID is the script(1) wrapper in PTY mode, not claude.
-            # resolve_trace_target walks descendants
-            # to find the actual workload by basename. Raising here (on miss) is
-            # intentional: a silent fallback to proc.pid recreates issue #806.
+            # Resolve the workload TraceTarget (spawn PID is the PTY-mode script(1)
+            # wrapper, not the workload); raising on a miss avoids recreating #806.
             _target: TraceTarget | None = None
             _observed_pid: int = root_pid
             _tracked_comm: str | None = None
@@ -359,10 +358,8 @@ async def run_managed_async(
                 _tracked_comm = _target.comm
 
             # PTY-wrapper hazard: a tether recording only the wrapper's identity
-            # re-creates the orphan class one level down (wrapper dies, workload
-            # survives reparented). Resolve and attach workload identity for every
-            # PTY-wrapped spawn on Linux, decoupled from whether tracing is
-            # enabled — the tracing branch above may have already resolved it.
+            # re-creates the orphan class one level down — resolve and attach
+            # workload identity for every PTY-wrapped Linux spawn regardless of tracing.
             if pty_mode and sys.platform == "linux" and owner.tether_path is not None:
                 _workload_pid: int | None = None
                 _workload_ticks: int | None = None
@@ -445,6 +442,7 @@ async def run_managed_async(
 
             async with anyio.create_task_group() as tg:
                 tg.start_soon(_watch_process, owner, acc, trigger)
+                line_driver_session.start(tg, proc, capture_file=stdout_file, trigger=trigger)
                 tg.start_soon(
                     functools.partial(
                         _watch_heartbeat,
@@ -633,11 +631,12 @@ async def run_managed_async(
             elif signals.exit_snapshot is not None:
                 snapshots_data = [signals.exit_snapshot]
 
-            if timeout_scope is not None and timeout_scope.cancelled_caught:
+            _timed_out = timeout_scope is not None and timeout_scope.cancelled_caught
+            if _timed_out:
                 termination = TerminationReason.TIMED_OUT
             action = decide_termination_action(
                 termination,
-                timeout_fired=timeout_scope is not None and timeout_scope.cancelled_caught,
+                timeout_fired=_timed_out or line_driver_session.failed,
                 process_exited=signals.process_exited,
                 pending_task_ids=signals.pending_task_ids,
                 schedule_wakeup_violation=signals.schedule_wakeup_violation,
@@ -669,7 +668,8 @@ async def run_managed_async(
                 reap_callback_attempted = True
                 on_process_reaped(root_pid, process_group_id)
 
-            # Flush and close before reading
+            await line_driver_session.finalize(stdout_file=stdout_file, stderr_file=stderr_file)
+            # Flush and close before reading (no-op re-close for line_driver).
             stdout_file.close()
             stderr_file.close()
 
@@ -739,6 +739,7 @@ async def run_managed_async(
                     ):
                         reap_callback_attempted = True
                         on_process_reaped(root_pid, process_group_id)
+                await line_driver_session.settle_best_effort()
             raise
         finally:
             if stdin_handle is not None:

@@ -166,54 +166,52 @@ def test_parse_skills_instructions_rejects_malformed_json_and_envelope(
 
 
 @pytest.mark.parametrize(
-    ("replacement", "message"),
+    ("needle", "replacement", "message"),
     [
-        ("### Roots", "Skill roots or Available skills heading"),
-        ("### Skills", "Skill roots or Available skills heading"),
         (
+            "### Skill roots",
+            "### Roots",
+            "Skill roots or Available skills heading",
+        ),
+        (
+            "### Skill roots",
+            "### Skills",
+            "Skill roots or Available skills heading",
+        ),
+        (
+            "- `r0` = `/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills`",
             "- `r0` = `relative/skills`",
             "skill root is not absolute",
         ),
         (
+            "- `r1` = `/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system`",
             "- `r0` = `/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills`",
             "duplicate skill-root alias",
         ),
         (
+            "(file: `r0/beta/SKILL.md`)",
             "(file: `r9/beta/SKILL.md`)",
             "unknown skill-root alias",
         ),
         (
+            "(file: `r0/beta/SKILL.md`)",
             "(file: `relative/beta/SKILL.md`)",
             "skill path is not absolute",
         ),
         (
-            "- alpha: duplicate fixture skill (file: `r0/alpha/SKILL.md`)",
+            "- beta:",
+            "- alpha: duplicate fixture skill (file: `r0/alpha/SKILL.md`)\n- beta:",
             "duplicate skill name",
         ),
     ],
 )
 def test_parse_skills_instructions_rejects_structural_drift(
+    needle: str,
     replacement: str,
     message: str,
 ) -> None:
     document = _fixture_document("discovery_prompt_input_v0153.json")
-    text = _skills_text(document)
-    if replacement.startswith("###"):
-        text = text.replace("### Skill roots", replacement)
-    elif message == "duplicate skill-root alias":
-        text = text.replace(
-            "- `r1` = `/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills/.system`",
-            replacement,
-        )
-    elif replacement.startswith("- `r0`"):
-        text = text.replace(
-            "- `r0` = `/opt/autoskillit-fixtures/codex/discovery/v0153/home/skills`",
-            replacement,
-        )
-    elif replacement.startswith("- alpha:"):
-        text = text.replace("- beta:", replacement + "\n- beta:")
-    else:
-        text = text.replace("(file: `r0/beta/SKILL.md`)", replacement)
+    text = _skills_text(document).replace(needle, replacement)
 
     with pytest.raises(ValueError, match=message):
         discovery.parse_skills_instructions(_with_skills_text(document, text))

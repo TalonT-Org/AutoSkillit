@@ -409,9 +409,13 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         kwargs["on_reaped"](101, 101)  # type: ignore[operator]
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
+    codex_shim = tmp_path / "codex"
+    atomic_write(codex_shim, "#!/bin/sh\nexit 0\n")
+    codex_shim.chmod(0o755)
+
     monkeypatch.chdir(project_root)
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
-    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/codex")
+    monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(codex_shim))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr(
         "autoskillit.cli.session._session_onboarding.is_first_run", lambda _project: False

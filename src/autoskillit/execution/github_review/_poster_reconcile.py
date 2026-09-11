@@ -34,6 +34,13 @@ async def preflight_new_operation(
     poster: DefaultGitHubReviewPoster,
     request: GitHubReviewRequest,
 ) -> tuple[CredentialScopeMaterial, str, str] | GitHubReviewPostResult:
+    """Validate identity and PR head before starting a brand-new review operation.
+
+    Returns ``(scope_material, authenticated_login, pr_author_login)`` on success. On
+    failure — authentication fails, the live PR head no longer matches
+    ``request.head_sha``, or the PR response omits required identity fields — returns a
+    terminal ``GitHubReviewPostResult`` instead.
+    """
     scope_material = await poster.gateway.scope_material()
     authenticated = await poster.gateway.get_authenticated_user()
     if not authenticated.succeeded:
@@ -86,6 +93,14 @@ async def reconcile_existing(
     findings: tuple[_poster_support.CanonicalFinding, ...],
     attempt: ReviewAttemptRecord,
 ) -> GitHubReviewPostResult:
+    """Reconcile a persisted review attempt against live GitHub state.
+
+    Resumes a pending retry directly when ``attempt.state`` is ``RETRY_PENDING``.
+    Otherwise re-authenticates and re-reconciles the persisted payload: returns a
+    non-final result (``AMBIGUOUS`` or ``COMMITTED_PENDING_VERIFICATION``) when the
+    remote review id cannot be resolved, or a final result (``SUCCEEDED`` or
+    ``RECONCILED``) once reconciliation confirms the remote review.
+    """
     if attempt.state == ReviewOperationState.RETRY_PENDING.value:
         return await _poster_retry.resume_pending_retry(
             poster,
@@ -160,6 +175,13 @@ async def scan_remote_findings(
     request: GitHubReviewRequest,
     authenticated_login: str,
 ) -> _poster_support.RemoteFindingScan:
+    """Scan the PR's existing reviews for finding markers left by ``authenticated_login``.
+
+    Returns a ``RemoteFindingScan`` mapping each finding-marker digest to the GitHub
+    comment id that carries it, for remote-side deduplication. ``ok`` is False (with
+    ``error`` set) if listing reviews/comments fails, a review has an invalid id, or the
+    same digest is attached to two different comment ids (ambiguous dedup).
+    """
     reviews = await poster.gateway.list_reviews(request.repository, request.pr_number)
     if not reviews.succeeded or not isinstance(reviews.data, list):
         return _poster_support.RemoteFindingScan(

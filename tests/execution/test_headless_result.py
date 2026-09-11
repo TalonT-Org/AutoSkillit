@@ -1091,6 +1091,93 @@ class TestParseStdout:
         assert result.result is not None
 
 
+class TestParseStdoutResumeIdentity:
+    """T-C3: a resumed app-server capture with no thread/started notification
+    is seeded from backend_resume_session_id; a disagreeing observed identity
+    is rejected rather than silently overridden."""
+
+    def test_no_observed_identity_is_seeded_from_resume_id(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "method": "item/completed",
+                        "params": {"item": {"type": "agentMessage", "text": "done"}},
+                    }
+                ),
+                json.dumps(
+                    {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+                ),
+            ]
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.session_id == "resumed-thread-42"
+        assert session.is_error is False
+
+    def test_matching_observed_identity_is_accepted(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {"method": "thread/started", "params": {"thread": {"id": "resumed-thread-42"}}}
+                ),
+                json.dumps(
+                    {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+                ),
+            ]
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.session_id == "resumed-thread-42"
+        assert session.is_error is False
+
+    def test_conflicting_stdout_identity_is_rejected(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {"method": "thread/started", "params": {"thread": {"id": "some-other-thread"}}}
+                ),
+                json.dumps(
+                    {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+                ),
+            ]
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.is_error is True
+        assert any("resumed-thread-42" in e and "some-other-thread" in e for e in session.errors)
+
+    def test_conflicting_channel_b_identity_is_rejected(self) -> None:
+        """A conflicting SubprocessResult.session_id (Channel B) is rejected
+        even when stdout itself carries no identity."""
+        stdout = json.dumps(
+            {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+        )
+        result = dataclasses.replace(
+            _codex_subprocess_result(stdout), session_id="channel-b-thread"
+        )
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.is_error is True
+
+    def test_no_backend_resume_session_id_leaves_identity_untouched(self) -> None:
+        """Without a resume id, an app-server capture with no identity at all
+        parses to an empty session_id — no inference, no fabricated id."""
+        stdout = json.dumps(
+            {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(result, backend=CodexBackend())
+        assert session.session_id == ""
+
+
 class TestStaleRecoveryWriteEvidence:
     def test_stale_recovery_carries_write_evidence(self):
         stdout = (

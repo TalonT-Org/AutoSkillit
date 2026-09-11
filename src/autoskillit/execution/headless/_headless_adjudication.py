@@ -77,10 +77,39 @@ def _resolve_skill_session_id(
     return result.session_id or result.channel_b_session_id
 
 
-def _parse_stdout(result: SubprocessResult, backend: CodingAgentBackend) -> ClaudeSessionResult:
+def _parse_stdout(
+    result: SubprocessResult,
+    backend: CodingAgentBackend,
+    backend_resume_session_id: str = "",
+) -> ClaudeSessionResult:
+    """Parse a completed session's stdout, seeded by its resume identity.
+
+    ``thread/resume`` returns a response but emits no ``thread/started``
+    notification, so a resumed app-server capture may carry no session
+    identity of its own anywhere in the transport. When the caller supplied
+    ``backend_resume_session_id`` and the transport observed none, that known
+    authority seeds the result directly rather than being inferred or left
+    empty. A transport-observed identity that disagrees is rejected outright
+    — never silently overridden or averaged.
+    """
     if backend.capabilities.supports_claude_format_stdout:
         return parse_session_result(result.stdout)
     agent_result = backend.result_parser().parse_stdout(result.stdout)
+    if backend_resume_session_id:
+        observed = agent_result.session_id or result.session_id
+        if observed and observed != backend_resume_session_id:
+            return ClaudeSessionResult(
+                subtype=CliSubtype.ERROR_DURING_EXECUTION,
+                is_error=True,
+                result="",
+                session_id=backend_resume_session_id,
+                errors=[
+                    "resumed session identity mismatch: expected "
+                    f"{backend_resume_session_id!r}, observed {observed!r}"
+                ],
+            )
+        if not agent_result.session_id:
+            agent_result = dataclasses.replace(agent_result, session_id=backend_resume_session_id)
     rows = extract_codex_turn_usage(
         backend.session_locator(),
         agent_result.session_id or result.session_id,
@@ -357,6 +386,7 @@ def _attempt_stall_recovery(
     git_writes_detected: bool,
     file_changes: Sequence[str],
     write_watch_dirs: Sequence[Path],
+    backend_resume_session_id: str = "",
 ) -> tuple[SkillResult | None, ClaudeSessionResult, WriteEvidence, ApiRetryOutcome]:
     """Parse a STALE/IDLE_STALL session's stdout and attempt success-recovery.
 
@@ -366,7 +396,9 @@ def _attempt_stall_recovery(
     caller proceeds to its own retry-policy dispatch and failure construction,
     using the returned ``session``/``evidence``/``api_retry``.
     """
-    session = _parse_stdout(result, backend=backend)
+    session = _parse_stdout(
+        result, backend=backend, backend_resume_session_id=backend_resume_session_id
+    )
     evidence = _compute_write_evidence(
         session,
         fs_writes_detected,

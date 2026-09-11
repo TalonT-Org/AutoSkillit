@@ -751,6 +751,85 @@ class TestHeartbeatStreamParser:
                     _poll_interval=0.05,
                 )
 
+    @pytest.mark.anyio
+    async def test_codex_app_server_turn_completed_notification_is_terminal(self, tmp_path):
+        """A real app-server JSON-RPC turn/completed notification (not exec
+        NDJSON) drives CodexStreamParser to terminality through the real
+        heartbeat — proving parser terminality end to end (T-C3)."""
+        import json
+
+        from autoskillit.execution.backends._codex_parse import CodexStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text(
+            json.dumps({"method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+            + "\n"
+        )
+
+        with anyio.fail_after(5.0):
+            result = await _heartbeat(
+                stdout_path,
+                stream_parser=CodexStreamParser(),
+                record_types=frozenset({"turn.completed", "turn.failed", "error"}),
+                _poll_interval=0.05,
+            )
+        assert result == "completion"
+
+    @pytest.mark.anyio
+    async def test_codex_app_server_turn_failed_notification_is_terminal(self, tmp_path):
+        import json
+
+        from autoskillit.execution.backends._codex_parse import CodexStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text(
+            json.dumps({"method": "turn/completed", "params": {"turn": {"status": "failed"}}})
+            + "\n"
+        )
+
+        with anyio.fail_after(5.0):
+            result = await _heartbeat(
+                stdout_path,
+                stream_parser=CodexStreamParser(),
+                record_types=frozenset({"turn.completed", "turn.failed", "error"}),
+                _poll_interval=0.05,
+            )
+        assert result == "completion"
+
+    @pytest.mark.anyio
+    async def test_codex_app_server_nonterminal_notifications_stay_silent(self, tmp_path):
+        """item/started, item/completed, and a JSON-RPC response line never
+        trip the heartbeat on their own."""
+        import json
+
+        from autoskillit.execution.backends._codex_parse import CodexStreamParser
+
+        stdout_path = tmp_path / "stdout.tmp"
+        stdout_path.write_text(
+            "\n".join(
+                [
+                    json.dumps({"method": "thread/started", "params": {"thread": {"id": "t1"}}}),
+                    json.dumps(
+                        {
+                            "method": "item/completed",
+                            "params": {"item": {"type": "agentMessage", "text": "hi"}},
+                        }
+                    ),
+                    json.dumps({"id": 3, "result": {}}),
+                ]
+            )
+            + "\n"
+        )
+
+        with pytest.raises(TimeoutError):
+            with anyio.fail_after(0.3):
+                await _heartbeat(
+                    stdout_path,
+                    stream_parser=CodexStreamParser(),
+                    record_types=frozenset({"turn.completed", "turn.failed", "error"}),
+                    _poll_interval=0.05,
+                )
+
 
 class TestHasActiveExecutionMarker:
     """Unit tests for _has_active_execution_marker."""

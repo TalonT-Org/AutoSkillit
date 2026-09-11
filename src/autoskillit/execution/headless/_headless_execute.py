@@ -413,6 +413,7 @@ async def _execute_claude_headless(
                 closure_spec=closure_spec,
                 closure_report_root=closure_report_root,
                 skill_contract=skill_contract,
+                backend_resume_session_id=backend_resume_session_id,
             )
             record_skill_result_rate_limit(
                 skill_result,

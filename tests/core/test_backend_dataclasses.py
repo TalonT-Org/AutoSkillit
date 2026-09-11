@@ -220,6 +220,7 @@ def test_codex_event_data_fields_exhaustive():
         "item_type",
         "raw",
         "usage",
+        "cumulative_usage",
         "file_changes",
         "command",
     }
@@ -230,8 +231,21 @@ def test_codex_event_data_new_fields_default_none():
 
     ev = CodexEventData(record_type="item", thread_id="t1", item_type="msg")
     assert ev.usage is None
+    assert ev.cumulative_usage is None
     assert ev.file_changes is None
     assert ev.command is None
+
+
+def test_codex_event_data_cumulative_usage_accepts_value():
+    from autoskillit.core import CodexEventData
+
+    ev = CodexEventData(
+        record_type="item",
+        thread_id="t1",
+        item_type="msg",
+        cumulative_usage={"input_tokens": 400, "output_tokens": 200},
+    )
+    assert ev.cumulative_usage == {"input_tokens": 400, "output_tokens": 200}
 
 
 def test_codex_event_data_new_fields_accept_values():
@@ -259,6 +273,7 @@ def test_codex_event_data_field_types():
 
     hints = typing.get_type_hints(CodexEventData)
     assert hints["usage"] == Mapping[str, typing.Any] | None
+    assert hints["cumulative_usage"] == Mapping[str, typing.Any] | None
     assert hints["file_changes"] == tuple[Mapping[str, typing.Any], ...] | None
     assert hints["command"] == str | None
 

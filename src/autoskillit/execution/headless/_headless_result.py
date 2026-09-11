@@ -148,6 +148,7 @@ def _build_skill_result(
     closure_spec: ClosureAuthoritySpec | None = None,
     closure_report_root: Path | None = None,
     skill_contract: SkillContract | None = None,
+    backend_resume_session_id: str = "",
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
@@ -187,7 +188,9 @@ def _build_skill_result(
         TerminationReason.SIGNAL_DEATH,
     }
     if obligation_failure and not provenance_failure:
-        obligation_session = _parse_stdout(result, backend=backend)
+        obligation_session = _parse_stdout(
+            result, backend=backend, backend_resume_session_id=backend_resume_session_id
+        )
         obligation_evidence = _compute_write_evidence(
             obligation_session,
             fs_writes_detected,
@@ -254,6 +257,7 @@ def _build_skill_result(
             git_writes_detected=git_writes_detected,
             file_changes=file_changes,
             write_watch_dirs=write_watch_dirs,
+            backend_resume_session_id=backend_resume_session_id,
         )
         if recovered_sr is not None:
             return recovered_sr
@@ -314,6 +318,7 @@ def _build_skill_result(
             git_writes_detected=git_writes_detected,
             file_changes=file_changes,
             write_watch_dirs=write_watch_dirs,
+            backend_resume_session_id=backend_resume_session_id,
         )
         if recovered_sr is not None:
             return recovered_sr
@@ -361,7 +366,9 @@ def _build_skill_result(
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
-        session = _parse_stdout(result, backend=backend)
+        session = _parse_stdout(
+            result, backend=backend, backend_resume_session_id=backend_resume_session_id
+        )
         if not session.session_id:
             session = dataclasses.replace(
                 session,
@@ -371,7 +378,9 @@ def _build_skill_result(
             session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
     else:
         returncode = result.returncode if result.returncode is not None else -1
-        session = _parse_stdout(result, backend=backend)
+        session = _parse_stdout(
+            result, backend=backend, backend_resume_session_id=backend_resume_session_id
+        )
 
     evidence = _compute_write_evidence(
         session,

@@ -13,6 +13,7 @@ from autoskillit.core import (
     CodexItemType,
     StreamParser,
 )
+from autoskillit.execution.backends._codex.app_server_events import _app_server_to_exec_event
 from autoskillit.execution.backends._codex_parse import (
     CodexStreamParser,
     _scan_codex_ndjson,
@@ -638,3 +639,171 @@ class TestCodexUnknownCounters:
         parser.parse_line(json.dumps({"type": "turn.completed", "usage": {}}))
         assert parser.ndjson_unknown_event_count == 0
         assert parser.ndjson_unknown_item_count == 0
+
+
+class TestAppServerToExecEventAdapter:
+    def test_exec_shaped_object_passes_through_unchanged(self) -> None:
+        obj = {"type": "thread.started", "thread_id": "t1"}
+        assert _app_server_to_exec_event(obj) == obj
+
+    def test_response_with_result_adapts_to_none(self) -> None:
+        assert _app_server_to_exec_event({"id": 5, "result": {}}) is None
+
+    def test_response_with_error_adapts_to_none(self) -> None:
+        assert _app_server_to_exec_event({"id": 5, "error": {"code": -32601}}) is None
+
+    def test_unrecognized_method_echoes_method_as_type(self) -> None:
+        adapted = _app_server_to_exec_event({"method": "some/future/method", "params": {}})
+        assert adapted == {"type": "some/future/method"}
+
+    def test_thread_started_unwraps_params_thread_id(self) -> None:
+        adapted = _app_server_to_exec_event(
+            {"method": "thread/started", "params": {"thread": {"id": "abc"}}}
+        )
+        assert adapted == {"type": "thread.started", "thread_id": "abc"}
+
+    @pytest.mark.parametrize(
+        ("camel", "snake"),
+        [
+            ("agentMessage", "agent_message"),
+            ("commandExecution", "command_execution"),
+            ("fileChange", "file_change"),
+            ("mcpToolCall", "mcp_tool_call"),
+            ("reasoning", "reasoning"),
+            ("plan", "todo_list"),
+            ("webSearch", "web_search"),
+            ("collabAgentToolCall", "collab_tool_call"),
+        ],
+    )
+    def test_item_completed_normalizes_camel_case_item_type(self, camel: str, snake: str) -> None:
+        adapted = _app_server_to_exec_event(
+            {"method": "item/completed", "params": {"item": {"type": camel, "text": "x"}}}
+        )
+        assert adapted == {"type": "item.completed", "item": {"type": snake, "text": "x"}}
+
+    def test_item_started_and_item_updated_unwrap_params_item(self) -> None:
+        started = _app_server_to_exec_event(
+            {"method": "item/started", "params": {"item": {"type": "agentMessage"}}}
+        )
+        assert started == {"type": "item.started", "item": {"type": "agent_message"}}
+        updated = _app_server_to_exec_event(
+            {"method": "item/updated", "params": {"item": {"type": "commandExecution"}}}
+        )
+        assert updated == {"type": "item.updated", "item": {"type": "command_execution"}}
+
+    def test_turn_started(self) -> None:
+        assert _app_server_to_exec_event({"method": "turn/started", "params": {}}) == {
+            "type": "turn.started"
+        }
+
+    def test_turn_completed_status_completed_maps_to_turn_completed(self) -> None:
+        adapted = _app_server_to_exec_event(
+            {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+        )
+        assert adapted == {"type": "turn.completed"}
+
+    @pytest.mark.parametrize("status", ["failed", "interrupted"])
+    def test_turn_completed_status_failed_or_interrupted_maps_to_turn_failed(
+        self, status: str
+    ) -> None:
+        adapted = _app_server_to_exec_event(
+            {"method": "turn/completed", "params": {"turn": {"status": status}}}
+        )
+        assert adapted is not None
+        assert adapted["type"] == "turn.failed"
+
+    def test_error_will_retry_true_maps_to_ignored_item_started_equivalent(self) -> None:
+        adapted = _app_server_to_exec_event(
+            {
+                "method": "error",
+                "params": {"willRetry": True, "error": {"message": "transient", "code": "E1"}},
+            }
+        )
+        assert adapted == {"type": "item.started"}
+
+    def test_error_will_retry_false_unwraps_nested_error_schema(self) -> None:
+        adapted = _app_server_to_exec_event(
+            {
+                "method": "error",
+                "params": {
+                    "willRetry": False,
+                    "error": {"message": "fatal turn error", "code": "E42"},
+                },
+            }
+        )
+        assert adapted == {"type": "error", "message": "fatal turn error", "code": "E42"}
+
+    def test_token_usage_updated_normalizes_camel_case_and_splits_last_total(self) -> None:
+        adapted = _app_server_to_exec_event(
+            {
+                "method": "thread/tokenUsage/updated",
+                "params": {
+                    "tokenUsage": {
+                        "last": {
+                            "inputTokens": 10,
+                            "cachedInputTokens": 2,
+                            "outputTokens": 5,
+                        },
+                        "total": {
+                            "inputTokens": 1000,
+                            "cachedInputTokens": 200,
+                            "outputTokens": 500,
+                        },
+                    }
+                },
+            }
+        )
+        assert adapted is not None
+        assert adapted["type"] == "item.updated"
+        assert adapted["last_usage"] == {
+            "input_tokens": 10,
+            "cached_input_tokens": 2,
+            "output_tokens": 5,
+        }
+        assert adapted["cumulative_usage"] == {
+            "input_tokens": 1000,
+            "cached_input_tokens": 200,
+            "output_tokens": 500,
+        }
+        # never summed into each other
+        assert adapted["last_usage"] != adapted["cumulative_usage"]
+
+
+class TestAppServerUsageAccumulation:
+    """T-C3: exact CanonicalTokenUsage values, sourced purely from
+    thread/tokenUsage/updated (the real-transport heartbeat/terminality
+    proof lives in tests/execution/test_process_heartbeat.py)."""
+
+    def test_resumed_capture_seeds_usage_before_completion(self) -> None:
+        """A resumed app-server capture with no thread/started still parses
+        turn/completed usage correctly, sourced purely from item.updated."""
+        parser = CodexStreamParser()
+        parser.parse_line(
+            json.dumps(
+                {
+                    "method": "thread/tokenUsage/updated",
+                    "params": {
+                        "tokenUsage": {
+                            "last": {"inputTokens": 50, "outputTokens": 25},
+                            "total": {"inputTokens": 5000, "outputTokens": 2500},
+                        }
+                    },
+                }
+            )
+        )
+        event = parser.parse_line(
+            json.dumps({"method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+        )
+        assert event is not None
+        assert event.is_terminal is True
+        assert event.backend_data is not None
+        assert event.backend_data.usage == {
+            "input_tokens": 50,
+            "cached_input_tokens": None,
+            "output_tokens": 25,
+        }
+        assert event.backend_data.cumulative_usage == {
+            "input_tokens": 5000,
+            "cached_input_tokens": None,
+            "output_tokens": 2500,
+        }

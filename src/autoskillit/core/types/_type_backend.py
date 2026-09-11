@@ -615,6 +615,10 @@ class CodexEventData:
     item_type: str
     raw: Mapping[str, Any] = field(default_factory=dict)
     usage: Mapping[str, Any] | None = None
+    # Cumulative (resumed-history-inclusive) usage diagnostics from the
+    # app-server transport's thread/tokenUsage/updated.total — never summed
+    # into `usage` (the single-turn snapshot). None on exec-transport launches.
+    cumulative_usage: Mapping[str, Any] | None = None
     file_changes: tuple[Mapping[str, Any], ...] | None = None
     command: str | None = None
 

@@ -27,6 +27,7 @@ ALLOWLIST = {
         "0009-verified-output-delivery-disposition.md",  # prescribed by issue #4479
         "0010-systemd-scope-defense-in-depth.md",  # prescribed by PR #4695 review fix
         "paper-backend-n3-exercise.md",  # 4 segments; prescribed by issue #4052
+        "child-terminal-reasons-4623.md",  # 4 segments; prescribed by issue #4623 plan Step 8.5
     },
 }
 

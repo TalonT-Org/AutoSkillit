@@ -418,7 +418,7 @@ def test_ml_sub_area_folding_mtime_change_forces_fresh_read(tmp_path, monkeypatc
     yaml_path.write_text(yaml_content_v1)
 
     monkeypatch.setattr(
-        "autoskillit.recipe.methodology_venue_appendix.BUNDLED_METHODOLOGY_TRADITIONS_DIR",
+        "autoskillit.recipe.methodology.methodology_venue_appendix.BUNDLED_METHODOLOGY_TRADITIONS_DIR",
         tmp_path,
     )
     _ML_SUB_AREA_CACHE.clear()

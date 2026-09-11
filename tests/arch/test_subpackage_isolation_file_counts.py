@@ -42,8 +42,10 @@ def test_server_file_count_under_limit() -> None:
     Twenty is a root package a single reviewer can still hold in mind.
     Responsibilities that would push the count past it belong in a
     grouping subpackage instead — see `server/recipe/`, `server/lifecycle/`,
-    and `server/response/` (issue #4673), each with its own nested-limit
-    entry below.
+    and `server/response/` (issue #4673). None of the three carries a
+    dedicated `FILE_COUNT_LIMITS` entry; they are governed by the default
+    10-file ceiling in `test_no_subpackage_exceeds_10_files` below, plus the
+    parameterized per-package cases in `tests/arch/test_server_fleet_folder_layout.py`.
     """
     limit = FILE_COUNT_LIMITS["server"]
     py_files = list((SRC_ROOT / "server").glob("*.py"))

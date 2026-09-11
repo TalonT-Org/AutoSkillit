@@ -463,94 +463,87 @@ def _gateway_pre_move_names(init_path: Path, parent_pkg: str, move_set: set[str]
     return expected
 
 
-def test_execution_github_ops_gateway_reexports_pre_move_names() -> None:
-    """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
-    modules destined for ``execution/github_ops/`` must resolve post-move as an
-    attribute of ``autoskillit.execution.github_ops``.
+@pytest.mark.parametrize(
+    ("init_subpath", "parent_pkg", "move_set", "target_pkg"),
+    [
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            {
+                "_github_http",
+                "ci",
+                "github",
+                "pr_analysis",
+                "diff_annotator",
+                "remote_resolver",
+            },
+            "autoskillit.execution.github_ops",
+            id="execution_github_ops",
+        ),
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            {
+                "session_log",
+                "_session_log_recovery",
+                "_session_retention",
+                "session_index",
+                "anomaly_detection",
+                "linux_tracing",
+                "otlp_sink",
+                "recording",
+                "_recording_skills",
+            },
+            "autoskillit.execution.evidence",
+            id="execution_evidence",
+        ),
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            {
+                "launch_resolution",
+                "commands",
+                "clone_guard",
+                "testing",
+                "db",
+            },
+            "autoskillit.execution.runtime",
+            id="execution_runtime",
+        ),
+        pytest.param(
+            ("hooks", "__init__.py"),
+            "autoskillit.hooks",
+            {
+                "_hook_constants",
+                "_hook_payload",
+                "_hook_settings",
+                "_hook_utils",
+                "_policy_event",
+                "_command_classification",
+                "_github_mutation_analysis",
+                "_exploration_request_record",
+            },
+            "autoskillit.hooks._runtime",
+            id="hooks_runtime",
+        ),
+    ],
+)
+def test_gateway_reexports_pre_move_names(
+    init_subpath: tuple[str, str],
+    parent_pkg: str,
+    move_set: set[str],
+    target_pkg: str,
+) -> None:
+    """REQ-GATEWAY-PARITY: every name the gateway re-exports from a move-set
+    module must resolve post-move as an attribute of the destination subpackage.
+
+    ``hooks_runtime``: ``_session_binding`` and ``_join_ledger`` are NOT in the
+    move set and are excluded.
     """
     import importlib
 
-    init_path = SRC_ROOT / "execution" / "__init__.py"
-    move_set = {
-        "_github_http",
-        "ci",
-        "github",
-        "pr_analysis",
-        "diff_annotator",
-        "remote_resolver",
-    }
-    expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
-    pkg = importlib.import_module("autoskillit.execution.github_ops")
+    init_path = SRC_ROOT.joinpath(*init_subpath)
+    expected = _gateway_pre_move_names(init_path, parent_pkg, move_set)
+    pkg = importlib.import_module(target_pkg)
     missing = sorted(name for name in expected if not hasattr(pkg, name))
-    assert not missing, f"execution/github_ops/ gateway missing re-exports: {missing}"
-
-
-def test_execution_evidence_gateway_reexports_pre_move_names() -> None:
-    """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
-    modules destined for ``execution/evidence/`` must resolve post-move as an
-    attribute of ``autoskillit.execution.evidence``.
-    """
-    import importlib
-
-    init_path = SRC_ROOT / "execution" / "__init__.py"
-    move_set = {
-        "session_log",
-        "_session_log_recovery",
-        "_session_retention",
-        "session_index",
-        "anomaly_detection",
-        "linux_tracing",
-        "otlp_sink",
-        "recording",
-        "_recording_skills",
-    }
-    expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
-    pkg = importlib.import_module("autoskillit.execution.evidence")
-    missing = sorted(name for name in expected if not hasattr(pkg, name))
-    assert not missing, f"execution/evidence/ gateway missing re-exports: {missing}"
-
-
-def test_execution_runtime_gateway_reexports_pre_move_names() -> None:
-    """REQ-GATEWAY-PARITY: every name the gateway re-exports from execution move-set
-    modules destined for ``execution/runtime/`` must resolve post-move as an
-    attribute of ``autoskillit.execution.runtime``.
-    """
-    import importlib
-
-    init_path = SRC_ROOT / "execution" / "__init__.py"
-    move_set = {
-        "launch_resolution",
-        "commands",
-        "clone_guard",
-        "testing",
-        "db",
-    }
-    expected = _gateway_pre_move_names(init_path, "autoskillit.execution", move_set)
-    pkg = importlib.import_module("autoskillit.execution.runtime")
-    missing = sorted(name for name in expected if not hasattr(pkg, name))
-    assert not missing, f"execution/runtime/ gateway missing re-exports: {missing}"
-
-
-def test_hooks_runtime_gateway_reexports_pre_move_names() -> None:
-    """REQ-GATEWAY-PARITY: every name the gateway re-exports from hooks move-set
-    modules destined for ``hooks/_runtime/`` must resolve post-move as an attribute
-    of ``autoskillit.hooks._runtime``. ``_session_binding`` and ``_join_ledger``
-    are NOT in the move set and are excluded.
-    """
-    import importlib
-
-    init_path = SRC_ROOT / "hooks" / "__init__.py"
-    move_set = {
-        "_hook_constants",
-        "_hook_payload",
-        "_hook_settings",
-        "_hook_utils",
-        "_policy_event",
-        "_command_classification",
-        "_github_mutation_analysis",
-        "_exploration_request_record",
-    }
-    expected = _gateway_pre_move_names(init_path, "autoskillit.hooks", move_set)
-    pkg = importlib.import_module("autoskillit.hooks._runtime")
-    missing = sorted(name for name in expected if not hasattr(pkg, name))
-    assert not missing, f"hooks/_runtime/ gateway missing re-exports: {missing}"
+    assert not missing, f"{target_pkg} gateway missing re-exports: {missing}"

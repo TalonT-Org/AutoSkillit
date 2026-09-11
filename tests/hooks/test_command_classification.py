@@ -1253,7 +1253,13 @@ class TestAnalyzeGitHubMutations:
         command: str,
         expected_status: GitHubMutationStatus,
     ) -> None:
-        assert analyze_github_mutations(command).status is expected_status
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is expected_status
+        if expected_status is GitHubMutationStatus.NONE:
+            assert analysis.mutations == ()
+        else:
+            assert [mutation.route for mutation in analysis.mutations] == ["/gh/pr/merge"]
 
     @pytest.mark.parametrize(
         "command",

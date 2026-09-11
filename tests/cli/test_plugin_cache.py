@@ -270,6 +270,12 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
         "directory_tree_digest",
         fail_digest,
     )
+    # The consumer (core/plugins/_plugin_artifact_identity.py:10) imports
+    # directory_tree_digest from ..io directly, bypassing the shim. Patch the
+    # real module too so the failure propagates to the call site.
+    from autoskillit.core.plugins import _plugin_artifact_identity as _real_pai
+
+    monkeypatch.setattr(_real_pai, "directory_tree_digest", fail_digest)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
     assert read_retiring_cache().records == (record,)

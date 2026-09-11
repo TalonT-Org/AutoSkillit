@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import autoskillit.recipe._cmd_rpc_guards as cmd_rpc_guards
+import autoskillit.recipe.cmd_rpc._cmd_rpc_guards as _real_cmd_rpc_guards
 from autoskillit.core import AuditCycleVerifier
 from autoskillit.core.closure_hashing import (
     canonical_json_bytes,
@@ -260,6 +261,11 @@ def test_active_no_go_salvage_logs_authority_validation_failure(tmp_path, monkey
         "logger",
         SimpleNamespace(warning=lambda event, **context: warnings.append((event, context))),
     )
+    monkeypatch.setattr(
+        _real_cmd_rpc_guards,
+        "logger",
+        SimpleNamespace(warning=lambda event, **context: warnings.append((event, context))),
+    )
 
     assert verify_plan_artifacts(
         plan_parts=str(plan),
@@ -280,6 +286,11 @@ def test_active_no_go_salvage_logs_malformed_association_context(tmp_path, monke
     warnings = []
     monkeypatch.setattr(
         cmd_rpc_guards,
+        "logger",
+        SimpleNamespace(warning=lambda event, **context: warnings.append((event, context))),
+    )
+    monkeypatch.setattr(
+        _real_cmd_rpc_guards,
         "logger",
         SimpleNamespace(warning=lambda event, **context: warnings.append((event, context))),
     )

@@ -159,10 +159,14 @@ def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
     import yaml
 
     import autoskillit.recipe._contracts_manifest as manifest_mod
+    import autoskillit.recipe.contracts._contracts_manifest as real_manifest_mod
     from autoskillit.recipe._api_cache import YamlFileCache
 
     monkeypatch.setattr(manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
     monkeypatch.setattr(manifest_mod, "pkg_root", lambda: tmp_path)
+    # Also patch the real module (consumer reads from real_manifest_mod._MANIFEST_CACHE).
+    monkeypatch.setattr(real_manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
+    monkeypatch.setattr(real_manifest_mod, "pkg_root", lambda: tmp_path)
 
     recipe_dir = tmp_path / "recipe"
     recipe_dir.mkdir()
@@ -199,7 +203,7 @@ def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
     undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
     assert len(undeclared) == 1
     assert undeclared[0].severity == Severity.ERROR
-    assert "verdict" in undeclared[0].message
+    assert undeclared[0].step_name == "run"
 
     manifest_v2 = {
         "skills": {

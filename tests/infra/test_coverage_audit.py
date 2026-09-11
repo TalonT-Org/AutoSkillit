@@ -198,8 +198,8 @@ class TestBuildTestSourceMap:
         monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
 
         result = cov_ast.query_contexts_map(tmp_path / ".coverage")
-        assert "src/autoskillit/core/io/io.py" in result
-        assert "tests/core/test_io.py" in result["src/autoskillit/core/io/io.py"]
+        assert "src/autoskillit/core/io.py" in result
+        assert "tests/core/test_io.py" in result["src/autoskillit/core/io.py"]
 
     def test_setup_and_teardown_contexts_excluded(self, cov_ast, tmp_path, monkeypatch):
         """query_contexts_map excludes |setup and |teardown contexts.
@@ -224,7 +224,7 @@ class TestBuildTestSourceMap:
         monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
 
         result = cov_ast.query_contexts_map(tmp_path / ".coverage")
-        assert "src/autoskillit/core/io/io.py" not in result
+        assert "src/autoskillit/core/io.py" not in result
 
     def test_build_test_source_map_writes_json(self, cov_ast, tmp_path, monkeypatch):
         """build_test_source_map() writes a valid JSON file to the output path."""
@@ -258,7 +258,7 @@ class TestBuildTestSourceMap:
         parsed = json.loads(output_path.read_text())
         assert parsed["schema_version"] == 1
         assert parsed["provenance"]["pytest_exit_code"] == 0
-        expected_key = "src/autoskillit/core/io/io.py"
+        expected_key = "src/autoskillit/core/io.py"
         assert expected_key in parsed["map"]
         assert "tests/core/test_io.py" in parsed["map"][expected_key]
 
@@ -558,7 +558,7 @@ class TestBuildTestSourceMap:
         assert provenance["source_file_count"] == 1
         assert isinstance(provenance["generated_at"], str)
         assert isinstance(provenance["tool_version"], str)
-        assert published["map"] == {"src/autoskillit/core/io/io.py": ["tests/core/test_io.py"]}
+        assert published["map"] == {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}
 
     def test_publication_is_atomic(self, cov_ast, tmp_path, monkeypatch):
         """A failed replace leaves the previous canonical oracle intact."""

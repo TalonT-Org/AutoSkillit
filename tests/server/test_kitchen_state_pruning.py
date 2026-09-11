@@ -64,7 +64,9 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
     def _raise():
         raise OSError("boom")
 
-    monkeypatch.setattr("autoskillit.core.pipeline_tracker.read_active_kitchens_registry", _raise)
+    monkeypatch.setattr(
+        "autoskillit.core.pipeline.pipeline_tracker.read_active_kitchens_registry", _raise
+    )
 
     prune_stale_kitchen_state(tmp_path, "K2")
 

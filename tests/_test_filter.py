@@ -253,7 +253,6 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "version_snapshot": frozenset({"core", "execution"}),
     "yaml_io": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
-    "io": frozenset({"core", "cli", "pipeline", "recipe", "execution", "server", "workspace"}),
     "audit": frozenset({"core", "execution", "pipeline", "recipe", "server", "workspace"}),
     "git": frozenset({"core", "pipeline", "server", "workspace"}),
     "plugins": frozenset(
@@ -295,18 +294,9 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_ids": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
-    "plugin_ids": frozenset(
-        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
-    ),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_artifact_identity": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
-    ),
-    "plugin_artifact_identity": frozenset(
-        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
-    ),
-    "plugin_cache": frozenset(
-        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
     ),
     "_plugin_cache": frozenset(
         {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}

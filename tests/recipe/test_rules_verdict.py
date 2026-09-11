@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 import autoskillit.recipe.contracts as _contracts
+import autoskillit.recipe.contracts.contracts as _real_contracts
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
@@ -378,6 +379,7 @@ def test_on_result_values_in_allowed_values_fires_on_unregistered_route(
         allowed_values=["approved", "changes_requested"],
     )
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: manifest)
+    monkeypatch.setattr(_real_contracts, "load_bundled_manifest", lambda: manifest)
     findings = run_semantic_rules(recipe)
     rule_findings = [f for f in findings if f.rule == "on-result-values-in-allowed-values"]
     assert len(rule_findings) >= 1, (

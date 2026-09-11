@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _sh
 import autoskillit.recipe.rules.rules_skill_content as _rsc
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules

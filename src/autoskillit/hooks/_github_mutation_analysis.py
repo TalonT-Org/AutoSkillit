@@ -191,22 +191,16 @@ def _segment_cwd(segment: Sequence[str], cwd: str) -> str:
         if token in {"-C", "--chdir"} and index and segment[index - 1] == "env":
             if index + 1 < len(segment):
                 value = segment[index + 1]
-                current = (
-                    value
-                    if os.path.isabs(value)
-                    else os.path.normpath(os.path.join(current, value))
-                    if current
-                    else current
-                )
+                if os.path.isabs(value):
+                    current = value
+                elif current:
+                    current = os.path.normpath(os.path.join(current, value))
         elif token.startswith("--chdir=") and "env" in segment[:index]:
             value = token.split("=", 1)[1]
-            current = (
-                value
-                if os.path.isabs(value)
-                else os.path.normpath(os.path.join(current, value))
-                if current
-                else current
-            )
+            if os.path.isabs(value):
+                current = value
+            elif current:
+                current = os.path.normpath(os.path.join(current, value))
     return current
 
 

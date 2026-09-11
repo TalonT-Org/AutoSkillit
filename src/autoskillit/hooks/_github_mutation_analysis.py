@@ -234,6 +234,7 @@ def _analyze_github_segment(
 
 
 def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAnalysis:
+    """Classify all reachable mutations, treating uncertainty as absorbing."""
     if not isinstance(command, str) or not command.strip():
         return _none_github_analysis()
     records: list[GitHubMutationRecord] = []

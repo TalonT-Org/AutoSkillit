@@ -26,7 +26,6 @@ _FLOCK_POLL_INTERVAL_S = 0.05
 # (bootstrap responsibility of the calling script).
 import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
 
-
 SESSION_BINDING_SCHEMA_VERSION: int = 3
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2
 

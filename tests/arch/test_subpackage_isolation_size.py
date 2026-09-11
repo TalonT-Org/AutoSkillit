@@ -68,6 +68,40 @@ def test_basename_fallback_dead_exemptions_are_retired() -> None:
     assert not stale, f"Retired basename-fallback exemptions reintroduced: {sorted(stale)}"
 
 
+def test_new_recipe_delivery_canonical_paths_need_no_line_limit_exemption() -> None:
+    """The post-#4673 canonical paths stay healthy, so the retirement protection
+    in ``test_basename_fallback_dead_exemptions_are_retired`` actually moves with
+    the code instead of only pinning the old flat-path keys absent.
+
+    Mirrors ``test_hook_registry_package_needs_no_line_limit_exemption`` /
+    ``test_recipe_binding_module_under_1000_lines``: each shard of the
+    decomposed ``server/recipe/_recipe_delivery/`` package, plus the still-flat
+    ``server/recipe/_recipe_section_pagination.py``, must carry no
+    ``_LINE_LIMIT_EXEMPTIONS`` entry and stay under the 1000-line default
+    ceiling.
+    """
+    canonical_paths = sorted((SRC_ROOT / "server" / "recipe" / "_recipe_delivery").rglob("*.py"))
+    assert canonical_paths, "expected shards under server/recipe/_recipe_delivery/ (issue #4673)"
+    canonical_paths.append(SRC_ROOT / "server" / "recipe" / "_recipe_section_pagination.py")
+
+    offenders = []
+    for path in canonical_paths:
+        rel = str(path.relative_to(SRC_ROOT))
+        if rel in _LINE_LIMIT_EXEMPTIONS:
+            offenders.append(f"{rel}: unexpectedly present in _LINE_LIMIT_EXEMPTIONS")
+            continue
+        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        if line_count > 1000:
+            offenders.append(
+                f"{rel}: {line_count} lines (exceeds default 1000-line ceiling, "
+                "no exemption present)"
+            )
+    assert not offenders, (
+        "New canonical post-#4673 paths need a fresh exemption or a split:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
 def test_every_exemption_key_matches_an_existing_file() -> None:
     """Every _LINE_LIMIT_EXEMPTIONS key must resolve to a real file under SRC_ROOT.
 

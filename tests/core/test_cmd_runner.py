@@ -24,7 +24,7 @@ class TestDefaultCmdRunner:
             default_cmd_runner(["false"], check=True)
 
     def test_default_cmd_runner_timeout_passed(self) -> None:
-        with patch("autoskillit.core._cmd_runner.subprocess.run") as mock_run:
+        with patch("autoskillit.core.install.cmd_runner.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="")
             default_cmd_runner(["echo", "test"], timeout=30.0)
             call_kwargs = mock_run.call_args[1]
@@ -120,7 +120,7 @@ class TestCustomRunnerInjection:
         assert result.stdout == "custom"
 
     def test_custom_runner_not_default(self) -> None:
-        with patch("autoskillit.core._cmd_runner.subprocess.run") as mock_run:
+        with patch("autoskillit.core.install.cmd_runner.subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="")
             # Using default runner should call subprocess.run
             default_cmd_runner(["echo", "test"])

@@ -24,7 +24,7 @@ _FLOCK_POLL_INTERVAL_S = 0.05
 
 # Stdlib-only: bare-name import. Requires `hooks/_runtime/` on sys.path
 # (bootstrap responsibility of the calling script).
-import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
+import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]  # noqa: E402
 
 SESSION_BINDING_SCHEMA_VERSION: int = 3
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2

@@ -998,6 +998,28 @@ class TestCheckedOutRefAllows:
         out = _run_guard("git push other HEAD:develop", kitchen_open=True, tmpdir=linked)
         assert out.strip() == ""
 
+    def test_denies_push_to_remote_aliasing_linked_worktree_via_file_url(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        """Regression for #4937: the file:// branch of `_local_path_from_remote_url`
+        (as opposed to the SCP-like or bare-path branches covered above) must also
+        resolve a same-repo alias correctly. A remote configured with an explicit
+        `file://` URL aliasing another linked worktree of the SAME repository must
+        remain protected -- a misclassified file:// URL would silently re-allow the
+        push instead of routing through the checked-out-ref deny path.
+        """
+        linked = linked_repo["linked"]
+        primary = linked_repo["primary"]
+        assert isinstance(linked, Path) and isinstance(primary, Path)
+        _git(linked, "remote", "add", "mirror-file", f"file://{primary}")
+        out = _run_guard("git push mirror-file HEAD:develop", kitchen_open=True, tmpdir=linked)
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        threatened = result["threatened_refs"]
+        assert isinstance(threatened, list)
+        assert any(row["target_ref"] == "refs/heads/develop" for row in threatened)
+        _assert_ref_unchanged(linked, "refs/heads/develop", str(linked_repo["old_sha"]))
+
 
 class TestCheckedOutRefPreflightOrdering:
     @pytest.mark.parametrize(

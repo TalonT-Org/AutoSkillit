@@ -502,15 +502,19 @@ def test_inert_mentions_and_read_only_commands_are_allowed(
         'for term in release; do gh search code "$term"; done',
         'while read -r number; do gh pr view "$number" --json number; done',
         'until false; do curl "https://api.github.com/repos/o/r/issues"; done',
+        'if gh search prs "is:open"; then :; fi',
         'find_repos() { gh search repos "topic:cli"; }; find_repos',
         "cat <(gh pr view 7 --json number)",
+        "for path in issues; do curl https://api.github.com/repos/o/r/issues; done",
     ],
     ids=[
         "for-search-code",
         "while-pr-view",
         "until-curl-get",
+        "condition-search-prs",
         "function-search-repos",
         "process-substitution-pr-view",
+        "for-curl-get",
     ],
 )
 @pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])

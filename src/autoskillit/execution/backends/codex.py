@@ -23,6 +23,7 @@ from autoskillit.core import (
     BackendConventions,
     CapabilityNotSupportedError,
     ClaudeDirectoryConventions,
+    CmdOrigin,
     CmdSpec,
     ExecutableLaunchBinding,
     ExecutionIdentity,
@@ -101,6 +102,14 @@ from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
 _CODEX_HOME_ENV_VAR = "CODEX_HOME"
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
+
+
+def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
+    command: list[str] = [origin.binary]
+    for flag, value in origin.kv_flags:
+        if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
+            command.extend((flag, value))
+    return tuple(command)
 
 
 __all__ = [
@@ -473,13 +482,9 @@ class CodexBackend(CodexSessionCommandMixin):
         if layout_errors:
             return layout_errors
 
-        probe_command: list[str] = [origin.binary]
-        for flag, value in origin.kv_flags:
-            if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
-                probe_command.extend((flag, value))
-        probe_command.extend(("mcp", "list", CodexFlags.JSON))
+        probe_command = (*_interactive_probe_prefix(origin), "mcp", "list", CodexFlags.JSON)
         errors = _validate_mcp_probe(
-            tuple(probe_command),
+            probe_command,
             env=spec.env,
             cwd=spec.cwd,
             config_bytes=config_bytes,
@@ -500,13 +505,12 @@ class CodexBackend(CodexSessionCommandMixin):
         if version_errors:
             return version_errors
 
-        discovery_command: list[str] = [origin.binary]
-        for flag, value in origin.kv_flags:
-            if flag in (CodexFlags.PROFILE, CodexFlags.CONFIG_OVERRIDE):
-                discovery_command.extend((flag, value))
-        discovery_command.extend(CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe)
+        discovery_command = (
+            *_interactive_probe_prefix(origin),
+            *CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
+        )
         errors = attest_catalog_discovery(
-            probe_command=tuple(discovery_command),
+            probe_command=discovery_command,
             env=spec.env,
             cwd=spec.cwd,
             catalog_dir=catalog_dir,

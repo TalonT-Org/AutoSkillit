@@ -382,14 +382,6 @@ def _prompt_input_for_catalog(generated_home: Path) -> bytes:
     ).encode()
 
 
-def _interactive_probe_prefix(origin: Any) -> tuple[str, ...]:
-    prefix: list[str] = [origin.binary]
-    for flag, value in origin.kv_flags:
-        if flag in ("--profile", "-c"):
-            prefix.extend((flag, value))
-    return tuple(prefix)
-
-
 def test_real_interactive_validator_reaches_successful_native_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -432,7 +424,7 @@ def test_real_interactive_validator_reaches_successful_native_probe(
 
     assert backend.validate_interactive_invocation(spec) == []
 
-    probe_prefix = _interactive_probe_prefix(spec.origin)
+    probe_prefix = codex._interactive_probe_prefix(spec.origin)
     assert calls == [
         {
             "command": (*probe_prefix, "mcp", "list", codex.CodexFlags.JSON),
@@ -487,7 +479,7 @@ def test_interactive_validator_returns_discovery_diagnostics_verbatim(
 
     assert backend.validate_interactive_invocation(spec) == discovery_errors
     assert captured["probe_command"] == (
-        *_interactive_probe_prefix(spec.origin),
+        *codex._interactive_probe_prefix(spec.origin),
         *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
     )
     assert captured["env"] == spec.env

@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoskillit.config import OutputBudgetConfig
 from autoskillit.core import (
     RecipeDeliveryMode,
     RecipeExecutionId,
@@ -262,12 +261,7 @@ def enforce_recipe_resource_response(
     tool_ctx: ToolContext,
 ) -> str:
     """Apply the ordinary response backstop and complete the receipt transaction."""
-    configured_budget = getattr(tool_ctx.config, "output_budget", None)
-    output_budget = (
-        configured_budget
-        if isinstance(configured_budget, OutputBudgetConfig)
-        else OutputBudgetConfig()
-    )
+    output_budget = tool_ctx.config.output_budget
     temp_dir = getattr(tool_ctx, "temp_dir", None)
     enforced = enforce_response_budget(
         finalized.rendered,

@@ -20,7 +20,6 @@ from .types import (
     MANAGED_SKILL_FILENAME,
     ValidatedAddDir,
     ValidatedWorktreePath,
-    validate_managed_skill_entries,
 )
 
 
@@ -57,7 +56,6 @@ def validate_add_dir(
     path: Path,
     *,
     session_home: str = "",
-    skill_entries: tuple[tuple[str, str], ...] = (),
 ) -> ValidatedAddDir:
     """Validate that a directory satisfies the --add-dir convention.
 
@@ -70,14 +68,9 @@ def validate_add_dir(
     skill_files = list(skills_subdir.glob("*/SKILL.md"))
     if not skill_files:
         raise LayoutError(f"{path}/.claude/skills/ contains no SKILL.md files")
-    try:
-        validate_managed_skill_entries(skill_entries)
-    except ValueError as exc:
-        raise LayoutError(str(exc)) from exc
     return ValidatedAddDir(
         path=str(path),
         session_home=session_home,
-        skill_entries=skill_entries,
     )
 
 

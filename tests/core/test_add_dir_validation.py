@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ValidatedAddDir
+from autoskillit.core import ValidatedAddDir, validate_managed_skill_entries
 from autoskillit.core.claude_conventions import (
     LayoutError,
     validate_add_dir,
@@ -34,6 +34,13 @@ class TestValidatedAddDir:
             vd.path = "/other"  # type: ignore[misc]
 
 
+def test_managed_skill_entries_reject_duplicate_names() -> None:
+    duplicate = ("test-skill", "test-skill/SKILL.md")
+
+    with pytest.raises(ValueError, match="duplicate managed skill name: test-skill"):
+        validate_managed_skill_entries((duplicate, duplicate))
+
+
 class TestValidateAddDir:
     """validate_add_dir enforces the .claude/skills/<name>/SKILL.md convention."""
 
@@ -55,15 +62,6 @@ class TestValidateAddDir:
         result = validate_add_dir(add_dir, session_home=str(tmp_path))
 
         assert result == ValidatedAddDir(path=str(add_dir), session_home=str(tmp_path))
-
-    def test_rejects_duplicate_managed_skill_names(self, tmp_path: Path) -> None:
-        skill_dir = tmp_path / ".claude" / "skills" / "test-skill"
-        skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text("# Test")
-        duplicate = ("test-skill", "test-skill/SKILL.md")
-
-        with pytest.raises(LayoutError, match="duplicate managed skill name: test-skill"):
-            validate_add_dir(tmp_path, skill_entries=(duplicate, duplicate))
 
     def test_missing_claude_skills_raises_layout_error(self, tmp_path: Path) -> None:
         with pytest.raises(LayoutError, match="does not contain .claude/skills/"):

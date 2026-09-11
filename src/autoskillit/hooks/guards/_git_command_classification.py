@@ -28,7 +28,7 @@ Public API surface:
         _tokenize_text, _git_result, _git_text, _parse_worktree_owners,
         _resolve_git_common_dir, _normal_branch_ref, _symbolic_head,
         _resolve_attempted_sha, _consume_option_value, _refspec_targets,
-        _same_repository
+        _same_repository, _resolve_remote_url, _local_path_from_remote_url
 """
 
 from __future__ import annotations
@@ -468,11 +468,62 @@ def _classify_fetch(
     return result
 
 
+def _resolve_remote_url(candidate: str, execution_cwd: str) -> str | None:
+    """Return the configured URL for candidate if it names a git remote, else None.
+
+    The returned URL has already passed through git's `insteadOf`/
+    `pushInsteadOf` config rewriting (git resolves this before printing), so
+    callers compare the rewritten value, not the raw configured one. A remote
+    configured with an empty URL (`url = `) also collapses to `None` here,
+    indistinguishable from an unconfigured remote name -- both are
+    pre-existing git-level ambiguities this guard does not disambiguate
+    further.
+    """
+    url = _git_text(execution_cwd, "remote", "get-url", candidate)
+    return url or None
+
+
+def _local_path_from_remote_url(url: str) -> str | None:
+    """Return the filesystem path url denotes if it is a local path/file:// remote.
+
+    Returns None for a network remote -- a scheme URL (https://, ssh://,
+    git://, ...) or git's SCP-like `user@host:path` syntax -- which cannot be
+    a checked-out worktree of this machine's filesystem.
+    """
+    if url.startswith("file://"):
+        return url[len("file://") :]
+    if "://" in url:
+        return None
+    colon_index = url.find(":")
+    slash_index = url.find("/")
+    if colon_index != -1 and (slash_index == -1 or colon_index < slash_index):
+        # SCP-like syntax (e.g. git@host:owner/repo.git) is recognized only
+        # when no slash precedes the first colon -- mirrors git's own rule
+        # for disambiguating scp-like remotes from local paths containing a
+        # colon (see `git help clone`, "GIT URLS"). A Windows DOS-drive path
+        # (e.g. `C:\repo`) matches this same shape and is classified as
+        # network here, diverging from git's own DOS-drive special case --
+        # benign for this guard, since a network classification only ever
+        # widens the allow path (`_same_repository` returns `False`), never
+        # the deny path.
+        return None
+    return url
+
+
 def _same_repository(candidate: str, context: dict[str, object]) -> bool | None:
     """Return True if candidate resolves to the same repo, False if not, None if uncertain."""
+    execution_cwd = str(context["execution_cwd"])
+    remote_url = _resolve_remote_url(candidate, execution_cwd)
+    if remote_url is not None:
+        local_path = _local_path_from_remote_url(remote_url)
+        if local_path is None:
+            # candidate is a configured remote resolving to a network URL --
+            # definitively not this worktree's own checkout.
+            return False
+        candidate = local_path
     candidate_path = candidate
     if not os.path.isabs(candidate_path):
-        candidate_path = str(Path(str(context["execution_cwd"])) / candidate_path)
+        candidate_path = str(Path(execution_cwd) / candidate_path)
     common_path = _resolve_git_common_dir(candidate_path)
     if common_path is None:
         # rev-parse failed transiently (unreachable git, ref removed, fs error);

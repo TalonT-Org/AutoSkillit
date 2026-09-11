@@ -115,3 +115,18 @@ def test_bound_attribute_reads_are_pinned_to_known_call_sites() -> None:
         "a pinned bound-attribute read site is missing -- update "
         f"_ALLOWED_BOUND_READS if this removal was intentional: {sorted(missing)}"
     )
+
+
+def test_allowed_bound_reads_paths_exist() -> None:
+    """Every ``_ALLOWED_BOUND_READS`` path must resolve to a real file under SRC_ROOT.
+
+    ``_ALLOWED_BOUND_READS`` is a hand-maintained registry with no direct
+    file-existence check -- its only indirect protection is contingent on
+    ``_SCANNED_FILES`` still covering the path. A phantom path here would
+    silently exempt a read site that no longer exists from ever being
+    exercised by ``test_bound_attribute_reads_are_pinned_to_known_call_sites``.
+    """
+    phantom = sorted(
+        path for path, _func, _expr in _ALLOWED_BOUND_READS if not (SRC_ROOT / path).is_file()
+    )
+    assert not phantom, f"_ALLOWED_BOUND_READS path(s) do not exist: {phantom}"

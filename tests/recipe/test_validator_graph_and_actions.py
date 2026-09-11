@@ -153,6 +153,9 @@ def test_run_semantic_rules_calls_analyze_dataflow_exactly_once(monkeypatch):
         call_count.append(1)
         return real_fn(recipe, **kwargs)
 
+    # make_validation_context resolves analyze_dataflow via the real analysis._analysis
+    # module's own globals (same module defines and calls it), bypassing the
+    # autoskillit.recipe._analysis shim; patch the real module too so counting_fn is seen.
     monkeypatch.setattr(_analysis, "analyze_dataflow", counting_fn)
     monkeypatch.setattr(_real_analysis, "analyze_dataflow", counting_fn)
 

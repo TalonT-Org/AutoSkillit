@@ -930,6 +930,136 @@ class TestCodexResultParserV0136Schema:
         assert len(result.raw["file_changes"]) > 0
 
 
+# ---------------------------------------------------------------------------
+# T-C3: app-server JSON-RPC whole-capture equivalence
+# ---------------------------------------------------------------------------
+
+
+def _app_server_response_line(id_: int, result: Mapping[str, object]) -> str:
+    """A JSON-RPC response (no ``method`` key) — e.g. ``initialize``'s reply.
+
+    The adapter treats this as driver-only noise, never a session event, so a
+    real app-server capture's leading response line must not disturb parsing.
+    """
+    return json.dumps({"id": id_, "result": dict(result)})
+
+
+def _app_server_thread_started_line(thread_id: str) -> str:
+    return json.dumps({"method": "thread/started", "params": {"thread": {"id": thread_id}}})
+
+
+def _app_server_turn_started_line() -> str:
+    return json.dumps({"method": "turn/started", "params": {}})
+
+
+def _app_server_item_started_line(item: Mapping[str, object]) -> str:
+    return json.dumps({"method": "item/started", "params": {"item": dict(item)}})
+
+
+def _app_server_item_completed_line(item: Mapping[str, object]) -> str:
+    return json.dumps({"method": "item/completed", "params": {"item": dict(item)}})
+
+
+def _app_server_token_usage_updated_line(
+    last: Mapping[str, object], total: Mapping[str, object]
+) -> str:
+    return json.dumps(
+        {
+            "method": "thread/tokenUsage/updated",
+            "params": {"tokenUsage": {"last": dict(last), "total": dict(total)}},
+        }
+    )
+
+
+def _app_server_turn_completed_line(status: str = "completed") -> str:
+    return json.dumps({"method": "turn/completed", "params": {"turn": {"status": status}}})
+
+
+class TestCodexResultParserAppServerEquivalence:
+    """T-C3: ``parse_stdout`` over a captured app-server session produces the
+    same ``AgentSessionResult`` fields as the equivalent exec capture (agent
+    messages, file changes, token usage, session id).
+
+    Both captures are scanned by the same ``_scan_codex_ndjson`` accumulator;
+    the app-server capture's lines are JSON-RPC notifications
+    (``thread/started``, ``item/started``/``item/completed`` with
+    ``agentMessage``/``fileChange`` items, ``thread/tokenUsage/updated``,
+    ``turn/completed``) that ``_app_server_to_exec_event`` adapts into the
+    same exec-shaped dicts before classification — this proves that adapter
+    is actually wired into the whole-capture parse path, not just
+    ``CodexStreamParser.parse_line``.
+    """
+
+    _SESSION_ID = "sess-appserver-parity"
+    _AGENT_MESSAGE = "Task completed."
+    _FILE_PATH = "/src/main.py"
+    _USAGE = {"input_tokens": 200, "cached_input_tokens": 25, "output_tokens": 80}
+
+    def _exec_capture(self) -> str:
+        return "\n".join(
+            [
+                _thread_started_line(self._SESSION_ID),
+                _item_completed_message_line(self._AGENT_MESSAGE),
+                _item_completed_file_change_line(self._FILE_PATH),
+                _turn_completed_line(self._USAGE),
+            ]
+        )
+
+    def _app_server_capture(self) -> str:
+        return "\n".join(
+            [
+                _app_server_response_line(1, {"userAgent": "codex-app-server/0.153.4"}),
+                _app_server_thread_started_line(self._SESSION_ID),
+                _app_server_turn_started_line(),
+                _app_server_item_started_line({"type": "agentMessage"}),
+                _app_server_item_completed_line(
+                    {"type": "agentMessage", "text": self._AGENT_MESSAGE}
+                ),
+                _app_server_item_started_line({"type": "fileChange", "path": self._FILE_PATH}),
+                _app_server_item_completed_line({"type": "fileChange", "path": self._FILE_PATH}),
+                _app_server_token_usage_updated_line(
+                    last={
+                        "inputTokens": self._USAGE["input_tokens"],
+                        "cachedInputTokens": self._USAGE["cached_input_tokens"],
+                        "outputTokens": self._USAGE["output_tokens"],
+                    },
+                    # Resumed-history-inclusive cumulative total: deliberately
+                    # different from `last` to prove it never leaks into
+                    # token_usage/canonical_token_usage below.
+                    total={"inputTokens": 5000, "cachedInputTokens": 400, "outputTokens": 2500},
+                ),
+                _app_server_turn_completed_line(),
+            ]
+        )
+
+    def test_app_server_capture_matches_exec_capture_fields(self) -> None:
+        parser = CodexResultParser()
+        exec_result = parser.parse_stdout(self._exec_capture())
+        app_server_result = parser.parse_stdout(self._app_server_capture())
+
+        assert exec_result.success is True
+        assert app_server_result.success is True
+        assert app_server_result.session_id == exec_result.session_id == self._SESSION_ID
+        assert app_server_result.output == exec_result.output == self._AGENT_MESSAGE
+        assert app_server_result.raw["agent_messages"] == exec_result.raw["agent_messages"]
+        assert app_server_result.raw["file_changes"] == exec_result.raw["file_changes"]
+        assert app_server_result.raw["file_changes"] == [self._FILE_PATH]
+        assert app_server_result.raw["token_usage"] == exec_result.raw["token_usage"]
+        assert (
+            app_server_result.raw["canonical_token_usage"]
+            == exec_result.raw["canonical_token_usage"]
+        )
+
+        # cumulative_token_usage is app-server-only raw diagnostics (resumed-
+        # history-inclusive); an exec capture never populates it.
+        assert exec_result.raw["cumulative_token_usage"] is None
+        assert app_server_result.raw["cumulative_token_usage"] == {
+            "input_tokens": 5000,
+            "cached_input_tokens": 400,
+            "output_tokens": 2500,
+        }
+
+
 class TestExtractCodexTurnUsage:
     def test_current_native_fixture_emits_ordered_rows_in_closed_interval(self) -> None:
         assert _fixture_version(_CURRENT_TURN_USAGE_FIXTURE) == "0.153.4"

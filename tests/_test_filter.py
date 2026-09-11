@@ -2001,14 +2001,12 @@ def apply_manifest(
     """
     if manifest is None:
         return None
-    if compiled_matchers is not None:
-        compiled = compiled_matchers
-    else:
-        compiled = _compile_manifest_matchers(manifest)
+    if compiled_matchers is None:
+        compiled_matchers = _compile_manifest_matchers(manifest)
     matched_dirs: set[str] = set()
     for f in changed_files:
         file_matched = False
-        for pattern, spec in compiled.items():
+        for pattern, spec in compiled_matchers.items():
             if spec.match_file(f):
                 test_dirs = manifest[pattern]
                 if isinstance(test_dirs, list):
@@ -2175,7 +2173,7 @@ def build_test_scope(
 
     test_dirs: set[str] = set()
     direct_test_files: set[str] = set()
-    compiled_manifest_matchers: dict[str, pathspec.PathSpec] | None = None
+    compiled_matchers: dict[str, pathspec.PathSpec] | None = None
     for f in changed_files:
         if f.startswith("tests/") and f.endswith(".py"):
             direct_test_files.add(f)
@@ -2239,11 +2237,9 @@ def build_test_scope(
             else:
                 return FullRunReason.UNMAPPED_FILE
         else:
-            if manifest is not None and compiled_manifest_matchers is None:
-                compiled_manifest_matchers = _compile_manifest_matchers(manifest)
-            manifest_dirs = apply_manifest(
-                {f}, manifest, compiled_matchers=compiled_manifest_matchers
-            )
+            if manifest is not None and compiled_matchers is None:
+                compiled_matchers = _compile_manifest_matchers(manifest)
+            manifest_dirs = apply_manifest({f}, manifest, compiled_matchers=compiled_matchers)
             if manifest_dirs is None:
                 return FullRunReason.UNMAPPED_FILE
             test_dirs.update(manifest_dirs)

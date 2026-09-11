@@ -51,7 +51,7 @@ def test_kitchen_identity_samples_process_incarnation_once(monkeypatch, tmp_path
         def create_time(self) -> float:
             return 123.5
 
-    monkeypatch.setattr("autoskillit.core._plugin_cache.psutil.Process", Process)
+    monkeypatch.setattr("autoskillit.core._active_kitchens.psutil.Process", Process)
 
     identity = sample_kitchen_process_identity("kitchen", 42, tmp_path)
 
@@ -90,7 +90,7 @@ def test_kitchen_identity_rejects_nonpositive_sampled_create_time(
         def create_time(self) -> float:
             return 0.0
 
-    monkeypatch.setattr("autoskillit.core._plugin_cache.psutil.Process", Process)
+    monkeypatch.setattr("autoskillit.core._active_kitchens.psutil.Process", Process)
 
     with pytest.raises(ValueError, match="create_time"):
         sample_kitchen_process_identity("kitchen", 42, tmp_path)
@@ -125,14 +125,14 @@ def test_pid_alive_no_such_process_with_create_time_reports_dead(
 ) -> None:
     """A PID that vanished between os.kill and psutil.Process must be reported dead
     when the caller supplied a stored_create_time (identity check possible)."""
-    from autoskillit.core import _plugin_cache
+    from autoskillit.core import _active_kitchens
 
-    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+    monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
     def raise_no_such_process(*_args: object, **_kwargs: object) -> object:
         raise psutil.NoSuchProcess(42)
 
-    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
+    monkeypatch.setattr(_active_kitchens.psutil, "Process", raise_no_such_process)
 
     assert _pid_alive(42, stored_create_time=1.0) is False
 
@@ -142,14 +142,14 @@ def test_pid_alive_no_such_process_without_create_time_reports_dead(
 ) -> None:
     """NoSuchProcess is definitive even without stored_create_time — the process
     is gone regardless of whether we have a stored identity to compare against."""
-    from autoskillit.core import _plugin_cache
+    from autoskillit.core import _active_kitchens
 
-    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+    monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
     def raise_no_such_process(*_args: object, **_kwargs: object) -> object:
         raise psutil.NoSuchProcess(42)
 
-    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_no_such_process)
+    monkeypatch.setattr(_active_kitchens.psutil, "Process", raise_no_such_process)
 
     assert _pid_alive(42, stored_create_time=None) is False
 
@@ -159,14 +159,14 @@ def test_pid_alive_access_denied_with_create_time_assumes_alive(
 ) -> None:
     """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive
     even when the caller has a stored_create_time to compare against."""
-    from autoskillit.core import _plugin_cache
+    from autoskillit.core import _active_kitchens
 
-    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+    monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
     def raise_access_denied(*_args: object, **_kwargs: object) -> object:
         raise psutil.AccessDenied(42)
 
-    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
+    monkeypatch.setattr(_active_kitchens.psutil, "Process", raise_access_denied)
 
     assert _pid_alive(42, stored_create_time=1.0) is True
 
@@ -175,14 +175,14 @@ def test_pid_alive_access_denied_without_create_time_assumes_alive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive."""
-    from autoskillit.core import _plugin_cache
+    from autoskillit.core import _active_kitchens
 
-    monkeypatch.setattr(_plugin_cache.os, "kill", lambda *_a, **_kw: None)
+    monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
     def raise_access_denied(*_args: object, **_kwargs: object) -> object:
         raise psutil.AccessDenied(42)
 
-    monkeypatch.setattr(_plugin_cache.psutil, "Process", raise_access_denied)
+    monkeypatch.setattr(_active_kitchens.psutil, "Process", raise_access_denied)
 
     assert _pid_alive(42, stored_create_time=None) is True
 

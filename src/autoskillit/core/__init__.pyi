@@ -586,6 +586,7 @@ from .types import (
 from .types import MANAGED_LAUNCH_ID_ENV_VAR as MANAGED_LAUNCH_ID_ENV_VAR
 from .types import MANAGED_LINEAGE_DIGEST_ENV_VAR as MANAGED_LINEAGE_DIGEST_ENV_VAR
 from .types import MANAGED_LINEAGE_REF_ENV_VAR as MANAGED_LINEAGE_REF_ENV_VAR
+from .types import MANAGED_SKILL_FILENAME as MANAGED_SKILL_FILENAME
 from .types import MCP_CLIENT_BACKEND_ENV_VAR as MCP_CLIENT_BACKEND_ENV_VAR
 from .types import (
     NATIVE_SHELL_CAPTURE_MODE_ENV_VAR as NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,
@@ -1191,8 +1192,6 @@ from .types import SkillContractError as SkillContractError
 from .types import SkillContractRemediationDef as SkillContractRemediationDef
 from .types import SkillContractResolver as SkillContractResolver
 from .types import SkillContractView as SkillContractView
-from .types import MANAGED_SKILL_FILENAME as MANAGED_SKILL_FILENAME
-from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import SkillExclusionAuthority as SkillExclusionAuthority
 from .types import SkillExecutionRole as SkillExecutionRole
 from .types import SkillFamilyDef as SkillFamilyDef
@@ -1354,6 +1353,7 @@ from .types import (
     validate_context_admission_persistence_value as validate_context_admission_persistence_value,
 )
 from .types import validate_label_transition as validate_label_transition
+from .types import validate_managed_skill_entries as validate_managed_skill_entries
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
 from .types._type_exploration import (

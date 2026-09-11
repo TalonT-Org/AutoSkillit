@@ -418,18 +418,21 @@ _STAGE_PACKAGES: tuple[tuple[str, int], ...] = (
     ("server/recipe", 10),
     # Two directory levels below server/; reached by neither
     # test_server_file_count_under_limit (root only) nor
-    # test_no_subpackage_exceeds_10_files (one level of nesting only).
-    ("server/recipe/section", 5),
+    # test_no_subpackage_exceeds_10_files (one level of nesting only). Ceiling
+    # carries headroom above the current count (5) -- a ceiling equal to the
+    # current count is a rubber stamp that trips on the very next file added.
+    ("server/recipe/section", 7),
     ("server/lifecycle", 10),
     # Two directory levels below server/ and underscore-prefixed; reached by
     # neither test_server_file_count_under_limit (root only) nor
     # test_no_subpackage_exceeds_10_files (one level of nesting, non-underscore
-    # names only).
-    ("server/lifecycle/_lifespan", 4),
+    # names only). Ceiling carries headroom above the current count (4).
+    ("server/lifecycle/_lifespan", 6),
     ("server/response", 10),
     # Same two-level, underscore-prefixed coverage gap as
-    # server/lifecycle/_lifespan above.
-    ("server/response/_response_budget", 5),
+    # server/lifecycle/_lifespan above. Ceiling carries headroom above the
+    # current count (5).
+    ("server/response/_response_budget", 7),
     ("fleet/campaign_state", 10),
 )
 

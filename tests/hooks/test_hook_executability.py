@@ -46,8 +46,11 @@ def _extract_hook_commands() -> list[str]:
 @pytest.mark.parametrize("module_name", ["_flags", "_interpreters"])
 def test_classification_submodule_imports_standalone(module_name: str) -> None:
     hooks_dir = pkg_root() / "hooks"
+    runtime_dir = hooks_dir / "_runtime"
     code = (
-        f"import sys; sys.path.insert(0, {str(hooks_dir)!r}); import _classification.{module_name}"
+        f"import sys; sys.path.insert(0, {str(hooks_dir)!r}); "
+        f"sys.path.insert(0, {str(runtime_dir)!r}); "
+        f"import _classification.{module_name}"
     )
 
     proc = subprocess.run(

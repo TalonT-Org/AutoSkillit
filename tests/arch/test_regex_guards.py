@@ -114,7 +114,7 @@ def test_cmd_keyword_regexes_use_path_safe_guards():
 
 HOOK_GUARD_RULE_FILES = [
     SRC_ROOT / "hooks" / "guards" / "write_guard.py",
-    SRC_ROOT / "hooks" / "_command_classification.py",
+    SRC_ROOT / "hooks" / "_runtime" / "_command_classification.py",
 ]
 
 
@@ -295,9 +295,9 @@ def test_git_ops_guard_orchestrator_keeps_command_classification_import() -> Non
 
 def test_shared_command_classification_module_exists():
     """The shared command classification module must exist for guards to import."""
-    module_path = SRC_ROOT / "hooks" / "_command_classification.py"
+    module_path = SRC_ROOT / "hooks" / "_runtime" / "_command_classification.py"
     assert module_path.exists(), (
-        "hooks/_command_classification.py must exist — "
+        "hooks/_runtime/_command_classification.py must exist — "
         "it centralizes interpreter/wrapper detection for all command-classifying guards"
     )
 
@@ -334,7 +334,7 @@ def test_write_guard_uses_tokenization() -> None:
 
 def test_command_classification_exports_tokenization() -> None:
     """_command_classification.py must export the tokenization primitives."""
-    source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
+    source = (SRC_ROOT / "hooks" / "_runtime" / "_command_classification.py").read_text()
     for name in (
         "tokenize_command_segments",
         "command_verb",

@@ -485,7 +485,7 @@ class TestCIVocabularyContract:
 
     def test_failed_conclusions_constant_exists(self):
         """FAILED_CONCLUSIONS must be exported as a module-level constant."""
-        from autoskillit.execution import ci
+        from autoskillit.execution.github_ops import ci
 
         assert hasattr(ci, "FAILED_CONCLUSIONS")
         assert isinstance(ci.FAILED_CONCLUSIONS, frozenset)
@@ -493,7 +493,7 @@ class TestCIVocabularyContract:
 
     def test_known_ci_conclusions_constant_exists(self):
         """KNOWN_CI_CONCLUSIONS must be exported and cover all values ci.py tests for."""
-        from autoskillit.execution import ci
+        from autoskillit.execution.github_ops import ci
 
         assert hasattr(ci, "KNOWN_CI_CONCLUSIONS")
         assert isinstance(ci.KNOWN_CI_CONCLUSIONS, frozenset)

@@ -404,11 +404,7 @@ def test_reclaimer_targets_exist_on_disk() -> None:
     the registry) so it is actually exercised in CI.
     """
     repo_root = REPO_ROOT
-    missing = [
-        path
-        for path, _qualified in RECLAIMER_TARGETS
-        if not (repo_root / path).is_file()
-    ]
+    missing = [path for path, _qualified in RECLAIMER_TARGETS if not (repo_root / path).is_file()]
     assert not missing, f"RECLAIMER_TARGETS references missing files: {missing}"
 
 

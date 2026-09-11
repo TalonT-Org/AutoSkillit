@@ -16,7 +16,7 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-SESSION_LOG = SRC / "execution" / "session_log.py"
+SESSION_LOG = SRC / "execution" / "evidence" / "session_log.py"
 
 
 def _find_flush_session_log(tree: ast.AST) -> ast.FunctionDef | None:

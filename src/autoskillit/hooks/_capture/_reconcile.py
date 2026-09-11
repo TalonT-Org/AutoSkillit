@@ -28,7 +28,7 @@ from ._types import (
 if TYPE_CHECKING:
     from autoskillit.hooks._runtime._policy_event import PolicyEvent, render_provenance_prefix
 elif __package__ == "_capture":
-    from _policy_event import PolicyEvent, render_provenance_prefix
+    from _runtime._policy_event import PolicyEvent, render_provenance_prefix
 else:
     from .._runtime._policy_event import PolicyEvent, render_provenance_prefix
 

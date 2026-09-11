@@ -266,8 +266,8 @@ __all__ = [
     "command_has_blocked_protected_path_read",
     "analyze_github_mutations",
     "consume_exploration_request_record",
-    "]",
 ]
+
 
 def __getattr__(name: str) -> object:
     """Lazily resolve re-exported names from their source submodules."""
@@ -276,10 +276,12 @@ def __getattr__(name: str) -> object:
     if submod is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     from importlib import import_module
+
     module = import_module(f"{__name__}.{submod}")
     value = getattr(module, name)
     globals()[name] = value  # cache for next access
     return value
+
 
 def __dir__() -> list[str]:
     return sorted(set(globals().keys()) | set(_NAME_TO_MODULE.keys()))

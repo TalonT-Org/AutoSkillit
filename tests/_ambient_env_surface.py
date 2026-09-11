@@ -921,7 +921,7 @@ FORWARDING_SITES: dict[str, str] = {
         "PROTECTED_CAPTURE_ENV_VARS; the exclusion happens outside the single expression this"
         "scanner inspects."
     ),
-    "hooks/_dispatch.py:80": (
+    "hooks/_dispatch.py:84": (
         "Unfiltered dict(os.environ) base for a same-host hook-script subprocess; only"
         "PYTHONDONTWRITEBYTECODE is added on top."
     ),

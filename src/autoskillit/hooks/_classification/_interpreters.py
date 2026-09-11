@@ -496,7 +496,7 @@ def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[
 
 if not TYPE_CHECKING:
     if __package__ == "autoskillit.hooks._classification":
-        from autoskillit.hooks._runtime import _command_classification as _classification
+        from .._runtime import _command_classification as _classification
     else:
         import _command_classification as _classification
 

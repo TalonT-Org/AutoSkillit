@@ -23,7 +23,7 @@ def _has_path_startswith_slash(func_node: ast.FunctionDef) -> bool:
 
 
 def test_extract_redirect_targets_uses_resolve_write_target():
-    import autoskillit.hooks._command_classification as mod
+    import autoskillit.hooks._runtime._command_classification as mod
 
     with open(mod.__file__) as f:
         source = ast.parse(f.read())

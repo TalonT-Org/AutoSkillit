@@ -229,7 +229,9 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
             "flush_session_log()"
         ),
         machine_local=True,
-        detection=("autoskillit.execution.evidence.session_index:find_stale_session_archive_references"),
+        detection=(
+            "autoskillit.execution.evidence.session_index:find_stale_session_archive_references"
+        ),
     ),
     DurableArtifactWriterDef(
         writer="autoskillit.execution.process._process_tether:write_tether",

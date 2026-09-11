@@ -418,8 +418,9 @@ class TestPtyWorkloadResolutionFailureDoesNotAbortSpawn:
         async def _boom(**kwargs):
             raise TraceTargetResolutionError(root_pid=1, expected_basename="python")
 
-        monkeypatch.setattr("autoskillit.execution.evidence.linux_tracing.resolve_trace_target",
-        _boom)
+        monkeypatch.setattr(
+            "autoskillit.execution.evidence.linux_tracing.resolve_trace_target", _boom
+        )
 
         # See the sibling test above for why this is patched via the module
         # object rather than a string path.

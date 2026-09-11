@@ -154,45 +154,6 @@ def test_stage_a_canonical_recipe_imports_resolve_and_old_paths_are_gone() -> No
 
 
 # ---------------------------------------------------------------------------
-# T2 -- Stage A: layout, documentation, and real ceilings
-# ---------------------------------------------------------------------------
-
-_STAGE_A_PACKAGES: tuple[tuple[str, int], ...] = (
-    ("server/recipe", 10),
-    ("server/recipe/section", 5),
-)
-
-
-@pytest.mark.parametrize("rel_path,max_files", _STAGE_A_PACKAGES)
-def test_stage_a_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
-    """Each new Stage A package exists, stays within its nested-file ceiling, and is documented.
-
-    `server/recipe/section/` sits two directory levels below `server/` and is
-    therefore reached by neither `test_server_file_count_under_limit` (root
-    only) nor `test_no_subpackage_exceeds_10_files` (one level of nesting
-    only) -- this parameterized case is what actually keeps it covered.
-    """
-    pkg_dir = SRC_ROOT / rel_path
-    assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
-
-    py_files = list(pkg_dir.glob("*.py"))
-    assert len(py_files) <= max_files, (
-        f"{rel_path}/ has {len(py_files)} direct Python files, max is {max_files}"
-    )
-
-    agents_md = pkg_dir / "AGENTS.md"
-    assert agents_md.is_file(), f"{rel_path}/AGENTS.md is missing"
-    agents_text = agents_md.read_text(encoding="utf-8")
-    assert agents_text.strip(), f"{rel_path}/AGENTS.md is empty"
-
-    claude_md = pkg_dir / "CLAUDE.md"
-    assert claude_md.is_file(), f"{rel_path}/CLAUDE.md is missing"
-    assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
-        f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
-    )
-
-
-# ---------------------------------------------------------------------------
 # T1 -- Stage B: canonical imports and removed old locations
 # ---------------------------------------------------------------------------
 
@@ -283,46 +244,6 @@ def test_stage_b_canonical_lifecycle_imports_resolve_and_old_paths_are_gone() ->
 
 
 # ---------------------------------------------------------------------------
-# T2 -- Stage B: layout, documentation, and real ceilings
-# ---------------------------------------------------------------------------
-
-_STAGE_B_PACKAGES: tuple[tuple[str, int], ...] = (
-    ("server/lifecycle", 10),
-    ("server/lifecycle/_lifespan", 4),
-)
-
-
-@pytest.mark.parametrize("rel_path,max_files", _STAGE_B_PACKAGES)
-def test_stage_b_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
-    """Each new Stage B package exists, stays within its nested-file ceiling, and is documented.
-
-    `server/lifecycle/_lifespan/` sits two directory levels below `server/`
-    and is underscore-prefixed, so it is reached by neither
-    `test_server_file_count_under_limit` (root only) nor
-    `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
-    names only) -- this parameterized case is what actually keeps it covered.
-    """
-    pkg_dir = SRC_ROOT / rel_path
-    assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
-
-    py_files = list(pkg_dir.glob("*.py"))
-    assert len(py_files) <= max_files, (
-        f"{rel_path}/ has {len(py_files)} direct Python files, max is {max_files}"
-    )
-
-    agents_md = pkg_dir / "AGENTS.md"
-    assert agents_md.is_file(), f"{rel_path}/AGENTS.md is missing"
-    agents_text = agents_md.read_text(encoding="utf-8")
-    assert agents_text.strip(), f"{rel_path}/AGENTS.md is empty"
-
-    claude_md = pkg_dir / "CLAUDE.md"
-    assert claude_md.is_file(), f"{rel_path}/CLAUDE.md is missing"
-    assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
-        f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
-    )
-
-
-# ---------------------------------------------------------------------------
 # T1 -- Stage C: canonical imports and removed old locations
 # ---------------------------------------------------------------------------
 
@@ -404,46 +325,6 @@ def test_stage_c_canonical_response_imports_resolve_and_old_paths_are_gone() -> 
         if outcome != "ModuleNotFoundError"
     }
     assert not not_removed, f"old response module path(s) still importable: {not_removed}"
-
-
-# ---------------------------------------------------------------------------
-# T2 -- Stage C: layout, documentation, and real ceilings
-# ---------------------------------------------------------------------------
-
-_STAGE_C_PACKAGES: tuple[tuple[str, int], ...] = (
-    ("server/response", 10),
-    ("server/response/_response_budget", 5),
-)
-
-
-@pytest.mark.parametrize("rel_path,max_files", _STAGE_C_PACKAGES)
-def test_stage_c_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
-    """Each new Stage C package exists, stays within its nested-file ceiling, and is documented.
-
-    `server/response/_response_budget/` sits two directory levels below
-    `server/` and is underscore-prefixed, so it is reached by neither
-    `test_server_file_count_under_limit` (root only) nor
-    `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
-    names only) -- this parameterized case is what actually keeps it covered.
-    """
-    pkg_dir = SRC_ROOT / rel_path
-    assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
-
-    py_files = list(pkg_dir.glob("*.py"))
-    assert len(py_files) <= max_files, (
-        f"{rel_path}/ has {len(py_files)} direct Python files, max is {max_files}"
-    )
-
-    agents_md = pkg_dir / "AGENTS.md"
-    assert agents_md.is_file(), f"{rel_path}/AGENTS.md is missing"
-    agents_text = agents_md.read_text(encoding="utf-8")
-    assert agents_text.strip(), f"{rel_path}/AGENTS.md is empty"
-
-    claude_md = pkg_dir / "CLAUDE.md"
-    assert claude_md.is_file(), f"{rel_path}/CLAUDE.md is missing"
-    assert claude_md.read_text(encoding="utf-8") == "@AGENTS.md\n", (
-        f"{rel_path}/CLAUDE.md must be the exact `@AGENTS.md` shim"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -529,15 +410,39 @@ def test_stage_d_canonical_campaign_state_imports_resolve_and_old_paths_are_gone
 
 
 # ---------------------------------------------------------------------------
-# T2 -- Stage D: layout, documentation, and real ceilings
+# T2 -- layout, documentation, and real ceilings for every decomposed package
 # ---------------------------------------------------------------------------
 
-_STAGE_D_PACKAGES: tuple[tuple[str, int], ...] = (("fleet/campaign_state", 10),)
+_STAGE_PACKAGES: tuple[tuple[str, int], ...] = (
+    ("server/recipe", 10),
+    # Two directory levels below server/; reached by neither
+    # test_server_file_count_under_limit (root only) nor
+    # test_no_subpackage_exceeds_10_files (one level of nesting only).
+    ("server/recipe/section", 5),
+    ("server/lifecycle", 10),
+    # Two directory levels below server/ and underscore-prefixed; reached by
+    # neither test_server_file_count_under_limit (root only) nor
+    # test_no_subpackage_exceeds_10_files (one level of nesting, non-underscore
+    # names only).
+    ("server/lifecycle/_lifespan", 4),
+    ("server/response", 10),
+    # Same two-level, underscore-prefixed coverage gap as
+    # server/lifecycle/_lifespan above.
+    ("server/response/_response_budget", 5),
+    ("fleet/campaign_state", 10),
+)
 
 
-@pytest.mark.parametrize("rel_path,max_files", _STAGE_D_PACKAGES)
-def test_stage_d_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
-    """The new Stage D package exists, stays within its nested-file ceiling, and is documented."""
+@pytest.mark.parametrize("rel_path,max_files", _STAGE_PACKAGES)
+def test_stage_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
+    """Each new #4673 package exists, stays within its nested-file ceiling, and is documented.
+
+    Packages nested two directory levels below `server/` (and/or
+    underscore-prefixed) are reached by neither `test_server_file_count_under_limit`
+    (root only) nor `test_no_subpackage_exceeds_10_files` (one level of nesting,
+    non-underscore names only) -- these parameterized cases are what actually
+    keep them covered.
+    """
     pkg_dir = SRC_ROOT / rel_path
     assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"
 

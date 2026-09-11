@@ -127,7 +127,7 @@ class TestPlannerDiscoveryDenied:
             "while read -r term; do gh search {search_kind} $term; done",
             "until false; do gh search {search_kind} query; done",
             "if gh search {search_kind} query; then :; fi",
-            "find_items() { gh search {search_kind} query; }; find_items",
+            "find_items() {{ gh search {search_kind} query; }}; find_items",
             "bash -c 'bash -c \"gh search {search_kind} query\"'",
             "echo $(gh search {search_kind} query)",
             "cat <(gh search {search_kind} query)",

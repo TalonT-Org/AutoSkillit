@@ -10,8 +10,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.hooks import _github_mutation_cli_analysis as _cli
-    from autoskillit.hooks import _github_mutation_request_analysis as _request
+    from autoskillit.hooks._classification import _github_mutation_cli_analysis as _cli
+    from autoskillit.hooks._classification import _github_mutation_request_analysis as _request
     from autoskillit.hooks._command_classification import (
         ArgvToken,
         _select_executable_argv_tokens,
@@ -19,11 +19,11 @@ if TYPE_CHECKING:
     )
 else:
     if __package__ == "autoskillit.hooks":
-        from . import _github_mutation_cli_analysis as _cli
-        from . import _github_mutation_request_analysis as _request
+        from ._classification import _github_mutation_cli_analysis as _cli
+        from ._classification import _github_mutation_request_analysis as _request
     else:
-        import _github_mutation_cli_analysis as _cli
-        import _github_mutation_request_analysis as _request
+        from _classification import _github_mutation_cli_analysis as _cli
+        from _classification import _github_mutation_request_analysis as _request
     from _command_classification import (  # noqa: E402
         ArgvToken,
         _select_executable_argv_tokens,

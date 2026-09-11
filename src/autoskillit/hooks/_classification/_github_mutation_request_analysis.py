@@ -23,15 +23,26 @@ if TYPE_CHECKING:
         command_verb_and_args,
     )
 else:
-    from _command_classification import (  # noqa: E402
-        ArgvToken,
-        _argv_token_after_prefix,
-        _argv_token_value_after_key,
-        _consume_argv_flag,
-        _FlagArity,
-        _normalize_executable,
-        command_verb_and_args,
-    )
+    if __package__ == "autoskillit.hooks._classification":
+        from .._command_classification import (  # noqa: E402
+            ArgvToken,
+            _argv_token_after_prefix,
+            _argv_token_value_after_key,
+            _consume_argv_flag,
+            _FlagArity,
+            _normalize_executable,
+            command_verb_and_args,
+        )
+    else:
+        from _command_classification import (  # noqa: E402
+            ArgvToken,
+            _argv_token_after_prefix,
+            _argv_token_value_after_key,
+            _consume_argv_flag,
+            _FlagArity,
+            _normalize_executable,
+            command_verb_and_args,
+        )
 
 
 class GitHubMutationKind(StrEnum):

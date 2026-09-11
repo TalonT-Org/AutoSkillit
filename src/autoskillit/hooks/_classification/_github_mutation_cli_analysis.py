@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
-    from autoskillit.hooks._github_mutation_request_analysis import (
+    from autoskillit.hooks._classification._github_mutation_request_analysis import (
         _GITHUB_WRITE_METHODS,
         GitHubMutationKind,
         GitHubMutationRecord,
@@ -18,9 +17,13 @@ if TYPE_CHECKING:
         _github_mutation_kind,
         _is_dynamic_shell_value,
     )
+    from autoskillit.hooks._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
 else:
-    from _command_classification import ArgvToken, _consume_argv_flag, _FlagArity
-    from _github_mutation_request_analysis import (
+    if __package__ == "autoskillit.hooks._classification":
+        from .._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
+    else:
+        from _command_classification import ArgvToken, _consume_argv_flag, _FlagArity
+    from ._github_mutation_request_analysis import (
         _GITHUB_WRITE_METHODS,
         GitHubMutationKind,
         GitHubMutationRecord,

@@ -243,7 +243,7 @@ def _analyze_gh_api(
     input_context_safe: bool,
     resolved_redirect_targets: Sequence[str],
     file_redirect_count: int,
-) -> tuple[GitHubMutationRecord | None, str, str]:
+) -> tuple[GitHubMutationRecord | None, str, str, bool]:
     method: ArgvToken | None = None
     route: ArgvToken | None = None
     input_value: ArgvToken | None = None
@@ -262,13 +262,13 @@ def _analyze_gh_api(
         value, next_i, matched = _flag_value(args, i, long_name="--method", short_name="-X")
         if matched or token.text in {"--method", "-X"}:
             if not matched or value is None:
-                return (None, "missing_required_value", "GitHub API method is missing")
+                return (None, "missing_required_value", "GitHub API method is missing", False)
             method, i = value, next_i
             continue
         value, next_i, matched = _flag_value(args, i, long_name="--input")
         if matched or token.text == "--input":
             if not matched or value is None:
-                return (None, "missing_required_value", "GitHub --input path is missing")
+                return (None, "missing_required_value", "GitHub --input path is missing", False)
             input_value, has_body_fields, i = value, True, next_i
             continue
         field_match = False
@@ -278,7 +278,7 @@ def _analyze_gh_api(
             )
             if matched or token.text in {long_name, short_name}:
                 if not matched or value is None:
-                    return (None, "missing_required_value", f"{long_name} value is missing")
+                    return (None, "missing_required_value", f"{long_name} value is missing", False)
                 field_values.append(value)
                 has_body_fields, i, field_match = True, next_i, True
                 break
@@ -295,9 +295,10 @@ def _analyze_gh_api(
                     None,
                     "unrecognized_gh_api_flag",
                     f"unrecognized gh api flag: {token.text!r}",
+                    False,
                 )
             if value is None and _GH_API_FLAG_SPEC.get(token.text) == _FlagArity.VALUE:
-                return (None, "missing_required_value", f"{token.text} value is missing")
+                return (None, "missing_required_value", f"{token.text} value is missing", False)
             i = next_i
             continue
         if route is None:
@@ -308,17 +309,18 @@ def _analyze_gh_api(
             None,
             "request_cardinality_unresolved",
             "multiple GitHub API routes are unresolved",
+            False,
         )
     if route is None:
         return (
-            (None, "missing_required_value", "GitHub API route is missing")
+            (None, "missing_required_value", "GitHub API route is missing", False)
             if method is not None or has_body_fields
-            else (None, "", "")
+            else (None, "", "", True)
         )
     if _is_dynamic_shell_value(route):
-        return (None, "dynamic_target", "GitHub API route is dynamic")
+        return (None, "dynamic_target", "GitHub API route is dynamic", False)
     if method is not None and _is_dynamic_shell_value(method):
-        return (None, "dynamic_target", "GitHub API method is dynamic")
+        return (None, "dynamic_target", "GitHub API method is dynamic", False)
     payload: dict[str, Any] = {}
     query_from_literal_input = input_value is not None
     if input_value is not None:
@@ -327,10 +329,11 @@ def _analyze_gh_api(
                 None,
                 "unsafe_input_provenance",
                 "a prior command may rewrite the inspected GitHub --input file",
+                False,
             )
         loaded, reason_code, reason = _load_literal_github_input(input_value, cwd=cwd)
         if loaded is None:
-            return (None, reason_code, reason)
+            return (None, reason_code, reason, False)
         input_path = (
             os.path.normpath(input_value.text)
             if os.path.isabs(input_value.text)
@@ -341,6 +344,7 @@ def _analyze_gh_api(
                 None,
                 "unsafe_input_provenance",
                 "an output redirect may alias the inspected GitHub --input file",
+                False,
             )
         for target in resolved_redirect_targets:
             if os.path.realpath(target) == os.path.realpath(input_path):
@@ -348,6 +352,7 @@ def _analyze_gh_api(
                     None,
                     "unsafe_input_provenance",
                     "an output redirect aliases the inspected GitHub --input file",
+                    False,
                 )
             if not os.path.exists(target):
                 continue
@@ -357,12 +362,14 @@ def _analyze_gh_api(
                         None,
                         "unsafe_input_provenance",
                         "an output redirect aliases the inspected GitHub --input file",
+                        False,
                     )
             except OSError:
                 return (
                     None,
                     "unsafe_input_provenance",
                     "an output redirect alias could not be inspected safely",
+                    False,
                 )
         payload = loaded
     effective_method = (
@@ -372,16 +379,17 @@ def _analyze_gh_api(
     )
     normalized_route = _normalize_github_route(route.text)
     if effective_method not in _GITHUB_WRITE_METHODS:
-        return (None, "", "")
+        return (None, "", "", True)
     if paginate:
         return (
             None,
             "request_cardinality_unresolved",
             "mutation request count is indeterminate with --paginate",
+            False,
         )
     comment_count, reason_code, reason = _comment_count_from_payload(payload)
     if reason:
-        return (None, reason_code, reason)
+        return (None, reason_code, reason, False)
     if graphql:
         query: ArgvToken | None = None
         raw_query = payload.get("query")
@@ -394,9 +402,9 @@ def _analyze_gh_api(
                     query = _argv_token_value_after_key(field, field_key)
                     break
         if query is None or (not query_from_literal_input and _is_dynamic_shell_value(query)):
-            return (None, "dynamic_target", "GraphQL mutation document is unresolved")
+            return (None, "dynamic_target", "GraphQL mutation document is unresolved", False)
         if not re.search(r"\bmutation\b", query.text):
-            return (None, "", "")
+            return (None, "", "", True)
         kind = (
             GitHubMutationKind.GRAPHQL_REVIEW
             if any(
@@ -411,4 +419,5 @@ def _analyze_gh_api(
         GitHubMutationRecord(effective_method, normalized_route, kind, 1, comment_count),
         "",
         "",
+        False,
     )

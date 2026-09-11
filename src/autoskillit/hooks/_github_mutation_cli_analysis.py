@@ -151,7 +151,8 @@ _GH_READ_ONLY_SUBCOMMANDS: dict[str, frozenset[str]] = {
         "view;gpg-key:list;issue:list status view;label:list;pr:checkout checks diff list status "
         "view;project:field-list item-list list view;release:download list verify verify-asset "
         "view;repo:clone list set-default view;run:download list view "
-        "watch;secret:list;ssh-key:list;variable:list;workflow:list view"
+        "watch;search:code commits issues prs repos;secret:list;ssh-key:list;variable:list;"
+        "workflow:list view"
     ).split(";")
 }
 
@@ -183,45 +184,60 @@ def _analyze_gh_segment(
     input_context_safe: bool,
     resolved_redirect_targets: Sequence[str],
     file_redirect_count: int,
-) -> tuple[GitHubMutationRecord | None, str, str]:
-    if not args or _gh_args_have_bare_help_flag(args[1:]) or args[:2] == ["pr", "create"]:
-        return (None, "", "")
+) -> tuple[GitHubMutationRecord | None, str, str, bool]:
+    if not args or _gh_args_have_bare_help_flag(args):
+        return (None, "", "", True)
+    if args[:2] == ["pr", "create"]:
+        return (None, "", "", False)
     if args[:2] == ["pr", "review"]:
         return (
             GitHubMutationRecord("POST", "/gh/pr/review", GitHubMutationKind.PULL_REVIEW, 1, None),
             "",
             "",
+            False,
         )
     if args[:2] == ["issue", "edit"]:
         request_count, reason_code, reason = _issue_edit_request_count(argv_args[2:])
         if request_count is None:
-            return (None, reason_code, reason)
+            return (None, reason_code, reason, False)
         return (
             GitHubMutationRecord(
                 "POST", "/gh/issue/edit", GitHubMutationKind.OTHER, request_count, None
             ),
             "",
             "",
+            False,
         )
     noun = args[0]
+    read_verbs = _GH_READ_ONLY_SUBCOMMANDS.get(noun, frozenset())
+    if len(args) >= 2 and args[1] in read_verbs:
+        return (None, "", "", True)
+    if noun == "search":
+        selector = args[1] if len(args) >= 2 else "<missing>"
+        return (
+            None,
+            "unsupported_grammar",
+            f"gh search {selector} classification is unresolved",
+            False,
+        )
     mutation_verbs = _GH_MUTATION_SUBCOMMANDS.get(noun)
     if mutation_verbs is not None and len(args) >= 2:
         verb = args[1]
-        if verb in _GH_READ_ONLY_SUBCOMMANDS.get(noun, frozenset()):
-            return (None, "", "")
         if verb not in mutation_verbs:
             return (
                 None,
                 "unsupported_grammar",
                 f"gh {noun} {verb} mutation classification is unresolved",
+                False,
             )
         return (
             GitHubMutationRecord("POST", f"/gh/{noun}/{verb}", GitHubMutationKind.OTHER, 1, None),
             "",
             "",
+            False,
         )
     if noun != "api":
-        return (None, "", "")
+        return (None, "", "", False)
     return _analyze_gh_api(
         argv_args[1:],
         cwd=cwd,
@@ -302,7 +318,7 @@ _CURL_FLAG_SPEC: Mapping[str, _FlagArity] = {
 
 def _analyze_curl_segment(
     args: Sequence[ArgvToken],
-) -> tuple[list[GitHubMutationRecord], str, str]:
+) -> tuple[list[GitHubMutationRecord], str, str, bool]:
     method: ArgvToken | None = None
     has_data = force_get = saw_next = False
     urls: list[ArgvToken] = []
@@ -321,13 +337,13 @@ def _analyze_curl_segment(
         value, next_i, matched = _flag_value(args, i, long_name="--request", short_name="-X")
         if matched or token.text in {"--request", "-X"}:
             if not matched or value is None:
-                return ([], "missing_required_value", "curl method is missing")
+                return ([], "missing_required_value", "curl method is missing", False)
             method, i = value, next_i
             continue
         value, next_i, matched = _flag_value(args, i, long_name="--url")
         if matched or token.text == "--url":
             if not matched or value is None:
-                return ([], "missing_required_value", "curl URL is missing")
+                return ([], "missing_required_value", "curl URL is missing", False)
             urls.append(value)
             i = next_i
             continue
@@ -350,7 +366,7 @@ def _analyze_curl_segment(
                 or (short_name is not None and token.text == short_name)
             ):
                 if not matched or value is None:
-                    return ([], "missing_required_value", f"{token.text} value is missing")
+                    return ([], "missing_required_value", f"{token.text} value is missing", False)
                 has_data, i, consumed = True, next_i, True
                 break
         if consumed:
@@ -361,7 +377,7 @@ def _analyze_curl_segment(
             )
             if matched or token.text == long_name or token.text == short_name:
                 if not matched or value is None:
-                    return ([], "missing_required_value", f"{token.text} value is missing")
+                    return ([], "missing_required_value", f"{token.text} value is missing", False)
                 i, consumed = next_i, True
                 break
         if consumed:
@@ -369,17 +385,22 @@ def _analyze_curl_segment(
         if token.text.startswith("-"):
             value, next_i, recognized = _consume_argv_flag(args, i, _CURL_FLAG_SPEC)
             if not recognized:
-                return ([], "unrecognized_curl_flag", f"unrecognized curl flag: {token.text!r}")
+                return (
+                    [],
+                    "unrecognized_curl_flag",
+                    f"unrecognized curl flag: {token.text!r}",
+                    False,
+                )
             if value is None and _CURL_FLAG_SPEC.get(token.text) == _FlagArity.VALUE:
-                return ([], "missing_required_value", f"{token.text} value is missing")
+                return ([], "missing_required_value", f"{token.text} value is missing", False)
             i = next_i
             continue
         urls.append(token)
         i += 1
     if method is not None and _is_dynamic_shell_value(method):
-        return ([], "dynamic_target", "curl method is dynamic")
+        return ([], "dynamic_target", "curl method is dynamic", False)
     if any(_is_dynamic_shell_value(url) for url in urls):
-        return ([], "dynamic_target", "curl URL is dynamic")
+        return ([], "dynamic_target", "curl URL is dynamic", False)
     github_urls = [
         url
         for url in urls
@@ -387,23 +408,25 @@ def _analyze_curl_segment(
         and hostname.lower() in {"api.github.com", "github.com"}
     ]
     if not github_urls:
-        return ([], "", "")
+        return ([], "", "", True)
     effective_method = (
         method.text.upper()
         if method is not None and method.text
         else ("GET" if force_get else ("POST" if has_data else "GET"))
     )
     if effective_method not in _GITHUB_WRITE_METHODS:
-        return ([], "", "")
+        return ([], "", "", True)
     if saw_next or len(github_urls) != 1 or len(urls) != 1:
         return (
             [],
             "request_cardinality_unresolved",
             "curl mutation request count is indeterminate",
+            False,
         )
     route = urlsplit(github_urls[0].text).path or "/"
     return (
         [GitHubMutationRecord(effective_method, route, _github_mutation_kind(route), 1, None)],
         "",
         "",
+        False,
     )

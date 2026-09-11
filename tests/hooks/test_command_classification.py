@@ -2049,6 +2049,37 @@ class TestAnalyzeGitHubMutations:
         assert analysis.status is GitHubMutationStatus.NONE
         assert analysis.mutations == ()
 
+    @pytest.mark.parametrize("selector", ["code", "commits", "issues", "prs", "repos"])
+    def test_every_curated_search_selector_is_proven_non_mutating(self, selector: str) -> None:
+        found, reason_code, reason, proven_non_mutating = (
+            github_mutation_analysis._analyze_github_segment(
+                ["gh", "search", selector, "release"],
+                cwd="",
+            )
+        )
+
+        assert found == []
+        assert (reason_code, reason) == ("", "")
+        assert proven_non_mutating is True
+
+    @pytest.mark.parametrize(
+        "tokens",
+        [["gh", "search"], ["gh", "search", "pulls"]],
+        ids=["missing-selector", "unknown-selector"],
+    )
+    def test_missing_or_unknown_search_selector_is_not_proven_non_mutating(
+        self,
+        tokens: list[str],
+    ) -> None:
+        found, reason_code, _reason, proven_non_mutating = (
+            github_mutation_analysis._analyze_github_segment(tokens, cwd="")
+        )
+
+        assert found == []
+        assert reason_code == "unsupported_grammar"
+        assert proven_non_mutating is False
+        assert analyze_github_mutations(" ".join(tokens)).status is GitHubMutationStatus.UNRESOLVED
+
     def test_pr_create_remains_owned_by_the_dedicated_guard(self) -> None:
         analysis = analyze_github_mutations("gh pr create --fill")
 
@@ -2650,7 +2681,7 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
 
 
 class TestSiblingWrappersDelegate:
-    """Smoke tests for the 7 sibling wrappers in _github_mutation_analysis.
+    """Smoke tests for the sibling wrappers in _github_mutation_analysis.
 
     Each wrapper should produce the same result as its _command_classification
     counterpart, since the wrappers exist only to defer the import past the
@@ -2708,6 +2739,30 @@ class TestSiblingWrappersDelegate:
         assert _extract_interpreter_segment_specs_call(
             segment
         ) == _extract_interpreter_segment_specs(segment)
+
+    def test_command_position_candidate_spans_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import _command_position_candidate_spans
+        from autoskillit.hooks._github_mutation_analysis import (
+            _command_position_candidate_spans_call,
+        )
+
+        segment = ["inspect()", "{", "gh", "pr", "view"]
+        assert _command_position_candidate_spans_call(
+            segment
+        ) == _command_position_candidate_spans(segment)
+
+    def test_process_substitution_occurrences_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+        from autoskillit.hooks._github_mutation_analysis import (
+            _extract_process_substitution_occurrences_call,
+        )
+
+        command = "cat <(gh pr view 7)"
+        assert _extract_process_substitution_occurrences_call(
+            command
+        ) == _extract_process_substitution_occurrences(command)
 
     def test_segment_evaluates_shell_payload_call_delegates(self) -> None:
         from autoskillit.hooks._command_classification import (

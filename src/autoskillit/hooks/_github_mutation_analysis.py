@@ -1,8 +1,4 @@
-"""Recursive GitHub-mutation cardinality analysis facade.
-
-Request parsing and command-line grammars live in sibling modules; this file
-owns the cross-command traversal and the public analysis result.
-"""
+"""Recursive GitHub-mutation cardinality analysis facade."""
 
 from __future__ import annotations
 
@@ -79,6 +75,22 @@ def _extract_interpreter_segment_specs_call(segment: Sequence[str]) -> tuple[lis
     return _extract_interpreter_segment_specs(segment)
 
 
+def _command_position_candidate_spans_call(
+    segment: Sequence[str],
+) -> tuple[tuple[int, int], ...]:
+    from _command_classification import _command_position_candidate_spans
+
+    return _command_position_candidate_spans(segment)
+
+
+def _extract_process_substitution_occurrences_call(
+    command: str,
+) -> tuple[tuple[str, int, int, str, bool], ...]:
+    from _command_classification import _extract_process_substitution_occurrences
+
+    return _extract_process_substitution_occurrences(command)
+
+
 def _segment_evaluates_shell_payload_call(tokens: list[str], payload: str) -> bool:
     from _command_classification import _segment_evaluates_shell_payload
 
@@ -121,18 +133,11 @@ _POSSIBLE_GITHUB_EXEC_NAMES: frozenset[str] = frozenset({"gh", "curl"})
 
 
 def _segment_has_possible_github_exec_token(segment: Sequence[str]) -> bool:
-    verb, args = _command_verb_and_args(list(segment))
-    if _normalize_executable_call(verb) in _POSSIBLE_GITHUB_EXEC_NAMES:
-        return True
-    body: list[str] | None = None
-    if verb == "{":
-        body = args
-    elif verb.endswith("()") and args[:1] == ["{"]:
-        body = args[1:]
-    if body is None:
-        return False
-    body_verb, _body_args = _command_verb_and_args(body)
-    return _normalize_executable_call(body_verb) in _POSSIBLE_GITHUB_EXEC_NAMES
+    return any(
+        _normalize_executable_call(_command_verb_and_args(segment[start:end])[0])
+        in _POSSIBLE_GITHUB_EXEC_NAMES
+        for start, end in _command_position_candidate_spans_call(segment)
+    )
 
 
 def _segments_have_possible_github_exec_token(segments: Sequence[Sequence[str]]) -> bool:
@@ -192,7 +197,8 @@ def _analyze_github_segment(
     resolved_redirect_targets: Sequence[str] = (),
     file_redirect_count: int = 0,
     argv_tokens: Sequence[ArgvToken] | None = None,
-) -> tuple[list[GitHubMutationRecord], str, str]:
+) -> tuple[list[GitHubMutationRecord], str, str, bool]:
+    """Return records, an optional unresolved reason, and explicit read proof."""
     verb, args = _command_verb_and_args(list(segment))
     executable = _normalize_executable_call(verb)
     if argv_tokens is None:
@@ -200,7 +206,7 @@ def _analyze_github_segment(
     start = _verb_start_index(list(segment))
     argv_args = list(argv_tokens[start + 1 :]) if start is not None else []
     if executable == "gh":
-        record, reason_code, reason = _analyze_gh_segment(
+        record, reason_code, reason, proven_non_mutating = _analyze_gh_segment(
             args,
             argv_args=argv_args,
             cwd=_segment_cwd(segment, cwd),
@@ -208,8 +214,8 @@ def _analyze_github_segment(
             resolved_redirect_targets=resolved_redirect_targets,
             file_redirect_count=file_redirect_count,
         )
-        return ([record] if record is not None else [], reason_code, reason)
-    return _analyze_curl_segment(argv_args) if executable == "curl" else ([], "", "")
+        return ([record] if record is not None else [], reason_code, reason, proven_non_mutating)
+    return _analyze_curl_segment(argv_args) if executable == "curl" else ([], "", "", False)
 
 
 def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAnalysis:
@@ -280,14 +286,24 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                         ("cwd_unresolved", "relative shell cwd transition has no authority")
                     )
                 continue
-            found, reason_code, reason = _analyze_github_segment(
-                executable_tokens,
-                cwd=current_cwd,
-                input_context_safe=input_context_safe,
-                resolved_redirect_targets=active_targets,
-                file_redirect_count=active_count,
-                argv_tokens=executable_argv_tokens,
-            )
+            candidate_analyses = [
+                _analyze_github_segment(
+                    executable_tokens[start:end],
+                    cwd=segment_cwd,
+                    input_context_safe=input_context_safe,
+                    resolved_redirect_targets=active_targets,
+                    file_redirect_count=active_count,
+                    argv_tokens=executable_argv_tokens[start:end],
+                )
+                for start, end in _command_position_candidate_spans_call(executable_tokens)
+            ]
+            # Keep the existing direct-record aggregation. Secondary inline
+            # candidates establish their own proof without double-counting
+            # records or reasons before repeatability policy consumes it.
+            if candidate_analyses:
+                found, reason_code, reason, _proven_non_mutating = candidate_analyses[0]
+            else:
+                found, reason_code, reason, _proven_non_mutating = ([], "", "", False)
             records.extend(found)
             if reason:
                 reasons.append((reason_code, reason))
@@ -373,7 +389,7 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                 )
             )
     for argv, argv_cwd, input_context_safe, inherited_targets, redirect_count in argv_payloads:
-        found, reason_code, reason = _analyze_github_segment(
+        found, reason_code, reason, _proven_non_mutating = _analyze_github_segment(
             argv,
             cwd=argv_cwd,
             input_context_safe=input_context_safe,

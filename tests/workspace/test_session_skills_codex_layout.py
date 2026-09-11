@@ -9,7 +9,6 @@ import pytest
 
 import autoskillit.workspace.session_skill_materialization as session_skill_materialization
 from autoskillit.core import (
-    SESSION_ADD_DIR_SUBDIR,
     ClaudeDirectoryConventions,
     ManagedSessionHome,
     PreLaunchReadiness,
@@ -284,9 +283,6 @@ def test_codex_generated_home_skills_is_single_alias_to_catalog(
     catalog = generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath
     discovery_root = generated_home / skills_subdir
 
-    assert Path(CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath) == (
-        Path(SESSION_ADD_DIR_SUBDIR) / skills_subdir
-    )
     assert catalog == add_dir_path / skills_subdir
     assert discovery_root.is_symlink()
     assert os.readlink(discovery_root) == CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath

@@ -1233,6 +1233,29 @@ class TestAnalyzeGitHubMutations:
         assert analyze_github_mutations(command).status is expected_status
 
     @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            (
+                'for number in 1 2; do python3 -c "import subprocess; '
+                "subprocess.run(['gh','pr','view','7'])\"; done",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                'for number in 1 2; do python3 -c "import subprocess; '
+                "subprocess.run(['gh','pr','merge','7'])\"; done",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+        ],
+        ids=["read-only", "mutation"],
+    )
+    def test_repeatable_literal_argv_preserves_explicit_read_proof(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        assert analyze_github_mutations(command).status is expected_status
+
+    @pytest.mark.parametrize(
         "command",
         [
             "for number in 1 2; do gh pr merge $number; done",
@@ -1277,6 +1300,15 @@ class TestAnalyzeGitHubMutations:
         expected_status: GitHubMutationStatus,
     ) -> None:
         assert analyze_github_mutations(command).status is expected_status
+
+    def test_process_substitution_uses_its_owning_segment_context(self, tmp_path: Path) -> None:
+        (tmp_path / "payload.json").write_text("{}", encoding="utf-8")
+        command = (
+            f"cd {shlex.quote(str(tmp_path))} && "
+            "cat <(gh api --method GET /repos/o/r/issues --input payload.json)"
+        )
+
+        assert analyze_github_mutations(command).status is GitHubMutationStatus.NONE
 
     def test_simple_rest_review_has_exact_record(self) -> None:
         analysis = analyze_github_mutations(

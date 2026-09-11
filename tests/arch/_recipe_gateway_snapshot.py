@@ -1,6 +1,5 @@
 """Frozen symbol snapshot for autoskillit.recipe.
 
-Captured on: 2026-09-10
 Python: 3.13.x (worktree venv)
 Platform: linux
 Command: python -c "import autoskillit.recipe; print(sorted(dir(autoskillit.recipe)))"

@@ -1,6 +1,5 @@
 """Frozen symbol snapshot for autoskillit.core.
 
-Captured on: 2026-09-10
 Python: 3.13.x (worktree venv)
 Platform: linux
 Command: python -c "import autoskillit.core; print(sorted(dir(autoskillit.core)))"

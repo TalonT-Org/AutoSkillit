@@ -435,6 +435,36 @@ class TestCommandVerbAndArgs:
         assert verb_from_helper == command_verb(seg)
 
 
+class TestCommandPositionCandidateSpans:
+    @pytest.mark.parametrize(
+        ("tokens", "expected"),
+        [
+            (["env", "MODE=read", "gh", "pr", "view"], ((2, 5),)),
+            (["while", "gh", "pr", "view"], ((1, 4),)),
+            (["until", "gh", "pr", "view"], ((1, 4),)),
+            (["if", "gh", "pr", "view"], ((1, 4),)),
+            (["inspect()", "{", "gh", "pr", "view"], ((0, 5), (2, 5))),
+            (["{", "gh", "pr", "view"], ((0, 4), (1, 4))),
+        ],
+        ids=[
+            "direct",
+            "while-control",
+            "until-control",
+            "if-control",
+            "function-body",
+            "group-body",
+        ],
+    )
+    def test_returns_spans_in_the_supplied_token_index_domain(
+        self,
+        tokens: list[str],
+        expected: tuple[tuple[int, int], ...],
+    ) -> None:
+        from autoskillit.hooks._command_classification import _command_position_candidate_spans
+
+        assert _command_position_candidate_spans(tokens) == expected
+
+
 class TestExtractShellCommandPayloads:
     def test_bash_c_payload(self):
         from autoskillit.hooks._command_classification import extract_shell_command_payloads
@@ -572,6 +602,83 @@ class TestTokenizeShellPayloadSegments:
         from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
 
         assert tokenize_shell_payload_segments("gh pr create --fill") == []
+
+    def test_process_substitution_traversal_is_opt_in(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        command = "cat <(gh pr view 7 --json number)"
+
+        assert tokenize_shell_payload_segments(command) == []
+        assert tokenize_shell_payload_segments(
+            command,
+            include_process_substitutions=True,
+        ) == [["gh", "pr", "view", "7", "--json", "number"]]
+
+
+class TestProcessSubstitutionExtraction:
+    def test_active_input_and_output_occurrences_preserve_source_order(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        command = "cat <(gh pr view 7) >(tee result.txt)"
+        occurrences = _extract_process_substitution_occurrences(command)
+
+        assert [(kind, body, balanced) for kind, _, _, body, balanced in occurrences] == [
+            ("<(", "gh pr view 7", True),
+            (">(", "tee result.txt", True),
+        ]
+        for kind, start, end, body, _balanced in occurrences:
+            assert command[start:end] == f"{kind}{body})"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo '<(gh pr view 7)'",
+            'echo "<(gh pr view 7)"',
+            r"echo \<(gh pr view 7)",
+        ],
+        ids=["single-quoted", "double-quoted", "escaped"],
+    )
+    def test_quoted_and_escaped_process_substitutions_are_inert(self, command: str) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        assert _extract_process_substitution_occurrences(command) == ()
+
+    def test_balanced_parentheses_respect_quoted_close_parens(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        command = "cat <(printf '%s' 'a) b' && gh pr view 7)"
+        ((kind, start, end, body, balanced),) = _extract_process_substitution_occurrences(command)
+
+        assert (kind, body, balanced) == ("<(", "printf '%s' 'a) b' && gh pr view 7", True)
+        assert command[start:end] == f"{kind}{body})"
+
+    def test_malformed_process_substitution_retains_its_unbalanced_span(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        command = "cat <(gh pr view 7"
+
+        assert _extract_process_substitution_occurrences(command) == (
+            ("<(", command.index("<("), len(command), "gh pr view 7", False),
+        )
+
+    def test_command_classification_exposes_the_lazy_interpreter_gateway(self) -> None:
+        from autoskillit.hooks._classification._interpreters import (
+            _extract_process_substitution_occurrences as implementation,
+        )
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences as gateway,
+        )
+
+        command = "cat <(gh pr view 7)"
+        assert gateway(command) == implementation(command)
 
 
 class TestExtractInterpreterCommandPayloads:
@@ -1049,6 +1156,175 @@ class TestAnalyzeGitHubMutations:
             reason="",
         )
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'for term in release; do gh search code "$term"; done',
+            'while read -r sha; do gh search commits "$sha"; done',
+            'until false; do gh search issues "is:open"; done',
+            'if gh search prs "is:open"; then :; fi',
+            'find_repos() { gh search repos "topic:cli"; }; find_repos',
+            "cat <(gh pr view 7 --json number)",
+            "for path in issues; do curl https://api.github.com/repos/o/r/issues; done",
+        ],
+        ids=[
+            "for-search-code",
+            "while-search-commits",
+            "until-search-issues",
+            "condition-search-prs",
+            "function-search-repos",
+            "process-substitution-pr-view",
+            "for-curl-get",
+        ],
+    )
+    def test_repeatable_read_only_commands_have_exact_empty_analysis(self, command: str) -> None:
+        assert analyze_github_mutations(command) == GitHubMutationAnalysis(
+            status=GitHubMutationStatus.NONE,
+            mutations=(),
+            request_count=0,
+            review_comment_count=None,
+            reason_code="",
+            reason="",
+        )
+
+    @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            (
+                "bash -c 'for number in 1 2; do gh pr view $number --json number; done'",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                "sh -c 'while read -r ref; do curl https://api.github.com/repos/o/r/issues; done'",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                "python3 -c \"import subprocess; subprocess.run(['gh','pr','view','7'])\"",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                "bash -c 'for number in 1 2; do gh pr merge $number; done'",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+            (
+                "sh -c 'until false; do curl -X PATCH "
+                'https://api.github.com/repos/o/r/issues/7 -d "{}"; done\'',
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+            (
+                "python3 -c \"import subprocess; subprocess.run(['gh','pr','merge','7'])\"",
+                GitHubMutationStatus.SINGLE_RESOLVED,
+            ),
+        ],
+        ids=[
+            "bash-string-read-loop",
+            "sh-string-read-loop",
+            "literal-argv-read",
+            "bash-string-write-loop",
+            "sh-string-write-loop",
+            "literal-argv-write",
+        ],
+    )
+    def test_nested_and_literal_argv_commands_preserve_read_write_classification(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is expected_status
+        if expected_status is GitHubMutationStatus.SINGLE_RESOLVED:
+            assert analysis.request_count == 1
+            assert [mutation.route for mutation in analysis.mutations] == ["/gh/pr/merge"]
+
+    @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            (
+                'for number in 1 2; do python3 -c "import subprocess; '
+                "subprocess.run(['gh','pr','view','7'])\"; done",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                'for number in 1 2; do python3 -c "import subprocess; '
+                "subprocess.run(['gh','pr','merge','7'])\"; done",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+        ],
+        ids=["read-only", "mutation"],
+    )
+    def test_repeatable_literal_argv_preserves_explicit_read_proof(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is expected_status
+        if expected_status is GitHubMutationStatus.NONE:
+            assert analysis.mutations == ()
+        else:
+            assert [mutation.route for mutation in analysis.mutations] == ["/gh/pr/merge"]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "for number in 1 2; do gh pr merge $number; done",
+            "while read -r ref; do gh workflow frobnicate $ref; done",
+            "until false; do curl -X PATCH https://api.github.com/repos/o/r/issues/7 "
+            "-d '{}'; done",
+            'if gh api --method "$METHOD" /repos/o/r/issues/7 -f title=x; then :; fi',
+            "for number in 1 2; do printf '%s\\n' $number | xargs -n1 gh pr merge; done",
+            "for term in release; do gh search issues $term; done; "
+            "gh issue edit $ISSUE --title updated",
+            "cat <(gh issue edit 7 --title updated)",
+        ],
+        ids=[
+            "repeatable-mutation",
+            "repeatable-unsupported-verb",
+            "repeatable-curl-mutation",
+            "condition-dynamic-method",
+            "repeatable-delegated-command",
+            "mixed-read-and-dynamic-mutation",
+            "process-substitution-mutation",
+        ],
+    )
+    def test_repeatable_or_ambiguous_github_commands_fail_closed(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code
+
+    @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            ("cat <(gh pr view 7", GitHubMutationStatus.UNRESOLVED),
+            ("cat <(gh issue edit 7 --title updated", GitHubMutationStatus.UNRESOLVED),
+            ("cat <(printf '%s' value", GitHubMutationStatus.NONE),
+        ],
+        ids=["read-only-github", "mutation-github", "unrelated-command"],
+    )
+    def test_malformed_process_substitution_only_fails_closed_for_github(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is expected_status
+        if expected_status is GitHubMutationStatus.UNRESOLVED:
+            assert analysis.reason_code == "shell_parse_unresolved"
+
+    def test_process_substitution_uses_its_owning_segment_context(self, tmp_path: Path) -> None:
+        (tmp_path / "payload.json").write_text("{}", encoding="utf-8")
+        command = (
+            f"cd {shlex.quote(str(tmp_path))} && "
+            "cat <(gh api --method GET /repos/o/r/issues --input payload.json)"
+        )
+
+        assert analyze_github_mutations(command).status is GitHubMutationStatus.NONE
+
     def test_simple_rest_review_has_exact_record(self) -> None:
         analysis = analyze_github_mutations(
             "gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT"
@@ -1327,6 +1603,28 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count == 2
         assert len(analysis.mutations) == 2
 
+    def test_identical_command_substitution_payloads_are_counted_per_occurrence(self) -> None:
+        nested = "gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT"
+
+        analysis = analyze_github_mutations(f"echo $({nested}) && echo $({nested})")
+
+        assert analysis.status is GitHubMutationStatus.MULTIPLE
+        assert analysis.request_count == 2
+        assert len(analysis.mutations) == 2
+
+    def test_read_only_loop_does_not_make_adjacent_mutation_unresolved(self) -> None:
+        command = (
+            "for term in release; do gh search issues $term; done; gh issue edit 7 --title updated"
+        )
+
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+        assert len(analysis.mutations) == 1
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+        assert analysis.mutations[0].route == "/gh/issue/edit"
+
     def test_identical_nested_payloads_keep_per_occurrence_cwd(self, tmp_path: Path) -> None:
         (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
         nested = "gh api --method POST /repos/o/r/issues/7/comments --input payload.json"
@@ -1481,6 +1779,19 @@ class TestAnalyzeGitHubMutations:
             )
 
         analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
+    def test_parent_redirect_provenance_reaches_command_substitution_mutation(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = f"gh api --method POST /repos/o/r/issues/7/comments --input {payload}"
+
+        analysis = analyze_github_mutations(f"printf '%s' $({nested}) > {payload}")
 
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert analysis.reason_code == "unsafe_input_provenance"
@@ -1787,6 +2098,37 @@ class TestAnalyzeGitHubMutations:
 
         assert analysis.status is GitHubMutationStatus.NONE
         assert analysis.mutations == ()
+
+    @pytest.mark.parametrize("selector", ["code", "commits", "issues", "prs", "repos"])
+    def test_every_curated_search_selector_is_proven_non_mutating(self, selector: str) -> None:
+        found, reason_code, reason, proven_non_mutating = (
+            github_mutation_analysis._analyze_github_segment(
+                ["gh", "search", selector, "release"],
+                cwd="",
+            )
+        )
+
+        assert found == []
+        assert (reason_code, reason) == ("", "")
+        assert proven_non_mutating is True
+
+    @pytest.mark.parametrize(
+        "tokens",
+        [["gh", "search"], ["gh", "search", "pulls"]],
+        ids=["missing-selector", "unknown-selector"],
+    )
+    def test_missing_or_unknown_search_selector_is_not_proven_non_mutating(
+        self,
+        tokens: list[str],
+    ) -> None:
+        found, reason_code, _reason, proven_non_mutating = (
+            github_mutation_analysis._analyze_github_segment(tokens, cwd="")
+        )
+
+        assert found == []
+        assert reason_code == "unsupported_grammar"
+        assert proven_non_mutating is False
+        assert analyze_github_mutations(" ".join(tokens)).status is GitHubMutationStatus.UNRESOLVED
 
     def test_pr_create_remains_owned_by_the_dedicated_guard(self) -> None:
         analysis = analyze_github_mutations("gh pr create --fill")
@@ -2389,7 +2731,7 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
 
 
 class TestSiblingWrappersDelegate:
-    """Smoke tests for the 7 sibling wrappers in _github_mutation_analysis.
+    """Smoke tests for the sibling wrappers in _github_mutation_analysis.
 
     Each wrapper should produce the same result as its _command_classification
     counterpart, since the wrappers exist only to defer the import past the
@@ -2447,6 +2789,30 @@ class TestSiblingWrappersDelegate:
         assert _extract_interpreter_segment_specs_call(
             segment
         ) == _extract_interpreter_segment_specs(segment)
+
+    def test_command_position_candidate_spans_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import _command_position_candidate_spans
+        from autoskillit.hooks._github_mutation_analysis import (
+            _command_position_candidate_spans_call,
+        )
+
+        segment = ["inspect()", "{", "gh", "pr", "view"]
+        assert _command_position_candidate_spans_call(
+            segment
+        ) == _command_position_candidate_spans(segment)
+
+    def test_process_substitution_occurrences_call_delegates(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+        from autoskillit.hooks._github_mutation_analysis import (
+            _extract_process_substitution_occurrences_call,
+        )
+
+        command = "cat <(gh pr view 7)"
+        assert _extract_process_substitution_occurrences_call(
+            command
+        ) == _extract_process_substitution_occurrences(command)
 
     def test_segment_evaluates_shell_payload_call_delegates(self) -> None:
         from autoskillit.hooks._command_classification import (

@@ -126,13 +126,19 @@ def _segment_evaluates_shell_payload(tokens: list[str], payload: str) -> bool:
     return f"$({payload})" in rendered or f"`{payload}`" in rendered
 
 
-def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
+def tokenize_shell_payload_segments(
+    command: str,
+    *,
+    include_process_substitutions: bool = False,
+) -> list[list[str]] | None:
     """Return tokenized segments for every evaluated shell payload in *command*.
 
     Walks the outer command and every distinct extracted payload recursively.
-    Each successfully parsed
-    segment of every payload is appended to the result so callers can apply
-    verb-position policies like ``command_verb_and_args`` to each segment.
+    Each successfully parsed segment of every payload is appended to the
+    result so callers can apply verb-position policies like
+    ``command_verb_and_args`` to each segment. Process-substitution bodies
+    are traversed only when ``include_process_substitutions`` is true; the
+    default preserves the historic shell-command-substitution-only behavior.
 
     Returns ``None`` when the outer command or any non-empty evaluated
     payload cannot be tokenized; callers interpret ``None`` as no deny
@@ -145,24 +151,43 @@ def tokenize_shell_payload_segments(command: str) -> list[list[str]] | None:
 
     result: list[list[str]] = []
     seen: set[str] = set()
-    queue: list[str] = list(extract_shell_command_payloads(command))
+    queue: list[tuple[str, bool]] = [
+        (payload, False) for payload in extract_shell_command_payloads(command)
+    ]
+    if include_process_substitutions:
+        for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
+            command
+        ):
+            if not balanced:
+                return None
+            queue.append((body, True))
     while queue:
-        payload = queue.pop(0)
-        if payload in seen:
+        payload, preserve_occurrence = queue.pop(0)
+        if not preserve_occurrence and payload in seen:
             continue
-        seen.add(payload)
+        if not preserve_occurrence:
+            seen.add(payload)
         if not payload.strip():
             continue
         segments = tokenize_command_segments(payload)
         if not segments and payload.strip():
             return None
         result.extend(segments)
-        queue.extend(extract_shell_command_payloads(payload))
+        queue.extend(
+            (nested, preserve_occurrence) for nested in extract_shell_command_payloads(payload)
+        )
+        if include_process_substitutions:
+            for _kind, _start, _end, body, balanced in _extract_process_substitution_occurrences(
+                payload
+            ):
+                if not balanced:
+                    return None
+                queue.append((body, True))
     return result
 
 
 def _find_substitution_end(command: str, start: int) -> int:
-    """Return the index of the ``)`` closing a ``$(`` whose body starts at *start*.
+    """Return the closing ``)`` index for a substitution body starting at *start*.
 
     Quotes open a fresh quoting context inside a substitution, so a literal
     ``)`` within a quoted span must not terminate the scan. Returns
@@ -199,6 +224,52 @@ def _find_substitution_end(command: str, start: int) -> int:
                 return k
         k += 1
     return n
+
+
+def _extract_process_substitution_occurrences(
+    command: str,
+) -> tuple[tuple[str, int, int, str, bool], ...]:
+    """Return active ``<(...)``/``>(...)`` occurrences in source order.
+
+    Each private tuple is ``(kind, start, end, body, balanced)``. ``kind`` is
+    the literal opening syntax (``"<("`` or ``">("``); ``start`` and ``end``
+    are raw-source offsets, with ``end`` exclusive; and ``body`` excludes the
+    delimiters. An unclosed occurrence has ``balanced=False`` and ends at the
+    command's end, allowing callers to retain occurrence identity while making
+    their own fail-open or fail-closed decision.
+
+    Process substitution is inactive inside quoted text or when its opening
+    character is escaped. The existing balanced-parenthesis scanner supplies
+    the quote- and escape-aware body boundary for active occurrences.
+    """
+    occurrences: list[tuple[str, int, int, str, bool]] = []
+    i = 0
+    n = len(command)
+    while i < n:
+        char = command[i]
+        if char == "\\" and i + 1 < n:
+            i += 2
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            i += 1
+            while i < n and command[i] != quote:
+                if quote == '"' and command[i] == "\\" and i + 1 < n:
+                    i += 2
+                    continue
+                i += 1
+            i += 1
+            continue
+        if char not in {"<", ">"} or i + 1 >= n or command[i + 1] != "(":
+            i += 1
+            continue
+
+        close = _find_substitution_end(command, i + 2)
+        balanced = close < n
+        end = close + 1 if balanced else n
+        occurrences.append((f"{char}(", i, end, command[i + 2 : close], balanced))
+        i = end
+    return tuple(occurrences)
 
 
 def _extract_substitution_payloads(command: str) -> list[str]:

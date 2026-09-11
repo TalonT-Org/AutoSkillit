@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
 
@@ -22,9 +21,10 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _SHELL_OPS,
+    _command_position_candidate_spans,
     command_verb_and_args,
     has_interpreter_wrapped_command,
+    tokenize_command_segments,
     tokenize_shell_payload_segments,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
@@ -84,33 +84,22 @@ def _is_gh_discovery(cmd: str) -> bool:
     """Return True when *cmd* contains a GitHub discovery subcommand.
 
     Targeted reads (``gh issue view <N>``, ``gh api .../issues/<N>``) are
-    explicitly allowed.  Tokenises with shlex to avoid false positives from
-    quoted arguments.
+    explicitly allowed. Every outer command-position candidate is checked,
+    so a targeted read cannot hide a later discovery command.
     """
-    try:
-        tokens = shlex.split(cmd)
-    except ValueError:
+    outer_segments = tokenize_command_segments(cmd)
+    if not outer_segments and cmd.strip():
         return False
-    for i, token in enumerate(tokens):
-        if token != "gh" or i + 2 >= len(tokens):
-            continue
-        if i != 0 and tokens[i - 1] not in _SHELL_OPS:
-            continue
-        pair = (tokens[i + 1], tokens[i + 2])
-        if pair in _DISCOVERY_SUBCOMMANDS:
-            return True
-        if pair in _TARGETED_SUBCOMMANDS:
-            return False
-        if tokens[i + 1] == "api":
-            endpoint = tokens[i + 2]
-            if _API_SPECIFIC_RE.search(endpoint):
-                return False
-            if _API_LISTING_RE.search(endpoint):
-                return True
+    if any(
+        _is_discovery_segment(segment[start:end])
+        for segment in outer_segments
+        for start, end in _command_position_candidate_spans(segment)
+    ):
+        return True
     discovery_targets = [f"gh {sub} {cmd_}" for sub, cmd_ in _DISCOVERY_SUBCOMMANDS]
     if has_interpreter_wrapped_command(cmd, target_commands=discovery_targets):
         return True
-    segments = tokenize_shell_payload_segments(cmd)
+    segments = tokenize_shell_payload_segments(cmd, include_process_substitutions=True)
     if segments is None:
         return False
     return any(_is_discovery_segment(segment) for segment in segments)

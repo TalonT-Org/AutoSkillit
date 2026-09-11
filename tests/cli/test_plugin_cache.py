@@ -249,7 +249,6 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
     from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -265,14 +264,9 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     def fail_digest(_path: Path, **_kwargs: object) -> str:
         raise PermissionError("injected transient digest failure")
 
-    monkeypatch.setattr(
-        plugin_artifact_identity,
-        "directory_tree_digest",
-        fail_digest,
-    )
-    # The consumer (core/plugins/_plugin_artifact_identity.py:10) imports
-    # directory_tree_digest from ..io directly, bypassing the shim. Patch the
-    # real module too so the failure propagates to the call site.
+    # core/plugins/_plugin_artifact_identity.py:10 imports directory_tree_digest
+    # from ..io directly and calls it via bare name from its own globals; the
+    # old core._plugin_artifact_identity shim path is bypassed entirely.
     from autoskillit.core.plugins import _plugin_artifact_identity as _real_pai
 
     monkeypatch.setattr(_real_pai, "directory_tree_digest", fail_digest)

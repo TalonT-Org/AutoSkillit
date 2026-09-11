@@ -1,4 +1,4 @@
-"""YAML load/dump helpers extracted from core.io (issue #4671 Phase A).
+"""YAML load/dump helpers extracted from core.io.
 
 Owns the unique-key-rejecting YAML loader and all YAML load/compose/dump helpers.
 Centralizes the ``yaml`` import for ``autoskillit.core.io`` — the rest of the io/

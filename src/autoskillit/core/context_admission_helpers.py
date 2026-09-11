@@ -1,7 +1,7 @@
 """Backward-compat shim. See core.context_admission.context_admission_helpers.
 
-Real implementation lives at ``autoskillit.core.context_admission.context_admission_helpers``
-after issue #4671 Phase C. This shim preserves the old import path
+Real implementation lives at ``autoskillit.core.context_admission.context_admission_helpers``.
+This shim preserves the old import path
 ``autoskillit.core.context_admission_helpers`` for downstream callers.
 """
 

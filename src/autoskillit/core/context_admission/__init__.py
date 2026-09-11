@@ -6,7 +6,7 @@ through the ``autoskillit.core.context_admission`` namespace. The per-event
 dispatch-category shards live as sibling modules under this package and
 are imported only by the gateway module ``context_admission``. Backward-compat
 shims at ``core/context_admission.py`` and ``core/context_admission_*.py``
-preserve old import paths (issue #4671 Phase C decomposition).
+preserve old import paths after the core/context_admission/ decomposition.
 """
 
 from __future__ import annotations

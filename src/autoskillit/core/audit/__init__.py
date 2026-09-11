@@ -5,7 +5,7 @@ Exposes the canonical public surface of ``audit_cycle_verifier``,
 through the ``autoskillit.core.audit`` namespace. Backward-compat shims at
 ``core/audit_cycle_verifier.py``, ``core/audit_semantic_codec.py``,
 ``core/closure_hashing.py``, and ``core/closure_verifier.py`` preserve old
-import paths (issue #4671 Phase B decomposition).
+import paths after the core/audit/ decomposition.
 
 Lazy module loading via PEP 562 ``__getattr__`` is required because
 ``core.types._type_audit_admission`` imports ``core.audit.closure_hashing``

@@ -5,7 +5,7 @@ Re-exports the public surface of the io/ sub-package through the
 ``core/paths.py``, ``core/path_containment.py``,
 ``core/_json.py``, ``core/_terminal_table.py``,
 ``core/_version_snapshot.py``, and ``core/_delivery_bounds.py`` preserve
-old import paths (issue #4671 Phase A decomposition).
+old import paths after the core/io/ decomposition.
 
 Implementation split: ``io`` (core file/versioned JSON primitives) and
 ``yaml_io`` (YAML loader + helpers) co-locate under this sub-package. The

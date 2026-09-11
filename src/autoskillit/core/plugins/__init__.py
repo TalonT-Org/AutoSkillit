@@ -6,7 +6,7 @@ Exposes the canonical public surface of ``_plugin_cache`` (facade over
 through the ``autoskillit.core.plugins`` namespace. Backward-compat shims at
 ``core/_plugin_cache.py``, ``core/_plugin_artifact_identity.py``,
 ``core/_plugin_ids.py``, and ``core/agent_definition.py`` preserve old
-import paths (issue #4671 Phase B decomposition).
+import paths after the core/plugins/ decomposition.
 """
 
 from __future__ import annotations

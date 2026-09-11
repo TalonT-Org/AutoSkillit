@@ -6,7 +6,7 @@ Exposes the canonical public surface of ``pipeline_tracker``,
 through the ``autoskillit.core.pipeline`` namespace. Backward-compat
 shims at ``core/pipeline_tracker.py``, ``core/tool_sequence_analysis.py``,
 ``core/_execution_marker.py``, and ``core/_step_context.py`` preserve old
-import paths (issue #4671 Phase B decomposition).
+import paths after the core/pipeline/ decomposition.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""IL-0 install detection and sync subprocess runner primitives (issue #4671 Phase A).
+"""IL-0 install detection and sync subprocess runner primitives.
 
 Exposes the canonical public surface of `install_detect` and `cmd_runner`
 through the `autoskillit.core.install` namespace. Backward-compat shims at

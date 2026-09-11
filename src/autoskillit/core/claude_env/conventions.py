@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.core.paths import is_git_worktree
+from autoskillit.core.io.paths import is_git_worktree
 
 from ..types import MANAGED_SKILL_FILENAME, ValidatedAddDir, ValidatedWorktreePath
 

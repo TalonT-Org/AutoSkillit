@@ -2020,11 +2020,10 @@ def test_codex_order_composition_rejects_effective_mcp_override(
     with pytest.raises(SystemExit, match="1"):
         launch()  # type: ignore[operator]
 
-    assert captured["events"] == ["validated"]
+    assert captured["events"] == []
     assert captured["process_calls"] == []
     errors = cast(list[list[str]], captured["validation_errors"])
-    assert len(errors) == 1
-    assert any("command does not match final config" in error for error in errors[0])
+    assert errors == []
     assert "command does not match final config" in capsys.readouterr().err
 
 

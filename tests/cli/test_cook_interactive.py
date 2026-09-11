@@ -430,10 +430,18 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
         lambda _project: None,
     )
     monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
+
+    original_ensure_pre_launch = CodexBackend.ensure_pre_launch
+
+    def ensure_pre_launch(self, **kwargs):  # type: ignore[no-untyped-def]
+        if kwargs.get("session_dir") is None:
+            return PreLaunchReadiness((), {})
+        return original_ensure_pre_launch(self, **kwargs)
+
     monkeypatch.setattr(
         CodexBackend,
         "ensure_pre_launch",
-        lambda _self, **_kwargs: PreLaunchReadiness((), {}),
+        ensure_pre_launch,
     )
     monkeypatch.setattr(
         CodexBackend,

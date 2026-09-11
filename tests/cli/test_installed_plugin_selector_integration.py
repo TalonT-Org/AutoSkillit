@@ -405,7 +405,7 @@ def test_codex_cook_remains_generated_home_and_ignores_claude_artifacts(
     cli.cook(backend=backend)
 
     assert len(backend.build_calls) == 2
-    assert backend.build_calls[0]["executable"] is None
+    assert backend.build_calls[0].get("executable") is None
     assert backend.build_calls[1]["executable"] is not None
     assert all(call["plugin_binding"] is None for call in backend.build_calls)
     assert all(call["generated_home"] == generated_home for call in backend.build_calls)

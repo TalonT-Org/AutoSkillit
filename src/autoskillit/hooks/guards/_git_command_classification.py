@@ -520,8 +520,9 @@ def _same_repository(candidate: str, context: dict[str, object]) -> bool | None:
             # candidate is a configured remote resolving to a network URL --
             # definitively not this worktree's own checkout.
             return False
-        candidate = local_path
-    candidate_path = candidate
+        candidate_path = local_path
+    else:
+        candidate_path = candidate
     if not os.path.isabs(candidate_path):
         candidate_path = str(Path(execution_cwd) / candidate_path)
     common_path = _resolve_git_common_dir(candidate_path)

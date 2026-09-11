@@ -22,10 +22,9 @@ from typing import NamedTuple
 _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
 
-if __package__:
-    from autoskillit.hooks._runtime import _hook_payload as _hook_payload_module
-else:
-    import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
+# Stdlib-only: bare-name import. Requires `hooks/_runtime/` on sys.path
+# (bootstrap responsibility of the calling script).
+import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
 
 
 SESSION_BINDING_SCHEMA_VERSION: int = 3

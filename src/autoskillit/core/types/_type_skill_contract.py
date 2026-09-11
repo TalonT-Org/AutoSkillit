@@ -34,6 +34,7 @@ __all__ = [
     "SkillSourceRef",
     "SkillVisibilitySpec",
     "StoredSkillSessionContract",
+    "managed_skill_relative_path",
     "normalize_parent_sandbox_mode",
     "validate_managed_skill_entries",
 ]
@@ -59,6 +60,11 @@ _CANONICAL_IDENTIFIER_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
 _VECTOR_MARKER_TOKEN = "autoskillit:exploration-vector"
 
 
+def managed_skill_relative_path(name: str) -> Path:
+    """Return the canonical relative path for one managed skill entry."""
+    return Path(name) / MANAGED_SKILL_FILENAME
+
+
 def validate_managed_skill_entries(
     entries: Sequence[tuple[str, str]],
 ) -> dict[str, Path]:
@@ -69,7 +75,7 @@ def validate_managed_skill_entries(
             raise ValueError(f"invalid managed skill name: {name!r}")
         if name in validated:
             raise ValueError(f"duplicate managed skill name: {name}")
-        expected_path = Path(name) / MANAGED_SKILL_FILENAME
+        expected_path = managed_skill_relative_path(name)
         if Path(relative_path) != expected_path:
             raise ValueError(f"managed skill entry {name!r} must use {expected_path.as_posix()!r}")
         validated[name] = expected_path

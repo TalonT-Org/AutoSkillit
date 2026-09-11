@@ -38,6 +38,7 @@ from autoskillit.core import (
     SkillUnavailabilityPayload,
     ValidatedAddDir,
     get_logger,
+    managed_skill_relative_path,
     observe_path_mode,
     strict_walk,
 )
@@ -234,7 +235,7 @@ def _freeze_skill_entries(catalog_dir: Path) -> tuple[tuple[str, str], ...]:
             raise SkillContractError(
                 f"managed skill SKILL.md must be a regular file: {skill_file}"
             )
-        entries.append((skill_dir.name, f"{skill_dir.name}/{MANAGED_SKILL_FILENAME}"))
+        entries.append((skill_dir.name, managed_skill_relative_path(skill_dir.name).as_posix()))
     return tuple(entries)
 
 

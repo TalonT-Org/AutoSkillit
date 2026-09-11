@@ -330,9 +330,6 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
-        )
-        monkeypatch.setattr(
             "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
             lambda: plugins_file,
         )
@@ -361,9 +358,6 @@ class TestOrderMcpPrefixSelection:
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text(f'{{"version": 2, "plugins": {{"{_PLUGIN_KEY}": []}}}}')
-        monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
-        )
         monkeypatch.setattr(
             "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
             lambda: plugins_file,
@@ -403,9 +397,6 @@ class TestOrderMcpPrefixSelection:
         monkeypatch.setattr("builtins.input", lambda _prompt="": "")
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
-        monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
-        )
         monkeypatch.setattr(
             "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
             lambda: plugins_file,

@@ -1,22 +1,25 @@
 from __future__ import annotations
 
+import ast
 import dataclasses
 from collections.abc import Callable
+from pathlib import Path
 
 
 @dataclasses.dataclass(frozen=True)
 class LineLimitExemption:
     """A REQ-CNST-010-EN-NN entry permitting one src module to exceed the
-    1000-line full-tree default enforced by test_no_src_module_exceeds_line_limit,
-    up to `limit` (today's exemptions range as high as 1600; this table enforces
-    no absolute ceiling of its own).
+    1000 non-import-line full-tree default (measured by ``count_budget_lines``)
+    enforced by test_no_src_module_exceeds_line_limit, up to `limit` (today's
+    exemptions range as high as 1600; this table enforces no absolute ceiling
+    of its own).
 
     `predicate`, when present, is a zero-argument callable that re-verifies the
     rationale's factual claim at check time. An exemption with `predicate=None`
     is honored by the full-tree test_no_src_module_exceeds_line_limit guard
     (legacy rationale-only contract, unchanged) but will be voided by the
-    diff-scoped REQ-CNST-010 gate a follow-on part adds -- whose 750-line default
-    ceiling applies only to lines touched in a diff -- touching that file in
+    diff-scoped REQ-CNST-010 gate a follow-on part adds -- whose 750 non-import-line
+    default ceiling applies only to lines touched in a diff -- touching that file in
     a future diff will force either decomposition or a real, verifiable
     predicate.
     """
@@ -24,6 +27,50 @@ class LineLimitExemption:
     limit: int
     rationale: str
     predicate: Callable[[], bool] | None = None
+
+
+def _physical_line_count(source: str) -> int:
+    """Count lines on the tokenizer's numbering.
+
+    ``Path.read_text`` already normalises CR and CRLF endings to LF; counting LF
+    (plus an unterminated final line) keeps this total on the same numbering as
+    ``ast`` ``lineno``/``end_lineno``. ``str.splitlines`` does not: it also splits on
+    form feeds and other separators the tokenizer treats as whitespace.
+    """
+    if not source:
+        return 0
+    return source.count("\n") + (0 if source.endswith("\n") else 1)
+
+
+def count_budget_lines(path: Path) -> int:
+    """Return the REQ-CNST-010 line count for ``path``: physical lines minus import lines.
+
+    Every physical line occupied by an ``import``/``from ... import`` statement is
+    excluded wherever it appears (module level, under ``if TYPE_CHECKING:``, inside
+    ``try``, inside a function) and however it is laid out (single line, parenthesised
+    block, backslash continuation). Blank and comment-only lines within a multiline
+    import span are excluded too. Every line outside those spans counts, including
+    separately laid-out enclosing statements, blanks, comments, docstrings and
+    ``__all__`` lists. Shared import lines are subtracted only once. A file Python
+    cannot parse raises ``SyntaxError``; the gate fails closed instead of guessing.
+
+    ``from __future__`` statements are excluded like other imports. Dynamic import
+    calls remain counted as ordinary expressions; source code is never executed.
+
+    This function is REQ-CNST-010's measurement. It is not a registered
+    ``PolicySurface`` -- ``scripts/check_policy_relaxation.py`` does not model
+    measurement function bodies -- so an edit here changes every file's effective budget
+    without tripping that gate. Treat any change as a policy change: cite a tracking
+    issue and obtain code-owner review. Issue #4965 records the import exclusion.
+    """
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    import_lines: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            assert node.end_lineno is not None
+            import_lines.update(range(node.lineno, node.end_lineno + 1))
+    return _physical_line_count(source) - len(import_lines)
 
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {

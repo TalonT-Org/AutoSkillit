@@ -1,4 +1,4 @@
-"""Sub-recipe merge logic — extracted from _recipe_composition (#4671 Phase D).
+"""Sub-recipe merge logic — extracted from _recipe_composition.
 
 Holds the ``_merge_sub_recipe`` helper that was carved out of
 ``_recipe_composition.py`` to bring the file under REQ-CNST-010's 750-line
@@ -12,7 +12,7 @@ sub-recipe into the parent.
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import regex as re
 
@@ -20,11 +20,6 @@ from autoskillit.recipe.schema import (
     StepResultCondition,
     StepResultRoute,
 )
-
-if TYPE_CHECKING:
-    # Lazy / TYPE_CHECKING-only — avoids the circular import:
-    # ``_recipe_composition`` imports this module to access ``_merge_sub_recipe``.
-    pass
 
 __all__ = ["_merge_sub_recipe"]
 

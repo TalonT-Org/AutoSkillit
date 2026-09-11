@@ -1621,6 +1621,9 @@ class TestAnalyzeGitHubMutations:
 
         assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
         assert analysis.request_count == 1
+        assert len(analysis.mutations) == 1
+        assert analysis.mutations[0].kind is GitHubMutationKind.OTHER
+        assert analysis.mutations[0].route == "/gh/issue/edit"
 
     def test_identical_nested_payloads_keep_per_occurrence_cwd(self, tmp_path: Path) -> None:
         (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")

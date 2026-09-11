@@ -1976,22 +1976,37 @@ def _reject_coverage_map(
     return None
 
 
+def _compile_manifest_matchers(manifest: dict[str, Any]) -> dict[str, pathspec.PathSpec]:
+    """Compile one matcher per manifest pattern.
+
+    The ``gitwildmatch`` factory is retained because the PathSpec 1.x ``gitignore``
+    factory stops ``dir/*`` rules from matching nested files.
+    """
+    return {pat: pathspec.PathSpec.from_lines("gitwildmatch", [pat]) for pat in manifest}
+
+
 def apply_manifest(
     changed_files: set[str],
     manifest: dict[str, Any] | None,
+    *,
+    compiled_matchers: dict[str, pathspec.PathSpec] | None = None,
 ) -> set[str] | None:
     """Return test directories matched by manifest patterns for the changed files.
 
     Returns None when manifest is None (fail-open) or when any changed file matches
     no manifest pattern (fail-open: caller should run the full suite).
+
+    ``compiled_matchers`` must be the complete dictionary returned by
+    ``_compile_manifest_matchers`` for the exact ``manifest`` passed to this call.
     """
     if manifest is None:
         return None
-    compiled = {pat: pathspec.PathSpec.from_lines("gitwildmatch", [pat]) for pat in manifest}
+    if compiled_matchers is None:
+        compiled_matchers = _compile_manifest_matchers(manifest)
     matched_dirs: set[str] = set()
     for f in changed_files:
         file_matched = False
-        for pattern, spec in compiled.items():
+        for pattern, spec in compiled_matchers.items():
             if spec.match_file(f):
                 test_dirs = manifest[pattern]
                 if isinstance(test_dirs, list):
@@ -2158,6 +2173,7 @@ def build_test_scope(
 
     test_dirs: set[str] = set()
     direct_test_files: set[str] = set()
+    compiled_matchers: dict[str, pathspec.PathSpec] | None = None
     for f in changed_files:
         if f.startswith("tests/") and f.endswith(".py"):
             direct_test_files.add(f)
@@ -2220,13 +2236,10 @@ def build_test_scope(
                 test_dirs.update(cascade_map[pkg])
             else:
                 return FullRunReason.UNMAPPED_FILE
-        elif f.endswith(".py"):
-            manifest_dirs = apply_manifest({f}, manifest)
-            if manifest_dirs is None:
-                return FullRunReason.UNMAPPED_FILE
-            test_dirs.update(manifest_dirs)
         else:
-            manifest_dirs = apply_manifest({f}, manifest)
+            if manifest is not None and compiled_matchers is None:
+                compiled_matchers = _compile_manifest_matchers(manifest)
+            manifest_dirs = apply_manifest({f}, manifest, compiled_matchers=compiled_matchers)
             if manifest_dirs is None:
                 return FullRunReason.UNMAPPED_FILE
             test_dirs.update(manifest_dirs)

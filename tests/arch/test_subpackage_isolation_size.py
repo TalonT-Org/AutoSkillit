@@ -49,15 +49,20 @@ def test_basename_fallback_dead_exemptions_are_retired() -> None:
     src/autoskillit/ and are already covered by
     test_every_exemption_key_matches_an_existing_file, which fails on any key
     that does not resolve to a real file -- reintroducing them needs no
-    dedicated assertion here. `server/recipe/_recipe_delivery.py`'s 750/750 exemption
-    was a rubber-stamp ceiling equal to its own line count (see
+    dedicated assertion here. `server/_recipe_delivery.py`'s 750/750 exemption
+    (now decomposed into `server/recipe/_recipe_delivery/`) was a rubber-stamp
+    ceiling equal to its own line count (see
     test_no_exemption_ceiling_equals_current_line_count) and, like
-    `server/recipe/_recipe_section_pagination.py` (465 lines, limit 750), is redundant
-    now that 750 is the universal default under REQ-CNST-010's diff-scoped gate.
+    `server/_recipe_section_pagination.py` (465 lines, limit 750, now
+    `server/recipe/_recipe_section_pagination.py`), is redundant now that 750
+    is the universal default under REQ-CNST-010's diff-scoped gate. The keys
+    below are the historical flat-path strings that must stay absent -- do
+    not path-migrate them to the post-#4673 locations, or a reintroduced
+    exemption under the old key would silently escape this guard.
     """
     retired = {
-        "server/recipe/_recipe_delivery.py",
-        "server/recipe/_recipe_section_pagination.py",
+        "server/_recipe_delivery.py",
+        "server/_recipe_section_pagination.py",
     }
     stale = retired.intersection(_LINE_LIMIT_EXEMPTIONS)
     assert not stale, f"Retired basename-fallback exemptions reintroduced: {sorted(stale)}"

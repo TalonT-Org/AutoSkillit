@@ -244,10 +244,22 @@ def _validate_tracker_data(raw: object) -> TrackerData:
     if not isinstance(steps, dict):
         raise ValueError("tracker steps must be a JSON object")
     for step_name, state in steps.items():
+        if not isinstance(step_name, str):
+            raise ValueError(f"tracker step name {step_name!r} must be a string")
         if not isinstance(state, dict):
             raise ValueError(f"tracker step '{step_name}' must be a JSON object")
     if not isinstance(dependencies, dict):
         raise ValueError("tracker dependencies must be a JSON object")
+    for dep_name, prereqs in dependencies.items():
+        if (
+            not isinstance(dep_name, str)
+            or not isinstance(prereqs, list)
+            or not all(isinstance(p, str) for p in prereqs)
+        ):
+            raise ValueError(
+                f"tracker dependency entry for {dep_name!r} must map a string step "
+                "name to a list of string step names"
+            )
     return dict(raw)
 
 

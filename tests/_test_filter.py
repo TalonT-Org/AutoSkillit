@@ -242,6 +242,44 @@ _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE: frozenset[str] = frozenset({"core", "p
 
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
+    # De-underscored stems added after #4671 Phase A core decomposition.
+    # Each entry mirrors its underscored shim counterpart's cascade.
+    "cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
+    "install_detect": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
+    "claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
+    "conventions": frozenset({"core", "execution", "server", "workspace"}),
+    "delivery_bounds": frozenset({"core", "execution", "server"}),
+    "json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
+    "terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
+    "version_snapshot": frozenset({"core", "execution"}),
+    "yaml_io": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
+    "io": frozenset({"core", "cli", "pipeline", "recipe", "execution", "server", "workspace"}),
+    "audit": frozenset({"core", "execution", "pipeline", "recipe", "server", "workspace"}),
+    "git": frozenset({"core", "pipeline", "server", "workspace"}),
+    "plugins": frozenset(
+        {
+            "core",
+            "cli",
+            "execution",
+            "fleet",
+            "hook_registry",
+            "pipeline",
+            "server",
+            "smoke_utils",
+            "workspace",
+        }
+    ),
+    "pipeline": frozenset(
+        {
+            "core",
+            "cli",
+            "execution",
+            "pipeline",
+            "recipe",
+            "server",
+            "workspace",
+        }
+    ),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "agent_definition": frozenset({"core", "execution", "pipeline", "server", "workspace"}),
     "artifact_lease": frozenset({"core", "workspace"}),
@@ -257,9 +295,18 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_plugin_ids": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
     ),
+    "plugin_ids": frozenset(
+        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
+    ),
     "_terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
     "_plugin_artifact_identity": frozenset(
         {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
+    ),
+    "plugin_artifact_identity": frozenset(
+        {"core", "cli", "execution", "hook_registry", "server", "smoke_utils", "workspace"}
+    ),
+    "plugin_cache": frozenset(
+        {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}
     ),
     "_plugin_cache": frozenset(
         {"core", "cli", "fleet", "pipeline", "server", "smoke_utils", "workspace"}

@@ -57,7 +57,7 @@ _PRODUCTION_MODULES = (
     "autoskillit.recipe._api_orchestration_types",
     "autoskillit.recipe._api_orchestration_validate",
     "autoskillit.recipe._io_loading",
-    "autoskillit.recipe._recipe_composition",
+    "autoskillit.recipe.ingredients._recipe_composition",
     "autoskillit.recipe.io",
     "autoskillit.recipe.validator",
     "autoskillit.recipe.rules.dataflow.rules_dataflow",

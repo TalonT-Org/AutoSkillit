@@ -142,7 +142,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
         skill_md_refs=(),
     ),
     "plan_association": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/recipe/_cmd_rpc_guards.py", 280),
+        consumer_site=("src/autoskillit/recipe/cmd_rpc/_cmd_rpc_guards.py", 280),
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_plan_association",

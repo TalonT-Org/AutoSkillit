@@ -36,7 +36,7 @@ _COMPOSITION_ANCHOR = (
     "test_resolve_skip_guards_strips_optional_true_on_truthy"
 )
 _VALIDATION_SITE = "autoskillit.recipe.validator:validate_recipe_structure"
-_COMPOSITION_SITE = "autoskillit.recipe._recipe_composition:_build_active_recipe"
+_COMPOSITION_SITE = "autoskillit.recipe.ingredients._recipe_composition:_build_active_recipe"
 _EXECUTION_SITE = "autoskillit.server.recipe._recipe_execution:build_recipe_execution_snapshot"
 _RECIPE_SITE = "autoskillit.recipe.io:load_recipe"
 

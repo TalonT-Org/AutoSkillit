@@ -311,7 +311,9 @@ def test_manifest_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
     manifest_path = recipe_dir / "skill_contracts.yaml"
     manifest_path.write_text("skills:\n  old-skill:\n    inputs: []\n    outputs: []\n")
 
-    monkeypatch.setattr("autoskillit.recipe._contracts_manifest.pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "autoskillit.recipe.contracts._contracts_manifest.pkg_root", lambda: tmp_path
+    )
     _MANIFEST_CACHE.clear()
 
     r1 = load_bundled_manifest()

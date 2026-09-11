@@ -1,5 +1,9 @@
 """Backward-compat shim for paths — see core.io.paths."""
 
+import os  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.core.paths.os", ...)
+import subprocess  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.core.paths.subprocess", ...)
+import sys  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.core.paths.sys", ...)
+
 from autoskillit.core.io.paths import (
     GENERATED_FILES,
     _find_git_ancestor,

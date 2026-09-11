@@ -408,7 +408,7 @@ def test_main_repo_guard_fallback_clears_staged_entries(tmp_path, monkeypatch):
             )
         return real_run_git(args, **kwargs)
 
-    monkeypatch.setattr("autoskillit.recipe._cmd_rpc_guards.run_git", _stash_fails)
+    monkeypatch.setattr("autoskillit.recipe.cmd_rpc._cmd_rpc_guards.run_git", _stash_fails)
     result = main_repo_guard(clone_path=str(tmp_path))
 
     assert result["cleaned"] == "force"
@@ -433,7 +433,7 @@ def test_export_local_bundle(tmp_path):
 
 
 def test_refetch_issues_builds_query():
-    with patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh:
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh:
         mock_run_gh.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="1 2", stderr=""
         )
@@ -505,8 +505,8 @@ def test_batch_create_issues_discovers_ticket_bodies(tmp_path):
             f"validated: true\n\n# Title {n}\n\n| col1 | col2 |\n"
         )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
@@ -528,10 +528,10 @@ def test_batch_create_issues_returns_empty_when_audit_root_vanishes(
 
     with (
         patch(
-            "autoskillit.recipe._cmd_rpc_issues.scan_observed",
+            "autoskillit.recipe.cmd_rpc._cmd_rpc_issues.scan_observed",
             side_effect=error_type("injected"),
         ),
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
     ):
         result = batch_create_issues(workspace=str(tmp_path))
 
@@ -560,8 +560,8 @@ def test_batch_create_issues_skips_body_that_vanishes_before_read(tmp_path, monk
 
     monkeypatch.setattr(Path, "read_text", remove_body_before_read)
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
@@ -590,8 +590,8 @@ def test_batch_create_issues_strips_body_content(tmp_path):
         "**Exception note:** this is an exception.\n"
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
@@ -619,8 +619,8 @@ def test_batch_create_issues_extracts_h1_title(tmp_path):
         "validated: true\n\n# Audit: Missing test coverage\n\nBody content."
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
@@ -641,8 +641,8 @@ def test_batch_create_issues_constructs_graphql_mutation(tmp_path):
     (va_dir / "ticket_body_tests_1_2026-01-01_120000.md").write_text("# Issue One\n\nBody one.")
     (va_dir / "ticket_body_tests_2_2026-01-01_120000.md").write_text("# Issue Two\n\nBody two.")
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
@@ -694,8 +694,8 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
             f"# Issue {n + 1}\n\nBody {n + 1}."
         )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
 
         def side_effect_factory():
@@ -802,8 +802,8 @@ def test_batch_create_issues_ignores_validation_summary_file(tmp_path):
         "## Validation Summary\nAll clear."
     )
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect()
         batch_create_issues(workspace=str(tmp_path))
@@ -855,8 +855,8 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
         subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="rate limited"),
     ]
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = error_side_effect
         with pytest.raises(RuntimeError, match="rate limited"):
@@ -866,8 +866,8 @@ def test_batch_create_issues_handles_graphql_error(tmp_path):
 # ─── Type coercion: int pr_number for _cmd_rpc callables (Step 1c) ───────────
 
 
-@patch("autoskillit.recipe._cmd_rpc_merge.run_gh")
-@patch("autoskillit.recipe._cmd_rpc_merge.time.sleep")
+@patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_gh")
+@patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.time.sleep")
 def test_wait_for_direct_merge_int_pr_number(mock_sleep, mock_run_gh):
     """wait_for_direct_merge handles int pr_number from LLM JSON boundary."""
     mock_run_gh.return_value = subprocess.CompletedProcess(
@@ -902,8 +902,8 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
 
     # Call batch_create_issues — should return 3 issues
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
@@ -924,8 +924,8 @@ def test_batch_create_issues_ignores_prior_run_files(tmp_path):
 
     # Call batch_create_issues WITHOUT audit_run_dir — globs all 5 files
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
@@ -970,8 +970,8 @@ def test_batch_create_issues_scoped_to_audit_run_dir(tmp_path):
 
     # Call batch_create_issues scoped to run2_dir only
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[
@@ -1007,8 +1007,8 @@ def test_batch_create_issues_audit_run_dir_only(tmp_path):
     (scoped_dir / "ticket_body_tests_1_2026-05-06_130000.md").write_text("# Active Issue\n\nBody.")
 
     with (
-        patch("autoskillit.recipe._cmd_rpc_issues.run_gh") as mock_run_gh,
-        patch("autoskillit.recipe._cmd_rpc_issues.time.sleep"),
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.run_gh") as mock_run_gh,
+        patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
         mock_run_gh.side_effect = _make_side_effect(
             issue_data=[{"number": 99, "url": "https://github.com/org/repo/issues/99"}]
@@ -1038,12 +1038,12 @@ def _raise_os_error(*_args, **_kwargs):
     raise OSError("Permission denied")
 
 
-@patch("autoskillit.recipe._cmd_rpc_merge.run_gh")
-@patch("autoskillit.recipe._cmd_rpc_merge.run_git")
-@patch("autoskillit.recipe._cmd_rpc_merge.time.sleep")
+@patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_gh")
+@patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git")
+@patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.time.sleep")
 def test_force_push_int_review_pr_number(mock_sleep, mock_run_git, mock_run_gh, tmp_path):
     """force_push_and_wait_mergeability handles int review_pr_number."""
-    with patch("autoskillit.recipe._cmd_rpc_merge._detect_remote", return_value="origin"):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge._detect_remote", return_value="origin"):
         mock_run_git.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
@@ -1077,7 +1077,7 @@ class TestReviewPathRebase:
 
         from autoskillit.recipe._cmd_rpc import review_path_rebase
 
-        with patch("autoskillit.recipe._cmd_rpc_merge.queue_ejected_fix") as mock:
+        with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.queue_ejected_fix") as mock:
             mock.return_value = {"status": "clean"}
             result = review_path_rebase(work_dir="/tmp/work", base_branch="main")
             assert result == {"status": "clean"}
@@ -1089,7 +1089,7 @@ class TestReviewPathRebase:
 
         from autoskillit.recipe._cmd_rpc import review_path_rebase
 
-        with patch("autoskillit.recipe._cmd_rpc_merge.queue_ejected_fix") as mock:
+        with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.queue_ejected_fix") as mock:
             mock.return_value = {"status": "conflicts"}
             result = review_path_rebase(work_dir="/tmp/work", base_branch="main")
             assert result == {"status": "conflicts"}
@@ -1368,10 +1368,10 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
     # Case 1: file split — untracked new file with 30 lines offsets the 30-line reduction.
     file_status_split = {"module_a.py": " M", "module_b.py": "??"}
     files_split = ["module_a.py", "module_b.py"]
-    with patch("autoskillit.recipe._cmd_rpc_guards.run_git", side_effect=_patched_run_git):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_guards.run_git", side_effect=_patched_run_git):
         # Need to patch the line-count helper used by new-file accounting as well.
         with patch(
-            "autoskillit.recipe._cmd_rpc_guards._count_lines_in_files",
+            "autoskillit.recipe.cmd_rpc._cmd_rpc_guards._count_lines_in_files",
             return_value=30,
         ):
             result = _check_regression(str(tmp_path), files_split, "main", file_status_split)
@@ -1380,9 +1380,9 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
     # Case 2: pure deletion with no compensating new files → regression.
     file_status_pure = {"module_a.py": " M", "module_b.py": " M"}
     files_pure = ["module_a.py", "module_b.py"]
-    with patch("autoskillit.recipe._cmd_rpc_guards.run_git", side_effect=_patched_run_git):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_guards.run_git", side_effect=_patched_run_git):
         with patch(
-            "autoskillit.recipe._cmd_rpc_guards._count_lines_in_files",
+            "autoskillit.recipe.cmd_rpc._cmd_rpc_guards._count_lines_in_files",
             return_value=0,
         ):
             result = _check_regression(str(tmp_path), files_pure, "main", file_status_pure)
@@ -1404,9 +1404,9 @@ def test_check_regression_unit_with_mocked_git(tmp_path: Path) -> None:
 
     file_status_small = {"a.py": " M", "b.py": " M", "c.py": " M"}
     files_small = ["a.py", "b.py", "c.py"]
-    with patch("autoskillit.recipe._cmd_rpc_guards.run_git", side_effect=_small_per_file):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_guards.run_git", side_effect=_small_per_file):
         with patch(
-            "autoskillit.recipe._cmd_rpc_guards._count_lines_in_files",
+            "autoskillit.recipe.cmd_rpc._cmd_rpc_guards._count_lines_in_files",
             return_value=0,
         ):
             result = _check_regression(str(tmp_path), files_small, "main", file_status_small)

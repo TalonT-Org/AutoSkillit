@@ -6,6 +6,8 @@ Preserves old import path ``autoskillit.recipe._contracts_manifest``.
 
 from __future__ import annotations
 
+import json  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.recipe._contracts_manifest.json", ...)
+
 from autoskillit.recipe.contracts._contracts_manifest import (
     _CONTEXT_REF_RE,
     _MANIFEST_CACHE,

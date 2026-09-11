@@ -64,7 +64,9 @@ def validate_add_dir(
     """Validate that a directory satisfies the --add-dir convention.
 
     Raises LayoutError if ``path/.claude/skills/`` does not exist or
-    contains no ``SKILL.md`` files.
+    contains no ``SKILL.md`` files. The ``session_home`` keyword is bound
+    onto the returned ``ValidatedAddDir`` so downstream consumers can
+    scope their SKILL.md search to a specific session home.
     """
     skills_subdir = path / ClaudeDirectoryConventions.ADD_DIR_SKILLS_SUBDIR
     if not skills_subdir.is_dir():

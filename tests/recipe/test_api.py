@@ -1913,7 +1913,7 @@ def test_mid_process_yaml_only_update(tmp_path, monkeypatch):
 
     import autoskillit.recipe._api_cache as cache_mod
     import autoskillit.recipe._api_orchestration as orch
-    import autoskillit.recipe._contracts_manifest as manifest_mod
+    import autoskillit.recipe.contracts._contracts_manifest as manifest_mod
     from autoskillit.recipe._api_cache import YamlFileCache
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _sh
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 

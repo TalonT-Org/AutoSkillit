@@ -1,4 +1,4 @@
-"""IL-0 filesystem, path, JSON, terminal-table, version-snapshot, and delivery-bounds primitives.
+"""IL-0 filesystem, path, JSON, terminal, version, delivery-bounds, atomic primitives.
 
 Re-exports the public surface of the io/ sub-package through the
 ``autoskillit.core.io`` namespace. Backward-compat shims at
@@ -14,6 +14,8 @@ Implementation split: ``io`` (core file/versioned JSON primitives) and
 """
 
 from __future__ import annotations
+
+import os  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.core.io.os", ...)
 
 from autoskillit.core.io.delivery_bounds import (
     recipe_delivery_request_digest,

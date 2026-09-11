@@ -120,7 +120,9 @@ def test_check_staleness_fast_path_on_not_stale_cache_hit(monkeypatch, tmp_path)
     def _raise(*a):
         raise AssertionError("should not read SKILL.md")
 
-    monkeypatch.setattr("autoskillit.recipe._contracts_staleness.compute_skill_hash", _raise)
+    monkeypatch.setattr(
+        "autoskillit.recipe.contracts._contracts_staleness.compute_skill_hash", _raise
+    )
 
     contract = {
         "bundled_manifest_version": manifest_version,
@@ -151,7 +153,7 @@ def test_check_staleness_writes_cache_on_miss(monkeypatch, tmp_path):
         return "sha256:" + "b" * 64
 
     monkeypatch.setattr(
-        "autoskillit.recipe._contracts_staleness.compute_skill_hash", tracking_compute
+        "autoskillit.recipe.contracts._contracts_staleness.compute_skill_hash", tracking_compute
     )
 
     contract = {
@@ -196,7 +198,7 @@ def test_check_staleness_stale_hit_still_returns_items(monkeypatch, tmp_path):
     write_staleness_cache(cache_path, "r", entry)
 
     monkeypatch.setattr(
-        "autoskillit.recipe._contracts_staleness.compute_skill_hash",
+        "autoskillit.recipe.contracts._contracts_staleness.compute_skill_hash",
         lambda skill_name, *, skills_dir: "sha256:" + "b" * 64,
     )
 

@@ -7,9 +7,10 @@ run_python callable contracts (recipe-routing-deadlock immunity, #3889).
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-import autoskillit.recipe._contracts_manifest as contracts_manifest
 from autoskillit.recipe._contracts_manifest import (
     compute_skill_contract_identity,
     get_callable_contract,
@@ -148,13 +149,13 @@ def test_skill_contract_identity_omits_unconfigured_absence_value(
         "skills": {"demo-skill": {"inputs": [{"name": "value", "type": "str", "required": False}]}}
     }
     serialized_payload: dict[str, object] = {}
-    json_dumps = contracts_manifest.json.dumps
+    json_dumps = json.dumps
 
     def capture_payload(value: dict[str, object], **kwargs: object) -> str:
         serialized_payload.update(value)
         return json_dumps(value, **kwargs)
 
-    monkeypatch.setattr(contracts_manifest.json, "dumps", capture_payload)
+    monkeypatch.setattr(json, "dumps", capture_payload)
 
     compute_skill_contract_identity("demo-skill", manifest=manifest)
 

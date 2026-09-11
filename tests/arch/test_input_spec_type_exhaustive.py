@@ -62,7 +62,7 @@ def test_resolve_input_specs_uses_match_assert_never():
     """resolve_input_specs must use match/assert_never for exhaustive dispatch."""
     from autoskillit.core import paths
 
-    src_file = paths.pkg_root() / "recipe" / "_contracts_manifest.py"
+    src_file = paths.pkg_root() / "recipe" / "contracts" / "_contracts_manifest.py"
     assert src_file.exists(), f"File not found: {src_file}"
     body = _get_function_body(src_file.read_text(), "resolve_input_specs")
     fn_tree = ast.Module(body=body, type_ignores=[])

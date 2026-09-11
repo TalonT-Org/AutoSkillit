@@ -6,6 +6,8 @@ Preserves old import path ``autoskillit.recipe._cmd_rpc_merge``.
 
 from __future__ import annotations
 
+import time  # noqa: F401  # re-exported for monkeypatch.setattr("autoskillit.recipe._cmd_rpc_merge.time", ...)
+
 from autoskillit.recipe.cmd_rpc._cmd_rpc_merge import (
     Path,
     _attempt_rebase_with_conflict_report,

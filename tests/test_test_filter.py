@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock
 
+import pathspec
 import pytest
 
 import tests._test_filter as tf_mod
@@ -21,12 +22,53 @@ from tests._test_filter import (
     FilterMode,
     FullRunReason,
     ImportContext,
+    _compile_manifest_matchers,
     apply_manifest,
     build_test_scope,
     check_bucket_a,
     git_changed_files,
     load_manifest,
 )
+
+_SCOPE_TREE_DIRS = (
+    "core",
+    "config",
+    "execution",
+    "pipeline",
+    "workspace",
+    "recipe",
+    "migration",
+    "server",
+    "cli",
+    "hooks",
+    "skills",
+    "arch",
+    "contracts",
+    "infra",
+    "docs",
+)
+
+
+def _make_tests_tree(tmp_path: Path) -> Path:
+    """Build the standard temporary tests/ tree used by scope-building tests."""
+    tests_root = tmp_path / "tests"
+    for d in _SCOPE_TREE_DIRS:
+        (tests_root / d).mkdir(parents=True, exist_ok=True)
+    return tests_root
+
+
+def _record_pathspec_construction(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
+    """Patch PathSpec.from_lines on the class and record its positional arguments."""
+    calls: list[tuple] = []
+    original = pathspec.PathSpec.from_lines
+
+    def _recording_from_lines(*args: object, **kwargs: object) -> pathspec.PathSpec:
+        calls.append(args)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pathspec.PathSpec, "from_lines", _recording_from_lines)
+    return calls
+
 
 pytestmark = [pytest.mark.medium]
 
@@ -478,6 +520,140 @@ class TestBuildTestScope:
         assert result is not None
         assert result is not FullRunReason.UNMAPPED_FILE
 
+    # --- Manifest matcher reuse (T1) ---
+
+    MANIFEST_A = {
+        "docs/**/*.md": ["docs"],
+        "*.yaml": ["config"],
+        "scripts/*.py": ["cli"],
+    }
+    MANIFEST_B = {
+        "docs/**/*.md": ["recipe"],
+        "*.yaml": ["server"],
+    }
+
+    def test_manifest_matchers_compiled_once_per_invocation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Each manifest pattern is compiled exactly once regardless of routed file count."""
+        tests_root = _make_tests_tree(tmp_path)
+        calls = _record_pathspec_construction(monkeypatch)
+
+        result = build_test_scope(
+            changed_files={"docs/a.md", "docs/deep/b.md", "settings.yaml", "scripts/run.py"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=self.MANIFEST_A,
+            tests_root=tests_root,
+        )
+
+        assert len(calls) == len(self.MANIFEST_A), (
+            f"expected {len(self.MANIFEST_A)} constructions, got {len(calls)}: {calls}"
+        )
+        assert calls == [("gitwildmatch", [pat]) for pat in self.MANIFEST_A]
+        assert isinstance(result, set)
+        dir_names = {p.name for p in result}
+        assert {"docs", "config", "cli"} <= dir_names
+
+    def test_source_only_scope_compiles_no_matchers(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Source-only changes return before manifest routing, so nothing is compiled."""
+        tests_root = _make_tests_tree(tmp_path)
+        calls = _record_pathspec_construction(monkeypatch)
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py", "tests/core/test_io.py"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=self.MANIFEST_A,
+            tests_root=tests_root,
+        )
+
+        assert calls == []
+        assert isinstance(result, set)
+
+    def test_manifest_matchers_not_retained_across_invocations(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A second in-process call with a different manifest recompiles and reroutes."""
+        tests_root = _make_tests_tree(tmp_path)
+        calls = _record_pathspec_construction(monkeypatch)
+
+        first = build_test_scope(
+            changed_files={"docs/a.md"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=self.MANIFEST_A,
+            tests_root=tests_root,
+        )
+        assert calls == [("gitwildmatch", [pat]) for pat in self.MANIFEST_A]
+        calls.clear()
+
+        second = build_test_scope(
+            changed_files={"docs/a.md"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest=self.MANIFEST_B,
+            tests_root=tests_root,
+        )
+
+        assert calls == [("gitwildmatch", [pat]) for pat in self.MANIFEST_B]
+        assert isinstance(first, set) and isinstance(second, set)
+        assert "docs" in {p.name for p in first}
+        assert "recipe" in {p.name for p in second}
+        assert "recipe" not in {p.name for p in first}
+
+    def test_manifest_construction_failure_propagates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A matcher constructor failure at the first routed artifact propagates directly."""
+        tests_root = _make_tests_tree(tmp_path)
+
+        def _boom(*args: object, **kwargs: object) -> pathspec.PathSpec:
+            raise RuntimeError("matcher construction failed")
+
+        monkeypatch.setattr(pathspec.PathSpec, "from_lines", _boom)
+
+        with pytest.raises(RuntimeError, match="matcher construction failed"):
+            build_test_scope(
+                changed_files={"docs/a.md"},
+                mode=FilterMode.CONSERVATIVE,
+                manifest=self.MANIFEST_A,
+                tests_root=tests_root,
+            )
+
+    @pytest.mark.parametrize(
+        "changed_files,expected",
+        [
+            ({"src/autoskillit/core/io.py"}, None),
+            ({"tests/core/test_io.py"}, None),
+            ({"pyproject.toml"}, FullRunReason.BUCKET_A),
+        ],
+        ids=["src_only", "test_only", "bucket_a"],
+    )
+    def test_paths_before_manifest_routing_never_construct_matchers(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        changed_files: set[str],
+        expected: FullRunReason | None,
+    ) -> None:
+        """Source/test-only and earlier full-return paths never reach the constructor."""
+        tests_root = _make_tests_tree(tmp_path)
+
+        def _boom(*args: object, **kwargs: object) -> pathspec.PathSpec:
+            raise RuntimeError("matcher construction failed")
+
+        monkeypatch.setattr(pathspec.PathSpec, "from_lines", _boom)
+
+        result = build_test_scope(
+            changed_files=changed_files,
+            mode=FilterMode.CONSERVATIVE,
+            manifest=self.MANIFEST_A,
+            tests_root=tests_root,
+        )
+        if expected is None:
+            assert isinstance(result, set)
+        else:
+            assert result is expected
+
 
 # ---------------------------------------------------------------------------
 # Conservative vs Aggressive Tests (M1–M4)
@@ -891,6 +1067,106 @@ class TestApplyManifest:
             for path in paths:
                 assert apply_manifest({path}, manifest) == expected
                 assert manifest_apply_manifest([path], manifest) == expected
+
+    # --- Semantics under both compilation paths (T2) ---
+
+    @pytest.mark.parametrize(
+        "manifest,changed_files,expected",
+        [
+            (
+                {"docs/*.md": ["docs"], "docs/README.md": ["config"]},
+                {"docs/README.md"},
+                {"docs", "config"},
+            ),
+            ({"docs/**/*.md": ["docs"]}, {"docs/README.md"}, {"docs"}),
+            ({"docs/**/*.md": ["docs"]}, {"docs/a/b/deep.md"}, {"docs"}),
+            (
+                {"tests/recipe/fixtures/*": ["recipe"]},
+                {"tests/recipe/fixtures/sub/x.yaml"},
+                {"recipe"},
+            ),
+            (
+                {"docs/**/*.md": ["docs"], "*.yaml": ["config", "infra"]},
+                {"docs/a.md", "settings.yaml"},
+                {"docs", "config", "infra"},
+            ),
+            ({"docs/*.md": ["docs"]}, {"docs/a.md", "some/unknown/file.txt"}, None),
+            (None, {"README.md"}, None),
+            ({}, {"README.md"}, None),
+            ({}, set(), set()),
+            ({"*.yaml": "config"}, {"settings.yaml"}, {"config"}),
+            ({"*.yaml": 42}, {"settings.yaml"}, set()),
+        ],
+        ids=[
+            "overlapping_rules_union",
+            "doublestar_zero_segments",
+            "doublestar_nested_segments",
+            "dir_star_matches_nested_file",
+            "multiple_routed_files",
+            "known_match_plus_unmapped_file",
+            "manifest_none",
+            "empty_manifest_nonempty_changed",
+            "empty_manifest_empty_changed",
+            "string_value_single_destination",
+            "unsupported_value_matched_no_destination",
+        ],
+    )
+    @pytest.mark.parametrize("supply_compiled", [False, True], ids=["compile", "supplied"])
+    def test_apply_manifest_semantics(
+        self,
+        manifest: dict[str, object] | None,
+        changed_files: set[str],
+        expected: set[str] | None,
+        supply_compiled: bool,
+    ) -> None:
+        """Ordinary and supplied-matcher calls agree with explicit expected results."""
+        if supply_compiled and manifest is not None:
+            compiled = _compile_manifest_matchers(manifest)
+            result = apply_manifest(changed_files, manifest, compiled_matchers=compiled)
+        else:
+            result = apply_manifest(changed_files, manifest)
+        assert result == expected
+
+    def test_compile_manifest_matchers_uses_gitwildmatch_per_pattern(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One gitwildmatch matcher is built per manifest key, in manifest order."""
+        manifest = {"docs/**/*.md": ["docs"], "*.yaml": ["config"]}
+        calls = _record_pathspec_construction(monkeypatch)
+
+        compiled = _compile_manifest_matchers(manifest)
+
+        assert calls == [("gitwildmatch", [pat]) for pat in manifest]
+        assert set(compiled) == set(manifest)
+
+    def test_supplied_matchers_avoid_recompilation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A supplied matcher dictionary suppresses all further construction."""
+        manifest = {"docs/**/*.md": ["docs"], "*.yaml": ["config"]}
+        compiled = _compile_manifest_matchers(manifest)
+        calls = _record_pathspec_construction(monkeypatch)
+
+        result = apply_manifest({"docs/a.md"}, manifest, compiled_matchers=compiled)
+
+        assert calls == []
+        assert result == {"docs"}
+
+    def test_empty_supplied_matchers_is_not_treated_as_absent(self) -> None:
+        """An empty supplied dictionary is used as given rather than recompiled."""
+        manifest = {"docs/**/*.md": ["docs"]}
+        assert apply_manifest({"docs/a.md"}, manifest, compiled_matchers={}) is None
+
+    def test_apply_manifest_construction_failure_propagates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Direct calls propagate constructor failures rather than failing open."""
+
+        def _boom(*args: object, **kwargs: object) -> pathspec.PathSpec:
+            raise RuntimeError("matcher construction failed")
+
+        monkeypatch.setattr(pathspec.PathSpec, "from_lines", _boom)
+
+        with pytest.raises(RuntimeError, match="matcher construction failed"):
+            apply_manifest({"docs/a.md"}, {"docs/*.md": ["docs"]})
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,10 @@
-"""AST-based contract test enforcing signature compatibility between the two apply_manifest
-implementations: tests/_test_filter.py and src/autoskillit/_test_filter.py.
+"""Contract tests for the two apply_manifest implementations: tests/_test_filter.py and
+src/autoskillit/_test_filter.py.
+
+The shared contract is checked per module, not by comparing the two signatures: each must
+return ``set[str] | None`` and accept a ``manifest`` parameter. The tests-side implementation
+additionally exposes the keyword-only ``compiled_matchers`` reuse argument that
+``build_test_scope`` uses to compile each manifest pattern once per invocation.
 """
 
 from __future__ import annotations
@@ -28,10 +33,11 @@ def _get_return_annotation(module: object, func_name: str) -> str:
 
 
 class TestApplyManifestSignatureContract:
-    """Enforces structural compatibility between the two apply_manifest implementations.
+    """Checks each apply_manifest implementation against the shared contract.
 
-    When the production module's apply_manifest signature changes, this test fails
-    immediately, forcing the conftest-side implementation to be updated in sync.
+    Each module is inspected independently: both must return ``set[str] | None`` and accept
+    a ``manifest`` parameter. The tests-side extension for matcher reuse is checked separately;
+    the two signatures are not required to be identical.
     """
 
     def test_both_return_optional_set(self) -> None:
@@ -52,3 +58,18 @@ class TestApplyManifestSignatureContract:
         conftest_sig = inspect.signature(conftest_filter.apply_manifest)
         assert "manifest" in src_sig.parameters
         assert "manifest" in conftest_sig.parameters
+
+    def test_conftest_exposes_keyword_only_compiled_matchers(self) -> None:
+        """The tests-side apply_manifest must expose the matcher-reuse argument."""
+        conftest_sig = inspect.signature(conftest_filter.apply_manifest)
+        param = conftest_sig.parameters.get("compiled_matchers")
+        assert param is not None, (
+            "tests/_test_filter.py apply_manifest must accept compiled_matchers so "
+            "build_test_scope can compile each manifest pattern once per invocation"
+        )
+        assert param.kind is inspect.Parameter.KEYWORD_ONLY, (
+            f"compiled_matchers must be keyword-only, got {param.kind}"
+        )
+        assert param.default is None, (
+            f"compiled_matchers must default to None, got {param.default!r}"
+        )

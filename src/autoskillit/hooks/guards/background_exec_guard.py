@@ -24,11 +24,12 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
-_HOOKS_DIR = str(__file__).rsplit("/", 1)[0].rsplit("/", 1)[0]
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
-_RUNTIME_DIR = _HOOKS_DIR + "/_runtime"
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
 if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 

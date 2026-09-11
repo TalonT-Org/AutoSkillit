@@ -206,6 +206,16 @@ def test_ops_decomposition_has_expected_siblings() -> None:
         "autoskillit.cli.ops",
         "autoskillit.cli.install",
         "autoskillit.smoke_utils.review",
+        # The six #4671 Part D recipe gateways. These are the largest facades in
+        # the tree and each hand-maintains a _LAZY_SYMBOL_TO_MODULE dict, so a
+        # forgotten or mistyped entry silently removes a name from the public
+        # surface — the forward hasattr check below is what catches that.
+        "autoskillit.recipe.analysis",
+        "autoskillit.recipe.cmd_rpc",
+        "autoskillit.recipe.contracts",
+        "autoskillit.recipe.helpers",
+        "autoskillit.recipe.ingredients",
+        "autoskillit.recipe.methodology",
     ],
 )
 def test_cli_facade_all_resolves(facade_pkg: str) -> None:

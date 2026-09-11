@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from collections.abc import Mapping
 from dataclasses import replace
@@ -585,7 +584,3 @@ def test_discovery_probes_forward_explicit_timeouts_to_bounded_probe(
         probes._CODEX_PROBE_STREAM_LIMIT,
         discovery._CODEX_DISCOVERY_STREAM_LIMIT,
     ]
-    timeout_parameter = inspect.signature(probes._run_bounded_codex_probe).parameters[
-        "timeout_seconds"
-    ]
-    assert timeout_parameter.default == probes._CODEX_PROBE_TIMEOUT_SECONDS

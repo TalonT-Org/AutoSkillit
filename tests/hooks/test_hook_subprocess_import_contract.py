@@ -62,6 +62,20 @@ def _fresh_dual_import(absolute_name: str, bare_name: str) -> tuple[object, obje
     return absolute, bare
 
 
+def _module_level_mutable_state(module: object) -> dict[str, str]:
+    """Names bound to a mutable container (dict/list/set/bytearray) at module level.
+
+    Unlike a single sentinel-attribute check, this scans every public and
+    private module attribute so any newly added mutable container — under
+    any name — is caught, not just one specific literal spelling.
+    """
+    return {
+        name: type(value).__name__
+        for name, value in vars(module).items()
+        if not name.startswith("__") and isinstance(value, dict | list | set | bytearray)
+    }
+
+
 def test_session_binding_dual_import_contract() -> None:
     """REQ-HOOKS-005: ``_session_binding`` must resolve under both identities.
 
@@ -83,9 +97,11 @@ def test_session_binding_dual_import_contract() -> None:
 
     # Documented statelessness invariant: the module carries no mutable
     # module-level state, so the two identities can safely share one object.
-    assert not hasattr(bare, "_mutable_state"), (
-        "_session_binding must remain stateless at module level — adding "
-        "mutable module-level state would break the dual-import contract."
+    mutable = _module_level_mutable_state(bare)
+    assert not mutable, (
+        f"_session_binding must remain stateless at module level — found "
+        f"mutable module-level attribute(s) {sorted(mutable)}, which would "
+        f"break the dual-import contract."
     )
 
 
@@ -107,7 +123,9 @@ def test_join_ledger_dual_import_contract() -> None:
         "(dual-import contract per hooks/_join_ledger.py:1-6)"
     )
 
-    assert not hasattr(bare, "_mutable_state"), (
-        "_join_ledger must remain stateless at module level — adding "
-        "mutable module-level state would break the dual-import contract."
+    mutable = _module_level_mutable_state(bare)
+    assert not mutable, (
+        f"_join_ledger must remain stateless at module level — found mutable "
+        f"module-level attribute(s) {sorted(mutable)}, which would break the "
+        f"dual-import contract."
     )

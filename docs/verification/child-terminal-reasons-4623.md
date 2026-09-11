@@ -28,6 +28,22 @@ All 8 plan steps are implemented and committed on this branch (base `94e3d18e0`)
 | 6.1, 6.3–6.6 | `eaa3ded66` | `SessionTelemetry.child_outcomes`, summary/index projection, reused-recovery refresh, schema v11 |
 | 7.1, 7.3 | `1ce5feb80` | `DurableArtifactWriterDef` registration, diagnostics/observability docs |
 | 6.2 | `855858aa3` | `AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR` producer/entrypoint (`_assemble_shared_env_extras`) |
+| 8.5 | `e52b5b5da` | This validation record |
+| — | `18ee003fb` | Extract managed-attempt wiring to stay under tracked size ratchets; one approved `PolicyRelaxationApproval` (`tests/arch/_acceptance_policy_surfaces.py`, `headless/_headless_execute.py` 711→738, issue #4623) |
+
+## Open follow-up: `_headless_execute.py` size ratchet
+
+`execution/headless/_headless_execute.py` was already at 709/711 lines against
+its tracked facade-split budget before this issue touched it. Steps 5 and 6
+add managed-attempt recording call sites embedded directly in exception
+handlers and cancellation-handling control flow (nonlocal-closure state) that
+could not be safely extracted further without restructuring that flow — a
+materially riskier change to attempt under implementation time pressure. After
+extracting what could be moved safely (749 → 738 lines, no behavior change),
+the user reviewed and explicitly approved the remaining relaxation in-session
+(`tests/arch/_acceptance_policy_surfaces.py`, one `PolicyRelaxationApproval`,
+711 → 738, issue #4623). A further decomposition of that cancellation-handling
+flow remains open and is not resolved by this relaxation.
 
 Step 7.2 (`HOOK_REGISTRY` completeness, `FILE_COUNT_LIMITS`, `registry.sha256`) required
 no further changes — verified already correct from steps 1–2/3 during a dedicated

@@ -73,7 +73,7 @@ def test_no_raw_issue_url_get_in_fleet() -> None:
     re-introduce the singular/plural mismatch.
     """
     violations: list[str] = []
-    py_files = sorted(set(SRC_ROOT.glob("*.py")) | set((SRC_ROOT / "campaign_state").glob("*.py")))
+    py_files = sorted(SRC_ROOT.rglob("*.py"))
     for py_file in py_files:
         relative_path = py_file.relative_to(SRC_ROOT).as_posix()
         if relative_path in EXEMPT_FILES:

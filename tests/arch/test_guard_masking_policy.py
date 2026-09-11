@@ -45,53 +45,63 @@ GUARD_MASKING_EXEMPTIONS = (
 )
 
 
-def _fixture_defs() -> list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+def _fixture_defs(
+    tree: ast.Module, rel: str
+) -> list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    """Every fixture definition in ``tree``, including nested ones (``ast.walk``)."""
     fixtures: list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef]] = []
-    for path in sorted(_TESTS_ROOT.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if any(
-                (
-                    isinstance(dec, ast.Call)
-                    and isinstance(dec.func, ast.Attribute)
-                    and dec.func.attr == "fixture"
-                )
-                or (isinstance(dec, ast.Attribute) and dec.attr == "fixture")
-                for dec in node.decorator_list
-            ):
-                rel = path.relative_to(_TESTS_ROOT).as_posix()
-                fixtures.append((node.name, f"{rel}::{node.name}", node))
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if any(
+            (
+                isinstance(dec, ast.Call)
+                and isinstance(dec.func, ast.Attribute)
+                and dec.func.attr == "fixture"
+            )
+            or (isinstance(dec, ast.Attribute) and dec.attr == "fixture")
+            for dec in node.decorator_list
+        ):
+            fixtures.append((node.name, f"{rel}::{node.name}", node))
     return fixtures
 
 
-def _module_usefixtures() -> dict[str, frozenset[str]]:
+def _module_usefixtures(tree: ast.Module) -> frozenset[str]:
+    """Fixture names named by module-level ``pytestmark`` ``usefixtures`` marks only."""
+    names: set[str] = set()
+    for statement in tree.body:
+        if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+        if not any(
+            isinstance(target, ast.Name) and target.id == "pytestmark" for target in targets
+        ):
+            continue
+        for call in (node for node in ast.walk(statement.value) if isinstance(node, ast.Call)):
+            if isinstance(call.func, ast.Attribute) and call.func.attr == "usefixtures":
+                names.update(
+                    arg.value
+                    for arg in call.args
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                )
+    return frozenset(names)
+
+
+def _scan_test_modules() -> tuple[
+    list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef]],
+    dict[str, frozenset[str]],
+]:
+    """Parse every module under ``_TESTS_ROOT`` once; derive fixtures and module usefixtures."""
+    fixtures: list[tuple[str, str, ast.FunctionDef | ast.AsyncFunctionDef]] = []
     uses: dict[str, frozenset[str]] = {}
     for path in sorted(_TESTS_ROOT.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        names: set[str] = set()
-        for statement in tree.body:
-            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
-                continue
-            targets = (
-                statement.targets if isinstance(statement, ast.Assign) else [statement.target]
-            )
-            if not any(
-                isinstance(target, ast.Name) and target.id == "pytestmark" for target in targets
-            ):
-                continue
-            value = statement.value
-            for call in (node for node in ast.walk(value) if isinstance(node, ast.Call)):
-                if isinstance(call.func, ast.Attribute) and call.func.attr == "usefixtures":
-                    names.update(
-                        arg.value
-                        for arg in call.args
-                        if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
-                    )
+        rel = path.relative_to(_TESTS_ROOT).as_posix()
+        fixtures.extend(_fixture_defs(tree, rel))
+        names = _module_usefixtures(tree)
         if names:
-            uses[path.relative_to(_TESTS_ROOT).as_posix()] = frozenset(names)
-    return uses
+            uses[rel] = names
+    return fixtures, uses
 
 
 def _is_autouse(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
@@ -125,12 +135,12 @@ def _patched_symbols(node: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[
 
 
 def _masking_hits() -> dict[str, frozenset[str]]:
-    fixtures = _fixture_defs()
+    fixtures, module_uses = _scan_test_modules()
     fixtures_by_location = {
         (qualified.rsplit("::", 1)[0], name): qualified for name, qualified, _node in fixtures
     }
     module_wide_fixtures: set[str] = set()
-    for module, names in _module_usefixtures().items():
+    for module, names in module_uses.items():
         module_path = Path(module)
         visible_files = (
             module,
@@ -246,3 +256,95 @@ def test_masking_exemptions_have_rationale_and_real_path_coverage() -> None:
     ]
     assert not invalid, f"Masking exemptions without rationale: {invalid}"
     assert not stale_tests, f"Missing designated real-path tests: {stale_tests}"
+
+
+def test_masking_scan_parses_each_test_module_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    atomic_write(
+        tmp_path / "conftest.py",
+        """import pytest
+
+@pytest.fixture(autouse=True)
+def _mask_launch(monkeypatch):
+    monkeypatch.setattr("autoskillit.cli.ensure_pre_launch", lambda: None)
+""",
+    )
+    atomic_write(tmp_path / "unit" / "conftest.py", "import pytest\n")
+    atomic_write(tmp_path / "unit" / "test_plain.py", "def test_nothing():\n    pass\n")
+    monkeypatch.setattr(sys.modules[__name__], "_TESTS_ROOT", tmp_path)
+    original_parse = ast.parse
+    parse_count = 0
+
+    def counting_parse(*args, **kwargs):
+        nonlocal parse_count
+        parse_count += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", counting_parse)
+
+    hits = _masking_hits()
+
+    assert hits == {"conftest.py::_mask_launch": frozenset({"ensure_pre_launch"})}
+    assert parse_count == len(list(tmp_path.rglob("*.py"))) == 3
+
+
+def test_masking_scan_keeps_nested_fixture_and_module_mark_asymmetry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    atomic_write(
+        tmp_path / "conftest.py",
+        """import pytest
+
+class Holder:
+    @pytest.fixture
+    def nested_mask(self, monkeypatch):
+        monkeypatch.setattr("autoskillit.cli.ensure_pre_launch", lambda: None)
+
+@pytest.fixture
+def class_marked_mask(monkeypatch):
+    monkeypatch.setattr("autoskillit.cli.resolve_executable_launch_binding", lambda: None)
+""",
+    )
+    atomic_write(
+        tmp_path / "test_module_mark.py",
+        'import pytest\n\npytestmark = pytest.mark.usefixtures("nested_mask")\n',
+    )
+    atomic_write(
+        tmp_path / "test_class_mark.py",
+        "import pytest\n\nclass TestConsumer:\n"
+        '    pytestmark = pytest.mark.usefixtures("class_marked_mask")\n',
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_TESTS_ROOT", tmp_path)
+
+    assert _masking_hits() == {"conftest.py::nested_mask": frozenset({"ensure_pre_launch"})}
+
+
+def test_masking_scan_resolves_same_named_fixture_by_nearest_scope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    atomic_write(
+        tmp_path / "conftest.py",
+        """import pytest
+
+@pytest.fixture
+def shared_name(monkeypatch):
+    monkeypatch.setattr("autoskillit.cli.ensure_pre_launch", lambda: None)
+""",
+    )
+    atomic_write(
+        tmp_path / "pkg" / "test_local_override.py",
+        """import pytest
+
+pytestmark = pytest.mark.usefixtures("shared_name")
+
+@pytest.fixture
+def shared_name(monkeypatch):
+    monkeypatch.setattr("autoskillit.cli.resolve_executable_launch_binding", lambda: None)
+""",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_TESTS_ROOT", tmp_path)
+
+    assert _masking_hits() == {
+        "pkg/test_local_override.py::shared_name": frozenset({"resolve_executable_launch_binding"})
+    }

@@ -570,10 +570,12 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         if executable is not None and dict(env) != dict(executable.launch_environment):
             raise ValueError("interactive environment changed after executable binding")
         partial = builder.build()
-        managed_skill_catalog = next(
-            (entry for entry in add_dirs if isinstance(entry, ValidatedAddDir)),
-            None,
+        managed_skill_catalogs = tuple(
+            entry for entry in add_dirs if isinstance(entry, ValidatedAddDir)
         )
+        if len(managed_skill_catalogs) > 1:
+            raise ValueError("interactive launch accepts at most one managed skill catalog")
+        managed_skill_catalog = managed_skill_catalogs[0] if managed_skill_catalogs else None
         return CmdSpec(
             cmd=partial.cmd,
             env=executable.launch_environment if executable is not None else env,

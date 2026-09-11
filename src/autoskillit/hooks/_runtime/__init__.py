@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 # Lazy gateway: importing _runtime/__init__.py must NOT trigger
 # `import autoskillit.hooks` (which would create a cycle when this package
 # is loaded during subprocess hook-script invocation). Each re-exported
@@ -250,7 +252,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str) -> object:
+def __getattr__(name: str) -> Any:
     """Lazily resolve re-exported names from their source submodules."""
     mapping = globals()["_NAME_TO_MODULE"]
     submod = mapping.get(name)

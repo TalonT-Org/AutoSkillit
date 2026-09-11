@@ -12,6 +12,10 @@ logger = get_logger(__name__)
 # move into ``autoskillit.recipe.methodology.*``. Python only exposes a
 # submodule as a parent-package attribute when the parent package triggers
 # the load; importing the new path does not retroactively bind the old name.
+# __init__.py files must be pure re-export facades (no module-scope function
+# defs), so this loop runs inline rather than through a helper function.
+import importlib as _importlib
+
 _LEGACY_SHIM_MODULES: tuple[str, ...] = (
     "_analysis",
     "_analysis_bfs",
@@ -44,16 +48,9 @@ _LEGACY_SHIM_MODULES: tuple[str, ...] = (
     "staleness_cache",
 )
 
-
-def _bind_legacy_paths() -> None:
-    """Import each old flat-module path so it is bound as an autoskillit.recipe attribute."""
-    import importlib
-
-    for _name in _LEGACY_SHIM_MODULES:
-        importlib.import_module(f"{__name__}.{_name}")
-
-
-_bind_legacy_paths()
+for _name in _LEGACY_SHIM_MODULES:
+    _importlib.import_module(f"{__name__}.{_name}")
+del _importlib, _name
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415

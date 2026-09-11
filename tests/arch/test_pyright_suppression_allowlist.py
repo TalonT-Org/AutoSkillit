@@ -20,7 +20,7 @@ _PYRIGHT_RE = re.compile(r"#\s*pyright:\s*ignore|#.*--\s*pyright:\s*ignore")
 PRODUCTION_ALLOWLIST: dict[tuple[str, int], str] = {
     (
         "recipe/__init__.py",
-        354,
+        362,
     ): "lazy-registry: _reg._finalize_registry() attribute access on dynamically-built registry",
     ("recipe/_api_orchestration_cache.py", 144): (
         "lazy-registry: RULE_REGISTRY_HASH set by _finalize_registry()"

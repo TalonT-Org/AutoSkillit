@@ -15,8 +15,8 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline import ReadyRecipe, ToolContext
-from autoskillit.server._recipe_delivery import initialize_host_client_attestation
-from autoskillit.server._recipe_segment_delivery import RECIPE_SEGMENT_MAX_BYTES
+from autoskillit.server.recipe._recipe_delivery import initialize_host_client_attestation
+from autoskillit.server.recipe._recipe_segment_delivery import RECIPE_SEGMENT_MAX_BYTES
 from tests.server._helpers import McpCallCounter, simulate_session_start
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium, pytest.mark.anyio]
@@ -27,7 +27,7 @@ async def _record_implementation_bounded_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> McpCallCounter:
     from autoskillit.pipeline import ReadyRecipe
-    from autoskillit.server._recipe_segment_delivery import (
+    from autoskillit.server.recipe._recipe_segment_delivery import (
         attach_recipe_segment,
         prepare_recipe_segment_delivery,
     )

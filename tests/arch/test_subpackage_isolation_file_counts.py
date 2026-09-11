@@ -16,13 +16,13 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "config": 20,
     "recipe": 53,  # +7 shards added by issue #4905 decomposition of _api_orchestration.py
     "recipe/rules": 66,
-    "server": 28,
+    "server": 20,
     "execution": 23,
     "cli": 9,
     "cli/session": 11,
     "cli/doctor": 13,
     "pipeline": 19,
-    "fleet": 29,
+    "fleet": 20,
     "server/tools": 39,
     "execution/process": 11,
     "execution/backends": 30,
@@ -37,43 +37,30 @@ FILE_COUNT_LIMITS: dict[str, int] = {
 
 
 def test_server_file_count_under_limit() -> None:
-    """server/ must not exceed 28 Python files (REQ-DSGN-002).
+    """server/ must not exceed 20 Python files (REQ-DSGN-002).
 
-    Limit updated from 14 to 16 after tools_integrations was split into
-    tools_github, tools_issue_lifecycle, and tools_pr_ops.
-    Limit updated from 16 to 17 after _editable_guard.py was added as
-    the pre-deletion editable install guard for perform_merge().
-    Limit updated from 17 to 18 after _lifespan/_lifespan.py was added for
-    FastMCP server lifespan teardown (#745).
-    Limit updated from 18 to 19 after _wire_compat.py was added for
-    Claude Code wire-format sanitization middleware.
-    Limit updated from 19 to 20 after _session_type.py was added for
-    session-type tag visibility dispatch (3-branch startup logic).
-    Limit updated from 20 to 22 after tools_ci.py was split into
-    tools_ci_watch.py and tools_ci_merge_queue.py submodules.
-    Limit updated from 22 to 23 after _guards.py was extracted from helpers.py.
-    Limit updated from 23 to 24 after _subprocess.py was extracted from helpers.py.
-    Limit updated from 24 to 25 after _misc.py was extracted from helpers.py.
-    Limit updated from 25 to 28 after #4557 decomposed _recipe_delivery.py
-    into _recipe_artifact.py + _recipe_delivery_helpers.py + _recipe_delivery.py,
-    and _recipe_section_pagination.py into _recipe_section_planning.py +
-    _recipe_section_pagination.py.
+    Twenty is a root package a single reviewer can still hold in mind.
+    Responsibilities that would push the count past it belong in a
+    grouping subpackage instead — see `server/recipe/`, `server/lifecycle/`,
+    and `server/response/` (issue #4673). None of the three carries a
+    dedicated `FILE_COUNT_LIMITS` entry; they are governed by the default
+    10-file ceiling in `test_no_subpackage_exceeds_10_files` below, plus the
+    parameterized per-package cases in `tests/arch/test_server_fleet_folder_layout.py`.
     """
+    limit = FILE_COUNT_LIMITS["server"]
     py_files = list((SRC_ROOT / "server").glob("*.py"))
-    assert len(py_files) <= 28, f"server/ has {len(py_files)} files, max is 28"
+    assert len(py_files) <= limit, f"server/ has {len(py_files)} files, max is {limit}"
 
 
 def test_no_subpackage_exceeds_10_files() -> None:
     """REQ-CNST-003: No sub-package directory may contain more than 10 Python files.
 
         Exemptions (rule ID | rationale):
-          server/ — REQ-CNST-003-E1: server/ splits tool handlers into per-domain files
-            (tools_clone, tools_github, tools_issue_headless, tools_issue_labels, tools_pr_ops,
-            tools_ci, tools_git, tools_recipe, tools_status, tools_workspace, tools_execution,
-            tools_kitchen, helpers, git, _factory, _state, __init__); each file is a thin
-            routing layer. Exempt at 16 files.
-            _progress_heartbeat.py adds the MCP progress-notification context manager,
-            bringing the count to 28.
+          server/ — REQ-CNST-003-E1: server/ retains composition, git, exploration, audit,
+            notification, and utility modules at the root -- grouping them would buy no
+            coherence. Recipe, lifecycle, and response concerns instead live in their own
+            subpackages (issue #4673: server/recipe/, server/lifecycle/, server/response/).
+            Exempt at 20 files -- a root package a single reviewer can still hold in mind.
           recipe/ — REQ-CNST-003-E2: recipe/ hosts one file per semantic-rule domain
             (rules_bypass, rules_ci, rules_clone, rules_packs, etc.) for independent testability.
             Adding rules_cmd.py for run_cmd echo-capture alignment validation and
@@ -261,15 +248,13 @@ def test_no_subpackage_exceeds_10_files() -> None:
             configurable asyncio.BoundedSemaphore implementation of the FleetLock protocol.
             Placed in fleet/ rather than server/ to preserve conservative test-filter cascade
             narrowing: changes to fleet/_semaphore.py only cascade to fleet/ tests, not to
-            server/ tests. state.py was decomposed into state_types.py, state_gates.py, and
-            state_recovery.py to reduce the 757-line monolith and centralize deserialization
-            logic on DispatchRecord.from_dict. Startup warming lives here so its
-            execution/fleet imports remain layer-correct. state_types.py was then further
-            decomposed into state_effects.py, state_records.py, state_transitions.py,
-            state_outcomes.py, and state_error_codes.py (#4856) to split the 899-line monolith
-            along effect-provenance, dispatch-record/campaign-state, transition/retry, and
-            outcome/result boundaries, after which the transitional state_types.py re-export
-            facade was deleted. Exempt at 28 files.
+            server/ tests. The nine campaign-state modules (state, state_effects,
+            state_error_codes, state_gates, state_outcomes, state_records, state_recovery,
+            state_transitions, _state_lock) moved into their own fleet/campaign_state/
+            subpackage (issue #4673), each retaining its basename; fleet's remaining
+            sidecar, dispatch, parsing, and prompt concerns do not form a shared
+            responsibility that would justify grouping them into a further package.
+            Exempt at 20 files -- a root package a single reviewer can still hold in mind.
     """
     violations: list[str] = []
     dirs_to_check: list[Path] = []

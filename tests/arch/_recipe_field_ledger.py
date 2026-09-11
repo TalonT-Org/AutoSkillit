@@ -37,7 +37,7 @@ _COMPOSITION_ANCHOR = (
 )
 _VALIDATION_SITE = "autoskillit.recipe.validator:validate_recipe_structure"
 _COMPOSITION_SITE = "autoskillit.recipe._recipe_composition:_build_active_recipe"
-_EXECUTION_SITE = "autoskillit.server._recipe_execution:build_recipe_execution_snapshot"
+_EXECUTION_SITE = "autoskillit.server.recipe._recipe_execution:build_recipe_execution_snapshot"
 _RECIPE_SITE = "autoskillit.recipe.io:load_recipe"
 
 

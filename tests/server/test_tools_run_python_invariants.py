@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoskillit.server._guards import RECIPE_READ_DENY_TRIGGER
+from autoskillit.server.lifecycle._guards import RECIPE_READ_DENY_TRIGGER
 from autoskillit.server.tools.tools_execution import run_python
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

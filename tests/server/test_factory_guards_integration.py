@@ -25,7 +25,7 @@ def test_ambient_provider_profile_does_not_contaminate_tier4_default(
     """
     from autoskillit.config import AutomationConfig
     from autoskillit.server._factory import make_context
-    from autoskillit.server._guards import _resolve_provider_profile
+    from autoskillit.server.lifecycle._guards import _resolve_provider_profile
 
     monkeypatch.setenv("AUTOSKILLIT_PROVIDER_PROFILE", "minimax")
     config = AutomationConfig()

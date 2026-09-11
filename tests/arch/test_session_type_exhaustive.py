@@ -28,7 +28,7 @@ def test_session_type_dispatch_is_exhaustive():
     """_apply_session_type_visibility must use match/assert_never for exhaustive dispatch."""
     from autoskillit.core import paths
 
-    src_file = paths.pkg_root() / "server" / "_session_type.py"
+    src_file = paths.pkg_root() / "server" / "lifecycle" / "_session_type.py"
     assert src_file.exists(), f"File not found: {src_file}"
     tree = ast.parse(src_file.read_text())
 

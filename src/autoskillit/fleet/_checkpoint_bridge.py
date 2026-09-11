@@ -22,9 +22,9 @@ from autoskillit.core import (
     retain_tracker_lease,
     sample_kitchen_process_identity,
 )
+from autoskillit.fleet.campaign_state.state import CampaignStateMutator
+from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
 from autoskillit.fleet.sidecar import IssueSidecarEntry, read_sidecar_from_path
-from autoskillit.fleet.state import CampaignStateMutator
-from autoskillit.fleet.state_transitions import DispatchStatus
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext

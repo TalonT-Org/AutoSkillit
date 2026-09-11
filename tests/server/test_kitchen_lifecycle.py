@@ -9,8 +9,8 @@ import pytest
 
 from autoskillit.config import AutomationConfig
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
-from autoskillit.server import _state
 from autoskillit.server._factory import make_context
+from autoskillit.server.lifecycle import _state
 from autoskillit.server.tools.tools_kitchen import (
     _close_kitchen_handler,
     _open_kitchen_handler,

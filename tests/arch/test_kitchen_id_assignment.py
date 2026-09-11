@@ -17,7 +17,12 @@ def test_kitchen_id_only_assigned_via_transition_bootstrap():
     infrastructure transition already owns one.
     """
     pkg_dirs = (
-        Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server" / "_lifespan",
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "autoskillit"
+        / "server"
+        / "lifecycle"
+        / "_lifespan",
         Path(__file__).parent.parent.parent
         / "src"
         / "autoskillit"

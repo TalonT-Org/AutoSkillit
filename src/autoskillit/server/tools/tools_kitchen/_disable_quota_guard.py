@@ -6,8 +6,8 @@ import json
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_orchestrator_exact
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)

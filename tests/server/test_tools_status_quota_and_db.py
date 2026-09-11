@@ -411,7 +411,7 @@ async def test_tools_status_routes_through_db_reader(tool_ctx_kitchen_open, tmp_
 @pytest.mark.anyio
 async def test_read_db_all_error_paths_include_success_false(tool_ctx_kitchen_open, monkeypatch):
     """Every read_db error path must return success=False."""
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
 

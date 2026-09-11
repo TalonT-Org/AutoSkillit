@@ -13,7 +13,7 @@ _STEP_NAMES = ["plan", "implement", "investigate", "verify", "review", "remediat
 def test_tier3_never_returns_step_name_as_profile_without_step_provider(step_name):
     """Tier 3 must not leak step_name as a profile when step_provider is empty."""
     from autoskillit.config._config_dataclasses import ProvidersConfig
-    from autoskillit.server._guards import _resolve_provider_profile
+    from autoskillit.server.lifecycle._guards import _resolve_provider_profile
 
     cfg = ProvidersConfig()
     profile_name, env_dict = _resolve_provider_profile(step_name, "", cfg)
@@ -29,7 +29,7 @@ def test_tier3_never_returns_step_name_as_profile_without_step_provider(step_nam
 def test_tier3_never_returns_step_name_as_profile_with_recipe_context(step_name):
     """With recipe context but no overrides, step_name must not become a profile."""
     from autoskillit.config._config_dataclasses import ProvidersConfig
-    from autoskillit.server._guards import _resolve_provider_profile
+    from autoskillit.server.lifecycle._guards import _resolve_provider_profile
 
     cfg = ProvidersConfig()
     profile_name, _ = _resolve_provider_profile(step_name, "implementation", cfg)
@@ -40,7 +40,7 @@ def test_tier3_never_returns_step_name_as_profile_with_recipe_context(step_name)
 def test_tier3_returns_step_provider_when_profile_exists():
     """Tier 3 should use step_provider (not step_name) for profile lookup."""
     from autoskillit.config._config_dataclasses import ProvidersConfig
-    from autoskillit.server._guards import _resolve_provider_profile
+    from autoskillit.server.lifecycle._guards import _resolve_provider_profile
 
     cfg = ProvidersConfig(profiles={"bedrock": {"AWS_REGION": "us-east-1"}})
     profile_name, env_dict = _resolve_provider_profile("plan", "", cfg, step_provider="bedrock")
@@ -51,7 +51,7 @@ def test_tier3_returns_step_provider_when_profile_exists():
 def test_tier3_unresolvable_step_provider_returns_anthropic():
     """Unknown step_provider must return anthropic, not propagate the name."""
     from autoskillit.config._config_dataclasses import ProvidersConfig
-    from autoskillit.server._guards import _resolve_provider_profile
+    from autoskillit.server.lifecycle._guards import _resolve_provider_profile
 
     cfg = ProvidersConfig()
     profile_name, env_dict = _resolve_provider_profile(

@@ -248,7 +248,7 @@ async def test_disable_quota_guard_writes_disabled_flag(tmp_path, monkeypatch):
     overlay_path.write_text(json.dumps(pre_overlay_content))
     overlay_bytes_before = overlay_path.read_bytes()
 
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     mock_state_ctx = _make_mock_ctx()
     mock_state_ctx.project_dir = tmp_path
@@ -286,7 +286,7 @@ async def test_disable_quota_guard_does_not_create_overlay(tmp_path, monkeypatch
     overlay_path = tmp_path.joinpath(*_HOOK_CONFIG_OVERLAY_RELPATH)
     assert not overlay_path.exists()
 
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     mock_state_ctx = _make_mock_ctx()
     mock_state_ctx.project_dir = tmp_path
@@ -327,7 +327,7 @@ async def test_disable_quota_guard_returns_error_when_kitchen_not_open(tmp_path,
         json.dumps({"quota_guard": {"cache_path": "/some/path.json", "cache_max_age": 300}})
     )
 
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     monkeypatch.setattr(_state, "_ctx", None)
 
@@ -481,7 +481,7 @@ async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypa
     mock_ctx.config.quota_guard.cache_path = "/some/path.json"
     mock_ctx.config.quota_guard.buffer_seconds = 60
 
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     monkeypatch.setattr(_state, "_ctx", mock_ctx)
 

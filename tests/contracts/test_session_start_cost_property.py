@@ -7,7 +7,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from autoskillit.core import BoundedDeliveryRoundTripBudgetExceededError
-from autoskillit.server._recipe_delivery import validate_compiled_recipe_delivery_budget
+from autoskillit.server.recipe._recipe_delivery import validate_compiled_recipe_delivery_budget
 from tests.contracts._delivery_constants import MAX_BYTES_PER_PAGE
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]

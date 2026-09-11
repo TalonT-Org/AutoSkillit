@@ -341,7 +341,7 @@ async def test_plan_review_pre_revealed_for_non_notification_backend(tmp_path, m
     from autoskillit.core import HEADLESS_ENV_VAR
     from autoskillit.pipeline.gate import DefaultGateState
     from autoskillit.server import mcp
-    from autoskillit.server._lifespan import _skill_auto_gate_boot
+    from autoskillit.server.lifecycle._lifespan import _skill_auto_gate_boot
     from tests.server.conftest import _make_mock_ctx
 
     monkeypatch.delenv(HEADLESS_ENV_VAR, raising=False)
@@ -355,7 +355,7 @@ async def test_plan_review_pre_revealed_for_non_notification_backend(tmp_path, m
 
     with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
         with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-            with patch("autoskillit.server._lifespan.register_active_kitchen"):
+            with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                 await _skill_auto_gate_boot(ctx)
 
     templates = await mcp.list_resource_templates()

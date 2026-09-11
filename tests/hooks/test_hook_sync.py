@@ -70,7 +70,7 @@ def test_response_spill_schema_mirror_matches_server_contract():
         _RESPONSE_SPILL_SCHEMA_DIGEST,
         _RESPONSE_SPILL_SCHEMA_VERSION,
     )
-    from autoskillit.server._response_budget import (
+    from autoskillit.server.response._response_budget import (
         RESPONSE_SPILL_METADATA_KEY,
         RESPONSE_SPILL_METADATA_KEYS,
         RESPONSE_SPILL_REASONS,
@@ -165,7 +165,7 @@ def test_ingredient_lock_deny_trigger_sync():
 def test_recipe_read_deny_trigger_sync():
     """RECIPE_READ_DENY_TRIGGER must be identical in server guards and hook guard."""
     from autoskillit.hooks.guards.recipe_read_guard import RECIPE_READ_DENY_TRIGGER as _HOOK
-    from autoskillit.server._guards import RECIPE_READ_DENY_TRIGGER as _SERVER
+    from autoskillit.server.lifecycle._guards import RECIPE_READ_DENY_TRIGGER as _SERVER
 
     assert _SERVER == _HOOK, (
         f"Recipe read deny trigger mismatch: server={_SERVER!r} vs hook={_HOOK!r}"

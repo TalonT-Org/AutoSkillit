@@ -89,7 +89,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_codex_discovery",
         "_fmt_response_spill",  # standalone spill schema and exemption mirror digests
         "_response_budget",  # canonical spill schema digest
-        "_primitives",  # server/_response_budget/_primitives.py: SHA-256 hexdigests
+        "_primitives",  # server/response/_response_budget/_primitives.py: SHA-256 hexdigests
         # derived once at import time from the canonical spill schema
         "_explorer_projection",  # server-owned logger and immutable projection authority
         "_explorer_dispatch",  # immutable backend-specific native dispatch renderers

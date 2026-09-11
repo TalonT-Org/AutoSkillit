@@ -421,7 +421,7 @@ class TestServerFleetCascadeNarrowing:
         (server_dir / "test_factory_context_construction.py").touch()
 
         result = build_test_scope(
-            changed_files={"src/autoskillit/server/tools/tools_kitchen/_open_kitchen.py"},
+            changed_files={"src/autoskillit/server/tools/tools_kitchen/_open_kitchen/__init__.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -450,7 +450,7 @@ class TestServerFleetCascadeNarrowing:
         (server_dir / "test_factory_context_construction.py").touch()
 
         result = build_test_scope(
-            changed_files={"src/autoskillit/server/tools/tools_kitchen/_open_kitchen.py"},
+            changed_files={"src/autoskillit/server/tools/tools_kitchen/_open_kitchen/__init__.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -551,7 +551,7 @@ class TestServerStateCrossLayerCascade:
             (tests_root / directory).mkdir(parents=True)
 
         result = build_test_scope(
-            changed_files={"src/autoskillit/server/_state.py"},
+            changed_files={"src/autoskillit/server/lifecycle/_state.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

@@ -2,9 +2,9 @@
 
 Issue #4112 defense-in-depth: the canonical extraction function lives in
 ``_issue_url_helpers.py``, and any raw ``.get()`` call elsewhere in ``fleet/``
-(except ``_issue_url_helpers.py`` itself and ``state_records.py``, which
-deserializes ``DispatchRecord`` from its own JSON dict) would re-introduce the
-singular/plural key mismatch that orphaned labels for the 7th time.
+(except ``_issue_url_helpers.py`` itself and ``campaign_state/state_records.py``,
+which deserializes ``DispatchRecord`` from its own JSON dict) would re-introduce
+the singular/plural key mismatch that orphaned labels for the 7th time.
 
 Also enforces that ``fleet_claim_guard.py`` retains BOTH key variants in its
 inline dual-key lookup — the guard is a stdlib-only hook script and cannot
@@ -34,8 +34,10 @@ HOOK_GUARD_PATH = (
 
 # Files exempt from the raw-``get`` ban:
 # - ``_issue_url_helpers.py``: defines the canonical accessor.
-# - ``state_records.py``: deserializes ``DispatchRecord`` from its own JSON dict.
-EXEMPT_FILES: frozenset[str] = frozenset({"_issue_url_helpers.py", "state_records.py"})
+# - ``campaign_state/state_records.py``: deserializes ``DispatchRecord`` from its own JSON dict.
+EXEMPT_FILES: frozenset[str] = frozenset(
+    {"_issue_url_helpers.py", "campaign_state/state_records.py"}
+)
 
 BANNED_KEYS: frozenset[str] = frozenset({"issue_url", "issue_urls"})
 
@@ -71,11 +73,13 @@ def test_no_raw_issue_url_get_in_fleet() -> None:
     re-introduce the singular/plural mismatch.
     """
     violations: list[str] = []
-    for py_file in sorted(SRC_ROOT.glob("*.py")):
-        if py_file.name in EXEMPT_FILES:
+    py_files = sorted(SRC_ROOT.rglob("*.py"))
+    for py_file in py_files:
+        relative_path = py_file.relative_to(SRC_ROOT).as_posix()
+        if relative_path in EXEMPT_FILES:
             continue
         for lineno, key in _find_issue_url_get_calls(py_file):
-            violations.append(f"{py_file.name}:{lineno} (.get({key!r}))")
+            violations.append(f"{relative_path}:{lineno} (.get({key!r}))")
 
     assert not violations, (
         "Raw .get('issue_url') / .get('issue_urls') calls in fleet/ must go "

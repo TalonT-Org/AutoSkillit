@@ -3,7 +3,7 @@
 Report-default / mutate-flag shape mirrors ``_codex_orphans.py``/``_daemon_orphans.py``.
 This is the manual/ops entry point ``doctor``'s tether check points operators at —
 the automatic path is the tether sweep wired into every boot/open chokepoint
-(``server/_lifespan.py``, ``open_kitchen``, cook startup).
+(``server/lifecycle/_lifespan/``, ``open_kitchen``, cook startup).
 """
 
 from __future__ import annotations

@@ -14,9 +14,9 @@ from typing import Any
 
 import pytest
 
-from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server import _recipe_section_planning as planning
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe import _recipe_section_pagination as pagination
+from autoskillit.server.recipe import _recipe_section_planning as planning
+from autoskillit.server.recipe._recipe_section_pagination import (
     PagePlanCache,
     get_or_build_recipe_section_page_plan,
     select_recipe_section,

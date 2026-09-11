@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.fleet.state_records import DispatchRecord
-from autoskillit.fleet.state_transitions import DispatchStatus
+from autoskillit.fleet.campaign_state.state_records import DispatchRecord
+from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -35,7 +35,7 @@ class TestDispatchRecordResumeCheckpoint:
 class TestResumeDecisionHasCheckpoint:
     def test_resume_decision_has_resume_checkpoint_field(self):
         """ResumeDecision must have a resume_checkpoint field."""
-        from autoskillit.fleet.state_records import ResumeDecision
+        from autoskillit.fleet.campaign_state.state_records import ResumeDecision
 
         decision = ResumeDecision(
             next_dispatch_name="step-2",
@@ -47,7 +47,7 @@ class TestResumeDecisionHasCheckpoint:
 
     def test_resume_decision_resume_checkpoint_accepts_dict(self):
         """ResumeDecision.resume_checkpoint must accept a dict with completed_items."""
-        from autoskillit.fleet.state_records import ResumeDecision
+        from autoskillit.fleet.campaign_state.state_records import ResumeDecision
 
         decision = ResumeDecision(
             next_dispatch_name="step-2",

@@ -28,23 +28,23 @@ from autoskillit.pipeline import (
     confirm_kitchen_effect,
     start_kitchen_effect,
 )
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     FinalizedRecipeResponse,
     complete_finalized_recipe_response,
 )
-from autoskillit.server._recipe_initialization import (
+from autoskillit.server.recipe._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
     FinalizedRecipeSectionResponse,
     complete_initialization_response,
     complete_section_response,
 )
-from autoskillit.server._recipe_section_pagination import resolve_recipe_section_bound_bytes
-from autoskillit.server._response_budget import (
+from autoskillit.server.recipe._recipe_section_pagination import resolve_recipe_section_bound_bytes
+from autoskillit.server.response._response_budget import (
     bounded_response_budget_failure,
     enforce_response_budget,
     post_effect_recipe_segment_failure,
 )
-from autoskillit.server._run_skill_completion import (
+from autoskillit.server.response._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
 )
 
@@ -57,7 +57,9 @@ logger = get_logger(__name__)
 
 
 def _get_ctx_or_none() -> ToolContext | None:
-    from autoskillit.server._state import _get_ctx_or_none as _ctx_none_fn  # circular-break
+    from autoskillit.server.lifecycle._state import (  # circular-break
+        _get_ctx_or_none as _ctx_none_fn,
+    )
 
     return _ctx_none_fn()
 

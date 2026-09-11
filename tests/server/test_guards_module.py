@@ -6,7 +6,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def test_require_orchestrator_or_higher_doc_mentions_l1():
-    from autoskillit.server._guards import _require_orchestrator_or_higher
+    from autoskillit.server.lifecycle._guards import _require_orchestrator_or_higher
 
     doc = _require_orchestrator_or_higher.__doc__ or ""
     assert "L1" in doc
@@ -15,7 +15,7 @@ def test_require_orchestrator_or_higher_doc_mentions_l1():
 
 
 def test_require_orchestrator_exact_doc_mentions_l2():
-    from autoskillit.server._guards import _require_orchestrator_exact
+    from autoskillit.server.lifecycle._guards import _require_orchestrator_exact
 
     doc = _require_orchestrator_exact.__doc__ or ""
     assert "L2" in doc
@@ -24,7 +24,7 @@ def test_require_orchestrator_exact_doc_mentions_l2():
 
 
 def test_require_fleet_doc_mentions_l3():
-    from autoskillit.server._guards import _require_fleet
+    from autoskillit.server.lifecycle._guards import _require_fleet
 
     doc = _require_fleet.__doc__ or ""
     assert "L3" in doc
@@ -33,7 +33,7 @@ def test_require_fleet_doc_mentions_l3():
 
 
 def test_check_recipe_read_prohibition_importable():
-    from autoskillit.server._guards import _check_recipe_read_prohibition
+    from autoskillit.server.lifecycle._guards import _check_recipe_read_prohibition
 
     doc = _check_recipe_read_prohibition.__doc__ or ""
     assert "recipe" in doc.lower()
@@ -41,7 +41,7 @@ def test_check_recipe_read_prohibition_importable():
 
 
 def test_check_write_target_boundary_importable():
-    from autoskillit.server._guards import _check_write_target_boundary
+    from autoskillit.server.lifecycle._guards import _check_write_target_boundary
 
     doc = _check_write_target_boundary.__doc__ or ""
     assert "write" in doc.lower()

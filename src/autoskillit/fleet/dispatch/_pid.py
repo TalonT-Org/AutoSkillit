@@ -17,7 +17,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from autoskillit.core import get_logger
-from autoskillit.fleet.state_effects import DispatchEffectName, DispatchProvenanceTracker
+from autoskillit.fleet.campaign_state.state_effects import (
+    DispatchEffectName,
+    DispatchProvenanceTracker,
+)
 
 logger = get_logger(__name__)
 

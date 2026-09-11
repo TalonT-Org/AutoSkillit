@@ -596,9 +596,9 @@ def test_json_producer_includes_completed_failure():
     Asserts on the individual completed_failure envelope (not the merged dict)
     to catch regressions where this specific shape drops 'kind'.
     """
-    from autoskillit.fleet.state_effects import DispatchEffectProvenance
-    from autoskillit.fleet.state_outcomes import DispatchCompleted
-    from autoskillit.fleet.state_transitions import DispatchStatus
+    from autoskillit.fleet.campaign_state.state_effects import DispatchEffectProvenance
+    from autoskillit.fleet.campaign_state.state_outcomes import DispatchCompleted
+    from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
     from tests.infra.conftest import _dispatch_food_truck_json_producer
 
     keys = _dispatch_food_truck_json_producer().keys()

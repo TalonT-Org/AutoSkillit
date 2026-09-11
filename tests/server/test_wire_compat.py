@@ -14,7 +14,8 @@ from fastmcp.tools.base import ToolResult
 from fastmcp.tools.function_tool import FunctionTool
 from mcp.types import CallToolRequestParams, TextContent
 
-from autoskillit.server._response_conformance import (
+from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
+from autoskillit.server.response._response_conformance import (
     _SCHEMA_NONCONFORMING_FAILURE,
     _WRAPPED_STRING_OUTPUT_SCHEMA,
     ResponseConformanceDecision,
@@ -22,7 +23,6 @@ from autoskillit.server._response_conformance import (
     _converted_result_conforms,
     decide_response_conformance,
 )
-from autoskillit.server._wire_compat import ClaudeCodeCompatMiddleware
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
@@ -365,7 +365,7 @@ class TestResponseConformanceMiddleware:
         tmp_path,
     ):
         from autoskillit.server import mcp
-        from autoskillit.server._response_budget import RESPONSE_SPILL_METADATA_KEY
+        from autoskillit.server.response._response_budget import RESPONSE_SPILL_METADATA_KEY
         from autoskillit.server.tools import tools_execution
 
         sentinels = ("HEAD-SENTINEL", "MIDDLE-SENTINEL", "TAIL-SENTINEL")

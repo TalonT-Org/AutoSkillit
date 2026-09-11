@@ -9,7 +9,9 @@ import pytest
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-LIFESPAN_PKG = Path(__file__).parents[2] / "src" / "autoskillit" / "server" / "_lifespan"
+LIFESPAN_PKG = (
+    Path(__file__).parents[2] / "src" / "autoskillit" / "server" / "lifecycle" / "_lifespan"
+)
 KITCHEN_PKG = (
     Path(__file__).parents[2] / "src" / "autoskillit" / "server" / "tools" / "tools_kitchen"
 )

@@ -35,16 +35,7 @@ from ._reset import (
 )
 from ._startup_warm import WARM_MODULE_NAMES as WARM_MODULE_NAMES
 from ._startup_warm import warm_failure_path_imports as warm_failure_path_imports
-from .result_parser import L3ParseResult, parse_l3_result_block
-from .sidecar import (
-    IssueSidecarEntry,
-    append_sidecar_entry,
-    compute_remaining_issues,
-    read_sidecar,
-    read_sidecar_from_path,
-    sidecar_path,
-)
-from .state import (
+from .campaign_state.state import (
     FLEET_HALTED_SENTINEL,
     TERMINAL_DISPATCH_STATUSES,
     TERMINAL_UNCLEANED_STATUSES,
@@ -85,16 +76,16 @@ from .state import (
     write_captured_values,
     write_initial_state,
 )
-from .state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
-from .state_outcomes import DispatchOutcome
-from .state_records import FLEET_STATE_SCHEMA_VERSION
-from .state_recovery import (
+from .campaign_state.state_error_codes import _INFRASTRUCTURE_FAILURE_REASONS
+from .campaign_state.state_outcomes import DispatchOutcome
+from .campaign_state.state_records import FLEET_STATE_SCHEMA_VERSION
+from .campaign_state.state_recovery import (
     MAX_CONSECUTIVE_RESUME_ATTEMPTS as MAX_CONSECUTIVE_RESUME_ATTEMPTS,
 )
-from .state_recovery import (
+from .campaign_state.state_recovery import (
     ResumePreflight as ResumePreflight,
 )
-from .state_recovery import (
+from .campaign_state.state_recovery import (
     classify_stale_dispatch,
     derive_orchestrator_resume_spec,
     find_completed_dispatch,
@@ -103,6 +94,15 @@ from .state_recovery import (
     has_completed_dispatch,
     prepare_resume,
     resolve_stale_running,
+)
+from .result_parser import L3ParseResult, parse_l3_result_block
+from .sidecar import (
+    IssueSidecarEntry,
+    append_sidecar_entry,
+    compute_remaining_issues,
+    read_sidecar,
+    read_sidecar_from_path,
+    sidecar_path,
 )
 from .summary import (
     CampaignParseResult,

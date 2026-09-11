@@ -306,7 +306,7 @@ class FleetRuntime:
 
     def read_dispatch_state(self, dispatch_id: str) -> Any:
         """Read per-dispatch CampaignState (or None if missing/corrupt)."""
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         return read_state(self.dispatch_state_path(dispatch_id))
 
@@ -456,7 +456,7 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
         state = rt.read_dispatch_state(result["dispatch_id"])
         assert state is not None
         d = state.dispatches[0]
-        from autoskillit.fleet.state import DispatchStatus
+        from autoskillit.fleet.campaign_state.state import DispatchStatus
 
         assert d.status == DispatchStatus.SUCCESS
         assert d.dispatched_pid > 0
@@ -466,7 +466,7 @@ async def test_two_dispatch_happy_path(fleet_runtime: FleetRuntime) -> None:
 @pytest.mark.anyio
 async def test_halt_on_first_failure_default(fleet_runtime: FleetRuntime) -> None:
     """Failure detection + campaign halt with continue_on_failure=False."""
-    from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
+    from autoskillit.fleet.campaign_state.state import DispatchStatus, resume_campaign_from_state
 
     rt = fleet_runtime
     rt.add_recipe("recipe-a")
@@ -488,7 +488,7 @@ async def test_halt_on_first_failure_default(fleet_runtime: FleetRuntime) -> Non
 @pytest.mark.anyio
 async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> None:
     """continue_on_failure=True does not halt; FAILURE dispatches excluded from next selection."""
-    from autoskillit.fleet.state import (
+    from autoskillit.fleet.campaign_state.state import (
         FLEET_HALTED_SENTINEL,
         DispatchStatus,
         resume_campaign_from_state,
@@ -522,7 +522,7 @@ async def test_continue_on_failure_when_flagged(fleet_runtime: FleetRuntime) -> 
 @pytest.mark.anyio
 async def test_malformed_l3_result_surfaces_warning(fleet_runtime: FleetRuntime) -> None:
     """Malformed sentinel body produces l3_parse_failed failure with diagnostic fields."""
-    from autoskillit.fleet.state import DispatchStatus
+    from autoskillit.fleet.campaign_state.state import DispatchStatus
 
     rt = fleet_runtime
     rt.add_recipe("recipe-a")
@@ -544,7 +544,7 @@ async def test_l3_halts_on_missing_result_block_when_continue_on_failure_false(
     fleet_runtime: FleetRuntime,
 ) -> None:
     """No-sentinel failure + continue_on_failure=False yields fleet_halted_on_failure."""
-    from autoskillit.fleet.state import DispatchStatus, resume_campaign_from_state
+    from autoskillit.fleet.campaign_state.state import DispatchStatus, resume_campaign_from_state
 
     rt = fleet_runtime
     rt.add_recipe("recipe-a")
@@ -609,7 +609,7 @@ async def test_state_json_atomic_under_concurrent_read(
     fleet_runtime: FleetRuntime, tmp_path: Path
 ) -> None:
     """atomic_write guarantees readers never observe corrupted partial JSON."""
-    from autoskillit.fleet.state import DispatchRecord, write_initial_state
+    from autoskillit.fleet.campaign_state.state import DispatchRecord, write_initial_state
 
     state_path = tmp_path / "atomic-test-state.json"
     write_initial_state(state_path, "cid-0", "cn", str(state_path), [DispatchRecord(name="d0")])
@@ -703,7 +703,7 @@ async def test_l3_killed_mid_dispatch_records_failure(
     fleet_runtime: FleetRuntime,
 ) -> None:
     """L3 process killed mid-dispatch produces l3_no_result_block failure (not crash)."""
-    from autoskillit.fleet.state import DispatchStatus
+    from autoskillit.fleet.campaign_state.state import DispatchStatus
 
     rt = fleet_runtime
     rt.add_recipe("sleepy-recipe")
@@ -756,7 +756,7 @@ async def test_orphan_l3_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) ->
     """_reap_stale_dispatches kills a real orphan process and marks it interrupted."""
     from autoskillit.cli.fleet import _reap_stale_dispatches
     from autoskillit.core.runtime._linux_proc import read_boot_id, read_starttime_ticks
-    from autoskillit.fleet.state import (
+    from autoskillit.fleet.campaign_state.state import (
         DispatchRecord,
         DispatchStatus,
         read_state,
@@ -805,7 +805,7 @@ async def test_orphan_l3_reaping(fleet_runtime: FleetRuntime, tmp_path: Path) ->
 @pytest.mark.anyio
 async def test_l3_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
     """timeout_sec=1 kills a sleeping L3 process and returns l3_timeout fleet_error."""
-    from autoskillit.fleet.state import DispatchStatus
+    from autoskillit.fleet.campaign_state.state import DispatchStatus
 
     rt = fleet_runtime
     rt.add_recipe("slow-recipe")
@@ -840,7 +840,7 @@ async def test_l3_timeout_enforced(fleet_runtime: FleetRuntime) -> None:
 @pytest.mark.anyio
 async def test_resume_after_l3_crash(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """resume_campaign_from_state marks stale RUNNING as interrupted and returns next pending."""
-    from autoskillit.fleet.state import (
+    from autoskillit.fleet.campaign_state.state import (
         DispatchRecord,
         DispatchStatus,
         read_state,
@@ -898,7 +898,7 @@ async def test_manifest_corrupted_yaml(fleet_runtime: FleetRuntime) -> None:
 @pytest.mark.anyio
 async def test_manifest_mid_campaign_deletion(fleet_runtime: FleetRuntime, tmp_path: Path) -> None:
     """resume_campaign_from_state returns None when state file is missing."""
-    from autoskillit.fleet.state import (
+    from autoskillit.fleet.campaign_state.state import (
         DispatchRecord,
         resume_campaign_from_state,
         write_initial_state,
@@ -1086,7 +1086,7 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
     from unittest.mock import MagicMock, patch
 
     from autoskillit.fleet import DispatchRecord, DispatchStatus, read_state, write_initial_state
-    from autoskillit.server._lifespan import _fleet_auto_gate_boot
+    from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
     proc = subprocess.Popen(["sleep", "999"])
     try:
@@ -1124,12 +1124,15 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
             patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=None),
             patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
-            patch("autoskillit.server._lifespan.resolve_kitchen_id", return_value="kitchen-test"),
             patch(
-                "autoskillit.server._lifespan.discover_campaign_state_files",
+                "autoskillit.server.lifecycle._lifespan.resolve_kitchen_id",
+                return_value="kitchen-test",
+            ),
+            patch(
+                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
                 return_value=[sp],
             ),
-            patch("autoskillit.server._lifespan.register_active_kitchen"),
+            patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
         ):
             await _fleet_auto_gate_boot(ctx)
 

@@ -42,9 +42,9 @@ from autoskillit.fleet import (
     upsert_dispatch_record_by_name,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import resolve_backend_override, resolve_log_dir
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled
 from autoskillit.server.tools import (
     tools_fleet_dispatch,  # noqa: F401 — late-binding for monkeypatch reach
 )

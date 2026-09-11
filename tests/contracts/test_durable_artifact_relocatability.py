@@ -219,7 +219,7 @@ class TestNonMachineLocalWritersAreRelocatable:
     def test_startup_drift_check_output_is_relocatable(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from autoskillit.server import _lifespan
+        from autoskillit.server.lifecycle import _lifespan
 
         hooks_dir = tmp_path / "hooks"
         hooks_dir.mkdir()

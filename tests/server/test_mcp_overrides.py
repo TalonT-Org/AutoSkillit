@@ -214,7 +214,7 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
             "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
             return_value=None,
         ),
-        patch("autoskillit.server._state._check_rerun", return_value=None),
+        patch("autoskillit.server.lifecycle._state._check_rerun", return_value=None),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
@@ -283,7 +283,7 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
             "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
             return_value=None,
         ),
-        patch("autoskillit.server._state._check_rerun", return_value=None),
+        patch("autoskillit.server.lifecycle._state._check_rerun", return_value=None),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 

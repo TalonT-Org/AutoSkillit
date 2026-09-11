@@ -37,20 +37,20 @@ from autoskillit.fleet._outcome import (
     build_dispatch_result,
     classify_dispatch_outcome,
 )
-from autoskillit.fleet.dispatch._cleanup import _post_dispatch_cleanup
-from autoskillit.fleet.dispatch._execution import SpawnContext
-from autoskillit.fleet.state import (
+from autoskillit.fleet.campaign_state.state import (
     DispatchRecord,
     DispatchStatus,
     normalize_dispatch_token_usage,
     upsert_dispatch_record_by_name,
     write_captured_values,
 )
-from autoskillit.fleet.state_effects import (
+from autoskillit.fleet.campaign_state.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
 )
-from autoskillit.fleet.state_outcomes import DispatchResult
+from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
+from autoskillit.fleet.dispatch._cleanup import _post_dispatch_cleanup
+from autoskillit.fleet.dispatch._execution import SpawnContext
 
 if TYPE_CHECKING:
     from autoskillit.core import CodingAgentBackend

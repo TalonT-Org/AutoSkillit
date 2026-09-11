@@ -53,16 +53,16 @@ from autoskillit.pipeline import (
     start_kitchen_effect,
 )
 from autoskillit.recipe import load_and_validate
-from autoskillit.server import _recipe_artifact as recipe_artifact
-from autoskillit.server import _recipe_delivery as recipe_delivery
-from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server._recipe_artifact import (
+from autoskillit.server.recipe import _recipe_artifact as recipe_artifact
+from autoskillit.server.recipe import _recipe_delivery as recipe_delivery
+from autoskillit.server.recipe import _recipe_section_pagination as pagination
+from autoskillit.server.recipe._recipe_artifact import (
     _canonical_payload,
     _generation_dir,
     _generation_from_payload,
     _safe_component,
 )
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     RECIPE_BODY_END,
     RECIPE_BODY_START,
     RECIPE_COMPLETION_SENTINEL,
@@ -78,7 +78,7 @@ from autoskillit.server._recipe_delivery import (
     recipe_recreation_producers,
     retire_recipe_artifacts,
 )
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     PagePlanCache,
     RecipeSectionNonConvergenceError,
     RecipeSectionPaginationError,
@@ -86,8 +86,8 @@ from autoskillit.server._recipe_section_pagination import (
     resolve_recipe_section_bound_bytes,
     select_recipe_section,
 )
-from autoskillit.server._response_budget import enforce_response_budget
-from autoskillit.server.recipe_section import _lifecycle as recipe_section_lifecycle
+from autoskillit.server.recipe.section import _lifecycle as recipe_section_lifecycle
+from autoskillit.server.response._response_budget import enforce_response_budget
 from autoskillit.server.tools._recipe_section_handler import _inject_initialization_counters
 from autoskillit.server.tools.tools_recipe import get_recipe_section
 
@@ -586,7 +586,7 @@ def test_shared_producer_surfaces_require_identical_pull_policies(
         pull_eligible=False
     )
     monkeypatch.setattr(
-        "autoskillit.server._recipe_artifact.RECIPE_DELIVERY_SURFACE_REGISTRY",
+        "autoskillit.server.recipe._recipe_artifact.RECIPE_DELIVERY_SURFACE_REGISTRY",
         conflicting,
     )
 
@@ -669,7 +669,7 @@ def test_generation_path_includes_version_domain(
     first = _persist(tmp_path)
     current_version = getattr(recipe_artifact, version_name)
     monkeypatch.setattr(
-        f"autoskillit.server._recipe_artifact.{version_name}",
+        f"autoskillit.server.recipe._recipe_artifact.{version_name}",
         current_version + 1,
     )
     monkeypatch.setattr(recipe_delivery_types, version_name, current_version + 1)
@@ -2171,7 +2171,7 @@ async def test_pull_tool_recreates_missing_exact_generation(
 async def test_recreation_reuses_original_snapshot_without_snapshot_factory(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.server._recipe_execution as recipe_execution
+    import autoskillit.server.recipe._recipe_execution as recipe_execution
 
     tool_ctx_kitchen_open.kitchen_id = "pull-recreate-stale-snapshot"
     payload = _payload()

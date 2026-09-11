@@ -15,7 +15,7 @@ def _make_profile(**kwargs):
 
 
 def test_all_fields_populated(monkeypatch):
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     monkeypatch.setenv("MY_KEY", "secret")
     profile = _make_profile(
@@ -35,7 +35,7 @@ def test_all_fields_populated(monkeypatch):
 
 
 def test_empty_fields_returns_empty_dict():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(name="x")
     result = _profile_to_env(profile)
@@ -43,7 +43,7 @@ def test_empty_fields_returns_empty_dict():
 
 
 def test_zero_timeout_returns_empty_dict():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(name="x", timeout_seconds=0)
     result = _profile_to_env(profile)
@@ -51,7 +51,7 @@ def test_zero_timeout_returns_empty_dict():
 
 
 def test_api_key_env_absent_warns(monkeypatch):
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     monkeypatch.delenv("MISSING_KEY", raising=False)
     profile = _make_profile(name="x", api_key_env="MISSING_KEY")
@@ -65,7 +65,7 @@ def test_api_key_env_absent_warns(monkeypatch):
 
 
 def test_base_url_only():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(name="x", base_url="https://b.com")
     result = _profile_to_env(profile)
@@ -73,7 +73,7 @@ def test_base_url_only():
 
 
 def test_timeout_only():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(name="x", timeout_seconds=60)
     result = _profile_to_env(profile)
@@ -81,7 +81,7 @@ def test_timeout_only():
 
 
 def test_api_key_env_only(monkeypatch):
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     monkeypatch.setenv("K", "v")
     profile = _make_profile(name="x", api_key_env="K")
@@ -90,7 +90,7 @@ def test_api_key_env_only(monkeypatch):
 
 
 def test_raw_env_passthrough():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(name="x", raw_env={"AWS_REGION": "us-east-1", "CUSTOM": "val"})
     result = _profile_to_env(profile)
@@ -98,7 +98,7 @@ def test_raw_env_passthrough():
 
 
 def test_raw_env_merged_with_mapped_fields():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(name="x", base_url="https://a.com", raw_env={"EXTRA": "e"})
     result = _profile_to_env(profile)
@@ -106,7 +106,7 @@ def test_raw_env_merged_with_mapped_fields():
 
 
 def test_raw_env_overrides_mapped_field():
-    from autoskillit.server._guards import _profile_to_env
+    from autoskillit.server.lifecycle._guards import _profile_to_env
 
     profile = _make_profile(
         name="x",

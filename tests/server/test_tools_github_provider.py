@@ -35,7 +35,7 @@ async def test_report_bug_forwards_provider_name_as_distinct_parameter(
     _feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
 

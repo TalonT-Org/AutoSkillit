@@ -28,8 +28,8 @@ from autoskillit.fleet import (
     update_campaign_state,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled, _require_fleet
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)

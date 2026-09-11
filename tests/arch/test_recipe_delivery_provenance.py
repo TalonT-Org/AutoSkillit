@@ -137,7 +137,7 @@ def test_launcher_attestation_env_reaches_server_context_unchanged(
     from packaging.version import Version
 
     from autoskillit.execution.backends.claude import _claude_host_attestation_env
-    from autoskillit.server._recipe_delivery import (
+    from autoskillit.server.recipe._recipe_delivery import (
         initialize_host_client_attestation,
     )
 
@@ -180,7 +180,7 @@ def test_implementation_recipe_segments_public_startup_but_persists_full_authori
     from typing import Any as AnyType
     from typing import cast as cast_fn
 
-    import autoskillit.server._recipe_generation as _recipe_generation
+    import autoskillit.server.recipe._recipe_generation as _recipe_generation
     from autoskillit.config import OutputBudgetConfig
     from autoskillit.core import (
         FinalizedRecipeProjection,
@@ -190,12 +190,12 @@ def test_implementation_recipe_segments_public_startup_but_persists_full_authori
     from autoskillit.execution.backends import BACKEND_REGISTRY
     from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
     from autoskillit.recipe import load_and_validate
-    from autoskillit.server._recipe_artifact import load_recipe_artifact
-    from autoskillit.server._recipe_delivery import (
+    from autoskillit.server.recipe._recipe_artifact import load_recipe_artifact
+    from autoskillit.server.recipe._recipe_delivery import (
         finalize_recipe_delivery,
         prepare_recipe_delivery_generation,
     )
-    from autoskillit.server._recipe_generation import RecipeGenerationStore
+    from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
     from autoskillit.server.tools._serve_helpers import build_open_kitchen_recipe_payload
 
     project_root = Path(__file__).resolve().parents[2]

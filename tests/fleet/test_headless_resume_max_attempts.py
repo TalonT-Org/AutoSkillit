@@ -15,8 +15,8 @@ import pytest
 
 from autoskillit.core import FleetErrorCode as FEC
 from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
-from autoskillit.fleet.state import mark_dispatch_running, read_state
-from autoskillit.fleet.state_recovery import (
+from autoskillit.fleet.campaign_state.state import mark_dispatch_running, read_state
+from autoskillit.fleet.campaign_state.state_recovery import (
     MAX_CONSECUTIVE_RESUME_ATTEMPTS,
 )
 
@@ -85,7 +85,7 @@ class TestHeadlessResumeCount:
         snapshot has ``status="failure"`` and breaks the run, so the cap is
         re-evaluated from the head on subsequent transitions.
         """
-        from autoskillit.fleet.state import (
+        from autoskillit.fleet.campaign_state.state import (
             ResumeCountExceeded,
             reset_blocking_dispatch,
         )
@@ -131,7 +131,7 @@ class TestHeadlessResumeCount:
         # and verify the cap is enforced on a subsequent mark_dispatch_running
         # (the canonical "reset-rewriting-the-status path" the test is named
         # for).
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name
+        from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         resumed = DispatchRecord(
             name="d1",
@@ -159,7 +159,7 @@ class TestHeadlessResumeCount:
         dispatch and the cap value. (The halt-decision string is owned by the
         campaign path's `ResumeDecision`; on the headless path we surface it via
         the exception's message.)"""
-        from autoskillit.fleet.state import ResumeCountExceeded
+        from autoskillit.fleet.campaign_state.state import ResumeCountExceeded
 
         attempt_history: list[dict[str, Any]] = [
             {"status": str(DispatchStatus.RESUMABLE), "reason": FEC.FLEET_L3_TIMEOUT}

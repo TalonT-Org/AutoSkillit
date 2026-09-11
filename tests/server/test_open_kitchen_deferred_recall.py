@@ -11,7 +11,7 @@ import pytest
 from autoskillit.core import FinalizedRecipeStep, RecipeExecutionId, RecipeFlowEdge
 from autoskillit.recipe._binding import bind_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
-from autoskillit.server._recipe_execution import get_recipe_execution
+from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from tests.server._helpers import (
     _configure_admitted_recipe,
     _make_finalized_projection,

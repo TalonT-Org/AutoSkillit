@@ -33,11 +33,21 @@ from autoskillit.core import (
     get_logger,
     release_tracker_lease,
 )
-from autoskillit.fleet import state as _fleet_state
 from autoskillit.fleet._outcome import (
     _sanitize_managed_capture_diagnostics,
 )
 from autoskillit.fleet._startup_warm import warm_failure_path_imports
+from autoskillit.fleet.campaign_state import state as _fleet_state
+from autoskillit.fleet.campaign_state.state import DispatchRecord, DispatchStatus
+from autoskillit.fleet.campaign_state.state_effects import (
+    DispatchAggregatePhase,
+    DispatchProvenanceTracker,
+)
+from autoskillit.fleet.campaign_state.state_outcomes import (
+    DispatchCompleted,
+    DispatchRejected,
+    DispatchResult,
+)
 from autoskillit.fleet.dispatch._classification import (
     finalize_state_write,
     run_outcome_classification,
@@ -53,16 +63,6 @@ from autoskillit.fleet.dispatch._execution import SpawnContext, run_execution
 from autoskillit.fleet.dispatch._lineage import run_lineage_preparation
 from autoskillit.fleet.dispatch._validation import run_pre_launch_gating
 from autoskillit.fleet.sidecar import sidecar_path
-from autoskillit.fleet.state import DispatchRecord, DispatchStatus
-from autoskillit.fleet.state_effects import (
-    DispatchAggregatePhase,
-    DispatchProvenanceTracker,
-)
-from autoskillit.fleet.state_outcomes import (
-    DispatchCompleted,
-    DispatchRejected,
-    DispatchResult,
-)
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -368,7 +368,7 @@ async def _run_dispatch(
     # targeting ``prepare_resume``. This call is a no-op when the state file
     # is missing/corrupt (returns ``None``) and preserves the chokepoint
     # semantics from the legacy implementation.
-    from autoskillit.fleet.state_recovery import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state_recovery import (  # noqa: PLC0415
         prepare_resume,
     )
 

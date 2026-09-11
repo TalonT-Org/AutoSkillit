@@ -10,7 +10,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _check(skill_command: str, cwd: str, resolver):
-    from autoskillit.server._guards import _check_input_contracts
+    from autoskillit.server.lifecycle._guards import _check_input_contracts
 
     return _check_input_contracts(skill_command, cwd, resolver)
 

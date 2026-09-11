@@ -220,7 +220,7 @@ async def _apply_triage_gate(
 
     Delegates to the RecipeRepository implementation via the Composition Root.
     """
-    from autoskillit.server._state import _ctx  # circular-break
+    from autoskillit.server.lifecycle._state import _ctx  # circular-break
 
     if _ctx is None or _ctx.recipes is None:
         return result
@@ -263,7 +263,7 @@ async def _prime_quota_cache(*, supports_quota_check: bool) -> None:
     """
     if not supports_quota_check:
         return
-    from autoskillit.server._state import _get_ctx as _ctx_fn  # circular-break
+    from autoskillit.server.lifecycle._state import _get_ctx as _ctx_fn  # circular-break
 
     try:
         _ctx = _ctx_fn()

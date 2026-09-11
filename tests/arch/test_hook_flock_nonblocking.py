@@ -113,7 +113,7 @@ _EXPECTED_ACQUISITIONS = (
         "flush_session_log",
         "ArtifactLease.acquire_exclusive",
     ),
-    ("fleet/_state_lock.py", "acquire", "acquire_flock_with_timeout"),
+    ("fleet/campaign_state/_state_lock.py", "acquire", "acquire_flock_with_timeout"),
     ("hooks/_capture/_resolver.py", "_acquire_shared_lease", "flock"),
     ("hooks/_capture/_resolver.py", "acquire_writer_lease", "flock"),
     ("hooks/_capture_lifecycle/_admission.py", "_acquire_flock", "flock"),
@@ -125,7 +125,7 @@ _EXPECTED_ACQUISITIONS = (
     ("hooks/resume_gate_post_hook.py", "_acquire_lock", "flock"),
     ("planner/merge.py", "merge_files", "acquire_flock_with_timeout"),
     ("planner/merge.py", "replace_item", "acquire_flock_with_timeout"),
-    ("server/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
+    ("server/recipe/_recipe_artifact.py", "_generation_lock", "acquire_flock_with_timeout"),
     ("server/tools/_overlay_state.py", "locked_overlay", "acquire_flock_with_timeout"),
     (
         "workspace/_install_state.py",

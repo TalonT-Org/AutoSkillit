@@ -27,15 +27,15 @@ from autoskillit.core import (
     get_logger,
     select_child_session_deadline,
 )
-from autoskillit.fleet.dispatch._errors import complete_failure_with_state
-from autoskillit.fleet.dispatch._heartbeat import _dispatch_heartbeat
-from autoskillit.fleet.dispatch._pid import _write_pid
-from autoskillit.fleet.state import DispatchStatus
-from autoskillit.fleet.state_effects import (
+from autoskillit.fleet.campaign_state.state import DispatchStatus
+from autoskillit.fleet.campaign_state.state_effects import (
     DispatchEffectName,
     DispatchProvenanceTracker,
 )
-from autoskillit.fleet.state_outcomes import DispatchResult
+from autoskillit.fleet.campaign_state.state_outcomes import DispatchResult
+from autoskillit.fleet.dispatch._errors import complete_failure_with_state
+from autoskillit.fleet.dispatch._heartbeat import _dispatch_heartbeat
+from autoskillit.fleet.dispatch._pid import _write_pid
 
 if TYPE_CHECKING:
     from autoskillit.core import (
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
         SessionCheckpoint,
         SkillResult,
     )
-    from autoskillit.fleet.state_recovery import ResumePreflight
+    from autoskillit.fleet.campaign_state.state_recovery import ResumePreflight
     from autoskillit.pipeline.context import ToolContext
 
 logger = get_logger(__name__)
@@ -151,7 +151,7 @@ async def run_execution(
             pass
 
     # State-record upsert before spawn.
-    from autoskillit.fleet.state import (  # noqa: PLC0415
+    from autoskillit.fleet.campaign_state.state import (  # noqa: PLC0415
         DispatchRecord,
         read_state,
         upsert_dispatch_record_by_name,
@@ -341,7 +341,7 @@ async def run_execution(
             spawn_ctx.spawn_error.append(err)
 
     def _on_session_id(session_id: str) -> None:
-        from autoskillit.fleet.state import mark_dispatch_session_identity
+        from autoskillit.fleet.campaign_state.state import mark_dispatch_session_identity
 
         spawn_ctx.dispatched_session_id.append(session_id)
         mark_dispatch_session_identity(

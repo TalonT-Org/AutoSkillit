@@ -8,13 +8,23 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
 def test_response_budget_decomposition_has_expected_siblings() -> None:
-    pkg = SRC_ROOT / "server" / "_response_budget"
+    pkg = SRC_ROOT / "server" / "response" / "_response_budget"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_primitives",
         "_projection",
         "_spill",
         "_enforce",
+    }
+
+
+def test_recipe_delivery_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "recipe" / "_recipe_delivery"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_completion",
+        "_finalize",
+        "_response",
     }
 
 
@@ -44,7 +54,6 @@ def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
-        "_open_kitchen",
         "_open_kitchen_transition",
         "_open_kitchen_errors",
         "_close_kitchen",
@@ -55,6 +64,17 @@ def test_tools_kitchen_decomposition_has_expected_siblings() -> None:
         "_hook_config",
         "_tracker_authority",
         "_declare_join_batch",
+    }
+
+
+def test_open_kitchen_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "server" / "tools" / "tools_kitchen" / "_open_kitchen"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
+        "__init__",
+        "_gate",
+        "_orchestrator",
+        "_visibility",
+        "_recipe_serve",
     }
 
 
@@ -103,7 +123,7 @@ def test_tools_execution_decomposition_has_expected_siblings() -> None:
 
 
 def test_lifespan_decomposition_has_expected_siblings() -> None:
-    pkg = SRC_ROOT / "server" / "_lifespan"
+    pkg = SRC_ROOT / "server" / "lifecycle" / "_lifespan"
     assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
         "__init__",
         "_startup_checks",

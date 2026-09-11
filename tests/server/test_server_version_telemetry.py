@@ -42,7 +42,8 @@ class TestVersionInfo:
 
     def test_version_info_returns_package_and_plugin_versions(self, monkeypatch):
         from autoskillit import __version__
-        from autoskillit.server import _state, version_info
+        from autoskillit.server import version_info
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(_state, "_ctx", None)
         info = version_info()
@@ -108,7 +109,7 @@ class TestVersionInfo:
     def test_version_info_is_public(self, monkeypatch):
         """version_info must be a public function — no underscore prefix."""
         from autoskillit import server
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(_state, "_ctx", None)
         assert hasattr(server, "version_info"), "server.version_info must exist"
@@ -137,7 +138,7 @@ class TestServerLazyInit:
 
     def test_get_ctx_raises_before_initialize(self, monkeypatch):
         """_get_ctx() raises RuntimeError when _ctx is None."""
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
@@ -145,7 +146,7 @@ class TestServerLazyInit:
 
     def test_get_config_raises_before_initialize(self, monkeypatch):
         """_get_config() raises RuntimeError when _ctx is None."""
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         monkeypatch.setattr(_state, "_ctx", None)
         with pytest.raises(RuntimeError, match="serve\\(\\) must be called"):
@@ -158,7 +159,7 @@ class TestInitializeClearMarker:
     def test_initialize_uses_clear_marker_as_since_bound(self, tool_ctx, tmp_path, monkeypatch):
         from datetime import UTC, datetime, timedelta
 
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
         from tests.execution.conftest import _flush
 
         log_dir = tmp_path / "logs"

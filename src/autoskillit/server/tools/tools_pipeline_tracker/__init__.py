@@ -6,7 +6,7 @@ from __future__ import annotations
 from autoskillit.core import read_tracker_authority  # noqa: F401
 
 # Re-exports for tests that patch symbols via the package facade.
-from autoskillit.server._recipe_segment_delivery import (
+from autoskillit.server.recipe._recipe_segment_delivery import (
     prepare_recipe_segment_delivery,  # noqa: F401
 )
 

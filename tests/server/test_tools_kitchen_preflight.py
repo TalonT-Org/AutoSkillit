@@ -543,16 +543,18 @@ class TestPreflightWiring:
 
     def test_open_kitchen_module_imports_preflight(self) -> None:
         """tools_kitchen package references _check_dispatch_feasibility."""
-        # The decomposed package routes _check_dispatch_feasibility via the
-        # _open_kitchen submodule; the facade itself is a thin re-export
-        # shell that does not need to mention preflight directly.
+        # The decomposed _open_kitchen package routes _check_dispatch_feasibility
+        # via its _recipe_serve shard; the facade itself (tools_kitchen/__init__.py)
+        # and the _open_kitchen package's own __init__.py are thin re-export
+        # shells that do not need to mention preflight directly.
         import inspect
 
-        from autoskillit.server.tools.tools_kitchen import _open_kitchen
+        from autoskillit.server.tools.tools_kitchen._open_kitchen import _recipe_serve
 
-        source = inspect.getsource(_open_kitchen)
+        source = inspect.getsource(_recipe_serve)
         assert "_check_dispatch_feasibility" in source, (
-            "tools_kitchen/_open_kitchen.py must reference _check_dispatch_feasibility"
+            "tools_kitchen/_open_kitchen/_recipe_serve.py must reference "
+            "_check_dispatch_feasibility"
         )
 
     def test_fleet_dispatch_module_imports_preflight(self) -> None:
@@ -596,7 +598,7 @@ class TestPreflightGateClosure:
             return result
 
         with (
-            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
                 return_value=None,
@@ -656,7 +658,7 @@ class TestPreflightGateClosure:
 
         synthetic = _make_fix_required_hook()
         with (
-            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
             patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",

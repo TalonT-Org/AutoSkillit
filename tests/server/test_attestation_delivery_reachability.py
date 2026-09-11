@@ -25,18 +25,18 @@ from autoskillit.core import (
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     load_recipe_artifact,
     persist_recipe_artifact,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_delivery_helpers import _attested_render
-from autoskillit.server._recipe_execution import (
+from autoskillit.server.recipe._recipe_delivery_helpers import _attested_render
+from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     install_recipe_execution,
 )
-from autoskillit.server._recipe_generation import RecipeGenerationStore
-from autoskillit.server._recipe_initialization import (
+from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
+from autoskillit.server.recipe._recipe_initialization import (
     _render_completion_receipt,
     build_embedded_completion_response,
     recipe_initialization_receipt,
@@ -477,7 +477,7 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
 ) -> None:
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())

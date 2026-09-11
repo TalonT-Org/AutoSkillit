@@ -17,8 +17,8 @@ from autoskillit.core import (
     RecipeArtifactGeneration,
     recipe_section_element_digest,
 )
-from autoskillit.server import _recipe_section_pagination as pagination
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe import _recipe_section_pagination as pagination
+from autoskillit.server.recipe._recipe_section_pagination import (
     build_recipe_section_page_plan,
     render_recipe_section_page,
     select_recipe_section,

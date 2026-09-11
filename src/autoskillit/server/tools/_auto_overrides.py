@@ -28,7 +28,7 @@ def _compute_effective_backend_map(
         if getattr(step, "tool", None) not in SKILL_TOOLS:
             continue
         if config_backend is not None:
-            from autoskillit.server._guards import (  # circular-break: server context bootstrap
+            from autoskillit.server.lifecycle._guards import (  # circular-break
                 _resolve_backend_override,
             )
 

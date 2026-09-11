@@ -17,8 +17,8 @@ from types import FunctionType
 
 import pytest
 
-from autoskillit.fleet import state as state_module
-from autoskillit.fleet.state_effects import (
+from autoskillit.fleet.campaign_state import state as state_module
+from autoskillit.fleet.campaign_state.state_effects import (
     DispatchAggregatePhase,
     DispatchEffectName,
     DispatchEffectPhase,
@@ -27,26 +27,26 @@ from autoskillit.fleet.state_effects import (
     DispatchProvenanceTracker,
     DispatchRetryDisposition,
 )
-from autoskillit.fleet.state_error_codes import (
+from autoskillit.fleet.campaign_state.state_error_codes import (
     _ERROR_CODE_CATEGORIES,
     _INFRASTRUCTURE_FAILURE_REASONS,
     get_error_category,
 )
-from autoskillit.fleet.state_outcomes import (
+from autoskillit.fleet.campaign_state.state_outcomes import (
     DispatchCompleted,
     DispatchOutcome,
     DispatchRejected,
     DispatchResult,
     GateRecordResult,
 )
-from autoskillit.fleet.state_records import (
+from autoskillit.fleet.campaign_state.state_records import (
     FLEET_HALTED_SENTINEL,
     FLEET_STATE_SCHEMA_VERSION,
     CampaignState,
     DispatchRecord,
     ResumeDecision,
 )
-from autoskillit.fleet.state_transitions import (
+from autoskillit.fleet.campaign_state.state_transitions import (
     _ALLOWED_TRANSITIONS,
     TERMINAL_DISPATCH_STATUSES,
     TERMINAL_UNCLEANED_STATUSES,
@@ -90,7 +90,7 @@ def test_state_effects_owns_effect_symbols() -> None:
             ("DispatchEffectProvenance", DispatchEffectProvenance),
             ("DispatchProvenanceTracker", DispatchProvenanceTracker),
         ),
-        "autoskillit.fleet.state_effects",
+        "autoskillit.fleet.campaign_state.state_effects",
     )
 
 
@@ -104,7 +104,7 @@ def test_state_records_owns_record_symbols() -> None:
             ("CampaignState", CampaignState),
             ("ResumeDecision", ResumeDecision),
         ),
-        "autoskillit.fleet.state_records",
+        "autoskillit.fleet.campaign_state.state_records",
     )
 
 
@@ -116,7 +116,7 @@ def test_state_transitions_owns_status_symbols() -> None:
             ("TERMINAL_DISPATCH_STATUSES", TERMINAL_DISPATCH_STATUSES),
             ("TERMINAL_UNCLEANED_STATUSES", TERMINAL_UNCLEANED_STATUSES),
         ),
-        "autoskillit.fleet.state_transitions",
+        "autoskillit.fleet.campaign_state.state_transitions",
     )
 
 
@@ -130,7 +130,7 @@ def test_state_outcomes_owns_outcome_symbols() -> None:
             ("DispatchResult", DispatchResult),
             ("GateRecordResult", GateRecordResult),
         ),
-        "autoskillit.fleet.state_outcomes",
+        "autoskillit.fleet.campaign_state.state_outcomes",
     )
 
 
@@ -140,7 +140,7 @@ def test_state_error_codes_owns_categorization_symbols() -> None:
     assert isinstance(_INFRASTRUCTURE_FAILURE_REASONS, frozenset)
     _assert_canonical_home(
         (("get_error_category", get_error_category),),
-        "autoskillit.fleet.state_error_codes",
+        "autoskillit.fleet.campaign_state.state_error_codes",
     )
 
 
@@ -183,6 +183,31 @@ def test_state_types_facade_is_gone() -> None:
         importlib.import_module("autoskillit.fleet.state_types")
 
 
+_RETIRED_ROOT_STATE_FILES: tuple[str, ...] = (
+    "state.py",
+    "state_effects.py",
+    "state_error_codes.py",
+    "state_gates.py",
+    "state_outcomes.py",
+    "state_records.py",
+    "state_recovery.py",
+    "state_transitions.py",
+    "_state_lock.py",
+)
+
+
+def test_retired_root_state_files_are_physically_gone() -> None:
+    """The nine campaign-state modules no longer exist at the old `fleet/` root (issue #4673).
+
+    They moved to `fleet/campaign_state/` with their basenames preserved; this
+    pins the physical absence at the old paths, distinct from the import-path
+    guard in `tests/arch/test_server_fleet_folder_layout.py`.
+    """
+    fleet_dir = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "fleet"
+    still_present = [name for name in _RETIRED_ROOT_STATE_FILES if (fleet_dir / name).exists()]
+    assert not still_present, f"retired root state file(s) still present: {still_present}"
+
+
 def _names_a_state_records_module(dotted: str) -> bool:
     """True when a dotted module path resolves to state_records itself.
 
@@ -202,7 +227,7 @@ def test_state_transitions_does_not_import_state_records() -> None:
     import-linter contracts do not describe intra-fleet edges.
 
     Both import forms are checked: ``from ... import`` (ast.ImportFrom) and
-    plain ``import autoskillit.fleet.state_records`` (ast.Import). Checking
+    plain ``import autoskillit.fleet.campaign_state.state_records`` (ast.Import). Checking
     only the former would let the plain form defeat the whole assertion.
     TYPE_CHECKING-guarded imports count as violations too — the docstring
     claims the module imports nothing from state_records, not merely nothing
@@ -213,6 +238,7 @@ def test_state_transitions_does_not_import_state_records() -> None:
         / "src"
         / "autoskillit"
         / "fleet"
+        / "campaign_state"
         / "state_transitions.py"
     )
     tree = ast.parse(transitions_source.read_text(encoding="utf-8"))

@@ -141,7 +141,7 @@ For each feature: do not output any prose between iterations — return findings
 - Find all `is_feature_enabled("{name}"` call sites across `src/`
 - Find all `AUTOSKILLIT_FEATURES__{NAME}` env-var reads (bypass paths)
 - FLAG (BLOCK): env-var gate without a corresponding `is_feature_enabled()` in the same code path
-- FLAG (WARN): `_fleet_auto_gate_boot()` calling `mcp.enable()` without then calling `_redisable_subsets()` (`server/_lifespan.py`)
+- FLAG (WARN): `_fleet_auto_gate_boot()` calling `mcp.enable()` without then calling `_redisable_subsets()` (`server/lifecycle/_lifespan/_session_boots.py`)
 - FLAG (BLOCK): tool handlers for feature-tagged tools without an in-handler `is_feature_enabled()` check (e.g., `dispatch_food_truck` in `src/autoskillit/server/tools/tools_fleet_dispatch.py`)
 - FLAG (WARN): session-type checks that enable feature functionality without verifying the feature flag
 

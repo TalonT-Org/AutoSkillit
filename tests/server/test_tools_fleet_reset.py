@@ -66,7 +66,7 @@ def _make_subprocess_result(returncode: int = 0, stdout: str = "", stderr: str =
 
 
 def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
 
     monkeypatch.setattr(_state, "_ctx", tool_ctx)
     monkeypatch.setattr(
@@ -193,7 +193,7 @@ class TestResetDispatchErrors:
     async def test_reset_dispatch_non_fleet_rejected(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         state_path = _setup_state(tmp_path)
         tool_ctx = build_ctx_open()
@@ -220,7 +220,7 @@ class TestResetDispatchErrors:
 
     @pytest.mark.anyio
     async def test_reset_dispatch_gate_closed(self, build_ctx_open, tmp_path, monkeypatch) -> None:
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         state_path = _setup_state(tmp_path)
         tool_ctx = build_ctx_open()
@@ -267,7 +267,7 @@ class TestResetDispatchErrors:
     ) -> None:
         """Test 1A: reset_dispatch must succeed for RUNNING dispatch with dead process."""
         state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
-        from autoskillit.fleet.state import CampaignStateMutator
+        from autoskillit.fleet.campaign_state.state import CampaignStateMutator
 
         with CampaignStateMutator(state_path) as m:
             assert m.state is not None
@@ -290,7 +290,7 @@ class TestResetDispatchErrors:
     ) -> None:
         """Test 1B: reset_dispatch must still block when process is alive."""
         state_path = _setup_state(tmp_path, status=DispatchStatus.RUNNING)
-        from autoskillit.fleet.state import CampaignStateMutator
+        from autoskillit.fleet.campaign_state.state import CampaignStateMutator
 
         current_pid = os.getpid()
         current_boot_id = read_boot_id()
@@ -321,7 +321,7 @@ class TestResetDispatchEdgeCases:
     async def test_reset_dispatch_partial_failure(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         sidecar = tmp_path / "sidecar.jsonl"
         _write_sidecar(sidecar, pr_url=None)
@@ -387,7 +387,7 @@ class TestResetDispatchEdgeCases:
         assert result["success"] is True
         assert result["labels_reset"] is False
 
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(state_path)
         assert state is not None
@@ -398,7 +398,7 @@ class TestResetDispatchEdgeCases:
     async def test_reset_dispatch_pr_fallback_search(
         self, build_ctx_open, tmp_path, monkeypatch
     ) -> None:
-        from autoskillit.server import _state
+        from autoskillit.server.lifecycle import _state
 
         sidecar = tmp_path / "sidecar.jsonl"
         _write_sidecar(sidecar, pr_url=None)
@@ -604,12 +604,12 @@ class TestResetDispatchStateOnly:
         _write_sidecar(sidecar, pr_url=None)
         state_path = _setup_state(tmp_path, sidecar_path=str(sidecar))
         # Inject issue_url onto the dispatch
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(state_path)
         assert state is not None
         state.dispatches[0].issue_url = "https://github.com/owner/repo/issues/5"
-        from autoskillit.fleet.state import CampaignStateMutator
+        from autoskillit.fleet.campaign_state.state import CampaignStateMutator
 
         with CampaignStateMutator(state_path) as m:
             assert m.state is not None

@@ -9,9 +9,9 @@ import pytest
 from autoskillit.fleet import DispatchStatus
 from autoskillit.fleet._outcome import classify_dispatch_outcome
 from autoskillit.fleet._sidecar_synthesis import synthesize_from_sidecar
+from autoskillit.fleet.campaign_state.state_transitions import _ALLOWED_TRANSITIONS
 from autoskillit.fleet.result_parser import L3ParseResult
 from autoskillit.fleet.sidecar import IssueSidecarEntry
-from autoskillit.fleet.state_transitions import _ALLOWED_TRANSITIONS
 from tests.fakes import _DEFAULT_SKILL_RESULT
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]

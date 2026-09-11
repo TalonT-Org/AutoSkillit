@@ -31,7 +31,7 @@ async def test_named_delivery_preserves_finalized_bytes_across_anonymous_guidanc
 ):
     """Named delivery preserves finalized bytes and never injects sous-chef."""
     from autoskillit.core import RecipeDeliveryDecision, RecipeDeliveryMode
-    from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+    from autoskillit.server.recipe._recipe_delivery import FinalizedRecipeResponse
 
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
@@ -247,7 +247,7 @@ async def test_prime_quota_cache_catches_typeerror(monkeypatch):
     mock_ctx = MagicMock()
     mock_ctx.config.quota_guard = MagicMock()
 
-    with patch("autoskillit.server._state._get_ctx", return_value=mock_ctx):
+    with patch("autoskillit.server.lifecycle._state._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server._misc.logger") as mock_logger:
             # Must not raise — fails open
             await _prime_quota_cache(supports_quota_check=True)

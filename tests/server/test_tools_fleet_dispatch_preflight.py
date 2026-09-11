@@ -105,7 +105,7 @@ class TestFleetDispatchPreflightBehavioral:
 
         mock_execute = AsyncMock()
         with (
-            patch("autoskillit.server._state._ctx", tool_ctx),
+            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
             patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
             patch(
                 "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",

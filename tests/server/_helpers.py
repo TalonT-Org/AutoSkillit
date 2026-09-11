@@ -373,7 +373,7 @@ def _ready_recipe_segment_step(
     from autoskillit.core import RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY
     from autoskillit.core.io import load_yaml
     from autoskillit.pipeline import ReadyRecipe
-    from autoskillit.server._recipe_segment_delivery import prepare_recipe_segment_delivery
+    from autoskillit.server.recipe._recipe_segment_delivery import prepare_recipe_segment_delivery
 
     state = tool_ctx.recipe_initialization_state
     assert isinstance(state, ReadyRecipe)

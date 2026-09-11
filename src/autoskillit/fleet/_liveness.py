@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from autoskillit.core import is_session_alive
-from autoskillit.fleet.state import DispatchRecord
+from autoskillit.fleet.campaign_state.state import DispatchRecord
 
 
 def is_dispatch_session_alive(record: DispatchRecord) -> bool:

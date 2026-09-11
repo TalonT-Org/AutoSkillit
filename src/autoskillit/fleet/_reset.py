@@ -13,13 +13,13 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet._label_cleanup import cleanup_orphaned_labels
-from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
-from autoskillit.fleet.state import (
+from autoskillit.fleet.campaign_state.state import (
     CampaignStateMutator,
     DispatchStatus,
     read_state,
     reset_blocking_dispatch,
 )
+from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
 from autoskillit.workspace import (
     WORKTREES_DIR,
     remove_git_worktree,
@@ -28,7 +28,7 @@ from autoskillit.workspace import (
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher, SubprocessRunner
-    from autoskillit.fleet.state_records import DispatchRecord
+    from autoskillit.fleet.campaign_state.state_records import DispatchRecord
 
 logger = get_logger(__name__)
 

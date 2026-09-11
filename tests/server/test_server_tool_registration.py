@@ -459,7 +459,7 @@ class TestConfigDrivenBehavior:
     def test_dry_walkthrough_uses_config_marker(self, tool_ctx, tmp_path):
         """S7: Gate checks config.implement_gate.marker."""
         from autoskillit.config import ImplementGateConfig
-        from autoskillit.server._guards import _check_dry_walkthrough
+        from autoskillit.server.lifecycle._guards import _check_dry_walkthrough
 
         tool_ctx.config = AutomationConfig(
             implement_gate=ImplementGateConfig(marker="CUSTOM MARKER")
@@ -479,7 +479,7 @@ class TestConfigDrivenBehavior:
     def test_dry_walkthrough_uses_config_skill_names(self, tool_ctx, tmp_path):
         """S8: Gate checks config.implement_gate.skill_names."""
         from autoskillit.config import ImplementGateConfig
-        from autoskillit.server._guards import _check_dry_walkthrough
+        from autoskillit.server.lifecycle._guards import _check_dry_walkthrough
 
         tool_ctx.config = AutomationConfig(
             implement_gate=ImplementGateConfig(skill_names={"/custom-impl"})

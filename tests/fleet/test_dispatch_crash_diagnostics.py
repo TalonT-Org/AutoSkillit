@@ -98,7 +98,7 @@ class TestCrashPathDiagnosticPersistence:
         self, tool_ctx, monkeypatch
     ) -> None:
         """A failed crash record write must not expose an untrustworthy state path."""
-        from autoskillit.fleet import state
+        from autoskillit.fleet.campaign_state import state
         from tests.fakes import InMemoryHeadlessExecutor
 
         _setup_dispatch(tool_ctx, monkeypatch)
@@ -137,7 +137,7 @@ class TestCrashPathDiagnosticPersistence:
         self, tool_ctx, monkeypatch
     ) -> None:
         """A failed rejection write must not expose an untrustworthy state path."""
-        from autoskillit.fleet import state
+        from autoskillit.fleet.campaign_state import state
 
         _setup_dispatch(tool_ctx, monkeypatch)
 

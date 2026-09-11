@@ -97,7 +97,7 @@ class TestTimeoutPath:
             )
         )
 
-        from autoskillit.fleet.state import normalize_dispatch_token_usage
+        from autoskillit.fleet.campaign_state.state import normalize_dispatch_token_usage
 
         result = await _run(tool_ctx)
         assert "dispatch_id" in result
@@ -315,7 +315,9 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
+        )
 
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -352,7 +354,9 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
+        )
 
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -387,7 +391,9 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
+        )
 
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -431,7 +437,9 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
+        )
 
         monkeypatch.setattr(
             "autoskillit.fleet._api.parse_l3_result_block",
@@ -514,7 +522,9 @@ class TestTrackerBridgeIntegration:
             def fresh(cls):
                 return fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", FixedDispatchIdentity
+        )
         target = TrackerAuthorityTarget.for_project(
             tool_ctx.project_dir, dispatch_id, expected=False
         )
@@ -653,7 +663,9 @@ class TestTrackerBridgeIntegration:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
+        )
 
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(

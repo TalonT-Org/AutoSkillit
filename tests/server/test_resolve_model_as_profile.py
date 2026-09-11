@@ -15,7 +15,7 @@ def _make_config(**kwargs):
 
 
 def test_model_matches_profile_with_anthropic_model():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(
         profiles={
@@ -34,7 +34,7 @@ def test_model_matches_profile_with_anthropic_model():
 
 
 def test_model_matches_profile_without_anthropic_model():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(profiles={"broken": {"ANTHROPIC_BASE_URL": "https://example.com"}})
     with structlog.testing.capture_logs() as logs:
@@ -47,7 +47,7 @@ def test_model_matches_profile_without_anthropic_model():
 
 
 def test_model_no_match_passthrough():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(profiles={"minimax": {"ANTHROPIC_MODEL": "MiniMax-M2.7"}})
     result = _resolve_model_as_profile("sonnet", cfg)
@@ -55,7 +55,7 @@ def test_model_no_match_passthrough():
 
 
 def test_empty_model_passthrough():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config()
     with structlog.testing.capture_logs() as logs:
@@ -65,7 +65,7 @@ def test_empty_model_passthrough():
 
 
 def test_anthropic_model_key_excluded_from_extras():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(
         profiles={
@@ -86,7 +86,7 @@ def test_anthropic_model_key_excluded_from_extras():
 
 
 def test_profile_with_only_anthropic_model_returns_empty_extras():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(profiles={"simple": {"ANTHROPIC_MODEL": "some-model"}})
     result = _resolve_model_as_profile("simple", cfg)
@@ -94,7 +94,7 @@ def test_profile_with_only_anthropic_model_returns_empty_extras():
 
 
 def test_anthropic_as_model_value_no_profile():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(profiles={"minimax": {"ANTHROPIC_MODEL": "M2.7"}})
     result = _resolve_model_as_profile("anthropic", cfg)
@@ -102,7 +102,7 @@ def test_anthropic_as_model_value_no_profile():
 
 
 def test_resolve_model_as_profile_filters_none_values():
-    from autoskillit.server._guards import _resolve_model_as_profile
+    from autoskillit.server.lifecycle._guards import _resolve_model_as_profile
 
     cfg = _make_config(
         profiles={

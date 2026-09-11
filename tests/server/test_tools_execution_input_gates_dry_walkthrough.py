@@ -8,8 +8,8 @@ import json
 
 import pytest
 
-from autoskillit.server._guards import _check_dry_walkthrough
-from autoskillit.server._state import _get_config
+from autoskillit.server.lifecycle._guards import _check_dry_walkthrough
+from autoskillit.server.lifecycle._state import _get_config
 from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -164,7 +164,7 @@ class TestCheckDryWalkthrough:
 
     def test_implement_gate_config_default_allowed_dirs(self, tool_ctx):
         """Default allowed_plan_dirs includes make-plan and rectify."""
-        from autoskillit.server._state import _get_config
+        from autoskillit.server.lifecycle._state import _get_config
 
         config = _get_config()
         assert "make-plan" in config.implement_gate.allowed_plan_dirs

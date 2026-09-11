@@ -58,12 +58,18 @@ def _collect_line_limit_violations(
 
 
 def _tool_module_paths(tools_dir: Path, *, flat_pattern: str = "tools_*.py") -> list[Path]:
-    """Return flat tool modules and modules from ``tools_*`` packages."""
+    """Return flat tool modules and modules from ``tools_*`` packages.
+
+    Recurses into nested sub-packages (e.g. a ``tools_*`` package whose own
+    file was further decomposed into a sub-package) so a scanner using this
+    helper doesn't silently stop reaching a module that moved one level
+    deeper.
+    """
     files = list(tools_dir.glob(flat_pattern))
     for package_dir in tools_dir.iterdir():
         if not package_dir.is_dir() or not package_dir.name.startswith("tools_"):
             continue
-        files.extend(path for path in package_dir.glob("*.py") if path.name != "__init__.py")
+        files.extend(path for path in package_dir.rglob("*.py") if path.name != "__init__.py")
     return sorted(files)
 
 

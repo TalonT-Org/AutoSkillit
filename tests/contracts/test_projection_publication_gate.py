@@ -468,7 +468,7 @@ class TestProjectionRepair:
     ) -> None:
         """T-B2 independence: repair runs even when the plugin cache is healthy
         and no obligation is pending."""
-        from autoskillit.server._lifespan import run_startup_hook_health_check
+        from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
         from autoskillit.workspace._projection_cache import (
             projected_artifact_lease_path,
             projected_artifact_manifest_path,

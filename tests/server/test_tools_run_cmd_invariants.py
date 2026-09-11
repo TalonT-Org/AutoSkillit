@@ -7,7 +7,7 @@ import json
 import pytest
 
 from autoskillit.config import TestCheckConfig
-from autoskillit.server._guards import RECIPE_READ_DENY_TRIGGER
+from autoskillit.server.lifecycle._guards import RECIPE_READ_DENY_TRIGGER
 from autoskillit.server.tools.tools_execution import run_cmd
 from tests.conftest import _make_result
 

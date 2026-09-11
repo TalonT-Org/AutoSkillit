@@ -13,7 +13,7 @@ from unittest.mock import patch
 import pytest
 import structlog.testing
 
-from autoskillit.server import _state
+from autoskillit.server.lifecycle import _state
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 

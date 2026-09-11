@@ -17,7 +17,7 @@ def _valid_recipe_section_pages(format_family: str) -> list[dict[str, object]]:
         RECIPE_FLOW_SCHEMA_VERSION,
         RecipeArtifactGeneration,
     )
-    from autoskillit.server._recipe_section_pagination import (
+    from autoskillit.server.recipe._recipe_section_pagination import (
         build_recipe_section_page_plan,
         render_recipe_section_page,
         select_recipe_section,
@@ -261,7 +261,7 @@ class TestGateDisabledSchema:
     def test_gate_disabled_schema(self, tool_ctx):
         """Gate-disabled response has standard keys."""
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._guards import _require_enabled
+        from autoskillit.server.lifecycle._guards import _require_enabled
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         response = json.loads(_require_enabled())

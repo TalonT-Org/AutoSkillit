@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 def _get_ctx():  # type: ignore[return]
     """Deferred import of _get_ctx from _state to avoid circular imports."""
-    from autoskillit.server._state import _get_ctx as _ctx_fn  # circular-break
+    from autoskillit.server.lifecycle._state import _get_ctx as _ctx_fn  # circular-break
 
     return _ctx_fn()
 

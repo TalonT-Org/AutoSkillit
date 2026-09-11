@@ -30,7 +30,7 @@ class TestResolveBackendOverride:
         self, recipe_name: str, step_name: str, key_path: str
     ) -> None:
         from autoskillit.core import BackendAuthorityKind
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         result = _resolve_backend_override(step_name, recipe_name, _bundled_backend())
 
@@ -42,7 +42,7 @@ class TestResolveBackendOverride:
 
     def test_exact_recipe_step_match(self) -> None:
         from autoskillit.core import BackendAuthorityKind
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"dry_walkthrough": "codex"}})
         result = _resolve_backend_override("dry_walkthrough", "remediation", cfg)
@@ -52,7 +52,7 @@ class TestResolveBackendOverride:
 
     def test_recipe_wildcard(self) -> None:
         from autoskillit.core import BackendAuthorityKind
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"*": "codex"}})
         result = _resolve_backend_override("any_step", "remediation", cfg)
@@ -63,7 +63,7 @@ class TestResolveBackendOverride:
         assert result.key_path == "agent_backend.recipe_overrides.remediation.*"
 
     def test_exact_beats_wildcard(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(
             recipe_overrides={"remediation": {"*": "codex", "dry_walkthrough": "claude-code"}}
@@ -75,7 +75,7 @@ class TestResolveBackendOverride:
 
     def test_step_override_with_recipe_context(self) -> None:
         from autoskillit.core import BackendAuthorityKind
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"dry_walkthrough": "codex"})
         result = _resolve_backend_override("dry_walkthrough", "remediation", cfg)
@@ -84,13 +84,13 @@ class TestResolveBackendOverride:
         assert result.kind is BackendAuthorityKind.STEP
 
     def test_step_override_requires_recipe_context(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"dry_walkthrough": "codex"})
         assert _resolve_backend_override("dry_walkthrough", "", cfg) is None
 
     def test_recipe_override_beats_step_override(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(
             step_overrides={"dry_walkthrough": "codex"},
@@ -102,31 +102,31 @@ class TestResolveBackendOverride:
         )
 
     def test_step_wildcard_with_recipe_context(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"*": "codex"})
         assert _backend(_resolve_backend_override("anything", "any_recipe", cfg)) == "codex"
 
     def test_step_wildcard_requires_recipe_context(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(step_overrides={"*": "codex"})
         assert _resolve_backend_override("anything", "", cfg) is None
 
     def test_no_match_returns_none(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend()
         assert _resolve_backend_override("nothing", "any_recipe", cfg) is None
 
     def test_empty_step_name_skips_recipe_lookup(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(recipe_overrides={"remediation": {"*": "codex"}})
         assert _backend(_resolve_backend_override("", "remediation", cfg)) == "codex"
 
     def test_empty_recipe_name_skips_recipe_overrides(self) -> None:
-        from autoskillit.server._guards import _resolve_backend_override
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
 
         cfg = _make_backend(
             recipe_overrides={"remediation": {"*": "codex"}},

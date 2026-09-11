@@ -16,7 +16,7 @@ from autoskillit.core import (
     resolve_general_output_token_limit,
     resolve_temp_dir,
 )
-from autoskillit.server._response_budget import shape_json_response
+from autoskillit.server.response._response_budget import shape_json_response
 from autoskillit.server.tools import _execution_helpers
 
 if TYPE_CHECKING:

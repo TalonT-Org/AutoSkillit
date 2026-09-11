@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 import autoskillit.server._audit_authority_materializer as materializer_module
-import autoskillit.server._recipe_execution as audit_finalization_module
+import autoskillit.server.recipe._recipe_execution as audit_finalization_module
 import autoskillit.server.tools.tools_audit_artifacts as audit_artifacts_module
 import autoskillit.server.tools.tools_execution as execution_module
 from autoskillit.core import (
@@ -22,13 +22,13 @@ from autoskillit.core import (
 )
 from autoskillit.core.io import resolve_temp_dir
 from autoskillit.pipeline import ReadyRecipe
-from autoskillit.server._recipe_execution import (
+from autoskillit.server.recipe._recipe_execution import (
     build_recipe_execution_snapshot,
     clear_recipe_execution,
     install_recipe_execution,
     prepare_recipe_execution,
 )
-from autoskillit.server._recipe_initialization import stage_recipe_initialization
+from autoskillit.server.recipe._recipe_initialization import stage_recipe_initialization
 from autoskillit.server.tools.tools_audit_artifacts import (
     write_audit_semantic_result,
 )

@@ -38,12 +38,12 @@ from autoskillit.recipe import (
     NON_INTERACTIVE_KINDS,
     load_and_validate,
 )
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     finalize_recipe_delivery,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_generation import RecipeGenerationStore
-from autoskillit.server._response_budget import (
+from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
+from autoskillit.server.response._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     enforce_response_budget,
 )
@@ -157,7 +157,7 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     from autoskillit.recipe._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(
         _recipe_generation,

@@ -100,7 +100,7 @@ def _check_dispatch_feasibility(
     if not run_skill_step_names:
         return None
 
-    from autoskillit.server._guards import (  # circular-break
+    from autoskillit.server.lifecycle._guards import (  # circular-break
         _resolve_backend_override,
         _resolve_provider_profile,
     )

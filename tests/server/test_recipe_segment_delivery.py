@@ -6,8 +6,8 @@ from dataclasses import replace
 
 import pytest
 
-import autoskillit.server._recipe_generation as generation_module
-import autoskillit.server._recipe_segment_delivery as segment_delivery_module
+import autoskillit.server.recipe._recipe_generation as generation_module
+import autoskillit.server.recipe._recipe_segment_delivery as segment_delivery_module
 from autoskillit.core import (
     RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY,
     FinalizedRecipeProjection,
@@ -16,15 +16,15 @@ from autoskillit.core import (
     RecipeBindingProjection,
 )
 from autoskillit.pipeline import NoActiveRecipe, ReadyRecipe
-from autoskillit.server._recipe_artifact import (
+from autoskillit.server.recipe._recipe_artifact import (
     _finalized_projection_payload,
     _normalized_recipe_compile_identity,
     extract_recipe_step_bodies,
     load_recipe_artifact,
     persist_recipe_artifact,
 )
-from autoskillit.server._recipe_generation import RecipeGenerationStore
-from autoskillit.server._recipe_segment_delivery import (
+from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
+from autoskillit.server.recipe._recipe_segment_delivery import (
     RecipeSegmentDeliveryError,
     prepare_recipe_segment_delivery,
     uses_segmented_startup,

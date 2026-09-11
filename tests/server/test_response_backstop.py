@@ -14,7 +14,7 @@ from autoskillit.core import (
     RECIPE_SECTION_RESPONSE_FLOOR_BYTES,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
 )
-from autoskillit.server._response_budget import (
+from autoskillit.server.response._response_budget import (
     RESPONSE_SPILL_METADATA_KEY,
     RESPONSE_SPILL_METADATA_KEYS,
     _delivery_bound_summary,
@@ -109,7 +109,7 @@ def test_plain_text_response_uses_same_type_envelope(tmp_path):
 
 
 def test_artifact_failure_is_fail_closed(tmp_path, monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     monkeypatch.setattr(
         _response_budget,
@@ -175,7 +175,7 @@ def test_checkpoint_budget_spills_only_base_and_preserves_whole_carrier(tmp_path
 
 
 def test_checkpoint_budget_publication_failure_returns_no_repeat_carrier(tmp_path, monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     carrier = _checkpoint_carrier()
     monkeypatch.setattr(
@@ -203,7 +203,7 @@ def test_checkpoint_budget_publication_failure_returns_no_repeat_carrier(tmp_pat
 
 
 def test_post_effect_carrier_rejection_preserves_no_repeat_fields(monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     carrier = _checkpoint_carrier()
     mock_logger = MagicMock()
@@ -240,7 +240,7 @@ def test_post_effect_carrier_rejection_preserves_no_repeat_fields(monkeypatch):
 def test_projected_utf8_bytes_is_exact_with_multibyte_digit_boundaries(
     tmp_path, monkeypatch, kind
 ):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     artifact = tmp_path / "fixed-α-artifact.log"
     monkeypatch.setattr(
@@ -281,7 +281,7 @@ def test_projected_utf8_bytes_is_exact_with_multibyte_digit_boundaries(
 
 
 def test_minimal_projection_has_exact_bytes_and_omission_aggregates(tmp_path, monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     monkeypatch.setattr(
         _response_budget,
@@ -415,7 +415,7 @@ def test_deeply_nested_json_string_degrades_to_plain_spill_with_artifact(tmp_pat
 
 
 def test_projection_recursion_failure_fails_closed_with_artifact_path(tmp_path, monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     def _stack_exhausted(*_args, **_kwargs):
         raise RecursionError("maximum recursion depth exceeded")
@@ -448,7 +448,7 @@ def test_response_max_bytes_below_recipe_section_floor_is_rejected(
 
 
 def test_spill_and_failure_telemetry_is_exact_and_path_free(tmp_path, monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     secret_path = "/private/audit/secrets.log"
 
@@ -478,7 +478,7 @@ def test_spill_and_failure_telemetry_is_exact_and_path_free(tmp_path, monkeypatc
 
 
 def test_telemetry_failure_is_nonfatal(tmp_path, monkeypatch):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     monkeypatch.setattr(
         _response_budget.logger,
@@ -515,7 +515,7 @@ def test_exemption_overage_fails_closed_and_does_not_spill(tmp_path):
 def test_successful_spill_and_exemption_events_have_exact_path_free_payloads(
     tmp_path, monkeypatch
 ):
-    from autoskillit.server import _response_budget
+    from autoskillit.server.response import _response_budget
 
     exemption = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["load_recipe"]
     events: list[tuple[str, dict]] = []

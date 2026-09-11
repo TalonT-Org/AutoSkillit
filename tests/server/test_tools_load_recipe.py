@@ -240,7 +240,7 @@ class TestLoadRecipeDiagram:
 @pytest.mark.anyio
 async def test_load_recipe_no_ctx_returns_error(monkeypatch):
     """load_recipe returns error JSON when server is uninitialized."""
-    import autoskillit.server._state as _state_mod
+    import autoskillit.server.lifecycle._state as _state_mod
 
     monkeypatch.setattr(_state_mod, "_ctx", None)
     result = json.loads(await load_recipe(name="anything"))

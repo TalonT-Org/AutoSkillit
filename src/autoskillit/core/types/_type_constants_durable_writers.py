@@ -121,7 +121,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.server._lifespan:run_startup_drift_check",
+        writer="autoskillit.server.lifecycle._lifespan:run_startup_drift_check",
         artifact=(
             "dev-checkout pkg_root()/hooks/hooks.json — self-healed at MCP server "
             "startup when on-disk bytes drift from render_hooks_json_text()"

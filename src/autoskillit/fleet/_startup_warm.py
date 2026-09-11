@@ -13,7 +13,7 @@ WARM_MODULE_NAMES: tuple[str, ...] = (
     "autoskillit.execution.session_log",
     "autoskillit.fleet",
     "autoskillit.fleet._label_cleanup",
-    "autoskillit.fleet.state",
+    "autoskillit.fleet.campaign_state.state",
 )
 
 logger = get_logger(__name__)

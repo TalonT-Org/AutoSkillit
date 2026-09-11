@@ -24,11 +24,11 @@ from autoskillit.core import (
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.pipeline.recipe_initialization import NoActiveRecipe
 from autoskillit.recipe import load_and_validate
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     persist_recipe_artifact,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_section_pagination import (
+from autoskillit.server.recipe._recipe_section_pagination import (
     build_recipe_section_page_plan,
     render_recipe_section_page,
     resolve_recipe_section_bound_bytes,
@@ -79,7 +79,7 @@ def test_implementation_flow_records_real_page_within_115k(
     section using the production pagination pipeline (not a synthetic envelope).
     Each rendered page's client-serialized char count must fit within 115K.
     """
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(
         _recipe_generation,

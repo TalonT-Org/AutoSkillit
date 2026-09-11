@@ -21,8 +21,8 @@ from autoskillit.core import (
     ProcessStaleError,
     get_logger,
 )
-from autoskillit.fleet.state_effects import DispatchProvenanceTracker
-from autoskillit.fleet.state_outcomes import (
+from autoskillit.fleet.campaign_state.state_effects import DispatchProvenanceTracker
+from autoskillit.fleet.campaign_state.state_outcomes import (
     DispatchRejected,
     DispatchResult,
 )

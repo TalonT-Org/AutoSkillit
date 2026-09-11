@@ -107,9 +107,9 @@ class TestInfrastructureFailureReasons:
     def test_has_failed_dispatch_returns_false_for_quota_exhaustion(self, tmp_path):
         """Quota exhaustion is infrastructure failure — does not halt campaign."""
         from autoskillit.core import FleetErrorCode as FEC
-        from autoskillit.fleet.state import _write_state as write_state
-        from autoskillit.fleet.state_records import CampaignState, DispatchRecord
-        from autoskillit.fleet.state_recovery import has_failed_dispatch
+        from autoskillit.fleet.campaign_state.state import _write_state as write_state
+        from autoskillit.fleet.campaign_state.state_records import CampaignState, DispatchRecord
+        from autoskillit.fleet.campaign_state.state_recovery import has_failed_dispatch
 
         dispatches = [
             DispatchRecord(

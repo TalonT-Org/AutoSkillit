@@ -104,7 +104,9 @@ class TestDispatchStatusEnvelopeField:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr("autoskillit.fleet.state.DispatchIdentity", _FixedDispatchIdentity)
+        monkeypatch.setattr(
+            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
+        )
 
         sidecar_file = sidecar_path(fixed_dispatch_id, tool_ctx.project_dir)
         sidecar_file.parent.mkdir(parents=True, exist_ok=True)

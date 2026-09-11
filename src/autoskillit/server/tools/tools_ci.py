@@ -12,15 +12,15 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled
 from autoskillit.server._misc import fetch_repo_merge_state, resolve_repo_from_remote
 from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_segment_delivery import (
+from autoskillit.server._subprocess import _run_subprocess
+from autoskillit.server.lifecycle._guards import _require_enabled
+from autoskillit.server.recipe._recipe_segment_delivery import (
     PreparedRecipeSegmentDelivery,
     attach_recipe_segment,
     prepare_recipe_segment_delivery,
 )
-from autoskillit.server._subprocess import _run_subprocess
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 
 logger = get_logger(__name__)

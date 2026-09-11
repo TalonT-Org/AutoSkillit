@@ -100,7 +100,7 @@ async def test_every_public_parameter_changes_its_runtime_observer(
     snapshot_section,
     snapshot_field,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_fleet, configure_order
 
     ctx = _open_context(tmp_path)
@@ -143,7 +143,7 @@ async def test_partial_updates_accumulate_in_live_config_and_snapshot(
         resolve_model_identity,
         resolve_model_pin,
     )
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)
@@ -165,7 +165,7 @@ async def test_shared_default_model_is_last_write_wins(tmp_path, monkeypatch) ->
         resolve_model_identity,
         resolve_model_pin,
     )
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_fleet, configure_order
 
     ctx = _open_context(tmp_path)
@@ -192,7 +192,7 @@ async def test_same_worktree_contexts_do_not_import_each_others_overrides(
         resolve_model_identity,
         resolve_model_pin,
     )
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx_a = _open_context(tmp_path)
@@ -219,7 +219,7 @@ async def test_same_worktree_contexts_do_not_import_each_others_overrides(
 async def test_configured_managed_worker_capacity_enforces_capacity_and_timeout(
     tmp_path, monkeypatch
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_fleet
 
     ctx = _open_context(tmp_path)
@@ -255,7 +255,7 @@ async def test_invalid_persisted_overlay_changes_neither_disk_nor_live_state(
     monkeypatch,
     raw_overlay,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)
@@ -288,7 +288,7 @@ async def test_invalid_update_has_no_disk_or_live_partial_commit(
     monkeypatch,
     kwargs,
 ) -> None:
-    from autoskillit.server import _state
+    from autoskillit.server.lifecycle import _state
     from autoskillit.server.tools.tools_config import configure_order
 
     ctx = _open_context(tmp_path)

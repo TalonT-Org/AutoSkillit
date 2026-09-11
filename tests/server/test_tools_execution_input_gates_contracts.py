@@ -17,7 +17,7 @@ class TestInputContractValidation:
     """_check_input_contracts validates file_path and directory_path inputs."""
 
     def test_file_path_input_rejects_nonexistent_path(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         resolver = _make_input_contract_resolver()
         result = _check_input_contracts(
@@ -31,7 +31,7 @@ class TestInputContractValidation:
         assert parsed["subtype"] == "gate_error"
 
     def test_file_path_input_rejects_directory_as_file(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
@@ -48,7 +48,7 @@ class TestInputContractValidation:
         assert parsed["success"] is False
 
     def test_file_path_input_accepts_file_without_extension(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
@@ -64,7 +64,7 @@ class TestInputContractValidation:
         assert result is None
 
     def test_directory_path_input_rejects_file_as_directory(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         file_as_worktree = tmp_path / "worktree"
         file_as_worktree.write_text("I am a file")
@@ -79,7 +79,7 @@ class TestInputContractValidation:
         assert parsed["success"] is False
 
     def test_directory_path_input_accepts_valid_directory(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
@@ -94,7 +94,7 @@ class TestInputContractValidation:
         assert result is None
 
     def test_file_path_input_accepts_valid_file(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         worktree = tmp_path / "worktree"
         worktree.mkdir()
@@ -109,7 +109,7 @@ class TestInputContractValidation:
         assert result is None
 
     def test_skill_without_contracts_passes(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         resolver = _make_input_contract_resolver()
         result = _check_input_contracts(
@@ -120,7 +120,7 @@ class TestInputContractValidation:
         assert result is None
 
     def test_mangled_plan_path_with_timestamp_suffix(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         real_plan = tmp_path / "rectify_foo_2026-05-28_194500.md"
         real_plan.write_text("Dry-walkthrough verified = TRUE")
@@ -138,7 +138,7 @@ class TestInputContractValidation:
         assert parsed["success"] is False
 
     def test_resolver_returns_none_skips_validation(self, tmp_path):
-        from autoskillit.server._guards import _check_input_contracts
+        from autoskillit.server.lifecycle._guards import _check_input_contracts
 
         result = _check_input_contracts(
             "/resolve-failures /nonexistent/worktree /nonexistent/plan.md main",

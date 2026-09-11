@@ -22,7 +22,7 @@ from autoskillit.fleet import (
     upsert_dispatch_record_by_name,
     write_initial_state,
 )
-from autoskillit.fleet.state import _write_state, reset_blocking_dispatch
+from autoskillit.fleet.campaign_state.state import _write_state, reset_blocking_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 

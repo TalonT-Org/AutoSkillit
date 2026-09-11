@@ -16,12 +16,12 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.fleet._liveness import is_dispatch_session_alive
-from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
-from autoskillit.fleet.state import (
+from autoskillit.fleet.campaign_state.state import (
     TERMINAL_UNCLEANED_STATUSES,
     CampaignStateMutator,
     DispatchStatus,
 )
+from autoskillit.fleet.sidecar import SidecarReadStatus, read_sidecar_from_path
 
 if TYPE_CHECKING:
     from autoskillit.core import GitHubFetcher

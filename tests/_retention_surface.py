@@ -496,7 +496,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_CodexSessionReconciliationMixin.recover",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/fleet/state.py",
+        "src/autoskillit/fleet/campaign_state/state.py",
         "build_protected_campaign_ids",
     ): _SEPARATE_LIFECYCLE_REASON,
     (

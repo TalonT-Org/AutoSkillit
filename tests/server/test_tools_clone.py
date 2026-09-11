@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import autoskillit.server.tools.tools_clone as tools_clone
-from autoskillit.server._recipe_segment_delivery import RecipeSegmentDeliveryError
+from autoskillit.server.recipe._recipe_segment_delivery import RecipeSegmentDeliveryError
 from autoskillit.server.tools.tools_clone import (
     batch_cleanup_clones,
     clone_repo,

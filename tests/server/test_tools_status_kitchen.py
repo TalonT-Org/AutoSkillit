@@ -298,7 +298,7 @@ class TestGetPipelineReport:
         self, tool_ctx_kitchen_open, monkeypatch
     ):
         """get_pipeline_report must await _startup_ready before accessing audit data."""
-        import autoskillit.server._state as _state_mod
+        import autoskillit.server.lifecycle._state as _state_mod
 
         ready = asyncio.Event()
         monkeypatch.setattr(_state_mod, "_startup_ready", ready)

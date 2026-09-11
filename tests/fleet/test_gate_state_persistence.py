@@ -102,7 +102,7 @@ class TestRecordGateDispatch:
     async def test_record_gate_dispatch_rejects_non_pending(
         self, tool_ctx_kitchen_open, monkeypatch, tmp_path
     ):
-        from autoskillit.fleet.state import append_dispatch_record
+        from autoskillit.fleet.campaign_state.state import append_dispatch_record
 
         sp = _init_state(tmp_path, "gate-check", "phase-one")
         append_dispatch_record(
@@ -550,7 +550,7 @@ class TestCampaignStateFieldCompleteness:
 
 class TestCampaignResumeChain:
     def test_campaign_dispatch_chain_resume_after_two_successes(self, tmp_path):
-        from autoskillit.fleet.state import append_dispatch_record
+        from autoskillit.fleet.campaign_state.state import append_dispatch_record
 
         sp = _init_state(
             tmp_path, "full-audit", "review-gate", "build-map", "implement-findings", "promote"
@@ -575,7 +575,7 @@ class TestCampaignResumeChain:
 
 def test_refused_gate_resume_selects_next(tmp_path):
     sp = _init_state(tmp_path, "gate-check", "phase-one")
-    from autoskillit.fleet.state_gates import record_gate_outcome
+    from autoskillit.fleet.campaign_state.state_gates import record_gate_outcome
 
     record_gate_outcome(sp, "gate-check", approved=False)
     state = read_state(sp)
@@ -590,7 +590,7 @@ def test_refused_gate_resume_selects_next(tmp_path):
 
 def test_gate_record_replacement_preserves_managed_lineage_identity(tmp_path):
     from autoskillit.core import ManagedHeadlessSessionLineageRef
-    from autoskillit.fleet.state_gates import record_gate_outcome
+    from autoskillit.fleet.campaign_state.state_gates import record_gate_outcome
 
     reference = ManagedHeadlessSessionLineageRef(
         launch_id="a" * 32,
@@ -824,7 +824,7 @@ class TestValidationFailureCampaignState:
 
     def test_campaign_resume_halts_on_validation_refused(self, tmp_path):
         """T5: resume_campaign_from_state halts on REFUSED dispatch."""
-        from autoskillit.fleet.state import append_dispatch_record
+        from autoskillit.fleet.campaign_state.state import append_dispatch_record
 
         sp = _init_state(tmp_path, "step1")
         append_dispatch_record(

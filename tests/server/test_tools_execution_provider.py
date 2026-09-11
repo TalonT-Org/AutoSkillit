@@ -56,7 +56,7 @@ async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {"SOME_KEY": "val"}),
     )
 
@@ -87,7 +87,7 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
 
@@ -119,11 +119,11 @@ async def test_run_skill_model_as_profile_resolves_provider(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),
     )
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_model_as_profile",
+        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
         lambda *a: ("M2.7", "minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
     )
 
@@ -156,12 +156,12 @@ async def test_run_skill_step_overrides_win_over_model_as_profile(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
     map_called = []
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_model_as_profile",
+        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
         lambda *a: map_called.append(True) or ("", "", None),
     )
 
@@ -220,11 +220,11 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),
     )
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_model_as_profile",
+        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
         lambda *a: ("", "", None),
     )
 
@@ -479,7 +479,7 @@ async def test_anthropic_base_url_cannot_override_codex_backend_authority(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: (
             "bedrock",
             {
@@ -523,7 +523,7 @@ async def test_run_skill_backend_override_none_no_anthropic_base_url(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
     )
 
@@ -559,7 +559,7 @@ async def test_run_skill_backend_override_none_claude_code_backend(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: (
             "bedrock",
             {"ANTHROPIC_BASE_URL": "https://bedrock.us-east-1.amazonaws.com"},
@@ -625,7 +625,7 @@ async def test_run_skill_forwards_provider_name_matching_profile(
     _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
     monkeypatch.setattr(_feat, lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
     )
 

@@ -15,7 +15,7 @@ from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
 )
 from autoskillit.server._factory import make_context
-from autoskillit.server._recipe_delivery import initialize_host_client_attestation
+from autoskillit.server.recipe._recipe_delivery import initialize_host_client_attestation
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

@@ -22,7 +22,12 @@ from autoskillit.core.types._type_constants import RETIRED_READINESS_TOKENS
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 _LIFESPAN_PKG = (
-    Path(__file__).parent.parent.parent / "src" / "autoskillit" / "server" / "_lifespan"
+    Path(__file__).parent.parent.parent
+    / "src"
+    / "autoskillit"
+    / "server"
+    / "lifecycle"
+    / "_lifespan"
 )
 
 

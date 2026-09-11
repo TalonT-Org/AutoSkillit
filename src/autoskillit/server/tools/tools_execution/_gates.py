@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, cast
 
 from autoskillit.core import DISPATCH_ID_ENV_VAR, FaultDomain, compute_bytes_hash, get_logger
 from autoskillit.pipeline import canonical_step_name as _canonical_step_name
-from autoskillit.server._run_skill_completion import (
+from autoskillit.server.response._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
     _request_session_identity,
     stage_run_skill_completion_response,

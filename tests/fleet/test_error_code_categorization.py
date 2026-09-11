@@ -6,9 +6,9 @@ import pytest
 
 from autoskillit.core import FaultDomain
 from autoskillit.core import FleetErrorCode as FEC
-from autoskillit.fleet.state_records import CampaignState, DispatchRecord
-from autoskillit.fleet.state_recovery import has_failed_dispatch
-from autoskillit.fleet.state_transitions import DispatchStatus
+from autoskillit.fleet.campaign_state.state_records import CampaignState, DispatchRecord
+from autoskillit.fleet.campaign_state.state_recovery import has_failed_dispatch
+from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature
 class TestTimeoutIsInfrastructureFailure:
     def test_timeout_is_infrastructure_failure(self, tmp_path):
         """FLEET_L3_TIMEOUT must be classified as infrastructure — does not halt campaign."""
-        from autoskillit.fleet.state import _write_state as write_state
+        from autoskillit.fleet.campaign_state.state import _write_state as write_state
 
         dispatches = [
             DispatchRecord(
@@ -41,7 +41,7 @@ class TestTimeoutIsInfrastructureFailure:
 class TestAllFleetErrorCodesHaveCategory:
     def test_all_fleet_error_codes_have_infrastructure_or_logic_category(self):
         """Every FleetErrorCode must have an explicit infrastructure/logic classification."""
-        from autoskillit.fleet.state_error_codes import get_error_category
+        from autoskillit.fleet.campaign_state.state_error_codes import get_error_category
 
         for code in FEC:
             if code.startswith("fleet_"):

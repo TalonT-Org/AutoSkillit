@@ -31,8 +31,8 @@ from autoskillit.fleet import (
     write_initial_state,
 )
 from autoskillit.fleet._checkpoint_bridge import bind_dispatch_launch_contract
-from autoskillit.fleet.state import FLEET_STATE_SCHEMA_VERSION
-from autoskillit.fleet.state import _write_state as fleet_write_state
+from autoskillit.fleet.campaign_state.state import FLEET_STATE_SCHEMA_VERSION
+from autoskillit.fleet.campaign_state.state import _write_state as fleet_write_state
 from tests.execution.conftest import _mock_backend, _resolved_launch_contract
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -354,31 +354,31 @@ class TestUnknownPersistedDispatchStatus:
 
 class TestStateDecompositionImports:
     def test_state_records_and_transitions_importable(self) -> None:
-        from autoskillit.fleet.state_records import DispatchRecord
-        from autoskillit.fleet.state_transitions import DispatchStatus
+        from autoskillit.fleet.campaign_state.state_records import DispatchRecord
+        from autoskillit.fleet.campaign_state.state_transitions import DispatchStatus
 
         assert DispatchStatus.PENDING == "pending"
         assert hasattr(DispatchRecord, "from_dict")
 
     def test_state_effects_importable(self) -> None:
-        from autoskillit.fleet.state_effects import DispatchProvenanceTracker
+        from autoskillit.fleet.campaign_state.state_effects import DispatchProvenanceTracker
 
         assert callable(DispatchProvenanceTracker)
 
     def test_state_gates_importable(self) -> None:
-        from autoskillit.fleet.state_gates import record_gate_outcome
+        from autoskillit.fleet.campaign_state.state_gates import record_gate_outcome
 
         assert callable(record_gate_outcome)
 
     def test_state_recovery_importable(self) -> None:
-        from autoskillit.fleet.state_recovery import (
+        from autoskillit.fleet.campaign_state.state_recovery import (
             resume_campaign_from_state,
         )
 
         assert callable(resume_campaign_from_state)
 
-    def test_backward_compat_from_state_module(self) -> None:
-        from autoskillit.fleet.state import (
+    def test_canonical_import_from_state_module(self) -> None:
+        from autoskillit.fleet.campaign_state.state import (
             read_state,
         )
 
@@ -1082,7 +1082,7 @@ class TestHasFailedDispatchReasonAware:
 class TestHasCompletedDispatch:
     def test_has_completed_dispatch_returns_true_for_success(self, tmp_path: Path) -> None:
         """has_completed_dispatch returns True when the named dispatch has SUCCESS status."""
-        from autoskillit.fleet.state_recovery import has_completed_dispatch
+        from autoskillit.fleet.campaign_state.state_recovery import has_completed_dispatch
 
         sp = _state_path(tmp_path)
         write_initial_state(
@@ -1096,7 +1096,7 @@ class TestHasCompletedDispatch:
 
     def test_has_completed_dispatch_returns_false_for_non_success(self, tmp_path: Path) -> None:
         """has_completed_dispatch returns False for RESUMABLE, PENDING, FAILURE, etc."""
-        from autoskillit.fleet.state_recovery import has_completed_dispatch
+        from autoskillit.fleet.campaign_state.state_recovery import has_completed_dispatch
 
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1", "d2", "d3"))
@@ -1109,7 +1109,7 @@ class TestHasCompletedDispatch:
 
     def test_has_completed_dispatch_returns_false_for_missing_state(self, tmp_path: Path) -> None:
         """has_completed_dispatch returns False when state file is missing (fail-open)."""
-        from autoskillit.fleet.state_recovery import has_completed_dispatch
+        from autoskillit.fleet.campaign_state.state_recovery import has_completed_dispatch
 
         sp = tmp_path / "nonexistent" / "state.json"
         assert has_completed_dispatch(sp, "any-dispatch") is False
@@ -1481,7 +1481,7 @@ class TestCampaignEndedAt:
 
     def test_campaign_ended_at_round_trips(self, tmp_path: Path) -> None:
         """ended_at persists through write/read cycle."""
-        from autoskillit.fleet.state import _write_state
+        from autoskillit.fleet.campaign_state.state import _write_state
 
         sp = _state_path(tmp_path)
         write_initial_state(sp, "cid", "camp", "/m.yaml", _make_dispatches("d1"))
@@ -1570,7 +1570,7 @@ class TestDispatchStatusStateMachineInvariants:
 
     def test_every_dispatch_status_in_allowed_transitions(self) -> None:
         """Every DispatchStatus member must appear as a key in _ALLOWED_TRANSITIONS."""
-        from autoskillit.fleet.state_transitions import _ALLOWED_TRANSITIONS
+        from autoskillit.fleet.campaign_state.state_transitions import _ALLOWED_TRANSITIONS
 
         for status in DispatchStatus:
             assert status in _ALLOWED_TRANSITIONS, (
@@ -1579,7 +1579,7 @@ class TestDispatchStatusStateMachineInvariants:
 
     def test_nonterminal_status_has_outgoing_transitions(self) -> None:
         """Every non-terminal status must have at least one outgoing transition."""
-        from autoskillit.fleet.state_transitions import (
+        from autoskillit.fleet.campaign_state.state_transitions import (
             _ALLOWED_TRANSITIONS,
             TERMINAL_DISPATCH_STATUSES,
         )
@@ -1592,7 +1592,7 @@ class TestDispatchStatusStateMachineInvariants:
 
     def test_terminal_set_matches_empty_transitions(self) -> None:
         """TERMINAL_DISPATCH_STATUSES must equal the set of statuses with empty transitions."""
-        from autoskillit.fleet.state_transitions import (
+        from autoskillit.fleet.campaign_state.state_transitions import (
             _ALLOWED_TRANSITIONS,
             TERMINAL_DISPATCH_STATUSES,
         )

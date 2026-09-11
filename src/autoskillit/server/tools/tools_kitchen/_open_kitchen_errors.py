@@ -39,7 +39,7 @@ def _kitchen_failure_envelope(
         "stage": stage,
     }
     try:
-        from autoskillit.server._state import _get_ctx_or_none  # circular-break
+        from autoskillit.server.lifecycle._state import _get_ctx_or_none  # circular-break
 
         tool_ctx: ToolContext | None = _get_ctx_or_none()
         if tool_ctx is not None:

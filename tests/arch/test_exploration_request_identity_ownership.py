@@ -11,7 +11,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_lifespan_boot_never_reads_request_identity_from_tool_context() -> None:
-    _LIFESPAN_PKG = _ROOT / "src" / "autoskillit" / "server" / "_lifespan"
+    _LIFESPAN_PKG = _ROOT / "src" / "autoskillit" / "server" / "lifecycle" / "_lifespan"
     source = ""
     for py in sorted(_LIFESPAN_PKG.rglob("*.py")):
         source += py.read_text()

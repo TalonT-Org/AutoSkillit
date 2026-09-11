@@ -1,4 +1,4 @@
-"""Tests for server/_state.py: server initialization."""
+"""Tests for server/lifecycle/_state.py: server initialization."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def test_initialize_runs_without_error(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx(tmp_path)
 
     with patch("autoskillit.execution.recover_crashed_sessions", return_value=0):
-        from autoskillit.server._state import _initialize
+        from autoskillit.server.lifecycle._state import _initialize
 
         _initialize(mock_ctx)  # Should not raise
 
@@ -68,7 +68,7 @@ def test_initialize_does_not_load_token_log(tmp_path):
     from autoskillit.pipeline.audit import DefaultAuditLog
     from autoskillit.pipeline.timings import DefaultTimingLog
     from autoskillit.pipeline.tokens import DefaultTokenLog
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle._state import _initialize
 
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
@@ -133,7 +133,7 @@ def test_initialize_does_not_load_token_log(tmp_path):
 def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
     """_initialize() registers McpRecordingMiddleware when runner is RecordingSubprocessRunner."""
     from autoskillit.execution.recording import RecordingSubprocessRunner
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle._state import _initialize
 
     mock_atexit = Mock()
     monkeypatch.setattr("atexit.register", mock_atexit)
@@ -164,7 +164,7 @@ def test_initialize_registers_mcp_recording_middleware(tmp_path, monkeypatch):
 
 def test_initialize_skips_middleware_for_non_recording_runner(tmp_path, monkeypatch):
     """_initialize() does not call mcp.add_middleware() for a non-recording runner."""
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle._state import _initialize
 
     mock_ctx = _make_mock_ctx(tmp_path)
     mock_ctx.runner = MagicMock()
@@ -186,7 +186,7 @@ def test_initialize_skips_middleware_for_non_recording_runner(tmp_path, monkeypa
 def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, monkeypatch):
     """_initialize() degrades gracefully when api_simulator.mcp is unavailable."""
     from autoskillit.execution.recording import RecordingSubprocessRunner
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle._state import _initialize
 
     mock_atexit = Mock()
     monkeypatch.setattr("atexit.register", mock_atexit)
@@ -212,7 +212,7 @@ def test_initialize_recording_middleware_import_error_does_not_raise(tmp_path, m
 def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
     """_initialize() registers McpReplayMiddleware when runner is ReplayingSubprocessRunner."""
     from autoskillit.execution.recording import ReplayingSubprocessRunner
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle._state import _initialize
 
     mock_player = Mock()
     replaying_runner = ReplayingSubprocessRunner({}, {}, player=mock_player)
@@ -240,7 +240,7 @@ def test_initialize_registers_mcp_replay_middleware(tmp_path, monkeypatch):
 
 def test_initialize_critical_does_not_call_recovery(tmp_path, monkeypatch):
     """Critical _initialize path must not perform deferrable I/O."""
-    from autoskillit.server._state import _initialize
+    from autoskillit.server.lifecycle._state import _initialize
 
     calls: list[str] = []
     monkeypatch.setattr(
@@ -276,7 +276,7 @@ def test_initialize_critical_does_not_call_recovery(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_deferred_initialize_runs_recovery_operations(tmp_path):
     """deferred_initialize() must run recovery, audit load, and stale cleanup."""
-    from autoskillit.server._state import deferred_initialize
+    from autoskillit.server.lifecycle._state import deferred_initialize
 
     mock_ctx = _make_mock_ctx(tmp_path)
     mock_ctx.config.subsets.disabled = []
@@ -288,7 +288,7 @@ async def test_deferred_initialize_runs_recovery_operations(tmp_path):
 
     event = asyncio.Event()
     with patch(
-        "autoskillit.server._state.recover_crashed_sessions", return_value=0
+        "autoskillit.server.lifecycle._state.recover_crashed_sessions", return_value=0
     ) as recover_crashed_sessions:
         await deferred_initialize(mock_ctx, ready_event=event)
 
@@ -314,7 +314,7 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
         ContextAdmissionStorageHealthStatus,
         ContextAdmissionStoreHealth,
     )
-    from autoskillit.server._state import deferred_initialize
+    from autoskillit.server.lifecycle._state import deferred_initialize
 
     mock_ctx = _make_mock_ctx(tmp_path)
     mock_ctx.session_skill_manager = None
@@ -335,7 +335,7 @@ async def test_deferred_initialize_logs_only_bounded_accounting_failure(
 
     with (
         patch("autoskillit.execution.recover_crashed_sessions", return_value=0),
-        patch("autoskillit.server._state.logger") as logger,
+        patch("autoskillit.server.lifecycle._state.logger") as logger,
     ):
         await deferred_initialize(mock_ctx, ready_event=event)
 
@@ -364,7 +364,7 @@ async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_sto
         ContextAdmissionStoreHealth,
         ContextAdmissionStreamHealth,
     )
-    from autoskillit.server._state import deferred_initialize
+    from autoskillit.server.lifecycle._state import deferred_initialize
     from tests.fixtures.context_admission import stream_key
 
     mock_ctx = _make_mock_ctx(tmp_path)
@@ -390,7 +390,7 @@ async def test_deferred_initialize_selects_failed_stream_reason_from_healthy_sto
 
     with (
         patch("autoskillit.execution.recover_crashed_sessions", return_value=0),
-        patch("autoskillit.server._state.logger") as logger,
+        patch("autoskillit.server.lifecycle._state.logger") as logger,
     ):
         await deferred_initialize(mock_ctx, ready_event=event)
 

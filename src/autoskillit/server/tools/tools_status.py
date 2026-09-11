@@ -32,13 +32,13 @@ from autoskillit.pipeline import (
     TelemetryFormatter,
 )
 from autoskillit.server import mcp
-from autoskillit.server._guards import _require_enabled, _require_fleet
 from autoskillit.server._misc import (
     _scan_tracker_gaps,
     resolve_log_dir,
     write_telemetry_clear_marker,
 )
 from autoskillit.server._notify import _notify, track_response_size
+from autoskillit.server.lifecycle._guards import _require_enabled, _require_fleet
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._ordering_telemetry import (
     detect_ordering_violations,
@@ -179,7 +179,7 @@ async def get_pipeline_report(clear: bool = False) -> str:
     structlog.contextvars.clear_contextvars()
     with structlog.contextvars.bound_contextvars(tool="get_pipeline_report"):
         try:
-            from autoskillit.server._state import (  # circular-break
+            from autoskillit.server.lifecycle._state import (  # circular-break
                 _startup_ready,
             )  # circular-break: server-internal circular dependency
 

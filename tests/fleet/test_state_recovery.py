@@ -8,7 +8,7 @@ import pytest
 
 from autoskillit.core import NamedResume, NoResume
 from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
-from autoskillit.fleet.state_records import ResumeDecision
+from autoskillit.fleet.campaign_state.state_records import ResumeDecision
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
 
@@ -33,21 +33,21 @@ def _make_state(
 
 class TestDeriveOrchestratorResumeSpec:
     def test_derive_returns_named_resume_when_session_id_present(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         state = _make_state(orchestrator_session_id="prior-session-xyz")
         result = derive_orchestrator_resume_spec(state)
         assert result == NamedResume(session_id="prior-session-xyz")
 
     def test_derive_returns_no_resume_when_session_id_empty(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         state = _make_state(orchestrator_session_id="")
         result = derive_orchestrator_resume_spec(state)
         assert result == NoResume()
 
     def test_derive_falls_back_to_caller_session_id(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -61,7 +61,7 @@ class TestDeriveOrchestratorResumeSpec:
         assert result == NamedResume(session_id="caller-sess-fallback")
 
     def test_derive_prefers_orchestrator_session_id_over_caller_session_id(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -77,7 +77,7 @@ class TestDeriveOrchestratorResumeSpec:
         assert result == NamedResume(session_id="orchestrator-sess-primary")
 
     def test_derive_returns_no_resume_when_no_session_ids_at_all(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(name="dispatch-1", status=DispatchStatus.SUCCESS),
@@ -87,7 +87,7 @@ class TestDeriveOrchestratorResumeSpec:
         assert result == NoResume()
 
     def test_derive_uses_latest_dispatch_caller_session_id(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -106,7 +106,7 @@ class TestDeriveOrchestratorResumeSpec:
         assert result == NamedResume(session_id="latest-caller-sess")
 
     def test_derive_falls_back_for_pending_dispatch(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -122,7 +122,7 @@ class TestDeriveOrchestratorResumeSpec:
     def test_derive_returns_no_resume_for_pending_dispatch_without_caller_session_id(
         self,
     ) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(name="dispatch-1", status=DispatchStatus.PENDING),
@@ -133,7 +133,7 @@ class TestDeriveOrchestratorResumeSpec:
 
     def test_derive_validates_backend_match_for_orchestrator_session(self) -> None:
         """Resume spec must reject session_id from a different backend."""
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -153,7 +153,7 @@ class TestDeriveOrchestratorResumeSpec:
         assert isinstance(mismatch_spec, NoResume)
 
     def test_derive_rejects_orchestrator_session_without_backend_provenance(self) -> None:
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         state = _make_state(orchestrator_session_id="legacy-session", dispatches=[])
 
@@ -162,7 +162,7 @@ class TestDeriveOrchestratorResumeSpec:
 
     def test_derive_validates_backend_match_for_caller_session_id_fallback(self) -> None:
         """Fallback caller_session_id path must also reject mismatched backends."""
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -180,7 +180,7 @@ class TestDeriveOrchestratorResumeSpec:
 
     def test_derive_uses_caller_backend_instead_of_dispatched_worker_backend(self) -> None:
         """A heterogeneous worker backend must not invalidate the caller session."""
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -199,7 +199,7 @@ class TestDeriveOrchestratorResumeSpec:
 
     def test_derive_rejects_legacy_record_without_caller_backend_name(self) -> None:
         """Legacy records without caller provenance must fail closed."""
-        from autoskillit.fleet.state_recovery import derive_orchestrator_resume_spec
+        from autoskillit.fleet.campaign_state.state_recovery import derive_orchestrator_resume_spec
 
         dispatches = [
             DispatchRecord(
@@ -242,8 +242,11 @@ class TestResumableToFailureEscalation:
     def test_resumable_escalation_to_failure_leaves_labels_uncleaned(self, tmp_path: Path) -> None:
         """When RESUMABLE exhausts attempts, dispatch becomes FAILURE with labels_cleaned=False."""
         from autoskillit.core import FleetErrorCode
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
-        from autoskillit.fleet.state_recovery import (
+        from autoskillit.fleet.campaign_state.state import (
+            upsert_dispatch_record_by_name,
+            write_initial_state,
+        )
+        from autoskillit.fleet.campaign_state.state_recovery import (
             MAX_CONSECUTIVE_RESUME_ATTEMPTS,
             resume_campaign_from_state,
         )
@@ -276,7 +279,7 @@ class TestResumableToFailureEscalation:
         assert decision is not None
         assert decision.next_dispatch_name == ""
 
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(state_path)
         assert state is not None
@@ -293,8 +296,11 @@ class TestResumableToFailureEscalation:
         from unittest.mock import AsyncMock
 
         from autoskillit.core import FleetErrorCode
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
-        from autoskillit.fleet.state_recovery import (
+        from autoskillit.fleet.campaign_state.state import (
+            upsert_dispatch_record_by_name,
+            write_initial_state,
+        )
+        from autoskillit.fleet.campaign_state.state_recovery import (
             MAX_CONSECUTIVE_RESUME_ATTEMPTS,
             resume_campaign_from_state,
         )
@@ -342,7 +348,7 @@ class TestResumableToFailureEscalation:
         resume_campaign_from_state(state_path, continue_on_failure=False)
 
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         swap_labels_mock = AsyncMock(return_value={"success": True})
         github_client = AsyncMock()
@@ -359,7 +365,10 @@ class TestResumableToFailureEscalation:
 class TestResumeCampaignFromStateDispatchId:
     async def test_resume_campaign_populates_dispatch_id(self, tmp_path: Path) -> None:
         """When a RESUMABLE dispatch is found, its dispatch_id must appear in ResumeDecision."""
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
+        from autoskillit.fleet.campaign_state.state import (
+            upsert_dispatch_record_by_name,
+            write_initial_state,
+        )
 
         state_path = tmp_path / "test_state.json"
         # Create initial state with a pending dispatch
@@ -380,7 +389,7 @@ class TestResumeCampaignFromStateDispatchId:
                 dispatched_session_id="session-abc",
             ),
         )
-        from autoskillit.fleet.state_recovery import resume_campaign_from_state
+        from autoskillit.fleet.campaign_state.state_recovery import resume_campaign_from_state
 
         decision = resume_campaign_from_state(state_path, continue_on_failure=False)
         assert decision is not None
@@ -388,7 +397,7 @@ class TestResumeCampaignFromStateDispatchId:
 
     async def test_resume_campaign_returns_none_for_missing_state(self, tmp_path: Path) -> None:
         """Missing state file should return None, not raise."""
-        from autoskillit.fleet.state_recovery import resume_campaign_from_state
+        from autoskillit.fleet.campaign_state.state_recovery import resume_campaign_from_state
 
         state_path = tmp_path / "nonexistent.json"
         decision = resume_campaign_from_state(state_path, continue_on_failure=False)
@@ -398,8 +407,11 @@ class TestResumeCampaignFromStateDispatchId:
 class TestNoResultBlockResumableEscalation:
     def test_no_result_block_escalation_to_failure(self, tmp_path: Path) -> None:
         from autoskillit.core import FleetErrorCode
-        from autoskillit.fleet.state import upsert_dispatch_record_by_name, write_initial_state
-        from autoskillit.fleet.state_recovery import (
+        from autoskillit.fleet.campaign_state.state import (
+            upsert_dispatch_record_by_name,
+            write_initial_state,
+        )
+        from autoskillit.fleet.campaign_state.state_recovery import (
             MAX_CONSECUTIVE_RESUME_ATTEMPTS,
             resume_campaign_from_state,
         )
@@ -434,7 +446,7 @@ class TestNoResultBlockResumableEscalation:
         assert decision is not None
         assert decision.next_dispatch_name == ""
 
-        from autoskillit.fleet.state import read_state
+        from autoskillit.fleet.campaign_state.state import read_state
 
         state = read_state(state_path)
         assert state is not None

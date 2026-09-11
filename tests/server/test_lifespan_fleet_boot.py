@@ -19,7 +19,7 @@ class TestFleetAutoGateBoot:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -31,11 +31,11 @@ class TestFleetAutoGateBoot:
                 "autoskillit.server._misc._prime_quota_cache", new=AsyncMock()
             ) as mock_prime_quota_cache:
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ) as mock_create_bg_task:
                     with patch(
-                        "autoskillit.server._lifespan.register_active_kitchen"
+                        "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
                     ) as mock_register_kitchen:
                         await _fleet_auto_gate_boot(tool_ctx)
 
@@ -63,7 +63,7 @@ class TestFleetAutoGateBoot:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
         dispatches_dir.mkdir(parents=True)
@@ -78,13 +78,16 @@ class TestFleetAutoGateBoot:
         with (
             patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
             patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-            patch("autoskillit.server._lifespan.create_background_task", return_value=MagicMock()),
-            patch("autoskillit.server._lifespan.register_active_kitchen"),
             patch(
-                "autoskillit.server._lifespan.discover_campaign_state_files",
+                "autoskillit.server.lifecycle._lifespan.create_background_task",
+                return_value=MagicMock(),
+            ),
+            patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+            patch(
+                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
                 return_value=[dispatches_dir / "campaign1.json"],
             ),
-            patch("autoskillit.server._lifespan.reap_stale_dispatches_async", mock_reap),
+            patch("autoskillit.server.lifecycle._lifespan.reap_stale_dispatches_async", mock_reap),
         ):
             await _fleet_auto_gate_boot(tool_ctx)
 
@@ -107,7 +110,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         monkeypatch.chdir(tmp_path)  # Ensure cwd != project_dir
         different_dir = tmp_path / "project_root"
@@ -120,11 +123,11 @@ class TestFleetAutoGateBootProjectDir:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
                     with patch(
-                        "autoskillit.server._lifespan.register_active_kitchen"
+                        "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
                     ) as mock_register_kitchen:
                         await _fleet_auto_gate_boot(ctx)
 
@@ -145,7 +148,7 @@ class TestFleetAutoGateBootProjectDir:
 
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         monkeypatch.chdir(tmp_path)
         different_dir = tmp_path / "project_root"
@@ -160,11 +163,11 @@ class TestFleetAutoGateBootProjectDir:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
                     with patch(
-                        "autoskillit.server._lifespan.register_active_kitchen"
+                        "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
                     ) as mock_register_kitchen:
                         await _food_truck_auto_gate_boot(ctx)
 
@@ -181,7 +184,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -192,10 +195,10 @@ class TestFleetAutoGateBootProjectDir:
         ):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True  # gate stays open despite hook_config failure
@@ -206,7 +209,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -217,10 +220,10 @@ class TestFleetAutoGateBootProjectDir:
                 new=AsyncMock(side_effect=RuntimeError("quota cache error")),
             ):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True  # gate stays open despite quota cache failure
@@ -231,7 +234,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -239,10 +242,10 @@ class TestFleetAutoGateBootProjectDir:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     side_effect=RuntimeError("task creation error"),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True  # gate stays open despite background task failure
@@ -253,7 +256,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -261,11 +264,11 @@ class TestFleetAutoGateBootProjectDir:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
                     with patch(
-                        "autoskillit.server._lifespan.register_active_kitchen",
+                        "autoskillit.server.lifecycle._lifespan.register_active_kitchen",
                         side_effect=OSError("registry write error"),
                     ):
                         await _fleet_auto_gate_boot(tool_ctx)
@@ -278,7 +281,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -287,11 +290,11 @@ class TestFleetAutoGateBootProjectDir:
             patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
             patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
             patch(
-                "autoskillit.server._lifespan.create_background_task",
+                "autoskillit.server.lifecycle._lifespan.create_background_task",
                 return_value=MagicMock(),
             ),
             patch(
-                "autoskillit.server._lifespan.register_active_kitchen",
+                "autoskillit.server.lifecycle._lifespan.register_active_kitchen",
                 return_value=False,
             ),
             structlog.testing.capture_logs() as logs,
@@ -307,7 +310,7 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -315,10 +318,10 @@ class TestFleetAutoGateBootProjectDir:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         with structlog.testing.capture_logs() as logs:
                             await _fleet_auto_gate_boot(tool_ctx)
 
@@ -340,7 +343,7 @@ class TestFleetAutoGateBootProjectDir:
         from autoskillit.core import FLEET_TOOLS
         from autoskillit.pipeline.gate import DefaultGateState
         from autoskillit.server import mcp
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         # First enable fleet tag (as import-time phase 1 would)
         mcp.enable(tags={"fleet"})
@@ -349,15 +352,17 @@ class TestFleetAutoGateBootProjectDir:
         tool_ctx.quota_refresh_task = None
         tool_ctx.config = dataclasses.replace(tool_ctx.config, features={"fleet": False})
 
-        monkeypatch.setattr("autoskillit.server._lifespan._get_ctx_or_none", lambda: tool_ctx)
+        monkeypatch.setattr(
+            "autoskillit.server.lifecycle._lifespan._get_ctx_or_none", lambda: tool_ctx
+        )
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task",
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
                     return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _fleet_auto_gate_boot(tool_ctx)
 
         async with Client(mcp) as client:
@@ -374,23 +379,29 @@ class TestFleetAutoGateBootProjectDir:
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _fleet_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _fleet_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
         tool_ctx.config = dataclasses.replace(tool_ctx.config, features={"fleet": False})
 
-        monkeypatch.setattr("autoskillit.server._lifespan._get_ctx_or_none", lambda: tool_ctx)
+        monkeypatch.setattr(
+            "autoskillit.server.lifecycle._lifespan._get_ctx_or_none", lambda: tool_ctx
+        )
 
-        with patch("autoskillit.server._lifespan._collect_disabled_feature_tags") as mock_helper:
+        with patch(
+            "autoskillit.server.lifecycle._lifespan._collect_disabled_feature_tags"
+        ) as mock_helper:
             mock_helper.return_value = frozenset({"fleet"})
             with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
                 with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                     with patch(
-                        "autoskillit.server._lifespan.create_background_task",
+                        "autoskillit.server.lifecycle._lifespan.create_background_task",
                         return_value=MagicMock(),
                     ):
-                        with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                        with patch(
+                            "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
+                        ):
                             await _fleet_auto_gate_boot(tool_ctx)
 
         mock_helper.assert_called_once_with(
@@ -410,7 +421,7 @@ class TestFoodTruckAutoGateBoot:
 
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -420,9 +431,10 @@ class TestFoodTruckAutoGateBoot:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task", return_value=MagicMock()
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
+                    return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.gate.enabled is True
@@ -435,7 +447,7 @@ class TestFoodTruckAutoGateBoot:
 
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         tool_ctx.quota_refresh_task = None
@@ -445,9 +457,10 @@ class TestFoodTruckAutoGateBoot:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task", return_value=MagicMock()
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
+                    return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         assert tool_ctx.active_recipe_packs == frozenset({"kitchen-core", "rectify"})
@@ -461,7 +474,7 @@ class TestFoodTruckAutoGateBoot:
 
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
@@ -481,7 +494,7 @@ class TestFoodTruckAutoGateBoot:
     ) -> None:
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         tool_ctx.gate = DefaultGateState(enabled=False)
         monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
@@ -520,7 +533,7 @@ class TestFoodTruckAutoGateBoot:
 
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
         from autoskillit.server.tools.tools_execution import run_skill
         from tests.fakes import InMemoryHeadlessExecutor
 
@@ -534,9 +547,10 @@ class TestFoodTruckAutoGateBoot:
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
                 with patch(
-                    "autoskillit.server._lifespan.create_background_task", return_value=MagicMock()
+                    "autoskillit.server.lifecycle._lifespan.create_background_task",
+                    return_value=MagicMock(),
                 ):
-                    with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                    with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                         await _food_truck_auto_gate_boot(tool_ctx)
 
         result = json.loads(await run_skill("/some-skill", "/tmp"))
@@ -552,7 +566,7 @@ class TestFoodTruckAutoGateBoot:
 
         from autoskillit.core import FOOD_TRUCK_TOOL_TAGS_ENV_VAR
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
         dispatches_dir.mkdir(parents=True)
@@ -568,16 +582,16 @@ class TestFoodTruckAutoGateBoot:
 
         with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
             with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-                _bg = "autoskillit.server._lifespan.create_background_task"
+                _bg = "autoskillit.server.lifecycle._lifespan.create_background_task"
                 with patch(_bg, mock_create_bg_task):
-                    _rk = "autoskillit.server._lifespan.register_active_kitchen"
+                    _rk = "autoskillit.server.lifecycle._lifespan.register_active_kitchen"
                     with patch(_rk):
                         with patch(
-                            "autoskillit.server._lifespan.sweep_stale_dispatch_labels",
+                            "autoskillit.server.lifecycle._lifespan.sweep_stale_dispatch_labels",
                             new_callable=AsyncMock,
                         ):
                             with patch(
-                                "autoskillit.server._lifespan.discover_campaign_state_files",
+                                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
                                 return_value=[dispatches_dir / "campaign1.json"],
                             ):
                                 await _food_truck_auto_gate_boot(tool_ctx)
@@ -604,7 +618,7 @@ class TestFoodTruckAutoGateBoot:
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
         )
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
         dispatches_dir.mkdir(parents=True)
@@ -623,13 +637,16 @@ class TestFoodTruckAutoGateBoot:
         with (
             patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
             patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-            patch("autoskillit.server._lifespan.create_background_task", return_value=MagicMock()),
-            patch("autoskillit.server._lifespan.register_active_kitchen"),
             patch(
-                "autoskillit.server._lifespan.discover_campaign_state_files",
+                "autoskillit.server.lifecycle._lifespan.create_background_task",
+                return_value=MagicMock(),
+            ),
+            patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+            patch(
+                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
                 return_value=[dispatches_dir / "campaign1.json"],
             ),
-            patch("autoskillit.server._lifespan.reap_stale_dispatches_async", mock_reap),
+            patch("autoskillit.server.lifecycle._lifespan.reap_stale_dispatches_async", mock_reap),
         ):
             await _food_truck_auto_gate_boot(tool_ctx)
 
@@ -656,7 +673,7 @@ class TestFoodTruckAutoGateBoot:
             FOOD_TRUCK_TOOL_TAGS_ENV_VAR,
         )
         from autoskillit.pipeline.gate import DefaultGateState
-        from autoskillit.server._lifespan import _food_truck_auto_gate_boot
+        from autoskillit.server.lifecycle._lifespan import _food_truck_auto_gate_boot
 
         dispatches_dir = tmp_path / ".autoskillit" / "temp" / "dispatches"
         dispatches_dir.mkdir(parents=True)
@@ -675,13 +692,16 @@ class TestFoodTruckAutoGateBoot:
         with (
             patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
             patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()),
-            patch("autoskillit.server._lifespan.create_background_task", return_value=MagicMock()),
-            patch("autoskillit.server._lifespan.register_active_kitchen"),
             patch(
-                "autoskillit.server._lifespan.discover_campaign_state_files",
+                "autoskillit.server.lifecycle._lifespan.create_background_task",
+                return_value=MagicMock(),
+            ),
+            patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+            patch(
+                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
                 return_value=[dispatches_dir / "campaign1.json"],
             ),
-            patch("autoskillit.server._lifespan.reap_stale_dispatches_async", mock_reap),
+            patch("autoskillit.server.lifecycle._lifespan.reap_stale_dispatches_async", mock_reap),
         ):
             await _food_truck_auto_gate_boot(tool_ctx)
 
@@ -719,16 +739,16 @@ async def test_boot_paths_inherit_campaign_id(boot_fn_name, tool_ctx, monkeypatc
     tool_ctx.quota_refresh_task = None
 
     boot_fn = getattr(
-        importlib.import_module("autoskillit.server._lifespan"),
+        importlib.import_module("autoskillit.server.lifecycle._lifespan"),
         boot_fn_name,
     )
     with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
         with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
             with patch(
-                "autoskillit.server._lifespan.create_background_task",
+                "autoskillit.server.lifecycle._lifespan.create_background_task",
                 return_value=MagicMock(),
             ):
-                with patch("autoskillit.server._lifespan.register_active_kitchen"):
+                with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
                     await boot_fn(tool_ctx)
 
     assert tool_ctx.kitchen_id == expected_id

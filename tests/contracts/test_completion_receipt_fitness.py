@@ -19,12 +19,12 @@ from autoskillit.core import (
     build_recipe_execution_credential,
     resolve_general_output_token_limit,
 )
-from autoskillit.server._recipe_delivery import (
+from autoskillit.server.recipe._recipe_delivery import (
     persist_recipe_artifact,
     prepare_recipe_delivery_generation,
 )
-from autoskillit.server._recipe_generation import RecipeGenerationStore
-from autoskillit.server._recipe_initialization import (
+from autoskillit.server.recipe._recipe_generation import RecipeGenerationStore
+from autoskillit.server.recipe._recipe_initialization import (
     _render_completion_receipt,
     recipe_initialization_receipt,
 )
@@ -91,7 +91,7 @@ def test_implementation_shape_supplies_unavailable_context(
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe._binding import bind_runtime_skill_invocation
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())
@@ -146,7 +146,7 @@ def test_completion_receipt_fits_every_delivery_bound(
 ) -> None:
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
-    from autoskillit.server import _recipe_generation
+    from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     monkeypatch.setattr(_recipe_generation, "_RECIPE_GENERATION_STORE", RecipeGenerationStore())

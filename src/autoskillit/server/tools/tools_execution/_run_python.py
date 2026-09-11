@@ -12,13 +12,13 @@ from fastmcp.dependencies import CurrentContext
 
 from autoskillit.core import get_logger
 from autoskillit.server import mcp
-from autoskillit.server._guards import (
+from autoskillit.server._notify import track_response_size
+from autoskillit.server.lifecycle._guards import (
     _check_recipe_read_prohibition,
     _require_enabled,
     _require_orchestrator_or_higher,
 )
-from autoskillit.server._notify import track_response_size
-from autoskillit.server._recipe_segment_delivery import attach_recipe_segment
+from autoskillit.server.recipe._recipe_segment_delivery import attach_recipe_segment
 from autoskillit.server.tools import tools_execution as _te_pkg
 from autoskillit.server.tools._cancellation_shield import _cancellation_shield
 from autoskillit.server.tools._execution_helpers import (
@@ -29,7 +29,7 @@ from autoskillit.server.tools._execution_helpers import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.server._recipe_segment_delivery import PreparedRecipeSegmentDelivery
+    from autoskillit.server.recipe._recipe_segment_delivery import PreparedRecipeSegmentDelivery
 
 logger = get_logger(__name__)
 

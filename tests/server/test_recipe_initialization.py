@@ -8,8 +8,8 @@ from unittest.mock import Mock
 
 import pytest
 
-import autoskillit.server._recipe_initialization as recipe_initialization
-import autoskillit.server._state as server_state
+import autoskillit.server.lifecycle._state as server_state
+import autoskillit.server.recipe._recipe_initialization as recipe_initialization
 from autoskillit.core import (
     RECIPE_ARTIFACT_DESCRIPTOR_VERSION,
     RECIPE_ARTIFACT_SCHEMA_VERSION,
@@ -30,13 +30,13 @@ from autoskillit.pipeline import (
     record_initialization_page,
 )
 from autoskillit.server._factory import make_recipe_execution
-from autoskillit.server._recipe_execution import (
+from autoskillit.server.recipe._recipe_execution import (
     RecipeExecutionAdmissionError,
     build_recipe_execution_snapshot,
     install_recipe_execution,
     prepare_recipe_execution,
 )
-from autoskillit.server._recipe_initialization import (
+from autoskillit.server.recipe._recipe_initialization import (
     FinalizedRecipeInitializationResponse,
     FinalizedRecipeSectionResponse,
     admit_registered_tool_during_initialization,
@@ -493,7 +493,7 @@ def test_completion_normalizes_unexpected_execution_preparation_failures(
         raise RuntimeError("resolver unavailable")
 
     monkeypatch.setattr(
-        "autoskillit.server._recipe_initialization.prepare_recipe_execution",
+        "autoskillit.server.recipe._recipe_initialization.prepare_recipe_execution",
         _raise_prepare,
     )
 

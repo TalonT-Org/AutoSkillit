@@ -21,7 +21,7 @@ from autoskillit.fleet._capture import _extract_captures
 from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
 )
-from autoskillit.server._recipe_execution import get_recipe_execution
+from autoskillit.server.recipe._recipe_execution import get_recipe_execution
 from autoskillit.server.tools.tools_audit_artifacts import (
     write_audit_semantic_result,
 )
@@ -106,7 +106,7 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
         lambda *args, **kwargs: True,
     )
     monkeypatch.setattr(
-        "autoskillit.server._guards._resolve_provider_profile",
+        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
         lambda *args, **kwargs: (
             "vertex",
             {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: hostile_authority_path},

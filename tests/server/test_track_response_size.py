@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
 def _finalized_recipe_response():
-    from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+    from autoskillit.server.recipe._recipe_delivery import FinalizedRecipeResponse
 
     ledger = MagicMock()
     ledger.commit.return_value = True
@@ -285,7 +285,7 @@ class TestTrackResponseSize:
                 "autoskillit.server._notify.enforce_response_budget",
                 side_effect=RuntimeError("/private/project/enforcement.log"),
             ),
-            patch("autoskillit.server._response_budget.logger.info") as log_info,
+            patch("autoskillit.server.response._response_budget.logger.info") as log_info,
         ):
             result = await fake_handler()
 
@@ -336,7 +336,7 @@ class TestTrackResponseSize:
             start_kitchen_effect,
         )
         from autoskillit.server._notify import track_response_size
-        from autoskillit.server._recipe_delivery import FinalizedRecipeResponse
+        from autoskillit.server.recipe._recipe_delivery import FinalizedRecipeResponse
 
         rendered = (
             '{"recipe_delivery":{"mode":"attested_inline"}}\n'
@@ -466,7 +466,7 @@ class TestTrackResponseSize:
         enforced: str,
     ):
         from autoskillit.server._notify import track_response_size
-        from autoskillit.server._recipe_initialization import (
+        from autoskillit.server.recipe._recipe_initialization import (
             FinalizedRecipeInitializationResponse,
             FinalizedRecipeSectionResponse,
         )

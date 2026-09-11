@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import autoskillit.recipe.contracts.contracts as _contracts_contracts
+import autoskillit.recipe.contracts.contracts as _real_contracts
 import autoskillit.recipe.helpers._skill_helpers as _sh
 from autoskillit.core.types import Severity
 from autoskillit.recipe._analysis import make_validation_context
@@ -171,7 +171,7 @@ def test_verdict_ungated_degradation_fires_when_shared_verdict(
     (skill_dir / "SKILL.md").write_text(_SKILL_MD_SHARED_VERDICT)
 
     monkeypatch.setattr(_sh, "SKILL_SEARCH_DIRS", [skills_ext])
-    monkeypatch.setattr(_contracts_contracts, "load_bundled_manifest", lambda: _MANIFEST)
+    monkeypatch.setattr(_real_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe()
     findings = run_semantic_rules(
@@ -200,7 +200,7 @@ def test_verdict_ungated_degradation_does_not_fire_with_distinct_verdict(
     (skill_dir / "SKILL.md").write_text(_SKILL_MD_DISTINCT_VERDICT)
 
     monkeypatch.setattr(_sh, "SKILL_SEARCH_DIRS", [skills_ext])
-    monkeypatch.setattr(_contracts_contracts, "load_bundled_manifest", lambda: _MANIFEST)
+    monkeypatch.setattr(_real_contracts, "load_bundled_manifest", lambda: _MANIFEST)
 
     recipe = _make_recipe()
     findings = run_semantic_rules(

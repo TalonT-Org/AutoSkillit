@@ -378,6 +378,9 @@ def test_on_result_values_in_allowed_values_fires_on_unregistered_route(
         verdict_route="approved_with_comments",
         allowed_values=["approved", "changes_requested"],
     )
+    # get_allowed_values_for_skill (helpers/_skill_helpers.py) does a per-call inline
+    # import from autoskillit.recipe.contracts.contracts, bypassing the recipe.contracts
+    # package shim; patch the real submodule too so the fake manifest is seen.
     monkeypatch.setattr(_contracts, "load_bundled_manifest", lambda: manifest)
     monkeypatch.setattr(_real_contracts, "load_bundled_manifest", lambda: manifest)
     findings = run_semantic_rules(recipe)

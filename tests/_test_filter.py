@@ -413,6 +413,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     ),
     "_type_protocols_backend": frozenset(
         {
+            "_llm_triage",
             "test_llm_triage.py",
             "cli",
             "core",

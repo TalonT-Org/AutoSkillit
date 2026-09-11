@@ -360,6 +360,7 @@ class TestModuleCascadeCore:
                 "pipeline",
                 "cli",
                 "workspace",
+                "_llm_triage",
                 "test_llm_triage.py",
                 "server",
             }

@@ -625,7 +625,10 @@ async def _execute_claude_headless(
 
         terminal_capture_diagnostic = _diag.capture(managed_lineage_observer)
         if _diag.should_flush(result, skill_result, step_name, terminal_capture_diagnostic):
-            from autoskillit.execution.evidence.session_log import flush_session_log
+            if result is None:
+                from autoskillit.execution import flush_session_log
+            else:
+                from autoskillit.execution.evidence.session_log import flush_session_log
 
             flush_kwargs: dict[str, Any] = {
                 "log_dir": ctx.config.linux_tracing.log_dir,

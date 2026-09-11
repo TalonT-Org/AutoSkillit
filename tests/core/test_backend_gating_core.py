@@ -66,7 +66,7 @@ def test_unknown_backend_name_all_zero_values():
 
 
 def test_none_backend_falls_back_to_env_path(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
 
@@ -83,7 +83,7 @@ def test_none_backend_falls_back_to_env_path(monkeypatch):
 
 
 def test_no_subprocess_call_with_protocol_backend(monkeypatch):
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     def _no_call(*args, **kwargs):
         raise AssertionError("subprocess.run should not be called")

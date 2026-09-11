@@ -217,6 +217,10 @@ class TestInstallBindingSeal:
             assert plugin_ref == _AUTOSKILLIT_INSTALL_ROOT_KEY
             return home / ".relocated-generations" / version
 
+        # core/_install_binding.py's _acquire_self_lease does a per-call inline
+        # `from ._plugin_artifact_identity import generation_version_root` — a
+        # relative import resolving to the OLD SHIM path (core._plugin_artifact_identity),
+        # not the new real location. Both patches are load-bearing.
         monkeypatch.setattr(identity, "generation_version_root", relocated_version_root)
         monkeypatch.setattr(shim_identity, "generation_version_root", relocated_version_root)
 

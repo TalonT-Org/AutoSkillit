@@ -204,7 +204,8 @@ class TestInstallBindingSeal:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         import autoskillit.core._install_binding as binding
-        import autoskillit.core._plugin_artifact_identity as identity
+        import autoskillit.core._plugin_artifact_identity as shim_identity
+        import autoskillit.core.plugins._plugin_artifact_identity as identity
         from autoskillit.core import (
             _AUTOSKILLIT_INSTALL_ROOT_KEY,
             ArtifactLease,
@@ -217,6 +218,7 @@ class TestInstallBindingSeal:
             return home / ".relocated-generations" / version
 
         monkeypatch.setattr(identity, "generation_version_root", relocated_version_root)
+        monkeypatch.setattr(shim_identity, "generation_version_root", relocated_version_root)
 
         incarnation = generation_artifact_root(
             tmp_path / "install-home",

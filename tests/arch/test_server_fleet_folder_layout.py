@@ -159,7 +159,7 @@ def test_stage_a_canonical_recipe_imports_resolve_and_old_paths_are_gone() -> No
 
 _STAGE_A_PACKAGES: tuple[tuple[str, int], ...] = (
     ("server/recipe", 10),
-    ("server/recipe/section", 10),
+    ("server/recipe/section", 5),
 )
 
 
@@ -288,7 +288,7 @@ def test_stage_b_canonical_lifecycle_imports_resolve_and_old_paths_are_gone() ->
 
 _STAGE_B_PACKAGES: tuple[tuple[str, int], ...] = (
     ("server/lifecycle", 10),
-    ("server/lifecycle/_lifespan", 10),
+    ("server/lifecycle/_lifespan", 4),
 )
 
 
@@ -412,7 +412,7 @@ def test_stage_c_canonical_response_imports_resolve_and_old_paths_are_gone() -> 
 
 _STAGE_C_PACKAGES: tuple[tuple[str, int], ...] = (
     ("server/response", 10),
-    ("server/response/_response_budget", 10),
+    ("server/response/_response_budget", 5),
 )
 
 

@@ -435,6 +435,36 @@ class TestCommandVerbAndArgs:
         assert verb_from_helper == command_verb(seg)
 
 
+class TestCommandPositionCandidateSpans:
+    @pytest.mark.parametrize(
+        ("tokens", "expected"),
+        [
+            (["env", "MODE=read", "gh", "pr", "view"], ((2, 5),)),
+            (["while", "gh", "pr", "view"], ((1, 4),)),
+            (["until", "gh", "pr", "view"], ((1, 4),)),
+            (["if", "gh", "pr", "view"], ((1, 4),)),
+            (["inspect()", "{", "gh", "pr", "view"], ((0, 5), (2, 5))),
+            (["{", "gh", "pr", "view"], ((0, 4), (1, 4))),
+        ],
+        ids=[
+            "direct",
+            "while-control",
+            "until-control",
+            "if-control",
+            "function-body",
+            "group-body",
+        ],
+    )
+    def test_returns_spans_in_the_supplied_token_index_domain(
+        self,
+        tokens: list[str],
+        expected: tuple[tuple[int, int], ...],
+    ) -> None:
+        from autoskillit.hooks._command_classification import _command_position_candidate_spans
+
+        assert _command_position_candidate_spans(tokens) == expected
+
+
 class TestExtractShellCommandPayloads:
     def test_bash_c_payload(self):
         from autoskillit.hooks._command_classification import extract_shell_command_payloads
@@ -572,6 +602,83 @@ class TestTokenizeShellPayloadSegments:
         from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
 
         assert tokenize_shell_payload_segments("gh pr create --fill") == []
+
+    def test_process_substitution_traversal_is_opt_in(self):
+        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+
+        command = "cat <(gh pr view 7 --json number)"
+
+        assert tokenize_shell_payload_segments(command) == []
+        assert tokenize_shell_payload_segments(
+            command,
+            include_process_substitutions=True,
+        ) == [["gh", "pr", "view", "7", "--json", "number"]]
+
+
+class TestProcessSubstitutionExtraction:
+    def test_active_input_and_output_occurrences_preserve_source_order(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        command = "cat <(gh pr view 7) >(tee result.txt)"
+        occurrences = _extract_process_substitution_occurrences(command)
+
+        assert [(kind, body, balanced) for kind, _, _, body, balanced in occurrences] == [
+            ("<(", "gh pr view 7", True),
+            (">(", "tee result.txt", True),
+        ]
+        for kind, start, end, body, _balanced in occurrences:
+            assert command[start:end] == f"{kind}{body})"
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "echo '<(gh pr view 7)'",
+            'echo "<(gh pr view 7)"',
+            r"echo \<(gh pr view 7)",
+        ],
+        ids=["single-quoted", "double-quoted", "escaped"],
+    )
+    def test_quoted_and_escaped_process_substitutions_are_inert(self, command: str) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        assert _extract_process_substitution_occurrences(command) == ()
+
+    def test_balanced_parentheses_respect_quoted_close_parens(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        command = "cat <(printf '%s' 'a) b' && gh pr view 7)"
+        ((kind, start, end, body, balanced),) = _extract_process_substitution_occurrences(command)
+
+        assert (kind, body, balanced) == ("<(", "printf '%s' 'a) b' && gh pr view 7", True)
+        assert command[start:end] == f"{kind}{body})"
+
+    def test_malformed_process_substitution_retains_its_unbalanced_span(self) -> None:
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences,
+        )
+
+        command = "cat <(gh pr view 7"
+
+        assert _extract_process_substitution_occurrences(command) == (
+            ("<(", command.index("<("), len(command), "gh pr view 7", False),
+        )
+
+    def test_command_classification_exposes_the_lazy_interpreter_gateway(self) -> None:
+        from autoskillit.hooks._classification._interpreters import (
+            _extract_process_substitution_occurrences as implementation,
+        )
+        from autoskillit.hooks._command_classification import (
+            _extract_process_substitution_occurrences as gateway,
+        )
+
+        command = "cat <(gh pr view 7)"
+        assert gateway(command) == implementation(command)
 
 
 class TestExtractInterpreterCommandPayloads:

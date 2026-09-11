@@ -509,8 +509,8 @@ def _command_start_index(segment: list[str]) -> int | None:
 def _verb_start_index(segment: list[str]) -> int | None:
     """Return the index of the command verb in *segment*, skipping shell
 
-    keywords (do/then/elif/else), POSIX assignments, `env`, and wrapper
-    prefixes (sudo/nice/timeout/...). Returns None when the segment is
+    keywords (while/until/if/do/then/elif/else), POSIX assignments, `env`,
+    and wrapper prefixes (sudo/nice/timeout/...). Returns None when the segment is
     empty or ends inside a wrapper (missing a required value) -- the same
     cases command_verb_and_args reports as ("", []). Exposed separately so
     a caller threading a second, index-aligned parallel array (e.g.
@@ -523,7 +523,7 @@ def _verb_start_index(segment: list[str]) -> int | None:
     start = 0
     while start < len(segment):
         token = segment[start]
-        if token in {"do", "then", "elif", "else"}:
+        if token in {"while", "until", "if", "do", "then", "elif", "else"}:
             start += 1
             continue
         if _is_posix_assignment(token):
@@ -558,6 +558,29 @@ def _verb_start_index(segment: list[str]) -> int | None:
             continue
         break
     return start if start < len(segment) else None
+
+
+def _command_position_candidate_spans(segment: Sequence[str]) -> tuple[tuple[int, int], ...]:
+    """Return verb-aligned candidate spans in *segment*'s original index domain.
+
+    Each span is ``(start, end)`` with an exclusive ``end``. The direct command
+    candidate starts at the same index as :func:`_verb_start_index`. An inline
+    function (``name() { ...``) or group (``{ ...``) also exposes its body as a
+    second candidate without re-tokenizing or changing indices, so callers can
+    keep a parallel token-provenance array aligned with the original segment.
+    """
+    start = _verb_start_index(list(segment))
+    if start is None:
+        return ()
+
+    end = len(segment)
+    spans: list[tuple[int, int]] = [(start, end)]
+    verb = segment[start]
+    if verb == "{" and start + 1 < end:
+        spans.append((start + 1, end))
+    elif verb.endswith("()") and start + 2 < end and segment[start + 1] == "{":
+        spans.append((start + 2, end))
+    return tuple(spans)
 
 
 def command_verb_and_args(segment: list[str]) -> tuple[str, list[str]]:
@@ -650,6 +673,7 @@ if TYPE_CHECKING:
     from autoskillit.hooks._classification._interpreters import (  # noqa: F401
         _extract_interpreter_command_specs,
         _extract_interpreter_segment_specs,
+        _extract_process_substitution_occurrences,
         _normalize_executable,
         _segment_evaluates_shell_payload,
         extract_interpreter_command_payloads,
@@ -680,6 +704,9 @@ else:
     is_allowed_protected_path_metadata_command = _flags.is_allowed_protected_path_metadata_command
     _extract_interpreter_command_specs = _interpreters._extract_interpreter_command_specs
     _extract_interpreter_segment_specs = _interpreters._extract_interpreter_segment_specs
+    _extract_process_substitution_occurrences = (
+        _interpreters._extract_process_substitution_occurrences
+    )
     _normalize_executable = _interpreters._normalize_executable
     _segment_evaluates_shell_payload = _interpreters._segment_evaluates_shell_payload
     extract_interpreter_command_payloads = _interpreters.extract_interpreter_command_payloads

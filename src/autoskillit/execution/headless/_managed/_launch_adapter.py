@@ -169,6 +169,7 @@ def _skill_launch_spec_builder(
     native_shell_capture_decision: NativeShellCaptureDecision | None,
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
     force_inactive_agent_teams: bool = False,
+    child_outcome_log_dir: str = "",
 ) -> _BuildSpec:
     """Bind stable skill-command inputs while leaving attempt identity late-bound."""
 
@@ -187,6 +188,7 @@ def _skill_launch_spec_builder(
             stream_idle_timeout_ms=stream_idle_timeout_ms,
             mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             scenario_step_name=step_name,
+            child_outcome_log_dir=child_outcome_log_dir,
             temp_dir_relpath=temp_dir_relpath,
             allowed_write_prefix=allowed_write_prefix,
             allowed_write_prefixes=allowed_write_prefixes,

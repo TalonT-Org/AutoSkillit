@@ -16,6 +16,7 @@ __all__ = [
     "AUTOSKILLIT_STATE_ROOT_ENV_VAR",
     "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES",
     "AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR",
+    "CHILD_OUTCOME_LOG_DIR_ENV_VAR",
     "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT_ENV_VAR",
     "CLAUDE_MCP_CONNECTION_NONBLOCKING",
     "CLAUDE_MCP_CONNECT_TIMEOUT_ENV_VAR",
@@ -106,6 +107,14 @@ AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: str = "AUTOSKILLIT_AUDIT_ADMISSION_AUTHO
 # (stdlib-only boundary prevents importing this constant there) — keep the two
 # string values byte-identical.
 AUTOSKILLIT_STATE_ROOT_ENV_VAR: str = "AUTOSKILLIT_STATE_ROOT"
+# The child-terminal-reason snapshot diagnostic root (issue #4623), injected by
+# the shared backend command builder for launched sessions. Read as a bare
+# string literal by hooks/_child_outcome_snapshot/_snapshot.py's
+# resolve_child_outcome_log_root (stdlib-only boundary prevents importing this
+# constant there) — keep the two string values byte-identical. Distinct from
+# the operator-owned AUTOSKILLIT_LOG_DIR: this channel is AutoSkillit-owned and
+# always tracks the same resolved log root the launching parent uses.
+CHILD_OUTCOME_LOG_DIR_ENV_VAR: str = "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR"
 # Launcher-to-server host client attestation transport. Injected by every
 # command builder (SHARED_BASELINE_ENV) so the server can read, once at
 # startup, the launcher's attested client capabilities without trusting

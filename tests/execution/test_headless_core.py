@@ -970,6 +970,35 @@ class TestRunHeadlessCore:
             assert flag in cmd, f"Missing required flag {flag!r} in assembled command: {cmd}"
 
     @pytest.mark.anyio
+    async def test_assembled_cmd_carries_child_outcome_log_dir_env(self, tool_ctx, tmp_path):
+        """The launched command's env carries AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR (#4623),
+
+        resolved from the same custom linux_tracing.log_dir the tool_ctx fixture
+        already configures, so the child's own subagent-lifecycle hooks can find
+        the diagnostic root.
+        """
+        from autoskillit.execution.headless import run_headless_core
+        from autoskillit.execution.session_log import resolve_log_dir
+
+        marker = tool_ctx.config.run_skill.completion_marker
+        payload = json.dumps(
+            {
+                "type": "result",
+                "subtype": "success",
+                "is_error": False,
+                "result": f"Done. {marker}",
+                "session_id": "sess-child-outcome-log-dir",
+            }
+        )
+        tool_ctx.runner.push(
+            SubprocessResult(0, payload, "", TerminationReason.NATURAL_EXIT, pid=1)
+        )
+        await run_headless_core("/investigate bar", cwd=str(tmp_path), ctx=tool_ctx)
+        _cmd, _cwd, _timeout, kwargs = tool_ctx.runner.call_args_list[0]
+        expected_root = str(resolve_log_dir(tool_ctx.config.linux_tracing.log_dir))
+        assert kwargs["env"]["AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR"] == expected_root
+
+    @pytest.mark.anyio
     async def test_run_headless_core_dispatches_through_backend_when_present(
         self, minimal_ctx, monkeypatch, tmp_path
     ):

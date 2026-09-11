@@ -75,6 +75,7 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
         stream_idle_timeout_ms: int = 0,
         mcp_tool_timeout_sec: float = 0.0,
         scenario_step_name: str = "",
+        child_outcome_log_dir: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
@@ -97,6 +98,7 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
             stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
             mcp_tool_timeout_sec = cfg["mcp_tool_timeout_sec"]
             scenario_step_name = cfg["scenario_step_name"]
+            child_outcome_log_dir = cfg["child_outcome_log_dir"]
             temp_dir_relpath = cfg["temp_dir_relpath"]
             allowed_write_prefix = cfg["allowed_write_prefix"]
             allowed_write_prefixes = cfg["allowed_write_prefixes"]
@@ -152,6 +154,7 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
             write_prefixes=allowed_write_prefixes,
             cwd=cwd,
             scenario_step_name=scenario_step_name,
+            child_outcome_log_dir=child_outcome_log_dir,
         )
         extras.update(_claude_host_attestation_env(None))
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CLAUDE_CODE

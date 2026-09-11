@@ -109,6 +109,7 @@ from autoskillit.execution.headless._managed._food_truck_executor import (
     DefaultHeadlessExecutor,
 )
 from autoskillit.execution.recording import RecordingSubprocessRunner
+from autoskillit.execution.session_log import resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -402,6 +403,7 @@ async def run_headless_core(
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             force_inactive_agent_teams=(ctx.config.agent_backend.force_inactive_agent_teams),
+            child_outcome_log_dir=str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
         )
 
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)

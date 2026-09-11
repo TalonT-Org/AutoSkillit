@@ -63,12 +63,12 @@ HOOK_ENV_CONTRACT: tuple[HookEnvVarDef, ...] = (
     ),
     HookEnvVarDef(
         "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
-        "operator",
-        None,
-        None,
-        "Operators may redirect the child-terminal-reason snapshot log root (issue #4623); "
-        "absent a producer, the diagnostic root falls back to the operator/default log root "
-        "like every other bounded hook diagnostic sink.",
+        "autoskillit",
+        "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
+        "autoskillit.execution.backends._backend_cmd_builder_base:BackendCmdBuilderBase._assemble_shared_env_extras",
+        "The shared backend builder binds the child-terminal-reason snapshot log root "
+        "(issue #4623) to the same resolved diagnostic root the launching parent uses; "
+        "interactive sessions still resolve the operator/default root separately.",
     ),
     HookEnvVarDef(
         "AUTOSKILLIT_COMPLETION_MARKER",

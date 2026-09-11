@@ -106,7 +106,7 @@ _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
 )
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 13,  # context_admission phase: 21 - 8 moved files
+    "core": 13,  # 13 files + __init__ + buffer (was 21 before 8 files moved to sub-packages)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
@@ -119,7 +119,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/types": 76,
     "core/runtime": 11,
     "config": 20,
-    "recipe": 23,  # recipe/ decomposition phase: 52 - 29 moved files
+    "recipe": 23,  # 23 files + __init__ + buffer (was 52 before 29 files moved to sub-packages)
     "recipe/analysis": 6,  # 5 moved files + __init__
     "recipe/helpers": 7,  # 6 moved files + __init__
     "recipe/ingredients": 5,  # 3 moved files + 1 file extracted to fit 750-line cap + __init__

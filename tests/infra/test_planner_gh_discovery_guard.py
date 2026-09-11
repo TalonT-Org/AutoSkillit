@@ -118,6 +118,74 @@ class TestPlannerDiscoveryDenied:
         out = _run_guard("echo foo && gh issue list")
         assert _is_denied(out)
 
+    @pytest.mark.parametrize("tool_type", ["bash", "run_cmd"])
+    @pytest.mark.parametrize("search_kind", ["issues", "prs"])
+    @pytest.mark.parametrize(
+        "command_template",
+        [
+            "for term in release; do gh search {search_kind} $term; done",
+            "while read -r term; do gh search {search_kind} $term; done",
+            "until false; do gh search {search_kind} query; done",
+            "if gh search {search_kind} query; then :; fi",
+            "find_items() { gh search {search_kind} query; }; find_items",
+            "bash -c 'bash -c \"gh search {search_kind} query\"'",
+            "echo $(gh search {search_kind} query)",
+            "cat <(gh search {search_kind} query)",
+            "tee >(gh search {search_kind} query) </dev/null",
+        ],
+        ids=[
+            "for-loop",
+            "while-loop",
+            "until-loop",
+            "condition",
+            "function",
+            "nested-shell",
+            "command-substitution",
+            "input-process-substitution",
+            "output-process-substitution",
+        ],
+    )
+    def test_denies_gh_search_in_shell_structure(
+        self,
+        tool_type: str,
+        search_kind: str,
+        command_template: str,
+    ) -> None:
+        out = _run_guard(
+            command_template.format(search_kind=search_kind),
+            tool_type=tool_type,
+        )
+
+        assert _is_denied(out)
+
+    @pytest.mark.parametrize("tool_type", ["bash", "run_cmd"])
+    @pytest.mark.parametrize(
+        ("command", "expected_denied"),
+        [
+            ("gh issue view 7", False),
+            ("gh pr view 7", False),
+            ("gh issue view 7 && gh search issues query", True),
+            ("gh search issues query && gh issue view 7", True),
+            ("gh pr view 7 && gh search prs query", True),
+            ("gh search prs query && gh pr view 7", True),
+        ],
+        ids=[
+            "targeted-issue",
+            "targeted-pr",
+            "issue-targeted-then-discovery",
+            "issue-discovery-then-targeted",
+            "pr-targeted-then-discovery",
+            "pr-discovery-then-targeted",
+        ],
+    )
+    def test_search_discovery_is_not_hidden_by_targeted_reads(
+        self,
+        tool_type: str,
+        command: str,
+        expected_denied: bool,
+    ) -> None:
+        assert _is_denied(_run_guard(command, tool_type=tool_type)) is expected_denied
+
     @pytest.mark.parametrize(
         "skill",
         ["planner-analyze", "planner-elaborate-phase", "planner-refine"],

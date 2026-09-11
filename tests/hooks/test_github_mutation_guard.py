@@ -496,6 +496,63 @@ def test_inert_mentions_and_read_only_commands_are_allowed(
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        'for term in release; do gh search code "$term"; done',
+        'while read -r number; do gh pr view "$number" --json number; done',
+        'until false; do curl "https://api.github.com/repos/o/r/issues"; done',
+        'find_repos() { gh search repos "topic:cli"; }; find_repos',
+        "cat <(gh pr view 7 --json number)",
+    ],
+    ids=[
+        "for-search-code",
+        "while-pr-view",
+        "until-curl-get",
+        "function-search-repos",
+        "process-substitution-pr-view",
+    ],
+)
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_repeatable_read_only_github_commands_are_allowed(
+    command: str,
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "for number in 1 2; do gh pr merge $number; done",
+        "while read -r ref; do gh workflow frobnicate $ref; done",
+        "until false; do curl -X PATCH https://api.github.com/repos/o/r/issues/7 -d '{}'; done",
+        'if gh api --method "$METHOD" /repos/o/r/issues/7 -f title=x; then :; fi',
+        "publish() { gh pr review 7 --approve; }; publish",
+        "for term in release; do gh search issues $term; done; "
+        "gh issue edit $ISSUE --title updated",
+    ],
+    ids=[
+        "for-mutation",
+        "while-unsupported-verb",
+        "until-curl-mutation",
+        "condition-dynamic-method",
+        "function-review-mutation",
+        "mixed-read-and-dynamic-mutation",
+    ],
+)
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_repeatable_or_ambiguous_github_commands_are_denied(
+    command: str,
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+
+
 @pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
 def test_proven_single_non_review_mutation_is_preserved(
     event_factory,

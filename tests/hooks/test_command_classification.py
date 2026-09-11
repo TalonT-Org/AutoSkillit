@@ -1049,6 +1049,128 @@ class TestAnalyzeGitHubMutations:
             reason="",
         )
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            'for term in release; do gh search code "$term"; done',
+            'while read -r sha; do gh search commits "$sha"; done',
+            'until false; do gh search issues "is:open"; done',
+            'if gh search prs "is:open"; then :; fi',
+            'find_repos() { gh search repos "topic:cli"; }; find_repos',
+            "cat <(gh pr view 7 --json number)",
+            "for path in issues; do curl https://api.github.com/repos/o/r/issues; done",
+        ],
+        ids=[
+            "for-search-code",
+            "while-search-commits",
+            "until-search-issues",
+            "condition-search-prs",
+            "function-search-repos",
+            "process-substitution-pr-view",
+            "for-curl-get",
+        ],
+    )
+    def test_repeatable_read_only_commands_have_exact_empty_analysis(self, command: str) -> None:
+        assert analyze_github_mutations(command) == GitHubMutationAnalysis(
+            status=GitHubMutationStatus.NONE,
+            mutations=(),
+            request_count=0,
+            review_comment_count=None,
+            reason_code="",
+            reason="",
+        )
+
+    @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            (
+                "bash -c 'for number in 1 2; do gh pr view $number --json number; done'",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                "sh -c 'while read -r ref; do curl https://api.github.com/repos/o/r/issues; done'",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                "python3 -c \"import subprocess; subprocess.run(['gh','pr','view','7'])\"",
+                GitHubMutationStatus.NONE,
+            ),
+            (
+                "bash -c 'for number in 1 2; do gh pr merge $number; done'",
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+            (
+                "sh -c 'until false; do curl -X PATCH "
+                'https://api.github.com/repos/o/r/issues/7 -d "{}"; done\'',
+                GitHubMutationStatus.UNRESOLVED,
+            ),
+            (
+                "python3 -c \"import subprocess; subprocess.run(['gh','pr','merge','7'])\"",
+                GitHubMutationStatus.SINGLE_RESOLVED,
+            ),
+        ],
+        ids=[
+            "bash-string-read-loop",
+            "sh-string-read-loop",
+            "literal-argv-read",
+            "bash-string-write-loop",
+            "sh-string-write-loop",
+            "literal-argv-write",
+        ],
+    )
+    def test_nested_and_literal_argv_commands_preserve_read_write_classification(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        assert analyze_github_mutations(command).status is expected_status
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "for number in 1 2; do gh pr merge $number; done",
+            "while read -r ref; do gh workflow frobnicate $ref; done",
+            "until false; do curl -X PATCH https://api.github.com/repos/o/r/issues/7 "
+            "-d '{}'; done",
+            'if gh api --method "$METHOD" /repos/o/r/issues/7 -f title=x; then :; fi',
+            "for number in 1 2; do printf '%s\\n' $number | xargs -n1 gh pr merge; done",
+            "for term in release; do gh search issues $term; done; "
+            "gh issue edit $ISSUE --title updated",
+            "cat <(gh issue edit 7 --title updated)",
+        ],
+        ids=[
+            "repeatable-mutation",
+            "repeatable-unsupported-verb",
+            "repeatable-curl-mutation",
+            "condition-dynamic-method",
+            "repeatable-delegated-command",
+            "mixed-read-and-dynamic-mutation",
+            "process-substitution-mutation",
+        ],
+    )
+    def test_repeatable_or_ambiguous_github_commands_fail_closed(self, command: str) -> None:
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.request_count is None
+        assert analysis.reason_code
+
+    @pytest.mark.parametrize(
+        ("command", "expected_status"),
+        [
+            ("cat <(gh pr view 7", GitHubMutationStatus.UNRESOLVED),
+            ("cat <(gh issue edit 7 --title updated", GitHubMutationStatus.UNRESOLVED),
+            ("cat <(printf '%s' value", GitHubMutationStatus.NONE),
+        ],
+        ids=["read-only-github", "mutation-github", "unrelated-command"],
+    )
+    def test_malformed_process_substitution_only_fails_closed_for_github(
+        self,
+        command: str,
+        expected_status: GitHubMutationStatus,
+    ) -> None:
+        assert analyze_github_mutations(command).status is expected_status
+
     def test_simple_rest_review_has_exact_record(self) -> None:
         analysis = analyze_github_mutations(
             "gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT"
@@ -1327,6 +1449,25 @@ class TestAnalyzeGitHubMutations:
         assert analysis.request_count == 2
         assert len(analysis.mutations) == 2
 
+    def test_identical_command_substitution_payloads_are_counted_per_occurrence(self) -> None:
+        nested = "gh api --method POST /repos/o/r/pulls/7/reviews -f event=COMMENT"
+
+        analysis = analyze_github_mutations(f"echo $({nested}) && echo $({nested})")
+
+        assert analysis.status is GitHubMutationStatus.MULTIPLE
+        assert analysis.request_count == 2
+        assert len(analysis.mutations) == 2
+
+    def test_read_only_loop_does_not_make_adjacent_mutation_unresolved(self) -> None:
+        command = (
+            "for term in release; do gh search issues $term; done; gh issue edit 7 --title updated"
+        )
+
+        analysis = analyze_github_mutations(command)
+
+        assert analysis.status is GitHubMutationStatus.SINGLE_RESOLVED
+        assert analysis.request_count == 1
+
     def test_identical_nested_payloads_keep_per_occurrence_cwd(self, tmp_path: Path) -> None:
         (tmp_path / "payload.json").write_text(json.dumps({"body": "x"}), encoding="utf-8")
         nested = "gh api --method POST /repos/o/r/issues/7/comments --input payload.json"
@@ -1481,6 +1622,19 @@ class TestAnalyzeGitHubMutations:
             )
 
         analysis = analyze_github_mutations(command, cwd=str(tmp_path))
+
+        assert analysis.status is GitHubMutationStatus.UNRESOLVED
+        assert analysis.reason_code == "unsafe_input_provenance"
+
+    def test_parent_redirect_provenance_reaches_command_substitution_mutation(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"body": "x"}), encoding="utf-8")
+        nested = f"gh api --method POST /repos/o/r/issues/7/comments --input {payload}"
+
+        analysis = analyze_github_mutations(f"printf '%s' $({nested}) > {payload}")
 
         assert analysis.status is GitHubMutationStatus.UNRESOLVED
         assert analysis.reason_code == "unsafe_input_provenance"

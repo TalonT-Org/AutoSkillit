@@ -246,7 +246,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     # Each entry mirrors its underscored shim counterpart's cascade.
     "cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
     "install_detect": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
-    "claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
+    "claude_env": frozenset({"core", "execution", "test_llm_triage.py", "cli"}),
     "conventions": frozenset({"core", "execution", "server", "workspace"}),
     "delivery_bounds": frozenset({"core", "execution", "server"}),
     "json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
@@ -403,7 +403,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "infra/test_generated_files.py",
         }
     ),
-    "_claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
+    "_claude_env": frozenset({"core", "execution", "test_llm_triage.py", "cli"}),
     "_version_snapshot": frozenset({"core", "execution"}),
     "claude_conventions": frozenset({"core", "execution", "server", "workspace"}),
     "_type_resume": frozenset({"core", "cli", "execution", "fleet"}),
@@ -412,7 +412,16 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "core", "execution", "pipeline", "recipe", "server", "workspace"}
     ),
     "_type_protocols_backend": frozenset(
-        {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
+        {
+            "test_llm_triage.py",
+            "cli",
+            "core",
+            "execution",
+            "fleet",
+            "pipeline",
+            "server",
+            "workspace",
+        }
     ),
     "_type_skill_semantics": frozenset(
         {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}

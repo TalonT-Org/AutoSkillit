@@ -28,6 +28,9 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 ├── sessions-archive.jsonl            # Append-only rows evicted from the retained index
 ├── otlp.jsonl                        # Current scrubbed vendor-native OTLP capture
 ├── otlp.jsonl.1                      # Single rotated generation
+├── child-outcomes/
+│   └── {backend}/
+│       └── {parent_session_id}.json  # Durable per-parent child-terminal-reason snapshot
 └── sessions/
     └── {session_id}/                 # or pid_{pid}_{timestamp} if session_id unavailable
         ├── proc_trace.jsonl          # Full ProcSnapshot series
@@ -58,7 +61,7 @@ Logs are stored in a **global** directory (not per-project), so they persist acr
 
 ### Session Summary Fields
 
-`summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`.
+`summary.json` contains: `session_id`, `dir_name`, `pid`, `cwd`, `skill_command`, `success`, `subtype`, `exit_code`, `start_ts`, `snapshot_count`, `anomaly_count`, `peak_rss_kb`, `peak_oom_score`, `peak_fd_ratio`, `session_type`, `child_outcomes` (see [Child Terminal Reasons](#child-terminal-reasons)).
 
 ### Anomaly Types
 
@@ -106,6 +109,10 @@ remain outside this headless-only field. See the authoritative
 Schema-v9 rows add `subagent_model_outcomes`; v8 rows are retained without
 that field and require neither a rewrite nor a version-specific reader.
 Absent values read as empty lists.
+
+Schema-v11 rows add `child_outcomes` (see [Child Terminal
+Reasons](#child-terminal-reasons)); older rows are retained without that
+field, same as v9's `subagent_model_outcomes`.
 
 | Field | Meaning | Source |
 | --- | --- | --- |
@@ -179,6 +186,73 @@ Consumers must preserve raw accounting and stop metadata. Do not add
 cache-read tokens to input tokens, add reasoning tokens to output tokens, or
 treat `finish_reasons=["length"]` as proof of context exhaustion.
 `sessions.jsonl` is only the retained session projection.
+
+## Child Terminal Reasons
+
+Issue #4623. Every observed L0 child run (native Claude subagent, native Codex
+`spawn_agent` thread, or managed leaf) gets one durable row keyed by structural
+identity (backend, parent session, child/attempt ID), independent of whether
+its parent ever produces a committed `sessions.jsonl` row. This is this
+project's own observational taxonomy, not an adopted external standard.
+
+### Canonical reasons
+
+| Reason | Meaning |
+| --- | --- |
+| `completed` | Explicit normal child terminal result, no adverse terminal evidence |
+| `context_exhausted` | Explicit context-window terminal evidence (`InfraExitCategory.CONTEXT_EXHAUSTED`) |
+| `turn_limited` | Explicit `max_turns`/`error_max_turns` terminal evidence |
+| `error` | Explicit provider/execution terminal error, including `api_error` even when subtype reports success |
+| `interrupted` | Confirmed child cancellation/interrupt |
+| `abandoned` | Owner explicitly abandons or kills a still-running child, with no recovered result |
+| `unknown` | Only a generic stop/completion notification, absent result, or an unrecognized cause — countable, never omitted |
+
+Explicit adverse terminal evidence (context exhaustion, turn limit, error,
+interrupt, abandonment) always outranks a success subtype or a generic
+lifecycle stop/completion notification. A historical run with no retained
+terminal marker stays `unknown` forever — recovery and later evidence can
+*refine* `unknown` into a known reason, never invent one from silence,
+timing, role, or transcript-marker absence. `unknown` splits into two causes,
+both preserved in the row's raw fields rather than collapsed: **unknown from
+absence** (no terminal evidence was ever retained) and **unknown from
+conflict** (two equally authoritative terminal records disagree — the raw
+conflicting evidence stays on the row for diagnosis).
+
+### Row shape
+
+Each row carries `child_id`, `launch_alias` (a later-bound backend-native
+session/thread ID merged onto the same row, not a second row), `backend`,
+`parent_session_id`, `role`, `attribution_skill`, `effective_model`,
+`effective_provider`, `terminal_reason`, and the raw evidence that produced
+it: `raw_reason`, `raw_subtype`, `raw_code`, `evidence_source`. `role` and
+`attribution_skill` are populated only for the paths that observe them
+(managed leaves, and Claude native transcripts carrying
+`attributionAgent`/`attributionSkill`); grouping child rows by role or
+provider is a query over these fields, never inferred from naming
+conventions.
+
+### Native vs. managed paths
+
+- **Native** — a `SubagentStart`/`SubagentStop`/parent `PostToolUse` hook
+  (Claude) or structural `sub_agent_activity` rollout evidence (Codex)
+  confirms the child. A start event inserts a durable `unknown` row
+  immediately, even if a terminal event never arrives.
+- **Managed** — the executor records each physical provider-attempt
+  directly (`ManagedAttemptRecorder` in `execution/child_outcomes.py`) using
+  internal `SkillResult` evidence (`cli_subtype`, `api_failure.terminal_reason`,
+  `infra.exit_category`) no hook can observe. A reservation is promoted to a
+  row only on confirmed process/session start — a cancelled or rejected
+  reservation never fabricates a child.
+
+### Orphan discovery and retention
+
+The snapshot is the canonical record; `summary.json`'s and `sessions.jsonl`'s
+`child_outcomes` fields are read-only projections of it, refreshed from one
+frozen snapshot read per publication. The canonical snapshot is never pruned
+by session retention or archival — a session whose own `sessions/` directory
+was evicted, or one with no `sessions.jsonl` row at all (an orphan, or an
+interactive parent), remains directly queryable under
+`child-outcomes/{backend}/{parent_session_id}.json`.
 
 ## Configuration
 

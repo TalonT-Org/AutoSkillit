@@ -366,6 +366,12 @@ def _load_or_init_document(
     return document
 
 
+def _write_document(snapshot_path: Path, document: dict[str, Any]) -> None:
+    """The one durable-writer call site (registered as such in core's
+    DURABLE_ARTIFACT_WRITERS) — every mutator writes through here."""
+    _atomic_write(snapshot_path, json.dumps(document, sort_keys=True))
+
+
 def observe_child(
     snapshot_path: Path,
     *,
@@ -400,7 +406,7 @@ def observe_child(
             outcome["start_confirmed"] = True
             if launch_alias and not outcome.get("launch_alias"):
                 outcome["launch_alias"] = launch_alias
-        _atomic_write(snapshot_path, json.dumps(document, sort_keys=True))
+        _write_document(snapshot_path, document)
 
 
 def record_terminal_evidence(
@@ -448,7 +454,7 @@ def record_terminal_evidence(
         merged = _merge_evidence_into_outcome(outcome, evidence)
         entry["outcome"] = dict(merged)
         applied_keys.append(evidence_key)
-        _atomic_write(snapshot_path, json.dumps(document, sort_keys=True))
+        _write_document(snapshot_path, document)
         return merged["terminal_reason"]
 
 
@@ -470,4 +476,4 @@ def reconcile_ended_children(
         document = _load_or_init_document(
             snapshot_path, backend=backend, parent_session_id=parent_session_id
         )
-        _atomic_write(snapshot_path, json.dumps(document, sort_keys=True))
+        _write_document(snapshot_path, document)

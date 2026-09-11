@@ -75,8 +75,8 @@ def pytest_collection_modifyitems(items, config):
         for sp in scope_abs:
             (file_scopes if sp.is_file() else ancestor_scopes).add(sp)
         for item in items:
-            matched = item.path in file_scopes or any(
-                _is_under(item.path, sp) for sp in ancestor_scopes
+            matched = item.path in file_scopes or not ancestor_scopes.isdisjoint(
+                item.path.parents
             )
             (selected if matched else deselected).append(item)
         if deselected:
@@ -134,13 +134,6 @@ def pytest_testnodedown(node, error):
     if selected is not None and deselected is not None:
         _worker_filter_counts["selected"] = selected
         _worker_filter_counts["deselected"] = deselected
-
-def _is_under(path, parent):
-    try:
-        path.relative_to(parent)
-        return True
-    except ValueError:
-        return False
 """
 
 _CONFTEST_ERROR_CONFIGURE_SOURCE = """

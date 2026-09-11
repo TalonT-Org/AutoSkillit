@@ -1138,6 +1138,7 @@ class TestApplyManifest:
 
         assert calls == [("gitwildmatch", [pat]) for pat in manifest]
         assert set(compiled) == set(manifest)
+        assert all(isinstance(v, pathspec.PathSpec) for v in compiled.values())
 
     def test_supplied_matchers_avoid_recompilation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A supplied matcher dictionary suppresses all further construction."""

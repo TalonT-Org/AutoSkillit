@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -348,6 +349,20 @@ def test_attest_catalog_discovery_reports_duplicate_legacy_root(tmp_path: Path) 
     )
 
     assert any("roots contain duplicate legacy root" in error for error in errors)
+
+
+def test_legacy_root_derivation_consumes_catalog_layout_depth(tmp_path: Path) -> None:
+    contract = replace(
+        discovery.CODEX_SKILL_DISCOVERY_CONTRACT,
+        catalog_relpath="nested/add-dir/skills",
+    )
+
+    legacy_root = discovery._legacy_root_for_catalog(
+        tmp_path / contract.catalog_relpath,
+        contract,
+    )
+
+    assert legacy_root == tmp_path / contract.legacy_root_relpath
 
 
 def test_attest_catalog_discovery_rejects_catalog_absent_from_roots(tmp_path: Path) -> None:

@@ -193,6 +193,16 @@ def _contract_context(
     )
 
 
+def _legacy_root_for_catalog(
+    catalog_dir: Path,
+    contract: CodexSkillDiscoveryContractDef,
+) -> Path:
+    generated_home = catalog_dir
+    for _part in Path(contract.catalog_relpath).parts:
+        generated_home = generated_home.parent
+    return generated_home / contract.legacy_root_relpath
+
+
 def _validated_expected_paths(
     catalog_dir: Path,
     expected_entries: Sequence[tuple[str, str]],
@@ -341,8 +351,9 @@ def attest_catalog_discovery(
                     f"Codex skill discovery reported misplaced managed paths {misplaced}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
-            legacy_root = (
-                catalog_dir.parent.parent / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
+            legacy_root = _legacy_root_for_catalog(
+                catalog_dir,
+                CODEX_SKILL_DISCOVERY_CONTRACT,
             )
             legacy_matches = [root for root in discovered.roots if root == legacy_root]
             if not legacy_matches:

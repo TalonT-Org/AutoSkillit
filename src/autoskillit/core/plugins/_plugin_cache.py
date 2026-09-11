@@ -7,17 +7,10 @@ The lifecycle concerns now live in three siblings:
 - ``_active_kitchens`` — active-kitchen registry + liveness
 
 This module re-exports the public names those shards define so existing
-importers continue to bind to ``autoskillit.core._plugin_cache``. The
-``os``, ``psutil``, and ``shutil`` bindings are kept solely as monkeypatch
-targets for tests that patch them through this facade path.
+importers continue to bind to ``autoskillit.core._plugin_cache``.
 """
 
 from __future__ import annotations
-
-import os  # noqa: F401 — re-exported for monkeypatch.setattr("autoskillit.core._plugin_cache.os", ...)
-import shutil  # noqa: F401 — re-exported for monkeypatch.setattr("autoskillit.core._plugin_cache.shutil", ...)
-
-import psutil  # noqa: F401 — re-exported for monkeypatch.setattr("autoskillit.core._plugin_cache.psutil", ...)
 
 from .._active_kitchens import (  # noqa: F401 — re-exported
     ActiveKitchensReadResult,

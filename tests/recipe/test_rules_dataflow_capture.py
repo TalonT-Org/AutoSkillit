@@ -203,6 +203,9 @@ def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
     undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
     assert len(undeclared) == 1
     assert undeclared[0].severity == Severity.ERROR
+    # Message text varies between the "no outputs contract" and "undeclared key"
+    # branches of undeclared-capture-key depending on manifest-cache timing;
+    # step_name is the stable invariant this test needs (see commit 2a8228277).
     assert undeclared[0].step_name == "run"
 
     manifest_v2 = {

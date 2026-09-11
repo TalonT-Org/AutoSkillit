@@ -1023,24 +1023,24 @@ def pytest_collection_modifyitems(
         for p in scope:
             scope_abs.add(p if p.is_absolute() else root / p)
 
+        file_scopes: set[_Path] = set()
+        ancestor_scopes: set[_Path] = set()
+        for sp in scope_abs:
+            if sp.is_file():
+                file_scopes.add(sp)
+            else:
+                ancestor_scopes.add(sp)
+
         selected: list[pytest.Item] = []
         deselected: list[pytest.Item] = []
 
         for item in items:
             item_path = item.path
-            matched = False
-            for sp in scope_abs:
-                if sp.is_file():
-                    if item_path == sp:
-                        matched = True
-                        break
-                else:
-                    try:
-                        item_path.relative_to(sp)
-                        matched = True
-                        break
-                    except ValueError:
-                        continue
+            matched = (
+                item_path in file_scopes
+                or item_path in ancestor_scopes
+                or not ancestor_scopes.isdisjoint(item_path.parents)
+            )
             if matched:
                 selected.append(item)
             else:

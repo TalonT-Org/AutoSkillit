@@ -4,14 +4,16 @@ Reads the durable snapshot written by the stdlib-only hook authority
 (``hooks/_child_outcome_snapshot``), and backfills metadata that only a full
 transcript read can supply: Claude native subagent transcript enumeration
 (role/model/attribution via ``attributionAgent``/``attributionSkill``,
-deduplicated by ``message.id``) and Codex unplanned-child discovery via
-``sub_agent_activity`` structural rollout evidence.
+deduplicated by ``message.id``), Codex unplanned-child discovery via
+``sub_agent_activity`` structural rollout evidence, and direct recording of
+every physical managed-leaf attempt's outcome using the rich internal
+``SkillResult`` evidence only the executor observes (Step 5).
 
 The stdlib-only hook module is the canonical write authority; this module is
-strictly a reader plus a narrow Codex-observation writer for children the
-hook observer cannot see (native ``spawn_agent`` calls confirmed only by
-rollout replay). Never re-derives or overrides a reason the hook already
-classified.
+a reader, a narrow Codex-observation writer for children the hook observer
+cannot see (native ``spawn_agent`` calls confirmed only by rollout replay),
+and the managed-executor's own direct writer for physical attempts it alone
+observes. Never re-derives or overrides a reason the hook already classified.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from autoskillit.hooks import (
 )
 
 if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend
+    from autoskillit.core import CodingAgentBackend, SkillResult
 
 logger = get_logger(__name__)
 
@@ -353,3 +355,226 @@ def reconcile_child_outcome_snapshots(log_root: Path) -> int:
                 continue
             visited += 1
     return visited
+
+
+def observe_managed_child_attempt(
+    *,
+    log_root: Path,
+    backend: str,
+    parent_session_id: str,
+    child_id: str,
+    role: str = "",
+    attribution_skill: str = "",
+) -> None:
+    """Record a confirmed managed-leaf physical attempt as a durable unknown row.
+
+    Called once a physical attempt is confirmed spawned (never for a
+    reservation that was cancelled or rejected before spawn — see the Step 2
+    design decision). ``child_id`` is the physical-attempt identity
+    (``managed_attempt_id`` when a lineage observer allocated one, else a
+    plain diagnostic attempt id), not a backend-native session id.
+    """
+    try:
+        snapshot_path = resolve_snapshot_path(
+            log_root, backend=backend, parent_session_id=parent_session_id
+        )
+    except Exception:
+        logger.debug("managed_child_attempt_snapshot_path_invalid", exc_info=True)
+        return
+    observe_child(
+        snapshot_path, backend=backend, parent_session_id=parent_session_id, child_id=child_id
+    )
+    evidence: dict[str, Any] = {"evidence_source": "managed_attempt_reservation"}
+    if role:
+        evidence["role"] = role
+    if attribution_skill:
+        evidence["attribution_skill"] = attribution_skill
+    if len(evidence) > 1:
+        record_terminal_evidence(
+            snapshot_path,
+            backend=backend,
+            parent_session_id=parent_session_id,
+            child_id=child_id,
+            evidence_key=f"{backend}:{child_id}:managed_attempt:metadata",
+            evidence=evidence,
+        )
+
+
+def bind_managed_child_launch_alias(
+    *,
+    log_root: Path,
+    backend: str,
+    parent_session_id: str,
+    child_id: str,
+    launch_alias: str,
+) -> None:
+    """Bind the resolved backend-native session id onto a physical attempt's row.
+
+    Called from the ``on_session_id_resolved`` callback as soon as the
+    backend-native session/thread id is captured — merges into the same
+    attempt row rather than creating a second one (Step 5.3).
+    """
+    if not launch_alias:
+        return
+    try:
+        snapshot_path = resolve_snapshot_path(
+            log_root, backend=backend, parent_session_id=parent_session_id
+        )
+    except Exception:
+        logger.debug("managed_child_launch_alias_snapshot_path_invalid", exc_info=True)
+        return
+    observe_child(
+        snapshot_path,
+        backend=backend,
+        parent_session_id=parent_session_id,
+        child_id=child_id,
+        launch_alias=launch_alias,
+    )
+
+
+def record_managed_child_attempt_outcome(
+    *,
+    log_root: Path,
+    backend: str,
+    parent_session_id: str,
+    child_id: str,
+    skill_result: SkillResult,
+    evidence_source: str,
+) -> None:
+    """Record one physical managed-leaf attempt's final outcome.
+
+    Uses the rich internal ``SkillResult`` fields (``cli_subtype``,
+    ``api_failure.terminal_reason``/``error_code``, ``infra.exit_category``)
+    that only the executor observes — never re-derived from a generic
+    tool-result status. ``confirmed_completed`` is set only for an explicit
+    successful, non-error result; ``confirmed_interrupted`` only for the
+    executor's own confirmed cancellation path (``subtype == "cancelled"``).
+    A crash/infrastructure-fault result carries no matching evidence key by
+    design — SkillResult.crashed()/.infrastructure_fault() never populate
+    api_failure or cli_subtype, so recording the raw subtype/exception text
+    here still cannot classify a cause without inventing one; it stays
+    unknown with the raw evidence preserved for diagnosis.
+    """
+    try:
+        snapshot_path = resolve_snapshot_path(
+            log_root, backend=backend, parent_session_id=parent_session_id
+        )
+    except Exception:
+        logger.debug("managed_child_attempt_outcome_snapshot_path_invalid", exc_info=True)
+        return
+    evidence: dict[str, Any] = {
+        "evidence_source": evidence_source,
+        "terminal_reason": skill_result.subtype,
+    }
+    if skill_result.cli_subtype:
+        evidence["cli_subtype"] = skill_result.cli_subtype
+    if skill_result.api_failure.terminal_reason:
+        evidence["api_terminal_reason"] = skill_result.api_failure.terminal_reason
+    if skill_result.api_failure.error_code:
+        evidence["error_code"] = skill_result.api_failure.error_code
+    if skill_result.infra.exit_category:
+        evidence["infra_exit_category"] = skill_result.infra.exit_category
+    if skill_result.subtype == "cancelled":
+        evidence["confirmed_interrupted"] = True
+    if skill_result.success and not skill_result.is_error:
+        evidence["confirmed_completed"] = True
+    record_terminal_evidence(
+        snapshot_path,
+        backend=backend,
+        parent_session_id=parent_session_id,
+        child_id=child_id,
+        evidence_key=f"{backend}:{child_id}:attempt_result:{evidence_source}",
+        evidence=evidence,
+    )
+
+
+class ManagedAttemptRecorder:
+    """Tracks and records one physical managed-leaf attempt at a time (Step 5).
+
+    Constructed once per ``_execute_claude_headless`` call (a no-op recorder
+    when ``role`` is empty, i.e. an ordinary non-managed session); one
+    ``start_attempt`` call per provider-retry loop iteration resets it for
+    that iteration's physical attempt. Kept invocation-local and cache-free —
+    no module-level state.
+    """
+
+    def __init__(
+        self,
+        *,
+        log_root: Path | None,
+        backend: str,
+        parent_session_id: str,
+        role: str,
+        attribution_skill: str,
+    ) -> None:
+        self._log_root = log_root
+        self._backend = backend
+        self._parent_session_id = parent_session_id
+        self._role = role
+        self._attribution_skill = attribution_skill
+        self.child_id: str | None = None
+        self.spawn_confirmed = False
+
+    def start_attempt(self, child_id: str | None) -> None:
+        """Reset tracking for a fresh physical attempt (a new loop iteration)."""
+        self.child_id = child_id
+        self.spawn_confirmed = False
+
+    def on_spawn(self, pid: int, extra: int, *, downstream: Any) -> None:
+        """``on_spawn`` wrapper: confirms the attempt, then chains to ``downstream``."""
+        self.spawn_confirmed = True
+        if self.child_id is not None and self._log_root is not None:
+            try:
+                observe_managed_child_attempt(
+                    log_root=self._log_root,
+                    backend=self._backend,
+                    parent_session_id=self._parent_session_id,
+                    child_id=self.child_id,
+                    role=self._role,
+                    attribution_skill=self._attribution_skill,
+                )
+            except Exception:
+                logger.debug("managed_child_attempt_observe_failed", exc_info=True)
+        if downstream is not None:
+            downstream(pid, extra)
+
+    def bind_launch_alias(self, native_session_id: str, *, downstream: Any) -> None:
+        """``on_session_id_resolved`` wrapper: binds the alias, then chains to ``downstream``."""
+        if self.child_id is not None and self._log_root is not None and native_session_id:
+            try:
+                bind_managed_child_launch_alias(
+                    log_root=self._log_root,
+                    backend=self._backend,
+                    parent_session_id=self._parent_session_id,
+                    child_id=self.child_id,
+                    launch_alias=native_session_id,
+                )
+            except Exception:
+                logger.debug("managed_child_launch_alias_bind_failed", exc_info=True)
+        downstream(native_session_id)
+
+    def record_outcome(self, skill_result: SkillResult, evidence_source: str) -> None:
+        """Record the current attempt's final outcome (success or exception path)."""
+        if self.child_id is None or self._log_root is None:
+            return
+        try:
+            record_managed_child_attempt_outcome(
+                log_root=self._log_root,
+                backend=self._backend,
+                parent_session_id=self._parent_session_id,
+                child_id=self.child_id,
+                skill_result=skill_result,
+                evidence_source=evidence_source,
+            )
+        except Exception:
+            logger.debug("managed_child_attempt_outcome_record_failed", exc_info=True)
+
+    def record_exception_outcome(self, skill_result: SkillResult, evidence_source: str) -> None:
+        """Record an exception-path outcome — only if this attempt's spawn was confirmed.
+
+        Cancellation or preparation failure before a confirmed spawn leaves
+        no confirmed child (Step 5.3).
+        """
+        if not self.spawn_confirmed:
+            return
+        self.record_outcome(skill_result, evidence_source)

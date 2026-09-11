@@ -177,6 +177,8 @@ async def run_headless_core(
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    child_role: str | None = None,
+    child_attribution_skill: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -464,6 +466,8 @@ async def run_headless_core(
                 on_session_id_resolved=on_session_id_resolved,
                 skill_contract=skill_contract,
                 managed_lineage_observer=managed_lineage_observer,
+                child_role=child_role,
+                child_attribution_skill=child_attribution_skill,
             )
         except anyio.get_cancelled_exc_class():
             if managed_lineage_observer is not None:

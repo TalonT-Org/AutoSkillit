@@ -41,9 +41,14 @@ from autoskillit.core import (
     is_git_main_checkout,
     is_git_worktree,
     is_in_git_repo,
+    new_managed_attempt_id,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
-from autoskillit.execution.child_outcomes import collect_native_children_for_backend
+from autoskillit.execution.child_outcomes import (
+    ManagedAttemptRecorder,
+    collect_native_children_for_backend,
+    normalize_backend_name,
+)
 from autoskillit.execution.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
@@ -85,6 +90,7 @@ from autoskillit.execution.headless._managed import (
 from autoskillit.execution.otlp_sink import LocalOtlpSink
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 from autoskillit.execution.quota._quota_observed import record_skill_result_rate_limit
+from autoskillit.execution.session_log import resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.core import SubprocessResult
@@ -154,6 +160,8 @@ async def _execute_claude_headless(
     skill_contract: SkillContract | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
+    child_role: str | None = None,
+    child_attribution_skill: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -301,18 +309,40 @@ async def _execute_claude_headless(
     physical_attempt = 0
     sink_env = dict(sink.env)
     current_provider_extras.update(sink_env)
+    # Child-terminal-reason recording (#4623): a no-op when child_role is None.
+    recorder = ManagedAttemptRecorder(
+        log_root=resolve_log_dir(ctx.config.linux_tracing.log_dir)
+        if child_role is not None
+        else None,
+        backend=normalize_backend_name(_step_backend.name) if child_role is not None else "",
+        parent_session_id=session_id or "",
+        role=child_role or "",
+        attribution_skill=child_attribution_skill,
+    )
+
+    def _observe_managed_spawn(pid: int, extra: int) -> None:
+        recorder.on_spawn(pid, extra, downstream=on_spawn)
+
+    def _bind_managed_launch_alias(native_session_id: str) -> None:
+        recorder.bind_launch_alias(native_session_id, downstream=lineage_callbacks.on_candidate)
+
     try:
         while True:
+            physical_child_id: str | None = None
             try:
                 managed_attempt_id = (
                     managed_lineage_observer.allocate_attempt()
                     if managed_lineage_observer is not None
                     else None
                 )
+                if child_role is not None:
+                    physical_child_id = managed_attempt_id or new_managed_attempt_id()
+                recorder.start_attempt(physical_child_id)
                 if not launch_logged:
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
                 physical_attempt += 1
+
                 _result, spec = await _run_headless_attempt(
                     build_spec,
                     runner=runner,
@@ -333,14 +363,14 @@ async def _execute_claude_headless(
                     idle_output_timeout=base_effective_idle,
                     max_suppression_seconds=cfg.max_suppression_seconds,
                     child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
-                    on_spawn=on_spawn,
+                    on_spawn=_observe_managed_spawn,
                     enable_deadline_extension=enable_deadline_extension,
                     max_extension_seconds=max_extension_seconds,
                     ceiling_seconds=ceiling_seconds,
                     systemd_scope_enabled=systemd_scope_enabled,
                     marker_dir=marker_dir,
                     session_id=session_id,
-                    on_session_id_resolved=lineage_callbacks.on_candidate,
+                    on_session_id_resolved=_bind_managed_launch_alias,
                     stream_parser=_stream_parser,
                     backend_resume_session_id=backend_resume_session_id,
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
@@ -360,6 +390,7 @@ async def _execute_claude_headless(
                     skill_command=skill_command,
                     order_id=order_id,
                 )
+                recorder.record_exception_outcome(skill_result, "infrastructure_fault")
                 break
             except Exception as exc:
                 logger.error("headless_runner_crashed", exc_info=True)
@@ -371,11 +402,13 @@ async def _execute_claude_headless(
                     skill_command=skill_command,
                     order_id=order_id,
                 )
+                recorder.record_exception_outcome(skill_result, "crashed")
                 break
             except BaseException as exc:
                 logger.warning("headless_runner_cancelled", exc_info=True)
                 result = None
                 skill_result = SkillResult.cancelled()
+                recorder.record_exception_outcome(skill_result, "cancelled")
                 defer_cancellation(exc)
                 break
             assert _result is not None
@@ -461,6 +494,7 @@ async def _execute_claude_headless(
                     logger.warning("headless_nudge_cancelled", exc_info=True)
                     skill_result = SkillResult.cancelled()
                     result = None
+                    recorder.record_exception_outcome(skill_result, "nudge_cancelled")
                     defer_cancellation(exc)
                     break
                 if nudge_success is not None:
@@ -486,8 +520,12 @@ async def _execute_claude_headless(
                     logger.warning("headless_clone_guard_cancelled", exc_info=True)
                     skill_result = SkillResult.cancelled()
                     result = None
+                    recorder.record_exception_outcome(skill_result, "clone_guard_cancelled")
                     defer_cancellation(exc)
                     break
+
+            # skill_result is final now (post nudge/clone-guard); record before retry decides.
+            recorder.record_outcome(skill_result, "attempt_final")
 
             if (
                 skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}

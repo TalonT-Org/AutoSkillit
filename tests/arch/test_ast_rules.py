@@ -2969,7 +2969,7 @@ def test_codex_unlocked_config_mutators_are_private_to_prelaunch() -> None:
 def test_no_build_cmd_accepts_output_format_value_string() -> None:
     """No cmd builder should accept output_format_value: str — use OutputFormat enum (ARCH-011)."""
     for src_path in (
-        SRC_ROOT / "execution" / "commands.py",
+        SRC_ROOT / "execution" / "runtime" / "commands.py",
         SRC_ROOT / "execution" / "backends" / "claude.py",
     ):
         source = src_path.read_text()

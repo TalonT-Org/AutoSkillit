@@ -166,7 +166,7 @@ def _process_occurrence_may_execute_github(body: str) -> bool:
 
 
 def _process_occurrence_owner_index(payload: str, start: int, segment_count: int) -> int | None:
-    """Map a process occurrence's source offset to its owning tokenized segment."""
+    """Map an occurrence offset to its owner, clamped to the available segments."""
     if not segment_count:
         return None
     preceding = _tokenize_with_redirects(payload[:start])

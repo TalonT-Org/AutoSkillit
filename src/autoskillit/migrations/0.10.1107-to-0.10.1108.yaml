@@ -19,3 +19,22 @@ changes:
       import `from autoskillit.execution import ClaudeHeadlessCmd` (or any
       other name from the gateway) need no change — the execution/__init__.py
       gateway re-exports the full public surface at the legacy path.
+
+  - id: execution-decomposition-full-module-list
+    description: >
+      #4672 relocated ~26 other execution/ top-level modules (session log,
+      recording, anomaly detection, linux tracing, CI watcher, GitHub
+      fetcher/PR analysis/diff annotator, remote resolver, database reader,
+      launch resolver, test runner, and their private helpers) into
+      execution/{github_ops,evidence,runtime}/, alongside the
+      execution.commands move documented above. No other move has a known
+      direct-import consumer outside execution/ itself — every one is
+      already re-exported in full by the execution/__init__.py gateway.
+    instruction: |
+      If you import any execution/ submodule directly by its pre-#4672
+      top-level path (e.g. `autoskillit.execution.session_log`,
+      `autoskillit.execution.recording`, `autoskillit.execution.ci`) rather
+      than through `from autoskillit.execution import <name>`, update the
+      import to its new sub-package path. See the AGENTS.md in each of
+      execution/evidence/, execution/github_ops/, and execution/runtime/
+      for the complete moved-module list and new paths.

@@ -2,7 +2,7 @@
 
 Re-exports the full public surface of the six execution sub-modules.
 All sub-modules depend only on autoskillit.core.* at runtime;
-execution/headless.py has TYPE_CHECKING-only references to pipeline/.
+execution/headless/ has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import CmdSpec, SkillResult

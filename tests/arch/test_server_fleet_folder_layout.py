@@ -441,11 +441,17 @@ _STAGE_PACKAGES: tuple[tuple[str, int], ...] = (
 def test_stage_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
     """Each new #4673 package exists, stays within its nested-file ceiling, and is documented.
 
-    Packages nested two directory levels below `server/` (and/or
-    underscore-prefixed) are reached by neither `test_server_file_count_under_limit`
-    (root only) nor `test_no_subpackage_exceeds_10_files` (one level of nesting,
-    non-underscore names only) -- these parameterized cases are what actually
-    keep them covered.
+    server/recipe, server/lifecycle, server/response, and fleet/campaign_state
+    are already file-count-covered at level one by
+    `test_no_subpackage_exceeds_10_files`; they're included here to exercise
+    the AGENTS.md/CLAUDE.md documentation-file assertions that guard does not
+    perform, not for file-count coverage. Only the three two-directory-level
+    (and/or underscore-prefixed) entries -- server/recipe/section,
+    server/lifecycle/_lifespan, server/response/_response_budget -- are
+    reached by neither `test_server_file_count_under_limit` (root only) nor
+    `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
+    names only); these parameterized cases are what actually keep those three
+    file-count-covered.
     """
     pkg_dir = SRC_ROOT / rel_path
     assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"

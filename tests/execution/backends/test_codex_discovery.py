@@ -9,7 +9,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from packaging.version import Version
 
 from autoskillit.execution.backends import _codex_discovery as discovery
 from autoskillit.execution.backends import _codex_probes as probes
@@ -531,13 +530,11 @@ def test_attest_catalog_discovery_distinguishes_revalidation_io_failure(
     assert "mutated the managed catalog" not in diagnostic
 
 
-def test_discovery_contract_pins_supported_extra_roots_revision() -> None:
+def test_discovery_contract_pins_verified_upstream_revision() -> None:
     contract = discovery.CODEX_SKILL_DISCOVERY_CONTRACT
 
     assert contract.legacy_root_relpath == "skills"
     assert contract.catalog_relpath == "add-dir/skills"
-    assert contract.extra_roots_rpc == "skills/extraRoots/set"
-    assert Version(contract.extra_roots_min_version) >= Version("0.136.0")
     assert contract.upstream_revision == "646f7c0a91b8e327d263335da68ae8ef212895ce"
     assert contract.upstream_legacy_root_citation == "codex-rs/ext/skills/src/host_roots.rs:94-113"
     assert contract.verified_binary == "codex-cli 0.153.4"

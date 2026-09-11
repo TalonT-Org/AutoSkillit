@@ -26,8 +26,6 @@ class CodexSkillDiscoveryContractDef:
 
     legacy_root_relpath: str = "skills"
     catalog_relpath: str = "add-dir/skills"
-    extra_roots_rpc: str = "skills/extraRoots/set"
-    extra_roots_min_version: str = "0.136.0"
     prompt_probe: tuple[str, ...] = ("debug", "prompt-input")
     upstream_revision: str = "646f7c0a91b8e327d263335da68ae8ef212895ce"
     upstream_legacy_root_citation: str = "codex-rs/ext/skills/src/host_roots.rs:94-113"

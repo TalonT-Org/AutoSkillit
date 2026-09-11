@@ -12,37 +12,48 @@ logger = get_logger(__name__)
 # move into ``autoskillit.recipe.methodology.*``. Python only exposes a
 # submodule as a parent-package attribute when the parent package triggers
 # the load; importing the new path does not retroactively bind the old name.
-from autoskillit.recipe import (  # noqa: E402, F401
-    _analysis,
-    _analysis_bfs,
-    _analysis_blocks,
-    _analysis_detectors,
-    _analysis_graph,
-    _cmd_rpc,
-    _cmd_rpc_guards,
-    _cmd_rpc_issues,
-    _cmd_rpc_merge,
-    _contracts_card,
-    _contracts_manifest,
-    _contracts_staleness,
-    _contracts_types,
-    _git_helpers,
-    _io_loading,
-    _recipe_composition,
-    _recipe_ingredients,
-    _recipe_raw_repair,
-    _registry_utils,
-    _rule_helpers,
-    _skill_helpers,
-    _skill_placeholder_parser,
-    contracts,
-    experiment_type_registry,
-    methodology_disambiguation,
-    methodology_tradition_registry,
-    methodology_tradition_router,
-    methodology_venue_appendix,
-    staleness_cache,
+_LEGACY_SHIM_MODULES: tuple[str, ...] = (
+    "_analysis",
+    "_analysis_bfs",
+    "_analysis_blocks",
+    "_analysis_detectors",
+    "_analysis_graph",
+    "_cmd_rpc",
+    "_cmd_rpc_guards",
+    "_cmd_rpc_issues",
+    "_cmd_rpc_merge",
+    "_contracts_card",
+    "_contracts_manifest",
+    "_contracts_staleness",
+    "_contracts_types",
+    "_git_helpers",
+    "_io_loading",
+    "_recipe_composition",
+    "_recipe_ingredients",
+    "_recipe_raw_repair",
+    "_registry_utils",
+    "_rule_helpers",
+    "_skill_helpers",
+    "_skill_placeholder_parser",
+    "contracts",
+    "experiment_type_registry",
+    "methodology_disambiguation",
+    "methodology_tradition_registry",
+    "methodology_tradition_router",
+    "methodology_venue_appendix",
+    "staleness_cache",
 )
+
+
+def _bind_legacy_paths() -> None:
+    """Import each old flat-module path so it is bound as an autoskillit.recipe attribute."""
+    import importlib
+
+    for _name in _LEGACY_SHIM_MODULES:
+        importlib.import_module(f"{__name__}.{_name}")
+
+
+_bind_legacy_paths()
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415

@@ -193,44 +193,6 @@ from .io import strict_walk as strict_walk
 from .io import temp_dir_display_str as temp_dir_display_str
 from .io import write_canonical_versioned_json as write_canonical_versioned_json
 from .io import write_versioned_json as write_versioned_json
-from .io.delivery_bounds import recipe_delivery_request_digest as recipe_delivery_request_digest
-from .io.delivery_bounds import (
-    resolve_general_output_token_limit as resolve_general_output_token_limit,
-)
-from .io.delivery_bounds import (
-    resolve_recipe_delivery_decision as resolve_recipe_delivery_decision,
-)
-from .io.delivery_bounds import (
-    resolve_recipe_envelope_byte_limit as resolve_recipe_envelope_byte_limit,
-)
-from .io.delivery_bounds import (
-    resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
-)
-from .io.json import fast_dumps as fast_dumps
-from .io.json import fast_loads as fast_loads
-from .io.path_containment import ContainmentError as ContainmentError
-from .io.path_containment import check_metadata_stable as check_metadata_stable
-from .io.path_containment import read_stable_contained_bytes as read_stable_contained_bytes
-from .io.path_containment import read_stable_contained_range as read_stable_contained_range
-from .io.path_containment import resolve_contained_path as resolve_contained_path
-from .io.paths import GENERATED_FILES as GENERATED_FILES
-from .io.paths import claude_code_log_path as claude_code_log_path
-from .io.paths import claude_code_project_dir as claude_code_project_dir
-from .io.paths import default_log_dir as default_log_dir
-from .io.paths import destination_location as destination_location
-from .io.paths import find_latest_session_id as find_latest_session_id
-from .io.paths import github_review_ledger_path as github_review_ledger_path
-from .io.paths import is_generated_path as is_generated_path
-from .io.paths import is_git_main_checkout as is_git_main_checkout
-from .io.paths import is_git_worktree as is_git_worktree
-from .io.paths import is_in_git_repo as is_in_git_repo
-from .io.paths import pkg_root as pkg_root
-from .io.paths import resolve_main_worktree as resolve_main_worktree
-from .io.paths import resolve_project_dir as resolve_project_dir
-from .io.terminal_table import TerminalColumn as TerminalColumn
-from .io.terminal_table import _render_gfm_table as _render_gfm_table
-from .io.terminal_table import _render_terminal_table as _render_terminal_table
-from .io.version_snapshot import collect_version_snapshot as collect_version_snapshot
 from .logging import PluginArtifactLifecycleLease as PluginArtifactLifecycleLease
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
@@ -1119,7 +1081,6 @@ from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
-from .types import ProducerSurface as ProducerSurface
 from .types import PromptContractError as PromptContractError
 from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
 from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId

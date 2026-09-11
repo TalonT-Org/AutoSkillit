@@ -64,7 +64,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
     "server/tools/tools_kitchen/_hook_config.py": "docstring example",
-    "recipe/cmd_rpc/_cmd_rpc_issues.py": "ensure_results default temp_subdir matches canonical default",
+    "recipe/cmd_rpc/_cmd_rpc_issues.py": "ensure_results default temp_subdir matches canonical",
     "hooks/guards/skill_load_guard.py": "stdlib-only guard; cannot use resolve_temp_dir()",
     "core/runtime/session_provenance.py": "IL-0 stdlib-only module; cannot use resolve_temp_dir()",
     "core/runtime/kitchen_state.py": "IL-0 stdlib-only; reads hook config from canonical path",

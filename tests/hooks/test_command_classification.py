@@ -718,11 +718,12 @@ class TestProcessSubstitutionExtraction:
         )
 
     def test_command_classification_exposes_the_lazy_interpreter_gateway(self) -> None:
-        from autoskillit.hooks._classification._interpreters import (
-            _extract_process_substitution_occurrences as implementation,
-        )
         from autoskillit.hooks._command_classification import (
             _extract_process_substitution_occurrences as gateway,
+        )
+
+        from autoskillit.hooks._classification._interpreters import (
+            _extract_process_substitution_occurrences as implementation,
         )
 
         command = "cat <(gh pr view 7)"

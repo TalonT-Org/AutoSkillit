@@ -16,13 +16,14 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification import _github_mutation_cli_analysis as _cli
-    from autoskillit.hooks._classification import _github_mutation_request_analysis as _request
     from _command_classification import (
         ArgvToken,
         _select_executable_argv_tokens,
         _verb_start_index,
     )
+
+    from autoskillit.hooks._classification import _github_mutation_cli_analysis as _cli
+    from autoskillit.hooks._classification import _github_mutation_request_analysis as _request
 else:
     if __package__ == "autoskillit.hooks._runtime":
         from .._classification import _github_mutation_cli_analysis as _cli

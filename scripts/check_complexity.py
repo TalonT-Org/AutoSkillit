@@ -363,15 +363,32 @@ def _decode_source(data: bytes) -> str:
         raise SyntaxError(f"bad encoding cookie ({encoding}): {exc}") from exc
 
 
-def git_show(repo_root: Path, rev: str, path: str) -> str | None:
-    """Return one Python blob's decoded source at *rev*, or None when it does not exist."""
+def git_show(repo_root: Path, rev: str, path: str) -> str:
+    """Return one Python blob's decoded source at *rev*.
+
+    Raises GitFailure (with git's stderr attached) on any non-zero exit: every call site in
+    this file already treats a miss here as unrecoverable, so failing loud beats losing the
+    diagnostic behind a bare None.
+    """
     result = _git(repo_root, "show", f"{rev}:{path}")
-    return _decode_source(result.stdout) if result.returncode == 0 else None
+    if result.returncode != 0:
+        raise GitFailure(f"git show {rev}:{path} failed{_plumbing_stderr(result)}")
+    return _decode_source(result.stdout)
 
 
-def merge_base(repo_root: Path, ref: str) -> str | None:
+def merge_base(repo_root: Path, ref: str) -> str:
+    """Return the merge base of HEAD and *ref*.
+
+    Raises GitFailure (with git's stderr attached) on any non-zero exit or empty output --
+    _resolve_mode's only caller always requires a resolved revision.
+    """
     result = _git(repo_root, "merge-base", "HEAD", ref)
-    return _plumbing_text(result).strip() or None if result.returncode == 0 else None
+    if result.returncode != 0:
+        raise GitFailure(f"git merge-base HEAD {ref} failed{_plumbing_stderr(result)}")
+    resolved = _plumbing_text(result).strip()
+    if not resolved:
+        raise GitFailure(f"git merge-base HEAD {ref} produced no output")
+    return resolved
 
 
 def _working_tree_reader(repo_root: Path) -> Callable[[str], str | None]:
@@ -771,8 +788,6 @@ def _resolve_mode(
     if base is None:
         raise GitFailure("_resolve_mode requires --base when --staged is not set")
     resolved = merge_base(repo_root, base)
-    if resolved is None:
-        raise GitFailure(f"unable to resolve a base revision from {base!r}")
     return resolved, _working_tree_reader(repo_root)
 
 

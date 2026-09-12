@@ -680,22 +680,22 @@ class TestEvaluatedPayloads:
     `git push --force origin main` (rectify #4941 Part A).
     """
 
-    @pytest.mark.parametrize("shape", EVALUATION_SHAPE_MATRIX, ids=lambda s: s.id)
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
     def test_executing_shapes_expose_the_git_segment(self, shape):
-        if not shape.executes:
-            pytest.skip("inert shape covered by test_inert_shapes_expose_no_git_segment")
         cmd = wrap_git_op(shape, ("push", "--force"))
         segments = all_evaluated_segments(cmd)
         assert segments is not None, f"{shape.id}: all_evaluated_segments returned None"
         found = [command_verb_and_args(segment) for segment in segments]
         assert _GIT_PUSH_FORCE_ARGV in found, f"{shape.id}: git segment missing from {found}"
 
-    @pytest.mark.parametrize("shape", EVALUATION_SHAPE_MATRIX, ids=lambda s: s.id)
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
     def test_inert_shapes_expose_no_git_segment(self, shape):
-        if shape.executes:
-            pytest.skip("executing shape covered by test_executing_shapes_expose_the_git_segment")
         cmd = wrap_git_op(shape, ("push", "--force"))
-        assert evaluated_payloads(cmd) is not None or True  # never raises
+        evaluated_payloads(cmd)  # smoke: must not raise for an inert shape
         segments = all_evaluated_segments(cmd)
         found = [command_verb_and_args(segment) for segment in (segments or [])]
         assert _GIT_PUSH_FORCE_ARGV not in found, f"{shape.id}: git segment leaked into {found}"
@@ -736,19 +736,29 @@ class TestEvaluatedPayloads:
     def test_stdin_consumer_classification(self, tokens, expected):
         assert stdin_consumer(tokens) == expected
 
+    # `-c` is also in the spec's VALUE-arity map, but `_stdin_consumer_for_verb`
+    # checks its own `inert_flags` bucket first, so `-c` never reaches the
+    # spec lookup -- it always resolves INERT rather than SHELL.
+    _SHELL_INERT_FLAGS = frozenset({"-c"})
+
     @pytest.mark.parametrize("flag", sorted(_SHELL_INVOCATION_FLAG_SPEC))
     def test_shell_invocation_value_flags_consume_one_token(self, flag):
         tokens = ["bash", flag, "VALUE"]
-        # A VALUE flag consumes its value and does not itself change the
-        # verdict beyond -c's own documented INERT branch.
-        result = stdin_consumer(tokens)
-        assert result in (StdinConsumer.SHELL, StdinConsumer.INERT)
+        expected = StdinConsumer.INERT if flag in self._SHELL_INERT_FLAGS else StdinConsumer.SHELL
+        assert stdin_consumer(tokens) == expected
+
+    # `-c`/`-m` are also in the spec's VALUE-arity map, but they are in
+    # `_stdin_consumer_for_verb`'s `inert_flags` bucket, checked first --
+    # they always resolve INERT rather than PYTHON.
+    _PYTHON_INERT_FLAGS = frozenset({"-c", "-m"})
 
     @pytest.mark.parametrize("flag", sorted(_PYTHON_INVOCATION_FLAG_SPEC))
     def test_python_invocation_value_flags_consume_one_token(self, flag):
         tokens = ["python3", flag, "VALUE"]
-        result = stdin_consumer(tokens)
-        assert result in (StdinConsumer.PYTHON, StdinConsumer.INERT)
+        expected = (
+            StdinConsumer.INERT if flag in self._PYTHON_INERT_FLAGS else StdinConsumer.PYTHON
+        )
+        assert stdin_consumer(tokens) == expected
 
     @pytest.mark.parametrize(
         "flag", ["-e", "-x", "-u", "-l", "--norc", "--posix", "+x", "--totally-unknown-flag"]

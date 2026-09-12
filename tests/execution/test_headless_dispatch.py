@@ -386,16 +386,11 @@ class TestDispatchFoodTruck:
                 return object()
 
         minimal_ctx.runner = runner
-        # skill_injection_capable + not plugin_install_capable is the
-        # managed-catalog-eligible shape (Codex); Claude gets skill content
-        # from finalize()'s plugin-dir projection alone and never reaches
-        # materialization_context()/managed_catalog().
+        # skill_injection_capable + not plugin_install_capable makes this the
+        # managed-catalog-eligible (Codex) shape, not Claude's plugin-dir path.
         backend = _mock_backend(food_truck_capable=True, skill_injection_capable=True)
-        # This managed-catalog shape puts _generated_home_attempt on the
-        # GENERATED_HOME path (Codex's real machinery, orthogonal to what this
-        # test verifies): it requires CODEX_HOME in the built spec's env and a
-        # working session_attempt_context, so the plain build_food_truck_cmd
-        # stub and Mock's default session_attempt_context need overriding.
+        # GENERATED_HOME needs CODEX_HOME in the built spec's env and a working
+        # session_attempt_context, so both are overridden below.
         from contextlib import nullcontext
 
         from autoskillit.core import CmdSpec
@@ -431,12 +426,14 @@ class TestDispatchFoodTruck:
         assert len(finalized_bindings) == 1
         assert runner.observed_live_binding
         assert finalized_bindings[0].closed is True
-        # Same one retained binding backs both the materialization context and
-        # the later spec-build finalize() call.
+        # Same retained binding backs both the materialization and finalize() calls.
         assert materialized_bindings == finalized_bindings
         assert len(session_skill_manager.managed_catalog_calls) == 1
         _session_id, catalog, _projection_context = session_skill_manager.managed_catalog_calls[0]
         assert catalog is Preparation.catalog
+        assert backend.build_food_truck_cmd.call_args.kwargs["managed_skill_catalog"] is (
+            managed_home.skills_dir
+        )
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_resume_session_id_to_cmd_builder(

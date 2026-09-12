@@ -16,8 +16,8 @@ pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 def test_deep_staleness_detects_rule_file_changes(tmp_path, monkeypatch):
     """Rule file content changes trigger staleness."""
-    import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api as api_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
@@ -32,7 +32,7 @@ def test_deep_staleness_detects_rule_file_changes(tmp_path, monkeypatch):
 
 def test_deep_staleness_baseline_initialized_eagerly(tmp_path, monkeypatch):
     """_get_process_start_mtime eagerly sets the content hash baseline."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", None)
     monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", None)
@@ -45,8 +45,8 @@ def test_deep_staleness_baseline_initialized_eagerly(tmp_path, monkeypatch):
 def test_staleness_check_skipped_for_fleet_sessions(monkeypatch):
     """Fleet sessions skip staleness — subprocess revalidates with fresh baselines."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api as api_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1)
     monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_a")
@@ -59,8 +59,8 @@ def test_staleness_check_skipped_for_fleet_sessions(monkeypatch):
 def test_fleet_guard_still_initializes_baseline(monkeypatch):
     """FLEET guard must still call _get_process_start_mtime() so baseline is set."""
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
-    import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api as api_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", None)
     monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", None)
@@ -74,7 +74,7 @@ def test_fleet_guard_still_initializes_baseline(monkeypatch):
 
 def test_content_hash_ignores_mtime_only_change(tmp_path, monkeypatch):
     """mtime change with identical content must NOT trigger staleness."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     rule_dir = tmp_path / "recipe"
     rule_dir.mkdir()
@@ -104,7 +104,7 @@ def test_content_hash_ignores_mtime_only_change(tmp_path, monkeypatch):
 
 def test_content_hash_detects_real_code_change(tmp_path, monkeypatch):
     """Byte-level change to a rule file must trigger staleness."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     rule_dir = tmp_path / "recipe"
     rule_dir.mkdir()
@@ -127,7 +127,7 @@ def test_content_hash_detects_real_code_change(tmp_path, monkeypatch):
 
 def test_baseline_refresh_after_successful_load(tmp_path, monkeypatch):
     """After _refresh_staleness_baseline, subsequent checks return non-stale."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     rule_dir = tmp_path / "recipe"
     rule_dir.mkdir()
@@ -159,8 +159,8 @@ def test_content_hash_staleness_fails_closed_on_unreadable_root(monkeypatch):
     caught and reported as non-stale -- the wrong guess in exactly the case
     (pkg_root mid-replacement) where the guess matters.
     """
-    import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api as api_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_PROCESS_START_PKG_MTIME", 1000)
     monkeypatch.setattr(cache_mod, "_DEEP_CONTENT_BASELINE", "fakehash_baseline")
@@ -177,7 +177,7 @@ def test_content_hash_staleness_fails_closed_on_unreadable_root(monkeypatch):
 
 def test_registry_hash_content_based(tmp_path):
     """Registry hash must be identical for same-content files regardless of mtime."""
-    from autoskillit.recipe._api_cache import _compute_registry_hash
+    from autoskillit.recipe.api._api_cache import _compute_registry_hash
 
     d = tmp_path / "types"
     d.mkdir()
@@ -199,7 +199,7 @@ def test_registry_hash_content_based(tmp_path):
 
 def test_staleness_scan_covers_recipe_top_level(monkeypatch):
     """_STALENESS_SCAN_DIRS must include recipe/ and recipes/."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     assert "recipe" in cache_mod._STALENESS_SCAN_DIRS
     assert "recipes" in cache_mod._STALENESS_SCAN_DIRS
@@ -207,7 +207,7 @@ def test_staleness_scan_covers_recipe_top_level(monkeypatch):
 
 def test_yaml_change_detected_by_staleness_detector(tmp_path, monkeypatch):
     """YAML-only change triggers _compute_content_hash (it hashes *.py and *.yaml)."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     rule_dir = tmp_path / "recipe"
     rule_dir.mkdir()
@@ -232,7 +232,7 @@ def test_yaml_change_detected_by_staleness_detector(tmp_path, monkeypatch):
 
 def test_recipes_dir_yaml_change_detected(tmp_path, monkeypatch):
     """YAML change under recipes/ triggers _compute_content_hash."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     recipe_dir = tmp_path / "recipe"
     recipe_dir.mkdir()
@@ -260,7 +260,7 @@ def test_recipes_dir_yaml_change_detected(tmp_path, monkeypatch):
 
 def test_yaml_file_cache_none_loader_result(tmp_path):
     """YamlFileCache correctly caches None loader results without re-calling."""
-    from autoskillit.recipe._api_cache import YamlFileCache
+    from autoskillit.recipe.api._api_cache import YamlFileCache
 
     yaml_path = tmp_path / "empty.yaml"
     yaml_path.write_text("")
@@ -286,7 +286,7 @@ def test_yaml_file_cache_invalidates_on_mtime_change(tmp_path):
     """YamlFileCache re-reads when file mtime changes."""
     import os
 
-    from autoskillit.recipe._api_cache import YamlFileCache
+    from autoskillit.recipe.api._api_cache import YamlFileCache
 
     yaml_path = tmp_path / "data.yaml"
     yaml_path.write_text("v1")

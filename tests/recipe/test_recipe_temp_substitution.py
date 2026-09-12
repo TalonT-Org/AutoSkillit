@@ -137,8 +137,8 @@ def test_load_and_validate_different_temp_dir_relpath_produces_different_content
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api as api_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     _setup_project_recipe_with_placeholder(tmp_path, "temp-placeholder-test")

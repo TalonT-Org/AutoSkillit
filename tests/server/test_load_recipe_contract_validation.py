@@ -81,7 +81,7 @@ class TestLoadRecipeSurfacesValidationFailure:
         """When load_and_validate returns valid=False, the response must include
         a validation_failed indicator so callers know the recipe is invalid.
         """
-        from autoskillit.recipe._api_cache import _LOAD_CACHE
+        from autoskillit.recipe.api._api_cache import _LOAD_CACHE
 
         monkeypatch.chdir(tmp_path)
         recipes_dir = tmp_path / ".autoskillit" / "recipes"

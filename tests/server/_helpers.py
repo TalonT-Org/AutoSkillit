@@ -238,8 +238,8 @@ async def _open_kitchen_patched(
     counter: McpCallCounter | None = None,
 ):
     """Call open_kitchen with all infrastructure side-effects patched out."""
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools import tools_kitchen
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 

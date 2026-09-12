@@ -362,7 +362,7 @@ steps:
 @pytest.fixture
 def fresh_load_cache(monkeypatch):
     """Install and return an isolated load cache for one test."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     cache = cache_mod.LoadCache()
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
@@ -371,8 +371,8 @@ def fresh_load_cache(monkeypatch):
 
 def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkeypatch):
     """Canonical equal resolved defaults return the warm cached result."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -405,8 +405,8 @@ def test_load_and_validate_returns_cached_result_on_second_call(tmp_path, monkey
 
 
 def test_default_cache_excludes_server_only_finalized_projection(tmp_path, monkeypatch):
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     cache = cache_mod.LoadCache()
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache)
@@ -433,8 +433,8 @@ def test_default_cache_excludes_server_only_finalized_projection(tmp_path, monke
 
 def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, monkeypatch):
     """Changing the recipe file mtime causes a cache miss."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -461,8 +461,8 @@ def test_load_and_validate_cache_invalidated_on_recipe_mtime_change(tmp_path, mo
 
 def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, monkeypatch):
     """Package version change invalidates the cache."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -488,8 +488,8 @@ def test_load_and_validate_cache_invalidated_on_pkg_version_change(tmp_path, mon
 
 def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monkeypatch):
     """Adding a new recipe file to the project directory invalidates the cache."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -518,8 +518,8 @@ def test_load_and_validate_cache_invalidated_on_dir_mtime_change(tmp_path, monke
 def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_path, monkeypatch):
     import inspect
 
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.core import BackendCapabilities, RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -643,7 +643,7 @@ def test_load_and_validate_cache_key_includes_all_result_affecting_params(tmp_pa
 
 def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, fresh_load_cache):
     """Resolved defaults alter ingredients_table and are canonically cache-keyed."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", _CACHE_RECIPE_WITH_BASE_BRANCH)
@@ -673,7 +673,7 @@ def test_load_and_validate_cache_separates_distinct_resolved_defaults(tmp_path, 
 
 def test_load_and_validate_cache_separates_backend_origin_maps(tmp_path, fresh_load_cache):
     """Distinct backend origins must not reuse the same validated response."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     cache = fresh_load_cache
     _setup_project_recipe(tmp_path, "myrecipe", MINIMAL_RECIPE_YAML)
@@ -705,8 +705,8 @@ def test_load_and_validate_cache_separates_temp_dirs_and_normalizes_defaults(
     tmp_path, monkeypatch, fresh_load_cache
 ):
     """Temp-directory cache identity follows the effective path used for staleness."""
-    import autoskillit.recipe._api as api_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api as api_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.recipe._contracts_types import StaleItem
 
     cache = fresh_load_cache
@@ -768,7 +768,7 @@ def test_load_and_validate_cache_separates_same_relative_project_dir_across_cwds
     tmp_path, monkeypatch, fresh_load_cache
 ):
     """The same relative project path resolves independently in each current directory."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     cache = fresh_load_cache
     project_a = tmp_path / "project-a"
@@ -797,7 +797,7 @@ def test_load_and_validate_cache_separates_caller_recipe_info_content_and_hash(
     tmp_path, fresh_load_cache
 ):
     """A warm cache cannot serve a caller's changed RecipeInfo content or hash."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -838,7 +838,7 @@ def test_load_and_validate_cache_normalizes_caller_recipe_info_paths_from_cwd(
     tmp_path, monkeypatch, fresh_load_cache
 ):
     """Relative RecipeInfo paths use cwd, while an equivalent absolute path hits cache."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -909,7 +909,7 @@ def test_load_and_validate_cache_preserves_recipe_list_dispatch_semantics(
     tmp_path, fresh_load_cache
 ):
     """Omitted and supplied inventories stay distinct and use stable name sets."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.core import RecipeSource
     from autoskillit.recipe.schema import RecipeInfo
 
@@ -979,7 +979,7 @@ def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
     """Different caller inventories rerun validation and change unknown-skill findings."""
     from types import SimpleNamespace
 
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     class InventoryLister:
         def __init__(self, names: list[str]) -> None:
@@ -1018,8 +1018,8 @@ def test_load_and_validate_bypasses_cache_for_an_explicit_lister(
 
 def test_load_and_validate_logs_stage_timing_at_debug(tmp_path, monkeypatch):
     """load_and_validate calls the timing helper for each pipeline stage."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1077,8 +1077,8 @@ def test_load_recipe_result_is_typed() -> None:
 
 def test_repository_load_and_validate_passes_recipe_info_to_api(monkeypatch):
     """DefaultRecipeRepository.load_and_validate passes a pre-resolved RecipeInfo to _api."""
-    import autoskillit.recipe._api_orchestration as orch
-    from autoskillit.recipe import _api as api_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
+    from autoskillit.recipe.api import _api as api_mod
     from autoskillit.recipe.repository import DefaultRecipeRepository
 
     captured = {}
@@ -1649,7 +1649,7 @@ def test_drop_sub_recipe_step_preserves_future_fields() -> None:
 
 def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
     """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
-    import autoskillit.recipe._api as api
+    import autoskillit.recipe.api._api as api
 
     assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"
     assert not hasattr(api, "_file_mtime_ns"), "_file_mtime_ns must be removed"
@@ -1684,8 +1684,8 @@ def test_compute_registry_hash_content_based(tmp_path: Path) -> None:
 
 def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkeypatch):
     """load_and_validate reuses match.content_hash for the result's content_hash field."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1714,8 +1714,8 @@ def test_load_and_validate_reuses_content_hash_from_recipe_info(tmp_path, monkey
 
 def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
     """list_recipes is called exactly once when recipe_info is not provided."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1740,8 +1740,8 @@ def test_load_and_validate_calls_list_recipes_once(tmp_path, monkeypatch):
 
 def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path, monkeypatch):
     """list_recipes is not called when recipe_list is provided alongside recipe_info."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
 
@@ -1775,8 +1775,8 @@ def test_load_and_validate_skips_list_recipes_when_recipe_list_provided(tmp_path
 
 def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, monkeypatch):
     """Changing the rule registry hash invalidates the cache."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_STALENESS_IS_STALE", False)
@@ -1808,8 +1808,8 @@ def test_load_and_validate_cache_invalidated_on_rule_registry_change(tmp_path, m
 
 def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
     """Stale process raises ProcessStaleError instead of evaluating recipes."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.core import ProcessStaleError
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
@@ -1830,8 +1830,8 @@ def test_load_and_validate_detects_stale_process(tmp_path, monkeypatch):
 
 def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
     """load_and_validate raises RecipeNotFoundError for nonexistent recipes."""
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     from autoskillit.core import RecipeNotFoundError
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
@@ -1844,10 +1844,10 @@ def test_load_and_validate_raises_on_not_found(tmp_path, monkeypatch):
 
 def test_lru_cache_helpers_cleared_on_process_staleness(tmp_path, monkeypatch):
     """Staleness clearing forces every discovery stage to repopulate."""
-    import autoskillit.recipe._api_cache as cache_mod
     import autoskillit.recipe._io_loading as io_loading
-    from autoskillit.recipe._api_cache import _MISSING
+    import autoskillit.recipe.api._api_cache as cache_mod
     from autoskillit.recipe._contracts_manifest import _MANIFEST_CACHE
+    from autoskillit.recipe.api._api_cache import _MISSING
     from autoskillit.recipe.contracts import load_bundled_manifest
     from autoskillit.recipe.methodology_venue_appendix import (
         _ML_SUB_AREA_CACHE,
@@ -1911,10 +1911,10 @@ def test_mid_process_yaml_only_update(tmp_path, monkeypatch):
     """YAML-only change to skill_contracts.yaml produces different load_and_validate results."""
     import yaml
 
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
     import autoskillit.recipe.contracts._contracts_manifest as manifest_mod
-    from autoskillit.recipe._api_cache import YamlFileCache
+    from autoskillit.recipe.api._api_cache import YamlFileCache
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
     monkeypatch.setattr(cache_mod, "_STALENESS_LAST_CHECK", 0.0)
@@ -2055,7 +2055,7 @@ dispatches:
 # 1a: steps-less YAML returns valid=False
 def test_load_and_validate_steps_less_yaml_returns_invalid(tmp_path: Path) -> None:
     """A YAML recipe without a 'steps' key must produce valid=False."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     cache_mod._LOAD_CACHE.clear()
     _setup_project_recipe(tmp_path, "test-no-steps", _RECIPE_NO_STEPS)
@@ -2080,7 +2080,7 @@ def test_load_and_validate_steps_less_yaml_returns_invalid(tmp_path: Path) -> No
 # 1b: cached result also returns valid=False
 def test_load_and_validate_steps_less_yaml_not_cached_as_valid(tmp_path: Path) -> None:
     """After calling load_and_validate with steps-less YAML, the cache must not serve valid=True."""  # noqa: E501
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     cache_mod._LOAD_CACHE.clear()
     _setup_project_recipe(tmp_path, "test-no-steps", _RECIPE_NO_STEPS)
@@ -2105,8 +2105,8 @@ def test_load_and_validate_always_invokes_compute_recipe_validity(
     no code path through load_and_validate can return a valid value that didn't come
     from compute_recipe_validity.
     """
-    import autoskillit.recipe._api_cache as cache_mod
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api_cache as cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     cache_mod._LOAD_CACHE.clear()
 
@@ -2135,7 +2135,7 @@ def test_load_and_validate_always_invokes_compute_recipe_validity(
 # 1d: empty-steps recipe returns valid=False
 def test_load_and_validate_empty_steps_returns_invalid(tmp_path: Path) -> None:
     """A YAML with steps: {} (present but empty) must produce valid=False."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     cache_mod._LOAD_CACHE.clear()
     _setup_project_recipe(tmp_path, "test-empty-steps", _RECIPE_EMPTY_STEPS)
@@ -2160,7 +2160,7 @@ def test_load_and_validate_non_dict_root_returns_invalid(tmp_path: Path) -> None
     Non-dict root YAML cannot be discovered by list_recipes (which catches the
     ValueError and skips the file), so we construct a RecipeInfo directly.
     """
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
     from autoskillit.core.types import RecipeSource
     from autoskillit.recipe._api import load_and_validate
     from autoskillit.recipe.schema import RecipeInfo
@@ -2191,7 +2191,7 @@ def test_load_and_validate_non_dict_steps_value_returns_invalid(tmp_path: Path) 
     Non-dict steps YAML cannot be discovered by list_recipes (the ValueError
     guard during recipe discovery skips it), so we construct a RecipeInfo directly.
     """
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
     from autoskillit.core.types import RecipeSource
     from autoskillit.recipe._api import load_and_validate
     from autoskillit.recipe.schema import RecipeInfo
@@ -2224,7 +2224,7 @@ def test_load_and_validate_campaign_no_steps_returns_valid(tmp_path: Path) -> No
     and are validated via their dispatches, not steps. This guards against the
     removal of the ``"steps" in data`` guard breaking campaign recipes.
     """
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     cache_mod._LOAD_CACHE.clear()
     _setup_project_recipe(tmp_path, "test-campaign-no-steps", _RECIPE_CAMPAIGN_NO_STEPS)
@@ -2243,8 +2243,8 @@ def test_suggestions_accumulation_preserves_over_bound_tail(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Domain validation preserves every finding before delivery projection."""
-    import autoskillit.recipe._api as api
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api._api as api
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     recipe_dir = tmp_path / ".autoskillit" / "recipes"
     recipe_dir.mkdir(parents=True, exist_ok=True)
@@ -2282,7 +2282,11 @@ def test_api_re_exports_load_and_validate() -> None:
     fails if a future refactor silently decouples the facade from the
     orchestrator (e.g. by duplicating the function or restoring an in-_api body).
     """
-    from autoskillit.recipe import _api, _api_orchestration
+    from autoskillit.recipe.api import _api
+    from autoskillit.recipe.api_orchestration import _api_orchestration
 
     assert _api.load_and_validate is _api_orchestration.load_and_validate
-    assert _api.load_and_validate.__module__ == "autoskillit.recipe._api_orchestration"
+    assert (
+        _api.load_and_validate.__module__
+        == "autoskillit.recipe.api_orchestration._api_orchestration"
+    )

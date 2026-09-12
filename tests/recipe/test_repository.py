@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import autoskillit.recipe._api as _patch_recipe__api
+import autoskillit.recipe.api._api as _patch_recipe__api
 import autoskillit.recipe.io as recipe_io
 import autoskillit.recipe.repository as _patch_recipe_repository
 from autoskillit.core import RecipeSource

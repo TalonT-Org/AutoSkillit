@@ -35,9 +35,9 @@ def _setup_cache_recipe(tmp_path: Path) -> Path:
 
 def test_load_cache_content_survives_consumer_pop(tmp_path, monkeypatch):
     """Mutating a returned result must not corrupt the cache entry."""
-    from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _setup_cache_recipe(tmp_path)
@@ -58,9 +58,9 @@ def test_load_cache_content_survives_consumer_pop(tmp_path, monkeypatch):
 
 def test_load_cache_suggestions_not_aliased(tmp_path, monkeypatch):
     """Appending to returned suggestions must not affect cached entry."""
-    from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _setup_cache_recipe(tmp_path)
@@ -76,9 +76,9 @@ def test_load_cache_suggestions_not_aliased(tmp_path, monkeypatch):
 
 def test_load_cache_returns_distinct_objects(tmp_path, monkeypatch):
     """Each cache hit must return a new dict object, not the cached reference."""
-    from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _setup_cache_recipe(tmp_path)
@@ -92,7 +92,7 @@ def test_load_cache_returns_distinct_objects(tmp_path, monkeypatch):
 
 def test_copy_result_produces_independent_copy():
     """copy_result must return a dict that shares no mutable references with the input."""
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     cache = LoadCache()
     original = {

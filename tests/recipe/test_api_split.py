@@ -268,14 +268,14 @@ def test_orchestration_importable_from_submodule():
 
 def test_phase_symbols_are_same_object_as_owning_shard():
     """Issue #4905: re-exports must be identity aliases, not copies."""
-    from autoskillit.recipe import _api_orchestration as _orch
-    from autoskillit.recipe import _api_orchestration_assemble as _assemble_mod
-    from autoskillit.recipe import _api_orchestration_cache as _cache_mod
-    from autoskillit.recipe import _api_orchestration_match as _match_mod
-    from autoskillit.recipe import _api_orchestration_parse as _parse_mod
-    from autoskillit.recipe import _api_orchestration_text as _text_mod
-    from autoskillit.recipe import _api_orchestration_types as _types_mod
-    from autoskillit.recipe import _api_orchestration_validate as _validate_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration as _orch
+    import autoskillit.recipe.api_orchestration._api_orchestration_assemble as _assemble_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration_cache as _cache_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration_match as _match_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration_parse as _parse_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration_text as _text_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration_types as _types_mod
+    import autoskillit.recipe.api_orchestration._api_orchestration_validate as _validate_mod
 
     assert _orch._resolve_cache_inputs is _cache_mod._resolve_cache_inputs
     assert _orch._resolve_recipe_match is _match_mod._resolve_recipe_match
@@ -293,7 +293,7 @@ def test_phase_symbols_are_same_object_as_owning_shard():
 
 # Names verified by grep against tests/recipe/test_api.py and
 # tests/server/test_tools_load_recipe.py — every name the test suite
-# monkeypatches onto autoskillit.recipe._api_orchestration MUST be an
+# monkeypatches onto autoskillit.recipe.api_orchestration._api_orchestration MUST be an
 # attribute of the module after decomposition.
 _ALL_MONKEYPATCH_TARGETS: tuple[str, ...] = (
     "load_recipe_dict_with_declarations",
@@ -314,9 +314,9 @@ _ALL_MONKEYPATCH_TARGETS: tuple[str, ...] = (
 
 def test_monkeypatch_targets_are_module_attributes_of_api_orchestration():
     """Issue #4905: every name the test suite monkeypatches onto
-    _api_orchestration must remain a module attribute after decomposition,
+    The canonical dispatcher must retain module attributes after decomposition,
     so monkeypatch.setattr(orch, NAME, mock) continues to resolve at call time."""
-    from autoskillit.recipe import _api_orchestration as _orch
+    from autoskillit.recipe.api_orchestration import _api_orchestration as _orch
 
     missing = [name for name in _ALL_MONKEYPATCH_TARGETS if not hasattr(_orch, name)]
     assert not missing, (

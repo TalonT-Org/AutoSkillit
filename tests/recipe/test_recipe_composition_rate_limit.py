@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
@@ -182,25 +181,27 @@ steps:
 class TestDeriveRateLimitRoutesViaLoadAndValidate:
     """Integration tests verifying _derive_rate_limit_routes runs inside load_and_validate."""
 
-    def test_load_and_validate_populates_on_rate_limit(self, tmp_path: Any) -> None:
+    def test_load_and_validate_populates_on_rate_limit(
+        self, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """After load_and_validate, a step with on_context_limit but no on_rate_limit
         in YAML has on_rate_limit populated automatically."""
-        from autoskillit.recipe import _api_cache as cache_mod
+        from autoskillit.recipe.api import _api_cache as cache_mod
 
-        with patch.object(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache()):
-            recipes_dir = tmp_path / ".autoskillit" / "recipes"
-            recipes_dir.mkdir(parents=True)
-            recipe_path = recipes_dir / "test-rate-limit-derive.yaml"
-            recipe_path.write_text(_RECIPE_YAML_MINIMAL)
+        monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())
+        recipes_dir = tmp_path / ".autoskillit" / "recipes"
+        recipes_dir.mkdir(parents=True)
+        recipe_path = recipes_dir / "test-rate-limit-derive.yaml"
+        recipe_path.write_text(_RECIPE_YAML_MINIMAL)
 
-            result = load_and_validate("test-rate-limit-derive", tmp_path)
+        result = load_and_validate("test-rate-limit-derive", tmp_path)
 
-            findings = [
-                f
-                for f in result.get("suggestions", [])
-                if isinstance(f, dict) and f.get("rule") == "run-skill-missing-rate-limit"
-            ]
-            assert not findings, (
-                f"After auto-derivation, no run-skill-missing-rate-limit findings "
-                f"should remain. Got: {findings}"
-            )
+        findings = [
+            f
+            for f in result.get("suggestions", [])
+            if isinstance(f, dict) and f.get("rule") == "run-skill-missing-rate-limit"
+        ]
+        assert not findings, (
+            f"After auto-derivation, no run-skill-missing-rate-limit findings "
+            f"should remain. Got: {findings}"
+        )

@@ -47,8 +47,8 @@ async def test_load_recipe_after_open_kitchen_with_overrides_serves_identical_co
     """load_recipe(name) in a session where open_kitchen(name, overrides={issue_url: ...})
     was called serves byte-identical content."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
@@ -77,8 +77,8 @@ async def test_load_recipe_after_open_kitchen_without_overrides_serves_identical
 ):
     """Serve idempotence in the interactive flow (no overrides → defer_unresolved=True)."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
@@ -114,8 +114,8 @@ async def test_deferred_recall_open_kitchen_serves_identical_to_first_serving(
     """Deferred-recall open_kitchen (called again while gate is open) produces
     byte-identical content to the normal path first serving."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -150,8 +150,8 @@ async def test_session_serve_overrides_cleared_on_close_kitchen(
 ):
     """Snapshot is set on open, cleared on close — no stale state leak."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_kitchen import close_kitchen
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
@@ -191,8 +191,8 @@ async def test_explicit_load_recipe_overrides_layer_on_top_of_session_baseline(
 ):
     """Explicit overrides passed to load_recipe layer on top of the session baseline."""
     monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
@@ -240,8 +240,8 @@ async def test_get_recipe_content_matches_open_kitchen_with_overrides(
     ingredient stack without the caller's overrides, producing divergent routing.
     """
     monkeypatch.chdir(tmp_path)
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -275,8 +275,8 @@ async def _call_re_serve_surface(
     monkeypatch: pytest.MonkeyPatch,
 ) -> str:
     """Call a re-serve surface and return the recipe content string."""
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -309,8 +309,8 @@ async def test_serve_surfaces_parametric_content_identity(
     _RE_SERVE_SURFACES stays in sync with RECIPE_DELIVERY_SURFACE_REGISTRY.
     """
     monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -337,8 +337,8 @@ async def test_all_surfaces_share_canonical_flow_artifact_and_execution_identity
 ) -> None:
     """Surface presentation may differ, but canonical compile outputs may not."""
     monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.recipe._recipe_generation import (
         get_recipe_generation_store,
         thaw_recipe_generation_mapping,
@@ -434,8 +434,8 @@ async def test_get_recipe_snapshot_lifecycle(
     """get_recipe reflects session_serve_overrides: step count matches open_kitchen."""
     monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
     from autoskillit.core.io import load_yaml
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
@@ -501,8 +501,8 @@ async def test_load_recipe_routing_matches_open_kitchen_for_arbitrary_overrides(
     snapshot is always set from the current example's overrides.
     """
     monkeypatch.chdir(tmp_path)  # type: ignore[arg-type]
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     # Reset serve-context state so each example sees a clean slate.

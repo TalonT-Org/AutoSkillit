@@ -245,7 +245,7 @@ def test_show_cook_preview_no_diagram(monkeypatch, tmp_path, capsys):
 
 def test_show_cook_preview_uses_resolved_base_branch_for_smoke_test(monkeypatch, capsys):
     """T8: show_cook_preview renders the config-resolved base_branch for smoke-test."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
     from autoskillit.cli._preview import show_cook_preview
     from autoskillit.core import pkg_root
     from autoskillit.recipe.io import find_recipe_by_name, load_recipe

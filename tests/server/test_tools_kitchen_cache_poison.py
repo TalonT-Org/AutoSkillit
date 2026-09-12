@@ -20,8 +20,8 @@ async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
     monkeypatch,
 ):
     """open_kitchen(ingredients_only=True) must not corrupt subsequent load_recipe."""
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_kitchen import open_kitchen
     from autoskillit.server.tools.tools_recipe import load_recipe
 

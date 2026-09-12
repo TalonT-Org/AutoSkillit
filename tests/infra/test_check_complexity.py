@@ -620,9 +620,10 @@ def test_git_timeout_exits_2(monkeypatch, capsys):
 
 
 def test_decode_source_honors_encoding_cookie():
-    data = "# -*- coding: latin-1 -*-\ndef f():\n    pass  # cafe: \xe9\n".encode("latin-1")
+    source = "# -*- coding: latin-1 -*-\ndef f():\n    pass  # cafe: \xe9\n"
+    data = source.encode("latin-1")
     text = check._decode_source(data)
-    assert "\xe9" in text
+    assert text == source
 
 
 # --- load_policy: literal-only extraction ---------------------------------------------------

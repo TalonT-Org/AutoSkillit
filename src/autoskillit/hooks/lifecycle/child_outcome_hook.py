@@ -51,8 +51,8 @@ if _HOOKS_DIR not in sys.path:
 # which static analysis cannot resolve ahead of the sys.path bootstrap above.
 _snapshot_module = importlib.import_module("_child_outcome_snapshot")
 HARNESS_API_ERROR_LITERAL = getattr(_snapshot_module, "HARNESS_API_ERROR_LITERAL")
+finalize_snapshot_at_session_end = getattr(_snapshot_module, "finalize_snapshot_at_session_end")
 observe_child = getattr(_snapshot_module, "observe_child")
-reconcile_ended_children = getattr(_snapshot_module, "reconcile_ended_children")
 record_terminal_evidence = getattr(_snapshot_module, "record_terminal_evidence")
 resolve_child_outcome_log_root = getattr(_snapshot_module, "resolve_child_outcome_log_root")
 resolve_snapshot_path = getattr(_snapshot_module, "resolve_snapshot_path")
@@ -206,7 +206,7 @@ def _handle_session_end(data: dict) -> None:
     snapshot_path = _snapshot_path_for("claude_code", parent_session_id)
     if snapshot_path is None:
         return
-    reconcile_ended_children(
+    finalize_snapshot_at_session_end(
         snapshot_path, backend="claude_code", parent_session_id=parent_session_id
     )
 
@@ -218,7 +218,9 @@ def _handle_codex_stop(data: dict) -> None:
     snapshot_path = _snapshot_path_for("codex", parent_session_id)
     if snapshot_path is None:
         return
-    reconcile_ended_children(snapshot_path, backend="codex", parent_session_id=parent_session_id)
+    finalize_snapshot_at_session_end(
+        snapshot_path, backend="codex", parent_session_id=parent_session_id
+    )
 
 
 def main() -> None:

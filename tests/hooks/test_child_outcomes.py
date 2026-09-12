@@ -505,14 +505,18 @@ def test_explicit_owner_cancellation_is_recorded_as_interrupted(tmp_path) -> Non
     assert reason == snap.REASON_INTERRUPTED
 
 
-def test_reconcile_ended_children_never_invents_a_cause_for_unknown_rows(tmp_path) -> None:
+def test_finalize_snapshot_at_session_end_never_invents_a_cause_for_unknown_rows(
+    tmp_path,
+) -> None:
     snapshot_path = snap.resolve_snapshot_path(
         tmp_path, backend="claude_code", parent_session_id="p1"
     )
     snap.observe_child(
         snapshot_path, backend="claude_code", parent_session_id="p1", child_id="child-a"
     )
-    snap.reconcile_ended_children(snapshot_path, backend="claude_code", parent_session_id="p1")
+    snap.finalize_snapshot_at_session_end(
+        snapshot_path, backend="claude_code", parent_session_id="p1"
+    )
     outcomes = snap.project_outcomes(snap.read_snapshot(snapshot_path))
     assert outcomes[0]["terminal_reason"] == snap.REASON_UNKNOWN
 

@@ -29,10 +29,10 @@ from autoskillit.execution.backends._codex_execution_identity import (
 )
 from autoskillit.execution.session_log import resolve_log_dir
 from autoskillit.hooks._child_outcome_snapshot import (
+    finalize_snapshot_at_session_end,
     observe_child,
     project_outcomes,
     read_snapshot,
-    reconcile_ended_children,
     record_terminal_evidence,
     resolve_snapshot_path,
 )
@@ -394,7 +394,7 @@ def reconcile_child_outcome_snapshots(log_root: Path) -> int:
                         "child_outcome_snapshot_reconcile_transcript_failed", exc_info=True
                     )
             try:
-                reconcile_ended_children(
+                finalize_snapshot_at_session_end(
                     snapshot_file, backend=backend, parent_session_id=parent_session_id
                 )
             except Exception:

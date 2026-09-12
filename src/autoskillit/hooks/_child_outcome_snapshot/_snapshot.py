@@ -458,7 +458,7 @@ def record_terminal_evidence(
         return merged["terminal_reason"]
 
 
-def reconcile_ended_children(
+def finalize_snapshot_at_session_end(
     snapshot_path: Path,
     *,
     backend: str,

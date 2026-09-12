@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from tests.fleet._helpers import _no_sleep_quota_checker, _noop_quota_refresher, _setup_dispatch
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -281,7 +282,8 @@ class TestDispatchSidecarCleanupOnNormalFailure:
 
         tool_ctx.executor.dispatch_food_truck = _return_failure
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: None,
         )
 

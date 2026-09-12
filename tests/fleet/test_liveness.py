@@ -80,13 +80,15 @@ class TestIsDispatchSessionAlive:
     def test_delegates_to_core_is_session_alive(self) -> None:
         from unittest.mock import patch
 
+        import autoskillit.fleet._liveness as fleet_liveness
+
         record = DispatchRecord(
             name="test",
             dispatched_pid=42,
             dispatched_boot_id="boot-id",
             dispatched_starttime_ticks=100,
         )
-        with patch("autoskillit.fleet._liveness.is_session_alive", return_value=True) as mock:
+        with patch.object(fleet_liveness, "is_session_alive", return_value=True) as mock:
             result = is_dispatch_session_alive(record)
         mock.assert_called_once_with(42, "boot-id", 100)
         assert result is True

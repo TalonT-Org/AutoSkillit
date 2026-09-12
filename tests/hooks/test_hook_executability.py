@@ -171,11 +171,10 @@ def test_generate_hooks_json_and_sync_produce_equivalent_entries(tmp_path, monke
     preventing path A/B divergence.
     """
     import autoskillit.cli._hooks as _hooks_mod
+    import autoskillit.cli._init_helpers as init_helpers
 
     monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
-    )
+    monkeypatch.setattr(init_helpers, "_is_plugin_installed", lambda **kwargs: False)
 
     from autoskillit.cli._hooks import _evict_stale_autoskillit_hooks, sync_hooks_to_settings
 
@@ -225,11 +224,10 @@ def test_generated_hooks_json_embeds_registry_hash() -> None:
 
 def test_synced_settings_json_embeds_registry_hash(tmp_path: Path, monkeypatch) -> None:
     import autoskillit.cli._hooks as _hooks_mod
+    import autoskillit.cli._init_helpers as init_helpers
 
     monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
-    )
+    monkeypatch.setattr(init_helpers, "_is_plugin_installed", lambda **kwargs: False)
 
     from autoskillit.cli._hooks import sync_hooks_to_settings
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.core._plugin_ids as _patch_core__plugin_ids
 from autoskillit.core import (
     DIRECT_PREFIX,
     MARKETPLACE_PREFIX,
@@ -372,7 +373,8 @@ class TestPerCorridorConsumptionChecks:
             '{"plugins": {"autoskillit@autoskillit-local": [{"installPath": "/fake"}]}}'
         )
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path",
+            _patch_core__plugin_ids,
+            "_installed_plugins_path",
             lambda home=None: fake_registry,
         )
 

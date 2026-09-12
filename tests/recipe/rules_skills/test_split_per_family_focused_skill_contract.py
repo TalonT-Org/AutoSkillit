@@ -19,6 +19,7 @@ from unittest.mock import patch
 import pytest
 
 import autoskillit.recipe.helpers._skill_helpers as _sh
+import autoskillit.recipe.rules.rules_skill_content as _patch_rules_rules_skill_content
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
 from tests.recipe.rules_skills._helpers import make_recipe_for_skill
@@ -193,8 +194,9 @@ def test_output_section_no_markdown_rule_fires_when_directive_missing(tmp_path: 
 
     with (
         patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
-        patch(
-            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+        patch.object(
+            _patch_rules_rules_skill_content,
+            "load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
         ),
     ):
@@ -234,8 +236,9 @@ def test_output_section_no_markdown_rule_passes_when_directive_present(tmp_path:
 
     with (
         patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
-        patch(
-            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+        patch.object(
+            _patch_rules_rules_skill_content,
+            "load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_PATTERNS,
         ),
     ):
@@ -413,8 +416,9 @@ def test_source_attribution_directive_fires_when_missing(tmp_path: Path) -> None
 
     with (
         patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
-        patch(
-            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+        patch.object(
+            _patch_rules_rules_skill_content,
+            "load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_SOURCE_PIN,
         ),
     ):
@@ -452,8 +456,9 @@ def test_source_attribution_directive_silent_when_present(tmp_path: Path) -> Non
 
     with (
         patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
-        patch(
-            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+        patch.object(
+            _patch_rules_rules_skill_content,
+            "load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITH_SOURCE_PIN,
         ),
     ):
@@ -488,8 +493,9 @@ def test_source_attribution_directive_silent_without_source_pin_fields(
 
     with (
         patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]),
-        patch(
-            "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+        patch.object(
+            _patch_rules_rules_skill_content,
+            "load_bundled_manifest",
             return_value=_MOCK_MANIFEST_WITHOUT_SOURCE_PIN,
         ),
     ):

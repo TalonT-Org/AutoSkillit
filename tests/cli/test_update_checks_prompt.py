@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.update._update_checks as _patch_update__update_checks
 from autoskillit.cli.install._install_info import (
     InstallInfo,
     InstallType,
@@ -67,7 +68,7 @@ def _setup_run_checks(
     )
 
     _info = info or _make_stable_info()
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.detect_install", lambda: _info)
+    monkeypatch.setattr(_patch_update__update_checks, "detect_install", lambda: _info)
 
     if state is not None:
         (tmp_path / ".autoskillit").mkdir(parents=True, exist_ok=True)
@@ -92,24 +93,28 @@ def _setup_run_checks(
     else:
         target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.0")
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_target_identity",
+        _patch_update__update_checks,
+        "resolve_target_identity",
         lambda info, home: target,
     )
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._binary_signal",
+        _patch_update__update_checks,
+        "_binary_signal",
         lambda installed, target, available: (
             Signal("binary", "New release: 0.9.0 (you have 0.7.77)") if binary_signal else None
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._hooks_signal",
+        _patch_update__update_checks,
+        "_hooks_signal",
         lambda settings_path: (
             Signal("hooks", "1 new/changed hook(s) detected") if hooks_signal else None
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._source_drift_signal",
+        _patch_update__update_checks,
+        "_source_drift_signal",
         lambda installed, target, available: (
             Signal("source_drift", "A newer version is available on the stable branch (aaa..bbb)")
             if source_drift_signal
@@ -117,7 +122,8 @@ def _setup_run_checks(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._claude_settings_path",
+        _patch_update__update_checks,
+        "_claude_settings_path",
         lambda scope, **_kwargs: tmp_path / "settings.json",
     )
 
@@ -228,12 +234,14 @@ def test_yes_delegates_to_shared_update_transaction(
     target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.0")
     resolutions: list[ReleaseIdentity] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.resolve_target_identity",
+        _patch_update__update_checks,
+        "resolve_target_identity",
         lambda info, home: resolutions.append(target) or target,
     )
     calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: (
             calls.append(kwargs)
             or UpdateTransactionResult(
@@ -242,8 +250,8 @@ def test_yes_delegates_to_shared_update_transaction(
             )
         ),
     )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr(_patch_update__update_checks, "terminal_guard", MagicMock)
+    monkeypatch.setattr(_patch_update__update_checks, "perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     assert resolutions == [target]
     assert calls[0]["home"] == tmp_path
@@ -263,16 +271,18 @@ def test_yes_noncompleted_transaction_returns_without_restart_or_state_clear(
     state = {"preserved": "value"}
     _write_dismiss_state(tmp_path, state)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
             outcome=UpdateTransactionOutcome.FAILED_INSTALL,
             expected_version="0.9.0",
         ),
     )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
+    monkeypatch.setattr(_patch_update__update_checks, "terminal_guard", MagicMock)
     restarted: list[bool] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.perform_restart",
+        _patch_update__update_checks,
+        "perform_restart",
         lambda: restarted.append(True),
     )
     run_update_checks(home=tmp_path)
@@ -292,14 +302,15 @@ def test_yes_single_invocation_exits_without_any_other_prompt(
         UpdateTransactionResult,
     )
 
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.terminal_guard", MagicMock)
+    monkeypatch.setattr(_patch_update__update_checks, "terminal_guard", MagicMock)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
             outcome=UpdateTransactionOutcome.COMPLETED,
         ),
     )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr(_patch_update__update_checks, "perform_restart", lambda: None)
     run_update_checks(home=tmp_path)
     assert len(input_calls) == 1
 

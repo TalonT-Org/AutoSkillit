@@ -10,6 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.update._update_checks as _patch_update__update_checks
+import autoskillit.cli.update._update_checks_fetch as _patch_update__update_checks_fetch
+import autoskillit.cli.update._update_checks_source as _patch_update__update_checks_source
 from autoskillit.cli.install._install_info import InstallInfo, InstallType
 from autoskillit.cli.update._update_checks import run_update_checks
 from autoskillit.core import ReleaseChannel, ReleaseIdentity
@@ -45,7 +48,8 @@ def test_run_update_checks_skips_on_guard_env_var(
             monkeypatch.delenv(other, raising=False)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
+        _patch_update__update_checks_fetch,
+        "_fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     prompted: list[str] = []
@@ -65,7 +69,8 @@ def test_run_update_checks_skips_non_tty_stdin(
     monkeypatch.setattr(sys, "stdout", fake_stdout)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
+        _patch_update__update_checks_fetch,
+        "_fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     run_update_checks(home=tmp_path)
@@ -84,7 +89,8 @@ def test_run_update_checks_skips_non_tty_stdout(
     monkeypatch.setattr(sys, "stdout", fake_stdout)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
+        _patch_update__update_checks_fetch,
+        "_fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     run_update_checks(home=tmp_path)
@@ -114,10 +120,11 @@ def test_run_update_checks_skips_local_and_unknown_install_types(
         url=None,
         editable_source=Path(tmp_path) if install_type == InstallType.LOCAL_EDITABLE else None,
     )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_update__update_checks, "detect_install", lambda: info)
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache",
+        _patch_update__update_checks_fetch,
+        "_fetch_with_cache",
         lambda url, **kw: fetched.append(url) or None,
     )
     prompted: list[str] = []
@@ -171,7 +178,8 @@ def test_released_target_resolver_reads_requested_revision(
     info = _make_stable_info(revision=revision)
     refs: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        _patch_update__update_checks_source,
+        "_fetch_latest_version",
         lambda ref, home: refs.append(ref) or "0.9.0",
     )
     target = resolve_target_identity(info, tmp_path)
@@ -188,11 +196,13 @@ def test_branch_target_resolver_reads_requested_branch(
     info = _make_develop_info()
     refs: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        _patch_update__update_checks_source,
+        "_fetch_latest_version",
         lambda ref, home: refs.append(ref) or "0.9.0",
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_reference_sha",
+        _patch_update__update_checks_source,
+        "resolve_reference_sha",
         lambda info, home, *, network: "bbbbbb",
     )
     target = resolve_target_identity(info, tmp_path)
@@ -220,7 +230,8 @@ def test_local_target_resolver_returns_none_without_fetch(
     )
     fetched: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        _patch_update__update_checks_source,
+        "_fetch_latest_version",
         lambda ref, home: fetched.append(ref) or "0.9.0",
     )
 
@@ -234,7 +245,8 @@ def test_target_resolver_fails_open_on_invalid_version(
     from autoskillit.cli.update._update_checks_source import resolve_target_identity
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source._fetch_latest_version",
+        _patch_update__update_checks_source,
+        "_fetch_latest_version",
         lambda ref, home: "not-a-version",
     )
 
@@ -248,7 +260,8 @@ def test_hooks_signal_fires_on_missing_hooks(
     from autoskillit.hook_registry import HookDriftResult
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
+        _patch_update__update_checks,
+        "_count_hook_registry_drift",
         lambda path: HookDriftResult(missing=3, orphaned=0),
     )
     sig = _hooks_signal(tmp_path / "settings.json")
@@ -264,7 +277,8 @@ def test_hooks_signal_fires_on_orphaned_hooks(
     from autoskillit.hook_registry import HookDriftResult
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
+        _patch_update__update_checks,
+        "_count_hook_registry_drift",
         lambda path: HookDriftResult(missing=0, orphaned=2),
     )
     sig = _hooks_signal(tmp_path / "settings.json")
@@ -280,7 +294,8 @@ def test_hooks_signal_silent_when_no_drift(
     from autoskillit.hook_registry import HookDriftResult
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
+        _patch_update__update_checks,
+        "_count_hook_registry_drift",
         lambda path: HookDriftResult(missing=0, orphaned=0),
     )
     assert _hooks_signal(tmp_path / "settings.json") is None
@@ -330,7 +345,8 @@ def test_dual_mcp_signal_fires_when_both_registered(
     from autoskillit.cli.update._update_checks import _dual_mcp_signal
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._is_dual_mcp_registered",
+        _patch_update__update_checks,
+        "_is_dual_mcp_registered",
         lambda home: True,
     )
     sig = _dual_mcp_signal(tmp_path)
@@ -345,7 +361,8 @@ def test_dual_mcp_signal_silent_when_only_one_registered(
     from autoskillit.cli.update._update_checks import _dual_mcp_signal
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._is_dual_mcp_registered",
+        _patch_update__update_checks,
+        "_is_dual_mcp_registered",
         lambda home: False,
     )
     sig = _dual_mcp_signal(tmp_path)

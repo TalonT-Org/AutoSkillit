@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core import PluginArtifactIdentity, PluginLaunchBinding
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
@@ -515,7 +516,8 @@ class TestDispatchFoodTruckGuards:
 
         mock_snapshot = AsyncMock()
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.snapshot_clone_state",
+            _patch_headless__headless_execute,
+            "snapshot_clone_state",
             mock_snapshot,
         )
 

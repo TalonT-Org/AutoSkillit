@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import autoskillit.server.tools.tools_ci as tools_ci
 from autoskillit.pipeline.gate import GATED_TOOLS, DefaultGateState
 from autoskillit.server.tools.tools_ci import set_commit_status
 from tests.conftest import _make_result
@@ -60,7 +61,8 @@ async def test_set_commit_status_gate_check(tool_ctx):
 async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatch, tmp_path):
     """Tool posts gh api with state=pending to the correct endpoint."""
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("owner/repo"),
     )
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
@@ -95,7 +97,8 @@ async def test_set_commit_status_posts_pending(tool_ctx_kitchen_open, monkeypatc
 async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatch, tmp_path):
     """Tool posts gh api with state=success and context preserved."""
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("myorg/myrepo"),
     )
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
@@ -125,7 +128,8 @@ async def test_set_commit_status_posts_success(tool_ctx_kitchen_open, monkeypatc
 async def test_set_commit_status_posts_failure(tool_ctx_kitchen_open, monkeypatch, tmp_path):
     """Tool posts gh api with state=failure."""
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("owner/repo"),
     )
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
@@ -161,7 +165,7 @@ async def test_set_commit_status_infers_repo_from_cwd(
         infer_calls.append(cwd)
         return "inferred/repo"
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
+    monkeypatch.setattr(tools_ci, "resolve_repo_from_remote", fake_infer)
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     cwd = str(tmp_path)
@@ -193,7 +197,7 @@ async def test_set_commit_status_falls_back_to_project_dir_when_no_cwd(
         infer_calls.append(cwd)
         return "fallback/repo"
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
+    monkeypatch.setattr(tools_ci, "resolve_repo_from_remote", fake_infer)
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
@@ -222,7 +226,7 @@ async def test_set_commit_status_uses_explicit_repo_without_inference(
         infer_calls.append(cwd)
         return "should-not-be-used/repo"
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
+    monkeypatch.setattr(tools_ci, "resolve_repo_from_remote", fake_infer)
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
 
     raw = await set_commit_status(
@@ -251,7 +255,8 @@ async def test_set_commit_status_on_gh_failure_returns_error_dict(
 ):
     """When gh api returns non-zero, tool returns success=false, never raises."""
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return("owner/repo"),
     )
     tool_ctx_kitchen_open.runner.push(_make_result(1, "", "API rate limit exceeded"))
@@ -274,7 +279,8 @@ async def test_set_commit_status_repo_inference_failure_returns_error(
 ):
     """When repo inference returns empty string, tool returns success=false."""
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         lambda cwd, hint=None: _async_return(""),
     )
 
@@ -328,7 +334,7 @@ async def test_set_commit_status_success_returns_str(tool_ctx_kitchen_open, monk
     async def fake_infer(cwd: str, hint: object = None) -> str:
         return "owner/repo"
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
+    monkeypatch.setattr(tools_ci, "resolve_repo_from_remote", fake_infer)
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
     result = await set_commit_status(sha="abc123", state="success", context="ci", cwd="/tmp")
     assert isinstance(result, str)
@@ -349,7 +355,7 @@ async def test_set_commit_status_uses_infer_repo_not_gh_subprocess(
         calls.append(cwd)
         return "owner/repo"
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.resolve_repo_from_remote", fake_infer)
+    monkeypatch.setattr(tools_ci, "resolve_repo_from_remote", fake_infer)
     # Only one runner push needed (the POST call, repo already resolved)
     tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
     await set_commit_status(sha="abc", state="success", context="ci", cwd="/tmp")

@@ -145,8 +145,11 @@ async def test_projected_plugin_child_publishes_through_parent_audit_authority(
 
     plugin_authority = project_default_plugin_authority(cwd=clone)
     dispatches: list[dict[str, object]] = []
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *args, **kwargs: (
             "bedrock",
             {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: "/hostile/provider/ledger.sqlite3"},

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.execution.backends._claude_parse as _patch_backends__claude_parse
 from autoskillit.core import BackendEventKind, ClaudeEventData, ResultParser, SessionEvent
 from autoskillit.execution.backends import ClaudeResultParser
 from autoskillit.execution.session import ClaudeSessionResult, CliSubtype
@@ -155,8 +156,9 @@ class TestClaudeResultParser:
             has_thinking_only_turn=False,
             seen_block_types=frozenset({"text", "tool_use"}),
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -186,8 +188,9 @@ class TestClaudeResultParser:
             session_id="",
             errors=["empty output"],
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -211,8 +214,9 @@ class TestClaudeResultParser:
                 {"name": "Edit", "id": "3", "file_path": "/c/d.py"},
             ],
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -228,8 +232,9 @@ class TestClaudeResultParser:
             errors=[],
             token_usage={"input_tokens": 10},
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ) as mock_parse:
             parser = ClaudeResultParser()
@@ -244,8 +249,9 @@ class TestClaudeResultParser:
             session_id="",
             seen_block_types=frozenset({"text", "thinking"}),
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -285,8 +291,9 @@ class TestClaudeResultParser:
             session_id="test-session",
             errors=[],
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -304,8 +311,9 @@ class TestClaudeResultParserTokenExtraction:
             errors=[],
             token_usage={"input_tokens": 500, "output_tokens": 200},
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -320,8 +328,9 @@ class TestClaudeResultParserTokenExtraction:
             session_id="",
             errors=[],
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -337,8 +346,9 @@ class TestClaudeResultParserTokenExtraction:
             errors=[],
             token_usage={},
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -358,8 +368,9 @@ class TestClaudeResultParserTokenExtraction:
                 "cache_read_input_tokens": 25,
             },
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()
@@ -409,8 +420,9 @@ class TestCliSubtypeRoundTrip:
             session_id="",
             errors=[],
         )
-        with patch(
-            "autoskillit.execution.backends._claude_parse.parse_session_result",
+        with patch.object(
+            _patch_backends__claude_parse,
+            "parse_session_result",
             return_value=mock_result,
         ):
             parser = ClaudeResultParser()

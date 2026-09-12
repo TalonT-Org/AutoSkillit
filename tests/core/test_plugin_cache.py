@@ -15,6 +15,7 @@ from unittest.mock import Mock
 import psutil
 import pytest
 
+import autoskillit.core.plugins._active_kitchens as _patch_plugins__active_kitchens
 from autoskillit.core import (
     ActiveKitchensState,
     PluginArtifactIdentity,
@@ -283,7 +284,7 @@ def test_scoped_kitchen_lookup_canonicalizes_project_path(monkeypatch, tmp_path:
     project_link.symlink_to(project, target_is_directory=True)
     register_active_kitchen(KitchenProcessIdentity("kitchen", 42, 123.5, str(project)))
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens.kitchen_entry_alive", lambda _entry: True
+        _patch_plugins__active_kitchens, "kitchen_entry_alive", lambda _entry: True
     )
 
     assert any_kitchen_open(str(project_link)) is True

@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock, MagicMock
 import anyio
 import pytest
 
+import autoskillit.server.tools.tools_execution as tools_execution
+import autoskillit.server.tools.tools_fleet_dispatch as tools_fleet_dispatch
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectProvenance,
@@ -43,7 +45,8 @@ async def test_run_skill_reports_progress_during_blocking_span(tool_ctx_kitchen_
     from autoskillit.server.tools.tools_execution import run_skill
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.progress_heartbeat",
+        tools_execution,
+        "progress_heartbeat",
         _fast_progress_heartbeat,
     )
     tool_ctx_kitchen_open.executor = _SlowExecutor()
@@ -63,7 +66,8 @@ async def test_dispatch_food_truck_reports_progress_during_blocking_span(
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "fleet")
     monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_fleet_dispatch.progress_heartbeat",
+        tools_fleet_dispatch,
+        "progress_heartbeat",
         _fast_progress_heartbeat,
     )
 
@@ -83,7 +87,8 @@ async def test_dispatch_food_truck_reports_progress_during_blocking_span(
         )
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+        tools_fleet_dispatch,
+        "execute_dispatch",
         _slow_execute_dispatch,
     )
 

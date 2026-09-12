@@ -11,6 +11,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import autoskillit.cli.session._session_cook as cook_module
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     BackendConventions,
@@ -141,24 +145,27 @@ def _run_cook(
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=mock_mgr),
         # cook() derives project_dir via the shared git-toplevel helper; pin it so
         # the test does not depend on the caller's checkout.
-        patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
-        patch(
-            "autoskillit.cli.session._session_process.run_cook_attempt",
+        patch.object(cook_module, "resolve_project_dir", Path.cwd),
+        patch.object(
+            _patch_session__session_process,
+            "run_cook_attempt",
             return_value=SimpleNamespace(pid=1, pgid=1, returncode=0),
         ),
-        patch(
-            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        patch.object(
+            _patch_session__session_reload,
+            "consume_reload_sentinel",
             return_value=None,
             side_effect=reload_sentinels,
         ),
-        patch("autoskillit.cli.session._session_onboarding.is_first_run", return_value=False),
+        patch.object(_patch_session__session_onboarding, "is_first_run", return_value=False),
         patch("autoskillit.core.write_registry_entry"),
         patch("autoskillit.config.load_config", return_value=cfg),
-        patch(
-            "autoskillit.cli.session._session_cook.is_feature_enabled",
+        patch.object(
+            cook_module,
+            "is_feature_enabled",
             side_effect=lambda key, *a, **kw: key == "providers",
         ),
-        patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
+        patch.object(_patch_ui__timed_input, "timed_prompt", return_value=""),
     ):
         cook_module.cook(profile=profile, backend=mock_backend_cls())
     return captured
@@ -355,7 +362,7 @@ def test_profile_feature_disabled_exits(capsys, _mock_mgr):
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
         patch("autoskillit.config.load_config", return_value=cfg),
-        patch("autoskillit.cli.session._session_cook.is_feature_enabled", return_value=False),
+        patch.object(cook_module, "is_feature_enabled", return_value=False),
     ):
         with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(profile="minimax", backend=mock_backend_cls())
@@ -373,7 +380,7 @@ def test_profile_unknown_exits(capsys, _mock_mgr):
         patch("shutil.which", return_value="/usr/bin/claude"),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=_mock_mgr),
         patch("autoskillit.config.load_config", return_value=cfg),
-        patch("autoskillit.cli.session._session_cook.is_feature_enabled", return_value=True),
+        patch.object(cook_module, "is_feature_enabled", return_value=True),
     ):
         with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(profile="minimax", backend=mock_backend_cls())
@@ -514,17 +521,19 @@ def _run_finalized_profile_cook(
         patch("shutil.which", return_value="/usr/bin/codex"),
         patch("sys.stdin.isatty", return_value=True),
         patch("autoskillit.config.load_config", return_value=cfg),
-        patch("autoskillit.cli.session._session_cook.is_feature_enabled", return_value=True),
+        patch.object(cook_module, "is_feature_enabled", return_value=True),
         patch("autoskillit.workspace.DefaultSessionSkillManager", return_value=manager),
-        patch("autoskillit.cli.session._session_onboarding.is_first_run", return_value=False),
-        patch("autoskillit.cli.ui._timed_input.timed_prompt", return_value=""),
+        patch.object(_patch_session__session_onboarding, "is_first_run", return_value=False),
+        patch.object(_patch_ui__timed_input, "timed_prompt", return_value=""),
         patch("autoskillit.core.write_registry_entry", side_effect=write_corrupt_registry),
-        patch(
-            "autoskillit.cli.session._session_process.run_cook_attempt",
+        patch.object(
+            _patch_session__session_process,
+            "run_cook_attempt",
             side_effect=run_attempt,
         ),
-        patch(
-            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        patch.object(
+            _patch_session__session_reload,
+            "consume_reload_sentinel",
             return_value=None,
         ),
     ):
@@ -606,8 +615,8 @@ def test_cook_rejects_orchestrator_skill_in_l1_tier_before_launch(capsys) -> Non
         patch("autoskillit.workspace.DefaultSessionSkillManager") as manager_cls,
         # project_dir comes from the shared git-toplevel helper; pin it so the
         # "nothing launched" assertion below stays about launches.
-        patch("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd),
-        patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
+        patch.object(cook_module, "resolve_project_dir", Path.cwd),
+        patch.object(_patch_session__session_process, "run_cook_attempt") as run,
     ):
         with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(backend=mock_backend_cls())
@@ -641,11 +650,12 @@ def test_cook_reports_fully_invalid_tier_skill_with_hint_and_doctor_pointer(
     with (
         patch("autoskillit.config.load_config", return_value=cfg),
         patch("autoskillit.workspace.DefaultSessionSkillManager") as manager_cls,
-        patch(
-            "autoskillit.cli.session._session_cook.resolve_project_dir",
+        patch.object(
+            cook_module,
+            "resolve_project_dir",
             return_value=tmp_path,
         ),
-        patch("autoskillit.cli.session._session_process.run_cook_attempt") as run,
+        patch.object(_patch_session__session_process, "run_cook_attempt") as run,
     ):
         with pytest.raises(SystemExit) as exc_info:
             cook_module.cook(backend=mock_backend_cls())

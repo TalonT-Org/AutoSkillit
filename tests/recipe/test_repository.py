@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.recipe._api as _patch_recipe__api
 import autoskillit.recipe.io as recipe_io
+import autoskillit.recipe.repository as _patch_recipe_repository
 from autoskillit.core import RecipeSource
 from autoskillit.core.types._type_results import LoadResult
 from autoskillit.recipe.repository import DefaultRecipeRepository
@@ -59,9 +61,7 @@ def test_find_returns_matching_recipe(tmp_path: Path, monkeypatch: pytest.Monkey
     """list_recipes returns a recipe named 'foo' → find('foo', ...) returns it."""
     recipe_path = _write_project_recipe(tmp_path, "foo")
     calls: list[Path] = []
-    monkeypatch.setattr(
-        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
-    )
+    monkeypatch.setattr(_patch_recipe_repository, "list_recipes", _counting_list_recipes(calls))
 
     result = DefaultRecipeRepository().find("foo", tmp_path)
 
@@ -75,9 +75,7 @@ def test_find_returns_none_when_no_match(tmp_path: Path, monkeypatch: pytest.Mon
     """No recipe named 'bar' → find('bar', ...) returns None."""
     _write_project_recipe(tmp_path, "foo")
     calls: list[Path] = []
-    monkeypatch.setattr(
-        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
-    )
+    monkeypatch.setattr(_patch_recipe_repository, "list_recipes", _counting_list_recipes(calls))
 
     result = DefaultRecipeRepository().find("bar", tmp_path)
 
@@ -95,9 +93,7 @@ def test_list_delegates_to_central_list_recipes(
 ) -> None:
     _write_project_recipe(tmp_path, "foo")
     calls: list[Path] = []
-    monkeypatch.setattr(
-        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
-    )
+    monkeypatch.setattr(_patch_recipe_repository, "list_recipes", _counting_list_recipes(calls))
 
     result = DefaultRecipeRepository().list(tmp_path)
 
@@ -133,10 +129,8 @@ def test_load_and_validate_delegates_to_api(
 
     _write_project_recipe(tmp_path, "foo")
     calls: list[Path] = []
-    monkeypatch.setattr(
-        "autoskillit.recipe.repository.list_recipes", _counting_list_recipes(calls)
-    )
-    with patch("autoskillit.recipe._api.load_and_validate", mock_api):
+    monkeypatch.setattr(_patch_recipe_repository, "list_recipes", _counting_list_recipes(calls))
+    with patch.object(_patch_recipe__api, "load_and_validate", mock_api):
         repo = DefaultRecipeRepository()
         result = repo.load_and_validate("foo", tmp_path)
 
@@ -153,7 +147,7 @@ def test_validate_from_path_delegates_to_api(tmp_path: Path) -> None:
     expected = {"valid": True}
     mock_api = MagicMock(return_value=expected)
 
-    with patch("autoskillit.recipe._api.validate_from_path", mock_api):
+    with patch.object(_patch_recipe__api, "validate_from_path", mock_api):
         repo = DefaultRecipeRepository()
         script_path = tmp_path / "recipe.yaml"
         result = repo.validate_from_path(script_path)
@@ -175,7 +169,7 @@ def test_list_all_delegates_to_api() -> None:
     expected = {"items": []}
     mock_api = MagicMock(return_value=expected)
 
-    with patch("autoskillit.recipe._api.list_all", mock_api):
+    with patch.object(_patch_recipe__api, "list_all", mock_api):
         repo = DefaultRecipeRepository()
         result = repo.list_all()
 
@@ -238,8 +232,8 @@ def test_load_and_validate_normalizes_relative_project_dir_at_repository_boundar
         discovered.append(project_dir)
         return _load_result(foo)
 
-    with patch("autoskillit.recipe._api.load_and_validate", mock_api):
-        with patch("autoskillit.recipe.repository.list_recipes", side_effect=list_from_project):
+    with patch.object(_patch_recipe__api, "load_and_validate", mock_api):
+        with patch.object(_patch_recipe_repository, "list_recipes", side_effect=list_from_project):
             repo = DefaultRecipeRepository()
             monkeypatch.chdir(first_project)
             repo.load_and_validate("test-recipe", ".")
@@ -265,8 +259,9 @@ def test_repository_load_and_validate_passes_recipe_list_to_api(tmp_path: Path) 
         "_get_list",
         return_value=_load_result(foo),
     ):
-        with patch(
-            "autoskillit.recipe._api.load_and_validate",
+        with patch.object(
+            _patch_recipe__api,
+            "load_and_validate",
             side_effect=capturing_load_and_validate,
         ):
             repo = DefaultRecipeRepository()

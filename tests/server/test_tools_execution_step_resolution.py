@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.server as server
 from autoskillit.core import FinalizedRecipeStep
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.server._helpers import _make_finalized_projection
 
@@ -49,7 +51,7 @@ async def test_run_skill_resolves_output_dir_from_recipe_step(
         with_args={"output_dir": str(tmp_path / ".autoskillit" / "temp")},
     )
     _install_active_step(tool_ctx_kitchen_open, step)
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     plan = tmp_path / "plan.md"
     plan.write_text("content")
@@ -75,7 +77,7 @@ async def test_run_skill_resolves_stale_threshold_from_recipe_step(
 
     step = RecipeStep(name="implement", stale_threshold=2400)
     _install_active_step(tool_ctx_kitchen_open, step)
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/implement ...", str(tmp_path), step_name="implement")
 
@@ -96,7 +98,7 @@ async def test_run_skill_resolves_idle_output_timeout_from_recipe_step(
 
     step = RecipeStep(name="idle-scope", idle_output_timeout=0)
     _install_active_step(tool_ctx_kitchen_open, step)
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/idle-scope ...", str(tmp_path), step_name="idle-scope")
 
@@ -120,7 +122,7 @@ async def test_run_skill_llm_provided_params_override_recipe_step(
         stale_threshold=2400,
     )
     _install_active_step(tool_ctx_kitchen_open, step)
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     plan = tmp_path / "plan.md"
     plan.write_text("content")
@@ -161,7 +163,7 @@ async def test_run_skill_logs_warning_when_output_dir_resolved_from_recipe(
         with_args={"output_dir": str(tmp_path / ".autoskillit" / "temp")},
     )
     tool_ctx_kitchen_open.active_recipe_steps = {"verify": step}
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     plan = tmp_path / "plan.md"
     plan.write_text("content")
@@ -193,7 +195,7 @@ async def test_run_skill_skips_auto_fill_when_output_dir_has_template(
             },
         )
     }
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill(
         skill_command=f"/autoskillit:dry-walkthrough {plan}",
@@ -224,7 +226,7 @@ async def test_run_skill_auto_fills_relative_output_dir_from_recipe(
             with_args={"output_dir": ".autoskillit/temp"},
         )
     }
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill(
         skill_command=f"/autoskillit:dry-walkthrough {plan}",
@@ -249,9 +251,9 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
 
     step = RecipeStep(name="run_canaries", provider="minimax")
     tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
 
     captured_kwargs: dict = {}
 
@@ -259,7 +261,9 @@ async def test_run_skill_resolves_step_provider_from_recipe_step(
         captured_kwargs.update(kwargs)
         return ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
 
-    monkeypatch.setattr("autoskillit.server.lifecycle._guards._resolve_provider_profile", spy)
+    from autoskillit.server.lifecycle import _guards
+
+    monkeypatch.setattr(_guards, "_resolve_provider_profile", spy)
 
     await run_skill(
         "/eval-agent --agent-name test",
@@ -284,9 +288,9 @@ async def test_run_skill_llm_step_provider_overrides_recipe_step(
 
     step = RecipeStep(name="run_canaries", provider="minimax")
     tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
 
     captured_kwargs: dict = {}
 
@@ -294,7 +298,9 @@ async def test_run_skill_llm_step_provider_overrides_recipe_step(
         captured_kwargs.update(kwargs)
         return ("bedrock", {"AWS_REGION": "us-east-1"})
 
-    monkeypatch.setattr("autoskillit.server.lifecycle._guards._resolve_provider_profile", spy)
+    from autoskillit.server.lifecycle import _guards
+
+    monkeypatch.setattr(_guards, "_resolve_provider_profile", spy)
 
     await run_skill(
         "/eval-agent --agent-name test",
@@ -321,11 +327,14 @@ async def test_run_skill_logs_warning_when_step_provider_resolved_from_recipe(
 
     step = RecipeStep(name="run_canaries", provider="minimax")
     tool_ctx_kitchen_open.active_recipe_steps = {"run_canaries": step}
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"}),
     )
 

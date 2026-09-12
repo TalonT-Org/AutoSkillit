@@ -13,6 +13,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
+import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.execution.backends.codex as _patch_backends_codex
 from autoskillit.cli.install._plugin_artifact import (
     interactive_plugin_authority as _production_interactive_plugin_authority,
 )
@@ -86,7 +92,8 @@ def _stub_artifact_authorities(
         lambda **_kwargs: _TestAuthority(plugin_dir),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.current_installed_plugin_authority",
+        _patch_install__plugin_artifact,
+        "current_installed_plugin_authority",
         lambda: _TestAuthority(None),
     )
 
@@ -284,7 +291,8 @@ def test_run_interactive_session_holds_binding_through_reap_and_passes_descripto
     events: list[str] = []
 
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -316,7 +324,8 @@ def test_run_interactive_session_closes_binding_on_launch_failure(
     expected = RuntimeError(f"injected {failure_site} failure")
 
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
     if failure_site == "build":
@@ -357,7 +366,8 @@ def test_run_interactive_session_preserves_failure_when_binding_close_fails(
     authority = _TestAuthority(None)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -470,7 +480,7 @@ def test_run_interactive_session_continues_when_real_owner_binding_refuses_corru
     process = InteractiveProcessStub(pid=888)
     monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: process)
     logger = MagicMock()
-    monkeypatch.setattr("autoskillit.cli.session._session_launch.logger", logger)
+    monkeypatch.setattr(_patch_session__session_launch, "logger", logger)
     path = registry_path(tmp_path)
     path.parent.mkdir(parents=True)
     path.write_text("not valid json", encoding="utf-8")
@@ -783,7 +793,8 @@ def test_run_interactive_session_default_backend_uses_typed_resolver(
     _stub_plugin_installed(monkeypatch, installed=True)
     _capture_subprocess(monkeypatch)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         fake_get_backend,
     )
     _run_interactive_session(system_prompt="test")
@@ -831,7 +842,8 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         lambda name: _DIBackend(),
     )
     _stub_plugin_installed(monkeypatch)
@@ -883,7 +895,8 @@ def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         lambda name: _DIBackend(),
     )
     _stub_plugin_installed(monkeypatch)
@@ -934,7 +947,8 @@ def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         lambda name: _NoInjectDIBackend(),
     )
 
@@ -1070,7 +1084,8 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         fake_get_backend,
     )
     monkeypatch.setattr(
@@ -1129,7 +1144,8 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
 
     monkeypatch.setattr("autoskillit.config.load_config", lambda: mock_config)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         lambda name: _CodexStub(),
     )
     monkeypatch.setattr(
@@ -1188,7 +1204,8 @@ def test_launch_cook_session_accepts_backend_param(
         _popen_from_run(lambda *a, **kw: type("Result", (), {"returncode": 0})()),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch.render_skill_unavailability",
+        _patch_session__session_launch,
+        "render_skill_unavailability",
         rendered_payloads.append,
     )
     _stub_plugin_installed(monkeypatch, installed=True)
@@ -1546,7 +1563,8 @@ def test_managed_interactive_session_validates_before_shared_process_owner(
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         run_attempt,
     )
     generated_home = tmp_path / "generated"
@@ -1604,11 +1622,13 @@ def test_managed_launch_rejects_executable_drift_before_spawn(
             return CmdSpec(cmd=(command,), env={})
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         lambda *_args, **_kwargs: pytest.fail("drifted executable must not spawn"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch.executable_binding_matches_current_file",
+        _patch_session__session_launch,
+        "executable_binding_matches_current_file",
         lambda _binding: False,
     )
     generated_home = tmp_path / "generated"
@@ -1869,7 +1889,8 @@ def _prepare_codex_order_composition(
     _write_codex_mcp_probe_executable(executable)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(executable))
     monkeypatch.setattr(
-        "autoskillit.execution.backends.codex.default_log_dir",
+        _patch_backends_codex,
+        "default_log_dir",
         lambda: tmp_path / "logs",
     )
 
@@ -1929,7 +1950,8 @@ def _prepare_codex_order_composition(
         return _CapturingAuthority(authority), load_mode
 
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         capture_interactive_authority,
     )
 
@@ -1941,7 +1963,8 @@ def _prepare_codex_order_composition(
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         record_final_process,
     )
 
@@ -2191,7 +2214,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
     compilation = compile_session_skill_catalog(catalog, backend)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/true")
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch.render_skill_unavailability",
+        _patch_session__session_launch,
+        "render_skill_unavailability",
         record_render,
     )
     monkeypatch.setattr(
@@ -2199,7 +2223,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         lambda *args, **kwargs: _LifecycleManager(),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (_LifecycleAuthority(), PluginLoadMode.GENERATED_HOME),
     )
 
@@ -2237,7 +2262,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         return next(results)
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         run_attempt,
     )
     sentinels = iter(("reload-id", None, None))
@@ -2248,7 +2274,8 @@ def test_order_managed_session_keeps_home_across_reload_and_infra_resume(
         return value
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         consume_sentinel,
     )
     infra_state = SessionState(

@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
+import autoskillit.recipe.contracts as _patch_recipe_contracts
 from autoskillit.core import SkillResolver
 from autoskillit.recipe.schema import RecipeIngredient
 from autoskillit.server.tools.tools_recipe import load_recipe
@@ -34,10 +36,12 @@ class TestLoadRecipeReadOnly:
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
         """load_recipe must not trigger headless migration even when migrations are applicable."""
         monkeypatch.chdir(tmp_path)
+        from autoskillit.migration import loader as migration_loader
+
         with (
-            patch("autoskillit.migration.loader.applicable_migrations", return_value=["v0.1.0"]),
-            patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
-            patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
+            patch.object(migration_loader, "applicable_migrations", return_value=["v0.1.0"]),
+            patch.object(_patch_execution_headless, "run_headless_core") as mock_headless,
+            patch.object(_patch_recipe_contracts, "generate_recipe_card") as mock_gen,
         ):
             result = json.loads(await load_recipe(name="implementation"))
         assert "error" not in result
@@ -53,7 +57,7 @@ class TestLoadRecipeReadOnly:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        with patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen:
+        with patch.object(_patch_recipe_contracts, "generate_recipe_card") as mock_gen:
             await load_recipe(name="test")
         mock_gen.assert_not_called()
 
@@ -79,13 +83,16 @@ class TestLoadRecipeAuthorityClobber:
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
         mock_ctx.config.linux_tracing.log_dir = ""
+        from autoskillit.server.tools import tools_recipe
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        with patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe._require_enabled",
+            with patch.object(
+                tools_recipe,
+                "_require_enabled",
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):
@@ -135,13 +142,16 @@ class TestLoadRecipeTypeGate:
         mock_recipe_info = MagicMock()
         mock_recipe_info.path = "/fake/recipe.yaml"
         mock_ctx.recipes.find.return_value = mock_recipe_info
+        from autoskillit.server.tools import tools_recipe
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        with patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe._require_enabled",
+            with patch.object(
+                tools_recipe,
+                "_require_enabled",
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):
@@ -181,13 +191,16 @@ class TestLoadRecipeTypeGate:
         mock_recipe_info = MagicMock()
         mock_recipe_info.path = "/fake/recipe.yaml"
         mock_ctx.recipes.find.return_value = mock_recipe_info
+        from autoskillit.server.tools import tools_recipe
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        with patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe._require_enabled",
+            with patch.object(
+                tools_recipe,
+                "_require_enabled",
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):

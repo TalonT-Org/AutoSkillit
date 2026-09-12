@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+import autoskillit.execution.quota._quota_gate as _patch_quota__quota_gate
 from tests._helpers import make_quota_guard_config
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -423,7 +424,7 @@ class TestPerWindowThresholds:
         async def fake_fetch(credentials_path, **kwargs):
             return QuotaFetchResult(windows=windows, binding=binding)
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         config = make_quota_guard_config(
             cache_path=str(tmp_path / "cache.json"),
             credentials_path=str(tmp_path / "creds.json"),
@@ -459,7 +460,7 @@ class TestPerWindowThresholds:
         async def fake_fetch(credentials_path, **kwargs):
             return QuotaFetchResult(windows=windows, binding=binding)
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         config = make_quota_guard_config(
             cache_path=str(tmp_path / "cache.json"),
             credentials_path=str(tmp_path / "creds.json"),
@@ -533,7 +534,7 @@ class TestRefreshQuotaCache:
                 binding=QuotaStatus(utilization=0.35, resets_at=None, window_name="five_hour"),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         config = make_quota_guard_config(cache_path=str(fresh_cache))
         await _refresh_quota_cache(config)
         assert len(fetch_called) == 1  # must have fetched even though cache was fresh
@@ -556,7 +557,7 @@ class TestRefreshQuotaCache:
                 binding=QuotaStatus(utilization=0.5, resets_at=None, window_name="five_hour"),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         config = make_quota_guard_config(cache_path=str(cache_path))
         await _refresh_quota_cache(config)
         assert cache_path.exists()
@@ -759,7 +760,7 @@ class TestPerWindowToggles:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["window_name"] == "weekly"
@@ -803,7 +804,7 @@ class TestPerWindowToggles:
                 ),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["window_name"] == "five_hour"
@@ -841,7 +842,7 @@ class TestPerWindowToggles:
                 binding=QuotaStatus(utilization=0.0, resets_at=None, effective_threshold=100.0),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         result = await check_and_sleep_if_needed(config)
         assert result["should_sleep"] is False
         assert result["utilization"] == pytest.approx(0.0)
@@ -859,7 +860,7 @@ class TestPerWindowToggles:
             fetch_called.append(1)
             raise AssertionError("_fetch_quota must not be called when enabled=False")
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", sentinel_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", sentinel_fetch)
         from autoskillit.execution.quota import check_and_sleep_if_needed
 
         config = make_quota_guard_config(
@@ -890,7 +891,7 @@ class TestPerWindowToggles:
                 binding=QuotaStatus(utilization=0.1, resets_at=None, window_name="five_hour"),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         config = make_quota_guard_config(
             short_window_enabled=False,
             cache_path=str(tmp_path / "cache.json"),

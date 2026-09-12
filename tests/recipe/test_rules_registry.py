@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.recipe.registry as _patch_recipe_registry
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.validator import RuleFinding, run_semantic_rules
@@ -55,7 +56,8 @@ def test_rule_registry_hash_changes_on_rule_addition(monkeypatch) -> None:
         check=lambda ctx: [],
     )
     monkeypatch.setattr(
-        "autoskillit.recipe.registry._RULE_REGISTRY",
+        _patch_recipe_registry,
+        "_RULE_REGISTRY",
         list(_RULE_REGISTRY) + [dummy],
     )
 

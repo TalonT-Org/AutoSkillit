@@ -47,13 +47,14 @@ class TestTrackResponseSize:
         log = DefaultMcpResponseLog()
         response_str = json.dumps({"steps": [], "total": {}})
 
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         @track_response_size("get_token_summary")
         async def fake_handler():
             return response_str
 
-        with patch("autoskillit.server._notify._get_ctx_or_none") as mock_ctx:
+        with patch.object(notify_module, "_get_ctx_or_none") as mock_ctx:
             mock_ctx.return_value = MagicMock(
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
@@ -72,13 +73,14 @@ class TestTrackResponseSize:
         log = DefaultMcpResponseLog()
         response_dict = {"key": "value"}
 
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         @track_response_size("kitchen_status")
         async def fake_handler():
             return response_dict
 
-        with patch("autoskillit.server._notify._get_ctx_or_none") as mock_ctx:
+        with patch.object(notify_module, "_get_ctx_or_none") as mock_ctx:
             mock_ctx.return_value = MagicMock(
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),
@@ -93,6 +95,7 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_injected_context_admission_ledger_does_not_mutate_response_path(self):
         """C2 stays shadow-only; producer integration is tracked by #4336."""
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         original = {"success": True, "value": "unchanged"}
@@ -105,9 +108,10 @@ class TestTrackResponseSize:
             return original
 
         with (
-            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(notify_module, "_get_ctx_or_none", return_value=ctx),
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 return_value=original,
             ),
         ):
@@ -119,13 +123,14 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_decorator_noop_when_ctx_unavailable(self):
         """When _get_ctx_or_none() returns None, decorator is silent."""
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         @track_response_size("run_skill")
         async def fake_handler():
             return "response"
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify_module, "_get_ctx_or_none", return_value=None):
             result = await fake_handler()
 
         assert result == "response"  # no error raised
@@ -135,13 +140,14 @@ class TestTrackResponseSize:
         """If the wrapped handler raises, the exception is caught and converted."""
         import json
 
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         @track_response_size("run_skill")
         async def bad_handler():
             raise ValueError("something went wrong")
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify_module, "_get_ctx_or_none", return_value=None):
             result = await bad_handler()
 
         data = json.loads(result)
@@ -152,13 +158,14 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_track_response_size_exception_envelope_includes_user_visible_message(self):
         """Exception envelope includes non-empty user_visible_message with tool name."""
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         @track_response_size("open_kitchen")
         async def bad_handler():
             raise RuntimeError("boom")
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify_module, "_get_ctx_or_none", return_value=None):
             result = await bad_handler()
 
         data = json.loads(result)
@@ -170,13 +177,14 @@ class TestTrackResponseSize:
     @pytest.mark.anyio
     async def test_track_response_size_exception_envelope_preserves_existing_fields(self):
         """Regression guard: success, error, exit_code, subtype keys still present."""
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         @track_response_size("test_tool")
         async def bad_handler():
             raise ValueError("fail")
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify_module, "_get_ctx_or_none", return_value=None):
             result = await bad_handler()
 
         data = json.loads(result)
@@ -188,6 +196,7 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_nonserializable_result_fails_closed_instead_of_returning_original(self):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         original = {"private": object()}
@@ -196,7 +205,7 @@ class TestTrackResponseSize:
         async def fake_handler():
             return original
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify_module, "_get_ctx_or_none", return_value=None):
             result = await fake_handler()
 
         assert result is not original
@@ -205,6 +214,7 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_response_log_failure_is_nonfatal_and_does_not_log_exception_path(self):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         response_log = MagicMock()
@@ -219,7 +229,7 @@ class TestTrackResponseSize:
             return "small"
 
         with (
-            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            patch.object(notify_module, "_get_ctx_or_none", return_value=ctx),
             structlog.testing.capture_logs() as logs,
         ):
             result = await fake_handler()
@@ -230,6 +240,7 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_notification_failure_is_nonfatal_and_does_not_log_exception_path(self):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         class FakeContext:
@@ -247,10 +258,11 @@ class TestTrackResponseSize:
             return "small"
 
         with (
-            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
+            patch.object(notify_module, "_get_ctx_or_none", return_value=ctx),
             patch("fastmcp.Context", FakeContext),
-            patch(
-                "autoskillit.server._notify._notify",
+            patch.object(
+                notify_module,
+                "_notify",
                 new=AsyncMock(side_effect=RuntimeError("/private/project/session.json")),
             ),
             structlog.testing.capture_logs() as logs,
@@ -263,6 +275,8 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_unexpected_enforcement_failure_is_bounded_and_centrally_emitted(self):
+        import autoskillit.server.response._response_budget as response_budget_module
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         tool_name = "/private/tool/" + "x" * 200
@@ -280,12 +294,13 @@ class TestTrackResponseSize:
             return "small"
 
         with (
-            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(notify_module, "_get_ctx_or_none", return_value=ctx),
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 side_effect=RuntimeError("/private/project/enforcement.log"),
             ),
-            patch("autoskillit.server.response._response_budget.logger.info") as log_info,
+            patch.object(response_budget_module.logger, "info") as log_info,
         ):
             result = await fake_handler()
 
@@ -300,6 +315,7 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_finalized_recipe_exact_response_commits_through_decorator(self):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         finalized, ledger = _finalized_recipe_response()
@@ -309,12 +325,14 @@ class TestTrackResponseSize:
             return finalized
 
         with (
-            patch(
-                "autoskillit.server._notify._get_ctx_or_none",
+            patch.object(
+                notify_module,
+                "_get_ctx_or_none",
                 return_value=_tracking_ctx(),
             ),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 return_value=finalized.rendered,
             ) as enforce,
         ):
@@ -335,6 +353,7 @@ class TestTrackResponseSize:
             new_kitchen_open_state,
             start_kitchen_effect,
         )
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
         from autoskillit.server.recipe._recipe_delivery import FinalizedRecipeResponse
 
@@ -366,9 +385,10 @@ class TestTrackResponseSize:
             return finalized
 
         with (
-            patch("autoskillit.server._notify._get_ctx_or_none", return_value=ctx),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(notify_module, "_get_ctx_or_none", return_value=ctx),
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 return_value=rendered,
             ),
         ):
@@ -389,6 +409,7 @@ class TestTrackResponseSize:
     )
     @pytest.mark.anyio
     async def test_finalized_recipe_transformation_aborts_through_decorator(self, enforced):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         finalized, ledger = _finalized_recipe_response()
@@ -398,12 +419,14 @@ class TestTrackResponseSize:
             return finalized
 
         with (
-            patch(
-                "autoskillit.server._notify._get_ctx_or_none",
+            patch.object(
+                notify_module,
+                "_get_ctx_or_none",
                 return_value=_tracking_ctx(),
             ),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 return_value=enforced,
             ),
         ):
@@ -415,6 +438,7 @@ class TestTrackResponseSize:
 
     @pytest.mark.anyio
     async def test_finalized_recipe_enforcement_failure_aborts_through_decorator(self):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
 
         finalized, ledger = _finalized_recipe_response()
@@ -425,16 +449,19 @@ class TestTrackResponseSize:
             return finalized
 
         with (
-            patch(
-                "autoskillit.server._notify._get_ctx_or_none",
+            patch.object(
+                notify_module,
+                "_get_ctx_or_none",
                 return_value=_tracking_ctx(),
             ),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 side_effect=RuntimeError("enforcement failed"),
             ),
-            patch(
-                "autoskillit.server._notify.bounded_response_budget_failure",
+            patch.object(
+                notify_module,
+                "bounded_response_budget_failure",
                 return_value=bounded,
             ),
         ):
@@ -449,11 +476,11 @@ class TestTrackResponseSize:
         [
             (
                 "section",
-                "autoskillit.server._notify.complete_section_response",
+                "complete_section_response",
             ),
             (
                 "initialization",
-                "autoskillit.server._notify.complete_initialization_response",
+                "complete_initialization_response",
             ),
         ],
     )
@@ -465,6 +492,7 @@ class TestTrackResponseSize:
         completion_target: str,
         enforced: str,
     ):
+        from autoskillit.server import _notify as notify_module
         from autoskillit.server._notify import track_response_size
         from autoskillit.server.recipe._recipe_initialization import (
             FinalizedRecipeInitializationResponse,
@@ -499,15 +527,17 @@ class TestTrackResponseSize:
             return finalized
 
         with (
-            patch(
-                "autoskillit.server._notify._get_ctx_or_none",
+            patch.object(
+                notify_module,
+                "_get_ctx_or_none",
                 return_value=_tracking_ctx(),
             ),
-            patch(
-                "autoskillit.server._notify.enforce_response_budget",
+            patch.object(
+                notify_module,
+                "enforce_response_budget",
                 return_value=enforced,
             ),
-            patch(completion_target, return_value=enforced) as complete,
+            patch.object(notify_module, completion_target, return_value=enforced) as complete,
         ):
             result = await fake_handler()
 

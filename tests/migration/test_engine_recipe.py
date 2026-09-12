@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.migration.adapters_recipe as _patch_migration_adapters_recipe
 from autoskillit.core.paths import pkg_root
 from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.engine import (
@@ -53,7 +54,8 @@ class TestRecipeMigrationAdapter:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         file = MigrationFile(
@@ -67,7 +69,8 @@ class TestRecipeMigrationAdapter:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [],
         )
         file = MigrationFile(
@@ -83,7 +86,8 @@ class TestRecipeMigrationAdapter:
         # current_version=None is treated as 0.0.0 by applicable_migrations;
         # we return a non-empty list to verify that None still causes needs_migration=True
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         file = MigrationFile(
@@ -108,7 +112,8 @@ class TestRecipeMigrationAdapter:
         temp_out.write_text("name: myrecipe\n# migrated\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(True))
@@ -195,7 +200,8 @@ class TestMigrateRecipesConstant:
         recipe_path.parent.mkdir(parents=True)
         recipe_path.write_text("name: myrecipe\n")
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_rh = AsyncMock(return_value=make_skill_result(False, "boom"))

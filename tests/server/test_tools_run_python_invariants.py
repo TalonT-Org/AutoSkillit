@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
 from autoskillit.server.lifecycle._guards import RECIPE_READ_DENY_TRIGGER
 from autoskillit.server.tools.tools_execution import run_python
 
@@ -36,21 +37,21 @@ class TestRecipeReadProhibitionCallable:
     @pytest.mark.anyio
     async def test_allows_cmd_rpc_callable(self, tool_ctx_kitchen_open, monkeypatch):
         mock = AsyncMock(return_value={"success": True, "result": "ok"})
-        monkeypatch.setattr("autoskillit.server.tools.tools_execution._import_and_call", mock)
+        monkeypatch.setattr(_patch_tools_tools_execution, "_import_and_call", mock)
         result = json.loads(await run_python(callable="autoskillit.recipe._cmd_rpc"))
         assert result["success"] is True
 
     @pytest.mark.anyio
     async def test_allows_cmd_rpc_batch_callable(self, tool_ctx_kitchen_open, monkeypatch):
         mock = AsyncMock(return_value={"success": True, "result": "ok"})
-        monkeypatch.setattr("autoskillit.server.tools.tools_execution._import_and_call", mock)
+        monkeypatch.setattr(_patch_tools_tools_execution, "_import_and_call", mock)
         result = json.loads(await run_python(callable="autoskillit.recipe._cmd_rpc_batch"))
         assert result["success"] is True
 
     @pytest.mark.anyio
     async def test_allows_non_recipe_callable(self, tool_ctx_kitchen_open, monkeypatch):
         mock = AsyncMock(return_value={"success": True, "result": "ok"})
-        monkeypatch.setattr("autoskillit.server.tools.tools_execution._import_and_call", mock)
+        monkeypatch.setattr(_patch_tools_tools_execution, "_import_and_call", mock)
         result = json.loads(await run_python(callable="autoskillit.core.paths.pkg_root"))
         assert result["success"] is True
 
@@ -58,6 +59,6 @@ class TestRecipeReadProhibitionCallable:
     async def test_allows_in_non_headless(self, tool_ctx_kitchen_open, monkeypatch):
         monkeypatch.delenv("AUTOSKILLIT_HEADLESS", raising=False)
         mock = AsyncMock(return_value={"success": True, "result": "ok"})
-        monkeypatch.setattr("autoskillit.server.tools.tools_execution._import_and_call", mock)
+        monkeypatch.setattr(_patch_tools_tools_execution, "_import_and_call", mock)
         result = json.loads(await run_python(callable="autoskillit.recipe.load_recipe"))
         assert result["success"] is True

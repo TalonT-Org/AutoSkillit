@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -78,8 +80,8 @@ def test_reload_session_falls_back_to_find_latest(
     # No kitchen marker — state dir is empty
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
-    with patch(
-        "autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value="fallback-id"
+    with patch.object(
+        _patch_tools_tools_kitchen, "find_latest_session_id", return_value="fallback-id"
     ):
         from autoskillit.server.tools.tools_kitchen import (
             _reload_session_handler as reload_session,
@@ -105,8 +107,8 @@ def test_reload_session_returns_exit_instruction(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
-    with patch(
-        "autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value="sess-exit"
+    with patch.object(
+        _patch_tools_tools_kitchen, "find_latest_session_id", return_value="sess-exit"
     ):
         from autoskillit.server.tools.tools_kitchen import (
             _reload_session_handler as reload_session,
@@ -129,7 +131,7 @@ def test_reload_session_raises_when_no_session_id(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
-    with patch("autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value=None):
+    with patch.object(_patch_tools_tools_kitchen, "find_latest_session_id", return_value=None):
         from autoskillit.server.tools.tools_kitchen import (
             _reload_session_handler as reload_session,
         )
@@ -150,8 +152,8 @@ async def test_reload_session_tool_wrapper_returns_str(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path / "empty"))
 
-    with patch(
-        "autoskillit.server.tools.tools_kitchen.find_latest_session_id", return_value="sess-wrap"
+    with patch.object(
+        _patch_tools_tools_kitchen, "find_latest_session_id", return_value="sess-wrap"
     ):
         from autoskillit.server.tools.tools_kitchen import reload_session
 

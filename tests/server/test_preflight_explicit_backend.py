@@ -60,6 +60,7 @@ class TestPreflightExplicitBackend:
         test keeps exercising its original fix-required-hook path (T6b).
         """
         from autoskillit.config.settings import ProvidersConfig
+        from autoskillit.server.tools import _preflight
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
         steps = {"step_a": _make_step("step_a")}
@@ -73,7 +74,7 @@ class TestPreflightExplicitBackend:
         backend.capabilities.anthropic_provider_capable = False
         backend.capabilities.applicable_guards = frozenset()
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             err = _check_dispatch_feasibility(
                 post_prune_step_names=["step_a"],
                 active_recipe_steps=cast(Any, steps),
@@ -91,6 +92,7 @@ class TestPreflightExplicitBackend:
         orchestrator-level fix_required_matchers check — with a synthetic
         fix-required hook, the claude-pinned step is skipped so preflight passes."""
         from autoskillit.config.settings import ProvidersConfig
+        from autoskillit.server.tools import _preflight
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
         steps = {"step_a": _make_step("step_a")}
@@ -104,7 +106,7 @@ class TestPreflightExplicitBackend:
         backend.capabilities.anthropic_provider_capable = False
         backend.capabilities.applicable_guards = frozenset({"some_guard"})
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             err = _check_dispatch_feasibility(
                 post_prune_step_names=["step_a"],
                 active_recipe_steps=cast(Any, steps),
@@ -120,6 +122,7 @@ class TestPreflightExplicitBackend:
         """A typo in the override backend name (unregistered) must not crash
         preflight — the step is silently excluded from feasibility."""
         from autoskillit.config.settings import ProvidersConfig
+        from autoskillit.server.tools import _preflight
         from autoskillit.server.tools._preflight import _check_dispatch_feasibility
 
         steps = {"step_a": _make_step("step_a")}
@@ -133,7 +136,7 @@ class TestPreflightExplicitBackend:
         backend.capabilities.anthropic_provider_capable = False
         backend.capabilities.applicable_guards = frozenset()
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             err = _check_dispatch_feasibility(
                 post_prune_step_names=["step_a"],
                 active_recipe_steps=cast(Any, steps),

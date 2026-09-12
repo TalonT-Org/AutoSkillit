@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.server.conftest import _make_mock_ctx
 
@@ -22,10 +23,8 @@ async def test_open_kitchen_enables_gate(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
@@ -77,8 +76,9 @@ def test_close_kitchen_continues_when_hook_config_removal_fails(tmp_path, monkey
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
         patch("autoskillit.server.logger") as logger,
-        patch(
-            "autoskillit.server.tools.tools_kitchen._hook_config_path",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "_hook_config_path",
             return_value=hook_cfg_path,
         ),
     ):
@@ -104,8 +104,9 @@ def test_close_kitchen_continues_when_overlay_removal_fails(tmp_path, monkeypatc
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
         patch("autoskillit.server.logger") as logger,
-        patch(
-            "autoskillit.server.tools.tools_kitchen.locked_overlay",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "locked_overlay",
             return_value=overlay_lock,
         ),
     ):
@@ -329,10 +330,8 @@ async def test_open_kitchen_inherits_campaign_id_from_env(tmp_path, monkeypatch)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
@@ -349,10 +348,8 @@ async def test_open_kitchen_generates_uuid_without_campaign_env(tmp_path, monkey
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
@@ -396,9 +393,7 @@ async def test_close_kitchen_drains_orphaned_github_api_entries(tmp_path, monkey
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen.resolve_log_dir", return_value=log_dir
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "resolve_log_dir", return_value=log_dir):
                 from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
 
                 _close_kitchen_handler()
@@ -426,15 +421,17 @@ async def test_open_kitchen_fail_closed_empty_content(monkeypatch, tmp_path):
     with (
         patch("autoskillit.server._get_ctx", return_value=ctx),
         patch("autoskillit.server.logger"),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "_apply_triage_gate",
             new=AsyncMock(return_value=_load_result),
         ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "_prime_quota_cache",
             new_callable=AsyncMock,
         ),
-        patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
+        patch.object(_patch_tools_tools_kitchen, "_write_hook_config"),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -463,15 +460,17 @@ async def test_open_kitchen_fail_closed_missing_content(monkeypatch, tmp_path):
     with (
         patch("autoskillit.server._get_ctx", return_value=ctx),
         patch("autoskillit.server.logger"),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "_apply_triage_gate",
             new=AsyncMock(return_value=_load_result),
         ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "_prime_quota_cache",
             new_callable=AsyncMock,
         ),
-        patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
+        patch.object(_patch_tools_tools_kitchen, "_write_hook_config"),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 

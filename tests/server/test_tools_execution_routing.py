@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.server as server
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -18,7 +20,7 @@ async def test_tools_execution_routes_through_executor(tool_ctx_kitchen_open, mo
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
     assert len(executor.calls) == 1
@@ -67,7 +69,7 @@ async def test_run_skill_preserves_execution_identity_in_response(
         )
     )
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     response = json.loads(await run_skill("/test skill", str(tmp_path)))
 
@@ -89,7 +91,7 @@ async def test_standalone_audit_uses_only_standalone_contract(
     materializer = MagicMock()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.audit_authority_materializer = materializer
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     response = json.loads(
         await run_skill(
@@ -120,7 +122,7 @@ async def test_run_skill_passes_validated_add_dirs(tool_ctx_kitchen_open, monkey
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
     # All add_dirs must be ValidatedAddDir instances
@@ -149,7 +151,7 @@ async def test_run_skill_materializes_exact_invocation(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -173,7 +175,7 @@ async def test_run_skill_materializes_resolved_dependency_closure(
     from tests.fakes import InMemoryHeadlessExecutor
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:investigate issue", "/tmp")
 
@@ -193,7 +195,7 @@ async def test_run_skill_result_includes_order_id_when_passed(
     from tests.fakes import InMemoryHeadlessExecutor
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result_json = await run_skill("/test skill", "/tmp", order_id="issue-185")
     data = _json.loads(result_json)
@@ -210,7 +212,7 @@ async def test_run_skill_result_order_id_empty_string_when_not_passed(
     from tests.fakes import InMemoryHeadlessExecutor
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result_json = await run_skill("/test skill", "/tmp")  # no order_id
     data = _json.loads(result_json)
@@ -231,7 +233,7 @@ async def test_run_skill_materializes_exact_resolver_closure(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:investigate the bug", "/tmp")
 
@@ -256,7 +258,7 @@ async def test_run_skill_without_injected_resolver_uses_default(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:investigate the bug", "/tmp")
 
@@ -279,7 +281,7 @@ async def test_run_skill_make_plan_passes_exact_retained_closure(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:make-plan refactor", "/tmp")
 
@@ -294,7 +296,7 @@ async def test_run_skill_passes_idle_output_timeout(tool_ctx_kitchen_open, monke
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp", idle_output_timeout=120)
     assert executor.calls[0].idle_output_timeout == 120.0  # int→float conversion
@@ -309,7 +311,7 @@ async def test_run_skill_idle_output_timeout_defaults_to_none(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
     assert executor.calls[0].idle_output_timeout is None
@@ -333,7 +335,7 @@ async def test_run_skill_passes_backend_to_projection_context(
     tool_ctx_kitchen_open.backend = fake_backend
 
     tool_ctx_kitchen_open.executor = InMemoryHeadlessExecutor()
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -365,7 +367,7 @@ class TestOutputDirParameter:
 
         executor = InMemoryHeadlessExecutor()
         tool_ctx_kitchen_open.executor = executor
-        monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+        monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
         output_dir = str(tmp_path / "output")
         await run_skill("/test skill", str(tmp_path), output_dir=output_dir)
@@ -383,11 +385,14 @@ async def test_run_skill_injects_provider_extras_when_feature_enabled(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("vertex", {"ANTHROPIC_API_KEY": "test-key-xyz"}),
     )
 
@@ -411,9 +416,9 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
 
     await run_skill("/autoskillit:probe", str(tmp_path))
 
@@ -431,11 +436,14 @@ async def test_run_skill_provider_extras_none_when_default_profile(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),
     )
 
@@ -464,7 +472,7 @@ async def test_run_skill_calls_cleanup_session_after_execution(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:test-skill", str(tmp_path))
 
@@ -489,7 +497,7 @@ async def test_run_skill_cleans_up_on_skill_md_not_found(
     mock_ssm.materialize_invocation.return_value = ValidatedAddDir(path=str(session_dir))
     mock_ssm.cleanup_session.side_effect = lambda sid: cleanup_calls.append(sid) or True
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/autoskillit:target-skill", str(tmp_path)))
 
@@ -514,7 +522,7 @@ async def test_run_skill_rejects_fabricated_skill_name(
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = None  # Skill not in any source
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/autoskillit:this-skill-does-not-exist", str(tmp_path)))
 
@@ -545,7 +553,7 @@ async def test_run_skill_empty_closure_not_expanded_to_unrestricted(
     mock_resolver = MagicMock()
     mock_resolver.resolve.return_value = MagicMock(source=MagicMock(value="bundled_extended"))
     tool_ctx_kitchen_open.skill_resolver = mock_resolver
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/autoskillit:some-skill", str(tmp_path)))
 
@@ -570,7 +578,7 @@ async def test_run_skill_cleans_up_on_materialization_failure(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/autoskillit:test-skill", str(tmp_path))
 
@@ -594,7 +602,7 @@ async def test_run_skill_succeeds_when_cleanup_session_raises(
     tool_ctx_kitchen_open.session_skill_manager = mock_ssm
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/autoskillit:test-skill", str(tmp_path)))
 
@@ -622,7 +630,7 @@ async def test_run_skill_passes_inspector_eligible_when_fleet_dispatch(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -647,7 +655,7 @@ async def test_run_skill_falls_back_to_static_inspector_in_fleet_dispatch(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -664,7 +672,7 @@ async def test_run_skill_no_inspector_outside_dispatch(tool_ctx_kitchen_open, mo
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     await run_skill("/test skill", "/tmp")
 
@@ -700,9 +708,10 @@ async def test_run_skill_exact_role_denial_precedes_all_downstream_work(
     tool_ctx_kitchen_open.token_log = token_log
     tool_ctx_kitchen_open.timing_log = timing_log
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._notify",
+        tools_execution,
+        "_notify",
         notify,
     )
 
@@ -757,8 +766,8 @@ async def test_invalid_orchestrator_root_rejects_before_all_downstream_work(
     tool_ctx_kitchen_open.skill_session_contract_store = contract_store
     tool_ctx_kitchen_open.audit = audit
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.server.tools.tools_execution._notify", notify)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(tools_execution, "_notify", notify)
 
     result = json.loads(await run_skill("/invalid-root", str(tmp_path)))
 
@@ -825,7 +834,7 @@ async def test_process_issues_l2_parent_executes_session_child_on_each_backend(
     tool_ctx_kitchen_open.backend = backend
     monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "orchestrator")
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result = json.loads(await run_skill("/test child", str(tmp_path)))
 
@@ -852,7 +861,7 @@ async def test_fresh_dispatch_without_injected_resolver_fails_before_writes(
     manager = MagicMock()
     tool_ctx_kitchen_open.session_skill_manager = manager
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
 
     result = await run_skill("/autoskillit:not-installed work", str(tmp_path))
 

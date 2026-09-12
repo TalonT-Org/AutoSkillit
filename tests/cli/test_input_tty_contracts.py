@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 # Files that are *allowed* to contain raw input() calls.
@@ -173,9 +175,7 @@ def test_cook_noninteractive_exits(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         "autoskillit.workspace.DefaultSessionSkillManager",
         lambda *args, **kwargs: manager,
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
-    )
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
     with pytest.raises(SystemExit) as exc_info:
         cook(backend=ClaudeCodeBackend())
     assert exc_info.value.code == 1

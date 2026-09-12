@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -84,7 +85,8 @@ class TestResumeWithoutPriorDispatchId:
             parse_error=None,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: mock_parsed,
         )
         monkeypatch.setattr(
@@ -361,7 +363,7 @@ class TestSessionChainAccumulatesAcrossResume:
         def _fake_classify(*args, **kwargs):
             return (DispatchStatus.SUCCESS, None)
 
-        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _fake_parse)
+        monkeypatch.setattr(fleet_api, "parse_l3_result_block", _fake_parse)
         monkeypatch.setattr("autoskillit.fleet.classify_dispatch_outcome", _fake_classify)
 
         result = await _run_dispatch(
@@ -439,7 +441,7 @@ class TestDispatchedSessionLogDirPopulated:
         def _fake_classify(*args, **kwargs):
             return (DispatchStatus.SUCCESS, None)
 
-        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _fake_parse)
+        monkeypatch.setattr(fleet_api, "parse_l3_result_block", _fake_parse)
         monkeypatch.setattr("autoskillit.fleet.classify_dispatch_outcome", _fake_classify)
 
         result = await _run_dispatch(
@@ -569,7 +571,7 @@ class TestProcessIdentityPreservation:
 
             return (DispatchStatus.SUCCESS, None)
 
-        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _fake_parse)
+        monkeypatch.setattr(fleet_api, "parse_l3_result_block", _fake_parse)
         monkeypatch.setattr("autoskillit.fleet.classify_dispatch_outcome", _fake_classify)
 
         monkeypatch.setattr(

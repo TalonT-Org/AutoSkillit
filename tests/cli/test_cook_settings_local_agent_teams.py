@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import atomic_write
@@ -106,7 +107,8 @@ def test_cook_against_populated_settings_local_json(
         monkeypatch, tmp_path, config=config, settings_content=settings_content
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: None,
     )
 

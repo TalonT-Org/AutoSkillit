@@ -296,6 +296,7 @@ class TestResumableToFailureEscalation:
         from unittest.mock import AsyncMock
 
         from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import _label_cleanup as label_cleanup
         from autoskillit.fleet.campaign_state.state import (
             upsert_dispatch_record_by_name,
             write_initial_state,
@@ -306,7 +307,8 @@ class TestResumableToFailureEscalation:
         )
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 

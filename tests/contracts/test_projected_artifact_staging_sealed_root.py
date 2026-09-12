@@ -26,6 +26,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.workspace._projected_artifact._generator_freshness as _freshness_module
 import autoskillit.workspace._projected_artifact.authority as authority
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.workspace import project_default_plugin_authority
@@ -64,7 +65,8 @@ def test_staging_reads_the_sealed_root_not_a_live_lookup(
         )
 
     monkeypatch.setattr(
-        "autoskillit.workspace._projected_artifact._generator_freshness.resolve_install_binding",
+        _freshness_module,
+        "resolve_install_binding",
         _poisoned,
     )
 

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_pr_ops as tools_pr_ops
 from autoskillit.core.types import (
     GitHubReviewComment,
     GitHubReviewPostResult,
@@ -79,8 +80,9 @@ def test_map_pr_view_reviews_empty() -> None:
 @pytest.mark.anyio
 async def test_close_issues_sequentially_all_succeed() -> None:
     """All gh calls return rc=0 → closed=[1,2], failed=[]."""
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
         with patch(
@@ -103,8 +105,9 @@ async def test_close_issues_sequentially_partial_failure() -> None:
         call_count["n"] += 1
         return (0, "", "") if n == 0 else (1, "", "not found")
 
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=_mock_subprocess,
     ):
         with patch(
@@ -125,8 +128,9 @@ async def test_close_issues_sequentially_partial_failure() -> None:
 @pytest.mark.anyio
 async def test_close_issues_sequentially_delays_between_calls() -> None:
     """Each gh issue close call is preceded by asyncio.sleep(1) after the first."""
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
         with patch(
@@ -162,8 +166,9 @@ async def test_get_pr_reviews_with_repo_success(
 ) -> None:
     """repo provided → gh api repos/{repo}/pulls/123/reviews path used."""
     api_response = json.dumps([{"user": {"login": "alice"}, "state": "APPROVED", "body": ""}])
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=AsyncMock(return_value=(0, api_response, "")),
     ):
         result = json.loads(await get_pr_reviews(123, "/tmp", repo="owner/repo"))
@@ -180,8 +185,9 @@ async def test_get_pr_reviews_without_repo_success(
     pr_view_response = json.dumps(
         {"reviews": [{"author": {"login": "bob"}, "state": "CHANGES_REQUESTED", "body": ""}]}
     )
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=AsyncMock(return_value=(0, pr_view_response, "")),
     ):
         result = json.loads(await get_pr_reviews(123, "/tmp", repo=""))
@@ -194,8 +200,9 @@ async def test_get_pr_reviews_gh_failure(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """gh returns rc=1 → {"success": False, "error": ...}."""
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=AsyncMock(return_value=(1, "", "repository not found")),
     ):
         result = json.loads(await get_pr_reviews(123, "/tmp", repo="owner/repo"))
@@ -218,8 +225,9 @@ async def test_bulk_close_issues_all_closed(
     tool_ctx_kitchen_open, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """All succeed → {"closed": [1, 2, 3], "failed": []}."""
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=AsyncMock(return_value=(0, "", "")),
     ):
         with patch(
@@ -244,8 +252,9 @@ async def test_bulk_close_issues_partial_failure(
         call_count["n"] += 1
         return (0, "", "") if n % 2 == 0 else (1, "", "error")
 
-    with patch(
-        "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+    with patch.object(
+        tools_pr_ops,
+        "_run_subprocess",
         new=_mock_subprocess,
     ):
         with patch(
@@ -288,11 +297,13 @@ async def test_post_pr_review_uses_injected_poster_with_exact_typed_request(
     get_ctx = Mock(return_value=tool_ctx)
     notify = AsyncMock()
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        tools_pr_ops,
+        "_get_ctx",
         get_ctx,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._notify",
+        tools_pr_ops,
+        "_notify",
         notify,
     )
     fastmcp_ctx = Mock()
@@ -368,11 +379,13 @@ async def test_post_pr_review_dry_run_is_delegated_without_gate(
     poster = _FakeReviewPoster(expected)
     monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        tools_pr_ops,
+        "_get_ctx",
         lambda: tool_ctx,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._notify",
+        tools_pr_ops,
+        "_notify",
         AsyncMock(),
     )
 
@@ -406,11 +419,13 @@ async def test_post_pr_review_missing_poster_returns_structured_error(
 ) -> None:
     monkeypatch.setattr(tool_ctx, "github_review_poster", None)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        tools_pr_ops,
+        "_get_ctx",
         lambda: tool_ctx,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._notify",
+        tools_pr_ops,
+        "_notify",
         AsyncMock(),
     )
 
@@ -446,11 +461,13 @@ async def test_post_pr_review_never_raises_when_poster_fails(
     poster.error = RuntimeError("poster exploded")
     monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        tools_pr_ops,
+        "_get_ctx",
         lambda: tool_ctx,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._notify",
+        tools_pr_ops,
+        "_notify",
         AsyncMock(),
     )
 
@@ -489,11 +506,13 @@ async def test_post_pr_review_never_raises_on_invalid_comment_shape(
     )
     monkeypatch.setattr(tool_ctx, "github_review_poster", poster)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._get_ctx",
+        tools_pr_ops,
+        "_get_ctx",
         lambda: tool_ctx,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_pr_ops._notify",
+        tools_pr_ops,
+        "_notify",
         AsyncMock(),
     )
 

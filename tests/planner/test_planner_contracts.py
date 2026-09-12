@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.planner.merge as _patch_planner_merge
+
 pytestmark = [pytest.mark.layer("planner"), pytest.mark.small, pytest.mark.feature("planner")]
 
 
@@ -19,7 +21,7 @@ def test_merge_files_does_not_use_atomic_write(
     from autoskillit.planner.merge import merge_files
 
     spy = MagicMock(side_effect=AssertionError("atomic_write must not be called"))
-    monkeypatch.setattr("autoskillit.planner.merge.write_versioned_json", spy)
+    monkeypatch.setattr(_patch_planner_merge, "write_versioned_json", spy)
 
     results_dir = tmp_path / "phases"
     results_dir.mkdir()
@@ -45,7 +47,7 @@ def test_replace_item_does_not_use_atomic_write(
     from autoskillit.planner.merge import replace_item
 
     spy = MagicMock(side_effect=AssertionError("atomic_write must not be called"))
-    monkeypatch.setattr("autoskillit.planner.merge.write_versioned_json", spy)
+    monkeypatch.setattr(_patch_planner_merge, "write_versioned_json", spy)
 
     src = tmp_path / "combined.json"
     src.write_text(json.dumps({"phases": [{"id": "P1", "name": "Old"}], "schema_version": 1}))

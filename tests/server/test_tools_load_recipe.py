@@ -45,14 +45,17 @@ async def test_load_recipe_rejects_skill_names_before_recipe_work(
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.find.return_value = object() if recipe_present else None
     mock_ctx.skill_resolver.resolve_effective.return_value = object()
+    from autoskillit.server.tools import tools_recipe
 
     with (
-        patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ),
-        patch(
-            "autoskillit.server.tools.tools_recipe._require_enabled",
+        patch.object(
+            tools_recipe,
+            "_require_enabled",
             return_value=None,
         ),
     ):
@@ -179,13 +182,15 @@ class TestLoadRecipeTools:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
+        from autoskillit.recipe import _api_orchestration
 
         with (
-            patch(
-                "autoskillit.recipe._api_orchestration.run_semantic_rules",
+            patch.object(
+                _api_orchestration,
+                "run_semantic_rules",
                 side_effect=ValueError("injected crash"),
             ),
-            patch("autoskillit.recipe._api_orchestration.logger") as mock_logger,
+            patch.object(_api_orchestration, "logger") as mock_logger,
         ):
             result = json.loads(await load_recipe(name="test"))
 

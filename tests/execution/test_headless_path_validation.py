@@ -5,6 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
+import autoskillit.execution.headless._headless_path_tokens as _path_tokens_module
 from autoskillit.core.types import (
     AgentSessionResult,
     ChannelConfirmation,
@@ -1240,7 +1242,8 @@ class TestHeadlessExecutorIdleOutputTimeout:
     @pytest.fixture(autouse=True)
     def _no_clone_guard(self, monkeypatch):
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            _patch_headless__headless_execute,
+            "is_git_main_checkout",
             lambda _: False,
         )
 
@@ -1417,7 +1420,8 @@ class TestContractNudge:
     @pytest.fixture(autouse=True)
     def _no_clone_guard(self, monkeypatch):
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            _patch_headless__headless_execute,
+            "is_git_main_checkout",
             lambda _: False,
         )
 
@@ -1863,7 +1867,8 @@ class TestEarlyStopRecovery:
     @pytest.fixture(autouse=True)
     def _no_clone_guard(self, monkeypatch):
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            _patch_headless__headless_execute,
+            "is_git_main_checkout",
             lambda _: False,
         )
 
@@ -1951,7 +1956,8 @@ class TestNudgeBackendGuard:
     @pytest.fixture(autouse=True)
     def _no_clone_guard(self, monkeypatch):
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            _patch_headless__headless_execute,
+            "is_git_main_checkout",
             lambda _: False,
         )
 
@@ -2529,7 +2535,8 @@ class TestOutputPathTokensScopedBySkillContract:
             }
         }
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_path_tokens.load_yaml",
+            _path_tokens_module,
+            "load_yaml",
             lambda _source: manifest,
         )
         by_skill, output_tokens, _recoverable = _build_path_token_registry()

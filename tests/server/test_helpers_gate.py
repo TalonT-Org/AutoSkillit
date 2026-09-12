@@ -7,6 +7,8 @@ import json
 
 import pytest
 
+import autoskillit.server.tools.tools_recipe as tools_recipe
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -170,7 +172,8 @@ async def test_recipe_section_helper_rejects_unknown_wire_contract(
         return json.dumps(response)
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_recipe.get_recipe_section",
+        tools_recipe,
+        "get_recipe_section",
         _page,
     )
     result = {
@@ -222,7 +225,8 @@ async def test_recipe_section_helper_rejects_invalid_page_sequences(
         return json.dumps(pages[part])
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_recipe.get_recipe_section",
+        tools_recipe,
+        "get_recipe_section",
         _page,
     )
     result = {

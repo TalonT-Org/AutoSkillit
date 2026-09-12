@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 import structlog.testing
 
+import autoskillit.cli.update._transaction as _patch_update__transaction
 from autoskillit.cli.install._install_contract import (
     InstallOutcome,
     InstallProcessStatus,
@@ -203,9 +204,10 @@ def _prepare(
     *,
     stub_git_checks: bool = True,
 ) -> None:
-    monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", _info)
+    monkeypatch.setattr(_patch_update__transaction, "detect_install", _info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.upgrade_command",
+        _patch_update__transaction,
+        "upgrade_command",
         lambda _info, **_kw: UpgradeCommand(
             argv=["uv", "tool", "upgrade", "autoskillit"],
             mutates_shared_root=True,
@@ -213,11 +215,13 @@ def _prepare(
     )
     if stub_git_checks:
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.is_git_worktree",
+            _patch_update__transaction,
+            "is_git_worktree",
             lambda _path: False,
         )
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.is_git_main_checkout",
+            _patch_update__transaction,
+            "is_git_main_checkout",
             lambda _path: False,
         )
     _stub_generation_verification(monkeypatch)
@@ -563,7 +567,8 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
     fake_entrypoint.write_text("#!/bin/sh\necho 9.9.9\n")
     fake_entrypoint.chmod(0o755)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.detect_install",
+        _patch_update__transaction,
+        "detect_install",
         lambda: InstallInfo(
             InstallType.GIT_VCS,
             "abc",
@@ -574,16 +579,15 @@ def test_default_fresh_version_prober_uses_resolved_autoskillit(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.upgrade_command",
+        _patch_update__transaction,
+        "upgrade_command",
         lambda _info, **_kw: UpgradeCommand(
             argv=["uv", "tool", "upgrade", "autoskillit"],
             mutates_shared_root=True,
         ),
     )
-    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
-    )
+    monkeypatch.setattr(_patch_update__transaction, "is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(_patch_update__transaction, "is_git_main_checkout", lambda _path: False)
     calls: list[tuple[list[str], dict[str, Any]]] = []
 
     def runner(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
@@ -637,13 +641,12 @@ def test_both_dev_installs_use_the_same_pinned_argv(
     transaction — this closes that gap.
     """
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.detect_install",
+        _patch_update__transaction,
+        "detect_install",
         lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
     )
-    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
-    )
+    monkeypatch.setattr(_patch_update__transaction, "is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(_patch_update__transaction, "is_git_main_checkout", lambda _path: False)
 
     calls: list[tuple[list[str], dict[str, Any]]] = []
 
@@ -718,13 +721,12 @@ def test_both_dev_installs_use_the_same_pinned_argv(
 
 def _prepare_dev_track_publication(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.detect_install",
+        _patch_update__transaction,
+        "detect_install",
         lambda: InstallInfo(InstallType.GIT_VCS, "abc123", "develop", "https://x", None),
     )
-    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
-    )
+    monkeypatch.setattr(_patch_update__transaction, "is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(_patch_update__transaction, "is_git_main_checkout", lambda _path: False)
 
 
 def _publication_runner(
@@ -767,12 +769,14 @@ def test_dev_track_post_pivot_publication_failures_are_terminal(
     _prepare_dev_track_publication(monkeypatch)
     if failure_point == "publication_error":
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.publish_install_root_generation",
+            _patch_update__transaction,
+            "publish_install_root_generation",
             lambda **_kwargs: (_ for _ in ()).throw(OSError("simulated publication failure")),
         )
     if failure_point == "shim_error":
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.write_entrypoint_shim",
+            _patch_update__transaction,
+            "write_entrypoint_shim",
             lambda _home: (_ for _ in ()).throw(OSError("simulated shim failure")),
         )
 
@@ -808,7 +812,8 @@ def test_dev_track_publication_infrastructure_fault_propagates(
 ) -> None:
     _prepare_dev_track_publication(monkeypatch)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        _patch_update__transaction,
+        "publish_install_root_generation",
         lambda **_kwargs: (_ for _ in ()).throw(
             InfrastructureFaultError("simulated infrastructure fault")
         ),
@@ -863,11 +868,13 @@ def test_dev_claudecode_defers_before_target_resolution(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.detect_install",
+        _patch_update__transaction,
+        "detect_install",
         _dev_info,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.resolve_target_identity",
+        _patch_update__transaction,
+        "resolve_target_identity",
         lambda _info, _home: (_ for _ in ()).throw(
             AssertionError("target resolution must remain after deferral")
         ),
@@ -1010,7 +1017,7 @@ def test_update_transaction_uses_channel_advance_criterion(
     expected_outcome: UpdateTransactionOutcome,
 ) -> None:
     _prepare(monkeypatch)
-    monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_update__transaction, "detect_install", lambda: info)
     is_branch = info.requested_revision == "develop"
 
     def fake_upgrade_command(
@@ -1035,19 +1042,23 @@ def test_update_transaction_uses_channel_advance_criterion(
         )
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.upgrade_command",
+        _patch_update__transaction,
+        "upgrade_command",
         fake_upgrade_command,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.resolve_target_identity",
+        _patch_update__transaction,
+        "resolve_target_identity",
         lambda _info, _home: None,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        _patch_update__transaction,
+        "publish_install_root_generation",
         lambda **_kwargs: None,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.write_entrypoint_shim",
+        _patch_update__transaction,
+        "write_entrypoint_shim",
         lambda _home: None,
     )
 
@@ -1522,7 +1533,8 @@ def test_git_contained_maintenance_cwd_fails_before_upgrade_and_is_removed(
 ) -> None:
     _prepare(monkeypatch)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout",
+        _patch_update__transaction,
+        "is_git_main_checkout",
         lambda _path: True,
     )
     calls: list[list[str]] = []
@@ -1884,19 +1896,22 @@ def test_no_obligation_for_failures_before_upgrade_subprocess(
 
     if failure_point == "unknown_install_type":
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.upgrade_command",
+            _patch_update__transaction,
+            "upgrade_command",
             lambda _info, **_kw: None,
         )
     elif failure_point == "claudecode_deferral":
         base_env["CLAUDECODE"] = "1"
     elif failure_point == "maintenance_context_failure":
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.build_maintenance_env",
+            _patch_update__transaction,
+            "build_maintenance_env",
             lambda *_a, **_kw: (_ for _ in ()).throw(ValueError("simulated env build failure")),
         )
     elif failure_point == "worktree_refusal":
         monkeypatch.setattr(
-            "autoskillit.cli.update._transaction.is_git_main_checkout",
+            _patch_update__transaction,
+            "is_git_main_checkout",
             lambda _path: True,
         )
 
@@ -1922,7 +1937,8 @@ def test_failing_obligation_write_aborts_before_upgrade_subprocess(
     _prepare(monkeypatch)
     _register_plugin(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.write_obligation",
+        _patch_update__transaction,
+        "write_obligation",
         lambda *_a, **_kw: (_ for _ in ()).throw(OSError("simulated disk full")),
     )
     calls: list[list[str]] = []

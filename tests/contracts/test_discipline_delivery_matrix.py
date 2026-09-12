@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit._llm_triage as _patch_autoskillit__llm_triage
 from autoskillit.core import (
     BUNDLED_EXPLORER_ROLES,
     CODEX_INTAKE_DISCIPLINE_DIGEST,
@@ -462,7 +463,7 @@ async def test_llm_triage_prompt_uses_projected_skill_document(
             pid=1,
         )
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", run)
     await triage_staleness(
         [
             StaleItem(

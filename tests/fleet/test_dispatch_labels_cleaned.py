@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
     _make_completed_clean,
@@ -63,7 +64,8 @@ class TestLabelsCleanedFieldPersistence:
 
         tool_ctx.executor.dispatch_food_truck = _return_failure
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -116,7 +118,8 @@ class TestLabelsCleanedFieldPersistence:
 
         tool_ctx.executor.dispatch_food_truck = _return_failure
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -134,7 +137,8 @@ class TestLabelsCleanedFieldPersistence:
         _setup_dispatch(tool_ctx, monkeypatch)
         tool_ctx.github_client = None
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(True),
         )
 
@@ -166,7 +170,8 @@ class TestLabelsCleanedFieldPersistence:
         )
         tool_ctx.executor = InMemoryHeadlessExecutor(default_result=failure_result)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -214,7 +219,8 @@ class TestLabelsCleanedFieldPersistence:
         # No sidecar is written — exercises the issue_url fallback path.
         tool_ctx.executor = InMemoryHeadlessExecutor(default_result=failure_result)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -262,7 +268,8 @@ class TestLabelsCleanedFieldPersistence:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(True),
         )
 

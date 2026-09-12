@@ -94,8 +94,8 @@ async def test_perform_merge_aborts_before_cleanup_on_poisoned_install(
     runner = MockSubprocessRunner()
     _queue_direct_merge_through_guard(runner, fake_wt)
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=_make_tester()
@@ -140,8 +140,8 @@ async def test_perform_merge_proceeds_normally_when_guard_returns_empty(
     runner = MockSubprocessRunner()
     _queue_direct_merge_through_guard(runner, fake_wt)
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt, "dev", config=AutomationConfig(), runner=runner, tester=_make_tester()
@@ -168,8 +168,8 @@ async def test_merge_surfaces_unverified_scan_reasons(
     runner = MockSubprocessRunner()
     _queue_direct_merge_through_guard(runner, str(tmp_path))
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             str(tmp_path),
@@ -201,8 +201,8 @@ async def test_merge_blocks_on_findings_regardless_of_unverified(
     runner = MockSubprocessRunner()
     _queue_direct_merge_through_guard(runner, str(tmp_path))
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             str(tmp_path),

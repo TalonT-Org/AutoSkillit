@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.fleet._label_cleanup as label_cleanup
 from autoskillit.fleet import DispatchStatus
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -58,7 +59,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -86,7 +88,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: True,
         )
 
@@ -115,7 +118,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet.campaign_state.state import mark_dispatch_running
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -151,7 +155,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet._label_cleanup import sweep_stale_dispatch_labels
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -185,7 +190,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -239,7 +245,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -293,7 +300,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -344,7 +352,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 
@@ -389,7 +398,8 @@ class TestStartupLabelRecoverySweep:
         from autoskillit.fleet.campaign_state.state import upsert_dispatch_record_by_name
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 

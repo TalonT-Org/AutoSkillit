@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.execution.backends.codex as _patch_backends_codex
 from autoskillit import cli
 from autoskillit.cli import _generate_config_yaml
 from autoskillit.core.io import load_yaml
+
+_app_module = importlib.import_module("autoskillit.cli.app")
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -74,7 +79,7 @@ class TestCLIInit:
     ) -> None:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        with patch("autoskillit.cli.app._prompt_test_command", return_value=["npm", "test"]):
+        with patch.object(_app_module, "_prompt_test_command", return_value=["npm", "test"]):
             cli.init()
         config_path = tmp_path / ".autoskillit" / "config.yaml"
         data = load_yaml(config_path)
@@ -215,7 +220,7 @@ class TestCLIInit:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+            _patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False
         )
         cli.init(scope="user", test_command="task test-all")
         claude_json = tmp_path / ".claude.json"
@@ -264,7 +269,7 @@ class TestCLIInit:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+            _patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False
         )
         cli.init(scope="user", test_command="task test-all")
         cli.init(scope="user", test_command="task test-all")
@@ -293,7 +298,7 @@ class TestCLIInit:
         monkeypatch.chdir(project_dir)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+            _patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False
         )
         cli.init(test_command="task test-all")
         # MCP server should be registered to user home, not project dir
@@ -338,7 +343,8 @@ class TestCodexInitFlow:
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND__BACKEND", raising=False)
         monkeypatch.setattr(
-            "autoskillit.execution.backends.codex._validate_global_codex_home",
+            _patch_backends_codex,
+            "_validate_global_codex_home",
             lambda *_args, **_kwargs: [],
         )
         cfg_dir = tmp_path / ".autoskillit"
@@ -976,9 +982,7 @@ def test_register_all_evicts_direct_entry_when_plugin_installed(
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: True
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: True)
     cli.init(scope="user", test_command="task test-all")
     data = json.loads(claude_json.read_text())
     assert "autoskillit" not in data.get("mcpServers", {})

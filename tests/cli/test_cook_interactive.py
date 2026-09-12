@@ -11,6 +11,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
+import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_picker as _patch_session__session_picker
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit import cli
 from autoskillit.core import (
     CODEX_RESERVED_HOME_ENV_VARS,
@@ -84,7 +91,8 @@ def _stub_plugin_artifact_authority(
         return authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR
 
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         choose,
     )
 
@@ -162,6 +170,8 @@ def _install_harness(
     returncode: int = 0,
     picked_session: str | None = None,
 ) -> dict[str, object]:
+    from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
+
     generated_home = tmp_path / "managed-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
@@ -222,24 +232,25 @@ def _install_harness(
         "autoskillit.workspace.DefaultSessionSkillManager",
         lambda *args, **kwargs: manager,
     )
+    monkeypatch.setattr(InstalledPluginsFile, "contains", lambda self, key: False)
     monkeypatch.setattr(
-        "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",
-        lambda self, key: False,
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run",
+        _patch_session__session_onboarding,
+        "is_first_run",
         lambda _project: first_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.run_onboarding_menu",
+        _patch_session__session_onboarding,
+        "run_onboarding_menu",
         lambda *args, **kwargs: onboarding_prompt,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.mark_onboarded",
+        _patch_session__session_onboarding,
+        "mark_onboarded",
         lambda project: events.append(("onboarded", project)),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.ui._timed_input.timed_prompt",
+        _patch_ui__timed_input,
+        "timed_prompt",
         lambda *args, **kwargs: confirm,
     )
     monkeypatch.setattr(
@@ -249,15 +260,18 @@ def _install_harness(
         ),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         run_attempt,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: None,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_picker.pick_session",
+        _patch_session__session_picker,
+        "pick_session",
         lambda *args, **kwargs: picked_session,
     )
     captured["generated_home"] = generated_home
@@ -417,20 +431,21 @@ def test_codex_cook_excludes_refused_compose_pr_roles(
     monkeypatch.setenv("MCP_CLIENT_BACKEND", "pre-test-backend")
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: str(codex_shim))
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _project: False)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _project: False
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.ui._timed_input.timed_prompt",
+        _patch_ui__timed_input,
+        "timed_prompt",
         lambda *args, **kwargs: "",
     )
     monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args: None)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         run_attempt,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: None,
     )
     monkeypatch.setattr(CodexBackend, "session_attempt_context", session_attempt_context)
@@ -504,7 +519,8 @@ def test_cook_uses_managed_home_for_final_child_context(
     authority = _CookAuthority(binding.plugin_dir)
     authority.acquire_launch_binding = lambda **_kwargs: binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -545,7 +561,8 @@ def test_cook_retains_projection_binding_when_launch_consumes_no_artifact(
 
     authority.acquire_launch_binding = acquire_binding  # type: ignore[method-assign]
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.NONE),
     )
 
@@ -666,7 +683,8 @@ def test_cook_resolves_default_backend(monkeypatch: pytest.MonkeyPatch, tmp_path
     _install_harness(monkeypatch, tmp_path)
     requested: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_backend.resolve_global_backend",
+        _patch_session__session_backend,
+        "resolve_global_backend",
         lambda name: requested.append(name) or backend,
     )
 
@@ -769,7 +787,8 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
     def run_once(answer: str) -> None:
         events.clear()
         monkeypatch.setattr(
-            "autoskillit.cli.ui._timed_input.timed_prompt",
+            _patch_ui__timed_input,
+            "timed_prompt",
             lambda *args, **kwargs: events.append(("confirm", answer)) or answer,
         )
         monkeypatch.setattr(
@@ -779,13 +798,15 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
             ),
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_process.run_cook_attempt",
+            _patch_session__session_process,
+            "run_cook_attempt",
             lambda *args, **kwargs: (
                 events.append(("run",)) or SimpleNamespace(pid=1, pgid=1, returncode=0)
             ),
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+            _patch_session__session_reload,
+            "consume_reload_sentinel",
             lambda _project: None,
         )
         cli.cook(backend=_Backend())
@@ -793,9 +814,7 @@ def test_cook_final_confirmation_precedes_registry_and_attempt(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda _name, **_kwargs: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
-    )
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )

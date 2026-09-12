@@ -23,6 +23,7 @@ from autoskillit.hooks._runtime._exploration_request_record import write_explora
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
 from autoskillit.server import _exploration_service
 from autoskillit.server._exploration_service import DefaultExplorationService
+from autoskillit.server.tools import tools_exploration
 from autoskillit.server.tools.tools_exploration import enable_exploration
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -30,7 +31,8 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 def _skill_session(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._resolve_session_type",
+        tools_exploration,
+        "_resolve_session_type",
         lambda: SessionType.SKILL,
     )
 
@@ -70,7 +72,8 @@ async def test_session_type_ineligible_returns_own_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._resolve_session_type",
+        tools_exploration,
+        "_resolve_session_type",
         lambda: SessionType.ORCHESTRATOR,
     )
     result = json.loads(await enable_exploration())
@@ -150,7 +153,8 @@ async def test_empty_resolved_session_id_surfaces_session_id_invalid_not_bind_fa
     _skill_session(monkeypatch)
     _bound_store(tool_ctx, exploration_snapshot_service)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._resolve_request_session",
+        tools_exploration,
+        "_resolve_request_session",
         MagicMock(return_value=""),
     )
 
@@ -297,7 +301,8 @@ async def test_unexpected_internal_error_returns_own_code(
     _skill_session(monkeypatch)
     assert isinstance(tool_ctx.exploration_context_store, OwnerBoundExplorationContextStore)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_exploration._resolve_request_session",
+        tools_exploration,
+        "_resolve_request_session",
         MagicMock(side_effect=RuntimeError("unclassified")),
     )
     result = json.loads(await enable_exploration())

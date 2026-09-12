@@ -16,6 +16,7 @@ import psutil
 import pytest
 import regex as re
 
+import autoskillit.execution.process._codex_orphans as _patch_process__codex_orphans
 from autoskillit.core import ProcessCleanupResult, read_boot_id, read_starttime_ticks
 from autoskillit.execution import (
     OrphanedCodexProcess,
@@ -386,7 +387,8 @@ def test_reap_reports_incomplete_on_survivors(_spawn_fake_codex, monkeypatch):
     logger = Mock()
     monkeypatch.setattr(codex_orphans, "logger", logger)
     monkeypatch.setattr(
-        "autoskillit.execution.process._codex_orphans.kill_process_tree",
+        _patch_process__codex_orphans,
+        "kill_process_tree",
         lambda pid, **kw: fake,
     )
 
@@ -411,7 +413,8 @@ def test_reap_reports_incomplete_when_observation_is_incomplete(_spawn_fake_code
     orphans = find_orphaned_codex_processes(process_name=name)
     assert len(orphans) == 1
     monkeypatch.setattr(
-        "autoskillit.execution.process._codex_orphans.kill_process_tree",
+        _patch_process__codex_orphans,
+        "kill_process_tree",
         lambda _pid, **_kwargs: ProcessCleanupResult(root_pid=orphans[0].pid),
     )
 

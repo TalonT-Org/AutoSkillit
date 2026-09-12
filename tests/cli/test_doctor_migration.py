@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.install._install_info as _patch_install__install_info
+import autoskillit.cli.update._update_checks_source as _patch_update__update_checks_source
+
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
 # ---------------------------------------------------------------------------
@@ -235,7 +238,8 @@ class TestDoctorSourceVersionDriftUsesNetwork:
 
         network_args: list[bool] = []
         monkeypatch.setattr(
-            "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+            _patch_update__update_checks_source,
+            "resolve_target_identity",
             lambda info, home, **kw: network_args.append(kw.get("network", True)) or None,
         )
 
@@ -269,7 +273,8 @@ class TestDoctorSourceVersionDriftUsesNetwork:
             lambda _name: fake_dist,
         )
         monkeypatch.setattr(
-            "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+            _patch_update__update_checks_source,
+            "resolve_target_identity",
             lambda info, home, **kw: None,
         )
 
@@ -335,9 +340,10 @@ def test_source_version_drift_remediation_contains_upgrade_command(
         url="https://github.com/TalonT-Org/AutoSkillit.git",
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda *a, **kw: ReleaseIdentity(ReleaseChannel.RELEASED, version="999.0.0"),
     )
     result = _check_source_version_drift(home=tmp_path)

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
 from autoskillit.cli._init_helpers import _is_plugin_installed
 from autoskillit.core import PreLaunchReadiness
 
@@ -66,20 +67,18 @@ class TestRegisterAllBackendKwarg:
         # _is_plugin_installed and is_git_worktree are already auto-patched by conftest.py
         mcp_calls: list[dict] = []
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._register_mcp_server",
+            _patch_cli__init_helpers,
+            "_register_mcp_server",
             lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: tmp_path / ".claude.json",
         )
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
-        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_prompt_github_repo", lambda: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda p: False)
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         (tmp_path / "pkg").mkdir()
@@ -157,20 +156,18 @@ class TestRegisterAllBackendDispatch:
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._register_mcp_server",
+            _patch_cli__init_helpers,
+            "_register_mcp_server",
             lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: tmp_path / ".claude.json",
         )
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
-        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_prompt_github_repo", lambda: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda p: False)
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         monkeypatch.setattr(
@@ -180,7 +177,8 @@ class TestRegisterAllBackendDispatch:
 
         # Override conftest's blanket patch on _is_plugin_installed to let real logic run
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed",
+            _patch_cli__init_helpers,
+            "_is_plugin_installed",
             lambda **kwargs: False,
         )
 
@@ -232,11 +230,13 @@ class TestRegisterAllBackendDispatch:
         claude_json_calls: list = []
         codex_calls, mcp_calls = self._setup_register_all(monkeypatch, tmp_path, "codex")
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: claude_json_calls.append("called") or (tmp_path / ".claude.json"),
         )
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.evict_direct_mcp_entry",
+            _patch_cli__init_helpers,
+            "evict_direct_mcp_entry",
             lambda p: claude_json_calls.append("evict") or False,
         )
         _register_all("user", tmp_path)
@@ -310,20 +310,18 @@ class TestRegisterAllCodexConfigTransaction:
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         mcp_calls: list[dict] = []
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._register_mcp_server",
+            _patch_cli__init_helpers,
+            "_register_mcp_server",
             lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: tmp_path / ".claude.json",
         )
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
-        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_prompt_github_repo", lambda: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda p: False)
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         monkeypatch.setattr(
@@ -332,7 +330,8 @@ class TestRegisterAllCodexConfigTransaction:
         )
 
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed",
+            _patch_cli__init_helpers,
+            "_is_plugin_installed",
             lambda **kwargs: False,
         )
 
@@ -415,9 +414,7 @@ class TestRegisterAllBackendBranching:
         monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
@@ -448,9 +445,7 @@ class TestRegisterAllBackendBranching:
         monkeypatch.setattr(_hooks_mod, "sweep_all_scopes_for_orphans", lambda p: None)
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
@@ -482,25 +477,24 @@ class TestRegisterAllBackendBranching:
         )
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed",
+            _patch_cli__init_helpers,
+            "_is_plugin_installed",
             lambda **kwargs: False,
         )
         mcp_calls: list[dict] = []
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._register_mcp_server",
+            _patch_cli__init_helpers,
+            "_register_mcp_server",
             lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: tmp_path / ".claude.json",
         )
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda p: False)
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
@@ -532,24 +526,22 @@ class TestRegisterAllCodexMcpRegistration:
         monkeypatch.setattr(_core_paths, "pkg_root", lambda: tmp_path / "pkg")
         mcp_calls: list[dict] = []
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._register_mcp_server",
+            _patch_cli__init_helpers,
+            "_register_mcp_server",
             lambda p, **kwargs: mcp_calls.append({"path": p, **kwargs}),
         )
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: tmp_path / ".claude.json",
         )
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
-        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda p: False
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_prompt_github_repo", lambda: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda p: False)
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
+            _patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False
         )
 
         mock_config = MagicMock()
@@ -617,23 +609,23 @@ class TestRegisterAllDualRegistration:
         (tmp_path / "pkg").mkdir(exist_ok=True)
 
         mcp_mock = MagicMock()
-        monkeypatch.setattr("autoskillit.cli._init_helpers._register_mcp_server", mcp_mock)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_register_mcp_server", mcp_mock)
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._user_claude_json_path",
+            _patch_cli__init_helpers,
+            "_user_claude_json_path",
             lambda: tmp_path / ".claude.json",
         )
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._create_secrets_template", lambda p: None
-        )
-        monkeypatch.setattr("autoskillit.cli._init_helpers._prompt_github_repo", lambda: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_create_secrets_template", lambda p: None)
+        monkeypatch.setattr(_patch_cli__init_helpers, "_prompt_github_repo", lambda: None)
 
         evict_mock = MagicMock(return_value=False)
-        monkeypatch.setattr("autoskillit.cli._init_helpers.evict_direct_mcp_entry", evict_mock)
+        monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", evict_mock)
 
         monkeypatch.setattr("sys.stdin", MagicMock(isatty=lambda: False))
         monkeypatch.setattr("autoskillit.core.ensure_project_temp", lambda p: tmp_path / "temp")
         monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed",
+            _patch_cli__init_helpers,
+            "_is_plugin_installed",
             lambda **kwargs: plugin_ok,
         )
 

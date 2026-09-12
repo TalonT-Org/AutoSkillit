@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.smoke_utils._investigation as _patch_smoke_utils__investigation
 from autoskillit.smoke_utils import (
     extract_investigation,
 )
@@ -31,7 +32,7 @@ _ISSUE_BODY_WITH_INVESTIGATION = (
 )
 
 
-@patch("autoskillit.smoke_utils._investigation.run_gh")
+@patch.object(_patch_smoke_utils__investigation, "run_gh")
 def test_extract_investigation_full_content(mock_run_gh, tmp_path: Path) -> None:
     """Extraction must retain all ## subsections inside ## Investigation."""
 
@@ -91,7 +92,7 @@ def test_extract_investigation_passthrough_truncated_raises(tmp_path: Path) -> N
         )
 
 
-@patch("autoskillit.smoke_utils._investigation.run_gh")
+@patch.object(_patch_smoke_utils__investigation, "run_gh")
 def test_extract_investigation_no_section_raises(mock_run_gh, tmp_path: Path) -> None:
     """When issue body has no ## Investigation section, callable raises."""
 
@@ -106,7 +107,7 @@ def test_extract_investigation_no_section_raises(mock_run_gh, tmp_path: Path) ->
         )
 
 
-@patch("autoskillit.smoke_utils._investigation.run_gh")
+@patch.object(_patch_smoke_utils__investigation, "run_gh")
 def test_extract_investigation_empty_body_raises(mock_run_gh, tmp_path: Path) -> None:
     """When neither the section nor the body carries any ## subsection, callable raises."""
 
@@ -121,7 +122,7 @@ def test_extract_investigation_empty_body_raises(mock_run_gh, tmp_path: Path) ->
         )
 
 
-@patch("autoskillit.smoke_utils._investigation.run_gh")
+@patch.object(_patch_smoke_utils__investigation, "run_gh")
 def test_extract_investigation_attestation_section_falls_back_to_body(
     mock_run_gh, tmp_path: Path
 ) -> None:
@@ -157,7 +158,7 @@ def test_extract_investigation_attestation_section_falls_back_to_body(
     assert "## Problem" in written
 
 
-@patch("autoskillit.smoke_utils._investigation.run_gh")
+@patch.object(_patch_smoke_utils__investigation, "run_gh")
 def test_extract_investigation_gh_failure_raises(mock_run_gh, tmp_path: Path) -> None:
     """When gh issue view fails, callable raises ValueError."""
 
@@ -170,7 +171,7 @@ def test_extract_investigation_gh_failure_raises(mock_run_gh, tmp_path: Path) ->
         )
 
 
-@patch("autoskillit.smoke_utils._investigation.run_gh")
+@patch.object(_patch_smoke_utils__investigation, "run_gh")
 def test_extract_investigation_ignores_h3_investigation_decoy(mock_run_gh, tmp_path: Path) -> None:
     """A decoy '### Investigation' subsection must not be mistaken for the real heading."""
 

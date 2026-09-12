@@ -6,7 +6,7 @@ the DispatchRejected message must include a '+N more errors' indicator.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -34,21 +34,20 @@ async def test_fleet_dispatch_surfaces_plus_n_more_for_combined_overflow(tool_ct
         "suggestions": _make_suggestions(5),
     }
 
-    with patch("autoskillit.fleet._api.execute_dispatch", new_callable=AsyncMock):
-        from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
+    from autoskillit.fleet._api import _run_dispatch
+    from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
 
-        result = await _run_dispatch(
-            tool_ctx=tool_ctx,
-            recipe="test-recipe",
-            task="test task",
-            ingredients={},
-            dispatch_name=None,
-            timeout_sec=None,
-            prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
-            quota_refresher=_noop_quota_refresher,
-        )
+    result = await _run_dispatch(
+        tool_ctx=tool_ctx,
+        recipe="test-recipe",
+        task="test task",
+        ingredients={},
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=lambda **kw: "prompt",
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
 
     assert isinstance(result.outcome, DispatchRejected)
     assert "+4 more errors" in result.outcome.message, (
@@ -68,21 +67,20 @@ async def test_fleet_dispatch_no_indicator_at_exactly_six(tool_ctx):
         "suggestions": _make_suggestions(3),
     }
 
-    with patch("autoskillit.fleet._api.execute_dispatch", new_callable=AsyncMock):
-        from autoskillit.fleet._api import _run_dispatch
-        from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
+    from autoskillit.fleet._api import _run_dispatch
+    from autoskillit.fleet.campaign_state.state_outcomes import DispatchRejected
 
-        result = await _run_dispatch(
-            tool_ctx=tool_ctx,
-            recipe="test-recipe",
-            task="test task",
-            ingredients={},
-            dispatch_name=None,
-            timeout_sec=None,
-            prompt_builder=lambda **kw: "prompt",
-            quota_checker=_no_sleep_quota_checker,
-            quota_refresher=_noop_quota_refresher,
-        )
+    result = await _run_dispatch(
+        tool_ctx=tool_ctx,
+        recipe="test-recipe",
+        task="test task",
+        ingredients={},
+        dispatch_name=None,
+        timeout_sec=None,
+        prompt_builder=lambda **kw: "prompt",
+        quota_checker=_no_sleep_quota_checker,
+        quota_refresher=_noop_quota_refresher,
+    )
 
     assert isinstance(result.outcome, DispatchRejected)
     assert "more errors" not in result.outcome.message, (

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import structlog.testing
 
+import autoskillit.fleet._api as fleet_api
 from tests.fleet._helpers import (
     _make_no_sentinel,
     _mock_backend_with_locator,
@@ -84,7 +85,8 @@ class TestResumeJSONLPreflight:
             project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -152,7 +154,8 @@ class TestResumeJSONLPreflight:
             session_log_path_side_effect=_mock_session_log_path,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -203,7 +206,8 @@ class TestSessionChainContinuity:
             project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -297,7 +301,8 @@ class TestResumeSuccessGuard:
             project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -351,7 +356,8 @@ class TestResumeSuccessGuard:
             project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -396,7 +402,8 @@ class TestResumeSuccessGuard:
             project_log_dir=tmp_path, session_log_path=jsonl_file
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 

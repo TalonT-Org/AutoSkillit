@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli.update._update_checks_fetch as _patch_update__update_checks_fetch
 from autoskillit.cli.update._update_checks_fetch import (
     _fetch_with_cache,
 )
@@ -393,8 +394,8 @@ def test_fetch_latest_version_routes_by_target(
             return {"content": content}
         return {"tag_name": "v0.9.300"}
 
-    with patch(
-        "autoskillit.cli.update._update_checks_fetch._fetch_with_cache", side_effect=_mock_fetch
+    with patch.object(
+        _patch_update__update_checks_fetch, "_fetch_with_cache", side_effect=_mock_fetch
     ):
         result = _fetch_latest_version(target, tmp_path)
 

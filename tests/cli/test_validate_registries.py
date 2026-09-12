@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._validate as _patch_cli__validate
 from autoskillit.cli._validate import validate_registries
 from autoskillit.recipe import ExperimentTypeSpec
 
@@ -75,7 +76,8 @@ class TestValidateRegistries:
     def _mock_lens_slugs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Patch lens slug resolution to return a known set."""
         monkeypatch.setattr(
-            "autoskillit.cli._validate._get_valid_lens_slugs",
+            _patch_cli__validate,
+            "_get_valid_lens_slugs",
             lambda: {
                 "exp-lens-estimand-clarity",
                 "exp-lens-error-budget",
@@ -87,7 +89,8 @@ class TestValidateRegistries:
     def _mock_bundled_types(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Patch bundled types loading to return empty dict."""
         monkeypatch.setattr(
-            "autoskillit.cli._validate.load_types_from_dir",
+            _patch_cli__validate,
+            "load_types_from_dir",
             lambda _: {},
         )
 
@@ -449,7 +452,8 @@ class TestValidateRegistries:
             is_fallback=True,
         )
         monkeypatch.setattr(
-            "autoskillit.cli._validate.load_types_from_dir",
+            _patch_cli__validate,
+            "load_types_from_dir",
             lambda _: {"bundled-fallback-type": bundled_fallback},
         )
 

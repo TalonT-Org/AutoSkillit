@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.ui._terminal as _patch_ui__terminal
 from autoskillit.cli.session._session_launch import _run_interactive_session
 from autoskillit.core import (
     AUTOSKILLIT_ATTESTED_META_SUPPORT,
@@ -58,11 +61,13 @@ def cold_launch(
     monkeypatch.setattr(subprocess, "run", capture_run)
     monkeypatch.setattr(subprocess, "Popen", capture_final_spawn)
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (None, PluginLoadMode.NONE),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.ui._terminal.terminal_guard",
+        _patch_ui__terminal,
+        "terminal_guard",
         nullcontext,
     )
     return shim, captured
@@ -154,7 +159,8 @@ def test_unmanaged_launch_rejects_executable_drift_before_spawn(
     shim, captured = cold_launch
     _write_claude_shim(shim, "2.1.220")
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch.executable_binding_matches_current_file",
+        _patch_session__session_launch,
+        "executable_binding_matches_current_file",
         lambda _binding: False,
     )
 

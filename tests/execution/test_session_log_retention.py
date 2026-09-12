@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from structlog.testing import capture_logs
 
+import autoskillit.execution.evidence._session_log_recovery as session_log_recovery
 import autoskillit.execution.evidence._session_retention as session_retention
 from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
 from autoskillit.execution.evidence._session_retention import apply_session_retention
@@ -443,7 +444,8 @@ def test_recover_crashed_sessions_skips_file_without_enrollment(tmp_path):
 def test_recover_crashed_sessions_skips_wrong_boot_id(tmp_path, monkeypatch):
     """An enrollment sidecar with a different boot_id must be rejected."""
     monkeypatch.setattr(
-        "autoskillit.execution.evidence._session_log_recovery.read_boot_id",
+        session_log_recovery,
+        "read_boot_id",
         lambda: "current-boot-id",
     )
     tmpfs = tmp_path / "shm"
@@ -499,9 +501,7 @@ def test_recover_crashed_sessions_removes_permanently_corrupt_enrolled_trace_onc
     def record_flush(**kwargs: object) -> None:
         flush_calls.append(kwargs)
 
-    monkeypatch.setattr(
-        "autoskillit.execution.evidence._session_log_recovery.flush_session_log", record_flush
-    )
+    monkeypatch.setattr(session_log_recovery, "flush_session_log", record_flush)
 
     target = (
         "src/autoskillit/execution/evidence/_session_log_recovery.py",
@@ -550,9 +550,7 @@ def test_recover_crashed_sessions_keeps_trace_after_transient_flush_failure(
         flush_attempts += 1
         raise RuntimeError("temporary output failure")
 
-    monkeypatch.setattr(
-        "autoskillit.execution.evidence._session_log_recovery.flush_session_log", fail_flush
-    )
+    monkeypatch.setattr(session_log_recovery, "flush_session_log", fail_flush)
 
     with capture_logs() as logs:
         assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 0
@@ -589,9 +587,7 @@ def test_recover_crashed_sessions_flushes_valid_trace_once(
     def record_flush(**kwargs: object) -> None:
         flush_calls.append(kwargs)
 
-    monkeypatch.setattr(
-        "autoskillit.execution.evidence._session_log_recovery.flush_session_log", record_flush
-    )
+    monkeypatch.setattr(session_log_recovery, "flush_session_log", record_flush)
 
     assert recover_crashed_sessions(tmpfs_path=str(tmpfs), log_dir=str(tmp_path / "logs")) == 1
     assert len(flush_calls) == 1

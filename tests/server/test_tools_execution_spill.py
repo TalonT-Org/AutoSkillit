@@ -16,6 +16,7 @@ from autoskillit.core import CapturedStream, SubprocessResult, TerminationReason
 from autoskillit.execution.process import CaptureReadError, CaptureSetupError, summarize_capture
 from autoskillit.server.response._response_budget import RESPONSE_SPILL_METADATA_KEY
 from autoskillit.server.tools import _execution_helpers as execution_helpers
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_cmd, run_python, run_skill
 from tests.conftest import _make_result
 
@@ -59,8 +60,9 @@ async def test_run_cmd_spills_large_stdout_under_calling_project(tool_ctx_kitche
     async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
         return _write_capture_result(capture_dir, stdout=stdout)
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -107,8 +109,9 @@ async def test_run_cmd_equal_length_post_summary_mutation_bridge(
         "_process_capture_stream",
         _mutate_then_promote,
     )
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -150,8 +153,9 @@ async def test_run_cmd_resolves_absolute_cwd_only_for_spill_anchor(
         )
     )
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=subprocess,
     ):
         data = json.loads(await run_cmd("bounded-command", str(project_link)))
@@ -171,8 +175,9 @@ async def test_run_cmd_empty_or_relative_cwd_uses_injected_temp_dir(tool_ctx_kit
     async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
         return _write_capture_result(capture_dir, stdout=stdout)
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", cwd))
@@ -187,8 +192,9 @@ async def test_run_cmd_small_output_shape_is_unchanged(tool_ctx_kitchen_open, tm
     async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
         return _write_capture_result(capture_dir, stdout="small")
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         raw = await run_cmd("bounded-command", str(tmp_path))
@@ -199,8 +205,9 @@ async def test_run_cmd_small_output_shape_is_unchanged(tool_ctx_kitchen_open, tm
 @pytest.mark.anyio
 async def test_run_python_preserves_routing_keys_and_full_json(tool_ctx_kitchen_open, tmp_path):
     result = {"success": True, "verdict": "GO", "payload": "x" * 10_000}
-    with patch(
-        "autoskillit.server.tools.tools_execution._import_and_call",
+    with patch.object(
+        tools_execution,
+        "_import_and_call",
         new=AsyncMock(return_value=result),
     ):
         data = json.loads(await run_python("package.module.callable", work_dir=str(tmp_path)))
@@ -214,8 +221,9 @@ async def test_run_python_preserves_routing_keys_and_full_json(tool_ctx_kitchen_
 @pytest.mark.anyio
 async def test_run_python_small_dict_is_byte_identical(tool_ctx_kitchen_open, tmp_path):
     result = {"success": True, "verdict": "GO"}
-    with patch(
-        "autoskillit.server.tools.tools_execution._import_and_call",
+    with patch.object(
+        tools_execution,
+        "_import_and_call",
         new=AsyncMock(return_value=result),
     ):
         raw = await run_python("package.module.callable", work_dir=str(tmp_path))
@@ -386,11 +394,13 @@ async def test_run_cmd_capture_read_failure_is_fail_stop(
         raise CaptureReadError(errno.EIO, "test read error")
 
     monkeypatch.setattr(
-        "autoskillit.server.tools._execution_helpers.summarize_capture",
+        execution_helpers,
+        "summarize_capture",
         _raise_read_error,
     )
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -409,8 +419,9 @@ async def test_run_cmd_capture_setup_failure_is_fail_stop(tool_ctx_kitchen_open,
     subprocess = AsyncMock(
         side_effect=CaptureSetupError("Cannot create capture directory: not a directory")
     )
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=subprocess,
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -437,8 +448,9 @@ async def test_run_cmd_timeout_promotes_partial_capture(tool_ctx_kitchen_open, t
             stderr_path=result.stderr_path,
         )
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -458,18 +470,18 @@ async def test_run_cmd_never_materializes_full_output(
     def _raise_read_temp_output(stdout_path, stderr_path):
         raise RuntimeError("read_temp_output must not be called on the capture path")
 
-    monkeypatch.setattr(
-        "autoskillit.execution.process._process_io.read_temp_output",
-        _raise_read_temp_output,
-    )
+    from autoskillit.execution.process import _process_io
+
+    monkeypatch.setattr(_process_io, "read_temp_output", _raise_read_temp_output)
     stdout = "head-sentinel\n" + ("x" * 50_000) + "\ntail-sentinel"
     capture_dir = tmp_path / ".autoskillit" / "temp" / "run_cmd"
 
     async def _fake_captured(cmd, *, cwd, timeout, env=None, capture_dir=capture_dir):
         return _write_capture_result(capture_dir, stdout=stdout)
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -499,11 +511,13 @@ async def test_run_cmd_partial_capture_error_leaves_no_orphan(
         return real_summarize(path, spec, complete=complete)
 
     monkeypatch.setattr(
-        "autoskillit.server.tools._execution_helpers.summarize_capture",
+        execution_helpers,
+        "summarize_capture",
         _fail_stderr_only,
     )
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))
@@ -535,8 +549,9 @@ async def test_run_cmd_signal_death_marks_incomplete(tool_ctx_kitchen_open, tmp_
             stderr_path=result.stderr_path,
         )
 
-    with patch(
-        "autoskillit.server.tools.tools_execution._run_subprocess_captured",
+    with patch.object(
+        tools_execution,
+        "_run_subprocess_captured",
         new=AsyncMock(side_effect=_fake_captured),
     ):
         data = json.loads(await run_cmd("bounded-command", str(tmp_path)))

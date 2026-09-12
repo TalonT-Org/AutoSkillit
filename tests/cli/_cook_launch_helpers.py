@@ -8,6 +8,11 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
+import autoskillit.cli.session._session_cook as _patch_session__session_cook
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.config import AutomationConfig
 from autoskillit.core import CmdSpec, ManagedSessionHome, PluginLoadMode, ValidatedAddDir
 
@@ -99,18 +104,18 @@ def arrange_cook(
         lambda: config or AutomationConfig(),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.resolve_project_dir",
+        _patch_session__session_cook,
+        "resolve_project_dir",
         lambda: project_dir,
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _path: False
-    )
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *args, **kwargs: "")
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _path: False)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *args, **kwargs: "")
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (_Authority(plugin_dir), PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
     monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *args, **kwargs: None)
@@ -120,7 +125,8 @@ def arrange_cook(
         return SimpleNamespace(pid=1, pgid=1, returncode=0)
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         capture,
     )
     return captured

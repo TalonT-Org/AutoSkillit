@@ -238,14 +238,14 @@ def test_atomic_write_failure_surfaces_diagnostic_and_leaves_no_marker(
 
     The hook must NOT echo the raw tool_response; it must rewrite only its own diagnostic.
     """
+    import autoskillit.hooks.quota_guard_state_post_hook as hook_module
+
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
 
     def _raise(*_args, **_kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr(
-        "autoskillit.hooks.quota_guard_state_post_hook.write_quota_disable_marker", _raise
-    )
+    monkeypatch.setattr(hook_module, "write_quota_disable_marker", _raise)
 
     event = {
         "session_id": "session-aaa",

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.server as server
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -25,9 +27,9 @@ async def test_run_skill_provider_extras_none_when_feature_disabled(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
 
     captured: dict = {}
     original_run = executor.run
@@ -52,11 +54,14 @@ async def test_run_skill_provider_extras_none_for_anthropic_sentinel(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {"SOME_KEY": "val"}),
     )
 
@@ -83,11 +88,14 @@ async def test_run_skill_provider_extras_forwarded_for_non_anthropic(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
 
@@ -115,15 +123,19 @@ async def test_run_skill_model_as_profile_resolves_provider(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),
     )
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
+        _guards,
+        "_resolve_model_as_profile",
         lambda *a: ("M2.7", "minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
     )
 
@@ -152,16 +164,20 @@ async def test_run_skill_step_overrides_win_over_model_as_profile(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
     map_called = []
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
+        _guards,
+        "_resolve_model_as_profile",
         lambda *a: map_called.append(True) or ("", "", None),
     )
 
@@ -189,9 +205,9 @@ async def test_run_skill_model_as_profile_disabled_when_feature_off(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
 
     captured: dict = {}
     original_run = executor.run
@@ -216,15 +232,19 @@ async def test_run_skill_model_as_profile_no_anthropic_model_falls_through(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("anthropic", {}),
     )
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
+        _guards,
+        "_resolve_model_as_profile",
         lambda *a: ("", "", None),
     )
 
@@ -253,9 +273,9 @@ async def test_run_skill_model_overrides_applied(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.recipe_name = "implementation"
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"implement": "opus"}}
     )
@@ -284,9 +304,9 @@ async def test_run_skill_model_overrides_wildcard_step(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.recipe_name = "implementation"
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"*": "opus"}}
     )
@@ -315,9 +335,9 @@ async def test_run_skill_model_overrides_exact_over_wildcard(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.recipe_name = "implementation"
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"implement": "opus", "*": "haiku"}}
     )
@@ -346,9 +366,9 @@ async def test_run_skill_model_overrides_without_providers_feature(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.recipe_name = "implementation"
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"implement": "opus"}}
     )
@@ -377,9 +397,9 @@ async def test_run_skill_model_overrides_no_match_passthrough(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.recipe_name = "implementation"
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"remediation": {"implement": "opus"}}
     )
@@ -408,9 +428,9 @@ async def test_run_skill_global_override_beats_model_overrides(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.recipe_name = "implementation"
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"implement": "opus"}}
     )
@@ -440,9 +460,9 @@ async def test_run_skill_no_provider_profile_injected_for_default_step(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
 
     captured: dict = {}
     original_run = executor.run
@@ -475,11 +495,14 @@ async def test_anthropic_base_url_cannot_override_codex_backend_authority(
         ephemeral_root=tmp_path / "ephemeral-sessions",
         persistent_roots={"codex": tmp_path / "persistent-sessions"},
     )
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: (
             "bedrock",
             {
@@ -519,11 +542,14 @@ async def test_run_skill_backend_override_none_no_anthropic_base_url(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.capabilities.anthropic_provider_capable = True
     tool_ctx_kitchen_open.backend = fake_backend
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
     )
 
@@ -555,11 +581,14 @@ async def test_run_skill_backend_override_none_claude_code_backend(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.capabilities.anthropic_provider_capable = True
     tool_ctx_kitchen_open.backend = fake_backend
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: (
             "bedrock",
             {"ANTHROPIC_BASE_URL": "https://bedrock.us-east-1.amazonaws.com"},
@@ -594,9 +623,9 @@ async def test_run_skill_backend_override_none_providers_disabled(
     fake_backend = MagicMock(spec=CodingAgentBackend)
     fake_backend.capabilities.anthropic_provider_capable = False
     tool_ctx_kitchen_open.backend = fake_backend
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: False)
 
     captured: dict = {}
     original_run = executor.run
@@ -621,11 +650,14 @@ async def test_run_skill_forwards_provider_name_matching_profile(
 
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("minimax", {"BASE_URL": "https://api.minimax.chat/v1"}),
     )
 

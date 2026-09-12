@@ -7,10 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import psutil
 import pytest
 
+import autoskillit.core as core
 from autoskillit.config import AutomationConfig
 from autoskillit.hooks import _HOOK_CONFIG_PATH_COMPONENTS
 from autoskillit.server._factory import make_context
 from autoskillit.server.lifecycle import _state
+from autoskillit.server.tools import tools_kitchen
 from autoskillit.server.tools.tools_kitchen import (
     _close_kitchen_handler,
     _open_kitchen_handler,
@@ -38,9 +40,9 @@ async def test_kitchen_open_close_lifecycle(monkeypatch, tmp_path):
     hook_config_path = tmp_path.joinpath(*_HOOK_CONFIG_PATH_COMPONENTS)
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
+        patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(core, "register_active_kitchen"),
+        patch.object(core, "unregister_active_kitchen"),
     ):
         # initial state
         assert ctx.gate.enabled is False
@@ -83,19 +85,12 @@ async def test_kitchen_lifecycle_logs_registry_write_refusals(monkeypatch, tmp_p
     lifecycle_logger = MagicMock()
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._tracker_authority.register_active_kitchen",
-            return_value=False,
+        patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(
+            tools_kitchen._tracker_authority, "register_active_kitchen", return_value=False
         ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.unregister_active_kitchen",
-            return_value=False,
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._tracker_authority.logger",
-            lifecycle_logger,
-        ),
+        patch.object(tools_kitchen, "unregister_active_kitchen", return_value=False),
+        patch.object(tools_kitchen._tracker_authority, "logger", lifecycle_logger),
     ):
         assert await _open_kitchen_handler() is None
         kitchen_id = ctx.kitchen_id
@@ -135,17 +130,13 @@ async def test_open_kitchen_runs_reaper(monkeypatch, tmp_path):
     reaper_called = AsyncMock()
 
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_kitchen.discover_campaign_state_files",
-        lambda _project_dir: [fake_state_path],
+        tools_kitchen, "discover_campaign_state_files", lambda _project_dir: [fake_state_path]
     )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_kitchen.reap_stale_dispatches_async",
-        reaper_called,
-    )
+    monkeypatch.setattr(tools_kitchen, "reap_stale_dispatches_async", reaper_called)
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
+        patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(core, "register_active_kitchen"),
     ):
         result = await _open_kitchen_handler()
         assert result is None
@@ -188,12 +179,9 @@ async def test_close_kitchen_preserves_peer_tracker_and_lease_sidecar(monkeypatc
     peer_lease_inode = peer_lease_path.stat().st_ino
     try:
         with (
-            patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
-                new_callable=AsyncMock,
-            ),
-            patch("autoskillit.core.register_active_kitchen"),
-            patch("autoskillit.core.unregister_active_kitchen"),
+            patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+            patch.object(core, "register_active_kitchen"),
+            patch.object(core, "unregister_active_kitchen"),
         ):
             await _open_kitchen_handler()
             current_target = TrackerAuthorityTarget.for_project(
@@ -236,9 +224,9 @@ async def test_back_to_back_open_close_open_resets_infrastructure(monkeypatch, t
     monkeypatch.setattr(_state, "_startup_ready", None)
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
+        patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(core, "register_active_kitchen"),
+        patch.object(core, "unregister_active_kitchen"),
     ):
         result1 = await _open_kitchen_handler()
         assert result1 is None
@@ -465,9 +453,9 @@ async def test_open_kitchen_sweeps_stale_kitchen_state_markers(monkeypatch, tmp_
     monkeypatch.setattr(_state, "_startup_ready", None)
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
+        patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(core, "register_active_kitchen"),
+        patch.object(core, "unregister_active_kitchen"),
     ):
         result = await _open_kitchen_handler()
         assert result is None
@@ -519,9 +507,9 @@ async def test_close_kitchen_retains_stable_lock_and_restores_config_baseline(
     monkeypatch.setattr(_state, "_startup_ready", None)
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
+        patch.object(tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(core, "register_active_kitchen"),
+        patch.object(core, "unregister_active_kitchen"),
     ):
         await _open_kitchen_handler()
 

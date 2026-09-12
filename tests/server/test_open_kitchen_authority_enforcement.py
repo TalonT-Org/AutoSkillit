@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.config.ingredient_defaults import SERVER_AUTHORITATIVE_INGREDIENTS
 from tests.server.conftest import _make_mock_ctx
 
@@ -41,17 +42,20 @@ async def test_open_kitchen_rejects_each_server_authoritative_ingredient(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-auth",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -78,17 +82,20 @@ async def test_open_kitchen_rejects_base_branch_override(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-auth",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -129,17 +136,20 @@ async def test_open_kitchen_still_accepts_non_authoritative_overrides(tmp_path, 
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-auth",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={"base_branch": "develop"},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -183,17 +193,20 @@ async def test_open_kitchen_authority_supersedes_type_validation(tmp_path, monke
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-auth",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -227,17 +240,20 @@ async def test_open_kitchen_no_snapshot_persisted_on_rejection(tmp_path, monkeyp
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-auth",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -272,17 +288,20 @@ async def test_open_kitchen_ingredients_only_rejects_authority_override(tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-auth",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -305,9 +324,11 @@ async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_op
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
+    from autoskillit.server.tools import tools_recipe
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
         result_str = await load_recipe(
@@ -328,9 +349,11 @@ async def test_load_recipe_ingredients_only_rejects_authority_override(tool_ctx_
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
+    from autoskillit.server.tools import tools_recipe
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
         result_str = await load_recipe(

@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.pipeline.gate import DefaultGateState
+from autoskillit.recipe import _api_listing
 from autoskillit.server.tools.tools_recipe import list_recipes
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -23,7 +24,7 @@ class TestListRecipeTools:
 
     # SS1
     @pytest.mark.anyio
-    @patch("autoskillit.recipe._api_listing.list_recipes")
+    @patch.object(_api_listing, "list_recipes")
     async def test_list_returns_json_object(self, mock_list):
         """list_recipes returns JSON object with scripts array."""
         from autoskillit.core.types import LoadResult, RecipeSource
@@ -69,7 +70,7 @@ class TestListRecipeTools:
 
     # SS4
     @pytest.mark.anyio
-    @patch("autoskillit.recipe._api_listing.list_recipes")
+    @patch.object(_api_listing, "list_recipes")
     async def test_list_reports_errors_in_response(self, mock_list):
         """list_recipes includes errors in JSON when recipes fail to parse."""
         from autoskillit.core.types import LoadReport, LoadResult
@@ -127,7 +128,7 @@ class TestListRecipeTools:
 
     # SS10
     @pytest.mark.anyio
-    @patch("autoskillit.recipe._api_listing.list_recipes")
+    @patch.object(_api_listing, "list_recipes")
     async def test_list_recipes_response_includes_source_field(self, mock_list):
         """list_recipes MCP response must include source field for each recipe entry."""
         from autoskillit.core.types import LoadResult, RecipeSource
@@ -189,7 +190,7 @@ async def test_list_recipes_mcp_includes_builtin_campaigns(tool_ctx_kitchen_open
     from autoskillit.core.types import LoadResult, RecipeSource
     from autoskillit.recipe.schema import RecipeInfo, RecipeKind
 
-    with patch("autoskillit.recipe._api_listing.list_recipes") as mock_list:
+    with patch.object(_api_listing, "list_recipes") as mock_list:
         mock_list.return_value = LoadResult(
             items=[
                 RecipeInfo(

@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+
 
 @pytest.fixture
 def launch_kwargs() -> dict[str, object]:
@@ -45,9 +47,7 @@ def _patch_worktree_guard_for_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(_core_paths, "is_git_worktree", lambda path: False)
     monkeypatch.setattr(_mkt_mod, "is_git_worktree", lambda path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False)
 
 
 @pytest.fixture(autouse=True)

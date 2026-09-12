@@ -11,6 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.session._session_backend as _patch_session__session_backend
+import autoskillit.cli.session._session_order as _patch_session__session_order
+import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags, PreLaunchReadiness
 from tests.cli._interactive_process import InteractiveProcessStub, configure_popen
@@ -29,7 +33,8 @@ class TestCLIOrderCommand:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._preview.show_cook_preview",
+            _patch_cli__preview,
+            "show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -192,8 +197,9 @@ class TestCLIOrderCommand:
                 ),
             )
 
-        with patch(
-            "autoskillit.cli.session._session_order.compile_session_skill_catalog",
+        with patch.object(
+            _patch_session__session_order,
+            "compile_session_skill_catalog",
             side_effect=compile_with_refusal,
         ):
             cli.order("test-script")
@@ -512,7 +518,8 @@ class TestCLIOrderCommand:
         mock_config.workspace.temp_dir = ".autoskillit/temp"
         monkeypatch.setattr("autoskillit.config.load_config", lambda *_a, **_kw: mock_config)
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_backend.resolve_global_backend",
+            _patch_session__session_backend,
+            "resolve_global_backend",
             lambda name: _real_get_backend(name),
         )
 
@@ -557,7 +564,8 @@ class TestCLIOrderCommand:
             return type("R", (), {"returncode": 0})()
 
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_process.run_cook_attempt",
+            _patch_session__session_process,
+            "run_cook_attempt",
             fake_cook_attempt,
         )
 

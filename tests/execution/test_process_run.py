@@ -20,6 +20,7 @@ import anyio
 import psutil
 import pytest
 
+import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
 from autoskillit.core.types import TerminationReason
 from autoskillit.execution.process import (
     _normalize_pass_fds,
@@ -471,7 +472,8 @@ class TestIdleStallWatchdog:
         )
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             lambda pid: True,
         )
 

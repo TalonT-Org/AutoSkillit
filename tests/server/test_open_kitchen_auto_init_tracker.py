@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from tests.server._helpers import (
     _install_active_recipe_projection,
     _make_finalized_projection_from_recipe_steps,
@@ -64,9 +65,7 @@ class TestOpenKitchenAutoInitTracker:
         def _raise(*_args):
             raise RuntimeError("initialization failed")
 
-        monkeypatch.setattr(
-            "autoskillit.server.tools.tools_kitchen.initialize_kitchen_tracker", _raise
-        )
+        monkeypatch.setattr(_patch_tools_tools_kitchen, "initialize_kitchen_tracker", _raise)
 
         with pytest.raises(RuntimeError, match="initialization failed"):
             _auto_init_pipeline_tracker(ctx)

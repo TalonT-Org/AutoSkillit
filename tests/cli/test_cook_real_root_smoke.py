@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import CmdSpec
@@ -105,7 +106,8 @@ def test_cook_real_root_settings_local_json_composition(
     "exactly one non-skipped test" mirrors test_claude_explorer_live_gate.py.
     """
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: None,
     )
 

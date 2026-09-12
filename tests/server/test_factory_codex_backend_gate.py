@@ -7,6 +7,7 @@ import pytest
 from autoskillit.config import AutomationConfig
 from autoskillit.core import is_feature_enabled
 from autoskillit.core.types import SubprocessResult, TerminationReason
+from autoskillit.server import _factory
 from autoskillit.server._factory import make_context
 from tests.fakes import MockSubprocessRunner
 
@@ -30,7 +31,8 @@ def _runner() -> MockSubprocessRunner:
 def test_codex_backend_not_instantiated_when_disabled(monkeypatch, tmp_path):
     """When codex_backend feature is disabled, CodexBackend is not the ctx.backend."""
     monkeypatch.setattr(
-        "autoskillit.server._factory.is_feature_enabled",
+        _factory,
+        "is_feature_enabled",
         lambda name, *a, **kw: (
             False if name == "codex_backend" else is_feature_enabled(name, *a, **kw)
         ),
@@ -44,7 +46,8 @@ def test_codex_backend_not_instantiated_when_disabled(monkeypatch, tmp_path):
 def test_codex_backend_instantiated_when_enabled(monkeypatch, tmp_path):
     """When codex_backend is enabled and config backend is codex, ctx.backend is CodexBackend."""
     monkeypatch.setattr(
-        "autoskillit.server._factory.is_feature_enabled",
+        _factory,
+        "is_feature_enabled",
         lambda name, *a, **kw: (
             True if name == "codex_backend" else is_feature_enabled(name, *a, **kw)
         ),

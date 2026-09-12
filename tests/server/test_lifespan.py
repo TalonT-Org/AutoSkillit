@@ -17,6 +17,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 async def test_lifespan_calls_finalize_on_recording_runner():
     """lifespan __aexit__ calls recorder.finalize() when runner is RecordingSubprocessRunner."""
     from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
 
     mock_recorder = MagicMock()
     mock_runner = MagicMock(spec=RecordingSubprocessRunner)
@@ -25,7 +26,7 @@ async def test_lifespan_calls_finalize_on_recording_runner():
     mock_ctx.runner = mock_runner
     mock_ctx.backend.capabilities.mcp_config_capable = False
 
-    with patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             pass  # server running phase
 
@@ -36,12 +37,13 @@ async def test_lifespan_calls_finalize_on_recording_runner():
 async def test_lifespan_skips_finalize_when_not_recording():
     """lifespan __aexit__ does not error when runner is not RecordingSubprocessRunner."""
     from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
 
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()  # plain runner, not RecordingSubprocessRunner
     mock_ctx.backend.capabilities.mcp_config_capable = False
 
-    with patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             pass  # must not raise
 
@@ -50,8 +52,9 @@ async def test_lifespan_skips_finalize_when_not_recording():
 async def test_lifespan_skips_finalize_when_ctx_is_none():
     """lifespan __aexit__ is safe when _get_ctx_or_none() returns None (non-recording mode)."""
     from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
 
-    with patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=None):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=None):
         async with _autoskillit_lifespan(MagicMock()):
             pass  # must not raise
 
@@ -65,6 +68,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
     is exactly what anyio does when KeyboardInterrupt cancels the running task group.
     """
     from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
 
     mock_recorder = MagicMock()
     mock_runner = MagicMock(spec=RecordingSubprocessRunner)
@@ -73,7 +77,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
     mock_ctx.runner = mock_runner
     mock_ctx.backend.capabilities.mcp_config_capable = False
 
-    with patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
         with pytest.raises(asyncio.CancelledError):
             async with _autoskillit_lifespan(MagicMock()):
                 raise asyncio.CancelledError
@@ -85,7 +89,7 @@ async def test_lifespan_calls_finalize_on_cancellation():
 async def test_lifespan_sets_startup_ready_event(monkeypatch):
     """_startup_ready must be set to a real Event and signalled after lifespan yield."""
     from autoskillit.server import _autoskillit_lifespan
-    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.lifecycle import _lifespan, _state
 
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()
@@ -98,7 +102,7 @@ async def test_lifespan_sets_startup_ready_event(monkeypatch):
 
     monkeypatch.setattr(_state, "_startup_ready", None)
 
-    with patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             assert _state._startup_ready is not None, (
                 "_startup_ready must be assigned an asyncio.Event during lifespan"
@@ -111,18 +115,15 @@ async def test_lifespan_sets_startup_ready_event(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_retirement_startup_uses_injected_coordinator_deadlines() -> None:
-    from autoskillit.server.lifecycle._lifespan import _run_retiring_sweep_async
+    from autoskillit.server.lifecycle import _lifespan
 
     coordinator = MagicMock()
     coordinator.sweep_due.return_value = ()
     mock_ctx = MagicMock()
     mock_ctx.plugin_retirement_coordinator = coordinator
 
-    with patch(
-        "autoskillit.server.lifecycle._lifespan._get_ctx_or_none",
-        return_value=mock_ctx,
-    ):
-        await _run_retiring_sweep_async()
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
+        await _lifespan._run_retiring_sweep_async()
 
     coordinator.sweep_due.assert_called_once()
     sweep_time = coordinator.sweep_due.call_args.args[0]
@@ -135,7 +136,7 @@ def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
     """run_startup_hook_health_check must detect broken hook scripts across all scopes."""
     import json as _json
 
-    from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
+    from autoskillit.server.lifecycle import _lifespan
 
     user_settings = tmp_path / ".claude" / "settings.json"
     user_settings.parent.mkdir(parents=True)
@@ -160,33 +161,30 @@ def test_startup_broken_hook_detection(tmp_path: Path, monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
+        _lifespan,
+        "iter_all_scope_paths",
         lambda project_root=None: iter([("user", user_settings)]),
     )
 
-    broken = run_startup_hook_health_check()
+    broken = _lifespan.run_startup_hook_health_check()
     assert broken  # must return non-empty list of broken hook paths
 
 
 def test_startup_hook_health_checks_plugin_cache(tmp_path: Path, monkeypatch) -> None:
     """run_startup_hook_health_check must include broken plugin cache paths in the result."""
-    from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
+    from autoskillit.server.lifecycle import _lifespan
 
     stale_commands = [
         "python3 /stale/cache/path/hooks/quota_guard.py",
         "python3 /stale/cache/path/hooks/write_guard.py",
     ]
 
+    monkeypatch.setattr(_lifespan, "iter_all_scope_paths", lambda project_root=None: iter([]))
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
-        lambda project_root=None: iter([]),
-    )
-    monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.validate_plugin_cache_hooks",
-        lambda cache_dir=None: stale_commands,
+        _lifespan, "validate_plugin_cache_hooks", lambda cache_dir=None: stale_commands
     )
 
-    broken = run_startup_hook_health_check()
+    broken = _lifespan.run_startup_hook_health_check()
 
     assert set(stale_commands).issubset(set(broken)), (
         "run_startup_hook_health_check must include broken plugin cache paths in result"
@@ -199,26 +197,21 @@ def test_startup_hook_health_check_survives_repair_primitive_raising(monkeypatch
 
     Detection remains authoritative even when best-effort repair fails.
     """
-    from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
+    from autoskillit.server.lifecycle import _lifespan
 
+    monkeypatch.setattr(_lifespan, "iter_all_scope_paths", lambda project_root=None: iter([]))
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
-        lambda project_root=None: iter([]),
-    )
-    monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.validate_plugin_cache_hooks",
+        _lifespan,
+        "validate_plugin_cache_hooks",
         lambda cache_dir=None: ["python3 /stale/cache/path/hooks/quota_guard.py"],
     )
 
     def _raise_repair(cache_dir):
         raise RuntimeError("simulated repair primitive failure")
 
-    monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.repair_broken_plugin_cache_hooks",
-        _raise_repair,
-    )
+    monkeypatch.setattr(_lifespan, "repair_broken_plugin_cache_hooks", _raise_repair)
 
-    broken = run_startup_hook_health_check()
+    broken = _lifespan.run_startup_hook_health_check()
 
     assert broken == ["python3 /stale/cache/path/hooks/quota_guard.py"]
 
@@ -228,7 +221,7 @@ def test_startup_logs_quarantined_hook_payloads_only_on_first_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A matching quarantine marker makes the next startup quiet."""
-    from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
+    from autoskillit.server.lifecycle import _lifespan
     from tests._helpers import _flush_structlog_proxy_caches
 
     cache_hooks = (
@@ -242,17 +235,14 @@ def test_startup_logs_quarantined_hook_payloads_only_on_first_pass(
     projection_hooks.parent.mkdir(parents=True)
     projection_hooks.write_bytes(b"[not-json")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
-        lambda project_root=None: iter(()),
-    )
+    monkeypatch.setattr(_lifespan, "iter_all_scope_paths", lambda project_root=None: iter(()))
 
     _flush_structlog_proxy_caches()
     try:
         with structlog.testing.capture_logs() as first_logs:
-            run_startup_hook_health_check()
+            _lifespan.run_startup_hook_health_check()
         with structlog.testing.capture_logs() as second_logs:
-            run_startup_hook_health_check()
+            _lifespan.run_startup_hook_health_check()
     finally:
         _flush_structlog_proxy_caches()
 
@@ -273,7 +263,7 @@ def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch)
 
     import autoskillit.core.paths as _paths
     from autoskillit.hook_registry import HOOK_REGISTRY_HASH
-    from autoskillit.server.lifecycle._lifespan import run_startup_drift_check
+    from autoskillit.server.lifecycle import _lifespan
 
     fake_pkg_root = tmp_path / "pkg"
     hooks_dir = fake_pkg_root / "hooks"
@@ -283,7 +273,7 @@ def test_serve_startup_regenerates_on_hash_mismatch(tmp_path: Path, monkeypatch)
 
     monkeypatch.setattr(_paths, "pkg_root", lambda: fake_pkg_root)
 
-    run_startup_drift_check()
+    _lifespan.run_startup_drift_check()
 
     updated = _json.loads((hooks_dir / "hooks.json").read_text())
     assert updated.get("_autoskillit_registry_hash") == HOOK_REGISTRY_HASH
@@ -293,7 +283,7 @@ def test_startup_refuses_when_a_fixed_set_backend_omits_a_join_guard(monkeypatch
     """Startup names the incomplete fixed-set backend and its missing guard."""
     import autoskillit.server.lifecycle._lifespan._startup_checks as startup_checks
     from autoskillit.core import BackendCapabilities
-    from autoskillit.server.lifecycle._lifespan import run_startup_join_guard_coverage_check
+    from autoskillit.server.lifecycle import _lifespan
 
     class IncompleteBackend:
         capabilities = BackendCapabilities(
@@ -311,7 +301,7 @@ def test_startup_refuses_when_a_fixed_set_backend_omits_a_join_guard(monkeypatch
     monkeypatch.setattr(startup_checks, "BACKEND_REGISTRY", {"incomplete": IncompleteBackend})
 
     with pytest.raises(RuntimeError) as exc_info:
-        run_startup_join_guard_coverage_check()
+        _lifespan.run_startup_join_guard_coverage_check()
 
     message = str(exc_info.value)
     assert "incomplete" in message
@@ -324,24 +314,23 @@ async def test_startup_join_guard_coverage_check_passes_and_runs_before_readines
 ) -> None:
     """The real registry passes, and lifespan runs coverage before marking readiness."""
     from autoskillit.server import _autoskillit_lifespan
-    from autoskillit.server.lifecycle._lifespan import run_startup_join_guard_coverage_check
+    from autoskillit.server.lifecycle import _lifespan
+    from autoskillit.server.lifecycle._lifespan import _lifespan as _lifespan_module
 
-    run_startup_join_guard_coverage_check()
+    _lifespan.run_startup_join_guard_coverage_check()
     calls: list[str] = []
     mock_ctx = MagicMock()
     mock_ctx.runner = MagicMock()
     mock_ctx.backend.capabilities.mcp_config_capable = False
 
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan._lifespan.run_startup_join_guard_coverage_check",
-        lambda: calls.append("coverage"),
+        _lifespan_module, "run_startup_join_guard_coverage_check", lambda: calls.append("coverage")
     )
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan._lifespan.write_readiness_sentinel",
-        lambda: calls.append("readiness"),
+        _lifespan_module, "write_readiness_sentinel", lambda: calls.append("readiness")
     )
 
-    with patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             assert calls == ["coverage", "readiness"]
 
@@ -349,9 +338,9 @@ async def test_startup_join_guard_coverage_check_passes_and_runs_before_readines
 def test_lifespan_boot_registry_covers_all_session_types() -> None:
     """_LIFESPAN_BOOT_REGISTRY must have an entry for every SessionType value."""
     from autoskillit.core import SessionType
-    from autoskillit.server.lifecycle._lifespan import _LIFESPAN_BOOT_REGISTRY
+    from autoskillit.server.lifecycle import _lifespan
 
-    missing = set(SessionType) - set(_LIFESPAN_BOOT_REGISTRY)
+    missing = set(SessionType) - set(_lifespan._LIFESPAN_BOOT_REGISTRY)
     assert not missing, (
         f"SessionType values not in _LIFESPAN_BOOT_REGISTRY: {missing}. "
         "Every SessionType must declare a boot function or None."
@@ -361,6 +350,7 @@ def test_lifespan_boot_registry_covers_all_session_types() -> None:
 @pytest.mark.asyncio
 async def test_lifespan_launches_backend_owned_registration_for_capable_backend():
     from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
 
     mock_ctx = MagicMock()
     mock_ctx.backend.name = "codex"
@@ -370,11 +360,8 @@ async def test_lifespan_launches_backend_owned_registration_for_capable_backend(
     reg_mock = AsyncMock()
 
     with (
-        patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx),
-        patch(
-            "autoskillit.server.lifecycle._lifespan._run_backend_mcp_registration_async",
-            reg_mock,
-        ),
+        patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(_lifespan, "_run_backend_mcp_registration_async", reg_mock),
     ):
         async with _autoskillit_lifespan(MagicMock()):
             pass
@@ -397,6 +384,7 @@ async def test_backend_registration_dispatches_through_prelaunch() -> None:
 @pytest.mark.asyncio
 async def test_lifespan_skips_codex_registration_for_non_codex_backend():
     from autoskillit.server import _autoskillit_lifespan
+    from autoskillit.server.lifecycle import _lifespan
 
     mock_ctx = MagicMock()
     mock_ctx.backend.name = "claude-code"
@@ -406,11 +394,8 @@ async def test_lifespan_skips_codex_registration_for_non_codex_backend():
     reg_mock = AsyncMock()
 
     with (
-        patch("autoskillit.server.lifecycle._lifespan._get_ctx_or_none", return_value=mock_ctx),
-        patch(
-            "autoskillit.server.lifecycle._lifespan._run_backend_mcp_registration_async",
-            reg_mock,
-        ),
+        patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(_lifespan, "_run_backend_mcp_registration_async", reg_mock),
     ):
         async with _autoskillit_lifespan(MagicMock()):
             pass
@@ -421,7 +406,7 @@ async def test_lifespan_skips_codex_registration_for_non_codex_backend():
 @pytest.mark.anyio
 async def test_cleanup_stale_loop_calls_cleanup_periodically(monkeypatch):
     """_cleanup_stale_loop calls cleanup_stale with explicit max_age after each sleep."""
-    from autoskillit.server.lifecycle._lifespan import _cleanup_stale_loop
+    from autoskillit.server.lifecycle import _lifespan
 
     calls: list[dict] = []
     sleep_count = 0
@@ -439,14 +424,13 @@ async def test_cleanup_stale_loop_calls_cleanup_periodically(monkeypatch):
     mock_ssm = MagicMock()
     mock_ssm.cleanup_stale = fake_cleanup_stale
 
-    monkeypatch.setattr("autoskillit.server.lifecycle._lifespan._asyncio.sleep", fake_sleep)
+    monkeypatch.setattr(_lifespan._asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan._get_ctx_or_none",
-        lambda: MagicMock(session_skill_manager=mock_ssm),
+        _lifespan, "_get_ctx_or_none", lambda: MagicMock(session_skill_manager=mock_ssm)
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await _cleanup_stale_loop(interval=1800.0)
+        await _lifespan._cleanup_stale_loop(interval=1800.0)
 
     assert len(calls) == 1
     assert calls[0]["max_age_seconds"] == 86400

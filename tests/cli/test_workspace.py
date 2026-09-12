@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._workspace as _patch_cli__workspace
 from autoskillit.cli._workspace import _format_age, run_workspace_clean
 from autoskillit.core import VANISHED_ERRORS
 from autoskillit.workspace import CleanupResult
@@ -206,11 +207,11 @@ class TestRunWorkspaceCleanWorktrees:
         async def fake_list(proj, prefix, runner):
             return [stale_wt]
 
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
-        monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "remove_git_worktree", fake_remove)
         monkeypatch.setattr("autoskillit.cli._workspace.time.time", real_time)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
@@ -240,11 +241,11 @@ class TestRunWorkspaceCleanWorktrees:
             return [recent_wt]
 
         real_time = time.time
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
-        monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "remove_git_worktree", fake_remove)
         monkeypatch.setattr("autoskillit.cli._workspace.time.time", real_time)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
@@ -277,10 +278,10 @@ class TestRunWorkspaceCleanWorktrees:
             removed_paths.append(path)
             return CleanupResult(deleted=[str(path)])
 
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
-        monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "remove_git_worktree", fake_remove)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
@@ -312,11 +313,11 @@ class TestRunWorkspaceCleanWorktrees:
         async def fake_remove(path, main_repo, runner):
             return CleanupResult(deleted=[str(path)])
 
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
-        monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "remove_git_worktree", fake_remove)
         monkeypatch.setattr("autoskillit.cli._workspace.time.time", lambda: now)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=base)
@@ -340,9 +341,9 @@ class TestRunWorkspaceCleanWorktrees:
                 worktrees_root.write_text("not a directory", encoding="utf-8")
             return []
 
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=base)
@@ -364,9 +365,9 @@ class TestRunWorkspaceCleanWorktrees:
         async def fake_list(proj, prefix, runner):
             return []
 
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=base)
@@ -402,11 +403,11 @@ class TestRunWorkspaceCleanWorktrees:
         async def fake_remove(path, main_repo, runner):
             return CleanupResult(deleted=[str(path)])
 
-        monkeypatch.setattr("autoskillit.cli._workspace.list_git_worktrees", fake_list)
-        monkeypatch.setattr("autoskillit.cli._workspace.remove_git_worktree", fake_remove)
-        monkeypatch.setattr("autoskillit.cli._workspace.remove_worktree_sidecar", fake_sidecar)
+        monkeypatch.setattr(_patch_cli__workspace, "list_git_worktrees", fake_list)
+        monkeypatch.setattr(_patch_cli__workspace, "remove_git_worktree", fake_remove)
+        monkeypatch.setattr(_patch_cli__workspace, "remove_worktree_sidecar", fake_sidecar)
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config", lambda p=None: _make_workspace_cfg()
+            _patch_cli__workspace, "load_config", lambda p=None: _make_workspace_cfg()
         )
 
         await run_workspace_clean(dir=str(base), force=True, project_root=project_root)
@@ -520,7 +521,8 @@ class TestRunWorkspaceCleanWorktrees:
         """run_workspace_clean calls load_config to resolve workspace paths."""
         load_called = []
         monkeypatch.setattr(
-            "autoskillit.cli._workspace.load_config",
+            _patch_cli__workspace,
+            "load_config",
             lambda p=None: (load_called.append(p), _make_workspace_cfg())[1],
         )
         # Supply an empty base dir to trigger early return (no dirs to clean)

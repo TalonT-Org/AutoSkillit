@@ -586,7 +586,8 @@ def test_shared_producer_surfaces_require_identical_pull_policies(
         pull_eligible=False
     )
     monkeypatch.setattr(
-        "autoskillit.server.recipe._recipe_artifact.RECIPE_DELIVERY_SURFACE_REGISTRY",
+        recipe_artifact,
+        "RECIPE_DELIVERY_SURFACE_REGISTRY",
         conflicting,
     )
 
@@ -669,7 +670,8 @@ def test_generation_path_includes_version_domain(
     first = _persist(tmp_path)
     current_version = getattr(recipe_artifact, version_name)
     monkeypatch.setattr(
-        f"autoskillit.server.recipe._recipe_artifact.{version_name}",
+        recipe_artifact,
+        version_name,
         current_version + 1,
     )
     monkeypatch.setattr(recipe_delivery_types, version_name, current_version + 1)
@@ -1700,8 +1702,11 @@ async def test_pull_tool_maps_planner_failures_to_exact_bounded_codes(
     def _fail_plan(**_kwargs: object) -> None:
         raise failure
 
+    from autoskillit.server.tools import _recipe_section_handler
+
     monkeypatch.setattr(
-        "autoskillit.server.tools._recipe_section_handler.get_or_build_recipe_section_page_plan",
+        _recipe_section_handler,
+        "get_or_build_recipe_section_page_plan",
         _fail_plan,
     )
 

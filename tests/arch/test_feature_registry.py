@@ -7,6 +7,8 @@ from datetime import date
 
 import pytest
 
+import autoskillit.config._automation_config as _patch_config__automation_config
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 # ── Structural registry tests ─────────────────────────────────────────────────
@@ -241,7 +243,7 @@ def test_env_var_fleet_uppercase_loads_without_crash(
     """AUTOSKILLIT_FEATURES__FLEET=true is accepted and loaded correctly."""
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     monkeypatch.setenv("AUTOSKILLIT_FEATURES__FLEET", "true")
     cfg = load_config(tmp_path)
     assert cfg.features.get("fleet") is True
@@ -338,7 +340,7 @@ def test_fleet_feature_default_disabled():
 
 
 def test_build_features_dict_accepts_fleet_key(monkeypatch):
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     from autoskillit.config.settings import AutomationConfig
 
     result, exp_enabled = AutomationConfig._build_features_dict({"fleet": True})
@@ -534,12 +536,12 @@ def test_build_features_dict_absent_experimental_enabled_auto_detects(
     """_build_features_dict calls is_dev_install() when experimental_enabled absent."""
     from autoskillit.config.settings import AutomationConfig
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: True)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: True)
     result, exp_enabled = AutomationConfig._build_features_dict({})
     assert exp_enabled is True
     assert result == {}
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     result, exp_enabled = AutomationConfig._build_features_dict({})
     assert exp_enabled is False
     assert result == {}
@@ -551,7 +553,7 @@ def test_build_features_dict_explicit_true_overrides_auto_detect(
     """_build_features_dict returns True when explicit True, ignoring is_dev_install."""
     from autoskillit.config.settings import AutomationConfig
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     _, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": True})
     assert exp_enabled is True
 
@@ -562,7 +564,7 @@ def test_build_features_dict_explicit_false_overrides_auto_detect(
     """_build_features_dict returns False when explicit False, ignoring is_dev_install."""
     from autoskillit.config.settings import AutomationConfig
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: True)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: True)
     _, exp_enabled = AutomationConfig._build_features_dict({"experimental_enabled": False})
     assert exp_enabled is False
 
@@ -600,12 +602,12 @@ def test_load_config_integration_experimental_auto_detects(
     """load_config auto-detects experimental_enabled via is_dev_install when unset."""
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: True)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: True)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True
 
     monkeypatch.delenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", raising=False)
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is False
 
@@ -619,7 +621,7 @@ def test_load_config_non_dev_install_experimental_disabled(
     """load_config defaults experimental_enabled=False for non-dev install."""
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is False
 
@@ -630,7 +632,7 @@ def test_load_config_dev_install_experimental_enabled(
     """load_config defaults experimental_enabled=True for editable dev install."""
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: True)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: True)
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True
 
@@ -639,7 +641,7 @@ def test_env_var_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch, tmp
     """AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED=true overrides non-dev auto-detect."""
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     monkeypatch.setenv("AUTOSKILLIT_FEATURES__EXPERIMENTAL_ENABLED", "true")
     cfg = load_config(tmp_path)
     assert cfg.experimental_enabled is True
@@ -653,7 +655,7 @@ def test_project_config_override_beats_auto_detect(
 
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     config_dir = tmp_path / ".autoskillit"
     config_dir.mkdir()
     (config_dir / "config.yaml").write_text(
@@ -669,7 +671,7 @@ def test_user_config_override_beats_auto_detect(monkeypatch: pytest.MonkeyPatch,
 
     from autoskillit.config.settings import load_config
 
-    monkeypatch.setattr("autoskillit.config._automation_config.is_dev_install", lambda: False)
+    monkeypatch.setattr(_patch_config__automation_config, "is_dev_install", lambda: False)
     fake_home = tmp_path / "home"
     user_config_dir = fake_home / ".autoskillit"
     user_config_dir.mkdir(parents=True)

@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server as server
+import autoskillit.server.tools.tools_kitchen as tools_kitchen
 from autoskillit.core import FinalizedRecipeStep, RecipeFlowEdge
 from tests.server._helpers import _make_finalized_projection
 from tests.server.conftest import _make_mock_ctx
@@ -63,7 +65,7 @@ class TestLockIngredientsBasic:
             },
         )
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(
@@ -92,7 +94,7 @@ class TestLockIngredientsBasic:
         ctx.project_dir = tmp_path
         _set_active_recipe_steps(ctx, {"investigate": _make_step_mock("inputs.investigate")})
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(
@@ -118,7 +120,7 @@ class TestLockIngredientsRejectsServerAuthoritative:
         ctx.project_dir = tmp_path
         ctx.active_recipe_steps = {}
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(
@@ -144,7 +146,7 @@ async def test_lock_ingredients_envelope_has_structured_fields(server_auth_key, 
     ctx.project_dir = tmp_path
     ctx.active_recipe_steps = {}
 
-    with patch("autoskillit.server._get_ctx", return_value=ctx):
+    with patch.object(server, "_get_ctx", return_value=ctx):
         from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
         result = json.loads(
@@ -176,7 +178,7 @@ class TestLockIngredientsUnlock:
         ctx.project_dir = tmp_path
         _set_active_recipe_steps(ctx, {"investigate": _make_step_mock("inputs.investigate")})
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             # Lock
@@ -202,7 +204,7 @@ class TestLockIngredientsRequiresKitchenOpen:
         ctx.project_dir = tmp_path
         ctx.active_recipe_steps = {}
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(await lock_ingredients(locked={"investigate": "false"}))
@@ -224,7 +226,7 @@ class TestLockIngredientsHeadlessDenial:
         ctx.project_dir = tmp_path
         ctx.active_recipe_steps = {}
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             with monkeypatch.context() as m:
                 m.setenv("AUTOSKILLIT_HEADLESS", "1")
                 m.setenv("AUTOSKILLIT_SESSION_TYPE", "skill")
@@ -254,7 +256,7 @@ class TestUnlockRebuildsLockedSteps:
             },
         )
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(
@@ -268,7 +270,7 @@ class TestUnlockRebuildsLockedSteps:
         data = json.loads(overlay.read_text())
         assert "fix-worktree" in data["locked_steps"]["a"]
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             result2 = json.loads(await lock_ingredients(unlock=["investigate"], pipeline_id="a"))
 
         assert result2["success"] is True
@@ -294,7 +296,7 @@ class TestLockIngredientsUnknownKeyValidation:
         )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(await lock_ingredients(locked={"audit": "false"}, pipeline_id="a"))
@@ -318,7 +320,7 @@ class TestLockIngredientsUnknownKeyValidation:
         )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(
@@ -344,7 +346,7 @@ class TestLockIngredientsUnknownKeyValidation:
         )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(
@@ -370,7 +372,7 @@ class TestLockIngredientsUnknownKeyValidation:
         )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             result = json.loads(await lock_ingredients(unlock=["audit"], pipeline_id="a"))
@@ -394,7 +396,7 @@ class TestLockIngredientsUnknownKeyValidation:
         )
         ctx.active_recipe_ingredients = frozenset(["audit_impl"])
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx):
+        with patch.object(server, "_get_ctx", return_value=ctx):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             await lock_ingredients(locked={"audit_impl": "false"}, pipeline_id="a")
@@ -436,19 +438,22 @@ class TestAuthorityFeedbackConsistency:
             mock_ctx.kitchen_id = "test-kitchen"
             mock_ctx.config.linux_tracing.log_dir = ""
 
-            with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
+            with patch.object(server, "_get_ctx", return_value=mock_ctx):
                 with patch("autoskillit.server.logger"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+                    with patch.object(
+                        tools_kitchen,
+                        "_prime_quota_cache",
                         new=AsyncMock(),
                     ):
-                        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                            with patch(
-                                "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                        with patch.object(tools_kitchen, "_write_hook_config"):
+                            with patch.object(
+                                tools_kitchen,
+                                "resolve_kitchen_id",
                                 return_value="test-kitchen",
                             ):
-                                with patch(
-                                    "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                                with patch.object(
+                                    tools_kitchen,
+                                    "resolve_ingredient_defaults",
                                     return_value={
                                         "base_branch": "develop",
                                         "pipeline_health": "false",
@@ -485,7 +490,7 @@ class TestAuthorityFeedbackConsistency:
         ctx_lk.project_dir = tmp_path
         ctx_lk.active_recipe_steps = {}
 
-        with patch("autoskillit.server._get_ctx", return_value=ctx_lk):
+        with patch.object(server, "_get_ctx", return_value=ctx_lk):
             from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
             for key in sorted(SERVER_AUTHORITATIVE_INGREDIENTS):
@@ -517,7 +522,7 @@ class TestLockIngredientsConcurrentFlock:
                     ctx,
                     {f"step-{pipeline_id}": _make_step_mock(None)},
                 )
-                with patch("autoskillit.server._get_ctx", return_value=ctx):
+                with patch.object(server, "_get_ctx", return_value=ctx):
                     from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
                     result = await lock_ingredients(
@@ -555,7 +560,7 @@ async def test_pipeline_health_lockable(tmp_path):
     ctx.project_dir = tmp_path
     ctx.active_recipe_steps = {}
 
-    with patch("autoskillit.server._get_ctx", return_value=ctx):
+    with patch.object(server, "_get_ctx", return_value=ctx):
         from autoskillit.server.tools.tools_kitchen import lock_ingredients
 
         result_str = await lock_ingredients(locked={"pipeline_health": "true"}, pipeline_id="a")

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
@@ -100,8 +101,10 @@ class TestMigrateRecipe:
     async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):  # SRV-UPD-1
         """migrate_recipe returns up_to_date when no migrations applicable and contract fresh."""
         monkeypatch.chdir(tmp_path)
+        from autoskillit.migration import loader as migration_loader
+
         with (
-            patch("autoskillit.migration.loader.applicable_migrations", return_value=[]),
+            patch.object(migration_loader, "applicable_migrations", return_value=[]),
             patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
             patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
         ):
@@ -129,7 +132,7 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch.object(_patch_execution_headless, "run_headless_core", mock_headless),
             patch("autoskillit.recipe.generate_recipe_card", return_value=None),
         ):
             result = json.loads(await migrate_recipe(name="test-script"))
@@ -144,7 +147,11 @@ class TestMigrateRecipe:
         self, tmp_path, monkeypatch, tool_ctx
     ):
         """LR4: FailureStore.clear(name) is called when migration succeeds."""
+        import importlib
+
         from autoskillit.migration.store import FailureStore, default_store_path
+
+        recipe_contracts = importlib.import_module("autoskillit.recipe.contracts")
 
         ctx = self._setup_migration_env(tmp_path, monkeypatch, tool_ctx)
         (ctx["temp_mig_dir"] / "test-script.yaml").write_text(ctx["migrated_content"])
@@ -173,8 +180,8 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
-            patch("autoskillit.recipe.contracts.generate_recipe_card", return_value=None),
+            patch.object(_patch_execution_headless, "run_headless_core", mock_headless),
+            patch.object(recipe_contracts, "generate_recipe_card", return_value=None),
         ):
             await migrate_recipe(name="test-script")
 
@@ -202,7 +209,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
+        with patch.object(_patch_execution_headless, "run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         assert "error" in result
@@ -228,7 +235,7 @@ class TestMigrateRecipe:
                 stderr="",
             )
         )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
+        with patch.object(_patch_execution_headless, "run_headless_core", mock_headless):
             result = json.loads(await migrate_recipe(name="test-script"))
 
         mock_headless.assert_not_called()
@@ -284,7 +291,7 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch.object(_patch_execution_headless, "run_headless_core", mock_headless),
             patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
             patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
         ):
@@ -316,7 +323,7 @@ class TestMigrateRecipe:
             )
         )
         with (
-            patch("autoskillit.execution.headless.run_headless_core", mock_headless),
+            patch.object(_patch_execution_headless, "run_headless_core", mock_headless),
             patch("autoskillit.recipe.load_recipe_card", return_value=None),
             patch("autoskillit.recipe.generate_recipe_card", return_value={}),
         ):

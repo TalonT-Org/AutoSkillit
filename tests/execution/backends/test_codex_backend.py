@@ -12,6 +12,8 @@ from typing import cast
 import pytest
 import structlog.testing
 
+import autoskillit.execution.backends._codex_prelaunch as _patch_backends__codex_prelaunch
+import autoskillit.execution.backends.codex as _patch_backends_codex
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     BUNDLED_EXPLORER_ROLES,
@@ -130,7 +132,8 @@ class TestCodexBackend:
         extract_identity = Mock(return_value=effective)
         monkeypatch.setattr(CodexBackend, "session_locator", lambda _self: locator)
         monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.extract_codex_execution_identity",
+            _patch_backends_codex,
+            "extract_codex_execution_identity",
             extract_identity,
         )
 
@@ -2040,7 +2043,8 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
 
     def test_source_config_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "autoskillit.execution.backends._codex_prelaunch._ensure_codex_mcp_registered_unlocked",
+            _patch_backends__codex_prelaunch,
+            "_ensure_codex_mcp_registered_unlocked",
             lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
@@ -2050,7 +2054,8 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
 
     def test_hook_update_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "autoskillit.execution.backends._codex_prelaunch._sync_hooks_to_codex_config_unlocked",
+            _patch_backends__codex_prelaunch,
+            "_sync_hooks_to_codex_config_unlocked",
             lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
@@ -2060,7 +2065,8 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
 
     def test_snapshot_write_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.atomic_write",
+            _patch_backends_codex,
+            "atomic_write",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
@@ -2072,7 +2078,8 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.execution.backends.codex._validate_global_codex_home",
+            _patch_backends_codex,
+            "_validate_global_codex_home",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=None)
@@ -2102,7 +2109,8 @@ class TestCodexBackendSetupSessionDir:
         self.fake_log_dir = tmp_path / "logs"
         monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
         monkeypatch.setattr(
-            "autoskillit.execution.backends.codex.default_log_dir",
+            _patch_backends_codex,
+            "default_log_dir",
             lambda: self.fake_log_dir,
         )
 

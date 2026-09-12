@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server as server
+import autoskillit.server.lifecycle._state as lifecycle_state
 from autoskillit.core import (
     RetryReason,
     SkillExecutionRole,
@@ -601,8 +603,8 @@ async def test_prepare_issue_uses_project_dir_as_subprocess_cwd(
         result="---prepare-issue-result---\n{}\n---/prepare-issue-result---",
     )
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.lifecycle._state._get_ctx", return_value=mock_ctx):
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(lifecycle_state, "_get_ctx", return_value=mock_ctx):
             with patch("autoskillit.server.logger"):
                 await prepare_issue(
                     title="Test issue",

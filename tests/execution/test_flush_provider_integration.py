@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core.types import RetryReason, SkillResult
 from tests.execution.conftest import _launch_preparation, _mock_backend
 
@@ -41,19 +42,23 @@ def _patch_common(monkeypatch, tmp_path, skill_result, ctx):
         return _sub_result
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._build_skill_result",
+        _patch_headless__headless_execute,
+        "_build_skill_result",
         lambda *a, **kw: skill_result,  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        _patch_headless__headless_execute,
+        "_compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        _patch_headless__headless_execute,
+        "_capture_git_head_sha",
         lambda *a: "",  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+        _patch_headless__headless_execute,
+        "collect_version_snapshot",
         lambda backend=None: {},
     )
 
@@ -134,24 +139,26 @@ class TestProviderFieldsReachFlush:
             call_count[0] += 1
             return r
 
+        monkeypatch.setattr(_patch_headless__headless_execute, "_build_skill_result", build_result)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._build_skill_result", build_result
-        )
-        monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+            _patch_headless__headless_execute,
+            "_compute_post_session_metrics",
             lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
         )
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+            _patch_headless__headless_execute,
+            "_capture_git_head_sha",
             lambda *a: "",  # noqa: ARG005
         )
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+            _patch_headless__headless_execute,
+            "collect_version_snapshot",
             lambda backend=None: {},
         )
         monkeypatch.setattr(minimal_ctx.config.providers, "provider_retry_limit", 2)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.is_feature_enabled",
+            _patch_headless__headless_execute,
+            "is_feature_enabled",
             lambda name, *a, **kw: name == "providers",  # noqa: ARG005
         )
 
@@ -189,7 +196,8 @@ class TestProviderFieldsReachFlush:
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+            _patch_headless__headless_execute,
+            "collect_version_snapshot",
             lambda backend=None: {},
         )
 
@@ -233,7 +241,8 @@ class TestProviderFieldsReachFlush:
         from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+            _patch_headless__headless_execute,
+            "collect_version_snapshot",
             lambda backend=None: {},
         )
 

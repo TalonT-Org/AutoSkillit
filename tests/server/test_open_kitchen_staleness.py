@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.core import ProcessStaleError
 from tests.server.conftest import _make_mock_ctx
 
@@ -27,8 +28,8 @@ async def test_open_kitchen_stale_returns_failure_envelope():
 
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()),
-        patch("autoskillit.server.tools.tools_kitchen._write_hook_config"),
+        patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()),
+        patch.object(_patch_tools_tools_kitchen, "_write_hook_config"),
     ):
         result = await open_kitchen(name="test-recipe", ctx=mock_ctx)
 

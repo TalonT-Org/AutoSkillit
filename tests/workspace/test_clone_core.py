@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import structlog.testing
 
+import autoskillit.workspace.clone as _patch_workspace_clone
 from autoskillit.workspace.clone import (
     clone_repo,
     remove_clone,
@@ -511,10 +512,12 @@ class TestCloneRepoDetectAndExpand:
 
     def test_cb7_calls_detect_branch_when_branch_empty(self, tmp_path: Path) -> None:
         """T_CB7: detect_branch is called with source_dir when branch=""."""
-        with patch(
-            "autoskillit.workspace.clone.detect_branch", return_value="main"
+        with patch.object(
+            _patch_workspace_clone, "detect_branch", return_value="main"
         ) as mock_detect:
-            with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
+            with patch.object(
+                _patch_workspace_clone, "detect_uncommitted_changes", return_value=[]
+            ):
                 mock_clone = MagicMock()
                 mock_clone.returncode = 0
                 with patch("autoskillit.workspace.clone.subprocess.run", return_value=mock_clone):
@@ -523,7 +526,7 @@ class TestCloneRepoDetectAndExpand:
 
     def test_cb9_passes_branch_flag_to_git(self, tmp_path: Path) -> None:
         """T_CB9: --branch and branch name appear in the git clone subprocess call."""
-        with patch("autoskillit.workspace.clone.detect_uncommitted_changes", return_value=[]):
+        with patch.object(_patch_workspace_clone, "detect_uncommitted_changes", return_value=[]):
             mock_clone = MagicMock()
             mock_clone.returncode = 0
             with patch(
@@ -540,9 +543,10 @@ class TestCloneRepoDetectAndExpand:
 
     def test_cb10_returns_warning_dict_on_uncommitted_changes(self, tmp_path: Path) -> None:
         """T_CB10: uncommitted changes produce warning dict; git clone not called."""
-        with patch("autoskillit.workspace.clone.detect_branch", return_value="main"):
-            with patch(
-                "autoskillit.workspace.clone.detect_uncommitted_changes",
+        with patch.object(_patch_workspace_clone, "detect_branch", return_value="main"):
+            with patch.object(
+                _patch_workspace_clone,
+                "detect_uncommitted_changes",
                 return_value=[" M file.py"],
             ):
                 with patch("autoskillit.workspace.clone.subprocess.run") as mock_run:

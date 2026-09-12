@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
 from autoskillit import cli
 from autoskillit.core import atomic_write
 from autoskillit.execution.backends import ClaudeCodeBackend
@@ -34,7 +35,8 @@ def test_reload_reprobes_exact_executable_for_each_attempt(
     captured = arrange_cook(monkeypatch, tmp_path)
     reloads = iter(("session-2", None))
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: next(reloads),
     )
 

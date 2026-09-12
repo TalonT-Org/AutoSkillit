@@ -8,6 +8,10 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.update._obligation_repair as _patch_update__obligation_repair
+import autoskillit.cli.update._update as _patch_update__update
+import autoskillit.cli.update._update_checks as _patch_update__update_checks
 from autoskillit.cli.update._transaction import (
     UpdateProcessStatus,
     UpdateTransactionOutcome,
@@ -44,11 +48,13 @@ def _patch_result(
     result: UpdateTransactionResult,
 ) -> None:
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.run_update_transaction",
+        _patch_update__update,
+        "run_update_transaction",
         lambda **kwargs: result,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.terminal_guard",
+        _patch_update__update,
+        "terminal_guard",
         _TerminalGuard,
     )
 
@@ -107,15 +113,18 @@ def test_registered_explicit_update_exits_with_exact_status_without_success_effe
     )
     effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        _patch_update__update_checks,
+        "_write_dismiss_state",
         lambda *_args: effects.append("write"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        _patch_update__update_checks,
+        "invalidate_fetch_cache",
         lambda *_args: effects.append("invalidate"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.perform_restart",
+        _patch_update__update,
+        "perform_restart",
         lambda: effects.append("restart"),
     )
     monkeypatch.setattr(
@@ -160,11 +169,13 @@ def test_explicit_completed_clears_state_invalidates_prints_and_restarts(
     )
     effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        _patch_update__update_checks,
+        "invalidate_fetch_cache",
         lambda *_args: effects.append("invalidate"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.perform_restart",
+        _patch_update__update,
+        "perform_restart",
         lambda: effects.append("restart"),
     )
 
@@ -295,9 +306,7 @@ def test_explicit_update_runs_the_transaction_exactly_once(
     monkeypatch.setattr(_update, "perform_restart", lambda: None)
     monkeypatch.setattr(_update_checks, "perform_restart", lambda: None)
 
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda *a, **kw: None)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(sys, "argv", ["autoskillit", "update"])
 
@@ -355,7 +364,8 @@ def test_missing_expected_version_prints_warning_at_update_command(
         )
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._obligation_repair.attempt_obligation_repair",
+        _patch_update__obligation_repair,
+        "attempt_obligation_repair",
         fake_repair,
     )
 

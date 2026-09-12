@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.core import (
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineageStatus,
@@ -300,7 +301,8 @@ class TestFoodTruckManagedLineage:
             _close_failed_first,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -400,7 +402,8 @@ class TestFoodTruckManagedLineage:
             raise RuntimeError(diagnostic)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api._run_dispatch",
+            fleet_api,
+            "_run_dispatch",
             _fail_dispatch,
         )
 

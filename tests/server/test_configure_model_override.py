@@ -8,6 +8,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server as server
+import autoskillit.server.tools.tools_execution as tools_execution
+import autoskillit.server.tools.tools_kitchen as tools_kitchen
 from tests.server.test_tools_config import _open_context
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.medium]
@@ -80,10 +83,9 @@ async def test_model_override_beats_providers_model_overrides(
     tool_ctx_kitchen_open.config.providers = ProvidersConfig(
         model_overrides={"implementation": {"implement": "opus"}}
     )
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(tools_execution, "is_feature_enabled", lambda *a, **kw: False)
 
     hook_path = tool_ctx_kitchen_open.project_dir / ".autoskillit" / "temp" / ".hook_config.json"
     hook_path.parent.mkdir(parents=True, exist_ok=True)
@@ -175,8 +177,8 @@ async def test_close_kitchen_restores_baseline_model_override(tmp_path, monkeypa
     assert payload["success"] is True
     assert ctx.config.model.model_override == "tier1-recovery"
 
-    with patch("autoskillit.server._get_ctx", return_value=ctx):
-        with patch("autoskillit.server.tools.tools_kitchen.mcp"):
+    with patch.object(server, "_get_ctx", return_value=ctx):
+        with patch.object(tools_kitchen, "mcp"):
             result = await close_kitchen(ctx=ctx)
 
     assert result == "Kitchen is closed."

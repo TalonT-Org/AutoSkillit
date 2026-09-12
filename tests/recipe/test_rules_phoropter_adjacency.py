@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.recipe.rules.rules_phoropter_adjacency as _patch_rules_rules_phoropter_adjacency
 from autoskillit.core import Severity
 from autoskillit.recipe.registry import run_semantic_rules
 from autoskillit.recipe.schema import Recipe, RecipeStep
@@ -345,7 +346,8 @@ def test_load_family_prefixes_file_not_found_returns_empty(monkeypatch):
 
     _PREFIXES_CACHE.clear()
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency.load_yaml",
+        _patch_rules_rules_phoropter_adjacency,
+        "load_yaml",
         _raise_file_not_found,
     )
     result = _load_family_prefixes()
@@ -370,7 +372,8 @@ def test_load_family_prefixes_cache_hit(monkeypatch):
         return original(path)
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_registry_yaml",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_registry_yaml",
         counting_loader,
     )
     _load_family_prefixes()
@@ -456,7 +459,8 @@ def test_prefixed_steps_correct_order_no_findings(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_family_prefixes",
         lambda: {"vis-lens": "vis"},
     )
     recipe = _make_recipe(
@@ -474,7 +478,8 @@ def test_prefixed_steps_wrong_order_error_with_canonical(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_family_prefixes",
         lambda: {"vis-lens": "vis"},
     )
     recipe = _make_recipe(
@@ -526,7 +531,8 @@ def test_mixed_two_family_correct_order_no_findings(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_family_prefixes",
         lambda: {"vis-lens": "vis"},
     )
     recipe = _make_recipe(
@@ -563,7 +569,8 @@ def test_sequential_family_exemption(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_family_prefixes",
         lambda: {"refactor-lens": "refactor"},
     )
     recipe = _make_recipe(
@@ -616,7 +623,8 @@ def test_route_action_between_complete_sequential_family_blocks_is_transparent(m
     import autoskillit.recipe  # noqa: F401
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_family_prefixes",
         lambda: {"vis-lens": "vis"},
     )
     recipe = _make_recipe(
@@ -638,7 +646,8 @@ def test_two_family_phase_order_no_findings(monkeypatch):
     import autoskillit.recipe  # noqa: F401
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency._load_family_prefixes",
+        _patch_rules_rules_phoropter_adjacency,
+        "_load_family_prefixes",
         lambda: {"vis-lens": "vis"},
     )
     recipe = _make_recipe(

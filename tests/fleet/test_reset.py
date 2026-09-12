@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.fleet._label_cleanup as label_cleanup
+import autoskillit.fleet._reset as fleet_reset
 from autoskillit.core import IssueLabelState
 from autoskillit.fleet import (
     DispatchRecord,
@@ -150,8 +152,9 @@ class TestResetDispatchArtifacts:
         github_client = AsyncMock()
         github_client.swap_labels = AsyncMock(return_value={"success": True})
         runner = AsyncMock(return_value=_make_subprocess_result())
-        with patch(
-            "autoskillit.fleet._reset.read_sidecar_from_path",
+        with patch.object(
+            fleet_reset,
+            "read_sidecar_from_path",
             side_effect=OSError("disk on fire"),
         ):
             report = await reset_dispatch_artifacts(
@@ -255,12 +258,14 @@ class TestResetDispatchArtifacts:
         github_client.swap_labels = AsyncMock(return_value={"success": True})
         runner = AsyncMock(return_value=_make_subprocess_result())
         with (
-            patch(
-                "autoskillit.fleet._reset.read_sidecar_from_path",
+            patch.object(
+                fleet_reset,
+                "read_sidecar_from_path",
                 side_effect=OSError("disk on fire"),
             ),
-            patch(
-                "autoskillit.fleet._label_cleanup.read_sidecar_from_path",
+            patch.object(
+                label_cleanup,
+                "read_sidecar_from_path",
                 side_effect=OSError("disk on fire"),
             ),
         ):

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import structlog.testing
 
+import autoskillit.server.git as server_git
 from autoskillit.core import CleanupResult
 from autoskillit.server.tools.tools_git import merge_worktree
 from tests.conftest import _make_result
@@ -65,13 +66,14 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
         with (
-            patch(
-                "autoskillit.server.git.remove_git_worktree",
+            patch.object(
+                server_git,
+                "remove_git_worktree",
                 new=AsyncMock(
                     return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
                 ),
             ),
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
         ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
@@ -126,7 +128,7 @@ class TestMergeWorktreeCleanupReporting:
         tool_ctx_kitchen_open.runner.push(
             _make_result(1, "", "error: branch not found")
         )  # branch -D FAILS
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")):
             result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
         assert result["cleanup_succeeded"] is False
@@ -181,13 +183,14 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
 
         with (
-            patch(
-                "autoskillit.server.git.remove_git_worktree",
+            patch.object(
+                server_git,
+                "remove_git_worktree",
                 new=AsyncMock(
                     return_value=CleanupResult(failed=[(str(wt), "error: untracked files")])
                 ),
             ),
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
             structlog.testing.capture_logs() as logs,
         ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
@@ -245,7 +248,7 @@ class TestMergeWorktreeCleanupWarnings:
         )  # branch -D FAILS
 
         with (
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
             structlog.testing.capture_logs() as logs,
         ):
             result = json.loads(await merge_worktree(str(wt), "dev"))
@@ -301,7 +304,7 @@ class TestMergeWorktreeCleanupWarnings:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D — success
 
         with (
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
             structlog.testing.capture_logs() as logs,
         ):
             result = json.loads(await merge_worktree(str(wt), "dev"))

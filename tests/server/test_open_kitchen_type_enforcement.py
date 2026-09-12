@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.recipe.schema import RecipeIngredient
 from tests.server.conftest import _make_mock_ctx
 
@@ -72,21 +73,25 @@ async def _call_open_kitchen_with_recipe(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-type",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={"base_branch": "develop"},
                         ):
-                            with patch(
-                                "autoskillit.server.tools.tools_kitchen.serve_recipe",
+                            with patch.object(
+                                _patch_tools_tools_kitchen,
+                                "serve_recipe",
                                 return_value=serve_recipe_result,
                             ):
                                 from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -287,21 +292,25 @@ async def test_open_kitchen_ingredients_only_rejects_invalid_type(tmp_path, monk
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-type",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={"base_branch": "develop"},
                         ):
-                            with patch(
-                                "autoskillit.server.tools.tools_kitchen.serve_recipe",
+                            with patch.object(
+                                _patch_tools_tools_kitchen,
+                                "serve_recipe",
                                 return_value=serve_recipe_result,
                             ):
                                 from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -334,17 +343,20 @@ async def test_open_kitchen_fails_closed_when_recipe_load_returns_none(tmp_path,
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-fail-closed",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={"base_branch": "develop"},
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen

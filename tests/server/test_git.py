@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import anyio
 import pytest
 
+import autoskillit.server.git as git_module
 from autoskillit.config import AutomationConfig
 from autoskillit.core import CleanupResult, WorktreeGateLease
 from autoskillit.core.types import (
@@ -282,7 +283,7 @@ async def test_perform_merge_blocks_on_pre_rebase_timed_out_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # git ls-files
     conftest_mock_runner.push(_make_result(0, "", ""))  # git status --porcelain
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=None):
+    with patch.object(git_module, "resolve_main_worktree", return_value=None):
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -379,7 +380,7 @@ async def test_perform_merge_blocks_on_post_rebase_timed_out_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # merge-commit preflight
     conftest_mock_runner.push(_make_result(0, "", ""))  # git rebase
 
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=None) as resolve_main:
+    with patch.object(git_module, "resolve_main_worktree", return_value=None) as resolve_main:
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -434,8 +435,8 @@ async def test_perform_merge_returns_success_on_green_tests(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt,
@@ -520,8 +521,8 @@ async def test_perform_merge_uses_no_edit_flag(default_config, conftest_mock_run
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt,
@@ -616,8 +617,8 @@ async def test_perform_merge_strips_tracked_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
@@ -675,8 +676,8 @@ async def test_perform_merge_noop_when_no_generated_files_tracked(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
@@ -752,8 +753,8 @@ async def test_perform_merge_dirty_check_ignores_generated_files(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
@@ -799,8 +800,8 @@ async def test_perform_merge_strips_generated_files_before_dirty_check(
     conftest_mock_runner.push(_make_result(0, "", ""))  # wt remove
     conftest_mock_runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(
             fake_wt, "dev", config=default_config, runner=conftest_mock_runner, tester=tester
@@ -866,13 +867,14 @@ class TestPerformMergeSidecarCleanup:
 
         sidecar_calls = []
         with (
-            patch(
-                "autoskillit.server.git.remove_worktree_sidecar",
+            patch.object(
+                git_module,
+                "remove_worktree_sidecar",
                 side_effect=lambda proj, name: (
                     sidecar_calls.append(name) or CleanupResult(deleted=["s"])
                 ),
             ),
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
@@ -903,11 +905,12 @@ class TestPerformMergeSidecarCleanup:
         (wt / ".git").write_text("gitdir: /repo/.git/worktrees/impl-test")
 
         with (
-            patch(
-                "autoskillit.server.git.remove_worktree_sidecar",
+            patch.object(
+                git_module,
+                "remove_worktree_sidecar",
                 return_value=CleanupResult(failed=[("/some/path", "permission denied")]),
             ),
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
@@ -937,11 +940,12 @@ class TestPerformMergeSidecarCleanup:
             return CleanupResult(deleted=[str(path)])
 
         with (
-            patch(
-                "autoskillit.server.git.remove_git_worktree",
+            patch.object(
+                git_module,
+                "remove_git_worktree",
                 new=AsyncMock(side_effect=_fake_remove),
             ),
-            patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+            patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")),
         ):
             runner = MockSubprocessRunner()
             _push_full_success_sequence(runner, worktree_path=wt)
@@ -983,7 +987,7 @@ class TestPerformMergeTargetBranchVerification:
         # Step 7.5: git branch --show-current on main_repo returns 'main'
         runner.push(_make_result(0, "main\n"))
 
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")):
             result = await perform_merge(
                 str(wt),
                 "dev",
@@ -1030,7 +1034,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # git merge --no-edit
         # cleanup: remove_git_worktree + branch -D use runner defaults (rc=0)
 
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")):
             result = await perform_merge(
                 str(wt),
                 "dev",
@@ -1069,7 +1073,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # git merge --no-edit
 
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")):
             result = await perform_merge(
                 str(wt),
                 "dev",
@@ -1114,7 +1118,7 @@ class TestPerformMergeTargetBranchVerification:
         runner.push(_make_result(0, ""))  # step 7.6: git status --porcelain (clean)
         runner.push(_make_result(0, ""))  # merge
 
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(git_module, "resolve_main_worktree", return_value=Path("/repo")):
             result = await perform_merge(
                 str(wt),
                 "dev",
@@ -1198,8 +1202,8 @@ async def test_perform_merge_rejects_diverged_local_branch(tmp_path):
     )  # step 7.5b: rev-parse remote SHA (different!)
     runner.push(_make_result(1, "", ""))  # merge-base: remote is not an ancestor
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
 
@@ -1246,8 +1250,8 @@ async def test_perform_merge_reports_local_ahead_ref_coherence(tmp_path):
     runner.push(_make_result(0, "aaaaaaaaaaaa\n", ""))
     runner.push(_make_result(0, "", ""))
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
 
@@ -1291,8 +1295,8 @@ async def test_perform_merge_reports_ancestry_operational_error(tmp_path):
     runner.push(_make_result(0, "bbbbbbbbbbbb\n", ""))
     runner.push(_make_result(128, "", "fatal: invalid object name"))
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
 
@@ -1329,8 +1333,8 @@ async def test_perform_merge_succeeds_when_refs_match(tmp_path):
     runner.push(_make_result(0, "", ""))  # wt remove
     runner.push(_make_result(0, "", ""))  # branch -D
 
-    with patch(
-        "autoskillit.server.git.resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
+    with patch.object(
+        git_module, "resolve_main_worktree", return_value=Path("/nonexistent-main-repo")
     ):
         result = await perform_merge(fake_wt, "dev", config=config, runner=runner)
 

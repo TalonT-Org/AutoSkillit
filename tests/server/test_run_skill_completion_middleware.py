@@ -14,6 +14,7 @@ from fastmcp.tools.function_tool import FunctionTool
 from mcp.types import CallToolRequestParams, ImageContent, TextContent
 
 from autoskillit.pipeline import DefaultRunSkillCompletionAuthority
+from autoskillit.server.lifecycle import _state
 from autoskillit.server.response._run_skill_completion import (
     FinalizedRunSkillCompletionResponse,
     RunSkillCompletionMiddleware,
@@ -163,8 +164,7 @@ async def test_middleware_denies_other_tools_while_receipt_is_pending(monkeypatc
     authority = _finalized().authority
     time.sleep(0.02)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     call_next = AsyncMock()
     registered = _registered_tool()
@@ -198,8 +198,7 @@ async def test_middleware_denial_payload_when_delivered_only(monkeypatch) -> Non
     authority.publish(finalized.receipt.receipt_id)
     time.sleep(0.02)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     call_next = AsyncMock()
     registered = _registered_tool()
@@ -238,8 +237,7 @@ async def test_middleware_denial_payload_when_in_flight_only(monkeypatch) -> Non
     )
     time.sleep(0.02)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     call_next = AsyncMock()
     registered = _registered_tool()
@@ -265,8 +263,7 @@ async def test_middleware_publishes_exact_and_compacted_deliveries(
 ) -> None:
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     registered = _registered_tool()
     fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
@@ -298,8 +295,7 @@ async def test_middleware_publishes_exact_and_compacted_deliveries(
 async def test_middleware_discards_unrepresentable_delivery(monkeypatch) -> None:
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=object()))
     finalized: FinalizedRunSkillCompletionResponse | None = None
@@ -327,8 +323,7 @@ async def test_middleware_discards_draft_when_compact_delivery_is_not_preserved(
 ) -> None:
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     registered = _registered_tool()
     invalid_delivery = _tool_result("still rewritten")
@@ -361,8 +356,7 @@ async def test_middleware_discards_draft_when_compact_delivery_is_not_preserved(
 async def test_middleware_discards_staged_draft_on_base_exception(monkeypatch) -> None:
     authority = DefaultRunSkillCompletionAuthority()
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     registered = _registered_tool()
     fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=registered))
@@ -399,8 +393,7 @@ async def test_middleware_preserves_original_exception_when_discard_fails(monkey
 
     authority = FailingDiscardAuthority()
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._state._get_ctx_or_none",
-        lambda: SimpleNamespace(run_skill_completion=authority),
+        _state, "_get_ctx_or_none", lambda: SimpleNamespace(run_skill_completion=authority)
     )
     fake_mcp = SimpleNamespace(get_tool=AsyncMock(return_value=_registered_tool()))
 

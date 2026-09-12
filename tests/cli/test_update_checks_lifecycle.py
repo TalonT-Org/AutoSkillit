@@ -10,6 +10,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._hooks as _patch_cli__hooks
+import autoskillit.cli.install._marketplace as _patch_install__marketplace
+import autoskillit.cli.update._update as _patch_update__update
+import autoskillit.cli.update._update_checks as _patch_update__update_checks
+import autoskillit.cli.update._update_checks_source as _patch_update__update_checks_source
 from autoskillit import __version__
 from autoskillit.cli.install._install_contract import InstallMode, InstallRequest
 from autoskillit.cli.update._transaction import (
@@ -122,9 +127,7 @@ def test_stale_fetch_cache_after_install_resolve_reference_sha_path2(
         json.dumps(cache_data), encoding="utf-8"
     )
 
-    monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.find_source_repo", lambda: None
-    )
+    monkeypatch.setattr(_patch_update__update_checks_source, "find_source_repo", lambda: None)
 
     class FreshClient:
         def __init__(self, **kw):
@@ -170,7 +173,8 @@ def test_run_update_sequence_invalidates_fetch_cache(
 
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: (
             captured.append(kwargs)
             or UpdateTransactionResult(
@@ -179,7 +183,7 @@ def test_run_update_sequence_invalidates_fetch_cache(
             )
         ),
     )
-    monkeypatch.setattr("autoskillit.cli.update._update_checks.perform_restart", lambda: None)
+    monkeypatch.setattr(_patch_update__update_checks, "perform_restart", lambda: None)
     target = ReleaseIdentity(ReleaseChannel.RELEASED, version="0.9.1")
     _run_update_sequence(tmp_path, {}, target)
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update"
@@ -202,13 +206,14 @@ def test_run_update_command_invalidates_fetch_cache(
     )
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update.run_update_transaction",
+        _patch_update__update,
+        "run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
             outcome=UpdateTransactionOutcome.COMPLETED,
             expected_version="0.9.1",
         ),
     )
-    monkeypatch.setattr("autoskillit.cli.update._update.perform_restart", lambda: None)
+    monkeypatch.setattr(_patch_update__update, "perform_restart", lambda: None)
 
     run_update_command(home=tmp_path)
     assert not cache_file.exists(), "Fetch cache must be deleted after successful update command"
@@ -251,13 +256,9 @@ def test_install_invalidates_fetch_cache(monkeypatch: pytest.MonkeyPatch, tmp_pa
         manifest_path=gen_dir.parent / f".{incarnation_id}.autoskillit-artifact.json",
     )
 
-    monkeypatch.setattr(
-        "autoskillit.cli.install._marketplace.evict_direct_mcp_entry", lambda _: False
-    )
-    monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
-    monkeypatch.setattr(
-        "autoskillit.cli.install._marketplace._ensure_marketplace", lambda **_kw: None
-    )
+    monkeypatch.setattr(_patch_install__marketplace, "evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(_patch_cli__hooks, "_evict_stale_autoskillit_hooks", lambda _: None)
+    monkeypatch.setattr(_patch_install__marketplace, "_ensure_marketplace", lambda **_kw: None)
     monkeypatch.setattr("autoskillit.workspace.reconcile_install_artifacts", lambda *, home: ())
     monkeypatch.setattr(
         "autoskillit.workspace.publish_generation",
@@ -594,7 +595,8 @@ def test_run_update_sequence_has_no_completed_only_effects_for_every_noncomplete
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
             outcome=outcome,
             expected_version="0.9.1",
@@ -602,15 +604,18 @@ def test_run_update_sequence_has_no_completed_only_effects_for_every_noncomplete
     )
     effects: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        _patch_update__update_checks,
+        "_write_dismiss_state",
         lambda *_args: effects.append("write"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        _patch_update__update_checks,
+        "invalidate_fetch_cache",
         lambda *_args: effects.append("invalidate"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.perform_restart",
+        _patch_update__update_checks,
+        "perform_restart",
         lambda: effects.append("restart"),
     )
     state = {
@@ -673,7 +678,8 @@ def test_non_completed_outcome_is_surfaced(
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
             outcome=outcome,
             findings=("some finding",),
@@ -748,7 +754,8 @@ def test_run_update_sequence_restarts_on_success(
     from autoskillit.cli.update._update_checks import _run_update_sequence
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.run_update_transaction",
+        _patch_update__update_checks,
+        "run_update_transaction",
         lambda **kwargs: UpdateTransactionResult(
             outcome=UpdateTransactionOutcome.COMPLETED,
             expected_version="0.9.1",
@@ -763,15 +770,18 @@ def test_run_update_sequence_restarts_on_success(
         effects.append("write")
 
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._write_dismiss_state",
+        _patch_update__update_checks,
+        "_write_dismiss_state",
         write_state,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.invalidate_fetch_cache",
+        _patch_update__update_checks,
+        "invalidate_fetch_cache",
         lambda *_args: effects.append("invalidate"),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks.perform_restart",
+        _patch_update__update_checks,
+        "perform_restart",
         lambda: effects.append("restart"),
     )
 

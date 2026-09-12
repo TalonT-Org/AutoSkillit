@@ -18,6 +18,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
+
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 
 
@@ -83,7 +85,8 @@ async def test_recipe_pin_to_persistent_backend_resolves_root_when_global_backen
         lambda binary: f"/test-bin/{binary}",
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.is_feature_enabled",
+        _patch_tools_tools_execution,
+        "is_feature_enabled",
         lambda *a, **kw: True,
     )
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.fleet as _patch_cli_fleet
 from autoskillit.cli.fleet import fleet_status as _fleet_status
 from tests.cli._fleet_helpers import (
     DispatchDescriptor,
@@ -173,18 +174,17 @@ def test_cross_check_warns_on_divergence(
 ) -> None:
     """_cross_check_tokens emits a stderr warning when divergence exceeds 5%."""
     from autoskillit.cli.fleet import _aggregate_totals, _cross_check_tokens
+    from autoskillit.pipeline.tokens import DefaultTokenLog
 
     (tmp_path / "sessions.jsonl").write_text("")
     state = _make_state_with_tokens(input_total=10000)
     state_totals = _aggregate_totals(state)
 
     monkeypatch.setattr("autoskillit.execution.resolve_log_dir", lambda *a: tmp_path)
+    monkeypatch.setattr(DefaultTokenLog, "load_from_log_dir", lambda self, *a, **kw: 1)
     monkeypatch.setattr(
-        "autoskillit.pipeline.tokens.DefaultTokenLog.load_from_log_dir",
-        lambda self, *a, **kw: 1,
-    )
-    monkeypatch.setattr(
-        "autoskillit.pipeline.tokens.DefaultTokenLog.compute_total",
+        DefaultTokenLog,
+        "compute_total",
         lambda self, **kw: {
             "input_tokens": 8000,
             "output_tokens": 0,
@@ -276,7 +276,8 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.fleet.is_feature_enabled",
+        _patch_cli_fleet,
+        "is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),

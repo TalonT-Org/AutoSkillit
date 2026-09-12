@@ -14,6 +14,13 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.session._session_cook as _patch_session__session_cook
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
+
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
 
@@ -282,11 +289,13 @@ class TestCookAddDirStructure:
             )
 
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_launch.resolve_executable_launch_binding",
+            _patch_session__session_launch,
+            "resolve_executable_launch_binding",
             binding,
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_cook.executable_binding_matches_current_file",
+            _patch_session__session_cook,
+            "executable_binding_matches_current_file",
             lambda _binding: True,
         )
         monkeypatch.setattr(
@@ -296,19 +305,20 @@ class TestCookAddDirStructure:
         )
         monkeypatch.setattr(shutil, "which", lambda _name: str(tmp_path / "claude"))
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
-        )
-        monkeypatch.setattr(
-            "autoskillit.cli.ui._timed_input.timed_prompt",
+            _patch_ui__timed_input,
+            "timed_prompt",
             lambda *args, **kwargs: "",
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_process.run_cook_attempt",
+            _patch_session__session_process,
+            "run_cook_attempt",
             fake_run,
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+            _patch_session__session_reload,
+            "consume_reload_sentinel",
             lambda _project: None,
         )
 

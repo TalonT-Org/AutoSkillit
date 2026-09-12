@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.server._notify as notify
 from autoskillit.pipeline.mcp_response import DefaultMcpResponseLog
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -26,7 +27,7 @@ class TestToolExceptionBoundary:
         async def boom():
             raise RuntimeError("boom")
 
-        with patch("autoskillit.server._notify._get_ctx_or_none") as mock_ctx:
+        with patch.object(notify, "_get_ctx_or_none") as mock_ctx:
             log = DefaultMcpResponseLog()
             mock_ctx.return_value = MagicMock(
                 response_log=log,
@@ -48,7 +49,7 @@ class TestToolExceptionBoundary:
         async def bad():
             raise AssertionError("No subprocess runner configured")
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify, "_get_ctx_or_none", return_value=None):
             result = await bad()
 
         data = json.loads(result)
@@ -63,7 +64,7 @@ class TestToolExceptionBoundary:
         async def bad():
             raise OSError("[Errno 2] No such file or directory: '/bad/path'")
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify, "_get_ctx_or_none", return_value=None):
             result = await bad()
 
         data = json.loads(result)
@@ -80,7 +81,7 @@ class TestToolExceptionBoundary:
         async def ok():
             return expected
 
-        with patch("autoskillit.server._notify._get_ctx_or_none", return_value=None):
+        with patch.object(notify, "_get_ctx_or_none", return_value=None):
             result = await ok()
 
         assert result == expected
@@ -94,7 +95,7 @@ class TestToolExceptionBoundary:
             raise ValueError("kaboom")
 
         log = DefaultMcpResponseLog()
-        with patch("autoskillit.server._notify._get_ctx_or_none") as mock_ctx:
+        with patch.object(notify, "_get_ctx_or_none") as mock_ctx:
             mock_ctx.return_value = MagicMock(
                 response_log=log,
                 config=MagicMock(mcp_response=MagicMock(alert_threshold_tokens=0)),

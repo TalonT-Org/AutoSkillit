@@ -7,6 +7,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.fleet as _patch_cli_fleet
+import autoskillit.cli.fleet._fleet_session as _patch_fleet__fleet_session
+import autoskillit.cli.prompts as _patch_cli_prompts
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.ui._menu as _patch_ui__menu
 from autoskillit.cli.fleet import fleet_campaign as _fleet_campaign
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
@@ -85,7 +92,7 @@ def test_fleet_run_exit_code_passthrough(monkeypatch: pytest.MonkeyPatch, tmp_pa
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_campaign_resolution(monkeypatch, tmp_path, "test-campaign")
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
         subprocess,
         "Popen",
@@ -104,7 +111,8 @@ def test_fleet_campaign_exits_when_disabled(
     _stub_guards(monkeypatch)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.fleet.is_feature_enabled",
+        _patch_cli_fleet,
+        "is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),
@@ -142,7 +150,7 @@ def test_fleet_campaign_no_name_shows_menu_and_launches(
     monkeypatch.chdir(tmp_path)
     _stub_list_campaign_recipes(monkeypatch, ["campaign-alpha", "campaign-beta"])
     _stub_campaign_resolution(monkeypatch, tmp_path, "campaign-alpha")
-    monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "1")
+    monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "1")
     captured = _capture_subprocess(monkeypatch)
     _fleet_campaign(campaign_name=None)
     assert "AUTOSKILLIT_CAMPAIGN_ID" in captured["env"]
@@ -176,7 +184,7 @@ def test_fleet_campaign_no_name_invalid_selection_exits(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_campaign_recipes(monkeypatch, ["campaign-alpha"])
-    monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "")
     with pytest.raises(SystemExit, match="1"):
         _fleet_campaign(campaign_name=None)
 
@@ -195,7 +203,7 @@ def test_fleet_campaign_resume_no_name_lists_active_campaigns(
     )
 
     _stub_campaign_resolution(monkeypatch, tmp_path, "campaign-active-1")
-    monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "1")
+    monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "1")
     monkeypatch.setattr(
         "autoskillit.fleet.resume_campaign_from_state",
         lambda *a, **kw: MagicMock(
@@ -266,7 +274,7 @@ class TestFleetCampaignResumeHaltedExits:
             nonlocal launch_called
             launch_called = True
 
-        monkeypatch.setattr("autoskillit.cli.fleet._launch_fleet_session", _track_launch)
+        monkeypatch.setattr(_patch_cli_fleet, "_launch_fleet_session", _track_launch)
         with pytest.raises(SystemExit):
             _fleet_campaign("test-campaign", resume_campaign=campaign_id)
         assert not launch_called
@@ -284,9 +292,10 @@ def test_fleet_campaign_passes_initial_message(
     def mock_launch_session(*a: object, **kw: object) -> None:
         captured_kwargs.update(kw)
 
-    monkeypatch.setattr("autoskillit.cli.fleet._launch_fleet_session", mock_launch_session)
+    monkeypatch.setattr(_patch_cli_fleet, "_launch_fleet_session", mock_launch_session)
     monkeypatch.setattr(
-        "autoskillit.cli._preview._pre_launch_campaign",
+        _patch_cli__preview,
+        "_pre_launch_campaign",
         lambda *a, **kw: ("", True),
     )
     _fleet_campaign("test-campaign")
@@ -315,14 +324,16 @@ def test_launch_fleet_session_forwards_initial_message_campaign(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         mock_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
+        _patch_cli_prompts,
+        "_build_fleet_campaign_prompt",
         lambda *a, **kw: "campaign-prompt",
     )
-    monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_fleet__fleet_session, "dump_yaml_str", lambda *a, **kw: "")
     from autoskillit.fleet import ResumeDecision
 
     monkeypatch.setattr(
@@ -368,14 +379,16 @@ def test_launch_fleet_session_clears_initial_message_on_reload_campaign(
         return "reload-session-abc" if call_count == 1 else None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         mock_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
+        _patch_cli_prompts,
+        "_build_fleet_campaign_prompt",
         lambda *a, **kw: "campaign-prompt",
     )
-    monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_fleet__fleet_session, "dump_yaml_str", lambda *a, **kw: "")
     from autoskillit.fleet import ResumeDecision
 
     monkeypatch.setattr(

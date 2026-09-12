@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.update._update_checks as _patch_update__update_checks
 from autoskillit.hook_registry import HookDriftResult
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -20,7 +22,7 @@ def test_hooks_signal_silent_when_plugin_installed(
     """Site 1: _hooks_signal() returns None when plugin is installed (missing drift suppressed)."""
     from autoskillit.cli.update._update_checks import _hooks_signal
 
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     settings = tmp_path / "settings.json"
     settings.write_text('{"hooks": {}}')
 
@@ -34,9 +36,10 @@ def test_hooks_signal_orphaned_still_fires_when_plugin_installed(
     """Site 1: orphaned hook detection remains unconditional when plugin is installed."""
     from autoskillit.cli.update._update_checks import _hooks_signal
 
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks._count_hook_registry_drift",
+        _patch_update__update_checks,
+        "_count_hook_registry_drift",
         lambda _path: HookDriftResult(missing=0, orphaned=2),
     )
     settings = tmp_path / "settings.json"

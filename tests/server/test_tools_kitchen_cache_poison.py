@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from tests.server._helpers import _resolve_recipe_section
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.anyio, pytest.mark.medium]
@@ -26,11 +27,12 @@ async def test_open_kitchen_ingredients_only_does_not_poison_load_recipe(
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
-    with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server.tools.tools_kitchen.create_background_task"):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+    with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+        with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "create_background_task"):
+                with patch.object(
+                    _patch_tools_tools_kitchen,
+                    "resolve_kitchen_id",
                     return_value="test-kitchen",
                 ):
                     ok_result = json.loads(

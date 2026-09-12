@@ -154,8 +154,9 @@ def test_load_bundled_manifest_patch_path_resolves() -> None:
     patched via the facade namespace without raising AttributeError.
     """
     sentinel = {"sentinel": True}
-    with patch(
-        "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+    with patch.object(
+        _rsc,
+        "load_bundled_manifest",
         return_value=sentinel,
     ) as mocked:
         from autoskillit.recipe.rules.rules_skill_content import load_bundled_manifest

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.execution.backends._codex_hooks as _patch_backends__codex_hooks
 from autoskillit.execution import (
     generate_codex_hooks_config,
     sync_hooks_to_codex_config,
@@ -47,7 +48,8 @@ class TestCodexHooksConfigRoundTrip:
             action="publish",
         )
         monkeypatch.setattr(
-            "autoskillit.execution.backends._codex_hooks.installed_plugin_artifact_root",
+            _patch_backends__codex_hooks,
+            "installed_plugin_artifact_root",
             lambda *_args: retained_root,
         )
 
@@ -61,11 +63,13 @@ class TestCodexHooksConfigRoundTrip:
         missing_root = fake_home / "missing"
         source_hooks = fake_home / "source-hooks"
         monkeypatch.setattr(
-            "autoskillit.execution.backends._codex_hooks.installed_plugin_artifact_root",
+            _patch_backends__codex_hooks,
+            "installed_plugin_artifact_root",
             lambda *_args: missing_root,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.backends._codex_hooks.HOOKS_DIR",
+            _patch_backends__codex_hooks,
+            "HOOKS_DIR",
             source_hooks,
         )
 

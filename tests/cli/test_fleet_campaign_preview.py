@@ -6,6 +6,11 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.fleet as _patch_cli_fleet
+import autoskillit.cli.prompts as _patch_cli_prompts
+import autoskillit.cli.ui._ansi as _patch_ui__ansi
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.cli.fleet import fleet_campaign as _fleet_campaign
 from tests.cli._fleet_helpers import (
     _stub_campaign_resolution,
@@ -37,10 +42,10 @@ def _stub_preview_layer(
     def _fake_launch(*args: object, **kwargs: object) -> None:
         calls["launch"].append({"args": args, "kwargs": kwargs})
 
-    monkeypatch.setattr("autoskillit.cli._preview.show_campaign_preview", _fake_preview)
-    monkeypatch.setattr("autoskillit.cli.prompts._get_ingredients_table", _fake_get_itable)
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", _fake_timed_prompt)
-    monkeypatch.setattr("autoskillit.cli.fleet._launch_fleet_session", _fake_launch)
+    monkeypatch.setattr(_patch_cli__preview, "show_campaign_preview", _fake_preview)
+    monkeypatch.setattr(_patch_cli_prompts, "_get_ingredients_table", _fake_get_itable)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", _fake_timed_prompt)
+    monkeypatch.setattr(_patch_cli_fleet, "_launch_fleet_session", _fake_launch)
     return calls
 
 
@@ -164,10 +169,8 @@ class TestFleetCampaignPreview:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(recipe_io, "pkg_root", lambda: builtin_root)
         monkeypatch.setattr("autoskillit.recipe.list_recipes", tracking_list_recipes)
-        monkeypatch.setattr("autoskillit.cli.ui._ansi.supports_color", lambda: False)
-        monkeypatch.setattr(
-            "autoskillit.cli.ui._ansi.permissions_warning", lambda: "permissions warning"
-        )
+        monkeypatch.setattr(_patch_ui__ansi, "supports_color", lambda: False)
+        monkeypatch.setattr(_patch_ui__ansi, "permissions_warning", lambda: "permissions warning")
 
         recipe_io._clear_recipe_discovery_caches()
         try:

@@ -17,6 +17,7 @@ from autoskillit.config import (
 from autoskillit.core.claude_conventions import ClaudeDirectoryConventions
 from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES
 from autoskillit.execution.runtime.commands import _inject_completion_directive
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.conftest import _make_result
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
@@ -206,8 +207,11 @@ class TestRunSkillPassesSessionLogDir:
 
         log_dir = tmp_path / "logs" / "some-project"
         log_dir.mkdir(parents=True, exist_ok=True)
+        from autoskillit.execution.headless import _headless_launch
+
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_launch._resolve_session_log_dir",
+            _headless_launch,
+            "_resolve_session_log_dir",
             lambda cwd, backend: log_dir,
         )
 
@@ -458,7 +462,8 @@ class TestRunSkillExecutionMarker:
             yield
 
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_execution.execution_marker",
+            tools_execution,
+            "execution_marker",
             _capture_marker,
         )
 
@@ -484,7 +489,8 @@ class TestRunSkillExecutionMarker:
             yield
 
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_execution.execution_marker",
+            tools_execution,
+            "execution_marker",
             _capture_marker,
         )
 

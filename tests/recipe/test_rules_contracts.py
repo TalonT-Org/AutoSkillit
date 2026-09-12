@@ -258,8 +258,9 @@ def test_write_behavior_invalid_value_flagged() -> None:
     """Invalid write_behavior value triggers an error finding."""
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="invalid")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -271,8 +272,9 @@ def test_conditional_without_patterns_flagged() -> None:
     """conditional without write_expected_when triggers an error."""
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="conditional", write_expected_when=[])
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -284,8 +286,9 @@ def test_always_with_patterns_flagged() -> None:
     """always with write_expected_when triggers a warning."""
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="always", write_expected_when=["pattern"])
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -297,8 +300,9 @@ def test_invalid_regex_in_patterns_flagged() -> None:
     """Invalid regex in write_expected_when triggers an error."""
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="conditional", write_expected_when=["[invalid"])
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -407,9 +411,7 @@ def test_unreadable_skill_md_emits_warning_finding(
         return original_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
 
     with (
-        patch(
-            "autoskillit.recipe.rules.rules_contracts.get_skill_contract", return_value=contract
-        ),
+        patch.object(_rc, "get_skill_contract", return_value=contract),
         patch.object(Path, "read_text", fail_read_text),
     ):
         findings = run_semantic_rules(recipe)
@@ -436,9 +438,7 @@ def test_always_no_write_detects_degrade_gracefully(
 
     recipe = _make_recipe_with_skill("/autoskillit:test-skill")
     contract = _make_contract(write_behavior="always")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract", return_value=contract
-    ):
+    with patch.object(_rc, "get_skill_contract", return_value=contract):
         findings = run_semantic_rules(recipe)
 
     exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
@@ -464,9 +464,7 @@ def test_always_no_write_detects_when_unavailable(
 
     recipe = _make_recipe_with_skill("/autoskillit:test-skill")
     contract = _make_contract(write_behavior="always")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract", return_value=contract
-    ):
+    with patch.object(_rc, "get_skill_contract", return_value=contract):
         findings = run_semantic_rules(recipe)
 
     exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
@@ -498,8 +496,9 @@ class TestResultFieldDriftRule:
                 ResultFieldSpec(name="ordering", type="int", required=True),
             ],
         )
-        with patch(
-            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        with patch.object(
+            _rc,
+            "get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -521,8 +520,9 @@ class TestResultFieldDriftRule:
                 ResultFieldSpec(name="phantom_field", type="str", required=True),
             ],
         )
-        with patch(
-            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        with patch.object(
+            _rc,
+            "get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -545,8 +545,9 @@ class TestResultFieldDriftRule:
                 # 'name' and 'ordering' are missing
             ],
         )
-        with patch(
-            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        with patch.object(
+            _rc,
+            "get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -570,8 +571,9 @@ class TestResultFieldDriftRule:
                 ResultFieldSpec(name="optional_extra", type="str", required=False),
             ],
         )
-        with patch(
-            "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+        with patch.object(
+            _rc,
+            "get_skill_contract",
             return_value=contract,
         ):
             findings = run_semantic_rules(recipe)
@@ -842,8 +844,9 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_conditional()
     """Rule fires ERROR when conditional write skill has no output_dir and reaches push."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="conditional")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -859,8 +862,9 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_always() -> N
     """Rule fires ERROR when always-write skill has no output_dir and reaches push."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="always")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -873,8 +877,9 @@ def test_write_skill_reaching_push_with_output_dir_passes() -> None:
     """Rule does NOT fire when output_dir is declared."""
     recipe = _make_write_push_recipe(output_dir="${{ context.work_dir }}", routes_to_push=True)
     contract = _make_write_contract(write_behavior="conditional")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -886,8 +891,9 @@ def test_write_skill_without_push_still_fires_when_no_output_dir() -> None:
     """Rule fires even when push_to_remote is NOT reachable — push is irrelevant."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
     contract = _make_write_contract(write_behavior="conditional")
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)
@@ -903,8 +909,9 @@ def test_read_only_skill_without_output_dir_not_flagged() -> None:
     """Rule does NOT fire when the skill is read_only, even with write_behavior='always'."""
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="always", read_only=True)
-    with patch(
-        "autoskillit.recipe.rules.rules_contracts.get_skill_contract",
+    with patch.object(
+        _rc,
+        "get_skill_contract",
         return_value=contract,
     ):
         findings = run_semantic_rules(recipe)

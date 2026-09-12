@@ -7,6 +7,7 @@ import re
 
 import pytest
 
+import autoskillit.server.tools.tools_recipe as tools_recipe
 from autoskillit.server.tools.tools_recipe import list_recipes as list_recipes_tool
 from autoskillit.server.tools.tools_recipe import validate_recipe
 from tests.server._helpers import (
@@ -555,12 +556,14 @@ async def test_load_recipe_injects_hidden_ingredient_overrides(
     _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
-        with patch(
-            "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+        with patch.object(
+            tools_recipe,
+            "resolve_ingredient_defaults",
             return_value=_PATCHED_DEFAULTS,
         ):
             await load_recipe(name="demo")
@@ -582,12 +585,14 @@ async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_op
     _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
-        with patch(
-            "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+        with patch.object(
+            tools_recipe,
+            "resolve_ingredient_defaults",
             return_value={
                 "base_branch": "develop",
                 "is_fleet_dispatch": "false",
@@ -621,12 +626,14 @@ async def test_load_recipe_with_config_authority_ingredient(tool_ctx_kitchen_ope
     _configure_admitted_recipe(tool_ctx_kitchen_open, tmp_path / "demo.yaml")
     tool_ctx_kitchen_open.kitchen_id = "test-kitchen-xyz"
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
-        with patch(
-            "autoskillit.server.tools.tools_recipe.resolve_ingredient_defaults",
+        with patch.object(
+            tools_recipe,
+            "resolve_ingredient_defaults",
             return_value={
                 "base_branch": "develop",
                 "is_fleet_dispatch": "false",

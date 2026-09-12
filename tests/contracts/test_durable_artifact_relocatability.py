@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.workspace.session_skill_catalog as _patch_workspace_session_skill_catalog
 from autoskillit.core.types._type_constants_durable_writers import (
     DURABLE_ARTIFACT_WRITERS,
     DurableArtifactWriterDef,
@@ -179,7 +180,8 @@ class TestNonMachineLocalWritersAreRelocatable:
             captured.update(path=path, content=content, schema_version=schema_version)
 
         monkeypatch.setattr(
-            "autoskillit.workspace.session_skill_catalog.write_versioned_json",
+            _patch_workspace_session_skill_catalog,
+            "write_versioned_json",
             capture_versioned_json,
         )
 

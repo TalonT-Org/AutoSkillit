@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 import structlog.testing
 
+import autoskillit.execution.process as _patch_execution_process
 from autoskillit.execution.process import run_managed_async
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -30,7 +31,7 @@ class TestStarttimeTicksZeroWarning:
 
         with (
             structlog.testing.capture_logs() as logs,
-            patch("autoskillit.execution.process.read_starttime_ticks", return_value=0),
+            patch.object(_patch_execution_process, "read_starttime_ticks", return_value=0),
         ):
             await run_managed_async(
                 [sys.executable, str(shim)],

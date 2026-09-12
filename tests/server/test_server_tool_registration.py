@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.server.git as server_git
 from autoskillit.config import (
     AutomationConfig,
     SafetyConfig,
@@ -636,7 +637,7 @@ class TestSafetyConfigWiring:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # git merge
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")):
             result = json.loads(await merge_worktree(str(wt), "dev"))
         assert result["merge_succeeded"] is True
 

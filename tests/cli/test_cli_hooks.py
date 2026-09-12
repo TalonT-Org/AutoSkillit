@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli._hooks as _patch_cli__hooks
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
 from autoskillit import __version__
 from autoskillit.cli.install._install_contract import InstallMode, InstallRequest
 
@@ -139,7 +142,8 @@ def test_sync_validates_lifecycle_before_plugin_installed_early_return(
 
     monkeypatch.setattr(hooks_module, "validate_lifecycle_contracts", fail_validation)
     monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed",
+        _patch_cli__init_helpers,
+        "_is_plugin_installed",
         plugin_check_must_not_run,
     )
 
@@ -377,8 +381,8 @@ def test_sync_hooks_rejects_worktree_pkg_root(tmp_path, monkeypatch):
     fake_pkg = tmp_path / "worktree" / "src" / "autoskillit"
     fake_pkg.mkdir(parents=True)
 
-    monkeypatch.setattr("autoskillit.cli._hooks.pkg_root", lambda: fake_pkg)
-    monkeypatch.setattr("autoskillit.cli._hooks.is_git_worktree", lambda path: True)
+    monkeypatch.setattr(_patch_cli__hooks, "pkg_root", lambda: fake_pkg)
+    monkeypatch.setattr(_patch_cli__hooks, "is_git_worktree", lambda path: True)
 
     settings_path = tmp_path / "settings.json"
     settings_path.write_text("{}")
@@ -452,13 +456,15 @@ def test_install_does_not_write_hooks_when_plugin_active(tmp_path, monkeypatch):
         lambda scope, **_kwargs: settings_path,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed",
+        _patch_cli__init_helpers,
+        "_is_plugin_installed",
         lambda **kwargs: True,
     )
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())
     monkeypatch.setattr("shutil.which", lambda cmd, *, path=None: f"/usr/bin/{cmd}")
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.publish_installed_plugin_artifact",
+        _patch_install__plugin_artifact,
+        "publish_installed_plugin_artifact",
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
@@ -509,7 +515,8 @@ def test_register_all_skips_hook_sync_when_plugin_active(tmp_path, monkeypatch):
         lambda scope, **_kwargs: settings_path,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed",
+        _patch_cli__init_helpers,
+        "_is_plugin_installed",
         lambda **kwargs: True,
     )
     from autoskillit.cli._init_helpers import _register_all
@@ -547,7 +554,8 @@ def test_register_all_writes_hooks_when_plugin_not_active(tmp_path, monkeypatch)
         lambda scope, **_kwargs: settings_path,
     )
     monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed",
+        _patch_cli__init_helpers,
+        "_is_plugin_installed",
         lambda **kwargs: False,
     )
     monkeypatch.setattr("subprocess.run", lambda *a, **kw: type("R", (), {"returncode": 0})())

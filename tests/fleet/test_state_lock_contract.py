@@ -543,6 +543,8 @@ class TestFlockTargetPathVerification:
         """
         import builtins
 
+        import autoskillit.fleet.campaign_state._state_lock as state_lock
+
         sp = tmp_path / "state.json"
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
 
@@ -578,8 +580,9 @@ class TestFlockTargetPathVerification:
 
         with (
             patch.object(builtins, "open", side_effect=tracking_open),
-            patch(
-                "autoskillit.fleet.campaign_state._state_lock.acquire_flock_with_timeout",
+            patch.object(
+                state_lock,
+                "acquire_flock_with_timeout",
                 side_effect=tracking_acquire_flock,
             ),
         ):

@@ -86,10 +86,12 @@ class TestGetPrReviewsExceptionScope:
         self, tool_ctx_kitchen_open, monkeypatch
     ):
         """get_pr_reviews logger.error carries tool= context even when subprocess raises."""
+        from autoskillit.server.tools import tools_pr_ops
         from autoskillit.server.tools.tools_pr_ops import get_pr_reviews
 
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_pr_ops._run_subprocess",
+            tools_pr_ops,
+            "_run_subprocess",
             AsyncMock(side_effect=RuntimeError("mock error")),
         )
 

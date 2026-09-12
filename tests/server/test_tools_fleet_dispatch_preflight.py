@@ -15,6 +15,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.lifecycle._state as lifecycle_state
+import autoskillit.server.tools._preflight as preflight
+import autoskillit.server.tools.tools_fleet_dispatch as tools_fleet_dispatch
 from autoskillit.hook_registry import HookDef
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -105,14 +108,16 @@ class TestFleetDispatchPreflightBehavioral:
 
         mock_execute = AsyncMock()
         with (
-            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
-            patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
-            patch(
-                "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+            patch.object(lifecycle_state, "_ctx", tool_ctx),
+            patch.object(preflight, "HOOK_REGISTRY", [synthetic]),
+            patch.object(
+                tools_fleet_dispatch,
+                "execute_dispatch",
                 mock_execute,
             ),
-            patch(
-                "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
+            patch.object(
+                tools_fleet_dispatch,
+                "_require_fleet",
                 lambda _name: None,
             ),
         ):

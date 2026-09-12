@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.server._subprocess as server_subprocess
 from autoskillit.core.types._type_subprocess import SubprocessResult, TerminationReason
 from tests.fakes import MockSubprocessRunner
 
@@ -27,7 +28,7 @@ async def test_gh_cli_call_is_recorded(build_ctx):
 
     from autoskillit.server._subprocess import _run_subprocess
 
-    with patch("autoskillit.server._subprocess._get_ctx", return_value=ctx):
+    with patch.object(server_subprocess, "_get_ctx", return_value=ctx):
         await _run_subprocess(["gh", "pr", "list", "--json", "number"], cwd="/tmp", timeout=30)
 
     usage = log.to_usage("sess-1")
@@ -55,7 +56,7 @@ async def test_non_gh_command_is_not_recorded(build_ctx):
 
     from autoskillit.server._subprocess import _run_subprocess
 
-    with patch("autoskillit.server._subprocess._get_ctx", return_value=ctx):
+    with patch.object(server_subprocess, "_get_ctx", return_value=ctx):
         await _run_subprocess(["git", "status"], cwd="/tmp", timeout=30)
 
     assert log.to_usage("sess-1") is None
@@ -88,7 +89,7 @@ async def test_gh_cli_records_exit_code_and_latency(build_ctx):
         return _tick
 
     with (
-        patch("autoskillit.server._subprocess._get_ctx", return_value=ctx),
+        patch.object(server_subprocess, "_get_ctx", return_value=ctx),
         patch("autoskillit.server._subprocess.time.monotonic", _fake_monotonic),
     ):
         await _run_subprocess(["gh", "api", "repos/o/r/issues"], cwd="/tmp", timeout=30)

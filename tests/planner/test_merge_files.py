@@ -59,7 +59,7 @@ def test_merge_files_propagates_lock_timeout(tmp_path, monkeypatch: pytest.Monke
     def fail_lock(*args: object, **kwargs: object) -> None:
         raise TimeoutError
 
-    monkeypatch.setattr("autoskillit.planner.merge.acquire_flock_with_timeout", fail_lock)
+    monkeypatch.setattr(merge_module, "acquire_flock_with_timeout", fail_lock)
 
     with pytest.raises(TimeoutError):
         merge_files(file_paths=[], output_path=str(tmp_path / "combined.json"), key="phases")

@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
+from autoskillit.server.tools.tools_kitchen import _tracker_authority
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.server._pipeline_test_helpers import _ack_direct_run_skill_result
 
@@ -130,9 +132,9 @@ async def test_close_reopen_rebuilds_deadline_from_new_configuration(
     _ack_direct_run_skill_result(tool_ctx_kitchen_open, first_result)
 
     with (
-        patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new_callable=AsyncMock),
-        patch("autoskillit.core.register_active_kitchen"),
-        patch("autoskillit.core.unregister_active_kitchen"),
+        patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new_callable=AsyncMock),
+        patch.object(_tracker_authority, "register_active_kitchen"),
+        patch.object(_patch_tools_tools_kitchen, "unregister_active_kitchen"),
     ):
         _close_kitchen_handler()
         assert await _open_kitchen_handler() is None

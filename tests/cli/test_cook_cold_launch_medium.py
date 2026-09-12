@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.session._session_cook as _patch_session__session_cook
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
@@ -47,7 +49,8 @@ def test_cook_probes_without_provider_secret_then_spawns_with_attestation(
     config.providers.profiles = {"anthropic": {"ANTHROPIC_API_KEY": "session-secret"}}
     captured = arrange_cook(monkeypatch, tmp_path, config=config)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: None,
     )
 
@@ -97,7 +100,8 @@ def test_cook_rejects_executable_drift_before_spawn(
     monkeypatch.setenv("PATH", str(tmp_path))
     captured = arrange_cook(monkeypatch, tmp_path)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.executable_binding_matches_current_file",
+        _patch_session__session_cook,
+        "executable_binding_matches_current_file",
         lambda _binding: False,
     )
 
@@ -149,7 +153,8 @@ def test_codex_cook_resolves_and_runs_exact_binding_prelaunch(
         lambda _self, _spec: [],
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: None,
     )
 

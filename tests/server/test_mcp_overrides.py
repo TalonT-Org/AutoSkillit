@@ -71,18 +71,17 @@ async def test_load_recipe_tool_accepts_overrides_param(tmp_path: Path) -> None:
         }
     )
     mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
+    import autoskillit.config as config
+    from autoskillit.server import _misc
+    from autoskillit.server.tools import tools_recipe
 
     with (
-        patch("autoskillit.server.tools.tools_recipe._require_enabled", return_value=None),
-        patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none", return_value=mock_tool_ctx
-        ),
-        patch(
-            "autoskillit.config.resolve_ingredient_defaults",
-            return_value={},
-        ),
-        patch(
-            "autoskillit.server._misc._apply_triage_gate",
+        patch.object(tools_recipe, "_require_enabled", return_value=None),
+        patch.object(tools_recipe, "_get_ctx_or_none", return_value=mock_tool_ctx),
+        patch.object(config, "resolve_ingredient_defaults", return_value={}),
+        patch.object(
+            _misc,
+            "_apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
@@ -120,27 +119,27 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
 
     mock_mcp_ctx = AsyncMock()
     mock_mcp_ctx.enable_components = AsyncMock()
+    import autoskillit.config as config
+    import autoskillit.server as server
+    from autoskillit.server import _misc
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch(
-            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch.object(
+            tools_kitchen,
+            "_open_kitchen_handler",
             new_callable=AsyncMock,
             return_value=None,
         ),
-        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
-        patch(
-            "autoskillit.config.resolve_ingredient_defaults",
-            return_value={},
-        ),
-        patch(
-            "autoskillit.server._misc._apply_triage_gate",
+        patch.object(server, "_get_ctx", return_value=mock_tool_ctx),
+        patch.object(config, "resolve_ingredient_defaults", return_value={}),
+        patch.object(
+            _misc,
+            "_apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
@@ -191,30 +190,35 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
 
     mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
     mock_mcp_ctx = AsyncMock()
+    import autoskillit.config as config
+    import autoskillit.server as server
+    from autoskillit.server import _misc
+    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch(
-            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch.object(
+            tools_kitchen,
+            "_open_kitchen_handler",
             new_callable=AsyncMock,
             return_value=None,
         ),
-        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
-        patch("autoskillit.config.resolve_ingredient_defaults", return_value={}),
-        patch(
-            "autoskillit.server._misc._apply_triage_gate",
+        patch.object(server, "_get_ctx", return_value=mock_tool_ctx),
+        patch.object(config, "resolve_ingredient_defaults", return_value={}),
+        patch.object(
+            _misc,
+            "_apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
-        patch("autoskillit.server.tools.tools_kitchen._update_hook_config_with_recipe"),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+        patch.object(tools_kitchen, "_update_hook_config_with_recipe"),
+        patch.object(
+            tools_kitchen,
+            "_build_hook_diagnostic_warning",
             return_value=None,
         ),
-        patch("autoskillit.server.lifecycle._state._check_rerun", return_value=None),
+        patch.object(_state, "_check_rerun", return_value=None),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
@@ -260,30 +264,35 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
 
     mock_tool_ctx = _make_mock_ctx(mock_recipes, tmp_path)
     mock_mcp_ctx = AsyncMock()
+    import autoskillit.config as config
+    import autoskillit.server as server
+    from autoskillit.server import _misc
+    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch(
-            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._open_kitchen_handler",
+        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch.object(
+            tools_kitchen,
+            "_open_kitchen_handler",
             new_callable=AsyncMock,
             return_value=None,
         ),
-        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
-        patch("autoskillit.config.resolve_ingredient_defaults", return_value={}),
-        patch(
-            "autoskillit.server._misc._apply_triage_gate",
+        patch.object(server, "_get_ctx", return_value=mock_tool_ctx),
+        patch.object(config, "resolve_ingredient_defaults", return_value={}),
+        patch.object(
+            _misc,
+            "_apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
-        patch("autoskillit.server.tools.tools_kitchen._update_hook_config_with_recipe"),
-        patch(
-            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+        patch.object(tools_kitchen, "_update_hook_config_with_recipe"),
+        patch.object(
+            tools_kitchen,
+            "_build_hook_diagnostic_warning",
             return_value=None,
         ),
-        patch("autoskillit.server.lifecycle._state._check_rerun", return_value=None),
+        patch.object(_state, "_check_rerun", return_value=None),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
@@ -327,19 +336,21 @@ async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> No
     mock_tool_ctx.gate.enabled = True
     mock_tool_ctx.recipe_name = "test"
     mock_mcp_ctx = AsyncMock()
+    import autoskillit.config as config
+    import autoskillit.server as server
+    from autoskillit.server import _misc
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch(
-            "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact", return_value=None
-        ),
-        patch("autoskillit.server._get_ctx", return_value=mock_tool_ctx),
-        patch("autoskillit.config.resolve_ingredient_defaults", return_value={}),
-        patch(
-            "autoskillit.server._misc._apply_triage_gate",
+        patch.object(tools_kitchen, "_require_orchestrator_exact", return_value=None),
+        patch.object(server, "_get_ctx", return_value=mock_tool_ctx),
+        patch.object(config, "resolve_ingredient_defaults", return_value={}),
+        patch.object(
+            _misc,
+            "_apply_triage_gate",
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch("autoskillit.server.tools.tools_kitchen.__version__", "0.0.0"),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 

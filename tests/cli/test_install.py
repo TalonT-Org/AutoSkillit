@@ -11,6 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli._hooks as _patch_cli__hooks
+import autoskillit.cli.install._marketplace as _patch_install__marketplace
 from autoskillit import __version__, cli
 from autoskillit.cli.install._install_contract import InstallMode, InstallRequest
 
@@ -359,9 +361,7 @@ class TestCLIInstall:
         _app_mod = importlib.import_module("autoskillit.cli.install._marketplace")
         monkeypatch.setattr(_app_mod, "is_git_worktree", lambda path: False)
         monkeypatch.setattr(_app_mod, "evict_direct_mcp_entry", lambda _: False)
-        monkeypatch.setattr(
-            "autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None
-        )
+        monkeypatch.setattr(_patch_cli__hooks, "_evict_stale_autoskillit_hooks", lambda _: None)
         monkeypatch.setattr(_app_mod, "write_generated_hooks_json", lambda _root: None)
         monkeypatch.setattr(_app_mod, "atomic_write", lambda *a, **kw: None)
         from autoskillit.cli.install._marketplace import install
@@ -1151,14 +1151,12 @@ def test_install_creates_autoskillit_gitignore(
         "subprocess.run",
         _successful_claude_run(tmp_path),
     )
+    monkeypatch.setattr(_patch_install__marketplace, "evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(_patch_cli__hooks, "_evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr(
-        "autoskillit.cli.install._marketplace.evict_direct_mcp_entry", lambda _: False
+        _patch_install__marketplace, "write_generated_hooks_json", lambda _root: None
     )
-    monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
-    monkeypatch.setattr(
-        "autoskillit.cli.install._marketplace.write_generated_hooks_json", lambda _root: None
-    )
-    monkeypatch.setattr("autoskillit.cli.install._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr(_patch_install__marketplace, "atomic_write", lambda *a, **kw: None)
     (tmp_path / ".autoskillit").mkdir()
     _install(request=_direct_request())
 
@@ -1184,14 +1182,12 @@ def test_install_calls_upgrade_when_scripts_dir_exists(
         "subprocess.run",
         _successful_claude_run(tmp_path),
     )
+    monkeypatch.setattr(_patch_install__marketplace, "evict_direct_mcp_entry", lambda _: False)
+    monkeypatch.setattr(_patch_cli__hooks, "_evict_stale_autoskillit_hooks", lambda _: None)
     monkeypatch.setattr(
-        "autoskillit.cli.install._marketplace.evict_direct_mcp_entry", lambda _: False
+        _patch_install__marketplace, "write_generated_hooks_json", lambda _root: None
     )
-    monkeypatch.setattr("autoskillit.cli._hooks._evict_stale_autoskillit_hooks", lambda _: None)
-    monkeypatch.setattr(
-        "autoskillit.cli.install._marketplace.write_generated_hooks_json", lambda _root: None
-    )
-    monkeypatch.setattr("autoskillit.cli.install._marketplace.atomic_write", lambda *a, **kw: None)
+    monkeypatch.setattr(_patch_install__marketplace, "atomic_write", lambda *a, **kw: None)
     scripts_dir = tmp_path / ".autoskillit" / "scripts"
     scripts_dir.mkdir(parents=True)
 

@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.ui._ansi as _patch_ui__ansi
 from autoskillit import cli
 from tests.cli._interactive_process import configure_popen
 from tests.cli.conftest import _GITHUB_RECIPE_YAML
@@ -25,7 +27,7 @@ class TestOrderSubsetGate:
 
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("autoskillit.cli._preview.show_cook_preview", lambda *a, **kw: None)
+        monkeypatch.setattr(_patch_cli__preview, "show_cook_preview", lambda *a, **kw: None)
 
     @pytest.fixture(autouse=True)
     def _stub_ingredients_table(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,7 +133,7 @@ class TestOrderSubsetGate:
         monkeypatch.setattr(_app_mod, "_enable_subsets_permanently", _fake_enable)
         inputs = iter(["2", "n"])
         monkeypatch.setattr("builtins.input", lambda _prompt="": next(inputs))
-        monkeypatch.setattr("autoskillit.cli.ui._ansi.permissions_warning", lambda: "")
+        monkeypatch.setattr(_patch_ui__ansi, "permissions_warning", lambda: "")
 
         cli.order("github-recipe")
 

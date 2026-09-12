@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,7 +16,7 @@ pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 @pytest.mark.anyio
 async def test_quota_refresh_loop_calls_refresh_at_each_interval(monkeypatch):
     """Loop calls _refresh_quota_cache once per cache_refresh_interval sleep."""
-    from autoskillit.server._misc import _quota_refresh_loop
+    from autoskillit.server import _misc
 
     call_count = 0
     sleep_count = 0
@@ -30,12 +31,12 @@ async def test_quota_refresh_loop_calls_refresh_at_each_interval(monkeypatch):
         nonlocal call_count
         call_count += 1
 
-    monkeypatch.setattr("autoskillit.server._misc.asyncio.sleep", fake_sleep)
-    monkeypatch.setattr("autoskillit.server._misc._refresh_quota_cache", fake_refresh)
+    monkeypatch.setattr(_misc, "asyncio", SimpleNamespace(sleep=fake_sleep))
+    monkeypatch.setattr(_misc, "_refresh_quota_cache", fake_refresh)
 
     config = QuotaGuardConfig(cache_refresh_interval=240)
     with pytest.raises(asyncio.CancelledError):
-        await _quota_refresh_loop(config, supports_quota_check=True)
+        await _misc._quota_refresh_loop(config, supports_quota_check=True)
 
     assert call_count == 2  # one refresh per completed sleep
 
@@ -43,14 +44,16 @@ async def test_quota_refresh_loop_calls_refresh_at_each_interval(monkeypatch):
 @pytest.mark.anyio
 async def test_quota_refresh_loop_exits_cleanly_on_cancel(monkeypatch):
     """CancelledError from asyncio.sleep propagates; loop does not swallow it."""
-    from autoskillit.server._misc import _quota_refresh_loop
+    from autoskillit.server import _misc
 
     async def immediate_cancel(n):
         raise asyncio.CancelledError
 
-    monkeypatch.setattr("autoskillit.server._misc.asyncio.sleep", immediate_cancel)
-    monkeypatch.setattr("autoskillit.server._misc._refresh_quota_cache", AsyncMock())
-    task = asyncio.create_task(_quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=True))
+    monkeypatch.setattr(_misc, "asyncio", SimpleNamespace(sleep=immediate_cancel))
+    monkeypatch.setattr(_misc, "_refresh_quota_cache", AsyncMock())
+    task = asyncio.create_task(
+        _misc._quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=True)
+    )
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -59,7 +62,7 @@ async def test_quota_refresh_loop_exits_cleanly_on_cancel(monkeypatch):
 @pytest.mark.anyio
 async def test_quota_refresh_loop_continues_after_refresh_exception(monkeypatch):
     """A transient error in _refresh_quota_cache does not kill the loop."""
-    from autoskillit.server._misc import _quota_refresh_loop
+    from autoskillit.server import _misc
 
     call_count = 0
     sleep_count = 0
@@ -76,11 +79,11 @@ async def test_quota_refresh_loop_continues_after_refresh_exception(monkeypatch)
         if call_count == 1:
             raise OSError("network blip")
 
-    monkeypatch.setattr("autoskillit.server._misc.asyncio.sleep", fake_sleep)
-    monkeypatch.setattr("autoskillit.server._misc._refresh_quota_cache", flaky_refresh)
+    monkeypatch.setattr(_misc, "asyncio", SimpleNamespace(sleep=fake_sleep))
+    monkeypatch.setattr(_misc, "_refresh_quota_cache", flaky_refresh)
 
     with pytest.raises(asyncio.CancelledError):
-        await _quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=True)
+        await _misc._quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=True)
 
     assert call_count == 2  # loop continued after the first OSError
 
@@ -88,28 +91,31 @@ async def test_quota_refresh_loop_continues_after_refresh_exception(monkeypatch)
 @pytest.mark.anyio
 async def test_quota_refresh_loop_returns_immediately_when_unsupported(monkeypatch):
     """supports_quota_check=False exits immediately without entering the loop."""
-    from autoskillit.server._misc import _quota_refresh_loop
+    from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        "autoskillit.server._misc.asyncio.sleep",
-        AsyncMock(side_effect=AssertionError("should not sleep")),
+        _misc,
+        "asyncio",
+        SimpleNamespace(sleep=AsyncMock(side_effect=AssertionError("should not sleep"))),
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc._refresh_quota_cache",
+        _misc,
+        "_refresh_quota_cache",
         AsyncMock(side_effect=AssertionError("should not refresh")),
     )
 
-    await _quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=False)
+    await _misc._quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=False)
     # No error = early return worked
 
 
 @pytest.mark.anyio
 async def test_prime_quota_cache_skips_when_unsupported(monkeypatch):
     """supports_quota_check=False skips the cache priming entirely."""
-    from autoskillit.server._misc import _prime_quota_cache
+    from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        "autoskillit.server._misc.check_and_sleep_if_needed",
+        _misc,
+        "check_and_sleep_if_needed",
         AsyncMock(side_effect=AssertionError("should not call")),
     )
-    await _prime_quota_cache(supports_quota_check=False)
+    await _misc._prime_quota_cache(supports_quota_check=False)

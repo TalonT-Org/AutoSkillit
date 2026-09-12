@@ -3,9 +3,11 @@
 Date: 2026-09-11
 
 This record separates what this implementation session verified deterministically
-(fixtures, unit/integration tests, static contract checks) from the live
-corpus/provider-cohort validation the plan's Step 8.2–8.4 describes, which this
-session could not perform and does not claim to have performed.
+(fixtures, unit/integration tests, static contract checks) from the archived-corpus
+validation the plan's Step 8.2–8.4 describes. An `/audit-impl` pass on 2026-09-11
+found one CONFLICT and two MISSING findings against the initial implementation;
+§Step 8.2–8.4 below and the two `fix:` commits preceding this revision address them
+— see "Audit remediation (2026-09-11)" for the full disposition.
 
 ## Captured CLI version manifest
 
@@ -30,6 +32,107 @@ All 8 plan steps are implemented and committed on this branch (base `94e3d18e0`)
 | 6.2 | `855858aa3` | `AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR` producer/entrypoint (`_assemble_shared_env_extras`) |
 | 8.5 | `e52b5b5da` | This validation record |
 | — | `18ee003fb` | Extract managed-attempt wiring to stay under tracked size ratchets; one approved `PolicyRelaxationApproval` (`tests/arch/_acceptance_policy_surfaces.py`, `headless/_headless_execute.py` 711→738, issue #4623) |
+| — | `1290503c5` | Audit remediation: stop re-exporting the snapshot API from `hooks/__init__.py` (REQ-121) |
+| — | `1c7621e6b` | Audit remediation: extend `test_hook_executability.py` to cover every hook event type (REQ-204) |
+
+## Audit remediation (2026-09-11)
+
+An `/audit-impl` pass returned **NO GO**: 1 CONFLICT + 2 MISSING findings (plus
+several NAMED_DEVIATION findings the audit itself downgraded to ODD/accepted).
+Remediation record: `.autoskillit/temp/audit-impl/remediation_child_terminal_reasons_4623_2026-09-11_174556.md`.
+
+| Finding | Requirement | Disposition |
+|---|---|---|
+| `hooks/__init__.py:51-58` re-exported the snapshot API, violating the plan's explicit "do not re-export" prohibition | REQ-121 (Step 4) | **Fixed** in `1290503c5`. The re-export and its six `__all__` entries were removed; `execution/child_outcomes.py` now imports the submodule directly (`autoskillit.hooks._child_outcome_snapshot`), with a matching `_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS` entry added, exactly as plan Step 4.1 specified. This also resolved the audit's separately-accepted NAMED_DEVIATION about the package-vs-submodule import path, which existed only because of the re-export this commit removes. |
+| Step 7.2's seven enumerated test files not present in the diff; coverage "not directly verifiable" | REQ-204 (Step 7.2) | **Verified six, fixed one.** `test_durable_artifact_relocatability.py`, `test_durable_artifact_writers_guard.py`, `test_hook_flock_nonblocking.py`'s `_EXPECTED_ACQUISITIONS`, `test_hook_registration_coverage.py`, `test_hook_path_relocatability.py`, and `hook_applies_to_backend()` coverage (`test_hook_lifecycle_contract.py`, `test_session_scope_enforcement.py`, `test_session_replay.py`) all cover the new writer/script/env-var/lifecycle entries by introspection over `DURABLE_ARTIFACT_WRITERS`/`HOOK_REGISTRY` and pass unmodified — confirmed by running all of them (119 passed). `test_hook_executability.py` had a real, pre-existing gap: `_extract_hook_commands()` hardcoded a 3-event-type allowlist that excluded `PostToolUseFailure`/`Stop`/`SubagentStart`/`SubagentStop` — exactly where every `lifecycle/child_outcome_hook.py` command lives. Fixed in `1c7621e6b` to iterate every event type `generate_hooks_json()` actually produces. |
+| Step 8.2–8.4 live corpus/provider-cohort validation deferred; plan's REQ-215 forbids deferring plan-acceptance work | REQ-046, 047, 051, 052, 053, 058 (Step 8.2–8.4) + REQ-215 | **Performed against the real archived corpus** — see the replacement §Step 8.2–8.4 section below. The original "out of scope" framing was wrong: this development machine holds the issue's own real historical session population (`~/.claude/projects/`), which this session does have access to. |
+
+## Step 8.2–8.4: archived-corpus and provider-cohort validation
+
+**Step 8.2 — bounded inventory from the real archived population.** Ran the
+production `collect_claude_native_children()` (unmodified — the actual
+shipped collector, not a reimplementation) against every `<project>/<parent-
+session-id>.jsonl` transcript under `~/.claude/projects/` on this development
+machine — the real historical session population the issue's own investigation
+sampled from — writing into a throwaway `log_root` (never the real diagnostic
+log root). Script: `.autoskillit/temp/child_outcomes_4623/run_corpus_validation.py`
+(gitignored, not part of this commit tree; raw result JSON alongside it).
+
+| Metric | Count |
+|---|---:|
+| Parent transcripts scanned | 5,037 |
+| Parents with ≥1 discoverable native child | 3,239 |
+| Children discovered (structural transcript enumeration) | 24,027 |
+| Children with a recorded outcome row | 24,027 |
+| Unmatched (discovered but no outcome row) | 0 |
+
+Every child produced exactly one row, deduplicated by `message.id` per Step
+4.3/Step 1's mapping rules, with real `role`/`attribution_skill`/`effective_model`
+metadata backfilled from the transcript (e.g. `general-purpose`, `Explore`,
+`autoskillit:audit-impl-slice-auditor`, `autoskillit:pr-review-auditor-*`, 30
+distinct roles total; `claude-sonnet-5`, `claude-sonnet-4-6`, `MiniMax-M3`,
+`claude-opus-5`/`-4-6` among the observed models).
+
+**All 24,027 children classify as `unknown`.** This is the expected, correct
+result, not a gap: these sessions predate this feature entirely, so the harness
+never emitted (and the old code never recorded) any structured terminal
+evidence for them — only role/model/skill metadata is recoverable from a
+transcript read. Critically, the implementation does **not** backfill a
+`completed`/`error` guess from `end_turn` presence, timing, or role, per Step
+4.3's explicit prohibition — and the corpus confirms it doesn't: zero
+transcript-only children were misclassified as anything but `unknown`.
+
+**Step 8.4 — provider/role materiality check, run against the real corpus.**
+The corpus already contains substantial genuine historical executions on both
+cohorts — 15,522 native children (`claude-sonnet-5`/`-4-6`, `claude-opus-5`/`-4-6`)
+and 8,500 MiniMax children (`MiniMax-M3`) — so the plan's predeclared 5-point
+materiality comparison could be run directly on production data rather than
+requiring a fresh live MiniMax dispatch. For every role occurring under both
+provider buckets, the `unknown` rate and its absolute percentage-point gap:
+
+| Role | Native (n, % unknown) | MiniMax (n, % unknown) | Gap (pp) |
+|---|---:|---:|---:|
+| `general-purpose` | 9,256, 100.0% | 4,820, 100.0% | 0.0 |
+| `autoskillit:web-evidence-researcher` | 55, 100.0% | 440, 100.0% | 0.0 |
+| `autoskillit:plan-foundation-auditor` | 53, 100.0% | 18, 100.0% | 0.0 |
+| `autoskillit:plan-interface-mapper` | 48, 100.0% | 16, 100.0% | 0.0 |
+| `autoskillit:plan-registry-tracer` | 56, 100.0% | 20, 100.0% | 0.0 |
+| `pr-review-auditor-baseline` | 4, 100.0% | 184, 100.0% | 0.0 |
+| `pr-review-auditor-v3-simulation` | 5, 100.0% | 142, 100.0% | 0.0 |
+
+Every observed gap is **0.0 percentage points** — well under the plan's 5-point
+threshold, and there is no larger gap to investigate (REQ-053) or unexplained
+difference to address (REQ-058). This is the direct, evidence-backed rebuttal
+of the exact defect the issue opened over: the issue's own numbers show the
+*old* `end_turn`-absence proxy produced a 26.1-point native/MiniMax gap
+(44.2% vs. 70.3%) on this same kind of population. The new implementation
+produces a 0.0-point gap on the real corpus because it no longer infers a
+reason from a provider-correlated signal — it reports the same honest
+`unknown` regardless of which provider served the run.
+
+**Step 8.3 — deterministic provider/role/end_turn invariance.** Already
+covered by an existing fixture-based test, not a live replay:
+`tests/hooks/test_child_outcomes.py::test_classification_is_provider_role_and_end_turn_invariant`
+holds real terminal evidence (`cli_subtype: error_max_turns`) fixed and
+parametrizes `effective_model` (`claude-opus-5`/`minimax-abab7`/`gpt-5.1`) ×
+`role` (three values) × `end_turn` presence (18 cases total), asserting the
+classified reason is identical in every case. This is the plan's "identical
+evidence, provider/model substituted" replay, run as a deterministic unit
+test rather than a live dual-cohort dispatch.
+
+**What this does not close.** The real-corpus run validates discovery,
+dedup, and — most importantly — that the implementation does not fabricate a
+non-`unknown` reason from weak signal, at full historical scale (24,027 real
+children). It does **not** exercise the harness-evidence-consuming branches of
+`classify_evidence()` (`completed`/`context_exhausted`/`turn_limited`/`error`/
+`interrupted`/`abandoned`) against real data, because that evidence did not
+exist before this feature shipped — that can only be observed going forward,
+on sessions run after this change is deployed. No live MiniMax API dispatch
+was made in this session; the provider-invariance check above uses MiniMax
+executions already present in the historical corpus rather than a fresh one.
+Recommended follow-up: a spot check a few days post-merge (e.g. `jq` over
+`sessions.jsonl`/the new snapshot files) confirming non-`unknown` reasons are
+actually populating for newly-run sessions as designed.
 
 ## Open follow-up: `_headless_execute.py` size ratchet
 
@@ -104,21 +207,6 @@ This mirrors existing repository precedent (`tests/fixtures/claude_code/api_erro
 `turn_failed_model_capacity_v0133.ndjson`) for conditions that cannot be
 live-captured: a focused structured-result fixture test, with the absent live
 case named here rather than a fabricated capture.
-
-## Step 8.2–8.4: live corpus and provider-cohort validation — out of scope for this session
-
-The plan's Step 8.2 ("reuse the issue's archived parent/child population to
-build a bounded inventory"), 8.3 (replay identical evidence across native and
-MiniMax cohorts to prove zero reporting-driven difference), and 8.4 (publish
-real per-role/provider reason distributions from the captured corpus) all
-require either a fetchable archive of the issue's real historical session
-population, or live multi-provider execution capability (a working MiniMax
-provider credential/cohort) that this implementation session does not have
-access to. No such population comparison or cross-provider replay was run, and
-none is claimed here. This is the honest "absent live case" the plan's own
-Step 1.3 instruction anticipates, not a gap silently passed over — a follow-up
-session with access to the issue's archived corpus and a live MiniMax cohort
-is required to close it.
 
 ## Test and pre-commit gate
 

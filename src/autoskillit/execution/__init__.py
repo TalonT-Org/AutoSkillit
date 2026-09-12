@@ -1,6 +1,6 @@
 """execution/ IL-1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
 
-Re-exports the full public surface of the six execution sub-modules.
+Re-exports the full public surface of the ten execution sub-packages.
 All sub-modules depend only on autoskillit.core.* at runtime;
 execution/headless/ has TYPE_CHECKING-only references to pipeline/.
 """

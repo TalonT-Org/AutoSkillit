@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import production_interpreter_env
 from tests.infra.conftest import _CONSTRUCT_CASES, load_check_script
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
@@ -37,6 +38,7 @@ def _require_ruff() -> None:
             capture_output=True,
             text=True,
             timeout=_RUFF_TIMEOUT_SECONDS,
+            env=production_interpreter_env(),
         )
     except OSError as exc:
         raise AssertionError(f"ruff is not runnable via {sys.executable} -m ruff: {exc}") from exc
@@ -73,6 +75,7 @@ def _run_ruff_json(path: Path) -> list[dict]:
         capture_output=True,
         text=True,
         timeout=_RUFF_TIMEOUT_SECONDS,
+        env=production_interpreter_env(),
     )
     assert result.returncode in (0, 1), (
         f"ruff exited {result.returncode}, expected 0 or 1\nstderr:\n{result.stderr}"

@@ -3,7 +3,7 @@
 
 Every non-test file under src/autoskillit/ must be <=750 non-import lines
 (physical lines minus lines occupied by import statements, as measured by
-tests.arch._subpackage_isolation_line_limits.count_budget_lines), or <=1000 with a
+tests.arch._line_budget.count_budget_lines), or <=1000 with a
 REQ-CNST-010-E<N> entry in _LINE_LIMIT_EXEMPTIONS whose `predicate` callable
 verifies True. Test files are exempt by design.
 
@@ -30,10 +30,10 @@ SRC_ROOT = PROJECT_ROOT / "src" / "autoskillit"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from tests.arch._line_budget import count_budget_lines
 from tests.arch._subpackage_isolation_line_limits import (
     _LINE_LIMIT_EXEMPTIONS,
     LineLimitExemption,
-    count_budget_lines,
 )
 
 HARD_CAP = 750

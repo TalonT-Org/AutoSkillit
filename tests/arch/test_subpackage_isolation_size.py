@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
-from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS, count_budget_lines
+from tests.arch._line_budget import count_budget_lines
+from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

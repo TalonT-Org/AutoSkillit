@@ -7,6 +7,7 @@ import re as _stdlib_re
 from collections.abc import Iterator
 from pathlib import Path
 
+from tests.arch._line_budget import count_budget_lines
 from tests.arch._rules import (
     _ASYNCIO_PIPE_EXEMPT,
     _BROAD_EXCEPT_EXEMPT,
@@ -21,7 +22,7 @@ from tests.arch._rules import (
     Violation,
     _rel,  # noqa: F401  # shared by layer and subpackage checks
 )
-from tests.arch._subpackage_isolation_line_limits import LineLimitExemption, count_budget_lines
+from tests.arch._subpackage_isolation_line_limits import LineLimitExemption
 
 # ── Path constants ────────────────────────────────────────────────────────────
 # Must be absolute for xdist compatibility -- do not use relative paths.

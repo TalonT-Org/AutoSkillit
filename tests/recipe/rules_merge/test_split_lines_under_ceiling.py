@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.arch._subpackage_isolation_line_limits import count_budget_lines
+from tests.arch._line_budget import count_budget_lines
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _RULES_DIR = _REPO_ROOT / "src" / "autoskillit" / "recipe" / "rules"

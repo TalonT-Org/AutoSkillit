@@ -18,7 +18,7 @@ from autoskillit.migration.engine import (
     MigrationFile,
     MigrationResult,
 )
-from tests.arch._subpackage_isolation_line_limits import count_budget_lines
+from tests.arch._line_budget import count_budget_lines
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 

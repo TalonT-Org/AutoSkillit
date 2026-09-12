@@ -109,6 +109,43 @@ class TestPreCommitConfig:
             f"check-file-lengths hook's entry script {entry_script!r} does not exist"
         )
 
+    def test_complexity_check_pre_commit_hook_exists(self) -> None:
+        """pre-commit config must include a check-complexity hook (issue #4968).
+
+        Without this, the cyclomatic-complexity ratchet only runs in CI, losing
+        the fast local feedback the pre-commit surface exists to provide.
+        """
+        config = load_yaml(PRECOMMIT_CONFIG)
+        hooks = [hook for repo in config.get("repos", []) for hook in repo.get("hooks", [])]
+        complexity_hooks = [hook for hook in hooks if "check_complexity" in hook.get("entry", "")]
+        assert complexity_hooks, (
+            "Missing 'check-complexity' hook in .pre-commit-config.yaml -- "
+            "add it so complexity-ratchet violations are caught before commit"
+        )
+        hook = complexity_hooks[0]
+        assert hook.get("entry") == "python scripts/check_complexity.py --staged"
+        assert hook.get("files") == r"^(src|tests|scripts)/.*\.py$", (
+            "check-complexity hook must scope to (src|tests|scripts)/*.py, matching "
+            "the checker's own SCAN_ROOTS"
+        )
+        assert hook.get("pass_filenames") is False, (
+            "check-complexity must select the cached-index paths itself so "
+            "pre-commit run --all-files does not turn it into a full-tree scan"
+        )
+        assert hook.get("verbose") is True, (
+            "check-complexity must set verbose: true so the warn-mode report is "
+            "visible on a passing (exit-0) hook run"
+        )
+        assert hook.get("always_run") is True, (
+            "check-complexity must set always_run: true so deletion-only commits "
+            "still reach stale-exemption validation"
+        )
+        entry_script = hook["entry"].split()[1]
+        script_path = PRECOMMIT_CONFIG.parent / entry_script
+        assert script_path.is_file(), (
+            f"check-complexity hook's entry script {entry_script!r} does not exist"
+        )
+
     def test_per_file_ignores_e501_bounded(self):
         """E501 exemptions in per-file-ignores must not exceed the established cap.
 

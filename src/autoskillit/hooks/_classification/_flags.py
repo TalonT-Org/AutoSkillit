@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shlex
 from collections.abc import Mapping, Sequence
 from enum import StrEnum, auto
@@ -9,15 +10,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoskillit.hooks._runtime._command_classification import (
-        _GIT_ADD_CONTENT_FLAGS,
-        _GIT_DIFF_CONTENT_FLAGS,
-        _GIT_DIFF_METADATA_FLAGS,
-        _GIT_STATUS_CONTENT_FLAGS,
-        _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS,
-        _PROTECTED_READ_SHELL_OPS,
-        _SHELL_STATE_VAR_RE,
-        _SHELL_SUBSTITUTION_RE,
-        _WC_FLAG_RE,
         ArgvToken,
         SearchPattern,
         _command_start_index,
@@ -25,6 +17,61 @@ if TYPE_CHECKING:
         command_verb,
         extract_git_subcommand_and_flags,
     )
+
+
+# Moved from _command_classification.py (rectify #4941 Part A) to keep that
+# facade under REQ-CNST-010's line cap; this module is their sole consumer.
+# Re-exported through the facade's existing block B bootstrap.
+_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
+
+_GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
+    {
+        "-p",
+        "--patch",
+        "-e",
+        "--edit",
+        "-i",
+        "--interactive",
+        "--pathspec-from-file",
+        # Content-staging flags: -A/--all stages all changes (incl. content);
+        # --force/--no-ignore-removal/--no-all are the no-restriction variants.
+        # Without these, `git add -A -- src/.../foo.yaml` is classified as
+        # metadata but actually stages content for indirect read via
+        # `git diff --staged`.
+        "-A",
+        "--all",
+        "--force",
+        "--no-ignore-removal",
+        "--no-all",
+    }
+)
+_GIT_STATUS_CONTENT_FLAGS: frozenset[str] = frozenset({"-v", "--verbose"})
+_GIT_DIFF_CONTENT_FLAGS: frozenset[str] = frozenset(
+    {
+        "-p",
+        "--patch",
+        "--patch-with-stat",
+        "--patch-with-raw",
+        "--binary",
+        "--text",
+        "--word-diff",
+        "--color-words",
+    }
+)
+_GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
+    {
+        "--name-only",
+        "--name-status",
+        "--stat",
+        "--shortstat",
+        "--numstat",
+        "--summary",
+    }
+)
+_SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
+_SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
+_PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+_WC_FLAG_RE = re.compile(r"-l+|--lines$")
 
 
 _GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
@@ -348,17 +395,6 @@ if not TYPE_CHECKING:
     else:
         import _command_classification as _classification
 
-    _GIT_ADD_CONTENT_FLAGS = _classification._GIT_ADD_CONTENT_FLAGS
-    _GIT_DIFF_CONTENT_FLAGS = _classification._GIT_DIFF_CONTENT_FLAGS
-    _GIT_DIFF_METADATA_FLAGS = _classification._GIT_DIFF_METADATA_FLAGS
-    _GIT_STATUS_CONTENT_FLAGS = _classification._GIT_STATUS_CONTENT_FLAGS
-    _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS = (
-        _classification._PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS
-    )
-    _PROTECTED_READ_SHELL_OPS = _classification._PROTECTED_READ_SHELL_OPS
-    _SHELL_STATE_VAR_RE = _classification._SHELL_STATE_VAR_RE
-    _SHELL_SUBSTITUTION_RE = _classification._SHELL_SUBSTITUTION_RE
-    _WC_FLAG_RE = _classification._WC_FLAG_RE
     ArgvToken = _classification.ArgvToken
     SearchPattern = _classification.SearchPattern
     _command_start_index = _classification._command_start_index

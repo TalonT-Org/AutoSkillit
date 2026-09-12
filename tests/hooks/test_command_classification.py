@@ -462,7 +462,9 @@ class TestCommandPositionCandidateSpans:
         tokens: list[str],
         expected: tuple[tuple[int, int], ...],
     ) -> None:
-        from autoskillit.hooks._command_classification import _command_position_candidate_spans
+        from autoskillit.hooks._runtime._command_classification import (
+            _command_position_candidate_spans,
+        )
 
         assert _command_position_candidate_spans(tokens) == expected
 
@@ -652,7 +654,9 @@ class TestTokenizeShellPayloadSegments:
         assert tokenize_shell_payload_segments("gh pr create --fill") == []
 
     def test_process_substitution_traversal_is_opt_in(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         command = "cat <(gh pr view 7 --json number)"
 
@@ -665,7 +669,7 @@ class TestTokenizeShellPayloadSegments:
 
 class TestProcessSubstitutionExtraction:
     def test_active_input_and_output_occurrences_preserve_source_order(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
@@ -689,14 +693,14 @@ class TestProcessSubstitutionExtraction:
         ids=["single-quoted", "double-quoted", "escaped"],
     )
     def test_quoted_and_escaped_process_substitutions_are_inert(self, command: str) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
         assert _extract_process_substitution_occurrences(command) == ()
 
     def test_balanced_parentheses_respect_quoted_close_parens(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
@@ -707,7 +711,7 @@ class TestProcessSubstitutionExtraction:
         assert command[start:end] == f"{kind}{body})"
 
     def test_malformed_process_substitution_retains_its_unbalanced_span(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
@@ -718,12 +722,11 @@ class TestProcessSubstitutionExtraction:
         )
 
     def test_command_classification_exposes_the_lazy_interpreter_gateway(self) -> None:
-        from autoskillit.hooks._command_classification import (
-            _extract_process_substitution_occurrences as gateway,
-        )
-
         from autoskillit.hooks._classification._interpreters import (
             _extract_process_substitution_occurrences as implementation,
+        )
+        from autoskillit.hooks._runtime._command_classification import (
+            _extract_process_substitution_occurrences as gateway,
         )
 
         command = "cat <(gh pr view 7)"
@@ -2842,8 +2845,10 @@ class TestSiblingWrappersDelegate:
         ) == _extract_interpreter_segment_specs(segment)
 
     def test_command_position_candidate_spans_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import _command_position_candidate_spans
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._command_classification import (
+            _command_position_candidate_spans,
+        )
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _command_position_candidate_spans_call,
         )
 
@@ -2853,10 +2858,10 @@ class TestSiblingWrappersDelegate:
         ) == _command_position_candidate_spans(segment)
 
     def test_process_substitution_occurrences_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _extract_process_substitution_occurrences_call,
         )
 

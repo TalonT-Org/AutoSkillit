@@ -348,6 +348,11 @@ def test_binding_candidate_enumeration_oserror_preserves_generic_refusal(
         (21, "recorded", "ambiguous_session_bindings"),
         (21, "requested", None),
     ],
+    ids=[
+        "single_foreign_within_limit",
+        "single_foreign_truncated",
+        "all_match_truncated",
+    ],
 )
 def test_handler_limits_binding_reads_and_respects_scan_completeness(
     tmp_path: Path,

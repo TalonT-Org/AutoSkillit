@@ -62,11 +62,10 @@ class TestCodexSmokeExecution:
 
     Run via ``task test-smoke-codex`` which sets CODEX_SMOKE_TEST=1 and
     requires one of: CODEX_API_KEY, OPENAI_API_KEY, or ~/.codex/auth.json.
-    Launches ``codex app-server`` with a trivial prompt, driven by
-    ``CodexAppServerDriver`` over ``run_managed_async``, and validates the
-    resulting JSON-RPC output parses through the same ``CodexStreamParser``/
-    ``CodexResultParser`` path as the retired ``codex exec --json`` transport
-    (``_app_server_to_exec_event`` makes the two shapes parse identically).
+
+    Validates app-server JSON-RPC output parses through the same
+    ``CodexStreamParser``/``CodexResultParser`` path as the retired
+    ``codex exec --json`` transport (bridged by ``_app_server_to_exec_event``).
     """
 
     @pytest.mark.anyio

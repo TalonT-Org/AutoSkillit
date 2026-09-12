@@ -7,7 +7,6 @@ version probe fails these tests outright -- it never quietly skips parity covera
 from __future__ import annotations
 
 import ast
-import importlib.util
 import json
 import re
 import subprocess
@@ -16,30 +15,16 @@ from pathlib import Path
 
 import pytest
 
+from tests.infra.conftest import _CONSTRUCT_CASES, load_check_script
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_ruff_parity"
-_T1_SCRIPT = REPO_ROOT / "tests" / "infra" / "test_check_complexity.py"
-_T1_MODULE_NAME = "_autoskillit_check_complexity_t1_for_ruff_parity"
 _RUFF_TIMEOUT_SECONDS = 30
 
-
-def _load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-check = _load_module(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
-# Reuse T1's _CONSTRUCT_CASES table directly rather than a separately-maintained copy, so a
-# construct T1 adds is automatically covered here too instead of silently drifting out of sync.
-_t1 = _load_module(_T1_MODULE_NAME, _T1_SCRIPT)
+check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 
 
 # --- ruff invocation: a required dependency, never skipped --------------------------------
@@ -125,7 +110,7 @@ def _own_mapping(source: str) -> dict[tuple[int, str], int]:
 
 def _build_construct_fixture() -> str:
     parts = []
-    for label, source, _expected in _t1._CONSTRUCT_CASES:
+    for label, source, _expected in _CONSTRUCT_CASES:
         name = f"construct_{label}"
         # T1's snippets are each a lone top-level `def f():` (or `async def f():`); giving
         # each a unique name avoids top-level-name collisions when concatenated into one file.

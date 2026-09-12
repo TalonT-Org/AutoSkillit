@@ -7,13 +7,19 @@ dataclass-aware pattern in tests/arch/test_acceptance_policy_relaxation_gate.py.
 from __future__ import annotations
 
 import ast
-import importlib.util
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+
+from tests.infra.conftest import (
+    _CONSTRUCT_CASES,
+    _MINIMAL_LIMITS,
+    _git,
+    _source_with_function,
+    load_check_script,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
@@ -21,18 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity"
 
-
-def _load_check_module():
-    spec = importlib.util.spec_from_file_location(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[_CHECK_MODULE_NAME] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-check = _load_check_module()
+check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 
 
 # --- shared helpers --------------------------------------------------------------------
@@ -46,29 +41,10 @@ def _policy(exemptions=None, max_complexity=10, min_rationale_chars=60):
     return check.ComplexityPolicy(max_complexity, min_rationale_chars, exemptions or {})
 
 
-def _source_with_function(name: str, complexity: int) -> str:
-    """A function with exactly *complexity*, via (complexity - 1) sibling `if` guards."""
-    lines = [f"def {name}():"]
-    if complexity <= 1:
-        lines.append("    pass")
-    else:
-        for i in range(complexity - 1):
-            lines.append(f"    if x{i}:")
-            lines.append("        pass")
-    return "\n".join(lines) + "\n"
-
-
 class _FakeCompleted:
     def __init__(self, returncode: int, stdout: bytes) -> None:
         self.returncode = returncode
         self.stdout = stdout
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=str(repo), check=True, capture_output=True, text=True)
-
-
-_MINIMAL_LIMITS = "MAX_COMPLEXITY = 10\nMIN_RATIONALE_CHARS = 60\nCOMPLEXITY_EXEMPTIONS = {}\n"
 
 
 def _seed_repo(tmp_path: Path, function_source: str) -> Path:
@@ -101,233 +77,6 @@ def _complexity_of(source: str) -> int:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return check.cyclomatic_complexity(node)
     raise AssertionError("no top-level function in snippet")
-
-
-def _snippet(source: str) -> str:
-    return textwrap.dedent(source).strip("\n") + "\n"
-
-
-_CONSTRUCT_CASES = [
-    ("plain", _snippet("def f():\n    pass\n"), 1),
-    ("if", _snippet("def f():\n    if a:\n        pass\n"), 2),
-    (
-        "if_elif_else",
-        _snippet(
-            """
-            def f():
-                if a:
-                    pass
-                elif b:
-                    pass
-                else:
-                    pass
-            """
-        ),
-        3,
-    ),
-    (
-        "for_else",
-        _snippet("def f():\n    for x in y:\n        pass\n    else:\n        pass\n"),
-        2,
-    ),
-    (
-        "while_else",
-        _snippet("def f():\n    while a:\n        pass\n    else:\n        pass\n"),
-        2,
-    ),
-    (
-        "try_2_handlers",
-        _snippet(
-            """
-            def f():
-                try:
-                    pass
-                except A:
-                    pass
-                except B:
-                    pass
-            """
-        ),
-        3,
-    ),
-    (
-        "try_except_else",
-        _snippet(
-            """
-            def f():
-                try:
-                    pass
-                except A:
-                    pass
-                else:
-                    pass
-            """
-        ),
-        3,
-    ),
-    ("try_finally", _snippet("def f():\n    try:\n        pass\n    finally:\n        pass\n"), 1),
-    ("with", _snippet("def f():\n    with a:\n        pass\n"), 1),
-    (
-        "match_2_literal_plus_wildcard",
-        _snippet(
-            """
-            def f():
-                match a:
-                    case 1:
-                        pass
-                    case 2:
-                        pass
-                    case _:
-                        pass
-            """
-        ),
-        3,
-    ),
-    (
-        "match_1_literal_plus_name",
-        _snippet(
-            """
-            def f():
-                match a:
-                    case 1:
-                        pass
-                    case x:
-                        pass
-            """
-        ),
-        2,
-    ),
-    (
-        "match_3_literal",
-        _snippet(
-            """
-            def f():
-                match a:
-                    case 1:
-                        pass
-                    case 2:
-                        pass
-                    case 3:
-                        pass
-            """
-        ),
-        4,
-    ),
-    (
-        "match_guarded_wildcard_last",
-        _snippet(
-            """
-            def f():
-                match a:
-                    case 1:
-                        pass
-                    case _ if b:
-                        pass
-            """
-        ),
-        3,
-    ),
-    (
-        "match_or_irrefutable_last",
-        _snippet(
-            """
-            def f():
-                match a:
-                    case 1:
-                        pass
-                    case 2 | _:
-                        pass
-            """
-        ),
-        2,
-    ),
-    (
-        "match_sequence_as_last",
-        _snippet(
-            """
-            def f():
-                match a:
-                    case 1:
-                        pass
-                    case [x, y] as w:
-                        pass
-            """
-        ),
-        3,
-    ),
-    (
-        "nested_def_with_if",
-        _snippet("def f():\n    def g():\n        if a:\n            pass\n"),
-        3,
-    ),
-    ("and_or", _snippet("def f():\n    x = a and b or c\n"), 1),
-    ("ternary", _snippet("def f():\n    x = a if b else c\n"), 1),
-    ("comprehension_with_filter", _snippet("def f():\n    x = [i for i in y if i]\n"), 1),
-    ("assert_stmt", _snippet("def f():\n    assert a\n"), 1),
-    ("async_for", _snippet("async def f():\n    async for x in y:\n        pass\n"), 2),
-    ("async_with", _snippet("async def f():\n    async with a:\n        pass\n"), 1),
-    (
-        "class_in_function_method_with_if",
-        _snippet(
-            """
-            def f():
-                class C:
-                    def m(self):
-                        if a:
-                            pass
-            """
-        ),
-        3,
-    ),
-    (
-        "except_star_x2",
-        _snippet(
-            """
-            def f():
-                try:
-                    pass
-                except* A:
-                    pass
-                except* B:
-                    pass
-            """
-        ),
-        3,
-    ),
-    (
-        "if_nested_inside_else",
-        _snippet(
-            """
-            def f():
-                if a:
-                    pass
-                else:
-                    if b:
-                        pass
-            """
-        ),
-        3,
-    ),
-    (
-        "with_body_with_if",
-        _snippet("def f():\n    with a:\n        if b:\n            pass\n"),
-        2,
-    ),
-    (
-        "try_finally_with_if_in_finally",
-        _snippet(
-            """
-            def f():
-                try:
-                    pass
-                finally:
-                    if a:
-                        pass
-            """
-        ),
-        2,
-    ),
-]
 
 
 @pytest.mark.parametrize(

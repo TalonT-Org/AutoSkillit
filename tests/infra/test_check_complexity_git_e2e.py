@@ -9,12 +9,11 @@ real commits -- following the same importlib-loaded-module pattern used there.
 
 from __future__ import annotations
 
-import importlib.util
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+
+from tests.infra.conftest import _MINIMAL_LIMITS, _git, _source_with_function, load_check_script
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
@@ -22,40 +21,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_git_e2e"
 
-
-def _load_check_module():
-    spec = importlib.util.spec_from_file_location(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[_CHECK_MODULE_NAME] = mod
-    spec.loader.exec_module(mod)
-    return mod
+check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 
 
-check = _load_check_module()
-
-
-# --- disposable repo fixture: own local copy, no shared fixture for this exists in the repo
-
-
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=str(repo), check=True, capture_output=True, text=True)
-
-
-def _source_with_function(name: str, complexity: int) -> str:
-    """A function with exactly *complexity*, via (complexity - 1) sibling `if` guards."""
-    lines = [f"def {name}():"]
-    if complexity <= 1:
-        lines.append("    pass")
-    else:
-        for i in range(complexity - 1):
-            lines.append(f"    if x{i}:")
-            lines.append("        pass")
-    return "\n".join(lines) + "\n"
-
-
-_MINIMAL_LIMITS = "MAX_COMPLEXITY = 10\nMIN_RATIONALE_CHARS = 60\nCOMPLEXITY_EXEMPTIONS = {}\n"
+# --- disposable repo fixture: seeding differs from test_check_complexity.py (branch
+# creation, fixed complexity-12/4 fixture), so it stays file-local rather than shared.
 
 
 def _write_a_py(repo: Path, f_complexity: int, g_complexity: int) -> None:

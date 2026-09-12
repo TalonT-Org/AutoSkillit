@@ -1934,6 +1934,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "(CODEX_RESERVED_HOME_ENV_VARS); must not leak between sessions."
         ),
     ),
+    "CODEX_HOME_ENV_VAR": AmbientEnvDisposition(
+        var="CODEX_HOME_ENV_VAR",
+        disposition="scrub",
+        owner="codex",
+        justification=(
+            "R4 predicate-(b) false positive: the __all__ export name of the CODEX_HOME"
+            "env-var-name constant; never set as a real OS environment variable itself."
+        ),
+    ),
     "CODEX_INTAKE_DISCIPLINE_DIGEST": AmbientEnvDisposition(
         var="CODEX_INTAKE_DISCIPLINE_DIGEST",
         disposition="scrub",

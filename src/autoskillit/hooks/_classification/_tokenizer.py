@@ -58,7 +58,7 @@ class StdinLiteral:
     directly by a test or caller rather than captured from source text.
     """
 
-    body: str
+    text: str
     kind: str
     outer_expansion: bool
     source_span: tuple[int, int] | None = None
@@ -146,7 +146,7 @@ def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
         index = len(literals)
         literals.append(
             StdinLiteral(
-                body=match.group("body"),
+                text=match.group("body"),
                 kind="heredoc",
                 outer_expansion=match.group("q") == "",
                 source_span=match.span("body"),
@@ -299,7 +299,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
             if index + 1 < total:
                 current_stdin_literals.append(
                     StdinLiteral(
-                        body=tokens[index + 1],
+                        text=tokens[index + 1],
                         kind="herestring",
                         outer_expansion=not fully_single_quoted[index + 1],
                     )
@@ -320,7 +320,7 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
             value_raw_span = raw_span[3:].rstrip()
             current_stdin_literals.append(
                 StdinLiteral(
-                    body=body,
+                    text=body,
                     kind="herestring",
                     outer_expansion=value_raw_span != f"'{body}'",
                 )

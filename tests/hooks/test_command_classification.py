@@ -321,7 +321,7 @@ class TestStdinLiteralBinding:
         assert segments[0].tokens == ["bash"]
         assert len(segments[0].stdin_literals) == 1
         literal = segments[0].stdin_literals[0]
-        assert literal.body == "x"
+        assert literal.text == "x"
         assert literal.kind == "heredoc"
         assert literal.outer_expansion is False
         assert literal.source_span is not None
@@ -350,7 +350,7 @@ class TestStdinLiteralBinding:
     def test_tab_heredoc_preserves_existing_strip_behavior(self):
         segments = self._segments("cat <<-'EOF'\n\tx\n\tEOF\n")
         assert segments[0].tokens == ["cat"]
-        assert segments[0].stdin_literals[0].body == "\tx"
+        assert segments[0].stdin_literals[0].text == "\tx"
         # Existing preservation assertion, unchanged (test_heredoc_body_stripped_before_tokenize).
         assert tokenize_command_segments("cat <<'EOF'\nbody content with > symbols\nEOF") == [
             ["cat"]
@@ -371,7 +371,7 @@ class TestStdinLiteralBinding:
         assert segments[0].tokens == ["bash"]
         literal = segments[0].stdin_literals[0]
         assert literal.kind == "herestring"
-        assert literal.body == expected_body
+        assert literal.text == expected_body
         assert literal.outer_expansion is expected_outer_expansion
 
     def test_heredoc_placeholder_precedes_opener_remainder(self):
@@ -386,7 +386,7 @@ class TestStdinLiteralBinding:
         segments = self._segments("bash -c 'x' <<'EOF'\ny\nEOF\n")
         assert len(segments) == 1
         assert segments[0].tokens == ["bash", "-c", "x"]
-        assert segments[0].stdin_literals[0].body == "y"
+        assert segments[0].stdin_literals[0].text == "y"
 
     def test_strip_heredoc_bodies_parity_preserved(self):
         """The parity-locked oracle (tests/core/test_bash_write_targets.py) is
@@ -3035,7 +3035,7 @@ class TestDeferredStdinLiteralShapes:
         assert len(segments) == 1
         assert segments[0].tokens == ["cat"]
         assert len(segments[0].stdin_literals) == 1
-        assert segments[0].stdin_literals[0].body == expected_body
+        assert segments[0].stdin_literals[0].text == expected_body
 
     @pytest.mark.xfail(
         strict=True,
@@ -3166,7 +3166,7 @@ class TestSiblingWrappersDelegate:
         # way an inline `-c` program is (rectify #4941 Part A).
         heredoc_literals = (
             StdinLiteral(
-                body="import subprocess; subprocess.run(['git','push'])",
+                text="import subprocess; subprocess.run(['git','push'])",
                 kind="heredoc",
                 outer_expansion=False,
             ),

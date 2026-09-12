@@ -402,7 +402,7 @@ def _upstream_pipe_text(segments: Sequence[_CommandSegment], index: int) -> str 
     executable = _normalize_executable(verb)
     if executable == "cat" and (not args or args == ["-"]):
         if segment.stdin_literals:
-            return "\n".join(literal.body for literal in segment.stdin_literals)
+            return "\n".join(literal.text for literal in segment.stdin_literals)
         if segment.piped_from_previous and index > 0:
             return _upstream_pipe_text(segments, index - 1)
         return None
@@ -466,10 +466,10 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
             if consumer != StdinConsumer.INERT:
                 origin = "heredoc" if literal.kind == "heredoc" else "herestring"
                 payloads.append(
-                    EvaluatedPayload(literal.body, consumer, index, origin, literal.source_span)
+                    EvaluatedPayload(literal.text, consumer, index, origin, literal.source_span)
                 )
             if literal.outer_expansion and consumer != StdinConsumer.SHELL:
-                for rel_start, sub in _iter_substitution_occurrences(literal.body):
+                for rel_start, sub in _iter_substitution_occurrences(literal.text):
                     abs_span = (
                         (
                             literal.source_span[0] + rel_start,
@@ -610,7 +610,7 @@ def _extract_interpreter_segment_specs(
 
     if stdin_literals and stdin_consumer(list(segment)) == StdinConsumer.PYTHON:
         for literal in stdin_literals:
-            found, unresolved = _python_program_command_specs(literal.body)
+            found, unresolved = _python_program_command_specs(literal.text)
             specs.extend(found)
             has_unresolved = has_unresolved or unresolved
 

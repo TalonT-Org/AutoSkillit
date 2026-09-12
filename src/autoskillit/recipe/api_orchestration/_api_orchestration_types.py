@@ -1,7 +1,7 @@
 """Seam-contract dataclasses shared by every _api_orchestration shard.
 
-Decomposed 2026-08-28 under issue #4905. The orchestrator and the seven
-sibling shards all import ``_LoadPipelineInputs`` and ``_ValidationResult``
+The orchestrator and the seven sibling shards all import
+``_LoadPipelineInputs`` and ``_ValidationResult``
 from this module so the cross-shard dataclass contract has a single source
 of truth. Without this split, ``_api_orchestration`` would need to import
 both ``_api_orchestration_cache`` (which needs ``_LoadPipelineInputs``) and

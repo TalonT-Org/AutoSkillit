@@ -138,6 +138,7 @@ class TestInitializeHandshake:
             )
         )
         assert driver.failure is None
+        assert driver._observed_server_version == _MIN_VERSION
 
     def test_codex_home_mismatch_sets_failure_naming_both_paths(self) -> None:
         driver = CodexAppServerDriver(_make_plan())

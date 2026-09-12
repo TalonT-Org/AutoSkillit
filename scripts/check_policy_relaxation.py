@@ -57,6 +57,10 @@ class PolicyRelaxationApproval:
     issue: int
     approved_by: str
 
+    def __post_init__(self) -> None:
+        if self.issue <= 0:
+            raise UnsupportedSurfaceShape("approval issue must be positive")
+
 
 @dataclasses.dataclass(frozen=True)
 class SurfaceValue:

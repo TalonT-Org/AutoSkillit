@@ -14,6 +14,11 @@ def test_policy_surface_rejects_unknown_kind() -> None:
         check.PolicySurface("p.py", "LIMITS", "unknown")
 
 
+def test_policy_approval_rejects_nonpositive_issue() -> None:
+    with pytest.raises(check.UnsupportedSurfaceShape, match="approval issue must be positive"):
+        check.PolicyRelaxationApproval("p.py", "LIMITS", None, "1", "2", 0, "reviewer")
+
+
 def test_exemption_rejects_unknown_keyword() -> None:
     surface = check.PolicySurface("p.py", "EXEMPTIONS", "exemption_map")
 

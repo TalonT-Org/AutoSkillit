@@ -356,7 +356,11 @@ class DefaultSessionSkillManager:
             backend,
             adaptation_context=projection_context.adaptation_context,
         )
-        assert isinstance(projection_context, SkillProjectionContext)
+        if not isinstance(projection_context, SkillProjectionContext):
+            raise SkillContractError(
+                f"managed catalog materialization requires a SkillProjectionContext, "
+                f"got {type(projection_context).__name__}"
+            )
         compiled_context = dataclasses.replace(projection_context, catalog=compilation.catalog)
         return self.managed_session(session_id, compilation, compiled_context)
 

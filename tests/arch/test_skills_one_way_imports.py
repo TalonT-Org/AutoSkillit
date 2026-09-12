@@ -85,7 +85,7 @@ def test_no_external_module_imports_skill_shards_directly() -> None:
     )
 
 
-def test_external_shard_guard_parses_each_inspected_file_once(
+def test_external_skill_shard_guard_parses_each_inspected_file_once(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _write_source(tmp_path, "server/handler.py", "import os\n")
@@ -102,7 +102,7 @@ def test_external_shard_guard_parses_each_inspected_file_once(
     assert counter[0] == len(inspected) == 2
 
 
-def test_external_shard_guard_flags_both_import_forms(
+def test_external_skill_shard_guard_flags_both_import_forms(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     _write_source(

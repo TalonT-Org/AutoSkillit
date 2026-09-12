@@ -50,27 +50,11 @@ def _app_server_plan_digest_payload(
     driver-mode skill session, ``adapter_digest`` must still identify the
     physical launch from these fields directly (the #4659 digest-divergence
     class) — ``None`` is returned, not omitted, for every non-app-server
-    command so absence remains distinguishable from an empty plan.
+    command so absence remains distinguishable from an empty plan. The field
+    enumeration itself lives on ``CodexAppServerPlan.digest_payload()`` so the
+    digest contract and the plan's field set stay in sync by construction.
     """
-    if plan is None:
-        return None
-    return {
-        "session_home": plan.session_home,
-        "catalog_root": plan.catalog_root,
-        "expected_skill_names": sorted(plan.expected_skill_names),
-        "expected_skill_entries": [list(pair) for pair in plan.expected_skill_entries],
-        "cwd": plan.cwd,
-        "prompt": plan.prompt,
-        "model": plan.model,
-        "sandbox": plan.sandbox,
-        "approval_policy": plan.approval_policy,
-        "bypass_hook_trust": plan.bypass_hook_trust,
-        "developer_instructions": plan.developer_instructions,
-        "config_overrides": dict(plan.config_overrides),
-        "client_version": plan.client_version,
-        "resume_thread_id": plan.resume_thread_id,
-        "runtime_workspace_roots": list(plan.runtime_workspace_roots),
-    }
+    return None if plan is None else plan.digest_payload()
 
 
 def _binding_identity(binding: PluginLaunchBinding | None) -> Mapping[str, str]:

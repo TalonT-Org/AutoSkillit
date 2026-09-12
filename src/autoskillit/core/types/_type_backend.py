@@ -509,6 +509,31 @@ class CodexAppServerPlan:
     resume_thread_id: str = ""
     runtime_workspace_roots: tuple[str, ...] = ()
 
+    def digest_payload(self) -> Mapping[str, object]:
+        """Deterministic JSON-safe rendering of this plan for ``adapter_digest``.
+
+        Owning the field enumeration here (rather than in a caller several
+        files/layers away) keeps the digest contract in sync with the field
+        set by construction — a new field only has to be added once.
+        """
+        return {
+            "session_home": self.session_home,
+            "catalog_root": self.catalog_root,
+            "expected_skill_names": sorted(self.expected_skill_names),
+            "expected_skill_entries": [list(pair) for pair in self.expected_skill_entries],
+            "cwd": self.cwd,
+            "prompt": self.prompt,
+            "model": self.model,
+            "sandbox": self.sandbox,
+            "approval_policy": self.approval_policy,
+            "bypass_hook_trust": self.bypass_hook_trust,
+            "developer_instructions": self.developer_instructions,
+            "config_overrides": dict(self.config_overrides),
+            "client_version": self.client_version,
+            "resume_thread_id": self.resume_thread_id,
+            "runtime_workspace_roots": list(self.runtime_workspace_roots),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class CmdSpec:

@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe.rules.rules_contracts as _patch_rules_rules_contracts
 import autoskillit.recipe.rules.rules_contracts as _rc
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types import Severity
@@ -260,7 +259,7 @@ def test_write_behavior_invalid_value_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="invalid")
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -274,7 +273,7 @@ def test_conditional_without_patterns_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="conditional", write_expected_when=[])
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -288,7 +287,7 @@ def test_always_with_patterns_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="always", write_expected_when=["pattern"])
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -302,7 +301,7 @@ def test_invalid_regex_in_patterns_flagged() -> None:
     recipe = _make_recipe_with_skill("/autoskillit:make-plan task")
     contract = _make_contract(write_behavior="conditional", write_expected_when=["[invalid"])
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -412,7 +411,7 @@ def test_unreadable_skill_md_emits_warning_finding(
         return original_read_text(self, *args, **kwargs)  # type: ignore[arg-type]
 
     with (
-        patch.object(_patch_rules_rules_contracts, "get_skill_contract", return_value=contract),
+        patch.object(_rc, "get_skill_contract", return_value=contract),
         patch.object(Path, "read_text", fail_read_text),
     ):
         findings = run_semantic_rules(recipe)
@@ -439,7 +438,7 @@ def test_always_no_write_detects_degrade_gracefully(
 
     recipe = _make_recipe_with_skill("/autoskillit:test-skill")
     contract = _make_contract(write_behavior="always")
-    with patch.object(_patch_rules_rules_contracts, "get_skill_contract", return_value=contract):
+    with patch.object(_rc, "get_skill_contract", return_value=contract):
         findings = run_semantic_rules(recipe)
 
     exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
@@ -465,7 +464,7 @@ def test_always_no_write_detects_when_unavailable(
 
     recipe = _make_recipe_with_skill("/autoskillit:test-skill")
     contract = _make_contract(write_behavior="always")
-    with patch.object(_patch_rules_rules_contracts, "get_skill_contract", return_value=contract):
+    with patch.object(_rc, "get_skill_contract", return_value=contract):
         findings = run_semantic_rules(recipe)
 
     exit_findings = [f for f in findings if f.rule == "always-has-no-write-exit"]
@@ -498,7 +497,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch.object(
-            _patch_rules_rules_contracts,
+            _rc,
             "get_skill_contract",
             return_value=contract,
         ):
@@ -522,7 +521,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch.object(
-            _patch_rules_rules_contracts,
+            _rc,
             "get_skill_contract",
             return_value=contract,
         ):
@@ -547,7 +546,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch.object(
-            _patch_rules_rules_contracts,
+            _rc,
             "get_skill_contract",
             return_value=contract,
         ):
@@ -573,7 +572,7 @@ class TestResultFieldDriftRule:
             ],
         )
         with patch.object(
-            _patch_rules_rules_contracts,
+            _rc,
             "get_skill_contract",
             return_value=contract,
         ):
@@ -846,7 +845,7 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_conditional()
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="conditional")
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -864,7 +863,7 @@ def test_write_skill_reaching_push_without_source_output_dir_fires_always() -> N
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="always")
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -879,7 +878,7 @@ def test_write_skill_reaching_push_with_output_dir_passes() -> None:
     recipe = _make_write_push_recipe(output_dir="${{ context.work_dir }}", routes_to_push=True)
     contract = _make_write_contract(write_behavior="conditional")
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -893,7 +892,7 @@ def test_write_skill_without_push_still_fires_when_no_output_dir() -> None:
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=False)
     contract = _make_write_contract(write_behavior="conditional")
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):
@@ -911,7 +910,7 @@ def test_read_only_skill_without_output_dir_not_flagged() -> None:
     recipe = _make_write_push_recipe(output_dir=None, routes_to_push=True)
     contract = _make_write_contract(write_behavior="always", read_only=True)
     with patch.object(
-        _patch_rules_rules_contracts,
+        _rc,
         "get_skill_contract",
         return_value=contract,
     ):

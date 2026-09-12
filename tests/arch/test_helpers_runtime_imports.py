@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-import ast
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from tests.arch._helpers import (
-    _install_parse_counter,
-    _runtime_import_froms,
-    _runtime_imports,
-    _runtime_plain_imports,
-)
+from tests.arch._helpers import _install_parse_counter, _runtime_import_froms, _runtime_imports
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -111,22 +104,9 @@ def test_runtime_imports_pins_selective_traversal(tmp_path: Path) -> None:
     ]
 
 
-def test_single_list_helpers_match_paired_result(tmp_path: Path) -> None:
-    path = tmp_path / "module.py"
-    path.write_text(_TRAVERSAL_SAMPLE)
-
-    import_froms, plain_imports = _runtime_imports(path)
-
-    def dumps(nodes: Sequence[ast.stmt]) -> list[str]:
-        return [ast.dump(node, include_attributes=True) for node in nodes]
-
-    assert dumps(_runtime_import_froms(path)) == dumps(import_froms)
-    assert dumps(_runtime_plain_imports(path)) == dumps(plain_imports)
-
-
 def test_runtime_import_helpers_propagate_syntax_error(tmp_path: Path) -> None:
     path = tmp_path / "broken.py"
     path.write_text("def broken(:\n")
-    for helper in (_runtime_imports, _runtime_import_froms, _runtime_plain_imports):
+    for helper in (_runtime_imports, _runtime_import_froms):
         with pytest.raises(SyntaxError):
             helper(path)

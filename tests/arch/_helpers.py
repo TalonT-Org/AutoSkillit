@@ -605,11 +605,6 @@ def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
     return _runtime_imports(path)[0]
 
 
-def _runtime_plain_imports(path: Path) -> list[ast.Import]:
-    """Return plain ``import X.Y.Z`` nodes not inside a TYPE_CHECKING guard."""
-    return _runtime_imports(path)[1]
-
-
 # ── Section B.1: Test fixture utilities shared by import-analysis test modules ─
 
 

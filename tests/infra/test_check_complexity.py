@@ -485,7 +485,9 @@ def test_main_exit_codes_warn_and_fail(tmp_path, monkeypatch, capsys):
     (repo / "src" / "a.py").write_text(_source_with_function("f", 11), encoding="utf-8")
     _git(repo, "add", "-A")
     assert check.main(["--staged", "--repo-root", str(repo)]) == 0
-    capsys.readouterr()
+    warn_out = capsys.readouterr().out
+    assert "complexity 11 > allowed 10" in warn_out
+    assert "was 10 at the base revision" in warn_out
     monkeypatch.setattr(check, "ENFORCEMENT", "fail")
     assert check.main(["--staged", "--repo-root", str(repo)]) == 1
 

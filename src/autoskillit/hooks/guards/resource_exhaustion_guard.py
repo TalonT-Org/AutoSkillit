@@ -45,8 +45,7 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    extract_shell_command_payloads,
-    strip_heredoc_bodies,
+    live_command_text,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
@@ -68,52 +67,32 @@ _BACKGROUNDED_INFINITE_LOOP_RE = re.compile(
 _KILL_JOBSPEC_RE = re.compile(r"\bkill\b[^;&|\n]*%\d+")
 
 
-def _iter_scan_texts(command: str) -> list[str]:
-    """Return the top-level command plus every recursively-extracted shell
-    payload (`sh -c`, `bash -c`, `eval`, and `$(...)`/backtick substitutions).
-
-    Mirrors the BFS-with-seen-set traversal already used by
-    unsafe_install_guard.py's `_iter_install_segments` for the same reason:
-    `extract_shell_command_payloads` is single-level per call.
-    """
-    seen: set[str] = set()
-    texts: list[str] = []
-    queue: list[str] = [command]
-    while queue:
-        current = queue.pop(0)
-        if current in seen:
-            continue
-        seen.add(current)
-        texts.append(current)
-        try:
-            payloads = extract_shell_command_payloads(current)
-        except (ValueError, TypeError):
-            payloads = []
-        for payload in payloads:
-            if payload not in seen:
-                queue.append(payload)
-    return texts
-
-
 def _matches_resource_exhaustion_pattern(command: str) -> str | None:
-    """Return a denial reason if *command* matches a known pattern, else None."""
-    try:
-        stripped = strip_heredoc_bodies(command)
-    except (ValueError, TypeError):
-        stripped = command
-    for text in _iter_scan_texts(stripped):
-        if _BACKGROUNDED_INFINITE_LOOP_RE.search(text):
-            return (
-                "a backgrounded infinite loop (`while :`/`while true` ... `done` "
-                "followed by `&`) — this is the exact leak shape behind issue #4678 "
-                "Incident B"
-            )
-        if _KILL_JOBSPEC_RE.search(text):
-            return (
-                "`kill %N` job-control syntax — job control is disabled in "
-                "non-interactive shells, so this silently fails to kill anything "
-                "and any `2>/dev/null` hides the failure"
-            )
+    """Return a denial reason if *command* matches a known pattern, else None.
+
+    Scans `live_command_text(command)` (rectify #4941 Part B) once: Part A's
+    occurrence-aware projection already contains each live SHELL payload
+    exactly once (a heredoc/herestring/pipe body bound to a shell consumer,
+    a `bash -c`/`eval` argument already present verbatim at its natural
+    position), while an inert `cat`/`tee` heredoc body is blanked -- so a
+    `bash <<'EOF'` body running the loop/kill shape is caught (previously a
+    false negative, since a raw `strip_heredoc_bodies` scan erased every
+    heredoc body regardless of consumer) and prose mentioning the shape in
+    an inert body no longer trips the guard.
+    """
+    text = live_command_text(command)
+    if _BACKGROUNDED_INFINITE_LOOP_RE.search(text):
+        return (
+            "a backgrounded infinite loop (`while :`/`while true` ... `done` "
+            "followed by `&`) — this is the exact leak shape behind issue #4678 "
+            "Incident B"
+        )
+    if _KILL_JOBSPEC_RE.search(text):
+        return (
+            "`kill %N` job-control syntax — job control is disabled in "
+            "non-interactive shells, so this silently fails to kill anything "
+            "and any `2>/dev/null` hides the failure"
+        )
     return None
 
 

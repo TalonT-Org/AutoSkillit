@@ -23,11 +23,9 @@ if _RUNTIME_DIR not in sys.path:
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _PIP_GLOBAL_FLAG_SPEC,
     _consume_str_flag,
+    all_evaluated_segments,
     command_verb_and_args,
     extract_interpreter_command_payloads,
-    extract_shell_command_payloads,
-    strip_heredoc_bodies,
-    tokenize_command_segments,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
@@ -198,44 +196,26 @@ def _classify_install_invocation(
 def _iter_install_segments(command: str) -> Iterator[tuple[str, list[str], list[str]]]:
     """Yield (kind, install_args, post_install) for every matched invocation.
 
-    Walks the top-level command, then nested shell payloads (recursively),
-    then Python subprocess payloads. Each invocation is classified once.
+    Reads *command* through `all_evaluated_segments` (rectify #4941 Part B),
+    which already recurses through nested shell payloads (`bash -c`, `eval`,
+    a heredoc/herestring/pipe fed to a shell) and includes every literal-argv
+    Python subprocess spec plus every resolved `os.system`/`shell=True`
+    string spec tokenized as shell text -- a `python3 - <<'EOF'` body running
+    `subprocess.run(["pip", "install", "-e", "."])` is classified the same
+    way a direct invocation is. `None` (unparseable) is treated as no
+    segments, matching today's `ValueError -> segments = []` fail-open
+    contract. `extract_interpreter_command_payloads` still reports
+    `has_unresolved` independently, so the guard's documented fail-closed
+    "unresolved-subprocess" kind is preserved.
     """
-    seen: set[str] = set()
-    queue: list[str] = [command]
+    for segment in all_evaluated_segments(command) or ():
+        result = _classify_install_invocation(segment)
+        if result is not None:
+            yield result
 
-    while queue:
-        current = queue.pop(0)
-        if current in seen:
-            continue
-        seen.add(current)
-
-        try:
-            stripped = strip_heredoc_bodies(current)
-            segments = tokenize_command_segments(stripped)
-        except (ValueError, TypeError):
-            segments = []
-
-        for segment in segments:
-            result = _classify_install_invocation(segment)
-            if result is not None:
-                yield result
-
-        for payload in extract_shell_command_payloads(current):
-            if payload not in seen:
-                queue.append(payload)
-
-        argv_payloads, has_unresolved = extract_interpreter_command_payloads(current)
-        for payload in argv_payloads:
-            if isinstance(payload, list):
-                result = _classify_install_invocation(payload)
-                if result is not None:
-                    yield result
-            elif isinstance(payload, str):
-                if payload not in seen:
-                    queue.append(payload)
-        if has_unresolved:
-            yield ("unresolved-subprocess", [], [])
+    _payloads, has_unresolved = extract_interpreter_command_payloads(command)
+    if has_unresolved:
+        yield ("unresolved-subprocess", [], [])
 
 
 def _is_unsafe_editable_install(cmd: str) -> bool:

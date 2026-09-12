@@ -134,7 +134,7 @@ def refresh_summary_child_outcomes(
     """
     try:
         committed = fast_loads(summary_path.read_text(encoding="utf-8"))
-        if committed.get("child_outcomes") != child_outcomes:
+        if child_outcomes and committed.get("child_outcomes") != child_outcomes:
             committed["child_outcomes"] = child_outcomes
             atomic_write(summary_path, fast_dumps(committed, sort_keys=True, indent=True) + "\n")
     except (OSError, ValueError):

@@ -336,6 +336,39 @@ def test_collect_codex_observed_children_missing_rollout_is_a_no_op(tmp_path) ->
     )
 
 
+def test_collect_codex_observed_children_retains_invalid_child_metadata(tmp_path) -> None:
+    parent_path = tmp_path / "parent.jsonl"
+    child_path = tmp_path / "child.jsonl"
+    log_root = tmp_path / "logs"
+    _write_rollout(
+        parent_path,
+        [
+            {"type": "session_meta", "payload": {"id": "parent-1"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "sub_agent_activity",
+                    "kind": "started",
+                    "agent_thread_id": "child-1",
+                },
+            },
+        ],
+    )
+    _write_rollout(child_path, [{"type": "session_meta", "payload": {"id": "wrong-child"}}])
+
+    assert not co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: child_path,
+    )
+    outcomes = co.collect_child_outcomes(
+        backend="codex", parent_session_id="parent-1", log_root=log_root
+    )
+    assert len(outcomes) == 1
+    assert outcomes[0]["role"] == ""
+
+
 def test_collect_codex_observed_children_is_idempotent_across_repeated_started_events(
     tmp_path,
 ) -> None:
@@ -397,7 +430,7 @@ def test_collect_codex_observed_children_refines_metadata_as_rollout_appears(
     def resolver(_child_id):
         return child_path if child_path.exists() else None
 
-    assert co.collect_codex_observed_children(
+    assert not co.collect_codex_observed_children(
         parent_rollout_path=parent_path,
         parent_session_id="parent-1",
         log_root=log_root,

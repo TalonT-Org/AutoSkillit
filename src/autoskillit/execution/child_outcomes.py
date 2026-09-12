@@ -314,9 +314,11 @@ def collect_codex_observed_children(
 ) -> bool:
     """Observe every Codex child thread structurally linked in the parent rollout.
 
-    Every observed child (planned or not) gets a durable unknown row even if
-    its own child rollout is missing — this only reads the parent's rollout,
-    never assumes a planned identity. A child already carrying a typed
+    Return true only when every linked child's metadata was published, or
+    when there are no linked children. Every observed child (planned or not)
+    gets a durable unknown row even if its own child rollout is missing —
+    this only reads the parent's rollout, never assumes a planned identity.
+    A child already carrying a typed
     ``ChildExecutionIdentity`` (from ``extract_codex_execution_identity``)
     still receives this call; ``observe_child`` is idempotent, so it is a
     no-op refinement rather than a duplicate row. Reuses
@@ -359,6 +361,7 @@ def collect_codex_observed_children(
         try:
             child_rollout_path = child_rollout_resolver(child_id)
             if child_rollout_path is None:
+                publication_succeeded = False
                 continue
             metadata = extract_codex_child_metadata(
                 child_rollout_path,
@@ -366,7 +369,8 @@ def collect_codex_observed_children(
                 expected_child_id=child_id,
             )
         except Exception:
-            logger.debug("codex_child_metadata_unavailable", exc_info=True)
+            publication_succeeded = False
+            logger.warning("codex_child_metadata_unavailable", exc_info=True)
             continue
         evidence: dict[str, Any] = {
             **metadata,

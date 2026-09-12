@@ -229,6 +229,44 @@ def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
 
 
 @pytest.mark.parametrize(
+    ("subpackage", "expected_files"),
+    [
+        pytest.param(
+            "api",
+            frozenset({"__init__", "_api", "_api_cache", "_api_listing"}),
+            id="api",
+        ),
+        pytest.param(
+            "api_orchestration",
+            frozenset(
+                {
+                    "__init__",
+                    "_api_orchestration",
+                    "_api_orchestration_assemble",
+                    "_api_orchestration_cache",
+                    "_api_orchestration_match",
+                    "_api_orchestration_parse",
+                    "_api_orchestration_text",
+                    "_api_orchestration_types",
+                    "_api_orchestration_validate",
+                }
+            ),
+            id="api-orchestration",
+        ),
+    ],
+)
+def test_recipe_api_decompositions_have_expected_siblings(
+    subpackage: str, expected_files: frozenset[str]
+) -> None:
+    recipe_dir = SRC_ROOT / "recipe"
+    pkg = recipe_dir / subpackage
+
+    assert {path.name.removesuffix(".py") for path in pkg.glob("*.py")} == expected_files
+    assert (recipe_dir / "_binding_input.py").is_file()
+    assert not (pkg / "_binding_input.py").exists()
+
+
+@pytest.mark.parametrize(
     "facade_pkg",
     [
         "autoskillit.cli.prompts",
@@ -245,6 +283,8 @@ def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
         "autoskillit.recipe.helpers",
         "autoskillit.recipe.ingredients",
         "autoskillit.recipe.methodology",
+        "autoskillit.recipe.api",
+        "autoskillit.recipe.api_orchestration",
     ],
 )
 def test_cli_facade_all_resolves(facade_pkg: str) -> None:
@@ -295,3 +335,29 @@ def test_cli_facade_all_resolves(facade_pkg: str) -> None:
                 f"{facade_pkg}.{name!r} resolves to a different object than "
                 f"{submodule_name}.{name!r}"
             )
+
+
+def test_recipe_api_facade_has_exact_public_surface() -> None:
+    import importlib
+
+    facade = importlib.import_module("autoskillit.recipe.api")
+
+    assert facade.__all__ == [
+        "load_and_validate",
+        "list_all",
+        "format_recipe_list_response",
+        "validate_from_path",
+    ]
+
+
+@pytest.mark.parametrize(
+    "facade_pkg",
+    ["autoskillit.recipe.api", "autoskillit.recipe.api_orchestration"],
+)
+def test_recipe_api_facades_reject_unknown_names(facade_pkg: str) -> None:
+    import importlib
+
+    facade = importlib.import_module(facade_pkg)
+
+    with pytest.raises(AttributeError):
+        getattr(facade, "_unknown_recipe_api_name")

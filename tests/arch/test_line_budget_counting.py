@@ -135,7 +135,19 @@ def _is_raw_splitlines_len_call(node: ast.AST) -> bool:
     [
         ("scripts/check_file_lengths.py", 1),
         ("tests/arch/_helpers.py", 1),
+        ("tests/arch/test_skills_subpackage_size_ceilings.py", 1),
+        ("tests/arch/test_subpackage_isolation_capture_layout.py", 1),
         ("tests/arch/test_subpackage_isolation_size.py", 7),
+        ("tests/arch/test_subpackage_isolation_smoke_review.py", 2),
+        ("tests/hooks/test_hook_registry_decomposition.py", 1),
+        ("tests/migration/test_engine_decomposition.py", 2),
+        ("tests/recipe/rules_merge/test_split_lines_under_ceiling.py", 2),
+        ("tests/recipe/rules_skills/test_split_lines_under_ceiling.py", 1),
+        # tests/arch/test_subpackage_isolation_topology.py is intentionally excluded:
+        # it also has an unrelated len(<expr>.splitlines()) call (in
+        # test_smoke_utils_suite_is_split, a tests/ shard-size check outside
+        # REQ-CNST-010's src/autoskillit/ scope) that would trip this test's
+        # raw-splitlines guard for reasons unrelated to the count_budget_lines migration.
     ],
 )
 def test_req_cnst_010_enforcers_measure_through_count_budget_lines(

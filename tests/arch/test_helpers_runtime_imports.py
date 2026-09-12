@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from tests.arch._helpers import _runtime_import_froms, _runtime_imports, _runtime_plain_imports
+from tests.arch._helpers import (
+    _install_parse_counter,
+    _runtime_import_froms,
+    _runtime_imports,
+    _runtime_plain_imports,
+)
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -58,18 +64,6 @@ for _ in ():
 while False:
     import in_while
 """
-
-
-def _install_parse_counter(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    original_parse = ast.parse
-    counter = [0]
-
-    def counting_parse(*args, **kwargs):
-        counter[0] += 1
-        return original_parse(*args, **kwargs)
-
-    monkeypatch.setattr(ast, "parse", counting_parse)
-    return counter
 
 
 def test_runtime_imports_parses_each_path_once(
@@ -123,7 +117,7 @@ def test_single_list_helpers_match_paired_result(tmp_path: Path) -> None:
 
     import_froms, plain_imports = _runtime_imports(path)
 
-    def dumps(nodes: list[ast.stmt]) -> list[str]:
+    def dumps(nodes: Sequence[ast.stmt]) -> list[str]:
         return [ast.dump(node, include_attributes=True) for node in nodes]
 
     assert dumps(_runtime_import_froms(path)) == dumps(import_froms)

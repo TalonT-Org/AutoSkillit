@@ -57,11 +57,10 @@ def count_budget_lines(path: Path) -> int:
     ``from __future__`` statements are excluded like other imports. Dynamic import
     calls remain counted as ordinary expressions; source code is never executed.
 
-    This function is REQ-CNST-010's measurement. It is not a registered
+    This function is REQ-CNST-010's measurement, not a registered
     ``PolicySurface`` -- ``scripts/check_policy_relaxation.py`` does not model
-    measurement function bodies -- so an edit here changes every file's effective budget
-    without tripping that gate. Treat any change as a policy change: cite a tracking
-    issue and obtain code-owner review. Issue #4965 records the import exclusion.
+    measurement function bodies -- so an edit here changes every file's effective
+    budget without tripping that gate.
     """
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))

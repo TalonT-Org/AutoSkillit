@@ -132,7 +132,15 @@ def test_counter_matches_ruff_on_construct_fixture(tmp_path):
     own_mapping = _own_mapping(fixture_source)
 
     assert ruff_mapping == own_mapping
-    assert len(own_mapping) >= 20
+    # own_mapping (unlike _CONSTRUCT_CASES) also walks into nested defs, so
+    # "nested_def_with_if" and "class_in_function_method_with_if" each contribute
+    # one extra complexity->=2 qualname beyond their single top-level case entry.
+    nested_entries_with_complexity_at_least_2 = 2
+    expected_count = (
+        sum(1 for _, _, expected in _CONSTRUCT_CASES if expected >= 2)
+        + nested_entries_with_complexity_at_least_2
+    )
+    assert len(own_mapping) == expected_count
 
 
 # --- real repository files -----------------------------------------------------------------

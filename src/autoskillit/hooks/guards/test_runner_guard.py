@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
 
@@ -24,6 +23,10 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    all_evaluated_segments,
+    command_verb_and_args,
+)
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SKILLS_BY_GUARD,
@@ -63,12 +66,6 @@ _READ_ONLY_MULTIWORD_PREFIXES: tuple[tuple[str, ...], ...] = (("uv", "pip"),)
 
 _PYTEST_NAMES: frozenset[str] = frozenset({"pytest", "py.test"})
 
-# Splits a shell command string on common shell operators (&&, ||, ;, |) so each
-# segment can be analyzed independently with shlex.split. This is necessary because
-# shlex does not treat ; as a metacharacter, so "echo foo; pytest" tokenizes as
-# ["echo", "foo;", "pytest"] — the semicolon stays attached to the preceding token.
-_SHELL_SEG_RE: re.Pattern[str] = re.compile(r"&&|\|\||;|\|")
-
 
 def _is_read_only_prefix(token: str) -> bool:
     """Return True if token names a known read-only command (possibly with a path prefix)."""
@@ -77,17 +74,24 @@ def _is_read_only_prefix(token: str) -> bool:
 
 
 def _is_direct_pytest(cmd: str) -> bool:
-    """Return True if cmd contains a direct pytest invocation in command position."""
-    for segment in _SHELL_SEG_RE.split(cmd):
-        segment = segment.strip()
+    """Return True if cmd contains a direct pytest invocation in command position.
+
+    Reads *cmd* through `all_evaluated_segments` (rectify #4941 Part B): a
+    direct invocation, one delivered via `bash -c`/`eval`, one fed through a
+    heredoc/herestring/pipe to a shell, and a literal-argv
+    `subprocess.run(["pytest", ...])` are all seen the same way. `None`
+    (unparseable) is treated as no segments, matching today's unclosed-quote
+    fail-open contract. `command_verb_and_args` skips a leading POSIX
+    assignment or wrapper (sudo, env, ...) to find the verb, so `sudo pytest`
+    and `VAR=1 pytest` now resolve to `pytest` too.
+    """
+    for segment in all_evaluated_segments(cmd) or ():
         if not segment:
             continue
-        try:
-            tokens = shlex.split(segment)
-        except ValueError:
-            continue  # unclosed quotes → fail-open
-        if not tokens:
+        verb, rest = command_verb_and_args(segment)
+        if not verb:
             continue
+        tokens = [verb, *rest]
 
         token = tokens[0]
 

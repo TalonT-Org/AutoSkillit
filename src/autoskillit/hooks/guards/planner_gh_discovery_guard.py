@@ -26,10 +26,9 @@ if _RUNTIME_DIR not in sys.path:
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
     _command_position_candidate_spans,
+    all_evaluated_segments,
     command_verb_and_args,
-    has_interpreter_wrapped_command,
-    tokenize_command_segments,
-    tokenize_shell_payload_segments,
+    interpreter_invokes,
 )
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
@@ -87,26 +86,27 @@ def _is_discovery_segment(segment: list[str]) -> bool:
 def _is_gh_discovery(cmd: str) -> bool:
     """Return True when *cmd* contains a GitHub discovery subcommand.
 
-    Targeted reads (``gh issue view <N>``, ``gh api .../issues/<N>``) are
-    explicitly allowed. Every outer command-position candidate is checked,
-    so a targeted read cannot hide a later discovery command.
+    Reads *cmd* exclusively through `all_evaluated_segments` (rectify #4941
+    Part B) with process substitutions included, so a direct invocation, one
+    delivered via `bash -c`/`eval`, one fed through a heredoc/herestring/pipe
+    or `<(...)`/`>(...)` to a shell, and a literal-argv
+    `subprocess.run(["gh", "issue", "list"])` are all seen the same way, at
+    every command-position candidate span. Targeted reads (``gh issue view
+    <N>``, ``gh api .../issues/<N>``) are explicitly allowed; every candidate
+    is checked, so a targeted read cannot hide a later discovery command.
+    `interpreter_invokes` closes the remaining gap: a string spec resolved
+    to shell text (`os.system(...)`, `subprocess.run(..., shell=True)`).
     """
-    outer_segments = tokenize_command_segments(cmd)
-    if not outer_segments and cmd.strip():
-        return False
-    if any(
+    segments = all_evaluated_segments(cmd, include_process_substitutions=True)
+    if segments is not None and any(
         _is_discovery_segment(segment[start:end])
-        for segment in outer_segments
+        for segment in segments
         for start, end in _command_position_candidate_spans(segment)
     ):
         return True
-    discovery_targets = [f"gh {sub} {cmd_}" for sub, cmd_ in _DISCOVERY_SUBCOMMANDS]
-    if has_interpreter_wrapped_command(cmd, target_commands=discovery_targets):
-        return True
-    segments = tokenize_shell_payload_segments(cmd, include_process_substitutions=True)
-    if segments is None:
-        return False
-    return any(_is_discovery_segment(segment) for segment in segments)
+    return any(
+        interpreter_invokes(cmd, target=("gh", sub, cmd_)) for sub, cmd_ in _DISCOVERY_SUBCOMMANDS
+    )
 
 
 def main() -> None:

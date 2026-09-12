@@ -11,7 +11,6 @@ stdlib-only; no autoskillit imports.
 from __future__ import annotations
 
 import json
-import shlex
 import sys
 from pathlib import Path
 
@@ -23,7 +22,11 @@ if _RUNTIME_DIR not in sys.path:
     sys.path.insert(0, _RUNTIME_DIR)
 
 
-from _command_classification import _SHELL_OPS  # type: ignore[import-not-found]  # noqa: E402
+from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
+    _command_position_candidate_spans,
+    all_evaluated_segments,
+    command_verb_and_args,
+)
 from _hook_payload import parse_hook_command  # type: ignore[import-not-found]  # noqa: E402
 
 ARTIFACT_DOWNLOAD_DENY_TRIGGER: str = "gh artifact download without --dir is prohibited"
@@ -40,25 +43,28 @@ _DENY_REASON = (
 
 
 def _deny_subcommand(cmd: str) -> str | None:
-    """Return the subcommand name if an unguarded download is detected, else None."""
-    try:
-        tokens = shlex.split(cmd)
-    except ValueError:
+    """Return the subcommand name if an unguarded download is detected, else None.
+
+    Reads *cmd* exclusively through `all_evaluated_segments` (rectify #4941
+    Part B): a direct invocation, one delivered via `bash -c`/`eval`, one fed
+    through a heredoc/herestring/pipe to a shell, and a literal-argv
+    `subprocess.run(["gh", "run", "download", ...])` are all seen the same
+    way, at every command-position candidate span. Returns `None` when
+    `all_evaluated_segments` cannot tokenize *cmd* (fail-open).
+    """
+    segments = all_evaluated_segments(cmd)
+    if segments is None:
         return None
-    for i, token in enumerate(tokens):
-        if token != "gh" or i + 2 >= len(tokens):
-            continue
-        if i != 0 and tokens[i - 1] not in _SHELL_OPS:
-            continue
-        pair = (tokens[i + 1], tokens[i + 2])
-        if pair in _DOWNLOAD_SUBCOMMANDS:
-            rest: list[str] = []
-            for t in tokens[i + 3 :]:
-                if t in _SHELL_OPS:
-                    break
-                rest.append(t)
-            if "--dir" not in rest and "-D" not in rest:
-                return tokens[i + 1]  # e.g. "run" or "release"
+    for segment in segments:
+        for start, end in _command_position_candidate_spans(segment):
+            verb, args = command_verb_and_args(segment[start:end])
+            if verb != "gh" or len(args) < 2:
+                continue
+            pair = (args[0], args[1])
+            if pair in _DOWNLOAD_SUBCOMMANDS:
+                rest = args[2:]
+                if "--dir" not in rest and "-D" not in rest:
+                    return args[0]  # e.g. "run" or "release"
     return None
 
 

@@ -255,22 +255,14 @@ def test_dispatch_py_sys_path_includes_runtime_subdir() -> None:
     assert dispatch_path.is_file(), f"dispatcher missing: {dispatch_path}"
     source = dispatch_path.read_text(encoding="utf-8")
 
-    # The bootstrap block must reference the _runtime subdir explicitly.
-    # Strategy A preserves the bare-name contract without violating the
-    # stdlib-only `hooks/AGENTS.md` rule by adding `hooks/_runtime/` to
-    # sys.path alongside `hooks/`.
+    # The bootstrap block must reference the _runtime subdir explicitly (see docstring).
     assert "_runtime" in source, (
         "hooks/_dispatch.py sys.path bootstrap does not reference "
         "`hooks/_runtime/` — hook subprocesses would fail to import "
         "moved utilities like `_hook_settings` (REQ-HOOKS-004)."
     )
 
-    # More specific: a _RUNTIME_DIR variable should resolve to hooks/_runtime.
-    # The bootstrap pattern (post-#4672) is:
-    #   _HOOKS_DIR = ...
-    #   _RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
-    #   if _RUNTIME_DIR not in sys.path:
-    #       sys.path.insert(0, _RUNTIME_DIR)
+    # A _RUNTIME_DIR variable should resolve to hooks/_runtime (see docstring).
     assert "_RUNTIME_DIR" in source, (
         "hooks/_dispatch.py is missing the `_RUNTIME_DIR = ... / `_runtime`` "
         "bootstrap entry required for bare-name imports after #4672."

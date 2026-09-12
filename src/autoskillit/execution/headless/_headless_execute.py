@@ -474,6 +474,7 @@ async def _execute_claude_headless(
                         plugin_load_mode=plugin_load_mode,
                         retained_binding=retained_binding,
                         session_env=spec.env,
+                        managed_skill_catalog=spec.managed_skill_catalog,
                         launch_resolver=launch_resolver,
                         launch_preparation=launch_preparation,
                         expected_launch_contract=resume_launch_contract,

@@ -24,6 +24,7 @@ from autoskillit.core import (
     SkillContractView,
     SkillResult,
     StreamParser,
+    ValidatedAddDir,
     get_logger,
     plugin_launch_binding_scope,
 )
@@ -252,6 +253,7 @@ async def _attempt_contract_nudge(
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     session_env: Mapping[str, str] | None = None,
+    managed_skill_catalog: ValidatedAddDir | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     launch_resolver: LaunchResolver | None = None,
     launch_preparation: LaunchPreparation | None = None,
@@ -354,6 +356,7 @@ async def _attempt_contract_nudge(
                     prompt=prompt,
                     output_format=OutputFormat.JSON,
                     plugin_binding=plugin_binding,
+                    managed_skill_catalog=managed_skill_catalog,
                     env_extras=extras,
                     native_shell_capture_decision=(
                         managed_lineage_observer.decision
@@ -441,6 +444,7 @@ async def _attempt_contract_nudge(
                     on_process_reaped=handle.record_reaped if handle is not None else None,
                     ceiling_seconds=ceiling_seconds,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
+                    line_driver=backend.line_driver(spec),
                 )
                 nudge_end_ts = datetime.now(UTC).isoformat()
     except OSError:

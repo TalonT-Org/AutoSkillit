@@ -224,7 +224,7 @@ def test_cat_written_markdown_with_fenced_review_command_is_allowed(
         f"$(gh api --method POST {_REVIEW_ROUTE})\n"
         "EOF"
     )
-    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) != "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 
 
 @pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
@@ -256,7 +256,7 @@ def test_inert_heredoc_repeatable_prose_is_allowed(
         "gh pr review 1 --approve; done\n"
         "EOF"
     )
-    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) != "deny"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
 
 
 @pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])

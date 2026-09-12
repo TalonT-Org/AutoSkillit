@@ -13,6 +13,7 @@ from typing import Any
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     CODEX_EFFORT_MAPPING,
+    CODEX_HOME_ENV_VAR,
     CODEX_MCP_ENV_FORWARD_VARS,
     CODEX_MODEL_ALIASES,
     CODEX_SESSIONS_SUBDIR,
@@ -90,7 +91,6 @@ from autoskillit.execution.backends._explorer_dispatch import (
 )
 from autoskillit.execution.process import INTERACTIVE_TETHER_CEILING_SECONDS
 
-_CODEX_HOME_ENV_VAR = "CODEX_HOME"
 _CODEX_SQLITE_HOME_ENV_VAR = "CODEX_SQLITE_HOME"
 
 
@@ -391,7 +391,7 @@ class CodexBackend(CodexHeadlessCommandMixin):
         if not spec.cwd or not Path(spec.cwd).is_absolute():
             return ["Codex interactive validation requires an absolute finalized cwd"]
 
-        home_value = spec.env.get(_CODEX_HOME_ENV_VAR)
+        home_value = spec.env.get(CODEX_HOME_ENV_VAR)
         sqlite_value = spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR)
         if not home_value or home_value != sqlite_value:
             return [

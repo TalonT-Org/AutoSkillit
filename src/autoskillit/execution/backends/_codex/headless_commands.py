@@ -15,6 +15,7 @@ from pathlib import Path
 
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
+    CODEX_HOME_ENV_VAR,
     CODEX_RESERVED_HOME_ENV_VARS,
     CmdSpec,
     CodexAppServerPlan,
@@ -27,11 +28,6 @@ from autoskillit.execution.backends._codex_cmd_builders import (
     _codex_exec_extras,
     _should_bypass_hook_trust,
 )
-
-# Local literal, not a reuse of `CODEX_RESERVED_HOME_ENV_VARS` (that frozenset covers
-# both CODEX_HOME and CODEX_SQLITE_HOME); matches the same locally-duplicated pattern
-# already used for `_CODEX_HOME_ENV_VAR` in `codex.py`.
-_CODEX_HOME_ENV_VAR = "CODEX_HOME"
 
 
 class CodexHeadlessCommandMixin(CodexSessionCommandMixin):
@@ -65,7 +61,7 @@ class CodexHeadlessCommandMixin(CodexSessionCommandMixin):
         # at all is to read it directly off this process's environment here
         # and re-inject it ourselves, exactly like every other builder injects
         # a bound managed session_home into its own reserved keys.
-        session_home = os.environ.get(_CODEX_HOME_ENV_VAR, "")
+        session_home = os.environ.get(CODEX_HOME_ENV_VAR, "")
         if session_home:
             for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
                 headless_extras[reserved_key] = session_home

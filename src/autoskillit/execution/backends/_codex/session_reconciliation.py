@@ -69,6 +69,20 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _release_recovery_thread_locks(
+    thread_locks: list[_FileLease], failures: list[BaseException]
+) -> bool:
+    released = True
+    for thread_lock in reversed(thread_locks):
+        try:
+            thread_lock.release()
+        except BaseException as exc:
+            released = False
+            logger.error("codex_recovery_thread_lease_release_failed", exc_info=True)
+            failures.append(RuntimeError(f"Thread lease release failed: {exc}"))
+    return released
+
+
 class _CodexSessionReconciliationMixin:
     def _publish_completed_view(
         self, view_path: Path, parent_session_ids: tuple[str, ...]
@@ -550,14 +564,7 @@ class _CodexSessionReconciliationMixin:
                             )
                         )
                 except TimeoutError:
-                    for thread_lock in reversed(thread_locks):
-                        try:
-                            thread_lock.release()
-                        except BaseException as exc:
-                            logger.error(
-                                "codex_recovery_thread_lease_release_failed", exc_info=True
-                            )
-                            failures.append(RuntimeError(f"Thread lease release failed: {exc}"))
+                    _release_recovery_thread_locks(thread_locks, failures)
                     continue
                 lifecycle: _FileLease | None = None
                 parent_session_ids: tuple[str, ...] | None = None
@@ -697,15 +704,8 @@ class _CodexSessionReconciliationMixin:
                                 "codex_recovery_lifecycle_lease_release_failed", exc_info=True
                             )
                             failures.append(RuntimeError(f"Lifecycle lease release failed: {exc}"))
-                    for thread_lock in reversed(thread_locks):
-                        try:
-                            thread_lock.release()
-                        except BaseException as exc:
-                            release_succeeded = False
-                            logger.error(
-                                "codex_recovery_thread_lease_release_failed", exc_info=True
-                            )
-                            failures.append(RuntimeError(f"Thread lease release failed: {exc}"))
+                    if not _release_recovery_thread_locks(thread_locks, failures):
+                        release_succeeded = False
                 if processing_succeeded and release_succeeded and parent_session_ids:
                     try:
                         store._publish_completed_view(view_path, parent_session_ids)

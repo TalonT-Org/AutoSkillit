@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import atomic_write
+from tests.arch._helpers import _install_parse_counter
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -273,20 +274,14 @@ def _mask_launch(monkeypatch):
     atomic_write(tmp_path / "unit" / "conftest.py", "import pytest\n")
     atomic_write(tmp_path / "unit" / "test_plain.py", "def test_nothing():\n    pass\n")
     monkeypatch.setattr(sys.modules[__name__], "_TESTS_ROOT", tmp_path)
-    original_parse = ast.parse
-    parse_count = 0
-
-    def counting_parse(*args, **kwargs):
-        nonlocal parse_count
-        parse_count += 1
-        return original_parse(*args, **kwargs)
-
-    monkeypatch.setattr(ast, "parse", counting_parse)
+    counter = _install_parse_counter(monkeypatch)
 
     hits = _masking_hits()
 
     assert hits == {"conftest.py::_mask_launch": frozenset({"ensure_pre_launch"})}
-    assert parse_count == len(list(tmp_path.rglob("*.py"))) == 3
+    inspected_files = list(tmp_path.rglob("*.py"))
+    assert len(inspected_files) == 3
+    assert counter[0] == len(inspected_files)
 
 
 def test_masking_scan_keeps_nested_fixture_and_module_mark_asymmetry(

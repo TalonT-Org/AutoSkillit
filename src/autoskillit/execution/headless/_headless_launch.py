@@ -129,11 +129,8 @@ async def _run_headless_attempt(
 ) -> tuple[SubprocessResult, CmdSpec]:
     """Build and execute one provider attempt under one owned plugin binding.
 
-    ``retained_binding``, when set, is an artifact binding the caller already
-    acquired and retains ownership of across the complete logical dispatch
-    (main attempt, retry, and nudge) — this attempt uses it directly instead
-    of acquiring (and closing) its own, so every physical attempt shares one
-    artifact identity.
+    ``retained_binding``, when set, is the caller's already-owned binding for
+    the complete logical dispatch; reuse it instead of acquiring a fresh one.
     """
     binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
         nullcontext(retained_binding)
@@ -268,8 +265,7 @@ async def _attempt_contract_nudge(
 ) -> SkillResult | None:
     """Resume once to recover omitted structured tokens or the completion marker.
 
-    ``retained_binding``, mirroring ``_run_headless_attempt``, reuses one
-    caller-owned artifact binding rather than acquiring a fresh one.
+    ``retained_binding`` mirrors ``_run_headless_attempt``: reuse the caller's binding.
     """
     if backend is None or not backend.capabilities.session_resume_capable:
         return None

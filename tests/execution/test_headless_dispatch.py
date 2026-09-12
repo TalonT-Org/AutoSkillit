@@ -339,6 +339,7 @@ class TestDispatchFoodTruck:
     ) -> None:
         from autoskillit.core.types import SubprocessResult, TerminationReason
         from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.execution.conftest import _mock_backend
         from tests.fakes import MockSubprocessRunner
 
         finalized_bindings: list[PluginLaunchBinding] = []
@@ -385,7 +386,36 @@ class TestDispatchFoodTruck:
                 return object()
 
         minimal_ctx.runner = runner
-        minimal_ctx.backend = ClaudeCodeBackend()
+        # skill_injection_capable + not plugin_install_capable is the
+        # managed-catalog-eligible shape (Codex); Claude gets skill content
+        # from finalize()'s plugin-dir projection alone and never reaches
+        # materialization_context()/managed_catalog().
+        backend = _mock_backend(food_truck_capable=True, skill_injection_capable=True)
+        # This managed-catalog shape puts _generated_home_attempt on the
+        # GENERATED_HOME path (Codex's real machinery, orthogonal to what this
+        # test verifies): it requires CODEX_HOME in the built spec's env and a
+        # working session_attempt_context, so the plain build_food_truck_cmd
+        # stub and Mock's default session_attempt_context need overriding.
+        from contextlib import nullcontext
+
+        from autoskillit.core import CmdSpec
+
+        backend.build_food_truck_cmd.return_value = CmdSpec(
+            cmd=("codex", "app-server"),
+            env={"CODEX_HOME": str(tmp_path / "managed-home")},
+        )
+
+        class _FakeAttemptHandle:
+            pass_fds: tuple[int, ...] = ()
+
+            def record_spawn(self, *args, **kwargs):
+                pass
+
+            def record_reaped(self, *args, **kwargs):
+                pass
+
+        backend.session_attempt_context.return_value = nullcontext(_FakeAttemptHandle())
+        minimal_ctx.backend = backend
         minimal_ctx.plugin_authority = authority
         minimal_ctx.session_skill_manager = session_skill_manager
 
@@ -542,6 +572,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
     @pytest.mark.anyio
     async def test_raises_without_session_skill_manager(self, minimal_ctx, tmp_path: Path) -> None:
         from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.execution.conftest import _mock_backend
 
         class Preparation:
             catalog = object()
@@ -552,7 +583,10 @@ class TestDispatchFoodTruckManagedCatalogGuards:
             def materialization_context(self, *, backend, binding):
                 raise AssertionError("materialization_context should not be reached")
 
-        minimal_ctx.backend = ClaudeCodeBackend()
+        # skill_injection_capable + not plugin_install_capable is required for
+        # managed_catalog_requested to gate true (Codex-shaped); ClaudeCodeBackend
+        # is plugin_install_capable and would never reach this guard.
+        minimal_ctx.backend = _mock_backend(food_truck_capable=True, skill_injection_capable=True)
         minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         assert minimal_ctx.session_skill_manager is None
 
@@ -628,7 +662,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
             def acquire_launch_binding(self, *, backend, load_mode):
                 return None
 
-        minimal_ctx.backend = _mock_backend(food_truck_capable=True)
+        minimal_ctx.backend = _mock_backend(food_truck_capable=True, skill_injection_capable=True)
         minimal_ctx.plugin_authority = _NullBindingAuthority()
         minimal_ctx.session_skill_manager = _UnreachableSessionSkillManager()
 
@@ -646,6 +680,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
         self, minimal_ctx, tmp_path: Path
     ) -> None:
         from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.execution.conftest import _mock_backend
 
         class Preparation:
             catalog = None
@@ -660,10 +695,12 @@ class TestDispatchFoodTruckManagedCatalogGuards:
             def managed_catalog(self, session_id, catalog, projection_context):
                 raise AssertionError("managed_catalog should not be reached")
 
-        # ClaudeCodeBackend is plugin_install_capable, so plugin_launch_binding_scope
-        # actually acquires a binding here — clearing the earlier guard and letting
-        # this test isolate the catalog guard specifically.
-        minimal_ctx.backend = ClaudeCodeBackend()
+        # skill_injection_capable + not plugin_install_capable makes
+        # managed_catalog_requested true (Codex-shaped); _StaticPluginAuthority
+        # still hands back a real binding for the coerced PROJECTED_HOME
+        # acquisition, clearing the earlier guard and letting this test
+        # isolate the catalog guard specifically.
+        minimal_ctx.backend = _mock_backend(food_truck_capable=True, skill_injection_capable=True)
         minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
         minimal_ctx.session_skill_manager = _UnreachableSessionSkillManager()
 

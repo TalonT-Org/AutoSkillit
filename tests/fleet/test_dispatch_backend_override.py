@@ -126,8 +126,11 @@ class TestFoodTruckBackendOverridePrelaunch:
         self,
         tool_ctx,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
-        from autoskillit.core import SubprocessResult, TerminationReason
+        from contextlib import contextmanager
+
+        from autoskillit.core import SubprocessResult, TerminationReason, ValidatedAddDir
         from tests.fakes import MockSubprocessRunner
 
         executor = tool_ctx.executor
@@ -136,6 +139,58 @@ class TestFoodTruckBackendOverridePrelaunch:
         backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
         prelaunch = Mock(return_value=PreLaunchReadiness((), {}))
         monkeypatch.setattr(type(backend), "ensure_pre_launch", prelaunch)
+
+        # capability_preparation is always attached by execute_dispatch, so this real
+        # CodexBackend (skill_injection_capable, not plugin_install_capable) now also
+        # routes through managed_catalog() for its generated home. Replace the real
+        # SessionSkillManager with a duck-typed fake so this test stays isolated to
+        # its actual subject — the outer no-arg prelaunch gate — instead of also
+        # exercising unrelated generated-home config/auth machinery.
+        managed_home_dir = tmp_path / "managed-home"
+        managed_home_dir.mkdir()
+        managed_skill_dir = tmp_path / "managed-skills" / "test-skill"
+        managed_skill_dir.mkdir(parents=True)
+
+        class _FakeManagedHome:
+            # Codex's build_food_truck_cmd rejects an empty session_home or an
+            # empty skill catalog, so the fake needs both fields populated with
+            # real, existing directories — not just a bare path — to reach the
+            # real subprocess launch.
+            skills_dir = ValidatedAddDir(
+                path=str(managed_skill_dir.parent),
+                session_home=str(managed_home_dir),
+                skill_entries=(("test-skill", str(managed_skill_dir)),),
+            )
+            pass_fds: tuple[int, ...] = ()
+
+        class _FakeSessionSkillManager:
+            @contextmanager
+            def managed_catalog(self, session_id, catalog, projection_context):
+                yield _FakeManagedHome()
+
+        tool_ctx.session_skill_manager = _FakeSessionSkillManager()
+
+        # The generated-home attempt also owns Codex's native rollout/lease
+        # bookkeeping (Part A, orthogonal to this test's subject) via
+        # backend.session_attempt_context — replace it with a no-op so this
+        # unit test doesn't need a real staged rollout on disk.
+        @contextmanager
+        def _fake_session_attempt_context(self, **kwargs):
+            class _FakeHandle:
+                pass_fds: tuple[int, ...] = ()
+
+                def record_spawn(self, *args, **kwargs):
+                    pass
+
+                def record_reaped(self, *args, **kwargs):
+                    pass
+
+            yield _FakeHandle()
+
+        monkeypatch.setattr(
+            type(backend), "session_attempt_context", _fake_session_attempt_context
+        )
+
         runner = MockSubprocessRunner()
         runner.set_default(
             SubprocessResult(

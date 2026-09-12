@@ -14,7 +14,7 @@ The moved modules each retain their original contract:
 - **`clone_guard.py`** — `CloneGuardPolicy`, `CloneSnapshot`,
   `ContaminationReport`, `build_clone_guard_policy`,
   `check_and_revert_clone_contamination`, plus internal worktree helpers
-  (not in `execution.__all__`).
+  (not re-exported by `execution`'s or `execution.runtime`'s `__all__`).
 - **`testing.py`** — `DefaultTestRunner`, `build_sanitized_env`,
   `check_test_passed`, `condense_test_output`, `parse_pytest_summary`.
 - **`db.py`** — `DefaultDatabaseReader`, `execute_readonly_query`

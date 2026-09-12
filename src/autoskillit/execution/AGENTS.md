@@ -4,7 +4,8 @@ IL-1 execution layer — headless Claude sessions, process lifecycle, CI/GitHub 
 Sub-packages: headless/ (see headless/AGENTS.md), process/ (see process/AGENTS.md),
 merge_queue/ (see merge_queue/AGENTS.md), session/ (see session/AGENTS.md),
 backends/ (see backends/AGENTS.md), github_ops/ (see github_ops/AGENTS.md),
-evidence/ (see evidence/AGENTS.md), runtime/ (see runtime/AGENTS.md).
+evidence/ (see evidence/AGENTS.md), runtime/ (see runtime/AGENTS.md),
+github_review/ (see github_review/AGENTS.md).
 
 SQLite access is read-only with defense in depth. The GitHub Actions CI watcher never
 raises.

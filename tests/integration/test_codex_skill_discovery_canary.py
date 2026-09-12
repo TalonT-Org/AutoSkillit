@@ -23,6 +23,11 @@ from autoskillit.core import (
     normalize_codex_cli_version,
     pkg_root,
 )
+
+# Reuse the production JSON-RPC frame encoder rather than duplicating it here;
+# the app-server's own non-standard framing convention omits the "jsonrpc"
+# member (see CodexAppServerDriver), which this encoder already does.
+from autoskillit.execution.backends._codex.app_server import _encode as _jsonrpc_line
 from autoskillit.execution.backends._codex_discovery import (
     CODEX_SKILL_DISCOVERY_CONTRACT,
     attest_catalog_discovery,
@@ -205,13 +210,6 @@ def _app_server_command(spec: CmdSpec, binary: Path) -> tuple[str, ...]:
     """
     assert spec.cmd and spec.cmd[0] == "codex", spec.cmd
     return (str(binary), *spec.cmd[1:])
-
-
-def _jsonrpc_line(obj: Mapping[str, object]) -> str:
-    """Encode one outbound JSON-RPC frame, omitting the ``jsonrpc`` member
-    (the app-server's own non-standard framing convention; see
-    ``CodexAppServerDriver``)."""
-    return json.dumps(obj, separators=(",", ":"))
 
 
 class _RegisteredRootsProbeDriver:

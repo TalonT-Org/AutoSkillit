@@ -1044,6 +1044,7 @@ class TestApplyManifest:
         cases = {
             ("AGENTS.md", "CLAUDE.md"): {"infra/", "contracts/", "docs/"},
             (".github/AGENTS.md",): {"infra/"},
+            ("docs/developer/contributing.md",): {"docs/", "infra/test_ci_workflow.py"},
             nested_paths: set(),
         }
         for paths, expected in cases.items():
@@ -1151,6 +1152,77 @@ class TestApplyManifest:
 
         with pytest.raises(RuntimeError, match="matcher construction failed"):
             apply_manifest({"docs/a.md"}, {"docs/*.md": ["docs"]})
+
+
+def _contributing_document_scope() -> set[Path]:
+    """Conservative scope for a change to docs/developer/contributing.md against the
+    real manifest and the real tests/ tree."""
+    scope = build_test_scope(
+        changed_files={"docs/developer/contributing.md"},
+        mode=FilterMode.CONSERVATIVE,
+        manifest=load_manifest(PROJECT_ROOT),
+        tests_root=PROJECT_ROOT / "tests",
+    )
+    assert isinstance(scope, set), f"expected a path scope, got {scope!r}"
+    return scope
+
+
+class TestProductionManifestScope:
+    """Resulting-scope calibration against the real manifest and the real tests/ tree."""
+
+    def test_contributing_document_route_selects_only_its_infra_reader(self) -> None:
+        from tests._test_filter import _HOOKS_UNCONDITIONAL_FILES, _INFRA_UNCONDITIONAL_FILES
+
+        tests_root = PROJECT_ROOT / "tests"
+        scope = _contributing_document_scope()
+
+        infra_dir = tests_root / "infra"
+        ci_reader = infra_dir / "test_ci_workflow.py"
+        guard_paths = {infra_dir / name for name in _INFRA_UNCONDITIONAL_FILES} | {
+            tests_root / "hooks" / name for name in _HOOKS_UNCONDITIONAL_FILES
+        }
+
+        assert {tests_root / "docs", tests_root / "arch", tests_root / "contracts"} <= scope
+        assert ci_reader in scope
+        assert guard_paths <= scope
+
+        assert infra_dir not in scope, "docs change must not broaden to all of tests/infra"
+        infra_entries = {p for p in scope if p.is_relative_to(infra_dir)}
+        assert infra_entries == {ci_reader} | {p for p in guard_paths if p.parent == infra_dir}
+        assert infra_dir / "test_pretty_output_recipe.py" not in scope
+
+    def test_contributing_document_route_file_targets_read_the_document(self) -> None:
+        route = load_manifest(PROJECT_ROOT)["docs/developer/contributing.md"]
+        file_targets = [target for target in route if not target.endswith("/")]
+        assert file_targets, "route must name at least one file-level reader"
+        for target in file_targets:
+            source = (PROJECT_ROOT / "tests" / target).read_text(encoding="utf-8")
+            assert "contributing.md" in source, (
+                f"{target!r} is routed as a reader of docs/developer/contributing.md "
+                "but never references the document"
+            )
+
+    def test_every_infra_module_referencing_the_document_stays_selected(self) -> None:
+        scope = _contributing_document_scope()
+        infra_dir = PROJECT_ROOT / "tests" / "infra"
+        referencing = {
+            module
+            for module in infra_dir.rglob("test_*.py")
+            if "contributing.md" in module.read_text(encoding="utf-8")
+        }
+        assert infra_dir / "test_ci_workflow.py" in referencing
+
+        unselected = sorted(
+            module.relative_to(PROJECT_ROOT).as_posix()
+            for module in referencing
+            if module not in scope and not any(module.is_relative_to(d) for d in scope)
+        )
+        assert not unselected, (
+            "tests/infra modules reference docs/developer/contributing.md but are not "
+            "selected for a change to it; add each as a file-level target of the "
+            "docs/developer/contributing.md route, or drop the reference if the module "
+            f"does not read the document: {unselected}"
+        )
 
 
 # ---------------------------------------------------------------------------

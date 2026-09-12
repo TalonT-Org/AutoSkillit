@@ -174,7 +174,7 @@ Taskfile.yml:
 
 docs/developer/contributing.md:
   - docs/
-  - infra/
+  - infra/test_ci_workflow.py
 
 docs/**/*.md:
   - docs/

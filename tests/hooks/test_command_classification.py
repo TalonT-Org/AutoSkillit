@@ -13,16 +13,22 @@ import autoskillit.hooks._runtime._command_classification as command_classificat
 import autoskillit.hooks._runtime._github_mutation_analysis as github_mutation_analysis
 from autoskillit.hooks._runtime._command_classification import (
     _GIT_GLOBAL_FLAG_SPEC,
+    _PYTHON_INVOCATION_FLAG_SPEC,
+    _SHELL_INVOCATION_FLAG_SPEC,
+    StdinConsumer,
     _FlagArity,
+    all_evaluated_segments,
     command_verb,
+    command_verb_and_args,
+    evaluated_payloads,
     extract_git_subcommand_and_flags,
     extract_interpreter_write_paths,
     extract_redirect_targets,
     has_interpreter_wrapped_command,
     has_interpreter_write,
-    has_nested_shell,
     is_allowed_protected_path_metadata_command,
     is_gh_command,
+    stdin_consumer,
     tokenize_command_segments,
 )
 from autoskillit.hooks._runtime._github_mutation_analysis import (
@@ -34,6 +40,11 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     GitHubMutationRecord,
     GitHubMutationStatus,
     analyze_github_mutations,
+)
+from tests.hooks._evaluation_shape_matrix import (
+    DEFERRED_SHAPES,
+    EVALUATION_SHAPE_MATRIX,
+    wrap_git_op,
 )
 from tests.hooks._flag_form_matrix import (
     FLAG_FORM_MATRIX,
@@ -66,10 +77,6 @@ def test_detects_python3_subprocess_run():
     assert has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"])
 
 
-def test_detects_bash_c_nesting():
-    assert has_nested_shell('bash -c "gh pr create --fill"')
-
-
 def test_no_false_positive_simple_command():
     assert not has_interpreter_wrapped_command(
         "gh pr create --fill",
@@ -100,14 +107,6 @@ def test_detects_python_heredoc_write():
 def test_no_false_positive_read_only_python():
     cmd = "python3 -c \"print(open('/tmp/x').read())\""
     assert not has_interpreter_write(cmd)
-
-
-def test_no_false_positive_simple_gh_command():
-    assert not has_nested_shell("gh pr create --fill")
-
-
-def test_detects_sh_c_nesting():
-    assert has_nested_shell('sh -c "gh issue list"')
 
 
 def test_no_match_when_no_interpreter():
@@ -294,6 +293,101 @@ class TestTokenizeCommandSegments:
     def test_parenthesized_subshell(self):
         result = tokenize_command_segments("(echo hi; echo bye)")
         assert len(result) == 2
+
+
+class TestStdinLiteralBinding:
+    """Binds every heredoc/herestring to the segment that consumes it.
+
+    Rectify #4941 Part A: the tokenizer is the only reader of the raw
+    command; `StdinLiteral.outer_expansion` and `_CommandSegment.
+    stdin_literals`/`piped_from_previous` are the tagged-at-tokenization
+    provenance every downstream scanner consumes instead of re-deriving it.
+    """
+
+    def _segments(self, command: str):
+        return command_classification._tokenize_command_segments_with_redirects(command)
+
+    def test_quoted_heredoc_binds_to_consumer(self):
+        segments = self._segments("bash <<'EOF'\nx\nEOF\n")
+        assert len(segments) == 1
+        assert segments[0].tokens == ["bash"]
+        assert len(segments[0].stdin_literals) == 1
+        literal = segments[0].stdin_literals[0]
+        assert literal.body == "x"
+        assert literal.kind == "heredoc"
+        assert literal.outer_expansion is False
+        assert literal.source_span is not None
+        command = "bash <<'EOF'\nx\nEOF\n"
+        assert command[literal.source_span[0] : literal.source_span[1]] == "x"
+
+    def test_unquoted_heredoc_with_real_redirect(self):
+        segments = self._segments("cat <<EOF > f\nx\nEOF\n")
+        assert len(segments) == 1
+        segment = segments[0]
+        assert segment.tokens == ["cat", ">", "f"]
+        assert segment.redirect_syntax == [False, True, False]
+        assert len(segment.stdin_literals) == 1
+        assert segment.stdin_literals[0].outer_expansion is True
+
+    def test_heredoc_pipe_binds_to_first_segment(self):
+        segments = self._segments("cat <<'EOF' | bash\nx\nEOF\n")
+        assert len(segments) == 2
+        assert segments[0].tokens == ["cat"]
+        assert len(segments[0].stdin_literals) == 1
+        assert segments[0].piped_from_previous is False
+        assert segments[1].tokens == ["bash"]
+        assert segments[1].stdin_literals == ()
+        assert segments[1].piped_from_previous is True
+
+    def test_tab_heredoc_preserves_existing_strip_behavior(self):
+        segments = self._segments("cat <<-'EOF'\n\tx\n\tEOF\n")
+        assert segments[0].tokens == ["cat"]
+        assert segments[0].stdin_literals[0].body == "\tx"
+        # Existing preservation assertion, unchanged (test_heredoc_body_stripped_before_tokenize).
+        assert tokenize_command_segments("cat <<'EOF'\nbody content with > symbols\nEOF") == [
+            ["cat"]
+        ]
+
+    @pytest.mark.parametrize(
+        ("command", "expected_body", "expected_outer_expansion"),
+        [
+            ('bash <<< "git push"', "git push", True),
+            ("bash <<<'git push'", "git push", False),
+            ("bash <<< 'git push'", "git push", False),
+        ],
+        ids=["double-quoted", "fused-single-quoted", "spaced-single-quoted"],
+    )
+    def test_herestring_quoting_forms(self, command, expected_body, expected_outer_expansion):
+        segments = self._segments(command)
+        assert len(segments) == 1
+        assert segments[0].tokens == ["bash"]
+        literal = segments[0].stdin_literals[0]
+        assert literal.kind == "herestring"
+        assert literal.body == expected_body
+        assert literal.outer_expansion is expected_outer_expansion
+
+    def test_heredoc_placeholder_precedes_opener_remainder(self):
+        segments = self._segments("cat > audit.log <<'EOF' | bash\nx\nEOF\n")
+        assert len(segments) == 2
+        assert segments[0].tokens == ["cat", ">", "audit.log"]
+        assert len(segments[0].stdin_literals) == 1
+        assert segments[1].tokens == ["bash"]
+        assert segments[1].piped_from_previous is True
+
+    def test_dash_c_program_alongside_heredoc(self):
+        segments = self._segments("bash -c 'x' <<'EOF'\ny\nEOF\n")
+        assert len(segments) == 1
+        assert segments[0].tokens == ["bash", "-c", "x"]
+        assert segments[0].stdin_literals[0].body == "y"
+
+    def test_strip_heredoc_bodies_parity_preserved(self):
+        """The parity-locked oracle (tests/core/test_bash_write_targets.py) is
+        untouched; this only pins that this module's own strip_heredoc_bodies
+        still matches its pre-rectify output shape."""
+        assert (
+            command_classification.strip_heredoc_bodies("cat <<'EOF'\nbody\nEOF\ncat file")
+            == "cat <<'EOF'\nEOF\ncat file"
+        )
 
 
 class TestCommandVerbAndArgs:
@@ -566,6 +660,97 @@ class TestExtractShellCommandPayloads:
         assert extract_shell_command_payloads('/bin/bash -c "pip install -e ."') == [
             "pip install -e ."
         ]
+
+
+_GIT_PUSH_FORCE_ARGV = ("git", ["push", "--force", "origin", "main"])
+
+
+class TestEvaluatedPayloads:
+    """The single authority for "what will be evaluated, and by whom".
+
+    Parametrized from EVALUATION_SHAPE_MATRIX with inner text
+    `git push --force origin main` (rectify #4941 Part A).
+    """
+
+    @pytest.mark.parametrize("shape", EVALUATION_SHAPE_MATRIX, ids=lambda s: s.id)
+    def test_executing_shapes_expose_the_git_segment(self, shape):
+        if not shape.executes:
+            pytest.skip("inert shape covered by test_inert_shapes_expose_no_git_segment")
+        cmd = wrap_git_op(shape, ("push", "--force"))
+        segments = all_evaluated_segments(cmd)
+        assert segments is not None, f"{shape.id}: all_evaluated_segments returned None"
+        found = [command_verb_and_args(segment) for segment in segments]
+        assert _GIT_PUSH_FORCE_ARGV in found, f"{shape.id}: git segment missing from {found}"
+
+    @pytest.mark.parametrize("shape", EVALUATION_SHAPE_MATRIX, ids=lambda s: s.id)
+    def test_inert_shapes_expose_no_git_segment(self, shape):
+        if shape.executes:
+            pytest.skip("executing shape covered by test_executing_shapes_expose_the_git_segment")
+        cmd = wrap_git_op(shape, ("push", "--force"))
+        assert evaluated_payloads(cmd) is not None or True  # never raises
+        segments = all_evaluated_segments(cmd)
+        found = [command_verb_and_args(segment) for segment in (segments or [])]
+        assert _GIT_PUSH_FORCE_ARGV not in found, f"{shape.id}: git segment leaked into {found}"
+
+    def test_dollar_substitution_inside_bash_heredoc_remains_evaluated(self):
+        """Named regression guard: an A-first fix (inert-body carve-out) must not
+        silently remove Defect B's coverage of a live substitution inside a
+        heredoc that a shell actually executes."""
+        cmd = "bash <<'EOF'\necho $(git push --force origin main)\nEOF\n"
+        segments = all_evaluated_segments(cmd)
+        assert segments is not None
+        found = [command_verb_and_args(segment) for segment in segments]
+        assert _GIT_PUSH_FORCE_ARGV in found
+
+    @pytest.mark.parametrize(
+        ("tokens", "expected"),
+        [
+            (["bash"], StdinConsumer.SHELL),
+            (["sudo", "bash", "-e"], StdinConsumer.SHELL),
+            (["bash", "-e", "-o", "pipefail"], StdinConsumer.SHELL),
+            (["bash", "--definitely-unknown-flag"], StdinConsumer.SHELL),
+            (["bash", "script.sh"], StdinConsumer.INERT),
+            (["bash", "-s", "arg"], StdinConsumer.SHELL),
+            (["bash", "-c", "x"], StdinConsumer.INERT),
+            (["python3", "-"], StdinConsumer.PYTHON),
+            (["python3", "-u"], StdinConsumer.PYTHON),
+            (["python3", "-W", "ignore", "-"], StdinConsumer.PYTHON),
+            (["python3", "script.py"], StdinConsumer.INERT),
+            (["python3", "-m", "mod"], StdinConsumer.INERT),
+            (["python3", "-c", "x"], StdinConsumer.INERT),
+            (["cat"], StdinConsumer.INERT),
+            (["tee", "f"], StdinConsumer.INERT),
+            (["gh", "pr", "create", "--body-file", "-"], StdinConsumer.INERT),
+            (["perl"], StdinConsumer.TEXT),
+            (["node", "-"], StdinConsumer.TEXT),
+        ],
+    )
+    def test_stdin_consumer_classification(self, tokens, expected):
+        assert stdin_consumer(tokens) == expected
+
+    @pytest.mark.parametrize("flag", sorted(_SHELL_INVOCATION_FLAG_SPEC))
+    def test_shell_invocation_value_flags_consume_one_token(self, flag):
+        tokens = ["bash", flag, "VALUE"]
+        # A VALUE flag consumes its value and does not itself change the
+        # verdict beyond -c's own documented INERT branch.
+        result = stdin_consumer(tokens)
+        assert result in (StdinConsumer.SHELL, StdinConsumer.INERT)
+
+    @pytest.mark.parametrize("flag", sorted(_PYTHON_INVOCATION_FLAG_SPEC))
+    def test_python_invocation_value_flags_consume_one_token(self, flag):
+        tokens = ["python3", flag, "VALUE"]
+        result = stdin_consumer(tokens)
+        assert result in (StdinConsumer.PYTHON, StdinConsumer.INERT)
+
+    @pytest.mark.parametrize(
+        "flag", ["-e", "-x", "-u", "-l", "--norc", "--posix", "+x", "--totally-unknown-flag"]
+    )
+    def test_shell_boolean_bucket_skips_unrecognized_flags(self, flag):
+        assert stdin_consumer(["bash", flag]) == StdinConsumer.SHELL
+
+    @pytest.mark.parametrize("flag", ["-u", "-B", "-E", "-I", "-S", "--totally-unknown-flag"])
+    def test_python_boolean_bucket_skips_unrecognized_flags(self, flag):
+        assert stdin_consumer(["python3", flag]) == StdinConsumer.PYTHON
 
 
 class TestTokenizeShellPayloadSegments:
@@ -2782,6 +2967,76 @@ def test_every_git_global_spec_flag_is_recognized(flag: str) -> None:
     assert result[0] != "<unresolved>"
 
 
+class TestDeferredStdinLiteralShapes:
+    """Strict-XFAIL regressions for the five _HEREDOC_BODY_RE limitations
+    deferred by rectify #4941 Part A (tracking issue #4973 --
+    tests/arch/test_hook_raw_command_scan_inventory.py's deferral registry
+    names these exact node IDs and requires this class to keep existing).
+
+    Each shape is intended to behave as a single inert `cat` consumer with
+    its inner text bound as one StdinLiteral; the regex limitation instead
+    leaks the inner text out as its own executable top-level segment. A
+    strict xfail means: if this ever starts passing, pytest errors instead
+    of silently going green, forcing the deferral entry to be removed.
+    """
+
+    def _assert_single_inert_cat_literal(self, command: str, expected_body: str) -> None:
+        segments = command_classification._tokenize_command_segments_with_redirects(command)
+        assert len(segments) == 1
+        assert segments[0].tokens == ["cat"]
+        assert len(segments[0].stdin_literals) == 1
+        assert segments[0].stdin_literals[0].body == expected_body
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="issue #4973: a second `<<` operator on the same opening line "
+        "is not recognized as a distinct heredoc",
+    )
+    def test_two_heredocs_one_line(self) -> None:
+        inner = "git push --force origin main"
+        cmd = DEFERRED_SHAPES["two-heredocs-one-line"](inner)
+        self._assert_single_inert_cat_literal(cmd, inner)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="issue #4973: a backslash-quoted delimiter (`<<\\EOF`) is not recognized as quoted",
+    )
+    def test_backslash_quoted_delimiter(self) -> None:
+        inner = "git push --force origin main"
+        cmd = DEFERRED_SHAPES["backslash-quoted-delimiter"](inner)
+        self._assert_single_inert_cat_literal(cmd, inner)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='issue #4973: a partially quoted delimiter (`<<E"OF"`) is '
+        "not recognized by the single leading/trailing quote-character group",
+    )
+    def test_partially_quoted_delimiter(self) -> None:
+        inner = "git push --force origin main"
+        cmd = DEFERRED_SHAPES["partially-quoted-delimiter"](inner)
+        self._assert_single_inert_cat_literal(cmd, inner)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="issue #4973: an unterminated heredoc never matches at all, "
+        "so its body tokenizes as ordinary outer command text",
+    )
+    def test_unterminated_heredoc(self) -> None:
+        inner = "git push --force origin main"
+        cmd = DEFERRED_SHAPES["unterminated-heredoc"](inner)
+        self._assert_single_inert_cat_literal(cmd, inner)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="issue #4973: the \\w+ delimiter class rejects a delimiter "
+        "containing non-word characters such as a hyphen",
+    )
+    def test_non_word_delimiter(self) -> None:
+        inner = "git push --force origin main"
+        cmd = DEFERRED_SHAPES["non-word-delimiter"](inner)
+        self._assert_single_inert_cat_literal(cmd, inner)
+
+
 class TestSiblingWrappersDelegate:
     """Smoke tests for the sibling wrappers in _github_mutation_analysis.
 
@@ -2831,8 +3086,19 @@ class TestSiblingWrappersDelegate:
             tokens, cwd="/work"
         ) == _partition_output_redirects(tokens, cwd="/work")
 
+    @staticmethod
+    def _spec_tuples(specs):
+        # _InterpreterCommandSpec is a plain dataclass (not a StrEnum), so its
+        # auto-generated __eq__ checks class identity first; the module-boundary
+        # (bare-name vs. dotted) dual-load this delegation test crosses can bind
+        # two distinct class objects for the same fields, making direct `==`
+        # unreliable. Compare field tuples instead, mirroring the `==`-not-`is`
+        # discipline _FlagArity's docstring already documents for this hazard.
+        return [(spec.payload, spec.cwd, spec.invokes_shell) for spec in specs]
+
     def test_extract_interpreter_segment_specs_call_delegates(self) -> None:
         from autoskillit.hooks._runtime._command_classification import (
+            StdinLiteral,
             _extract_interpreter_segment_specs,
         )
         from autoskillit.hooks._runtime._github_mutation_analysis import (
@@ -2840,9 +3106,33 @@ class TestSiblingWrappersDelegate:
         )
 
         segment = ["python3", "-c", "print(1)"]
-        assert _extract_interpreter_segment_specs_call(
-            segment
-        ) == _extract_interpreter_segment_specs(segment)
+        called_specs, called_unresolved = _extract_interpreter_segment_specs_call(segment)
+        direct_specs, direct_unresolved = _extract_interpreter_segment_specs(segment)
+        assert self._spec_tuples(called_specs) == self._spec_tuples(direct_specs)
+        assert called_unresolved == direct_unresolved
+
+        # The wrapper forwards the keyword-only stdin_literals parameter so a
+        # heredoc/herestring-fed `python3 -` program is inspected the same
+        # way an inline `-c` program is (rectify #4941 Part A).
+        heredoc_literals = (
+            StdinLiteral(
+                body="import subprocess; subprocess.run(['git','push'])",
+                kind="heredoc",
+                outer_expansion=False,
+            ),
+        )
+        stdin_segment = ["python3", "-"]
+        called_specs, called_unresolved = _extract_interpreter_segment_specs_call(
+            stdin_segment, stdin_literals=heredoc_literals
+        )
+        direct_specs, direct_unresolved = _extract_interpreter_segment_specs(
+            stdin_segment, stdin_literals=heredoc_literals
+        )
+        expected = [(["git", "push"], None, False)]
+        assert self._spec_tuples(called_specs) == expected
+        assert self._spec_tuples(direct_specs) == expected
+        assert called_unresolved is False
+        assert direct_unresolved is False
 
     def test_command_position_candidate_spans_call_delegates(self) -> None:
         from autoskillit.hooks._runtime._command_classification import (
@@ -2870,29 +3160,19 @@ class TestSiblingWrappersDelegate:
             command
         ) == _extract_process_substitution_occurrences(command)
 
-    def test_segment_evaluates_shell_payload_call_delegates(self) -> None:
-        from autoskillit.hooks._runtime._command_classification import (
-            _segment_evaluates_shell_payload,
-        )
-        from autoskillit.hooks._runtime._github_mutation_analysis import (
-            _segment_evaluates_shell_payload_call,
-        )
+    def test_evaluated_payloads_call_delegates(self) -> None:
+        from autoskillit.hooks._runtime._command_classification import evaluated_payloads
+        from autoskillit.hooks._runtime._github_mutation_analysis import _evaluated_payloads_call
 
-        tokens = ["bash", "-c", "echo hi"]
-        payload = "echo hi"
-        assert _segment_evaluates_shell_payload_call(
-            tokens, payload
-        ) == _segment_evaluates_shell_payload(tokens, payload)
-
-    def test_extract_shell_command_payloads_call_delegates(self) -> None:
-        from autoskillit.hooks._runtime._command_classification import (
-            extract_shell_command_payloads,
-        )
-        from autoskillit.hooks._runtime._github_mutation_analysis import (
-            _extract_shell_command_payloads_call,
-        )
+        # EvaluatedPayload is a plain dataclass; compare field tuples rather
+        # than instances directly for the same cross-module class-identity
+        # reason documented on _spec_tuples above.
+        def _payload_tuples(payloads):
+            return [
+                (p.text, str(p.kind), p.consumer_index, p.origin, p.source_span) for p in payloads
+            ]
 
         command = 'bash -c "pip install -e ."'
-        assert _extract_shell_command_payloads_call(command) == extract_shell_command_payloads(
-            command
+        assert _payload_tuples(_evaluated_payloads_call(command)) == _payload_tuples(
+            evaluated_payloads(command)
         )

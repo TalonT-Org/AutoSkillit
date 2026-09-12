@@ -341,6 +341,8 @@ def test_command_classification_exports_tokenization() -> None:
         "is_gh_command",
         "extract_redirect_targets",
         "strip_heredoc_bodies",
+        "all_evaluated_segments",
+        "live_command_text",
     ):
         assert f"def {name}" in source, (
             f"_command_classification.py must define {name}() for structural command parsing"

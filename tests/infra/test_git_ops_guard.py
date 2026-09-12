@@ -447,10 +447,148 @@ class TestInterpreterAndNestedShell:
         out = _run_guard(cmd, kitchen_open=True, tmpdir=tmp_path)
         assert _is_denied(out)
 
-    def test_allows_env_prefix_git_amend(self, tmp_path):
-        # env-prefix pattern (VAR=1 git ...) fails-open matching artifact_download_guard
+    def test_denies_env_prefix_git_amend(self, tmp_path):
+        # rectify #4941 Part A: _contains_blocked_git_op now resolves the verb
+        # through command_verb_and_args, which skips POSIX assignments the
+        # same way the checked-out-ref preflight always has -- an env-prefixed
+        # invocation (VAR=1 git ...) is no longer a raw-shlex-split blind spot.
         out = _run_guard("VAR=1 git commit --amend", kitchen_open=True, tmpdir=tmp_path)
+        assert _is_denied(out)
+
+
+# ---------------------------------------------------------------------------
+# Stdin-literal (heredoc/herestring/pipe) consumer recognition — rectify #4941 Part A
+# ---------------------------------------------------------------------------
+
+
+class TestStdinLiteralConsumers:
+    """One deny per shape family on the headless blocklist path, checked-out-ref
+    preflight coverage on the real-repository path, and the inert-body allows
+    that prove Defect A's carve-out (rectify #4941 Part A)."""
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            pytest.param("bash <<'EOF'\ngit push --force origin main\nEOF", id="heredoc-quoted"),
+            pytest.param("bash <<EOF\ngit push --force origin main\nEOF", id="heredoc-unquoted"),
+            pytest.param("bash <<-'EOF'\n\tgit push --force origin main\n\tEOF", id="heredoc-tab"),
+            pytest.param("bash <<< 'git push --force origin main'", id="herestring"),
+            pytest.param(
+                "cat <<'EOF' | bash\ngit push --force origin main\nEOF", id="cat-pipe-bash"
+            ),
+            pytest.param(
+                "sudo bash <<'EOF'\ngit push --force origin main\nEOF", id="sudo-bash-heredoc"
+            ),
+            pytest.param(
+                "python3 - <<'EOF'\nimport subprocess\n"
+                "subprocess.run(['git','push','--force','origin','main'])\nEOF",
+                id="python-dash-heredoc",
+            ),
+        ],
+    )
+    def test_denies_push_force_through_every_shape_family(self, tmp_path, cmd: str) -> None:
+        out = _run_guard(cmd, kitchen_open=True, tmpdir=tmp_path)
+        assert _is_denied(out)
+
+    def test_denies_bash_heredoc_update_ref_delete_preflight(self, tmp_path) -> None:
+        _git(tmp_path, "init", "-b", "develop")
+        _git(tmp_path, "config", "user.name", "Guard Test")
+        _git(tmp_path, "config", "user.email", "guard@example.invalid")
+        (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+        _git(tmp_path, "add", "f.txt")
+        _git(tmp_path, "commit", "-m", "initial")
+        out = _run_guard(
+            "bash <<'EOF'\ngit update-ref -d refs/heads/develop\nEOF",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert _is_denied(out)
+
+    def test_denies_python_heredoc_update_ref_delete_preflight(self, tmp_path) -> None:
+        _git(tmp_path, "init", "-b", "develop")
+        _git(tmp_path, "config", "user.name", "Guard Test")
+        _git(tmp_path, "config", "user.email", "guard@example.invalid")
+        (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+        _git(tmp_path, "add", "f.txt")
+        _git(tmp_path, "commit", "-m", "initial")
+        cmd = (
+            "python3 - <<'EOF'\nimport subprocess\n"
+            "subprocess.run(['git','update-ref','-d','refs/heads/develop'])\nEOF"
+        )
+        out = _run_guard(cmd, kitchen_open=True, tmpdir=tmp_path)
+        assert _is_denied(out)
+
+    @pytest.mark.parametrize("include_execution_cwd", [True, False])
+    def test_denies_raw_write_verb_via_heredoc_preflight(
+        self, tmp_path, include_execution_cwd: bool
+    ) -> None:
+        """Pins the _raw_target_mutations segment-source change and the
+        no-execution_cwd early-return path (2.3): a raw-write verb (`rm`)
+        delivered through a heredoc must deny with or without a resolvable
+        execution_cwd."""
+        _git(tmp_path, "init", "-b", "develop")
+        _git(tmp_path, "config", "user.name", "Guard Test")
+        _git(tmp_path, "config", "user.email", "guard@example.invalid")
+        (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+        _git(tmp_path, "add", "f.txt")
+        _git(tmp_path, "commit", "-m", "initial")
+        out = _run_guard(
+            "bash <<'EOF'\nrm .git/refs/heads/develop\nEOF",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+            include_execution_cwd=include_execution_cwd,
+        )
+        assert _is_denied(out)
+
+    def test_allows_inert_backtick_heredoc_git_push(self, tmp_path) -> None:
+        """cat-redirect-heredoc-inline-backtick: an inert `cat` body mentioning
+        `git push --force` inside a single backtick pair must not deny."""
+        _git(tmp_path, "init", "-b", "develop")
+        _git(tmp_path, "config", "user.name", "Guard Test")
+        _git(tmp_path, "config", "user.email", "guard@example.invalid")
+        (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+        _git(tmp_path, "add", "f.txt")
+        _git(tmp_path, "commit", "-m", "initial")
+        out = _run_guard(
+            "cat > f.md <<'EOF'\nrun `git push --force origin main` here\nEOF",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
         assert out.strip() == ""
+
+    def test_allows_inert_fenced_heredoc_gh_api(self, tmp_path) -> None:
+        """cat-redirect-heredoc-fenced: an inert `cat` body containing a fenced
+        `gh api ...` example must not deny (git_ops_guard only cares about git,
+        but this pins the same live-text projection github_mutation_guard uses)."""
+        _git(tmp_path, "init", "-b", "develop")
+        _git(tmp_path, "config", "user.name", "Guard Test")
+        _git(tmp_path, "config", "user.email", "guard@example.invalid")
+        (tmp_path / "f.txt").write_text("x\n", encoding="utf-8")
+        _git(tmp_path, "add", "f.txt")
+        _git(tmp_path, "commit", "-m", "initial")
+        out = _run_guard(
+            "cat > notes.md <<'EOF'\n```\ngit push --force origin main\n```\nEOF",
+            kitchen_open=True,
+            tmpdir=tmp_path,
+        )
+        assert out.strip() == ""
+
+    def test_denies_cross_worktree_heredoc_branch_force(
+        self, linked_repo: dict[str, Path | str]
+    ) -> None:
+        """The multi-worktree topology the #4588 immunity was built for, proven
+        on the heredoc path: from the primary worktree, `git branch -f` fed
+        through a heredoc targeting the branch checked out in the *other*
+        worktree must still deny."""
+        primary = linked_repo["primary"]
+        out = _run_guard(
+            f"bash <<'EOF'\ngit branch -f review {linked_repo['new_sha']}\nEOF",
+            kitchen_open=True,
+            tmpdir=primary,
+        )
+        assert _is_denied(out)
+        result = _checked_out_ref_result(out)
+        assert result["threatened_refs"][0]["target_ref"] == "refs/heads/review"
 
 
 # ---------------------------------------------------------------------------

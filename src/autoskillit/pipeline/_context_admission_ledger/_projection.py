@@ -122,20 +122,23 @@ def _recover_stream_projection(
             ContextAdmissionStorageFailureReason.AMBIGUOUS_RECOVERY,
             "empty-bound-stream",
         )
-    journal_rows = _read_bounded_rows(
-        connection.execute(
-            """
-            SELECT journal_sequence, event_id, event_envelope, decision_envelope,
-                   expected_revision, prior_aggregate_revision,
-                   prior_admission_sequence, resulting_aggregate_revision,
-                   resulting_admission_sequence
-            FROM journal_events
-            WHERE stream_id = ?
-            ORDER BY journal_sequence
-            """,
-            (stream_id,),
+    journal_rows = cast(
+        tuple[tuple[int, str, bytes, bytes, int, int, int, int, int], ...],
+        _read_bounded_rows(
+            connection.execute(
+                """
+                SELECT journal_sequence, event_id, event_envelope, decision_envelope,
+                       expected_revision, prior_aggregate_revision,
+                       prior_admission_sequence, resulting_aggregate_revision,
+                       resulting_admission_sequence
+                FROM journal_events
+                WHERE stream_id = ?
+                ORDER BY journal_sequence
+                """,
+                (stream_id,),
+            ),
+            read_budget,
         ),
-        read_budget,
     )
     sequences = tuple(int(row[0]) for row in journal_rows)
     if latest_journal_sequence != len(sequences) or any(
@@ -146,17 +149,20 @@ def _recover_stream_projection(
             "journal-sequence-gap",
         )
     effects_by_sequence: dict[int, list[bytes]] = {sequence: [] for sequence in sequences}
-    effect_rows = _read_bounded_rows(
-        connection.execute(
-            """
-            SELECT journal_sequence, effect_ordinal, effect_envelope
-            FROM effect_outbox
-            WHERE stream_id = ?
-            ORDER BY journal_sequence, effect_ordinal
-            """,
-            (stream_id,),
+    effect_rows = cast(
+        tuple[tuple[int, int, bytes], ...],
+        _read_bounded_rows(
+            connection.execute(
+                """
+                SELECT journal_sequence, effect_ordinal, effect_envelope
+                FROM effect_outbox
+                WHERE stream_id = ?
+                ORDER BY journal_sequence, effect_ordinal
+                """,
+                (stream_id,),
+            ),
+            read_budget,
         ),
-        read_budget,
     )
     for sequence, ordinal, envelope in effect_rows:
         effects = effects_by_sequence.get(int(sequence))
@@ -166,17 +172,20 @@ def _recover_stream_projection(
                 "effect-sequence-gap",
             )
         effects.append(bytes(envelope))
-    shadow_rows = _read_bounded_rows(
-        connection.execute(
-            """
-            SELECT journal_sequence, shadow_envelope
-            FROM shadow_decisions
-            WHERE stream_id = ?
-            ORDER BY journal_sequence
-            """,
-            (stream_id,),
+    shadow_rows = cast(
+        tuple[tuple[int, bytes], ...],
+        _read_bounded_rows(
+            connection.execute(
+                """
+                SELECT journal_sequence, shadow_envelope
+                FROM shadow_decisions
+                WHERE stream_id = ?
+                ORDER BY journal_sequence
+                """,
+                (stream_id,),
+            ),
+            read_budget,
         ),
-        read_budget,
     )
     if tuple(int(row[0]) for row in shadow_rows) != sequences:
         raise _LedgerOpenError(

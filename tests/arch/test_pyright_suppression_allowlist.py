@@ -42,9 +42,6 @@ TEST_ALLOWLIST: dict[tuple[str, int], str] = {
 # across the declare_join_batch handler, the join ledger, and the Join-guard
 # hook scripts; the runtime join ledger is stdlib-only and the bridge layers
 # cannot be statically resolved from outside the hooks/ subtree.
-# Wavefront 1 (#4667) added 3 net # type: ignore comments elsewhere in the
-# codebase (rebinds via setattr make mypy unable to see methods on the class
-# at 5 site-bounded sites), bringing the count from 137 to 140.
 # Bumped from 140 to 144 after rebase onto develop (#4853 added 4 net
 # # type: ignore[import-not-found] suppressions on standalone guard scripts).
 # Bumped from 144 to 155 after rebase onto develop (#4851 adds 9 site-bounded

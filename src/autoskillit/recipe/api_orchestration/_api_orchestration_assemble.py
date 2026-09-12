@@ -9,7 +9,7 @@ from ``_api_orchestration_text``.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, cast  # noqa: F401 — retained legacy module attributes
 
 import autoskillit.recipe.api._api_cache as _api_cache
 from autoskillit.core import FinalizedRecipeStep
@@ -115,7 +115,7 @@ def _assemble_load_result(
         else None
     )
     assert_no_raw_placeholders(raw, context=name, hidden_ingredient_names=_hidden_names)
-    result: dict[str, Any] = {
+    result: LoadRecipeResult = {
         "content": raw,
         "errors": errors,
         "diagram": diagram,
@@ -187,4 +187,4 @@ def _assemble_load_result(
         )
         _api_cache._LOAD_CACHE.put(cache_key, entry)
 
-    return cast(LoadRecipeResult, result)
+    return result

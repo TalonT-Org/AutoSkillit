@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import SessionType, get_logger, pkg_root, session_type
+from autoskillit.recipe.ingredients._recipe_ingredients import LoadRecipeResult
 
 logger = get_logger(__name__)
 
@@ -33,7 +34,7 @@ class _LoadCacheEntry:
     builtin_dir_mtime: int
     pkg_version: str
     rule_registry_hash: str
-    result: Any  # LoadRecipeResult but avoiding circular import
+    result: LoadRecipeResult
 
 
 class LoadCache:
@@ -51,21 +52,22 @@ class LoadCache:
         with self._lock:
             return self._store.get(key)
 
-    def copy_result(self, result: Any) -> dict[str, Any]:
+    def copy_result(self, result: LoadRecipeResult) -> LoadRecipeResult:
         """Return a shallow copy of result with list fields independently copied."""
         if not isinstance(result, Mapping):
             msg = f"copy_result expected a Mapping, got {type(result).__name__}"
             raise TypeError(msg)
-        r = dict(result)
-        for list_key in (
-            "suggestions",
-            "kitchen_rules",
-            "requires_packs",
-            "requires_features",
-            "deferred_guards",
-        ):
-            if list_key in r:
-                r[list_key] = list(r[list_key])
+        r = result.copy()
+        if "suggestions" in r:
+            r["suggestions"] = list(r["suggestions"])
+        if "kitchen_rules" in r:
+            r["kitchen_rules"] = list(r["kitchen_rules"])
+        if "requires_packs" in r:
+            r["requires_packs"] = list(r["requires_packs"])
+        if "requires_features" in r:
+            r["requires_features"] = list(r["requires_features"])
+        if "deferred_guards" in r:
+            r["deferred_guards"] = list(r["deferred_guards"])
         return r
 
     def put(self, key: tuple, entry: _LoadCacheEntry) -> None:

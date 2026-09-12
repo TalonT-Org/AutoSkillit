@@ -103,8 +103,6 @@ def load_and_validate(
         ProcessStaleError: Package directory was modified since server startup.
         RecipeNotFoundError: Named recipe could not be found.
     """
-    from typing import cast
-
     from autoskillit.recipe.api import _api_cache
 
     t0 = time.perf_counter()
@@ -150,7 +148,7 @@ def load_and_validate(
             and rs == cached.recipe_size
         ):
             logger.debug("load_recipe_cache_hit", recipe=name)
-            return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(cached.result))
+            return _api_cache._LOAD_CACHE.copy_result(cached.result)
 
     partial, t0 = _resolve_recipe_match(name, pipeline_inputs, t0)
     pipeline_result = _run_validation_pipeline(partial, pipeline_inputs, t0)
@@ -158,7 +156,7 @@ def load_and_validate(
 
     if result.get("valid", False):
         _api_cache._refresh_staleness_baseline()
-    return cast(LoadRecipeResult, _api_cache._LOAD_CACHE.copy_result(result))
+    return _api_cache._LOAD_CACHE.copy_result(result)
 
 
 __all__ = [

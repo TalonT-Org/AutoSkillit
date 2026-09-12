@@ -445,6 +445,22 @@ class TestWriteGuardBashBypass:
 
 _ECHO_REDIRECT_INNER = "echo x > /outside/redirect-target.txt"
 
+# These inert shapes carry their OWN real write target on the opening line
+# (`cat > notes.md`, `cat > f.md`, `tee f.md`) or pipe into `tee f`,
+# independent of whatever inner text they wrap -- write_guard correctly
+# denies these regardless of body content, so they are excluded from the
+# "inert shape must allow" expectation rather than inheriting a blanket one.
+_SHAPES_WITH_OWN_WRITE_TARGET = frozenset(
+    {
+        "cat-redirect-heredoc-fenced",
+        "cat-redirect-heredoc-inline-backtick",
+        "cat-redirect-heredoc-dollar",
+        "cat-heredoc-dquote-delim",
+        "tee-heredoc-dollar",
+        "cat-heredoc-pipe-tee",
+    }
+)
+
 
 class TestWriteGuardEvaluationShapeMatrix:
     """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape.
@@ -477,7 +493,13 @@ class TestWriteGuardEvaluationShapeMatrix:
         )
 
     @pytest.mark.parametrize(
-        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+        "shape",
+        [
+            s
+            for s in EVALUATION_SHAPE_MATRIX
+            if not s.executes and s.id not in _SHAPES_WITH_OWN_WRITE_TARGET
+        ],
+        ids=lambda s: s.id,
     )
     def test_heredoc_family_inert_shape_allows_rm_rf(self, shape) -> None:
         result = _run_hook(_build_bash_event(shape.build("rm -rf src/")))

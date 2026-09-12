@@ -489,7 +489,18 @@ class TestPrCreateGuardEvaluationShapeMatrix:
         assert _is_denied(out), f"shape {shape.id!r} must deny"
 
     @pytest.mark.parametrize(
-        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+        "shape",
+        [
+            s
+            for s in EVALUATION_SHAPE_MATRIX
+            # "gh-body-file-stdin-heredoc" is itself a `gh pr create
+            # --body-file -` invocation on its opening line, independent of
+            # whatever inner text it wraps -- the guard correctly denies it
+            # regardless of body content, so it is excluded here rather than
+            # inheriting a blanket "inert shape must allow" expectation.
+            if not s.executes and s.id != "gh-body-file-stdin-heredoc"
+        ],
+        ids=lambda s: s.id,
     )
     def test_inert_shape_allows_gh_pr_create(self, shape, tmp_path) -> None:
         out = _run_guard(

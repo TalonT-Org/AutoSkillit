@@ -51,13 +51,10 @@ class CodexHeadlessCommandMixin(CodexSessionCommandMixin):
         """
         headless_extras = _codex_exec_extras(session_type="")
         _merge_caller_env_extras(headless_extras, env_extras)
-        # CODEX_HOME is one of _HEADLESS_EXCLUSIVE_VARS (stripped below from the
-        # subprocess's own base env to block host leakage) and one of the
-        # reserved keys _merge_caller_env_extras always blocks from caller
-        # extras — so the only way an explicit ambient home reaches the child
-        # at all is to read it directly off this process's environment here
-        # and re-inject it ourselves, exactly like every other builder injects
-        # a bound managed session_home into its own reserved keys.
+        # CODEX_HOME is stripped from the base env and blocked from caller
+        # extras (_HEADLESS_EXCLUSIVE_VARS / CODEX_RESERVED_HOME_ENV_VARS), so
+        # an explicit ambient home must be read directly off this process's
+        # env and re-injected here, like other builders inject a bound home.
         session_home = os.environ.get(CODEX_HOME_ENV_VAR, "")
         if session_home:
             for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:

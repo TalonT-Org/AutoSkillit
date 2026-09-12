@@ -390,11 +390,17 @@ do not bypass hook review. Automated skill and food-truck builders retain
 their explicit hook-trust bypass because they have a separate non-interactive
 trust contract.
 
-The opt-in installed-Codex canary is a release gate for each supported
+The opt-in installed-Codex canary (`task test-codex-startup-canary`,
+`AUTOSKILLIT_CODEX_STARTUP_CANARY=1`) is a release gate for each supported
 version. It must prove that fresh and resumed writes remain on the staged
 inode (or follow an explicitly supported representation transition) and that
 a live Codex process retains the inherited lease after the parent closes its
-copy. Failure blocks the hard-link design for that version.
+copy. Failure blocks the hard-link design for that version. Binary selection
+is gated only on `CodexBackend().capabilities.min_version` (0.136.0); the
+exact rollout/inode/lease wire-schema assertions are separately pinned to
+`codex-cli 0.147.0` and skip — reporting the limitation rather than passing
+silently — when the selected binary clears the transport floor but is not
+that exact schema-verified build.
 
 ### Exception rendering ownership
 

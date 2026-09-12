@@ -552,12 +552,10 @@ class _CodexSessionReconciliationMixin:
                         try:
                             thread_lock.release()
                         except BaseException as exc:
-                            failures.append(
-                                RuntimeError(
-                                    f"Codex recovery thread lease release failed for "
-                                    f"{view_path.name}: {exc}"
-                                )
+                            logger.error(
+                                "codex_recovery_thread_lease_release_failed", exc_info=True
                             )
+                            failures.append(RuntimeError(f"Thread lease release failed: {exc}"))
                     continue
                 lifecycle: _FileLease | None = None
                 parent_session_ids: tuple[str, ...] | None = None
@@ -693,23 +691,19 @@ class _CodexSessionReconciliationMixin:
                             lifecycle.release()
                         except BaseException as exc:
                             release_succeeded = False
-                            failures.append(
-                                RuntimeError(
-                                    f"Codex recovery lifecycle lease release failed for "
-                                    f"{view_path.name}: {exc}"
-                                )
+                            logger.error(
+                                "codex_recovery_lifecycle_lease_release_failed", exc_info=True
                             )
+                            failures.append(RuntimeError(f"Lifecycle lease release failed: {exc}"))
                     for thread_lock in reversed(thread_locks):
                         try:
                             thread_lock.release()
                         except BaseException as exc:
                             release_succeeded = False
-                            failures.append(
-                                RuntimeError(
-                                    f"Codex recovery thread lease release failed for "
-                                    f"{view_path.name}: {exc}"
-                                )
+                            logger.error(
+                                "codex_recovery_thread_lease_release_failed", exc_info=True
                             )
+                            failures.append(RuntimeError(f"Thread lease release failed: {exc}"))
                 if processing_succeeded and release_succeeded and parent_session_ids:
                     try:
                         store._publish_completed_view(view_path, parent_session_ids)
@@ -725,11 +719,8 @@ class _CodexSessionReconciliationMixin:
                 try:
                     view_lock.release()
                 except BaseException as exc:
-                    failures.append(
-                        RuntimeError(
-                            f"Codex recovery view lease release failed for {view_path.name}: {exc}"
-                        )
-                    )
+                    logger.error("codex_recovery_view_lease_release_failed", exc_info=True)
+                    failures.append(RuntimeError(f"View lease release failed: {exc}"))
         lifecycle = _FileLease.acquire(
             store.locks_root / "lifecycle.lock",
             timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,

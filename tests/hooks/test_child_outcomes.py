@@ -21,6 +21,7 @@ import pytest
 from autoskillit.core import CliSubtype, InfraExitCategory
 from autoskillit.hooks import _child_outcome_snapshot as snap
 from autoskillit.hooks import _session_binding
+from autoskillit.hooks._child_outcome_snapshot import _snapshot as snapshot_impl
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -391,13 +392,13 @@ def test_duplicate_metadata_evidence_can_clear_and_restore_native_settings(
         tmp_path, backend="codex", parent_session_id="parent-1"
     )
     writes: list[dict] = []
-    original_write = snap._write_document
+    original_write = snapshot_impl._write_document
 
     def tracking_write(path: Path, document: dict) -> None:
         writes.append(json.loads(json.dumps(document)))
         original_write(path, document)
 
-    monkeypatch.setattr(snap, "_write_document", tracking_write)
+    monkeypatch.setattr(snapshot_impl, "_write_document", tracking_write)
     resolved = {
         "role": "plan-foundation-auditor",
         "effective_model": "gpt-5.6-sol",

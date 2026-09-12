@@ -679,15 +679,8 @@ else:
     _all_evaluated_segments_impl = _interpreters.all_evaluated_segments
     _interpreter_invokes_impl = _interpreters.interpreter_invokes
     _live_command_text_impl = _interpreters.live_command_text
-
-
-# Deferred (PEP 562): eagerly binding these here would race _interpreters.py's
-# own bottom bootstrap, which re-enters block B above, when this facade loads
-# via _interpreters/_flags standalone first.
-def __getattr__(name: str) -> object:
-    if name in ("_SHELL_INVOCATION_FLAG_SPEC", "_PYTHON_INVOCATION_FLAG_SPEC"):
-        return getattr(_interpreters, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    _SHELL_INVOCATION_FLAG_SPEC = _interpreters._SHELL_INVOCATION_FLAG_SPEC
+    _PYTHON_INVOCATION_FLAG_SPEC = _interpreters._PYTHON_INVOCATION_FLAG_SPEC
 
 
 def all_evaluated_segments(

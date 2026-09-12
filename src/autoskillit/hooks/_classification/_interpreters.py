@@ -666,64 +666,6 @@ def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
 
 
 if not TYPE_CHECKING:
-    # _FlagArity must come from the _flags sibling directly, not the facade:
-    # the facade binds _FlagArity only after its own
-    # `from ._classification import _flags, _interpreters` statement
-    # completes, so a facade lookup during this module's own bootstrap
-    # would raise AttributeError. This import (and the flag-spec dicts
-    # below, which need _FlagArity as a real value, not just a deferred
-    # annotation) must stay at the BOTTOM of the file, after every function
-    # above is defined, and BEFORE the facade-rebind block that follows:
-    # `_flags` itself reaches back into the facade at its own bottom, which
-    # in turn re-enters this very module for every name defined above --
-    # including these two flag-spec dicts. If the facade-rebind block below
-    # ran first, it would trigger that same re-entrant chain before these
-    # two dicts existed yet, and find a partially-initialized module.
-    # Placing this block first (still after every function definition
-    # above) means the re-entrant facade lookup always succeeds.
-    #
-    # A same-package sibling import needs only a truthy __package__ (unlike
-    # the strict `== "autoskillit.hooks._classification"` check the facade
-    # rebind below uses to reach the *parent* package) -- this module is
-    # always loaded as some package's `_interpreters` submodule (the real
-    # dotted package, or the bare `_classification` package the standalone
-    # guard bootstrap creates via sys.path), and `from .` resolves to
-    # "current package" in both cases.
-    if __package__:
-        from . import _flags
-    else:
-        import _flags
-
-    _FlagArity = _flags._FlagArity
-
-    # Flags that consume a following value when the shell/Python interpreter
-    # itself (not a heredoc/herestring body) reads a script from a
-    # positional operand. Only VALUE-arity flags are listed: any other
-    # `-`/`+`-prefixed token is skipped as boolean by the default bucket in
-    # `_walk_invocation_flags`.
-    _SHELL_INVOCATION_FLAG_SPEC = {
-        "-o": _FlagArity.VALUE,
-        "+o": _FlagArity.VALUE,
-        "-O": _FlagArity.VALUE,
-        "+O": _FlagArity.VALUE,
-        "--rcfile": _FlagArity.VALUE,
-        "--init-file": _FlagArity.VALUE,
-        # Bash 5.2 help does not print --rcfile/--init-file's operand arity;
-        # covered by the generative flag-spec test instead of the
-        # live-`--help` contract test (see
-        # tests/hooks/test_gh_api_flag_spec_contract.py).
-        "-c": _FlagArity.VALUE,
-    }
-    _PYTHON_INVOCATION_FLAG_SPEC = {
-        "-c": _FlagArity.VALUE,
-        "-m": _FlagArity.VALUE,
-        "-W": _FlagArity.VALUE,
-        "-X": _FlagArity.VALUE,
-        "--check-hash-based-pycs": _FlagArity.VALUE,
-    }
-
-
-if not TYPE_CHECKING:
     if __package__ == "autoskillit.hooks._classification":
         from .._runtime import _command_classification as _classification
     else:

@@ -189,7 +189,7 @@ def _session_mismatch_error(requested_session_id: str, recorded_session_id: str)
 def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | None:
     """Report ambiguity from multiple foreign IDs or an incomplete candidate scan.
 
-    Return ``None`` when no foreign session ID is observed.
+    Return ``None`` when no candidate recorded an ID other than the requested session.
     """
     recorded_session_ids: set[str] = set()
     candidate_paths, truncated = enumerate_binding_paths(channel_dir)

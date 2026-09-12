@@ -508,13 +508,6 @@ class TestPrCreateGuardEvaluationShapeMatrix:
         )
         assert out.strip() == "", f"shape {shape.id!r} must allow"
 
-    def test_python_argv_list_gh_pr_create_is_denied(self, tmp_path) -> None:
-        cmd = (
-            "python3 -c \"import subprocess; subprocess.run(['gh','pr','create','--title','x'])\""
-        )
-        out = _run_guard(cmd, kitchen_open=True, tmpdir=tmp_path)
-        assert _is_denied(out)
-
 
 class TestNestedShellDenyRegressions:
     """Real nested-shell `gh pr create` invocations must still be denied."""

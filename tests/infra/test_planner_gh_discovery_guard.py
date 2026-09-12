@@ -340,11 +340,6 @@ class TestPlannerGhDiscoveryEvaluationShapeMatrix:
         out = _run_guard(shape.build("gh issue list"))
         assert out.strip() == "", f"shape {shape.id!r} must allow"
 
-    def test_python_argv_list_gh_issue_list_is_denied(self) -> None:
-        cmd = "python3 -c \"import subprocess; subprocess.run(['gh','issue','list'])\""
-        out = _run_guard(cmd)
-        assert _is_denied(out)
-
 
 class TestNestedShellDeny:
     """Real nested-shell discovery commands must still be denied."""

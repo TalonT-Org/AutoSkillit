@@ -75,6 +75,28 @@ class _FakeSessionSkillManager:
         yield self._home
 
 
+class _UnreachableSessionSkillManager:
+    """Session skill manager whose managed_catalog must never be reached by a
+    guard that fails closed earlier in dispatch_food_truck."""
+
+    def managed_catalog(self, session_id, catalog, projection_context):
+        raise AssertionError("managed_catalog should not be reached")
+
+
+class _UnreachableCapabilityPreparation:
+    """Capability preparation whose finalize/materialization_context must never
+    be reached by a guard that fails closed before catalog materialization."""
+
+    def __init__(self, catalog: object) -> None:
+        self.catalog = catalog
+
+    def finalize(self, *, backend, binding):
+        raise AssertionError("finalize should not be reached")
+
+    def materialization_context(self, *, backend, binding):
+        raise AssertionError("materialization_context should not be reached")
+
+
 def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
     return json.dumps(
         {
@@ -571,15 +593,6 @@ class TestDispatchFoodTruckManagedCatalogGuards:
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
 
-        class Preparation:
-            catalog = object()
-
-            def finalize(self, *, backend, binding):
-                raise AssertionError("finalize should not be reached")
-
-            def materialization_context(self, *, backend, binding):
-                raise AssertionError("materialization_context should not be reached")
-
         # skill_injection_capable + not plugin_install_capable is required for
         # managed_catalog_requested to gate true (Codex-shaped); ClaudeCodeBackend
         # is plugin_install_capable and would never reach this guard.
@@ -593,7 +606,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
                 "some prompt",
                 str(tmp_path),
                 completion_marker="DONE",
-                capability_preparation=Preparation(),
+                capability_preparation=_UnreachableCapabilityPreparation(object()),
             )
 
     @pytest.mark.anyio
@@ -606,19 +619,6 @@ class TestDispatchFoodTruckManagedCatalogGuards:
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
 
-        class Preparation:
-            catalog = object()
-
-            def finalize(self, *, backend, binding):
-                raise AssertionError("finalize should not be reached")
-
-            def materialization_context(self, *, backend, binding):
-                raise AssertionError("materialization_context should not be reached")
-
-        class _UnreachableSessionSkillManager:
-            def managed_catalog(self, session_id, catalog, projection_context):
-                raise AssertionError("managed_catalog should not be reached")
-
         minimal_ctx.backend = _mock_backend(food_truck_capable=True)
         minimal_ctx.plugin_authority = None
         minimal_ctx.session_skill_manager = _UnreachableSessionSkillManager()
@@ -629,7 +629,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
                 "some prompt",
                 str(tmp_path),
                 completion_marker="DONE",
-                capability_preparation=Preparation(),
+                capability_preparation=_UnreachableCapabilityPreparation(object()),
             )
 
     @pytest.mark.anyio
@@ -641,19 +641,6 @@ class TestDispatchFoodTruckManagedCatalogGuards:
         than proceed to materialize a managed catalog from nothing."""
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
-
-        class Preparation:
-            catalog = object()
-
-            def finalize(self, *, backend, binding):
-                raise AssertionError("finalize should not be reached")
-
-            def materialization_context(self, *, backend, binding):
-                raise AssertionError("materialization_context should not be reached")
-
-        class _UnreachableSessionSkillManager:
-            def managed_catalog(self, session_id, catalog, projection_context):
-                raise AssertionError("managed_catalog should not be reached")
 
         class _NullBindingAuthority:
             def acquire_launch_binding(self, *, backend, load_mode):
@@ -669,7 +656,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
                 "some prompt",
                 str(tmp_path),
                 completion_marker="DONE",
-                capability_preparation=Preparation(),
+                capability_preparation=_UnreachableCapabilityPreparation(object()),
             )
 
     @pytest.mark.anyio
@@ -678,19 +665,6 @@ class TestDispatchFoodTruckManagedCatalogGuards:
     ) -> None:
         from autoskillit.execution.headless import DefaultHeadlessExecutor
         from tests.execution.conftest import _mock_backend
-
-        class Preparation:
-            catalog = None
-
-            def finalize(self, *, backend, binding):
-                raise AssertionError("finalize should not be reached")
-
-            def materialization_context(self, *, backend, binding):
-                raise AssertionError("materialization_context should not be reached")
-
-        class _UnreachableSessionSkillManager:
-            def managed_catalog(self, session_id, catalog, projection_context):
-                raise AssertionError("managed_catalog should not be reached")
 
         # skill_injection_capable + not plugin_install_capable makes
         # managed_catalog_requested true (Codex-shaped); _StaticPluginAuthority
@@ -707,7 +681,7 @@ class TestDispatchFoodTruckManagedCatalogGuards:
                 "some prompt",
                 str(tmp_path),
                 completion_marker="DONE",
-                capability_preparation=Preparation(),
+                capability_preparation=_UnreachableCapabilityPreparation(None),
             )
 
 

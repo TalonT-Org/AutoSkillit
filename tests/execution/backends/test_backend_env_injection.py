@@ -16,6 +16,7 @@ from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.otlp_sink import _build_env
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -36,7 +37,10 @@ def test_skill_session_cmd_injects_write_guard_tool_names() -> None:
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            add_dirs=codex_skill_add_dirs("/repo"),
         )
         assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" in spec.env, (
             f"{name}: AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES missing from build_skill_session_cmd env"
@@ -90,9 +94,13 @@ def test_skill_session_audit_authority_env_contract(
         "/clone",
         completion_marker="DONE",
         provider_extras={AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: trusted_path},
+        add_dirs=codex_skill_add_dirs("/clone"),
     )
     non_attested = backend.build_skill_session_cmd(
-        "/autoskillit:investigate", "/clone", completion_marker="DONE"
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        add_dirs=codex_skill_add_dirs("/clone"),
     )
 
     assert attested.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == trusted_path
@@ -130,11 +138,15 @@ def test_skill_session_cmd_injects_child_outcome_log_dir(
         "/clone",
         completion_marker="DONE",
         child_outcome_log_dir="/diag-root",
+        add_dirs=codex_skill_add_dirs("/clone"),
     )
     assert carrying.env[CHILD_OUTCOME_LOG_DIR_ENV_VAR] == "/diag-root"
 
     omitted = backend.build_skill_session_cmd(
-        "/autoskillit:investigate", "/clone", completion_marker="DONE"
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        add_dirs=codex_skill_add_dirs("/clone"),
     )
     assert CHILD_OUTCOME_LOG_DIR_ENV_VAR not in omitted.env
 
@@ -183,12 +195,14 @@ def test_native_otlp_activation_uses_each_backends_supported_launch_contract(
         "/clone",
         completion_marker="DONE",
         provider_extras=sink_env,
+        add_dirs=codex_skill_add_dirs("/clone"),
     )
     codex = CodexBackend().build_skill_session_cmd(
         "/autoskillit:investigate",
         "/clone",
         completion_marker="DONE",
         provider_extras=sink_env,
+        add_dirs=codex_skill_add_dirs("/clone"),
     )
 
     for key in (

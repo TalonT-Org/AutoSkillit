@@ -880,6 +880,7 @@ from .types import ClosureReport as ClosureReport
 from .types import ClosureRow as ClosureRow
 from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
+from .types import CodexAppServerPlan as CodexAppServerPlan
 from .types import CodexEventData as CodexEventData
 from .types import CodexEventType as CodexEventType
 from .types import CodexItemType as CodexItemType
@@ -1008,6 +1009,8 @@ from .types import LaunchSurface as LaunchSurface
 from .types import LaunchValueSource as LaunchValueSource
 from .types import LaunchValueSourceKind as LaunchValueSourceKind
 from .types import LegacyRetiringEvidence as LegacyRetiringEvidence
+from .types import LineDriver as LineDriver
+from .types import LineDriverError as LineDriverError
 from .types import LoadReport as LoadReport
 from .types import LoadResult as LoadResult
 from .types import LogicalRoleSpec as LogicalRoleSpec

@@ -40,6 +40,7 @@ from ._type_skill_semantics import (
     SkillSemanticAdaptationResult,
     SkillSemanticPlan,
 )
+from ._type_subprocess import LineDriver
 
 __all__ = [
     "StreamParser",
@@ -373,6 +374,15 @@ class CodingAgentBackend(Protocol):
     def model_config_overrides(self, model: str) -> tuple[str, ...]: ...
 
     def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec: ...
+
+    def line_driver(self, spec: CmdSpec) -> LineDriver | None:
+        """Return the piped-stdio request/response driver for this command, if any.
+
+        Backends without a line-oriented transport (every backend except
+        Codex's app-server-driven skill sessions) return ``None`` here so
+        the runner keeps using file-backed stdout capture.
+        """
+        ...
 
     def setup_session_dir(
         self,

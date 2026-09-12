@@ -40,6 +40,7 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
+    "CodexAppServerPlan",
     "SessionAttemptHandle",
     "ExecutableLaunchBinding",
     "ModelTranslation",
@@ -482,6 +483,70 @@ class CmdOrigin:
 
 
 @dataclass(frozen=True, slots=True)
+class CodexAppServerPlan:
+    """Per-launch driver plan for a managed Codex `app-server` skill session.
+
+    Carries every value the app-server JSON-RPC line driver needs that no
+    longer lives in ``argv`` once the transport moves off ``codex exec``:
+    the frozen catalog to register via ``skills/extraRoots/set``, the
+    prompt and thread-start/resume overrides, and the client identity used
+    to negotiate ``initialize``.
+    """
+
+    session_home: str
+    catalog_root: str
+    expected_skill_names: frozenset[str]
+    expected_skill_entries: tuple[tuple[str, str], ...]
+    cwd: str
+    prompt: str
+    model: str | None
+    sandbox: str
+    approval_policy: str
+    bypass_hook_trust: bool
+    developer_instructions: str | None
+    config_overrides: Mapping[str, object]
+    client_version: str
+    resume_thread_id: str = ""
+    runtime_workspace_roots: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.session_home:
+            raise ValueError("session_home must not be blank")
+        if not self.catalog_root:
+            raise ValueError("catalog_root must not be blank")
+        if not self.client_version:
+            raise ValueError("client_version must not be blank")
+        names_from_entries = frozenset(name for name, _ in self.expected_skill_entries)
+        if self.expected_skill_names != names_from_entries:
+            raise ValueError("expected_skill_names must match the names in expected_skill_entries")
+
+    def digest_payload(self) -> Mapping[str, object]:
+        """Deterministic JSON-safe rendering of this plan for ``adapter_digest``.
+
+        Owning the field enumeration here (rather than in a caller several
+        files/layers away) keeps the digest contract in sync with the field
+        set by construction — a new field only has to be added once.
+        """
+        return {
+            "session_home": self.session_home,
+            "catalog_root": self.catalog_root,
+            "expected_skill_names": sorted(self.expected_skill_names),
+            "expected_skill_entries": [list(pair) for pair in self.expected_skill_entries],
+            "cwd": self.cwd,
+            "prompt": self.prompt,
+            "model": self.model,
+            "sandbox": self.sandbox,
+            "approval_policy": self.approval_policy,
+            "bypass_hook_trust": self.bypass_hook_trust,
+            "developer_instructions": self.developer_instructions,
+            "config_overrides": dict(self.config_overrides),
+            "client_version": self.client_version,
+            "resume_thread_id": self.resume_thread_id,
+            "runtime_workspace_roots": list(self.runtime_workspace_roots),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class CmdSpec:
     """Fully-resolved subprocess command specification passed to the runner."""
 
@@ -493,6 +558,7 @@ class CmdSpec:
     process_idle_timeout_ms: int = 0
     inherited_fds: tuple[int, ...] = ()
     managed_skill_catalog: ValidatedAddDir | None = None
+    app_server_plan: CodexAppServerPlan | None = None
     # Records that the builder was asked to keep Claude agent teams inactive
     # and honored that request at construction. Post-spawn checkpoints read
     # this intent rather than inferring policy from environment content.
@@ -586,6 +652,10 @@ class CodexEventData:
     item_type: str
     raw: Mapping[str, Any] = field(default_factory=dict)
     usage: Mapping[str, Any] | None = None
+    # Cumulative (resumed-history-inclusive) usage diagnostics from the
+    # app-server transport's thread/tokenUsage/updated.total — never summed
+    # into `usage` (the single-turn snapshot). None on exec-transport launches.
+    cumulative_usage: Mapping[str, Any] | None = None
     file_changes: tuple[Mapping[str, Any], ...] | None = None
     command: str | None = None
 

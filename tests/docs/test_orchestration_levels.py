@@ -92,6 +92,7 @@ def test_process_issues_l2_run_skill_child_crosses_to_l1_session(backend_name: s
     from autoskillit.execution import get_backend
     from autoskillit.workspace import DefaultSkillResolver
     from tests.execution.backends._plugin_binding import plugin_binding
+    from tests.fixtures.codex import codex_skill_add_dirs
 
     resolver = DefaultSkillResolver()
     parent = resolver.resolve_invocation(
@@ -114,10 +115,12 @@ def test_process_issues_l2_run_skill_child_crosses_to_l1_session(backend_name: s
             cwd=str(REPO_ROOT),
             completion_marker="%%L2_DONE%%",
         )
+    add_dirs = codex_skill_add_dirs(str(REPO_ROOT)) if backend_name == "codex" else ()
     child_spec = backend.build_skill_session_cmd(
         match.group(1),
         str(REPO_ROOT),
         completion_marker="%%L1_DONE%%",
+        add_dirs=add_dirs,
     )
 
     assert parent.execution_role is SkillExecutionRole.ORCHESTRATOR

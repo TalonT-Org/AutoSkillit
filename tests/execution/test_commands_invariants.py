@@ -12,6 +12,7 @@ from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -51,6 +52,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
+            add_dirs=codex_skill_add_dirs("/tmp"),
         ),
         lambda: _with_plugin_binding(
             lambda binding: CodexBackend().build_food_truck_cmd(
@@ -102,6 +104,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
             "/investigate foo",
             cwd="/tmp",
             completion_marker="%%DONE%%",
+            add_dirs=codex_skill_add_dirs("/tmp"),
         ),
         lambda: _with_plugin_binding(
             lambda binding: CodexBackend().build_food_truck_cmd(
@@ -363,11 +366,6 @@ def test_cwd_in_headless_exclusive_vars() -> None:
 @pytest.mark.parametrize(
     "builder_call",
     [
-        lambda: CodexBackend().build_skill_session_cmd(
-            "/investigate foo",
-            cwd="/tmp",
-            completion_marker="%%DONE%%",
-        ),
         lambda: _with_plugin_binding(
             lambda binding: CodexBackend().build_food_truck_cmd(
                 orchestrator_prompt="L3 orchestrator",
@@ -379,12 +377,25 @@ def test_cwd_in_headless_exclusive_vars() -> None:
         lambda: CodexBackend().build_headless_cmd("do stuff"),
         lambda: CodexBackend().build_resume_cmd(resume_session_id="sess-test", prompt="continue"),
     ],
-    ids=["skill_session", "food_truck", "headless", "resume"],
+    ids=["food_truck", "headless", "resume"],
 )
 def test_codex_exec_builders_start_with_codex_exec(builder_call) -> None:
+    """build_skill_session_cmd moved to the app-server transport; see the dedicated
+    test_codex_skill_session_builder_starts_with_codex_app_server below."""
     spec = builder_call()
     assert spec.cmd[0] == "codex"
     assert spec.cmd[1] == "exec"
+
+
+def test_codex_skill_session_builder_starts_with_codex_app_server() -> None:
+    spec = CodexBackend().build_skill_session_cmd(
+        "/investigate foo",
+        cwd="/tmp",
+        completion_marker="%%DONE%%",
+        add_dirs=codex_skill_add_dirs("/tmp"),
+    )
+    assert spec.cmd[0] == "codex"
+    assert spec.cmd[1] == "app-server"
 
 
 def test_session_deadline_not_in_l1_subprocess_env(monkeypatch) -> None:

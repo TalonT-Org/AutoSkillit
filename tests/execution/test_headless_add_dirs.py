@@ -149,6 +149,7 @@ async def test_codex_add_dir_uses_generated_home_without_artifact_binding(
             ValidatedAddDir(
                 path=str(generated_home / "add-dir"),
                 session_home=str(generated_home),
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
             )
         ],
     )

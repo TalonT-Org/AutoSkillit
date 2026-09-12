@@ -41,7 +41,7 @@ from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 if TYPE_CHECKING:
     from api_simulator.claude import ScenarioPlayer, ScenarioRecorder
 
-    from autoskillit.core import StreamParser
+    from autoskillit.core import LineDriver, StreamParser
 
 logger = get_logger(__name__)
 
@@ -152,10 +152,17 @@ class RecordingSubprocessRunner(SubprocessRunner):
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
+        line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
+        # Validated here, before any branch is selected: the PTY cassette path
+        # below never reaches the inner runner (it calls ScenarioRecorder
+        # directly), so it cannot rely on run_managed_async's own check to
+        # catch a driver combined with PTY or input_data.
+        if line_driver is not None and (pty_mode or input_data is not None):
+            raise ValueError("line_driver is mutually exclusive with pty_mode and input_data")
         step_name = (env or {}).get(SCENARIO_STEP_NAME_ENV, "")
 
         if step_name:
@@ -201,6 +208,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                     child_deferral_ceiling=child_deferral_ceiling,
                     capture_dir=capture_dir,
                     backend_resume_session_id=backend_resume_session_id,
+                    line_driver=line_driver,
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
                     ceiling_seconds=ceiling_seconds,
                     systemd_scope_enabled=systemd_scope_enabled,
@@ -237,6 +245,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
                 child_deferral_ceiling=child_deferral_ceiling,
                 capture_dir=capture_dir,
                 backend_resume_session_id=backend_resume_session_id,
+                line_driver=line_driver,
                 lifecycle_observation_enabled=lifecycle_observation_enabled,
                 ceiling_seconds=ceiling_seconds,
                 systemd_scope_enabled=systemd_scope_enabled,
@@ -283,6 +292,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
             backend_resume_session_id=backend_resume_session_id,
+            line_driver=line_driver,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
             ceiling_seconds=ceiling_seconds,
             systemd_scope_enabled=systemd_scope_enabled,
@@ -392,6 +402,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
+        line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
@@ -427,6 +438,7 @@ class RecordingSubprocessRunner(SubprocessRunner):
             child_deferral_ceiling=child_deferral_ceiling,
             capture_dir=capture_dir,
             backend_resume_session_id=backend_resume_session_id,
+            line_driver=line_driver,
             lifecycle_observation_enabled=lifecycle_observation_enabled,
             ceiling_seconds=ceiling_seconds,
             systemd_scope_enabled=systemd_scope_enabled,
@@ -545,18 +557,21 @@ class ReplayingSubprocessRunner(SubprocessRunner):
         child_deferral_ceiling: float = 0.0,
         capture_dir: Path | None = None,
         backend_resume_session_id: str = "",
+        line_driver: LineDriver | None = None,
         lifecycle_observation_enabled: bool = False,
         ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
         systemd_scope_enabled: bool = False,
     ) -> SubprocessResult:
         # natural_exit_grace_seconds is inert during replay: the runner returns
         # pre-recorded subprocess results instead of managing a live process, so
-        # the drain window has no work to absorb.
+        # the drain window has no work to absorb. line_driver never starts live
+        # I/O during replay either — the recorded stdout is the whole transcript.
         del (
             pass_fds,
             on_process_spawned,
             on_process_reaped,
             backend_resume_session_id,
+            line_driver,
             ceiling_seconds,
             systemd_scope_enabled,
             natural_exit_grace_seconds,

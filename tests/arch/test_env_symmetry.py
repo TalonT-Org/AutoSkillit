@@ -5,8 +5,11 @@ from pathlib import Path
 import pytest
 
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
+
+_SKILL_SESSION_ADD_DIRS = codex_skill_add_dirs("/repo", skill_name="investigate")
 
 _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
     {
@@ -47,7 +50,10 @@ def test_skill_and_food_truck_share_required_env_vars() -> None:
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         skill_spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            add_dirs=_SKILL_SESSION_ADD_DIRS,
         )
         with plugin_binding(Path("/plugins")) as binding:
             food_truck_spec = backend.build_food_truck_cmd(
@@ -121,7 +127,10 @@ def test_dynaconf_backend_env_var_in_skill_session() -> None:
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         skill_spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            add_dirs=_SKILL_SESSION_ADD_DIRS,
         )
         assert "AUTOSKILLIT_AGENT_BACKEND__BACKEND" in skill_spec.env, (
             f"{name}: AUTOSKILLIT_AGENT_BACKEND__BACKEND missing from build_skill_session_cmd env"
@@ -155,7 +164,10 @@ def test_dynaconf_and_flat_backend_values_match() -> None:
     for name, cls in BACKEND_REGISTRY.items():
         backend = cls()
         skill_spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            add_dirs=_SKILL_SESSION_ADD_DIRS,
         )
         assert (
             skill_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
@@ -185,7 +197,10 @@ _ALL_GUARD_BUILDERS: list[str] = [
 def _call_builder(backend: object, builder_name: str) -> object:
     if builder_name == "build_skill_session_cmd":
         return backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
+            "/autoskillit:investigate",
+            "/repo",
+            completion_marker="DONE",
+            add_dirs=_SKILL_SESSION_ADD_DIRS,
         )
     if builder_name == "build_food_truck_cmd":
         with plugin_binding(Path("/plugins")) as binding:

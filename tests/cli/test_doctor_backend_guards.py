@@ -559,11 +559,11 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.136.0\n"),
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert "0.130.0" in result.message
+        assert "0.136.0" in result.message
 
     def test_version_above_minimum_returns_ok(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import subprocess
@@ -575,11 +575,11 @@ class TestCheckBackendVersion:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.131.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.137.0\n"),
         )
         result = _check_backend_version(backend=CodexBackend())
         assert result.severity == Severity.OK
-        assert "0.131.0" in result.message
+        assert "0.137.0" in result.message
 
     def test_claude_uses_its_own_floor_and_display_name(
         self, monkeypatch: pytest.MonkeyPatch
@@ -647,14 +647,14 @@ class TestCheckCodexGraduation:
         monkeypatch.setattr(
             subprocess,
             "run",
-            lambda *a, **kw: self._codex_result("Codex 0.130.0\n"),
+            lambda *a, **kw: self._codex_result("Codex 0.136.0\n"),
         )
         ts = datetime.now(UTC).isoformat()
         (tmp_path / "codex-probe-cache.json").write_text(
             json.dumps(
                 {
                     "schema_version": 1,
-                    "entries": {"0.130.0": {"passed": True, "probe_timestamp": ts}},
+                    "entries": {"0.136.0": {"passed": True, "probe_timestamp": ts}},
                 }
             )
         )

@@ -42,6 +42,7 @@ from autoskillit.core import (
     CmdSpec,
     ExecutableLaunchBinding,
     ExplorationDispatchRenderer,
+    LineDriver,
     ManagedHeadlessSessionLineageRef,
     NamedResume,
     NativeShellCaptureDecision,
@@ -736,3 +737,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             raise CapabilityNotSupportedError("inspector_capable", self.name)
         msg = "inspector_capable is True but build_inspector_cmd has no implementation"
         raise AssertionError(msg)
+
+    def line_driver(self, spec: CmdSpec) -> LineDriver | None:
+        del spec
+        return None

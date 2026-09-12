@@ -14,6 +14,7 @@ from autoskillit.execution.backends.codex import (
 )
 from autoskillit.execution.headless._headless_helpers import _CODEX_VALUE_BEARING_FLAGS
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -29,6 +30,7 @@ SKILL_BASE: dict[str, object] = {
     "model": None,
     "plugin_binding": None,
     "output_format": OutputFormat.JSON,
+    "add_dirs": codex_skill_add_dirs("/work"),
 }
 
 
@@ -81,10 +83,6 @@ class TestCodexFlagRegistryAudit:
     @pytest.mark.parametrize(
         "builder_call",
         [
-            lambda: CodexBackend().build_skill_session_cmd(**SKILL_BASE),
-            lambda: CodexBackend().build_skill_session_cmd(
-                **{**SKILL_BASE, "resume_session_id": "sess-test"},
-            ),
             _build_food_truck,
             lambda: _build_food_truck(resume_session_id="sess-test"),
             lambda: CodexBackend().build_headless_cmd("do stuff"),
@@ -93,8 +91,6 @@ class TestCodexFlagRegistryAudit:
             ),
         ],
         ids=[
-            "skill_session",
-            "skill_session_resume",
             "food_truck",
             "food_truck_resume",
             "headless",
@@ -102,6 +98,9 @@ class TestCodexFlagRegistryAudit:
         ],
     )
     def test_exec_builder_flags_are_all_in_codex_exec_flags(self, builder_call) -> None:
+        """build_skill_session_cmd moved to the app-server transport and no longer
+        speaks the codex-exec flag vocabulary; its shape is covered by
+        test_codex_exec_builder_invariants.py::test_skill_session_builder_starts_with_codex_app_server."""
         spec = builder_call()
         flags = _extract_flags(spec.cmd)
         unknown = flags - CODEX_EXEC_FLAGS

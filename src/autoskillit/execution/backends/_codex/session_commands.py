@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
-import tomllib
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -13,8 +11,8 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     AGENT_BACKEND_DYNACONF_ENV_VAR,
     AGENT_BACKEND_ENV_VAR,
+    AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
-    BUNDLED_EXPLORER_ROLES,
     CODEX_INTERACTIVE_REQUIRED_ENV,
     CODEX_RESERVED_HOME_ENV_VARS,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
@@ -32,6 +30,7 @@ from autoskillit.core import (
     BackendCapabilities,
     BareResume,
     CmdSpec,
+    CodexAppServerPlan,
     ExecutableLaunchBinding,
     ManagedHeadlessSessionLineageRef,
     NamedResume,
@@ -45,11 +44,9 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillSessionConfig,
     ValidatedAddDir,
-    atomic_write,
     extract_skill_name,
     get_logger,
 )
-from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
@@ -67,29 +64,18 @@ from autoskillit.execution.backends._claude_prompt import (
     codex_discipline_suffix,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
-from autoskillit.execution.backends._codex.explorer_projection import (
-    _canonical_explorer_mcp_transport,
-    _render_parent_explorer_config,
-    _validate_injected_explorer_parent_policy,
-    _validated_explorer_binding_envs,
-)
+from autoskillit.execution.backends._codex.session_setup import setup_codex_session_dir
 from autoskillit.execution.backends._codex_cmd_builders import (
     _IMAGE_GENERATION_DISABLED,
     CodexEnvPolicy,
     CodexFlags,
+    _codex_app_server_base,
     _codex_exec_base,
     _codex_exec_extras,
     _should_bypass_hook_trust,
 )
 from autoskillit.execution.backends._codex_config import _format_toml_value
-from autoskillit.execution.backends._codex_explorer_projection import (
-    _bundled_agent_definitions,
-    _generate_agent_tomls,
-    _preflight_agent_projection,
-    _register_agent_tomls,
-    _render_cli_auth_store,
-    _render_parent_sandbox_config,
-)
+from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
 
 logger = get_logger(__name__)
 
@@ -193,7 +179,6 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             native_shell_capture_decision = None
             managed_lineage_ref = None
             managed_attempt_id = None
-        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
         if output_format != OutputFormat.JSON:
             logger.warning("codex_output_format_coerced")
         _has_prefix = (
@@ -260,16 +245,15 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         if profile_name:
             extras[PROVIDER_PROFILE_ENV_VAR] = profile_name
             extras["AUTOSKILLIT_COMPLETION_MARKER"] = completion_marker
-        if add_dirs:
-            session_home = add_dirs[0].session_home
-            if not session_home:
-                raise ValueError(
-                    "Codex skill sessions require an add-dir bound to its session_home"
-                )
-            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
-                extras[reserved_key] = session_home
-        elif projected_codex_home is not None:
-            extras["CODEX_HOME"] = projected_codex_home
+        if len(add_dirs) != 1 or not add_dirs[0].session_home or not add_dirs[0].skill_entries:
+            raise ValueError(
+                "Codex app-server skill sessions require exactly one add-dir bound to a "
+                "nonempty session_home with a frozen, nonempty skill catalog"
+            )
+        managed_catalog = add_dirs[0]
+        session_home = managed_catalog.session_home
+        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+            extras[reserved_key] = session_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
@@ -282,11 +266,9 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             filtered_base,
             extras=extras,
-            required=(
-                SKILL_SESSION_REQUIRED_ENV
-                | {MCP_CLIENT_BACKEND_ENV_VAR}
-                | (CODEX_RESERVED_HOME_ENV_VARS if add_dirs else frozenset())
-            ),
+            required=SKILL_SESSION_REQUIRED_ENV
+            | {MCP_CLIENT_BACKEND_ENV_VAR}
+            | CODEX_RESERVED_HOME_ENV_VARS,
         )
         env.update(
             _managed_native_shell_env(
@@ -296,26 +278,34 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             )
         )
 
-        _net_overrides: list[str] = []
-        if network_access:
-            _net_overrides.append("sandbox_workspace_write.network_access=true")
-        _net_overrides.extend(self._otlp_overrides(extras))
-        cmd = _codex_exec_base(
-            sandbox=sandbox_mode if sandbox_mode == "read-only" else None,
-            bypass_hook_trust=_should_bypass_hook_trust(
-                self.capabilities.hook_trust_policy,
-                automated_session=True,
-            ),
-            extra_overrides=_net_overrides,
+        cmd = _codex_app_server_base(extra_overrides=self._otlp_overrides(extras))
+        bypass_hook_trust = _should_bypass_hook_trust(
+            self.capabilities.hook_trust_policy, automated_session=True
         )
+        config_overrides: dict[str, object] = {"bypass_hook_trust": bypass_hook_trust}
         if model:
-            cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
-                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
-        if resume_session_id:
-            cmd.append(CodexFlags.RESUME_SUBCOMMAND)
-            cmd.append(resume_session_id)
-        cmd.append(prompt)
+                key, _, value = override.partition("=")
+                config_overrides[key] = value
+        if network_access:
+            config_overrides["sandbox_workspace_write.network_access"] = True
+        catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
+        app_server_plan = CodexAppServerPlan(
+            session_home=session_home,
+            catalog_root=catalog_root,
+            expected_skill_names=frozenset(name for name, _ in managed_catalog.skill_entries),
+            expected_skill_entries=managed_catalog.skill_entries,
+            cwd=cwd,
+            prompt=prompt,
+            model=self.translate_model(model) if model else None,
+            sandbox=sandbox_mode,
+            approval_policy="never",
+            bypass_hook_trust=bypass_hook_trust,
+            developer_instructions=None,
+            config_overrides=config_overrides,
+            client_version=AUTOSKILLIT_INSTALLED_VERSION,
+            resume_thread_id=resume_session_id,
+        )
 
         return CmdSpec(
             cmd=tuple(cmd),
@@ -324,6 +314,8 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             is_resume=bool(resume_session_id),
             process_idle_timeout_ms=stream_idle_timeout_ms,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            managed_skill_catalog=managed_catalog,
+            app_server_plan=app_server_plan,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
@@ -667,77 +659,11 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> frozenset[str]:
         assert self.source_codex_home is not None
-        codex_home_source = self.source_codex_home
-        config_path = session_dir / "config.toml"
-        if not config_path.is_file():
-            raise FileNotFoundError(f"pre-launch Codex config snapshot is missing: {config_path}")
-        definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
-        explorer_binding_envs = _validated_explorer_binding_envs(definitions, explorer_binding_env)
-        explorer_mcp_transport = (
-            _canonical_explorer_mcp_transport(config_path) if explorer_binding_envs else None
-        )
-        if explorer_binding_envs and parent_sandbox_mode != "read-only":
-            raise ValueError("explorer shared-principal projection requires a read-only parent")
-        policy_definitions = definitions if explorer_binding_envs else agent_defs
-        _validate_injected_explorer_parent_policy(policy_definitions, parent_sandbox_mode)
-        projected_definitions = _preflight_agent_projection(
+        return setup_codex_session_dir(
+            self.source_codex_home,
             session_dir,
-            definitions,
-            exact_definitions=agent_defs is not None,
+            parent_sandbox_mode=parent_sandbox_mode,
+            agent_defs=agent_defs,
+            explorer_binding_env=explorer_binding_env,
+            execution_role=execution_role,
         )
-        rendered_parent_config = _render_parent_sandbox_config(
-            config_path.read_text(encoding="utf-8"),
-            parent_sandbox_mode,
-        )
-        rendered_parent_config = _render_cli_auth_store(
-            rendered_parent_config,
-            execution_role,
-        )
-        if explorer_binding_envs:
-            assert explorer_mcp_transport is not None
-            shared_binding = next(iter(explorer_binding_envs.values()))
-            rendered_parent_config = _render_parent_explorer_config(
-                rendered_parent_config,
-                explorer_mcp_transport=explorer_mcp_transport,
-                explorer_binding_env=shared_binding,
-            )
-        finalized_config = tomllib.loads(rendered_parent_config)
-        if (
-            execution_role is SkillExecutionRole.ORCHESTRATOR
-            and finalized_config.get("cli_auth_credentials_store") != "file"
-        ):
-            raise ValueError("finalized ORCHESTRATOR config lost the file credential store")
-        atomic_write(config_path, rendered_parent_config)
-
-        auth_source = codex_home_source / "auth.json"
-        auth_dest = session_dir / "auth.json"
-        auth_target = auth_source.resolve(strict=False)
-        auth_dest.symlink_to(auth_target)
-        logger.debug(
-            "codex_auth_symlink",
-            src=str(auth_target),
-            dest=str(auth_dest),
-        )
-
-        env_source = codex_home_source / ".env"
-        if env_source.exists():
-            shutil.copy2(env_source, session_dir / ".env")
-
-        toml_definitions = projected_definitions
-        if not explorer_binding_envs and agent_defs is None:
-            toml_definitions = tuple(
-                d for d in projected_definitions if d.name not in BUNDLED_EXPLORER_ROLES
-            )
-        _generate_agent_tomls(
-            session_dir,
-            toml_definitions,
-            explorer_binding_envs=explorer_binding_envs,
-            explorer_mcp_transport=explorer_mcp_transport,
-        )
-        registered = _register_agent_tomls(
-            session_dir,
-            toml_definitions,
-            explorer_binding_envs=explorer_binding_envs,
-        )
-        logger.debug("codex_agents_registered", count=registered)
-        return _codex_cfg.effective_codex_agent_names(session_dir)

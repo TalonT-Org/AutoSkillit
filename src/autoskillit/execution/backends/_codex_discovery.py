@@ -30,6 +30,11 @@ class CodexSkillDiscoveryContractDef:
     upstream_revision: str = "646f7c0a91b8e327d263335da68ae8ef212895ce"
     upstream_legacy_root_citation: str = "codex-rs/ext/skills/src/host_roots.rs:94-113"
     verified_binary: str = "codex-cli 0.153.4"
+    # First release carrying `skills/extraRoots/set` — the app-server-driven
+    # managed skill-session transport's supported floor. Must equal
+    # CodexBackend.capabilities.min_version (tests/execution/backends/
+    # test_codex_backend.py enforces the equality).
+    extra_roots_min_version: str = "0.136.0"
 
 
 # The inner catalog remains upstream-rendered text. Its grammar was verified at

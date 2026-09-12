@@ -32,6 +32,7 @@ from autoskillit.execution.backends._codex_explorer_projection import _generate_
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs, prompt_text
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -54,6 +55,16 @@ def _build_orchestrator_spec(backend):
         )
 
 
+def _build_skill_session_spec(backend, skill_command: str, cwd: str = "/tmp", **kwargs):
+    """Build a skill-session CmdSpec, supplying Codex's required add-dir catalog binding.
+
+    Claude has no such requirement, so its call is passed through unchanged.
+    """
+    if isinstance(backend, CodexBackend) and "add_dirs" not in kwargs:
+        kwargs["add_dirs"] = codex_skill_add_dirs(cwd, skill_name="investigate")
+    return backend.build_skill_session_cmd(skill_command, cwd, **kwargs)
+
+
 def _assert_interactive_intake_digest(backend, spec) -> None:
     """Assert the intake digest is present for Codex, absent for Claude.
 
@@ -70,10 +81,11 @@ def _assert_interactive_intake_digest(backend, spec) -> None:
 
 def _assert_headless_intake_digest(backend, spec) -> None:
     """Assert the intake digest is present in the final prompt arg for Codex, absent for Claude."""
+    prompt = prompt_text(spec)
     if isinstance(backend, ClaudeCodeBackend):
-        assert CODEX_INTAKE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST not in prompt
     else:
-        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in prompt
 
 
 def _assert_interactive_scope_digest(backend, spec) -> None:
@@ -91,7 +103,7 @@ def _assert_interactive_scope_digest(backend, spec) -> None:
 
 def _assert_headless_scope_digest_absent(backend, spec) -> None:
     """Assert the scope digest is absent by default in the final prompt arg for both backends."""
-    assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+    assert CODEX_SCOPE_DISCIPLINE_DIGEST not in prompt_text(spec)
 
 
 class TestFleetInteractive:
@@ -237,8 +249,11 @@ class TestSkillSession:
         ids=["claude-code", "codex"],
     )
     def test_positional_prompt_non_empty(self, backend) -> None:
-        spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
-        assert any("investigate" in arg for arg in spec.cmd)
+        spec = _build_skill_session_spec(backend, "/investigate foo")
+        if spec.app_server_plan is not None:
+            assert "investigate" in spec.app_server_plan.prompt
+        else:
+            assert any("investigate" in arg for arg in spec.cmd)
 
     @pytest.mark.parametrize(
         "backend",
@@ -246,7 +261,7 @@ class TestSkillSession:
         ids=["claude-code", "codex"],
     )
     def test_session_type_skill_in_env(self, backend) -> None:
-        spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
+        spec = _build_skill_session_spec(backend, "/investigate foo")
         assert spec.env.get(SESSION_TYPE_ENV_VAR) == SESSION_TYPE_SKILL
 
     @pytest.mark.parametrize(
@@ -255,7 +270,7 @@ class TestSkillSession:
         ids=["claude-code", "codex"],
     )
     def test_intake_digest_delivery(self, backend) -> None:
-        spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
+        spec = _build_skill_session_spec(backend, "/investigate foo")
         _assert_headless_intake_digest(backend, spec)
 
     @pytest.mark.parametrize(
@@ -265,18 +280,19 @@ class TestSkillSession:
     )
     def test_scope_digest_delivery(self, backend) -> None:
         """Default (no opt-in) skill sessions get no scope digest on either backend."""
-        spec = backend.build_skill_session_cmd("/investigate foo", "/tmp")
+        spec = _build_skill_session_spec(backend, "/investigate foo")
         _assert_headless_scope_digest_absent(backend, spec)
 
     def test_scope_digest_delivered_when_contract_opts_in(self) -> None:
         from autoskillit.core import SkillSessionConfig
 
-        codex_spec = CodexBackend().build_skill_session_cmd(
+        codex_spec = _build_skill_session_spec(
+            CodexBackend(),
             "/implement-worktree-no-merge foo",
-            "/tmp",
             include_scope_discipline=True,
         )
-        assert CODEX_SCOPE_DISCIPLINE_DIGEST in codex_spec.cmd[-1]
+        assert codex_spec.app_server_plan is not None
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST in codex_spec.app_server_plan.prompt
 
         # Claude has no standalone kwarg for this (mirrors sandbox_mode/network_access,
         # both config-only) — the opt-in is expressed via SkillSessionConfig instead, and

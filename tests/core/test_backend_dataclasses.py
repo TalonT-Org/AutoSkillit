@@ -32,8 +32,16 @@ def test_cmd_spec_fields():
         "process_idle_timeout_ms",
         "inherited_fds",
         "managed_skill_catalog",
+        "app_server_plan",
         "force_inactive_agent_teams",
     }
+
+
+def test_cmd_spec_app_server_plan_default_absent():
+    from autoskillit.core import CmdSpec
+
+    spec = CmdSpec(cmd=(), env={})
+    assert spec.app_server_plan is None
 
 
 def test_cmd_spec_is_resume_default():
@@ -72,6 +80,71 @@ def test_cmd_spec_preserves_managed_skill_catalog():
     catalog = ValidatedAddDir(path="/tmp/session/add-dir", session_home="/tmp/session")
 
     assert CmdSpec(cmd=(), env={}, managed_skill_catalog=catalog).managed_skill_catalog == catalog
+
+
+def test_codex_app_server_plan_frozen_slots_and_exact_fields():
+    from autoskillit.core import CodexAppServerPlan
+
+    plan = CodexAppServerPlan(
+        session_home="/tmp/session",
+        catalog_root="/tmp/session/add-dir/skills",
+        expected_skill_names=frozenset({"foo"}),
+        expected_skill_entries=(("foo", "foo/SKILL.md"),),
+        cwd="/tmp/session",
+        prompt="do the thing",
+        model="gpt-5.6-sol",
+        sandbox="workspace-write",
+        approval_policy="never",
+        bypass_hook_trust=True,
+        developer_instructions=None,
+        config_overrides={},
+        client_version="0.10.1109",
+    )
+
+    assert tuple(f.name for f in dataclasses.fields(CodexAppServerPlan)) == (
+        "session_home",
+        "catalog_root",
+        "expected_skill_names",
+        "expected_skill_entries",
+        "cwd",
+        "prompt",
+        "model",
+        "sandbox",
+        "approval_policy",
+        "bypass_hook_trust",
+        "developer_instructions",
+        "config_overrides",
+        "client_version",
+        "resume_thread_id",
+        "runtime_workspace_roots",
+    )
+    assert plan.resume_thread_id == ""
+    assert plan.runtime_workspace_roots == ()
+    assert not hasattr(plan, "__dict__")
+    with pytest.raises(FrozenInstanceError):
+        plan.session_home = "/other"  # type: ignore[misc]
+
+
+def test_cmd_spec_preserves_app_server_plan():
+    from autoskillit.core import CmdSpec, CodexAppServerPlan
+
+    plan = CodexAppServerPlan(
+        session_home="/tmp/session",
+        catalog_root="/tmp/session/add-dir/skills",
+        expected_skill_names=frozenset(),
+        expected_skill_entries=(),
+        cwd="/tmp/session",
+        prompt="p",
+        model=None,
+        sandbox="workspace-write",
+        approval_policy="never",
+        bypass_hook_trust=True,
+        developer_instructions=None,
+        config_overrides={},
+        client_version="0.10.1109",
+    )
+
+    assert CmdSpec(cmd=(), env={}, app_server_plan=plan).app_server_plan == plan
 
 
 def test_cmd_spec_normalizes_inherited_fds():
@@ -147,6 +220,7 @@ def test_codex_event_data_fields_exhaustive():
         "item_type",
         "raw",
         "usage",
+        "cumulative_usage",
         "file_changes",
         "command",
     }
@@ -157,8 +231,21 @@ def test_codex_event_data_new_fields_default_none():
 
     ev = CodexEventData(record_type="item", thread_id="t1", item_type="msg")
     assert ev.usage is None
+    assert ev.cumulative_usage is None
     assert ev.file_changes is None
     assert ev.command is None
+
+
+def test_codex_event_data_cumulative_usage_accepts_value():
+    from autoskillit.core import CodexEventData
+
+    ev = CodexEventData(
+        record_type="item",
+        thread_id="t1",
+        item_type="msg",
+        cumulative_usage={"input_tokens": 400, "output_tokens": 200},
+    )
+    assert ev.cumulative_usage == {"input_tokens": 400, "output_tokens": 200}
 
 
 def test_codex_event_data_new_fields_accept_values():
@@ -186,6 +273,7 @@ def test_codex_event_data_field_types():
 
     hints = typing.get_type_hints(CodexEventData)
     assert hints["usage"] == Mapping[str, typing.Any] | None
+    assert hints["cumulative_usage"] == Mapping[str, typing.Any] | None
     assert hints["file_changes"] == tuple[Mapping[str, typing.Any], ...] | None
     assert hints["command"] == str | None
 
@@ -340,6 +428,7 @@ def test_backend_module_all_exhaustive():
         "CODEX_VALID_MODEL_IDS",
         "CmdOrigin",
         "CmdSpec",
+        "CodexAppServerPlan",
         "SessionAttemptHandle",
         "ExecutableLaunchBinding",
         "ModelTranslation",

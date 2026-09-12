@@ -22,11 +22,14 @@ from autoskillit.core import (
     StreamParser,
 )
 from autoskillit.execution.backends import BACKEND_REGISTRY, get_backend
+from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 from .test_backend_contract_base import BackendContractBase
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
 
 NOT_YET_LIVE: frozenset[str] = frozenset(
     {
@@ -203,6 +206,12 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         result = self.backend.model_config_overrides("sonnet")
         assert isinstance(result, tuple)
 
+    def test_line_driver_is_none_without_app_server_plan(self) -> None:
+        """CmdSpec.app_server_plan — no backend hands back a driver without one."""
+        spec = self.backend.build_cmd(skill_command="do stuff", cwd="/tmp")
+        assert spec.app_server_plan is None
+        assert self.backend.line_driver(spec) is None
+
     # --- Group 2: Sub-protocol Factories ---
 
     def test_stream_parser_no_marker_returns_stream_parser(self) -> None:
@@ -247,8 +256,9 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_build_skill_session_cmd_with_default_config_returns_cmd_spec(self) -> None:
         """BackendCapabilities.skill_injection_capable, required_skill_fields, skill_sigil."""
+        add_dirs = codex_skill_add_dirs("/work") if isinstance(self.backend, CodexBackend) else ()
         result = self.backend.build_skill_session_cmd(
-            skill_command="/test-skill", cwd="/work", config=SkillSessionConfig()
+            skill_command="/test-skill", cwd="/work", config=SkillSessionConfig(add_dirs=add_dirs)
         )
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
@@ -366,11 +376,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert result.inherited_fds == (9, 3)
 
     def test_skill_cmd_carries_plugin_binding_descriptors(self) -> None:
+        add_dirs = codex_skill_add_dirs("/tmp") if isinstance(self.backend, CodexBackend) else ()
         result = self.backend.build_skill_session_cmd(
             "/test",
             "/tmp",
             config=SkillSessionConfig(
-                plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3))
+                plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
+                add_dirs=add_dirs,
             ),
         )
         assert result.inherited_fds == (9, 3)

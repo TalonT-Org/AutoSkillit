@@ -216,6 +216,7 @@ async def _run_headless_attempt(
                 workload_basenames=backend.capabilities.process_name_aliases or None,
                 pass_fds=spec.inherited_fds,
                 backend_resume_session_id=backend_resume_session_id,
+                line_driver=backend.line_driver(spec),
                 lifecycle_observation_enabled=lifecycle_observation_enabled,
             )
         return result, spec

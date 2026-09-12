@@ -9,8 +9,14 @@ import pytest
 from autoskillit.core import CmdSpec, OutputFormat, SkillSessionConfig
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+# Deliberately decoupled from the builder calls' cwd="" below — this fixture's
+# session_home is independent of the launch cwd, so it stays hardcoded here
+# rather than threading cwd through.
+_SKILL_SESSION_ADD_DIRS = codex_skill_add_dirs("/work")
 
 
 @pytest.fixture(autouse=True)
@@ -21,22 +27,18 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 class TestCodexSandboxInvariants:
     @pytest.mark.parametrize(
-        ("sandbox_mode", "expected_cli_sandbox"),
-        [("workspace-write", None), ("read-only", "read-only")],
+        ("sandbox_mode", "expected_sandbox"),
+        [("workspace-write", "workspace-write"), ("read-only", "read-only")],
     )
     def test_build_skill_session_cmd_sandbox_mode(
-        self, sandbox_mode: str, expected_cli_sandbox: str | None
+        self, sandbox_mode: str, expected_sandbox: str
     ) -> None:
-        config = SkillSessionConfig(sandbox_mode=sandbox_mode)
+        config = SkillSessionConfig(sandbox_mode=sandbox_mode, add_dirs=_SKILL_SESSION_ADD_DIRS)
         spec: CmdSpec = CodexBackend().build_skill_session_cmd(
             "/test-skill", cwd="", config=config
         )
-        positions = [i for i, v in enumerate(spec.cmd) if v == "--sandbox"]
-        if expected_cli_sandbox is None:
-            assert positions == []
-            return
-        assert len(positions) == 1, f"expected exactly one --sandbox, got {len(positions)}"
-        assert spec.cmd[positions[0] + 1] == expected_cli_sandbox
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == expected_sandbox
 
     def test_build_food_truck_cmd_sandbox_read_only(self) -> None:
         spec: CmdSpec = CodexBackend().build_food_truck_cmd(
@@ -67,19 +69,23 @@ class TestNetworkAccessOverride:
     """T-A5, T-A6: network_access in SkillSessionConfig drives Codex extra override."""
 
     def test_skill_session_with_network_access_gets_override(self) -> None:
-        config = SkillSessionConfig(network_access=True)
+        config = SkillSessionConfig(network_access=True, add_dirs=_SKILL_SESSION_ADD_DIRS)
         spec: CmdSpec = CodexBackend().build_skill_session_cmd(
             "/test-skill", cwd="", config=config
         )
-        assert any("sandbox_workspace_write.network_access=true" in part for part in spec.cmd), (
-            f"Expected network_access override in cmd, got: {spec.cmd}"
+        assert spec.app_server_plan is not None
+        overrides = spec.app_server_plan.config_overrides
+        assert overrides.get("sandbox_workspace_write.network_access") is True, (
+            f"Expected network_access override in plan, got: {overrides}"
         )
 
     def test_skill_session_without_network_access_no_override(self) -> None:
-        config = SkillSessionConfig()
+        config = SkillSessionConfig(add_dirs=_SKILL_SESSION_ADD_DIRS)
         spec: CmdSpec = CodexBackend().build_skill_session_cmd(
             "/test-skill", cwd="", config=config
         )
-        assert not any(
-            "sandbox_workspace_write.network_access=true" in part for part in spec.cmd
-        ), f"Unexpected network_access override in cmd: {spec.cmd}"
+        assert spec.app_server_plan is not None
+        overrides = spec.app_server_plan.config_overrides
+        assert not overrides.get("sandbox_workspace_write.network_access"), (
+            f"Unexpected network_access override in plan: {overrides}"
+        )

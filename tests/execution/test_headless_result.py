@@ -451,6 +451,7 @@ def _make_codex_parse_stdout() -> object:
     def _patched(
         result: SubprocessResult,
         backend: object,  # noqa: ARG001
+        backend_resume_session_id: str = "",  # noqa: ARG001
     ) -> ClaudeSessionResult:
         agent_result = CodexBackend().result_parser().parse_stdout(result.stdout)
         return _adapt_codex_result(agent_result)
@@ -704,10 +705,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
@@ -740,10 +744,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_adjudication._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
@@ -775,10 +782,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_adjudication._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
@@ -805,10 +815,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
@@ -1089,6 +1102,93 @@ class TestParseStdout:
         assert isinstance(agent_result, AgentSessionResult)
         assert isinstance(result, ClaudeSessionResult)
         assert result.result is not None
+
+
+class TestParseStdoutResumeIdentity:
+    """T-C3: a resumed app-server capture with no thread/started notification
+    is seeded from backend_resume_session_id; a disagreeing observed identity
+    is rejected rather than silently overridden."""
+
+    def test_no_observed_identity_is_seeded_from_resume_id(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "method": "item/completed",
+                        "params": {"item": {"type": "agentMessage", "text": "done"}},
+                    }
+                ),
+                json.dumps(
+                    {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+                ),
+            ]
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.session_id == "resumed-thread-42"
+        assert session.is_error is False
+
+    def test_matching_observed_identity_is_accepted(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {"method": "thread/started", "params": {"thread": {"id": "resumed-thread-42"}}}
+                ),
+                json.dumps(
+                    {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+                ),
+            ]
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.session_id == "resumed-thread-42"
+        assert session.is_error is False
+
+    def test_conflicting_stdout_identity_is_rejected(self) -> None:
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {"method": "thread/started", "params": {"thread": {"id": "some-other-thread"}}}
+                ),
+                json.dumps(
+                    {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+                ),
+            ]
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.is_error is True
+        assert any("resumed-thread-42" in e and "some-other-thread" in e for e in session.errors)
+
+    def test_conflicting_channel_b_identity_is_rejected(self) -> None:
+        """A conflicting SubprocessResult.session_id (Channel B) is rejected
+        even when stdout itself carries no identity."""
+        stdout = json.dumps(
+            {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+        )
+        result = dataclasses.replace(
+            _codex_subprocess_result(stdout), session_id="channel-b-thread"
+        )
+        session = _parse_stdout(
+            result, backend=CodexBackend(), backend_resume_session_id="resumed-thread-42"
+        )
+        assert session.is_error is True
+
+    def test_no_backend_resume_session_id_leaves_identity_untouched(self) -> None:
+        """Without a resume id, an app-server capture with no identity at all
+        parses to an empty session_id — no inference, no fabricated id."""
+        stdout = json.dumps(
+            {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+        )
+        result = _codex_subprocess_result(stdout)
+        session = _parse_stdout(result, backend=CodexBackend())
+        assert session.session_id == ""
 
 
 class TestStaleRecoveryWriteEvidence:

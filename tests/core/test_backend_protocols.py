@@ -188,6 +188,26 @@ def test_coding_agent_backend_new_lifecycle_signatures_are_exact():
     }
 
 
+def test_coding_agent_backend_line_driver_exact_signature():
+    import inspect
+    import typing
+
+    from autoskillit.core import CmdSpec, CodingAgentBackend, LineDriver
+
+    signature = inspect.signature(CodingAgentBackend.line_driver)
+    assert tuple(signature.parameters) == ("self", "spec")
+    assert typing.get_type_hints(CodingAgentBackend.line_driver) == {
+        "spec": CmdSpec,
+        "return": LineDriver | None,
+    }
+
+
+def test_line_driver_is_runtime_checkable():
+    from autoskillit.core import LineDriver
+
+    assert getattr(LineDriver, "_is_runtime_protocol", False)
+
+
 def test_no_autoskillit_imports_in_protocols_backend():
     from autoskillit.core import paths
 
@@ -209,6 +229,23 @@ def test_stub_class_satisfies_stream_parser():
     assert isinstance(_Parser(), StreamParser)
 
 
+def test_stub_class_satisfies_line_driver():
+    from autoskillit.core import LineDriver
+
+    class _Driver:
+        finished = False
+        failure: str | None = None
+
+        def initial_lines(self) -> tuple[str, ...]:
+            return ("initialize",)
+
+        def on_line(self, line: str) -> tuple[str, ...]:
+            del line
+            return ()
+
+    assert isinstance(_Driver(), LineDriver)
+
+
 def test_stub_class_satisfies_coding_agent_backend():
     from collections.abc import Sequence
     from pathlib import Path
@@ -223,6 +260,7 @@ def test_stub_class_satisfies_coding_agent_backend():
         EnvPolicy,
         ExecutionIdentity,
         ExplorationDispatchRenderer,
+        LineDriver,
         NoResume,
         OutputFormat,
         PluginLaunchBinding,
@@ -381,6 +419,10 @@ def test_stub_class_satisfies_coding_agent_backend():
 
         def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
             return CmdSpec(cmd=(), env={})
+
+        def line_driver(self, spec: CmdSpec) -> LineDriver | None:
+            del spec
+            return None
 
         def setup_session_dir(
             self,

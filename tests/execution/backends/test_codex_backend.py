@@ -16,6 +16,7 @@ from autoskillit.core import (
     AGENT_BACKEND_CODEX,
     BUNDLED_EXPLORER_ROLES,
     CAMPAIGN_ID_ENV_VAR,
+    CODEX_EFFORT_MAPPING,
     CODEX_MODEL_ALIASES,
     DIRECT_PREFIX,
     KITCHEN_SESSION_ID_ENV_VAR,
@@ -209,7 +210,15 @@ class TestCodexBackend:
         assert CodexBackend().capabilities.env_denylist_prefixes == CODEX_ENV_PREFIX_DENYLIST
 
     def test_capabilities_min_version(self) -> None:
-        assert CodexBackend().capabilities.min_version == "0.130.0"
+        from autoskillit.execution.backends._codex_discovery import (
+            CODEX_SKILL_DISCOVERY_CONTRACT,
+        )
+
+        assert CodexBackend().capabilities.min_version == "0.136.0"
+        assert (
+            CodexBackend().capabilities.min_version
+            == CODEX_SKILL_DISCOVERY_CONTRACT.extra_roots_min_version
+        )
 
     def test_capabilities_version_check_command(self) -> None:
         assert CodexBackend().capabilities.version_check_command == "codex --version"
@@ -323,6 +332,13 @@ class TestCodexBackendCommands:
             completion_marker="DONE",
             provider_extras=OTLP_EXTRAS,
             network_access=True,
+            add_dirs=(
+                ValidatedAddDir(
+                    path="/repo/add-dir",
+                    session_home="/repo",
+                    skill_entries=(("investigate", "investigate/SKILL.md"),),
+                ),
+            ),
         )
         food_truck = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="dispatch",
@@ -333,7 +349,11 @@ class TestCodexBackendCommands:
         )
         skill_overrides = _config_overrides(skill)
         food_truck_overrides = _config_overrides(food_truck)
-        assert "sandbox_workspace_write.network_access=true" in skill_overrides
+        assert skill.app_server_plan is not None
+        assert (
+            skill.app_server_plan.config_overrides["sandbox_workspace_write.network_access"]
+            is True
+        )
         assert "web_search=disabled" in food_truck_overrides
         assert tuple(value for value in skill_overrides if value.startswith("otel.")) == (
             _OTLP_OVERRIDES
@@ -671,48 +691,63 @@ class TestCodexBuildSkillSessionCmd:
         "model": None,
         "plugin_binding": None,
         "output_format": OutputFormat.JSON,
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
     }
 
     def test_completion_directive_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert "ORCHESTRATION DIRECTIVE" in spec.app_server_plan.prompt
 
     def test_cwd_anchor_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "/work" in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert "/work" in spec.app_server_plan.prompt
 
     def test_narration_suppression_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "EFFICIENCY DIRECTIVE" in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert "EFFICIENCY DIRECTIVE" in spec.app_server_plan.prompt
 
     def test_fresh_headless_includes_output_discipline_digest(self) -> None:
         from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.app_server_plan.prompt
 
     def test_fresh_headless_includes_intake_discipline_digest(self) -> None:
         from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.app_server_plan.prompt
 
     def test_fresh_headless_excludes_scope_discipline_digest_by_default(self) -> None:
         """Scope discipline is a change-authoring policy; default sessions don't get it (#4478)."""
         from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.app_server_plan.prompt
 
     def test_fresh_headless_includes_scope_discipline_digest_when_opted_in(self) -> None:
         from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_skill_session_cmd(**self.BASE, include_scope_discipline=True)
-        assert CODEX_SCOPE_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST in spec.app_server_plan.prompt
 
     def test_completion_reminder_injected(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "Remember: end your final response with" in spec.cmd[-1]
+        assert spec.app_server_plan is not None
+        assert "Remember: end your final response with" in spec.app_server_plan.prompt
 
     def test_headless_env_set(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
@@ -751,7 +786,13 @@ class TestCodexBuildSkillSessionCmd:
         assert "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES" not in spec4.env
 
     def test_codex_home_env_set(self) -> None:
-        dirs = [ValidatedAddDir(path="/extra/add-dir", session_home="/extra")]
+        dirs = [
+            ValidatedAddDir(
+                path="/extra/add-dir",
+                session_home="/extra",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            )
+        ]
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "add_dirs": dirs},
         )
@@ -771,7 +812,13 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(
             **{
                 **self.BASE,
-                "add_dirs": [ValidatedAddDir(path="/extra/add-dir", session_home="/extra")],
+                "add_dirs": [
+                    ValidatedAddDir(
+                        path="/extra/add-dir",
+                        session_home="/extra",
+                        skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+                    )
+                ],
             },
         )
         assert {"CODEX_HOME", "CODEX_SQLITE_HOME"} <= spec.env.keys()
@@ -782,12 +829,14 @@ class TestCodexBuildSkillSessionCmd:
         assert caps.session_dir_persistent is True
         assert caps.cook_startup_observer_capable is True
 
-    def test_codex_home_not_set_by_default(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "CODEX_HOME" not in spec.env
-
     def test_no_add_dir_flag_with_add_dirs(self) -> None:
-        dirs = [ValidatedAddDir(path="/extra/add-dir", session_home="/extra")]
+        dirs = [
+            ValidatedAddDir(
+                path="/extra/add-dir",
+                session_home="/extra",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            )
+        ]
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "add_dirs": dirs},
         )
@@ -801,20 +850,19 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "model": "o3"},
         )
-        assert "--model" in spec.cmd
-        idx = spec.cmd.index("--model")
-        assert spec.cmd[idx + 1] == "o3"
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.model == "o3"
         spec2 = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "--model" not in spec2.cmd
+        assert spec2.app_server_plan is not None
+        assert spec2.app_server_plan.model is None
 
     def test_resume_path(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc123"},
         )
-        assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
-        assert "sess-abc123" in spec.cmd
-        assert "--sandbox" not in spec.cmd
-        assert "-a" not in spec.cmd
+        assert spec.is_resume is True
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.resume_thread_id == "sess-abc123"
 
     def test_completion_marker_with_profile(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -848,10 +896,6 @@ class TestCodexBuildSkillSessionCmd:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
         assert spec.env.get("AUTOSKILLIT_HEADLESS_AUTO_GATE") == "1"
 
-    def test_json_flag_always_present(self) -> None:
-        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "--json" in spec.cmd
-
     def test_skill_session_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
         from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
@@ -863,6 +907,9 @@ class TestCodexBuildSkillSessionCmd:
             "MAX_MCP_OUTPUT_TOKENS",
             "AUTOSKILLIT_SKILL_NAME",
             "AUTOSKILLIT_CWD",
+            # Unconditionally re-injected from the mandatory add-dir's session_home,
+            # never read from ambient environment.
+            "CODEX_HOME",
         }
         leaking = (
             _HEADLESS_EXCLUSIVE_VARS - reinjected - CODEX_MCP_ENV_FORWARD_VARS
@@ -871,16 +918,130 @@ class TestCodexBuildSkillSessionCmd:
 
     def test_bypass_hook_trust_present_in_skill_session_cmd(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
-        assert "--dangerously-bypass-hook-trust" in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.bypass_hook_trust is True
+
+    def test_app_server_plan_catalog_root_expected_names_and_cwd(self) -> None:
+        """app_server_plan carries the catalog root under the frozen add-dir's
+        session_home, the expected skill names/entries straight from that
+        catalog, and the invocation's cwd — none of which live on argv."""
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        assert spec.app_server_plan is not None
+        plan = spec.app_server_plan
+        assert plan.session_home == "/work"
+        assert plan.catalog_root == "/work/add-dir/skills"
+        assert plan.expected_skill_names == frozenset({"test-skill"})
+        assert plan.expected_skill_entries == (("test-skill", "test-skill/SKILL.md"),)
+        assert plan.cwd == "/work"
+
+    def test_model_and_effort_forwarded_via_config_overrides(self) -> None:
+        spec = CodexBackend().build_skill_session_cmd(**{**self.BASE, "model": "sonnet"})
+        assert spec.app_server_plan is not None
+        plan = spec.app_server_plan
+        assert plan.model == CodexBackend().translate_model("sonnet")
+        assert plan.config_overrides["model_reasoning_effort"] == CODEX_EFFORT_MAPPING["sonnet"]
+
+    def test_line_driver_returns_driver_bound_to_the_exact_plan(self) -> None:
+        """CodexBackend.line_driver hands back a driver bound to the exact plan object
+        the builder produced — never a copy or a re-derived plan."""
+        from autoskillit.execution.backends._codex.app_server import CodexAppServerDriver
+
+        spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        driver = CodexBackend().line_driver(spec)
+        assert isinstance(driver, CodexAppServerDriver)
+        assert driver._plan is spec.app_server_plan  # type: ignore[attr-defined]
+
+    def test_adapter_digest_moves_with_app_server_plan_despite_shared_argv(self) -> None:
+        """#4659 digest-divergence class: once prompt, catalog root, and resume
+        thread id leave argv for the app-server transport, adapter_digest must
+        still distinguish two launches that differ only in those app_server_plan
+        fields (see _app_server_plan_digest_payload)."""
+        import hashlib
+        import json
+
+        from autoskillit.execution.headless._managed._launch_adapter import (
+            _app_server_plan_digest_payload,
+        )
+
+        def digest_of(spec: CmdSpec) -> str:
+            payload = {
+                "argv": spec.cmd,
+                "app_server_plan": _app_server_plan_digest_payload(spec.app_server_plan),
+            }
+            return hashlib.sha256(
+                json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+
+        base_spec = CodexBackend().build_skill_session_cmd(**self.BASE)
+        base_digest = digest_of(base_spec)
+        other_catalog = ValidatedAddDir(
+            path="/other/add-dir",
+            session_home="/other",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        )
+        variants: dict[str, dict[str, object]] = {
+            "prompt": {**self.BASE, "skill_command": "/test-skill extra arg"},
+            "catalog_root": {**self.BASE, "add_dirs": (other_catalog,)},
+            "resume_thread_id": {**self.BASE, "resume_session_id": "original-thread-id"},
+        }
+        for field, kwargs in variants.items():
+            varied_spec = CodexBackend().build_skill_session_cmd(**kwargs)
+            assert varied_spec.cmd == base_spec.cmd, f"{field} variant must share argv"
+            assert digest_of(varied_spec) != base_digest, (
+                f"adapter_digest failed to move when only {field} changed"
+            )
+
+    def test_resumed_session_uses_current_invocation_home_and_overrides(self) -> None:
+        """A retained skill-catalog closure restored for a resumed attempt is bound
+        to the CURRENT invocation's session_home (never a prior attempt's),
+        attested by its exact skill names/paths, while resuming the original
+        Codex thread id and carrying only this call's own overrides."""
+        original_thread_id = "original-thread-abc123"
+        retained_entries = (
+            ("investigate", "investigate/SKILL.md"),
+            ("make-plan", "make-plan/SKILL.md"),
+        )
+        current_invocation_add_dirs = (
+            ValidatedAddDir(
+                path="/current/home/add-dir",
+                session_home="/current/home",
+                skill_entries=retained_entries,
+            ),
+        )
+        spec = CodexBackend().build_skill_session_cmd(
+            **{
+                **self.BASE,
+                "add_dirs": current_invocation_add_dirs,
+                "resume_session_id": original_thread_id,
+                "network_access": True,
+            }
+        )
+        assert spec.is_resume is True
+        assert spec.app_server_plan is not None
+        plan = spec.app_server_plan
+        assert plan.session_home == "/current/home"
+        assert plan.catalog_root == "/current/home/add-dir/skills"
+        assert plan.expected_skill_names == frozenset({"investigate", "make-plan"})
+        assert plan.expected_skill_entries == retained_entries
+        assert plan.resume_thread_id == original_thread_id
+        assert plan.config_overrides["sandbox_workspace_write.network_access"] is True
 
 
 class TestCodexBuildSkillSessionCmdConfigAdapter:
     def test_config_adapter_matches_flat_params(self) -> None:
+        add_dirs = (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        )
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             model=None,
             plugin_binding=None,
             output_format=OutputFormat.JSON,
+            add_dirs=add_dirs,
         )
         via_config = CodexBackend().build_skill_session_cmd(
             "/test-skill", cwd="/work", config=config
@@ -892,6 +1053,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             model=None,
             plugin_binding=None,
             output_format=OutputFormat.JSON,
+            add_dirs=add_dirs,
         )
         assert via_config.cmd == via_flat.cmd
         assert via_config.env == via_flat.env
@@ -899,11 +1061,19 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
 
     def test_config_adapter_forwards_all_fields(self) -> None:
         chk = SessionCheckpoint(step_name="chk")
+        add_dirs = (
+            ValidatedAddDir(
+                path="/tmp/add-dir",
+                session_home="/tmp",
+                skill_entries=(("test", "test/SKILL.md"),),
+            ),
+        )
         config = SkillSessionConfig(
             completion_marker="%%MARKER%%",
             model="o3",
             plugin_binding=None,
             output_format=OutputFormat.STREAM_JSON,
+            add_dirs=add_dirs,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
             scenario_step_name="step1",
@@ -925,6 +1095,7 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             model="o3",
             plugin_binding=None,
             output_format=OutputFormat.STREAM_JSON,
+            add_dirs=add_dirs,
             exit_after_stop_delay_ms=120000,
             stream_idle_timeout_ms=30000,
             scenario_step_name="step1",
@@ -942,35 +1113,73 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
         assert via_config.env == via_flat.env
 
     def test_config_sandbox_mode_propagates(self) -> None:
-        config = SkillSessionConfig(sandbox_mode="read-only")
+        config = SkillSessionConfig(
+            sandbox_mode="read-only",
+            add_dirs=(
+                ValidatedAddDir(
+                    path="/tmp/add-dir",
+                    session_home="/tmp",
+                    skill_entries=(("test", "test/SKILL.md"),),
+                ),
+            ),
+        )
         spec = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
-        assert "--sandbox" in spec.cmd
-        idx = spec.cmd.index("--sandbox")
-        assert spec.cmd[idx + 1] == "read-only"
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == "read-only"
 
     def test_workspace_write_parent_omits_cli_sandbox_override(self) -> None:
-        config = SkillSessionConfig(sandbox_mode="workspace-write")
+        config = SkillSessionConfig(
+            sandbox_mode="workspace-write",
+            add_dirs=(
+                ValidatedAddDir(
+                    path="/tmp/add-dir",
+                    session_home="/tmp",
+                    skill_entries=(("test", "test/SKILL.md"),),
+                ),
+            ),
+        )
         spec = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
         assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == "workspace-write"
 
     def test_config_path_returns_cmdspec(self) -> None:
-        config = SkillSessionConfig(completion_marker="%%DONE%%", output_format=OutputFormat.JSON)
+        config = SkillSessionConfig(
+            completion_marker="%%DONE%%",
+            output_format=OutputFormat.JSON,
+            add_dirs=(
+                ValidatedAddDir(
+                    path="/tmp/add-dir",
+                    session_home="/tmp",
+                    skill_entries=(("test", "test/SKILL.md"),),
+                ),
+            ),
+        )
         result = CodexBackend().build_skill_session_cmd("/test", cwd="/tmp", config=config)
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
 
-    def test_config_projects_plugin_binding_into_codex_home(self) -> None:
+    def test_config_add_dir_session_home_governs_codex_home_over_plugin_binding(self) -> None:
+        """Skill sessions now source CODEX_HOME from the add-dir's session_home;
+        plugin_binding no longer participates for this builder (it's superseded by
+        the mandatory add-dir catalog binding, unlike build_food_truck_cmd)."""
         config = SkillSessionConfig(
             completion_marker="%%DONE%%",
             output_format=OutputFormat.STREAM_JSON,
             plugin_binding=plugin_binding(Path("/p")),
+            add_dirs=(
+                ValidatedAddDir(
+                    path="/work/add-dir",
+                    session_home="/work",
+                    skill_entries=(("test", "test/SKILL.md"),),
+                ),
+            ),
         )
         spec = CodexBackend().build_skill_session_cmd("/test", cwd="/work", config=config)
         cmd_str = " ".join(spec.cmd)
         assert "--output-format" not in cmd_str
         assert "--plugin-dir" not in cmd_str
-        assert "--json" in spec.cmd
-        assert spec.env["CODEX_HOME"] == "/p"
+        assert spec.env["CODEX_HOME"] == "/work"
 
     def test_legacy_flat_params_still_work(self) -> None:
         spec = CodexBackend().build_skill_session_cmd(
@@ -980,9 +1189,17 @@ class TestCodexBuildSkillSessionCmdConfigAdapter:
             model=None,
             plugin_binding=None,
             output_format=OutputFormat.JSON,
+            add_dirs=(
+                ValidatedAddDir(
+                    path="/work/add-dir",
+                    session_home="/work",
+                    skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+                ),
+            ),
         )
         assert isinstance(spec, CmdSpec)
-        assert any("$test-skill" in s for s in spec.cmd)
+        assert spec.app_server_plan is not None
+        assert "$test-skill" in spec.app_server_plan.prompt
 
 
 class TestCodexBuildInteractiveCmd:
@@ -1106,6 +1323,13 @@ class TestCodexBuildSkillSessionCmdAgentBackend:
         "model": None,
         "plugin_binding": None,
         "output_format": OutputFormat.JSON,
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
     }
 
     def test_agent_backend_env_set(self) -> None:
@@ -1135,6 +1359,13 @@ class TestCodexDynaconfBackendEnv:
         "model": None,
         "plugin_binding": None,
         "output_format": OutputFormat.JSON,
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
     }
 
     FOOD_TRUCK_BASE: dict[str, object] = {
@@ -1441,6 +1672,13 @@ class TestCodexForwardVarsInjection:
         "model": None,
         "plugin_binding": None,
         "output_format": OutputFormat.JSON,
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
@@ -1506,6 +1744,13 @@ class TestCodexMcpClientBackendRequired:
         "model": None,
         "plugin_binding": None,
         "output_format": OutputFormat.JSON,
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
+        ),
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
@@ -1625,7 +1870,9 @@ class TestClaudeCodeBackendProcessIdleDefault:
 class TestCodexDiscardDispositions:
     """Codex builder parameter disposition contracts.
 
-    plugin_binding -> delivered as a sanitized CODEX_HOME.
+    plugin_binding -> delivered as a sanitized CODEX_HOME for build_food_truck_cmd;
+        build_skill_session_cmd no longer honors it, since CODEX_HOME there is
+        sourced exclusively from the mandatory add-dir's session_home.
     output_format -> logged warning when != JSON.
     exit_after_stop_delay_ms -> AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env injection via setdefault.
     stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms + env injection.
@@ -1635,6 +1882,13 @@ class TestCodexDiscardDispositions:
         "skill_command": "/test",
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "add_dirs": (
+            ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test", "test/SKILL.md"),),
+            ),
+        ),
     }
     FOOD_TRUCK_BASE: dict[str, object] = {
         "orchestrator_prompt": "go",
@@ -1643,12 +1897,14 @@ class TestCodexDiscardDispositions:
         "completion_marker": "%%DONE%%",
     }
 
-    def test_plugin_binding_delivered_by_skill_builder(self) -> None:
+    def test_plugin_binding_not_delivered_by_skill_builder(self) -> None:
+        """Unlike build_food_truck_cmd, the skill builder ignores plugin_binding for
+        CODEX_HOME — the mandatory add-dir's session_home is the sole authority."""
         spec = CodexBackend().build_skill_session_cmd(
             **self.SKILL_BASE,
             plugin_binding=plugin_binding(Path("/pkg")),
         )
-        assert spec.env["CODEX_HOME"] == "/pkg"
+        assert spec.env["CODEX_HOME"] == "/work"
 
     def test_plugin_binding_delivered_by_food_truck_builder(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)

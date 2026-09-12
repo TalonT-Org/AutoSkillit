@@ -23,6 +23,7 @@ _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_ruff_parity"
 _T1_SCRIPT = REPO_ROOT / "tests" / "infra" / "test_check_complexity.py"
 _T1_MODULE_NAME = "_autoskillit_check_complexity_t1_for_ruff_parity"
+_RUFF_TIMEOUT_SECONDS = 30
 
 
 def _load_module(name: str, path: Path):
@@ -47,7 +48,10 @@ _t1 = _load_module(_T1_MODULE_NAME, _T1_SCRIPT)
 def _require_ruff() -> None:
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "ruff", "--version"], capture_output=True, text=True
+            [sys.executable, "-m", "ruff", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=_RUFF_TIMEOUT_SECONDS,
         )
     except OSError as exc:
         raise AssertionError(f"ruff is not runnable via {sys.executable} -m ruff: {exc}") from exc
@@ -83,6 +87,7 @@ def _run_ruff_json(path: Path) -> list[dict]:
         [sys.executable, "-m", "ruff", *_RUFF_ARGS, str(path)],
         capture_output=True,
         text=True,
+        timeout=_RUFF_TIMEOUT_SECONDS,
     )
     assert result.returncode in (0, 1), (
         f"ruff exited {result.returncode}, expected 0 or 1\nstderr:\n{result.stderr}"

@@ -581,6 +581,7 @@ class TestStdinLiteralConsumers:
         through a heredoc targeting the branch checked out in the *other*
         worktree must still deny."""
         primary = linked_repo["primary"]
+        linked = linked_repo["linked"]
         out = _run_guard(
             f"bash <<'EOF'\ngit branch -f review {linked_repo['new_sha']}\nEOF",
             kitchen_open=True,
@@ -588,7 +589,14 @@ class TestStdinLiteralConsumers:
         )
         assert _is_denied(out)
         result = _checked_out_ref_result(out)
-        assert result["threatened_refs"][0]["target_ref"] == "refs/heads/review"
+        refs = result["threatened_refs"]
+        assert isinstance(refs, list)
+        assert {row["target_ref"] for row in refs} >= {"refs/heads/review"}
+        review_rows = [row for row in refs if row["target_ref"] == "refs/heads/review"]
+        assert any(str(linked) in row["owner_paths"] for row in review_rows), (
+            "must prove the ref was resolved to the OTHER (linked) worktree, "
+            f"not just that some ref named refs/heads/review was threatened: {refs}"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -21,7 +21,6 @@ from unittest.mock import patch
 import pytest
 
 import autoskillit.recipe.helpers._skill_helpers as _sh
-import autoskillit.recipe.rules.rules_skill_content as _patch_rules_rules_skill_content
 import autoskillit.recipe.rules.rules_skill_content as _rsc
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -156,7 +155,7 @@ def test_load_bundled_manifest_patch_path_resolves() -> None:
     """
     sentinel = {"sentinel": True}
     with patch.object(
-        _patch_rules_rules_skill_content,
+        _rsc,
         "load_bundled_manifest",
         return_value=sentinel,
     ) as mocked:

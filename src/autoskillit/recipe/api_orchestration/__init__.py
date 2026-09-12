@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from ._api_orchestration_validate import _record_pipeline_error, _run_validation_pipeline
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     """Lazily resolve orchestration symbols and concrete child modules."""
     if name in _LAZY_MODULES:
         from importlib import import_module

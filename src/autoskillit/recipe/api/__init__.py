@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     )
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     """Lazily resolve API symbols and concrete child modules."""
     if name in _LAZY_MODULES:
         from importlib import import_module

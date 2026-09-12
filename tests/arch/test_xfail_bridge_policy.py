@@ -63,36 +63,42 @@ def _extract_reason(node: ast.Call) -> str | None:
     return None
 
 
+def _decorator_xfail_nodes(decorator: ast.expr) -> list[ast.Call]:
+    if not isinstance(decorator, ast.Call):
+        return []
+    if _is_xfail_strict_true(decorator):
+        return [decorator]
+    return [
+        node
+        for node in ast.walk(decorator)
+        if isinstance(node, ast.Call) and node is not decorator and _is_xfail_strict_true(node)
+    ]
+
+
+def _param_mark_xfail_nodes(call: ast.Call) -> list[ast.Call]:
+    func = call.func
+    is_param = (isinstance(func, ast.Attribute) and func.attr == "param") or (
+        isinstance(func, ast.Name) and func.id == "param"
+    )
+    if not is_param:
+        return []
+    results = []
+    for keyword in call.keywords:
+        if keyword.arg == "marks":
+            for node in ast.walk(keyword.value):
+                if isinstance(node, ast.Call) and _is_xfail_strict_true(node):
+                    results.append(node)
+    return results
+
+
 def _collect_xfail_strict_true_nodes(tree: ast.Module) -> list[ast.Call]:
     results: list[ast.Call] = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for dec in node.decorator_list:
-                if isinstance(dec, ast.Call) and _is_xfail_strict_true(dec):
-                    results.append(dec)
-                elif isinstance(dec, ast.Call):
-                    for arg_node in ast.walk(dec):
-                        if (
-                            isinstance(arg_node, ast.Call)
-                            and arg_node is not dec
-                            and _is_xfail_strict_true(arg_node)
-                        ):
-                            results.append(arg_node)
+            for decorator in node.decorator_list:
+                results.extend(_decorator_xfail_nodes(decorator))
         if isinstance(node, ast.Call):
-            func = node.func
-            is_param = False
-            if isinstance(func, ast.Attribute) and func.attr == "param":
-                is_param = True
-            elif isinstance(func, ast.Name) and func.id == "param":
-                is_param = True
-            if is_param:
-                for kw in node.keywords:
-                    if kw.arg == "marks":
-                        for marks_node in ast.walk(kw.value):
-                            if isinstance(marks_node, ast.Call) and _is_xfail_strict_true(
-                                marks_node
-                            ):
-                                results.append(marks_node)
+            results.extend(_param_mark_xfail_nodes(node))
     return results
 
 

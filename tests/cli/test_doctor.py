@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -12,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from autoskillit import cli
+from tests.cli._doctor_helpers import select_doctor_checks
 from tests.fixtures.plugin_artifact_state import (
     PLUGIN_ARTIFACT_STATE_KINDS,
     PluginArtifactStateKind,
@@ -658,25 +658,16 @@ def _restrict_doctor_collection(
     doctor_mod: Any,
     selected_check_names: set[str],
 ) -> None:
-    """Run only the named checks through the real collection isolation wrapper."""
-    from autoskillit.cli.doctor._doctor_types import _check_display_name
+    """Run only the named checks, with config and backend resolution stubbed out."""
     from autoskillit.config import AutomationConfig
 
-    real_run_check = doctor_mod._run_check
-
-    def run_selected(fn: Callable[[], object], *, check_name: str | None = None) -> list[Any]:
-        resolved_name = check_name or _check_display_name(fn)
-        if resolved_name not in selected_check_names:
-            return []
-        return real_run_check(fn, check_name=check_name)
-
+    select_doctor_checks(monkeypatch, selected_check_names)
     monkeypatch.setattr(
         doctor_mod,
         "_load_config_guarded",
         lambda _cwd: (AutomationConfig(), []),
     )
     monkeypatch.setattr(doctor_mod, "get_backend", lambda _name: None)
-    monkeypatch.setattr(doctor_mod, "_run_check", run_selected)
 
 
 @pytest.mark.parametrize("plugin_installed", [False, True])

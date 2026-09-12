@@ -82,6 +82,61 @@ def _meta_text(meta: Mapping[str, Any], spawn: Mapping[str, Any], field: str) ->
     return value if isinstance(value, str) else ""
 
 
+def _structural_text(
+    owner: str,
+    field: str,
+    sources: tuple[Mapping[str, Any], ...],
+    *,
+    required: bool,
+    allow_null: bool = False,
+) -> str:
+    values: list[object] = []
+    for source in sources:
+        if field not in source:
+            continue
+        value = source[field]
+        if value is None and allow_null:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(f"Codex {owner} rollout has malformed {field}")
+        values.append(value)
+    return _unique_text(owner, field, values, required=required)
+
+
+def _child_session_metadata(
+    events: list[Mapping[str, Any]],
+    *,
+    expected_parent_id: str,
+    expected_child_id: str | None,
+) -> tuple[Mapping[str, Any], Mapping[str, Any], str, str]:
+    child_metas = _payloads(events, "session_meta")
+    if len(child_metas) != 1:
+        raise ValueError("Codex child rollout must contain exactly one session_meta")
+    child_meta = child_metas[0]
+    spawn = _spawn_record(child_meta)
+    child_id = _structural_text("child", "id", (child_meta, spawn), required=True)
+    if expected_child_id is not None and child_id != expected_child_id:
+        raise ValueError("Codex child session_meta has an invalid child id")
+
+    parent_values: list[object] = []
+    for source in (child_meta, spawn):
+        for field in ("forked_from_id", "parent_thread_id"):
+            if field not in source:
+                continue
+            value = source[field]
+            if not isinstance(value, str):
+                raise ValueError(f"Codex child rollout has malformed {field}")
+            parent_values.append(value)
+    linked_parent = _unique_text("child", "parent linkage", parent_values, required=True)
+    if linked_parent != expected_parent_id:
+        raise ValueError("Codex child rollout is not linked to the authoritative parent")
+
+    role = _structural_text(
+        "child", "agent_role", (child_meta, spawn), required=False, allow_null=True
+    )
+    return child_meta, spawn, child_id, role
+
+
 def _instruction_text(meta: Mapping[str, Any]) -> str:
     base = meta.get("base_instructions")
     if isinstance(base, str):
@@ -135,6 +190,50 @@ def read_codex_rollout_events(path: Path) -> list[Mapping[str, Any]]:
     Public alias of ``_read_rollout``, tolerant of ``.zst``-compressed rollouts.
     """
     return _read_rollout(path)
+
+
+def extract_codex_child_metadata(
+    child_rollout_path: Path,
+    *,
+    expected_parent_id: str,
+    expected_child_id: str,
+) -> dict[str, Any]:
+    """Return native metadata for one structurally linked Codex child."""
+    events = _read_rollout(child_rollout_path)
+    _child_meta, _spawn, child_id, role = _child_session_metadata(
+        events,
+        expected_parent_id=expected_parent_id,
+        expected_child_id=expected_child_id,
+    )
+    metadata: dict[str, Any] = {
+        "backend": AGENT_BACKEND_CODEX,
+        "parent_session_id": expected_parent_id,
+        "child_id": child_id,
+    }
+    if role:
+        metadata["role"] = role
+
+    contexts = _payloads(events, "turn_context")
+    conflicts: list[str] = []
+    for native_field, outcome_field in (
+        ("model", "effective_model"),
+        ("effort", "effective_effort"),
+    ):
+        try:
+            value = _unique_text(
+                "child",
+                native_field,
+                [context.get(native_field) for context in contexts],
+                required=False,
+            )
+        except ValueError:
+            conflicts.append(outcome_field)
+        else:
+            if value:
+                metadata[outcome_field] = value
+    if conflicts:
+        metadata["metadata_conflicts"] = conflicts
+    return metadata
 
 
 def extract_codex_execution_identity(
@@ -201,20 +300,13 @@ def extract_codex_execution_identity(
     child_cli_versions: set[str] = set()
     for child_rollout_path in child_rollout_paths:
         child_events = _read_rollout(child_rollout_path)
-        child_metas = _payloads(child_events, "session_meta")
-        if len(child_metas) != 1:
-            raise ValueError("Codex child rollout must contain exactly one session_meta")
-        child_meta = child_metas[0]
-        spawn = _spawn_record(child_meta)
-        linked_parent = _meta_text(child_meta, spawn, "forked_from_id") or _meta_text(
-            child_meta, spawn, "parent_thread_id"
+        child_meta, spawn, child_id, role = _child_session_metadata(
+            child_events,
+            expected_parent_id=parent_id,
+            expected_child_id=None,
         )
-        if linked_parent != parent_id:
-            raise ValueError("Codex child rollout is not linked to the authoritative parent")
-        child_id = _meta_text(child_meta, spawn, "id")
-        if not child_id or child_id not in linked_child_ids:
+        if child_id not in linked_child_ids:
             raise ValueError("Codex child session_meta has an invalid child id")
-        role = _meta_text(child_meta, spawn, "agent_role")
         evidence = _instruction_text(child_meta) + "\n" + _message_text(child_events)
         matches = tuple(
             child

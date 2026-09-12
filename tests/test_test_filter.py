@@ -1208,7 +1208,8 @@ class TestProductionManifestScope:
 
     def test_every_infra_module_referencing_the_document_stays_selected(self) -> None:
         scope = _contributing_document_scope()
-        infra_dir = PROJECT_ROOT / "tests" / "infra"
+        tests_root = PROJECT_ROOT / "tests"
+        infra_dir = tests_root / "infra"
         referencing = {
             module
             for module in infra_dir.rglob("test_*.py")

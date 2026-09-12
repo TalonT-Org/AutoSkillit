@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification._flag_arity import _FlagArity
+    from autoskillit.hooks._classification._flag_arity_classification import _FlagArity
     from autoskillit.hooks._classification._interpreters import (
         all_evaluated_segments,
         live_command_text,
@@ -20,19 +20,19 @@ if TYPE_CHECKING:
         extract_git_subcommand_and_flags,
     )
 else:
-    # _flag_arity is a leaf sibling (no back-reference into the facade or
-    # into _interpreters), so it can be imported at the top of the file
-    # without the circular-bootstrap hazard that governs the _interpreters
-    # import at the bottom of this module. _FlagArity used to be defined
-    # directly in this file, which forced _interpreters.py to reach back
-    # into _flags at ITS OWN bottom bootstrap just to get it -- a
+    # _flag_arity_classification is a leaf sibling (no back-reference into
+    # the facade or into _interpreters), so it can be imported at the top of
+    # the file without the circular-bootstrap hazard that governs the
+    # _interpreters import at the bottom of this module. _FlagArity used to
+    # be defined directly in this file, which forced _interpreters.py to
+    # reach back into _flags at ITS OWN bottom bootstrap just to get it -- a
     # bidirectional _flags<->_interpreters coupling this extraction removes.
     if __package__:
-        from . import _flag_arity
+        from . import _flag_arity_classification
     else:
-        import _flag_arity
+        import _flag_arity_classification
 
-    _FlagArity = _flag_arity._FlagArity
+    _FlagArity = _flag_arity_classification._FlagArity
 
 
 # Moved from _command_classification.py (rectify #4941 Part A) to keep that

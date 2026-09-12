@@ -22,10 +22,10 @@ class _FlagArity(StrEnum):
     `=` for long forms, or glued onto a short form like -XPOST).
 
     A StrEnum, not a plain Enum: this module can be loaded under the dotted
-    `autoskillit.hooks._classification._flag_arity` package name and the bare
-    `_classification._flag_arity` standalone name. The two loads produce
-    distinct `_FlagArity` class objects, so an `is`
-    comparison between a value sourced from one and `_FlagArity.VALUE`
+    `autoskillit.hooks._classification._flag_arity_classification` package
+    name and the bare `_classification._flag_arity_classification` standalone
+    name. The two loads produce distinct `_FlagArity` class objects, so an
+    `is` comparison between a value sourced from one and `_FlagArity.VALUE`
     sourced from the other silently fails even though both represent the
     same arity. StrEnum members compare equal by their underlying str value
     across class identities (`A.VALUE == B.VALUE` is True even when `A is

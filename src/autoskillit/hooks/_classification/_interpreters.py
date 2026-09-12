@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification._flag_arity import _FlagArity
+    from autoskillit.hooks._classification._flag_arity_classification import _FlagArity
     from autoskillit.hooks._classification._python_program_analysis import (
         _InterpreterCommandSpec,
         _python_program_command_specs,
@@ -37,23 +37,28 @@ if TYPE_CHECKING:
     _SHELL_INVOCATION_FLAG_SPEC: dict[str, _FlagArity]
     _PYTHON_INVOCATION_FLAG_SPEC: dict[str, _FlagArity]
 else:
-    # _flag_arity, _python_program_analysis, and _substitution_scanning are
-    # leaf siblings (no back-reference into the facade), so they can be
-    # imported at the top of the file without the circular-bootstrap hazard
-    # that governs the _flags import at the bottom of this module. _FlagArity
-    # used to come from _flags directly (PR #4983 review: that forced a
-    # bidirectional _flags<->_interpreters coupling -- _flags needed
-    # all_evaluated_segments/live_command_text from here, and here needed
-    # _FlagArity from _flags); it now comes from this dependency-free leaf
-    # instead, leaving only the _flags -> _interpreters edge.
+    # _flag_arity_classification, _python_program_analysis, and
+    # _substitution_scanning are leaf siblings (no back-reference into the
+    # facade), so they can be imported at the top of the file without the
+    # circular-bootstrap hazard that governs the _flags import at the bottom
+    # of this module. _FlagArity used to come from _flags directly (PR #4983
+    # review: that forced a bidirectional _flags<->_interpreters coupling --
+    # _flags needed all_evaluated_segments/live_command_text from here, and
+    # here needed _FlagArity from _flags); it now comes from this
+    # dependency-free leaf instead, leaving only the _flags -> _interpreters
+    # edge.
     if __package__:
-        from . import _flag_arity, _python_program_analysis, _substitution_scanning
+        from . import (
+            _flag_arity_classification,
+            _python_program_analysis,
+            _substitution_scanning,
+        )
     else:
-        import _flag_arity
+        import _flag_arity_classification
         import _python_program_analysis
         import _substitution_scanning
 
-    _FlagArity = _flag_arity._FlagArity
+    _FlagArity = _flag_arity_classification._FlagArity
     _InterpreterCommandSpec = _python_program_analysis._InterpreterCommandSpec
     _python_program_command_specs = _python_program_analysis._python_program_command_specs
     _extract_process_substitution_occurrences = (

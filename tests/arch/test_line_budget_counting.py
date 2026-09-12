@@ -71,8 +71,11 @@ def test_unparseable_source_raises_syntax_error(tmp_path: Path) -> None:
     path = tmp_path / "m.py"
     path.write_text("def (:\n", encoding="utf-8")
 
-    with pytest.raises(SyntaxError):
+    with pytest.raises(SyntaxError) as exc_info:
         count_budget_lines(path)
+
+    assert exc_info.value.lineno == 1
+    assert exc_info.value.filename == str(path)
 
 
 def test_collect_line_limit_violations_measures_non_import_lines(

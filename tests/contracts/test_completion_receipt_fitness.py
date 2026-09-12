@@ -88,9 +88,9 @@ def test_implementation_shape_supplies_unavailable_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe._binding import bind_runtime_skill_invocation
     from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
@@ -144,8 +144,8 @@ def test_completion_receipt_fits_every_delivery_bound(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())

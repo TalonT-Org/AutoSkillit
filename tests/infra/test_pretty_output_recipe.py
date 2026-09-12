@@ -1034,8 +1034,8 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
         _strip_yaml_ingredients_block,
     )
     from autoskillit.recipe import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
     from autoskillit.recipe.repository import DefaultRecipeRepository
     from autoskillit.server._misc import strip_ingredients_only_keys

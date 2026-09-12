@@ -153,8 +153,8 @@ def test_bundled_recipe_open_kitchen_envelope_fits_per_backend(
     must fit every registered backend's effective delivery bound. Each response
     contains either complete inline flow or a successful bounded recovery manifest.
     """
-    from autoskillit.recipe._api_cache import LoadCache
     from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     from autoskillit.server.recipe import _recipe_generation

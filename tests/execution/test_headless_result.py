@@ -451,6 +451,7 @@ def _make_codex_parse_stdout() -> object:
     def _patched(
         result: SubprocessResult,
         backend: object,  # noqa: ARG001
+        backend_resume_session_id: str = "",  # noqa: ARG001
     ) -> ClaudeSessionResult:
         agent_result = CodexBackend().result_parser().parse_stdout(result.stdout)
         return _adapt_codex_result(agent_result)
@@ -704,10 +705,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)
@@ -740,10 +744,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_adjudication._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
@@ -775,10 +782,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_adjudication._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_adjudication, "_parse_stdout", spy)
@@ -805,10 +815,13 @@ class TestBackendDelegatedWriteToolNames:
         original_parse = _headless_result._parse_stdout
         turn_usage = [_turn_usage_entry()]
 
-        def spy(result, backend):
+        def spy(result, backend, backend_resume_session_id=""):
             captured["backend"] = backend
             return dataclasses.replace(
-                original_parse(result, backend=backend), turn_usage=turn_usage
+                original_parse(
+                    result, backend=backend, backend_resume_session_id=backend_resume_session_id
+                ),
+                turn_usage=turn_usage,
             )
 
         monkeypatch.setattr(_headless_result, "_parse_stdout", spy)

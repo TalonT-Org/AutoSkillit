@@ -32,14 +32,21 @@ The package initializer remains import-free.
   unowned and L3 sessions, and review-loop actions remain gated on `check_review_loop`.
 - **Files and commands:** generated writes to `hooks.json`, `settings.json`, and recipe
   `contracts/` are blocked. Headless command tools cannot read recipe/skill/agent files
-  directly. Grep rejects BRE `\|` alternation and supplies the POSIX ERE
-  form. Artifact downloads require `--dir`; editable system-Python installs, direct
-  `pytest` or `python -m pytest`, and destructive git commands are denied.
+  directly, including a protected-path mention inside a live (SHELL/PYTHON/TEXT-consumed)
+  heredoc/herestring/pipe body — an inert body's own prose is not blocked. Grep rejects BRE
+  `\|` alternation and supplies the POSIX ERE form. Artifact downloads require `--dir`;
+  editable system-Python installs, direct `pytest` or `python -m pytest`, and destructive
+  git commands are denied the same way whether delivered directly, via `bash -c`/`eval`, via
+  a heredoc/herestring/pipe bound to a shell consumer, or via a literal-argv or
+  `shell=True`/`os.system` Python subprocess call (rectify #4941): every command-classifying
+  guard reads the command through the shared evaluated-segment/live-text authority rather
+  than a private parser, so none of these delivery shapes is a blind spot for another.
 - **Pipeline and planner policy:** unmet pipeline dependencies produce an advisory while
   the server remains the primary enforcer. Planner writes require canonical result names,
-  planner sessions cannot discover issues or PRs through GitHub listings, quota limits
-  block skill runs but fail open when their cache is missing, and ingredient locks are
-  enforced as a supplement to the server gate.
+  planner sessions cannot discover issues or PRs through GitHub listings (including through
+  a nested shell or process substitution), quota limits block skill runs but fail open when
+  their cache is missing, and ingredient locks are enforced as a supplement to the server
+  gate.
 - **Skill loading:** non-Anthropic headless skill sessions must load the skill before
   native tools are used. The load gate exempts Codex, subagents carrying `agent_id`, and
   sessions whose `AUTOSKILLIT_APPLICABLE_GUARDS` omits the guard stem.

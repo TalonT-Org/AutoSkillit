@@ -38,17 +38,22 @@ with no expansion-token equivalent; its commands always bake a real absolute pat
 else the dev-source checkout).
 
 `_classification/_tokenizer.py` is the sole general parsing authority for command text
-(rectify #4941 Part A): it is the only module that reads a raw command string to derive
+(rectify #4941 Parts A-B): it is the only module that reads a raw command string to derive
 segments, redirect syntax, and stdin literals (heredoc/herestring bodies bound to the
 segment that consumes them, via `StdinLiteral`). Every other scanner in `_classification/`
 and `guards/` must consume `_classification/_interpreters.py`'s
-`evaluated_payloads`/`all_evaluated_segments`/`live_command_text` projection — "what will
-actually execute, and by whom" — rather than re-deriving liveness by scanning the raw
-command itself; `tests/arch/test_hook_raw_command_scan_inventory.py` makes any new raw scan
-under `hooks/` a conscious, reviewed diff. `StdinLiteral` is the second instance of the
-`ArgvToken` "tag once at tokenization, consume tagged provenance downstream" pattern
-(`_tokenizer.py`, commit `6624dda71`, issue #4680): future token-level provenance should
-extend this path rather than add a parallel parser. Part A migrated only
-`git_ops_guard.py`/`_git_command_classification.py` and `_github_mutation_analysis.py` onto
-this authority; the remaining guards' private parsers are temporary, reviewed debt tracked
-in that inventory test until a follow-on part migrates them too.
+`evaluated_payloads`/`all_evaluated_segments`/`live_command_text`/`interpreter_invokes`
+projection — "what will actually execute, and by whom" — rather than re-deriving liveness
+by scanning the raw command itself; no guard tokenizes the command itself. Every guard
+under `guards/` (git_ops_guard, github_mutation_guard, pr_create_guard,
+planner_gh_discovery_guard, artifact_download_guard, test_runner_guard, write_guard,
+unsafe_install_guard, resource_exhaustion_guard) and `_classification/_flags.py`'s
+protected-path read check now consume this authority instead of a private parser.
+`compose_pr_body_guard.py` is the one deliberate exception: it tokenizes each evaluated
+payload independently (`all_evaluated_segments` flattens across payloads, which would let a
+`$VAR` lookup for one payload resolve from a sibling payload's assignment), a reviewed
+entry in `tests/arch/test_hook_raw_command_scan_inventory.py` rather than a silent bypass.
+That inventory test makes any new raw scan under `hooks/` a conscious, reviewed diff.
+`StdinLiteral` is the second instance of the `ArgvToken` "tag once at tokenization, consume
+tagged provenance downstream" pattern (`_tokenizer.py`, commit `6624dda71`, issue #4680):
+future token-level provenance should extend this path rather than add a parallel parser.

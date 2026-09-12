@@ -36,6 +36,17 @@ from autoskillit.recipe.validator import (
 logger = get_logger(__name__)
 
 
+def _invalid_validation_result(message: str) -> dict[str, Any]:
+    """Return the stable validation result shape for an input error."""
+    return {
+        "valid": False,
+        "errors": [message],
+        "quality": {},
+        "findings": [{"error": message}],
+        "contracts": [],
+    }
+
+
 def format_recipe_list_response(result: LoadResult[RecipeInfo]) -> dict[str, object]:
     """Build the MCP response dict for the list_recipes tool."""
     items: list[RecipeListItem] = [
@@ -99,29 +110,22 @@ def validate_from_path(
 
     Returns:
         {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
-        On file/parse error: {"error": str}
+        File and parse errors use the same keys with empty quality and contract data.
     """
     if not path.is_file():
-        return {
-            "valid": False,
-            "findings": [{"error": f"File not found: {path}"}],
-        }
+        return _invalid_validation_result(f"File not found: {path}")
 
     try:
         raw_text = path.read_text(encoding="utf-8")
         substituted = substitute_temp_placeholder(raw_text, temp_dir_relpath)
         data = load_yaml(substituted)
     except YAMLError as exc:
-        return {
-            "valid": False,
-            "findings": [{"error": f"YAML parse error: {exc}"}],
-        }
+        return _invalid_validation_result(f"YAML parse error: {exc}")
+    except OSError as exc:
+        return _invalid_validation_result(f"File read error: {exc}")
 
     if not isinstance(data, dict):
-        return {
-            "valid": False,
-            "findings": [{"error": "File must contain a YAML mapping"}],
-        }
+        return _invalid_validation_result("File must contain a YAML mapping")
 
     if lister is None:
         from autoskillit.workspace import DefaultSkillResolver  # noqa: PLC0415

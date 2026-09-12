@@ -66,6 +66,58 @@ def _setup_project_recipe(tmp_path: Path, name: str, content: str) -> Path:
     return recipe_path
 
 
+def _assert_validation_failure_shape(result: dict[str, Any], message_fragment: str) -> None:
+    assert set(result) == {"valid", "errors", "quality", "findings", "contracts"}
+    assert result["valid"] is False
+    assert result["quality"] == {}
+    assert result["contracts"] == []
+    assert result["errors"] == [result["findings"][0]["error"]]
+    assert message_fragment in result["errors"][0]
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "message_fragment"),
+    [
+        ("missing.yaml", None, "File not found"),
+        ("invalid.yaml", "steps: [", "YAML parse error"),
+        ("sequence.yaml", "[]", "File must contain a YAML mapping"),
+    ],
+)
+def test_validate_from_path_early_errors_have_stable_shape(
+    tmp_path: Path,
+    filename: str,
+    content: str | None,
+    message_fragment: str,
+) -> None:
+    from autoskillit.recipe.api._api_listing import validate_from_path
+
+    recipe_path = tmp_path / filename
+    if content is not None:
+        recipe_path.write_text(content)
+
+    result = validate_from_path(recipe_path)
+
+    _assert_validation_failure_shape(result, message_fragment)
+
+
+def test_validate_from_path_converts_file_read_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from autoskillit.recipe.api._api_listing import validate_from_path
+
+    recipe_path = tmp_path / "unreadable.yaml"
+    recipe_path.write_text("name: unreadable")
+
+    def fail_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    result = validate_from_path(recipe_path)
+
+    _assert_validation_failure_shape(result, "File read error: permission denied")
+
+
 def _make_recipe_with_ingredient(name: str, ingredient: object) -> object:
     """Build a minimal Recipe with a single named ingredient for unit testing."""
     from autoskillit.recipe.schema import Recipe, RecipeStep

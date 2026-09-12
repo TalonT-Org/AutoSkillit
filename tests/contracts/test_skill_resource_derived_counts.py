@@ -6,8 +6,8 @@ import re
 
 import pytest
 
-from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills import DefaultSkillResolver
+from autoskillit.workspace.skills._resources import load_skill_resource
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 

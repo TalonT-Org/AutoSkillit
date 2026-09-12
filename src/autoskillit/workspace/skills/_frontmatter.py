@@ -30,12 +30,13 @@ from autoskillit.core import (
     get_logger,
     validate_skill_capability_roles,
 )
-from autoskillit.workspace.skill_format import read_skill_frontmatter
-from autoskillit.workspace.skill_resources import load_skill_resource
-from autoskillit.workspace.skills_records import (
+
+from ._format import read_skill_frontmatter
+from ._records import (
     SkillInfo,
     SkillInvalidity,
 )
+from ._resources import load_skill_resource
 
 logger = get_logger(__name__)
 
@@ -92,7 +93,7 @@ def _skill_info_from_frontmatter(
     uses_capabilities = frozenset(str(c) for c in caps_raw)
 
     from autoskillit.workspace.skill_capabilities import (
-        parse_skill_semantic_plan,  # noqa: PLC0415  # deferred import to break the cycle with skills_frontmatter → skill_capabilities
+        parse_skill_semantic_plan,  # noqa: PLC0415  # deferred import to break the cycle with _frontmatter → skill_capabilities
     )
 
     semantic_plan, semantic_diagnostics = parse_skill_semantic_plan(
@@ -217,7 +218,7 @@ def _skill_info_from_frontmatter(
         frontmatter=parsed,
         invalidities=tuple(invalidities),
     )
-    from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415  # deferred import to break the cycle with skills_frontmatter → skill_capabilities
+    from autoskillit.workspace.skill_capabilities import (  # noqa: PLC0415  # deferred import to break the cycle with _frontmatter → skill_capabilities
         validate_skill_capability_authenticity,
     )
 

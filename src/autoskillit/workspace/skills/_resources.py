@@ -10,7 +10,8 @@ from pathlib import Path
 import regex as re
 
 from autoskillit.core import SkillContractError, pkg_root
-from autoskillit.workspace.skill_format import read_skill_frontmatter
+
+from ._format import read_skill_frontmatter
 
 _RESOURCE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _RESOURCE_KEYS = frozenset({"id", "title", "summary"})

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skill_format import read_skill_frontmatter
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 
 pytestmark = [pytest.mark.small]
 

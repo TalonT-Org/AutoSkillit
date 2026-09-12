@@ -216,7 +216,7 @@ def test_effective_invocation_rejects_inconsistent_direct_construction(
 
 
 def test_projection_reuses_the_single_frontmatter_parse(tmp_path: Path, monkeypatch) -> None:
-    import autoskillit.workspace.skill_format as skill_format_module
+    import autoskillit.workspace.skills._format as skill_format_module
     from autoskillit.workspace import (
         EffectiveSkillCatalog,
         SkillCatalogEntry,

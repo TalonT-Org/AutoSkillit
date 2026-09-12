@@ -9,11 +9,11 @@ import pytest
 
 from autoskillit.core import SkillSemanticOperation, SkillSource
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skill_format import read_skill_frontmatter
 from autoskillit.workspace.skills import (
     _skill_info_from_frontmatter,
     render_skill_invalidities,
 )
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 

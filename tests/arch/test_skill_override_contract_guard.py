@@ -10,8 +10,8 @@ from autoskillit.core import SkillSemanticOperation, SkillSource
 from autoskillit.core.paths import pkg_root
 from autoskillit.core.types._type_backend import ALL_PROJECT_LOCAL_SKILL_SEARCH_DIRS
 from autoskillit.execution.backends import CodexBackend
-from autoskillit.workspace.skill_format import read_skill_frontmatter
 from autoskillit.workspace.skills import DefaultSkillResolver
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 from tests._git_inventory import git_ls_files
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]

@@ -25,7 +25,8 @@ from autoskillit.core import (
     SkillContractError,
     load_yaml,
 )
-from autoskillit.workspace.skill_format import _normalize_exploration_vector_body
+
+from ._format import _normalize_exploration_vector_body
 
 _SIDECAR_MIGRATED_KEYS = frozenset(
     {"id", "role", "relationship_classes", "rationale", "applicability"}

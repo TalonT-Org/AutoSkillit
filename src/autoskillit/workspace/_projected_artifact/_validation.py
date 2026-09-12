@@ -26,8 +26,8 @@ from autoskillit.workspace._projected_artifact._publication import (
     SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
     _skill_sequence,
 )
-from autoskillit.workspace.skill_format import parse_frontmatter_content
 from autoskillit.workspace.skills import SkillInfo
+from autoskillit.workspace.skills._format import parse_frontmatter_content
 
 
 def validate_sanitized_plugin_artifact(

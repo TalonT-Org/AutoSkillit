@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.workspace.skill_format import read_skill_frontmatter
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 from tests.skills.conftest import extract_step_section
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]

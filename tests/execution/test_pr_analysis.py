@@ -236,7 +236,7 @@ def test_partition_files_cli_prefix() -> None:
 
 
 def test_partition_files_workspace_prefix() -> None:
-    result = partition_files_by_domain(["src/autoskillit/workspace/skills.py"])
+    result = partition_files_by_domain(["src/autoskillit/workspace/skills/__init__.py"])
     assert "CLI/Workspace" in result
 
 

@@ -29,12 +29,12 @@ from autoskillit.workspace import (
     project_direct_install_authority,
 )
 from autoskillit.workspace._projection_cache import public_plugin_asset_digest
-from autoskillit.workspace.skill_resources import SkillResourceDef, load_skill_resource
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     SkillInfo,
     _skill_info_from_frontmatter,
 )
+from autoskillit.workspace.skills._resources import SkillResourceDef, load_skill_resource
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
@@ -192,7 +192,7 @@ def test_editing_resource_bytes_changes_the_projected_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Fresh catalog binding must not reuse a projection after resource changes."""
-    import autoskillit.workspace.skill_resources as resource_module
+    import autoskillit.workspace.skills._resources as resource_module
 
     resource_root = tmp_path / "resource-root"
     resource_path = resource_root / "skill_resources" / "digest-fixture.md"

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.workspace.skill_format import (
+from autoskillit.workspace.skills._format import (
     parse_frontmatter_content,
     validate_skill_frontmatter,
 )

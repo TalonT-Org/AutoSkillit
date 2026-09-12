@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from autoskillit.core import SkillExecutionRole
-from autoskillit.workspace.skill_format import (
+from autoskillit.workspace.skills._format import (
     SkillFrontmatterParseResult,
     parse_frontmatter_content,
     read_skill_frontmatter,

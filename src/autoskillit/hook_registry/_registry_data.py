@@ -591,20 +591,6 @@ def _build_hook_registry() -> list[HookDef]:
             mechanism="side-effect",
             enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
         ),
-        # Codex's Stop reconciliation is injected only for the managed
-        # "parent" route (see execution/backends/_codex_hooks.py's
-        # _managed_route_hook_defs), matching the existing join_stop_guard.py
-        # precedent — Stop is a managed-parent-only concept for Codex in this
-        # codebase, never part of the general/interactive Codex hook surface.
-        HookDef(
-            matcher="",
-            event_type="Stop",
-            scripts=["lifecycle/child_outcome_hook.py"],
-            session_scope="any",
-            codex_status="not-applicable",
-            mechanism="side-effect",
-            enforcement_strength={"claude_code": "soft", "codex": "not-applicable"},
-        ),
     ]
 
 

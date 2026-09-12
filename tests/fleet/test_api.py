@@ -10,6 +10,7 @@ from pathlib import Path
 import anyio
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.core import ProcessCleanupResult
 from autoskillit.fleet import (
     DispatchEffectName,
@@ -222,7 +223,7 @@ class TestExecuteDispatchCancelledErrorLockRelease:
             active_count_at_cancel.append(worker_capacity.active_count)
             raise asyncio.CancelledError
 
-        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _raise_cancelled)
+        monkeypatch.setattr(fleet_api, "_run_dispatch", _raise_cancelled)
 
         with pytest.raises(asyncio.CancelledError):
             from autoskillit.fleet import execute_dispatch
@@ -262,7 +263,7 @@ class TestExecuteDispatchCancelledErrorLockRelease:
             captured_kwargs.append(kwargs)
             raise asyncio.CancelledError
 
-        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _capture)
+        monkeypatch.setattr(fleet_api, "_run_dispatch", _capture)
 
         with pytest.raises(asyncio.CancelledError):
             from autoskillit.fleet import execute_dispatch
@@ -297,7 +298,7 @@ class TestExecuteDispatchCancelledErrorLockRelease:
             captured_kwargs.append(kwargs)
             raise asyncio.CancelledError
 
-        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _capture)
+        monkeypatch.setattr(fleet_api, "_run_dispatch", _capture)
 
         with pytest.raises(asyncio.CancelledError):
             await execute_dispatch(
@@ -335,7 +336,7 @@ class TestExecuteDispatchCancelledErrorLockRelease:
             captured_kwargs.append(kwargs)
             raise asyncio.CancelledError
 
-        monkeypatch.setattr("autoskillit.fleet._api._run_dispatch", _capture)
+        monkeypatch.setattr(fleet_api, "_run_dispatch", _capture)
 
         with pytest.raises(asyncio.CancelledError):
             from autoskillit.fleet import execute_dispatch

@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from tests.fleet._helpers import (
     _make_recipe_info,
     _no_sleep_quota_checker,
@@ -71,7 +72,8 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
     _setup_research_campaign(tool_ctx)
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l3_result_block",
+        fleet_api,
+        "parse_l3_result_block",
         lambda **_: L3ParseResult(
             outcome="completed_clean",
             payload={
@@ -117,7 +119,8 @@ async def test_design_captured_values_propagate_to_implement_dispatch(tool_ctx, 
         return "prompt"
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l3_result_block",
+        fleet_api,
+        "parse_l3_result_block",
         lambda **kwargs: L3ParseResult(
             outcome="completed_clean",
             payload={"success": True},
@@ -185,7 +188,8 @@ async def test_partial_capture_propagates_only_captured_keys(tool_ctx, monkeypat
     _setup_research_campaign(tool_ctx)
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l3_result_block",
+        fleet_api,
+        "parse_l3_result_block",
         lambda **kwargs: L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "worktree_path": "/tmp/wt/proj"},
@@ -294,7 +298,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_design_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_design_result)
 
     captured_during_design: dict = {}
 
@@ -358,7 +362,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_implement_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_implement_result)
 
     captured_during_implement: dict = {}
 
@@ -435,7 +439,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_review_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_review_result)
 
     captured_during_review: dict = {}
 
@@ -512,7 +516,7 @@ async def test_full_four_step_chain_verifies_complete_data_lineage(tool_ctx, mon
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_archive_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_archive_result)
 
     captured_during_archive: dict = {}
 
@@ -605,7 +609,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_design_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_design_result)
 
     raw = await execute_dispatch(
         tool_ctx=tool_ctx,
@@ -660,7 +664,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_implement_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_implement_result)
 
     captured_implement_ingredients: dict = {}
 
@@ -735,7 +739,7 @@ async def test_cross_phase_paths_are_coherent_when_implement_creates_new_worktre
             source="stdout",
         )
 
-    monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _make_review_result)
+    monkeypatch.setattr(fleet_api, "parse_l3_result_block", _make_review_result)
 
     captured_review_ingredients: dict = {}
 

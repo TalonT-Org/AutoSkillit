@@ -6,7 +6,9 @@ import json
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.fleet import DispatchEffectProvenance
+from autoskillit.fleet.campaign_state import state as campaign_state
 from tests.fleet._helpers import (
     _make_completed_clean,
     _make_completed_dirty,
@@ -49,7 +51,8 @@ class TestDispatchStatusEnvelopeField:
         """Envelope from _run_dispatch includes dispatch_status matching state-file status."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -62,7 +65,8 @@ class TestDispatchStatusEnvelopeField:
         """Envelope includes dispatch_status='failure' when outcome is completed_dirty."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
@@ -75,7 +79,8 @@ class TestDispatchStatusEnvelopeField:
         """Envelope includes dispatch_status='failure' for no_sentinel without session signal."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -104,9 +109,7 @@ class TestDispatchStatusEnvelopeField:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
 
         sidecar_file = sidecar_path(fixed_dispatch_id, tool_ctx.project_dir)
         sidecar_file.parent.mkdir(parents=True, exist_ok=True)
@@ -131,7 +134,8 @@ class TestDispatchStatusEnvelopeField:
         tool_ctx.executor = _SpawningExecutor(default_result=resumable_result)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 

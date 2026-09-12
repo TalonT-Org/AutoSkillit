@@ -1120,19 +1120,24 @@ async def test_fleet_auto_gate_boot_reaps_orphan(tmp_path: Path) -> None:
         ctx.github_client = None
         ctx.config = None
 
+        import autoskillit.fleet._dispatch_reaper as dispatch_reaper
+        from autoskillit.server.lifecycle import _lifespan as lifespan
+
         with (
             patch("autoskillit.fleet._dispatch_reaper.psutil.pid_exists", return_value=False),
-            patch("autoskillit.fleet._dispatch_reaper.read_boot_id", return_value=None),
-            patch("autoskillit.fleet._dispatch_reaper.kill_process_tree"),
-            patch(
-                "autoskillit.server.lifecycle._lifespan.resolve_kitchen_id",
+            patch.object(dispatch_reaper, "read_boot_id", return_value=None),
+            patch.object(dispatch_reaper, "kill_process_tree"),
+            patch.object(
+                lifespan,
+                "resolve_kitchen_id",
                 return_value="kitchen-test",
             ),
-            patch(
-                "autoskillit.server.lifecycle._lifespan.discover_campaign_state_files",
+            patch.object(
+                lifespan,
+                "discover_campaign_state_files",
                 return_value=[sp],
             ),
-            patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"),
+            patch.object(lifespan, "register_active_kitchen"),
         ):
             await _fleet_auto_gate_boot(ctx)
 

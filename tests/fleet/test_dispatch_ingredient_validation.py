@@ -183,6 +183,7 @@ class TestConfigAuthoritativeIngredientInjection:
         """base_branch with authority='config' is injected from config even when not supplied."""
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -206,8 +207,9 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={"base_branch": "develop"},
         ):
             await execute_dispatch(
@@ -229,6 +231,7 @@ class TestConfigAuthoritativeIngredientInjection:
         """base_branch with authority='config' overrides LLM-supplied value."""
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -252,8 +255,9 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={"base_branch": "develop"},
         ):
             await execute_dispatch(
@@ -275,6 +279,7 @@ class TestConfigAuthoritativeIngredientInjection:
         """Config injection only applies to ingredients the recipe declares."""
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -296,8 +301,9 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={"base_branch": "develop"},
         ):
             await execute_dispatch(
@@ -321,6 +327,7 @@ class TestConfigAuthoritativeIngredientInjection:
         resolved defaults."""
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -350,8 +357,9 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={
                 "base_branch": "develop",
                 "source_dir": "/repo/src",
@@ -382,6 +390,7 @@ class TestConfigAuthoritativeIngredientInjection:
         import json
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -399,8 +408,9 @@ class TestConfigAuthoritativeIngredientInjection:
         )
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={"base_branch": "develop"},
         ):
             await execute_dispatch(
@@ -435,6 +445,7 @@ class TestConfigAuthoritativeIngredientInjection:
         (caller-sovereign path — no warning)."""
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -461,8 +472,9 @@ class TestConfigAuthoritativeIngredientInjection:
         from autoskillit.fleet._api import execute_dispatch
 
         with (
-            patch(
-                "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+            patch.object(
+                ingredient_defaults,
+                "resolve_ingredient_defaults",
                 return_value={},  # key absent from all registries
             ),
             structlog.testing.capture_logs() as cap_logs,
@@ -491,6 +503,7 @@ class TestConfigAuthoritativeIngredientInjection:
         caller's value — source_dir is caller-sovereign project identity."""
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.recipe.schema import Recipe, RecipeIngredient, RecipeKind
 
         _setup_config_authority_recipe(
@@ -514,8 +527,9 @@ class TestConfigAuthoritativeIngredientInjection:
 
         from autoskillit.fleet._api import execute_dispatch
 
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={
                 "source_dir": "https://github.com/TalonT-Org/AutoSkillit",
                 "base_branch": "main",
@@ -544,13 +558,15 @@ class TestConfigAuthoritativeIngredientInjection:
         from types import SimpleNamespace
         from unittest.mock import patch
 
+        import autoskillit.config.ingredient_defaults as ingredient_defaults
         from autoskillit.config import apply_config_authoritative_overrides
 
         recipe_ingredients = {
             "source_dir": SimpleNamespace(authority="config"),
         }
-        with patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        with patch.object(
+            ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={"source_dir": "https://github.com/TalonT-Org/AutoSkillit"},
         ):
             result = apply_config_authoritative_overrides(

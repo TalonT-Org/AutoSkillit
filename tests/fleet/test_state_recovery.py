@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.fleet._label_cleanup as label_cleanup
 from autoskillit.core import NamedResume, NoResume
 from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 from autoskillit.fleet.campaign_state.state_records import ResumeDecision
@@ -306,7 +307,8 @@ class TestResumableToFailureEscalation:
         )
 
         monkeypatch.setattr(
-            "autoskillit.fleet._label_cleanup.is_dispatch_session_alive",
+            label_cleanup,
+            "is_dispatch_session_alive",
             lambda record: False,
         )
 

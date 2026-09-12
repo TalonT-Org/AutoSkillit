@@ -6,7 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.core.types import CliSubtype, FleetErrorCode
+from autoskillit.fleet.campaign_state import state as campaign_state
 from autoskillit.recipe.schema import RecipeIngredient
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
@@ -72,7 +74,8 @@ class TestTimeoutPath:
             raise AssertionError("parse_l3_result_block called on timeout path")
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             _should_not_be_called,
         )
 
@@ -126,7 +129,7 @@ class TestTimeoutPath:
             parse_called.append(True)
             return _make_no_sentinel()
 
-        monkeypatch.setattr("autoskillit.fleet._api.parse_l3_result_block", _recording_parse)
+        monkeypatch.setattr(fleet_api, "parse_l3_result_block", _recording_parse)
 
         await _run(tool_ctx)
         assert parse_called, "parse_l3_result_block was not called for idle_stall"
@@ -190,7 +193,8 @@ class TestTimeoutPath:
             parse_calls.append(kwargs)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             _recording_parse,
         )
 
@@ -212,7 +216,8 @@ class TestNoSentinelPath:
         """no_sentinel outcome → DispatchRecord.reason = 'l3_no_result_block'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -237,7 +242,8 @@ class TestNoSentinelPath:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -253,7 +259,8 @@ class TestCompletedDirtyPath:
         """completed_dirty outcome → DispatchRecord.reason = 'l3_parse_failed'."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
@@ -269,7 +276,8 @@ class TestCompletedCleanPath:
         """completed_clean with success=True → DispatchRecord.reason = ''."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -283,7 +291,8 @@ class TestCompletedCleanPath:
         """completed_clean success=False: payload.reason → DispatchRecord.reason."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=False, reason="my-failure-reason"),
         )
 
@@ -315,12 +324,11 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -354,12 +362,11 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -391,12 +398,11 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -437,19 +443,18 @@ class TestSidecarBasedResultSynthesis:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
         def _should_not_be_called(spec, payload):
             raise AssertionError("_extract_captures called on sidecar-synthesized result")
 
-        monkeypatch.setattr("autoskillit.fleet._api._extract_captures", _should_not_be_called)
+        monkeypatch.setattr(fleet_api, "_extract_captures", _should_not_be_called)
 
         issue_url = "https://github.com/org/repo/issues/1"
         entry = IssueSidecarEntry(
@@ -490,7 +495,8 @@ class TestTrackerBridgeIntegration:
             raise AssertionError("pre-lineage rejection acquired tracker authority")
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            fleet_api,
+            "retain_dispatch_tracker_authority",
             unexpected_acquire,
         )
 
@@ -522,9 +528,7 @@ class TestTrackerBridgeIntegration:
             def fresh(cls):
                 return fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", FixedDispatchIdentity)
         target = TrackerAuthorityTarget.for_project(
             tool_ctx.project_dir, dispatch_id, expected=False
         )
@@ -546,7 +550,8 @@ class TestTrackerBridgeIntegration:
             return dispatch_key, lease
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            fleet_api,
+            "retain_dispatch_tracker_authority",
             recording_retain,
         )
         try:
@@ -565,7 +570,8 @@ class TestTrackerBridgeIntegration:
     ):
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -584,11 +590,13 @@ class TestTrackerBridgeIntegration:
         _setup_dispatch(tool_ctx, monkeypatch)
         retain_spy = MagicMock(wraps=retain_dispatch_tracker_authority)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            fleet_api,
+            "retain_dispatch_tracker_authority",
             retain_spy,
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -600,7 +608,8 @@ class TestTrackerBridgeIntegration:
             raise OSError("progress unavailable")
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.load_dispatch_progress",
+            fleet_api,
+            "load_dispatch_progress",
             fail_progress_load,
         )
 
@@ -622,7 +631,8 @@ class TestTrackerBridgeIntegration:
         _setup_dispatch(tool_ctx, monkeypatch)
         retain_spy = MagicMock(wraps=retain_dispatch_tracker_authority)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.retain_dispatch_tracker_authority",
+            fleet_api,
+            "retain_dispatch_tracker_authority",
             retain_spy,
         )
 
@@ -651,7 +661,8 @@ class TestTrackerBridgeIntegration:
 
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.load_dispatch_progress",
+            fleet_api,
+            "load_dispatch_progress",
             load_dispatch_progress,
         )
 
@@ -663,9 +674,7 @@ class TestTrackerBridgeIntegration:
             def fresh(cls) -> DispatchIdentity:
                 return _fixed_identity
 
-        monkeypatch.setattr(
-            "autoskillit.fleet.campaign_state.state.DispatchIdentity", _FixedDispatchIdentity
-        )
+        monkeypatch.setattr(campaign_state, "DispatchIdentity", _FixedDispatchIdentity)
 
         tool_ctx.executor = InMemoryHeadlessExecutor(
             default_result=dataclasses.replace(
@@ -679,7 +688,8 @@ class TestTrackerBridgeIntegration:
         )
 
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 

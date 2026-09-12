@@ -6,6 +6,7 @@ import dataclasses
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from tests.fakes import _DEFAULT_SKILL_RESULT, InMemoryHeadlessExecutor
 from tests.fleet._helpers import (
     _make_completed_clean,
@@ -29,7 +30,8 @@ class TestStderrEnvelopeForwarding:
             default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, stderr="some error output")
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -44,7 +46,8 @@ class TestStderrEnvelopeForwarding:
             default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, stderr="parse failure trace")
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
@@ -61,7 +64,8 @@ class TestStderrEnvelopeForwarding:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -86,7 +90,8 @@ class TestStderrEnvelopeForwarding:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -107,7 +112,8 @@ class TestStderrEnvelopeForwarding:
             default_result=dataclasses.replace(_DEFAULT_SKILL_RESULT, stderr=long_stderr)
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -154,7 +160,8 @@ class TestStderrEnvelopeForwarding:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=False),
         )
 
@@ -175,7 +182,8 @@ class TestStderrEnvelopeForwarding:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 
@@ -188,7 +196,8 @@ class TestStderrEnvelopeForwarding:
         """When skill_result.stderr is empty, envelope stderr field is empty string."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 

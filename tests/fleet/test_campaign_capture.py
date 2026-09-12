@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.core.types import CaptureEntrySpec, resolve_payload_field
 
 pytestmark = [pytest.mark.layer("fleet"), pytest.mark.small, pytest.mark.feature("fleet")]
@@ -451,7 +452,8 @@ async def test_dispatch_captures_extracted_and_written_to_state(tool_ctx, monkey
     from autoskillit.fleet.result_parser import L3ParseResult
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l3_result_block",
+        fleet_api,
+        "parse_l3_result_block",
         lambda **kwargs: L3ParseResult(
             outcome="completed_clean",
             payload=payload,
@@ -524,7 +526,8 @@ async def test_dispatch_ingredients_interpolated_from_captured_values(tool_ctx, 
         return "prompt"
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l3_result_block",
+        fleet_api,
+        "parse_l3_result_block",
         lambda **kwargs: L3ParseResult(
             outcome="completed_clean",
             payload={"success": True, "reason": ""},

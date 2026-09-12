@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from tests.fakes import InMemoryHeadlessExecutor
 from tests.fleet._helpers import _setup_dispatch
 
@@ -120,7 +121,8 @@ class TestLifespanStartedInEnvelopes:
             )
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_clean(success=True),
         )
 
@@ -136,7 +138,8 @@ class TestLifespanStartedInEnvelopes:
         """no_sentinel envelope includes 'lifespan_started' field."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_no_sentinel(),
         )
 
@@ -152,7 +155,8 @@ class TestLifespanStartedInEnvelopes:
         """completed_dirty envelope includes 'lifespan_started' field."""
         _setup_dispatch(tool_ctx, monkeypatch)
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_: _make_completed_dirty(),
         )
 

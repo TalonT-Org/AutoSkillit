@@ -99,6 +99,8 @@ POLICY_SURFACES: tuple[PolicySurface, ...] = (
     PolicySurface(
         "tests/arch/test_recipe_diagram_freshness.py", "CURRENT_XFAIL_CAP", "int_scalar"
     ),
+    PolicySurface("tests/arch/_complexity_limits.py", "MAX_COMPLEXITY", "int_scalar"),
+    PolicySurface("tests/arch/_complexity_limits.py", "COMPLEXITY_EXEMPTIONS", "exemption_map"),
 )
 
 POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (

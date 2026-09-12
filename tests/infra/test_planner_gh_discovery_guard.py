@@ -15,6 +15,8 @@ import unittest.mock
 
 import pytest
 
+from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _BASH_TOOL = "Bash"
@@ -319,6 +321,29 @@ class TestNestedShellAllow:
         """Malformed inner shell text must remain fail-open (no deny)."""
         out = _run_guard("bash -c \"echo 'unclosed")
         assert out.strip() == "", "Malformed inner payload must fail open"
+
+
+class TestPlannerGhDiscoveryEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape."""
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_executing_shape_denies_gh_issue_list(self, shape) -> None:
+        out = _run_guard(shape.build("gh issue list"))
+        assert _is_denied(out), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
+    def test_inert_shape_allows_gh_issue_list(self, shape) -> None:
+        out = _run_guard(shape.build("gh issue list"))
+        assert out.strip() == "", f"shape {shape.id!r} must allow"
+
+    def test_python_argv_list_gh_issue_list_is_denied(self) -> None:
+        cmd = "python3 -c \"import subprocess; subprocess.run(['gh','issue','list'])\""
+        out = _run_guard(cmd)
+        assert _is_denied(out)
 
 
 class TestNestedShellDeny:

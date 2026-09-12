@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.hooks._runtime._command_classification import _PIP_GLOBAL_FLAG_SPEC, _FlagArity
+from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
@@ -396,6 +397,45 @@ def test_grammar_allowed_run_guard(cmd: str) -> None:
 )
 def test_grammar_allowed_bash_guard(cmd: str) -> None:
     assert not _is_denied(_run_bash_guard(cmd)), f"Bash tool should allow: {cmd!r}"
+
+
+class TestUnsafeInstallGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape."""
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_executing_shape_denies_pip_install_editable(self, shape) -> None:
+        assert _is_denied(_run_guard(shape.build("pip install -e ."))), (
+            f"shape {shape.id!r} must deny"
+        )
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
+    def test_inert_shape_allows_pip_install_editable(self, shape) -> None:
+        assert not _is_denied(_run_guard(shape.build("pip install -e ."))), (
+            f"shape {shape.id!r} must allow"
+        )
+
+
+# --- Stdin-literal (heredoc) consumer cases (rectify #4941 Part B) ---
+
+
+class TestStdinLiteralConsumerDeny:
+    """A python3 -/bash heredoc body running the real install call must deny."""
+
+    def test_python_dash_heredoc_subprocess_run_denied(self) -> None:
+        cmd = (
+            "python3 - <<'EOF'\n"
+            "import subprocess; subprocess.run(['pip', 'install', '-e', '.'])\n"
+            "EOF"
+        )
+        assert _is_denied(_run_guard(cmd))
+
+    def test_bash_heredoc_pip_install_denied(self) -> None:
+        cmd = "bash <<'EOF'\npip install -e .\nEOF"
+        assert _is_denied(_run_guard(cmd))
 
 
 # --- Nested shell payload cases ---

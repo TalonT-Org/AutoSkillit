@@ -364,6 +364,41 @@ def test_malformed_hook_json_fails_open(monkeypatch):
     assert output.getvalue() == ""
 
 
+def test_inert_heredoc_body_mentioning_gh_pr_create_is_ignored(monkeypatch, tmp_path):
+    """Rectify #4941 Part B: an inert (cat-consumed) heredoc body's own prose
+    mentioning `gh pr create --body-file evil.md` must not be scanned as a
+    real occurrence -- previously a false positive, since the old newline
+    rewrite converted the body's own bare newlines into command boundaries
+    and scanned its prose as if it were a real command."""
+    monkeypatch.chdir(tmp_path)
+    valid = _ordinary_pair(tmp_path)
+    command = (
+        "cat > notes.md <<'EOF'\ngh pr create --body-file evil.md\nEOF\n"
+        f"gh pr create --body-file {valid}"
+    )
+    assert _run_hook(_event(command), monkeypatch) == ""
+
+
+def test_variable_resolved_within_one_payload_allows(monkeypatch, tmp_path):
+    valid = _ordinary_pair(tmp_path)
+    command = f'BODY={valid}; gh pr create --body-file "$BODY"'
+    assert _run_hook(_event(command), monkeypatch) == ""
+
+
+def test_conflicting_outer_and_nested_body_assignments_use_own_payload_scope(
+    monkeypatch, tmp_path
+):
+    """Rectify #4941 Part B: a $VAR lookup for a nested bash -c payload's own
+    `gh pr create` must resolve from that SAME payload's own assignment, not
+    an outer assignment sharing the same variable name."""
+    monkeypatch.chdir(tmp_path)
+    valid = _ordinary_pair(tmp_path)
+    command = (
+        f"BODY=/does/not/exist.md\nbash -c 'BODY={valid}; gh pr create --body-file \"$BODY\"'"
+    )
+    assert _run_hook(_event(command), monkeypatch) == ""
+
+
 def test_hook_registration_shape():
     matching = [
         hook for hook in HOOK_REGISTRY if "guards/compose_pr_body_guard.py" in hook.scripts

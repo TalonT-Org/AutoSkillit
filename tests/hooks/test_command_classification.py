@@ -18,14 +18,15 @@ from autoskillit.hooks._runtime._command_classification import (
     StdinConsumer,
     _FlagArity,
     all_evaluated_segments,
+    command_has_blocked_protected_path_read,
     command_verb,
     command_verb_and_args,
     evaluated_payloads,
     extract_git_subcommand_and_flags,
     extract_interpreter_write_paths,
     extract_redirect_targets,
-    has_interpreter_wrapped_command,
     has_interpreter_write,
+    interpreter_invokes,
     is_allowed_protected_path_metadata_command,
     is_gh_command,
     stdin_consumer,
@@ -58,35 +59,60 @@ from tests.hooks._flag_form_matrix import (
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 
-def test_shell_control_words_includes_closing_keywords():
-    """_SHELL_CONTROL_WORDS must include the closing keywords added by this task.
+class TestInterpreterInvokes:
+    """interpreter_invokes: argv-aware successor to has_interpreter_wrapped_command.
 
-    Pinning the shared primitive directly so boundary expansion is not only
-    covered indirectly through compose_pr_body_guard integration tests.
+    Preserves the distinction between os.system/shell=True (which reach an
+    argv-splitting shell, tokenized and matched) and a plain string passed to
+    subprocess.run without shell=True (never split into words by a shell).
     """
-    from autoskillit.hooks._runtime._command_classification import (
-        _SHELL_CONTROL_WORDS,  # noqa: PLC0415
-    )
 
-    for word in ("esac", "fi", "done"):
-        assert word in _SHELL_CONTROL_WORDS, f"_SHELL_CONTROL_WORDS is missing '{word}'"
+    def test_detects_literal_argv_subprocess_run(self):
+        cmd = (
+            "python3 -c \"import subprocess; subprocess.run(['gh','pr','create','--title','x'])\""
+        )
+        assert interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
+    def test_detects_os_system_string(self):
+        cmd = "python3 -c \"import os; os.system('gh pr create --title x')\""
+        assert interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
-def test_detects_python3_subprocess_run():
-    cmd = "python3 -c \"import subprocess; subprocess.run('gh pr create', shell=True)\""
-    assert has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"])
+    def test_detects_subprocess_run_shell_true_string(self):
+        cmd = (
+            'python3 -c "import subprocess; '
+            "subprocess.run('gh pr create --title x', shell=True)\""
+        )
+        assert interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
+    def test_detects_python_dash_heredoc_form(self):
+        cmd = (
+            "python3 - <<'EOF'\n"
+            "import subprocess; subprocess.run(['gh','pr','create','--title','x'])\n"
+            "EOF"
+        )
+        assert interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
-def test_no_false_positive_simple_command():
-    assert not has_interpreter_wrapped_command(
-        "gh pr create --fill",
-        target_commands=["gh pr create"],
-    )
+    def test_no_match_plain_string_without_shell_true(self):
+        cmd = "python3 -c \"import subprocess; subprocess.run('gh pr create --title x')\""
+        assert not interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
+    def test_no_match_script_heredoc_data(self):
+        cmd = (
+            "python3 script.py <<'EOF'\n"
+            "import subprocess; subprocess.run(['gh','pr','create','--title','x'])\n"
+            "EOF"
+        )
+        assert not interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
-def test_detects_os_system_wrapping():
-    cmd = "python3 -c \"import os; os.system('gh issue list')\""
-    assert has_interpreter_wrapped_command(cmd, target_commands=["gh issue list"])
+    def test_no_match_simple_direct_command(self):
+        assert not interpreter_invokes("gh pr create --fill", target=("gh", "pr", "create"))
+
+    def test_no_match_when_no_interpreter(self):
+        assert not interpreter_invokes("git push origin main", target=("git", "push"))
+
+    def test_detects_os_popen(self):
+        cmd = "python3 -c \"import os; os.popen('gh pr create')\""
+        assert interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
 
 def test_detects_python_write_text():
@@ -107,23 +133,6 @@ def test_detects_python_heredoc_write():
 def test_no_false_positive_read_only_python():
     cmd = "python3 -c \"print(open('/tmp/x').read())\""
     assert not has_interpreter_write(cmd)
-
-
-def test_no_match_when_no_interpreter():
-    assert not has_interpreter_wrapped_command(
-        "git push origin main",
-        target_commands=["git push"],
-    )
-
-
-def test_detects_python_os_popen():
-    cmd = "python3 -c \"import os; os.popen('gh pr create')\""
-    assert has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"])
-
-
-def test_interpreter_wrapped_command_case_insensitive():
-    cmd = "python3 -c \"import os; os.system('GH PR CREATE')\""
-    assert has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"])
 
 
 class TestTokenizeCommandSegments:
@@ -271,7 +280,6 @@ class TestTokenizeCommandSegments:
         )
 
         assert [segment.tokens for segment in command_segments] == expected
-        assert command_classification._tokenize_protected_read_segments(command) == expected
 
     def test_quoted_operator_remains_argument(self):
         result = tokenize_command_segments("echo 'pip && install -e .'")
@@ -1366,6 +1374,38 @@ class TestIsAllowedProtectedPathMetadataCommand:
             )
             is False
         )
+
+
+class TestCommandHasBlockedProtectedPathRead:
+    """Rectify #4941 Part B: reads through live_command_text/all_evaluated_segments.
+
+    An inert heredoc/herestring body's mention of a protected path (prose,
+    a fenced example) must not be blocked; a live SHELL/PYTHON/TEXT stdin
+    body's genuine read of one must still be, even though a PYTHON/TEXT
+    body's content is never its own argv segment.
+    """
+
+    _PATTERNS = [re.compile(r"src/autoskillit/recipes/foo\.yaml")]
+
+    def test_inert_heredoc_body_mention_is_allowed(self) -> None:
+        cmd = "cat > out.md <<'EOF'\nsee src/autoskillit/recipes/foo.yaml\nEOF"
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is False
+
+    def test_bash_heredoc_stdin_read_is_blocked(self) -> None:
+        cmd = "bash <<'EOF'\ncat src/autoskillit/recipes/foo.yaml\nEOF"
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
+
+    def test_direct_cat_read_is_blocked(self) -> None:
+        cmd = "cat src/autoskillit/recipes/foo.yaml"
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
+
+    def test_python_stdin_open_read_is_blocked(self) -> None:
+        cmd = "python3 - <<'EOF'\nopen('src/autoskillit/recipes/foo.yaml').read()\nEOF"
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
+
+    def test_text_stdin_consumer_live_read_is_blocked(self) -> None:
+        cmd = 'perl <<\'EOF\'\nopen(FH, "<", "src/autoskillit/recipes/foo.yaml")\nEOF'
+        assert command_has_blocked_protected_path_read(cmd, self._PATTERNS) is True
 
 
 class TestAnalyzeGitHubMutations:

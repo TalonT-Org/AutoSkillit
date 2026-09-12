@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+
 from .conftest import make_hook_event
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
@@ -441,6 +443,75 @@ class TestWriteGuardBashBypass:
         assert result == ""
 
 
+_ECHO_REDIRECT_INNER = "echo x > /outside/redirect-target.txt"
+
+
+class TestWriteGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape.
+
+    (rectify #4941 Part B). `rm -rf src/` is a command-invocation policy:
+    every `executes` shape truly invokes it as argv, so the full matrix
+    applies without exclusion. `echo x > <outside-prefix path>` is a
+    shell-grammar policy: a Python argv-list shape's `subprocess.run([...])`
+    call passes `>` as a literal string argument to `echo` -- no shell ever
+    sees it as a redirect operator -- so those shapes are excluded from this
+    test's deny expectation rather than inheriting a blanket one.
+    """
+
+    PREFIX = "/clone/.autoskillit/temp/planner/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+        monkeypatch.setenv("AUTOSKILLIT_CWD", "/clone")
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_heredoc_family_executing_shape_denies_rm_rf(self, shape) -> None:
+        result = _run_hook(_build_bash_event(shape.build("rm -rf src/")))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny", (
+            f"shape {shape.id!r} must deny rm -rf src/"
+        )
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
+    def test_heredoc_family_inert_shape_allows_rm_rf(self, shape) -> None:
+        result = _run_hook(_build_bash_event(shape.build("rm -rf src/")))
+        assert result == "", f"shape {shape.id!r} must allow inert rm -rf src/"
+
+    @pytest.mark.parametrize(
+        "shape",
+        [s for s in EVALUATION_SHAPE_MATRIX if s.executes and s.consumer != "python"],
+        ids=lambda s: s.id,
+    )
+    def test_heredoc_family_shell_shape_denies_redirect(self, shape) -> None:
+        result = _run_hook(_build_bash_event(shape.build(_ECHO_REDIRECT_INNER)))
+        parsed = json.loads(result)
+        assert parsed["hookSpecificOutput"]["permissionDecision"] == "deny", (
+            f"shape {shape.id!r} must deny the outside-prefix redirect"
+        )
+
+
+class TestWriteGuardStdinLiteralConsumerAllow:
+    """A cat-redirected heredoc body is inert prose, not an interpreter write."""
+
+    PREFIX = "/clone/.autoskillit/temp/planner/"
+
+    @pytest.fixture(autouse=True)
+    def _enable_headless(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("AUTOSKILLIT_HEADLESS", "1")
+        monkeypatch.setenv("AUTOSKILLIT_ALLOWED_WRITE_PREFIX", self.PREFIX)
+
+    def test_heredoc_body_open_call_does_not_fabricate_write_target_allowed(self) -> None:
+        cmd = f'cat > {self.PREFIX}f.md <<\'EOF\'\nopen("secret.txt","w")\nEOF'
+        result = _run_hook(_build_bash_event(cmd))
+        assert result == ""
+
+
 class TestExtractBashWriteTargets:
     """Unit tests for _extract_bash_write_targets -- the two-phase detect+extract logic."""
 
@@ -541,42 +612,39 @@ class TestExtractBashWriteTargets:
         assert result is None or result == [], f"Should not detect writes in: {command}"
 
     @pytest.mark.parametrize(
-        "command,expected_targets,excluded_targets",
+        "command,expected_targets",
         [
             (
                 "x=$(cmd 2>/tmp/err.log) && echo done > /tmp/out.txt",
-                ["/tmp/out.txt"],
-                ["/tmp/err.log"],
+                ["/tmp/err.log", "/tmp/out.txt"],
             ),
             (
                 "x=$(grep errors 2>/tmp/debug.log)",
-                [],
                 ["/tmp/debug.log"],
             ),
         ],
         ids=["subshell_with_real_redirect", "subshell_only_real_path"],
     )
-    def test_subshell_redirect_excludes_nested_real_paths(
-        self, command, expected_targets, excluded_targets
-    ):
+    def test_subshell_internal_redirect_is_now_detected(self, command, expected_targets):
+        """Rectify #4941 Part B: a command-substitution body really does write
+        when the substitution executes, so its own redirect is no longer
+        excluded -- the old exclusion was an artifact of the flat plain-shlex
+        pass's trailing-')' heuristic (which only fires when the redirect
+        operator and its target are fused into one un-marked token), not a
+        deliberate safety boundary. `all_evaluated_segments` recursively
+        tokenizes the substitution body with the same redirect-marking
+        tokenizer used everywhere else, so its `2>/tmp/...` is seen as an
+        ordinary redirect like any other."""
         from autoskillit.hooks.guards.write_guard import _extract_bash_write_targets
 
         result = _extract_bash_write_targets(command)
-        if not expected_targets:
-            assert result is None or result == [], f"Should not detect writes in: {command}"
-        else:
-            assert result is not None
-            for expected in expected_targets:
-                assert expected in result, f"Expected {expected} in result {result}"
-        if result:
-            for excluded in excluded_targets:
-                assert excluded not in result, (
-                    f"Subshell-internal redirect {excluded!r} must not appear in {result}"
-                )
-            for path in result:
-                assert not path.endswith(")"), f"Path should not end with ')': {path}"
-                assert not path.endswith("`"), f"Path should not end with backtick: {path}"
-                assert not path.endswith("}"), f"Path should not end with '}}': {path}"
+        assert result is not None
+        for expected in expected_targets:
+            assert expected in result, f"Expected {expected} in result {result}"
+        for path in result:
+            assert not path.endswith(")"), f"Path should not end with ')': {path}"
+            assert not path.endswith("`"), f"Path should not end with backtick: {path}"
+            assert not path.endswith("}"), f"Path should not end with '}}': {path}"
 
     @pytest.mark.parametrize(
         "cmd",

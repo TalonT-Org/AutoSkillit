@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 # The exact busy-loop leak from issue #4678 Incident B: backgrounded infinite
@@ -148,6 +150,62 @@ _KILL_PID_ALLOWED: list[tuple[str, str]] = [
 )
 def test_allows_kill_by_pid(cmd: str, shape: str) -> None:
     assert not _is_denied(_run(cmd, shape=shape)), f"{shape} should allow: {cmd!r}"
+
+
+_STDIN_LITERAL_LOOP_DENIED: list[tuple[str, str]] = [
+    ("bash <<'EOF'\nwhile :; do :; done &\nEOF", "bash-heredoc-backgrounded-loop"),
+    ("cat <<'EOF' | bash\nwhile :; do :; done &\nEOF", "cat-heredoc-pipe-bash-loop"),
+]
+
+
+@pytest.mark.parametrize("shape", ["run_cmd", "bash"])
+@pytest.mark.parametrize(
+    "cmd",
+    [c[0] for c in _STDIN_LITERAL_LOOP_DENIED],
+    ids=[c[1] for c in _STDIN_LITERAL_LOOP_DENIED],
+)
+def test_denies_heredoc_delivered_backgrounded_loop(cmd: str, shape: str) -> None:
+    """Rectify #4941 Part B: a SHELL-consumed heredoc body running the exact
+    loop shape must deny -- previously a false negative, since the private
+    strip_heredoc_bodies pre-pass erased every heredoc body before scanning."""
+    assert _is_denied(_run(cmd, shape=shape)), f"{shape} should deny: {cmd!r}"
+
+
+def test_allows_inert_heredoc_body_mentioning_loop_shape() -> None:
+    """An INERT (cat, no pipe) heredoc body is prose, not an executed loop."""
+    cmd = "cat > notes.md <<'EOF'\nwhile :; do :; done &\nEOF"
+    assert not _is_denied(_run(cmd, shape="run_cmd"))
+
+
+_MATRIX_APPLICABLE_SHAPES = [
+    s for s in EVALUATION_SHAPE_MATRIX if s.executes and s.consumer != "python"
+]
+_MATRIX_INERT_SHAPES = [s for s in EVALUATION_SHAPE_MATRIX if not s.executes]
+
+
+class TestResourceExhaustionGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing, non-Python shape.
+
+    A Python argv-list shape's `subprocess.run([...])` call never evaluates
+    `while`/`done`/`&`/`kill %N` as shell syntax -- they are chopped into
+    separate literal argv strings, so those shapes are excluded rather than
+    inheriting a blanket deny expectation (rectify #4941 Part B, plan 1.1).
+    """
+
+    @pytest.mark.parametrize("shape", _MATRIX_APPLICABLE_SHAPES, ids=lambda s: s.id)
+    def test_shell_shape_denies_backgrounded_loop(self, shape) -> None:
+        cmd = shape.build("(while :; do :; done) &")
+        assert _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize("shape", _MATRIX_APPLICABLE_SHAPES, ids=lambda s: s.id)
+    def test_shell_shape_denies_kill_jobspec(self, shape) -> None:
+        cmd = shape.build("kill %1")
+        assert _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize("shape", _MATRIX_INERT_SHAPES, ids=lambda s: s.id)
+    def test_inert_shape_allows_backgrounded_loop(self, shape) -> None:
+        cmd = shape.build("(while :; do :; done) &")
+        assert not _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must allow"
 
 
 class TestResourceExhaustionGuardEdgeCases:

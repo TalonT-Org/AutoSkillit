@@ -16,6 +16,8 @@ import unittest.mock
 
 import pytest
 
+from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
@@ -472,6 +474,35 @@ class TestNestedShellStructuredDetection:
             tmpdir=tmp_path,
         )
         assert out.strip() == "", "Malformed inner payload must fail open"
+
+
+class TestPrCreateGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape."""
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_executing_shape_denies_gh_pr_create(self, shape, tmp_path) -> None:
+        out = _run_guard(
+            shape.build("gh pr create --title x --body y"), kitchen_open=True, tmpdir=tmp_path
+        )
+        assert _is_denied(out), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
+    def test_inert_shape_allows_gh_pr_create(self, shape, tmp_path) -> None:
+        out = _run_guard(
+            shape.build("gh pr create --title x --body y"), kitchen_open=True, tmpdir=tmp_path
+        )
+        assert out.strip() == "", f"shape {shape.id!r} must allow"
+
+    def test_python_argv_list_gh_pr_create_is_denied(self, tmp_path) -> None:
+        cmd = (
+            "python3 -c \"import subprocess; subprocess.run(['gh','pr','create','--title','x'])\""
+        )
+        out = _run_guard(cmd, kitchen_open=True, tmpdir=tmp_path)
+        assert _is_denied(out)
 
 
 class TestNestedShellDenyRegressions:

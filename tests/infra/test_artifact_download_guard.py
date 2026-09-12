@@ -15,6 +15,8 @@ import unittest.mock
 
 import pytest
 
+from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
@@ -161,6 +163,24 @@ class TestArtifactDownloadGuardAllowed:
 # ---------------------------------------------------------------------------
 
 
+class TestArtifactDownloadGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape."""
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_executing_shape_denies_gh_run_download(self, shape) -> None:
+        out = _run_guard(shape.build("gh run download 123"))
+        assert _is_denied(out), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
+    def test_inert_shape_allows_gh_run_download(self, shape) -> None:
+        out = _run_guard(shape.build("gh run download 123"))
+        assert out.strip() == "", f"shape {shape.id!r} must allow"
+
+
 class TestArtifactDownloadGuardEdgeCases:
     def test_fails_open_on_malformed_stdin(self):
         out = _run_guard("", raw_stdin="not-json{{{")
@@ -183,9 +203,10 @@ class TestArtifactDownloadGuardEdgeCases:
         out = _run_guard('echo "gh run download 123"')
         assert out.strip() == "", "Quoted string should not match"
 
-    def test_fails_open_when_env_var_precedes_gh(self):
-        # Guard checks tokens[i-1] in _SHELL_OPS to detect chained gh; a bare
-        # env-var assignment is not a shell operator, so this invocation is
-        # skipped. Documents the fail-open boundary for env-var prefixes.
+    def test_denies_env_prefix_gh_run_download(self):
+        # Rectify #4941 Part B: all_evaluated_segments + command_verb_and_args
+        # skip a leading POSIX assignment to find the verb, so a bare
+        # env-var-prefixed invocation is now visible to the guard (same
+        # decision Part A recorded for git_ops_guard's env-assignment case).
         out = _run_guard("VAR=1 gh run download 123")
-        assert out.strip() == "", "Env-var prefix before gh must fail open"
+        assert _is_denied(out), "Env-var prefix before gh must now be denied"

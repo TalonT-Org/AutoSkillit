@@ -240,6 +240,42 @@ def test_unquoted_cat_heredoc_substitution_is_still_classified(
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_inert_heredoc_repeatable_prose_is_allowed(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """rectify #4941 Part B: an inert (cat-consumed) heredoc body's own
+    `for ... do ... done` prose mentioning `gh` verbs must not trip the
+    repeatable-shell-construct or unresolved-shell-payload fallback
+    heuristics -- previously a false positive from scanning the raw text."""
+    command = (
+        "cat > runbook.md <<'EOF'\n"
+        f"for r in $(gh api --method POST {_REVIEW_ROUTE}); do "
+        "gh pr review 1 --approve; done\n"
+        "EOF"
+    )
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) != "deny"
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_shell_delivered_repeatable_construct_still_denies(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The same repeatable construct, delivered through a SHELL-consumed
+    heredoc, still denies -- the loop genuinely executes."""
+    command = (
+        "bash <<'EOF'\n"
+        f"for r in $(gh api --method POST {_REVIEW_ROUTE}); do "
+        "gh pr review 1 --approve; done\n"
+        "EOF"
+    )
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+
+
 @pytest.mark.parametrize(
     "command",
     [

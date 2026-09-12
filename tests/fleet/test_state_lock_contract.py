@@ -50,7 +50,7 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "execution/backends/_codex_config_lock.py",
         "execution/backends/_codex_session_lease.py",
         "execution/session/_session_state.py",
-        "workspace/clone_registry.py",
+        "workspace/clone/_registry.py",
         "workspace/session_skill_lifecycle.py",
         "fleet/campaign_state/_state_lock.py",
         "planner/merge.py",

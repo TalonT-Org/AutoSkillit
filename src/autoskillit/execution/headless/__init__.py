@@ -39,6 +39,7 @@ from autoskillit.core import (
     temp_dir_display_str,
 )
 from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
+from autoskillit.execution.evidence.session_log import resolve_log_dir
 from autoskillit.execution.headless._headless_evidence import (
     _adapt_agent_result,  # noqa: F401
     _apply_budget_guard,  # noqa: F401
@@ -109,7 +110,6 @@ from autoskillit.execution.headless._managed import (
 from autoskillit.execution.headless._managed._food_truck_executor import (
     DefaultHeadlessExecutor,
 )
-from autoskillit.execution.evidence.session_log import resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext

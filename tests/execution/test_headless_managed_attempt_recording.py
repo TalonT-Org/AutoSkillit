@@ -24,8 +24,8 @@ from autoskillit.core import (
 )
 from autoskillit.core.types import RetryReason, SkillResult
 from autoskillit.execution import child_outcomes as co
-from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.headless._managed import _ManagedLineageObserver
+from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 from tests.execution.conftest import _launch_preparation, _mock_backend, _sink_env, _sr
 from tests.fakes import FakeManagedHeadlessSessionLineageStore
 
@@ -151,8 +151,8 @@ def _runner_cancelling_after_spawn(pid: int):
 
 def _patch_headless_internals(monkeypatch, tmp_path, ctx, build_result_fn):
     """Mirrors TestProviderFallbackLoop._patch_common (test_headless_provider_fallback.py)."""
+    import autoskillit.execution.evidence.session_log as _sl_mod
     import autoskillit.execution.headless._headless_execute as _execute_module
-    import autoskillit.execution.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
 
     monkeypatch.setattr(ctx.config.providers, "provider_retry_limit", _PROVIDER_RETRY_LIMIT)

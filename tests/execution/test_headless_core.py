@@ -984,8 +984,8 @@ class TestRunHeadlessCore:
         already configures, so the child's own subagent-lifecycle hooks can find
         the diagnostic root.
         """
+        from autoskillit.execution.evidence.session_log import resolve_log_dir
         from autoskillit.execution.headless import run_headless_core
-        from autoskillit.execution.session_log import resolve_log_dir
 
         marker = tool_ctx.config.run_skill.completion_marker
         payload = json.dumps(

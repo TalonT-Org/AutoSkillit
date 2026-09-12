@@ -561,8 +561,12 @@ def read_session_binding(payload_cwd: str, session_id: str) -> dict[str, object]
     existing permissive policy and are treated as no binding.
     """
     # Some projected hooks consume settings without carrying join artifacts, so
-    # load this dependency only on the join-binding path.
-    module_name = f"{__package__}._session_binding" if __package__ else "_session_binding"
+    # load this dependency only on the join-binding path. ``_session_binding``
+    # is excluded from the hooks/_runtime/ move (dual-import contract) and
+    # stays a sibling of this module's *parent* package, not this package.
+    module_name = (
+        f"{__package__.rsplit('.', 1)[0]}._session_binding" if __package__ else "_session_binding"
+    )
     binding_module = importlib.import_module(module_name)
     resolve_path = getattr(binding_module, "resolve_binding_path")
     read_binding = getattr(binding_module, "read_binding")

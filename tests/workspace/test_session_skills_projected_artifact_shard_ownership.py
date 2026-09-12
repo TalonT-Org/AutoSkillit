@@ -9,25 +9,36 @@ duplicate a name across two shards.
 
 The decomposition splits the two flat modules into:
 
-- ``autoskillit.workspace.session_skill_catalog``
-- ``autoskillit.workspace.session_skill_provider``
-- ``autoskillit.workspace.session_skill_lifecycle``
-- ``autoskillit.workspace.session_skill_materialization``
-- ``autoskillit.workspace.session_skill_manager``
+- ``autoskillit.workspace.session_skills._catalog``
+- ``autoskillit.workspace.session_skills._provider``
+- ``autoskillit.workspace.session_skills._lifecycle``
+- ``autoskillit.workspace.session_skills._materialization``
+- ``autoskillit.workspace.session_skills._manager``
 - ``autoskillit.workspace._projected_artifact._documents``
 - ``autoskillit.workspace._projected_artifact._publication``
 - ``autoskillit.workspace._projected_artifact._validation``
 
-The two original facade modules (``session_skills.py`` and
-``_projected_artifact/materialization.py``) become identity-preserving
-compatibility surfaces over those shards.
+The session-skill facade (``session_skills/__init__.py``) and the
+projected-artifact facade (``_projected_artifact/materialization.py``) become
+identity-preserving compatibility surfaces over those shards.
+
+``autoskillit.workspace.session_skills._projection`` (issue #4989; formerly
+the flat, workspace-root ``skill_projection.py``) is a distinct *gateway*
+shard rather than a session-skill shard proper: it owns a small local surface
+(``SkillProjectionPreparation``, ``build_skill_projection_binding``,
+``finalize_skill_projection_binding``, ``prepare_catalog_skill_projection``,
+``prepare_skill_projection``) and re-exports the rest of its ``__all__``,
+identity-equal, from ``_projected_artifact``. It is tracked by dedicated
+gateway tests below rather than by the per-shard ownership tables, since the
+generic ``__all__ <= owned_names`` invariant does not hold for a module that
+legitimately re-exports names it does not own.
 
 Import convention for shards that need to reach a symbol defined in another
 shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
 
 1. **Canonical** — import the producer's facade at module scope under a
-   ``_X_facade`` alias (e.g. ``import autoskillit.workspace.skill_projection
-   as _skill_projection_facade`` in ``session_skill_provider.py``). The alias
+   ``_X_facade`` alias (e.g. ``import autoskillit.workspace.session_skills._projection
+   as _skill_projection_facade`` in ``_provider.py``). The alias
    preserves identity-equal re-export with the facade's ``__all__`` so patches
    propagate without rebinding.
 
@@ -35,10 +46,15 @@ shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
    structurally impossible (cycle that cannot be broken without rearranging
    call sites). Use ``# noqa: PLC0415`` with an inline rationale.
 
-3. **Cross-subsystem facade** — session/projection shards may import from the
-   cross-subsystem ``skill_projection`` facade; they may NOT import from their
-   own facade (``workspace.session_skills`` for session shards,
-   ``_projected_artifact.materialization`` for projection shards).
+3. **Intra-package sibling narrowing** — ``_provider`` and ``_materialization``
+   may import the sibling ``_projection`` gateway shard directly; no other
+   session-skill shard may. This mirrors the pre-#4989 fan-in restriction to
+   the (then cross-subsystem) ``skill_projection`` facade — the restriction
+   itself is unchanged, only its framing: ``_projection`` is now a private
+   sibling inside the same package rather than an external facade. Shards
+   may NOT import from their own facade (``workspace.session_skills`` for
+   session shards, ``_projected_artifact.materialization`` for projection
+   shards).
 
 Pick (1) by default; reach for (2) only when (1) is structurally impossible.
 Never mix the two in the same shard without an inline justification.
@@ -75,7 +91,7 @@ _FACADE_RETAINED_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "session_skill_catalog",
+        "_catalog",
         (
             "CompiledSessionSkillCatalog",
             "SkillUnavailableMetadata",
@@ -92,7 +108,7 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "session_skill_provider",
+        "_provider",
         (
             "SkillsDirectoryProvider",
             "_CANDIDATE_ROOTS",
@@ -103,7 +119,7 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "session_skill_lifecycle",
+        "_lifecycle",
         (
             "_SESSION_LEASES_SUBDIR",
             "_SessionLease",
@@ -114,7 +130,7 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "session_skill_materialization",
+        "_materialization",
         (
             "_ExplorerBindingEnv",
             "_ExplorerBindingEnvFactory",
@@ -129,7 +145,7 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "session_skill_manager",
+        "_manager",
         (
             "DefaultSessionSkillManager",
             "_InitializedSession",
@@ -176,6 +192,61 @@ _PROJECTED_ARTIFACT_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
+# _projection.py (formerly workspace/skill_projection.py) is a gateway shard:
+# these five names are the only ones it defines locally. The rest of its
+# __all__ is re-exported, identity-equal, from `_projected_artifact` (see
+# _PROJECTION_PROJECTED_ARTIFACT_REEXPORTS below) or from `autoskillit.core`
+# dataclasses (SkillProjectionBinding, SkillProjectionRefusal) — neither of
+# those two categories is ownership-tracked here; the local set is.
+_PROJECTION_LOCAL_NAMES: frozenset[str] = frozenset(
+    {
+        "SkillProjectionPreparation",
+        "build_skill_projection_binding",
+        "finalize_skill_projection_binding",
+        "prepare_catalog_skill_projection",
+        "prepare_skill_projection",
+    }
+)
+
+# Names _projection.py re-exports, identity-equal, from `_projected_artifact`.
+_PROJECTION_PROJECTED_ARTIFACT_REEXPORTS: frozenset[str] = frozenset(
+    {
+        "AgentSkillDocument",
+        "ProjectedPluginArtifactAuthority",
+        "ProjectedPluginRetirementOwner",
+        "SkillProjectionContext",
+        "materialize_agent_skill_tree",
+        "materialize_sanitized_plugin_root",
+        "project_agent_skill_document",
+        "project_default_plugin_authority",
+        "project_direct_install_authority",
+        "validate_sanitized_plugin_artifact",
+        "write_generated_hooks_json",
+    }
+)
+
+# The fourteen names autoskillit.workspace (the outer package facade) imports
+# from workspace.session_skills._projection after the relocation (previously
+# from the flat workspace.skill_projection module).
+_WORKSPACE_PROJECTION_REEXPORTS: frozenset[str] = frozenset(
+    {
+        "AgentSkillDocument",
+        "SkillProjectionBinding",
+        "SkillProjectionContext",
+        "SkillProjectionPreparation",
+        "SkillProjectionRefusal",
+        "build_skill_projection_binding",
+        "finalize_skill_projection_binding",
+        "materialize_agent_skill_tree",
+        "materialize_sanitized_plugin_root",
+        "prepare_catalog_skill_projection",
+        "prepare_skill_projection",
+        "project_agent_skill_document",
+        "validate_sanitized_plugin_artifact",
+        "write_generated_hooks_json",
+    }
+)
+
 
 def _facade_public_surface() -> tuple[str, ...]:
     session_skills = import_module("autoskillit.workspace.session_skills")
@@ -191,8 +262,11 @@ def _shard_stems() -> tuple[set[str], set[str]]:
     pkg_init_file = workspace_init.__file__
     assert pkg_init_file is not None
     pkg_root = Path(pkg_init_file).parent
+    session_skills_pkg = pkg_root / "session_skills"
     session_skill_stems = {
-        p.stem for p in pkg_root.glob("session_skill_*.py") if p.stem != "session_skills"
+        p.stem
+        for p in session_skills_pkg.glob("_*.py")
+        if p.stem not in {"__init__", "_projection"}
     }
 
     projected_pkg_root = pkg_root / "_projected_artifact"
@@ -202,6 +276,17 @@ def _shard_stems() -> tuple[set[str], set[str]]:
         if p.stem in {"_documents", "_publication", "_validation"}
     }
     return session_skill_stems, projection_stems
+
+
+def _import_family_shard(family: str, shard_stem: str):
+    if family == "session_skills":
+        return import_module(f"autoskillit.workspace.session_skills.{shard_stem}")
+    return import_module(f"autoskillit.workspace._projected_artifact.{shard_stem}")
+
+
+_ALL_SHARD_OWNERS: tuple[tuple[str, str, tuple[str, ...]], ...] = tuple(
+    ("session_skills", stem, names) for stem, names in _SESSION_SKILL_SHARD_OWNERS
+) + tuple(("projected_artifact", stem, names) for stem, names in _PROJECTED_ARTIFACT_SHARD_OWNERS)
 
 
 def test_every_shard_module_is_in_ownership_table() -> None:
@@ -217,6 +302,28 @@ def test_every_shard_module_is_in_ownership_table() -> None:
         f"projected-artifact shard stems out of sync: disk has "
         f"{sorted(projection_stems - table_projections)}, "
         f"table has {sorted(table_projections - projection_stems)}"
+    )
+
+
+def test_session_skills_package_contains_exact_owned_shard_set() -> None:
+    """The private session_skills/ package must contain exactly the owned shards.
+
+    Complements _shard_stems() sync above by pinning the literal file set,
+    including the gateway shard _projection.py, which _shard_stems()
+    deliberately excludes from the generic ownership-table sync check.
+    """
+    workspace_init = import_module("autoskillit.workspace")
+    pkg_init_file = workspace_init.__file__
+    assert pkg_init_file is not None
+    session_skills_pkg = Path(pkg_init_file).parent / "session_skills"
+    expected = (
+        {"__init__.py"}
+        | {f"{stem}.py" for stem, _ in _SESSION_SKILL_SHARD_OWNERS}
+        | {"_projection.py"}
+    )
+    actual = {p.name for p in session_skills_pkg.glob("*.py")}
+    assert actual == expected, (
+        f"workspace/session_skills/ contains {sorted(actual)}, expected {sorted(expected)}"
     )
 
 
@@ -241,19 +348,17 @@ def test_shard_ownership_is_well_formed() -> None:
 
 
 @pytest.mark.parametrize(
-    ("shard_stem", "owned_names"),
-    _SESSION_SKILL_SHARD_OWNERS + _PROJECTED_ARTIFACT_SHARD_OWNERS,
-    ids=[stem for stem, _ in _SESSION_SKILL_SHARD_OWNERS + _PROJECTED_ARTIFACT_SHARD_OWNERS],
+    ("family", "shard_stem", "owned_names"),
+    _ALL_SHARD_OWNERS,
+    ids=[f"{family}:{stem}" for family, stem, _ in _ALL_SHARD_OWNERS],
 )
 def test_each_shard_declares_only_owned_names(
+    family: str,
     shard_stem: str,
     owned_names: tuple[str, ...],
 ) -> None:
     """Each shard's __all__ (or named exports) must be a subset of its owned names."""
-    if shard_stem.startswith("_"):
-        module = import_module(f"autoskillit.workspace._projected_artifact.{shard_stem}")
-    else:
-        module = import_module(f"autoskillit.workspace.{shard_stem}")
+    module = _import_family_shard(family, shard_stem)
     declared = set(getattr(module, "__all__", ()))
     assert declared <= set(owned_names), (
         f"shard {shard_stem} declares names outside its ownership: {declared - set(owned_names)}"
@@ -274,11 +379,12 @@ def test_every_owned_name_is_reexported_by_a_facade(name: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("shard_stem", "owned_names"),
-    _SESSION_SKILL_SHARD_OWNERS + _PROJECTED_ARTIFACT_SHARD_OWNERS,
-    ids=[stem for stem, _ in _SESSION_SKILL_SHARD_OWNERS + _PROJECTED_ARTIFACT_SHARD_OWNERS],
+    ("family", "shard_stem", "owned_names"),
+    _ALL_SHARD_OWNERS,
+    ids=[f"{family}:{stem}" for family, stem, _ in _ALL_SHARD_OWNERS],
 )
 def test_facade_reexport_is_passthrough(
+    family: str,
     shard_stem: str,
     owned_names: tuple[str, ...],
 ) -> None:
@@ -288,10 +394,7 @@ def test_facade_reexport_is_passthrough(
     are private to the shard (e.g. ``_SessionLease``) and are not subject to
     facade re-export — they are reached directly via the shard module.
     """
-    if shard_stem.startswith("_"):
-        shard = import_module(f"autoskillit.workspace._projected_artifact.{shard_stem}")
-    else:
-        shard = import_module(f"autoskillit.workspace.{shard_stem}")
+    shard = _import_family_shard(family, shard_stem)
     session_skills = import_module("autoskillit.workspace.session_skills")
     materialization = import_module("autoskillit.workspace._projected_artifact.materialization")
     facade_surface = set(getattr(session_skills, "__all__", ())) | set(
@@ -317,7 +420,7 @@ def test_facade_reexport_is_passthrough(
         (
             "write_skill_unavailability_metadata",
             "autoskillit.workspace.session_skills",
-            "autoskillit.workspace.session_skill_catalog",
+            "autoskillit.workspace.session_skills._catalog",
         ),
         (
             "write_generated_hooks_json",
@@ -363,8 +466,8 @@ def test_compute_skill_closure_remains_external_reexport() -> None:
 
 def test_parse_write_paths_remains_provider_owned_direct_module_alias() -> None:
     """_parse_write_paths stays directly available from session_skills and provider shard."""
-    import autoskillit.workspace.session_skill_provider as session_skill_provider
-    import autoskillit.workspace.session_skills as session_skills
+    session_skills = import_module("autoskillit.workspace.session_skills")
+    session_skill_provider = import_module("autoskillit.workspace.session_skills._provider")
 
     assert session_skills._parse_write_paths is session_skill_provider._parse_write_paths, (
         "session_skills._parse_write_paths must be identity-equal to provider shard's "
@@ -374,16 +477,16 @@ def test_parse_write_paths_remains_provider_owned_direct_module_alias() -> None:
 
 def test_session_skill_catalog_owns_write_versioned_json_writer() -> None:
     """Catalog shard owns the durable-writer call site for skill-unavailability.json."""
-    from autoskillit.workspace.session_skill_catalog import write_skill_unavailability_metadata
-    from autoskillit.workspace.session_skills import (
-        write_skill_unavailability_metadata as facade_writer,
-    )
+    session_skills = import_module("autoskillit.workspace.session_skills")
+    catalog = import_module("autoskillit.workspace.session_skills._catalog")
+    write_skill_unavailability_metadata = catalog.write_skill_unavailability_metadata
+    facade_writer = session_skills.write_skill_unavailability_metadata
 
     src = Path(write_skill_unavailability_metadata.__code__.co_filename).resolve()
-    expected_src = SRC_ROOT / "workspace" / "session_skill_catalog.py"
+    expected_src = SRC_ROOT / "workspace" / "session_skills" / "_catalog.py"
     assert src == expected_src.resolve(), (
         f"write_skill_unavailability_metadata must be defined in "
-        f"session_skill_catalog.py; actual source: {src}"
+        f"session_skills/_catalog.py; actual source: {src}"
     )
     assert facade_writer is write_skill_unavailability_metadata
 
@@ -398,10 +501,10 @@ def test_session_skill_lifecycle_owns_lease_delegation() -> None:
 
     Direct-``fcntl.flock`` governance is NOT asserted here — that is owned by
     ``tests/fleet/test_state_lock_contract.py``, whose allowlist deliberately
-    admits ``workspace/session_skill_lifecycle.py``. This test pins ownership
-    and re-export identity only.
+    admits ``workspace/session_skills/_lifecycle.py``. This test pins
+    ownership and re-export identity only.
     """
-    import autoskillit.workspace.session_skill_lifecycle as lifecycle
+    lifecycle = import_module("autoskillit.workspace.session_skills._lifecycle")
 
     assert hasattr(lifecycle, "ArtifactLease"), (
         "lifecycle shard must import ArtifactLease (the canonical fcntl.flock owner)"
@@ -414,6 +517,67 @@ def test_session_skill_lifecycle_owns_lease_delegation() -> None:
         assert facade._SessionLease is lifecycle._SessionLease, (
             "a facade re-export of _SessionLease must be identity-equal to the "
             "lifecycle shard's definition"
+        )
+
+
+def test_projection_locally_defined_names_are_uniquely_owned() -> None:
+    """_projection's locally defined names must be defined in _projection itself.
+
+    Only these five names are ownership-tracked for the gateway shard; its
+    remaining __all__ entries are pass-through reexports checked separately
+    (see test_projection_reexports_remain_identity_equal_to_projected_artifact)
+    and are intentionally NOT required to appear in this local-ownership row —
+    a gateway shard's __all__ is not a subset of what it owns.
+    """
+    projection = import_module("autoskillit.workspace.session_skills._projection")
+    declared = set(getattr(projection, "__all__", ()))
+    assert _PROJECTION_LOCAL_NAMES <= declared, (
+        f"_projection must declare its locally-owned names in __all__; "
+        f"missing: {sorted(_PROJECTION_LOCAL_NAMES - declared)}"
+    )
+    for name in sorted(_PROJECTION_LOCAL_NAMES):
+        value = getattr(projection, name)
+        module_name = getattr(value, "__module__", None)
+        assert module_name == "autoskillit.workspace.session_skills._projection", (
+            f"{name!r} must be defined in _projection itself, not imported; "
+            f"actual __module__: {module_name}"
+        )
+
+
+def test_projection_reexports_remain_identity_equal_to_projected_artifact() -> None:
+    """_projection's _projected_artifact reexports stay identity-equal to their source.
+
+    _projection is a gateway: it re-exports these names from the cross-subsystem
+    ``_projected_artifact`` package rather than owning them. A gateway must
+    never introduce a copy — patches to the projected-artifact original must
+    still be visible through _projection.
+    """
+    projection = import_module("autoskillit.workspace.session_skills._projection")
+    projected_artifact = import_module("autoskillit.workspace._projected_artifact")
+    for name in sorted(_PROJECTION_PROJECTED_ARTIFACT_REEXPORTS):
+        assert hasattr(projected_artifact, name), (
+            f"{name!r} must remain part of _projected_artifact's public surface"
+        )
+        assert getattr(projection, name) is getattr(projected_artifact, name), (
+            f"_projection.{name} must be identity-equal to "
+            f"_projected_artifact.{name} (gateway reexport, not a copy)"
+        )
+
+
+def test_workspace_projection_reexports_remain_identity_equal_to_projection_module() -> None:
+    """autoskillit.workspace's projection-related exports stay identity-equal to _projection.
+
+    workspace/__init__.py imports these fourteen names from
+    workspace.session_skills._projection after the relocation (previously from
+    the flat workspace.skill_projection module) — the move must not introduce
+    a wrapper or copy anywhere along that reexport chain.
+    """
+    workspace = import_module("autoskillit.workspace")
+    projection = import_module("autoskillit.workspace.session_skills._projection")
+    for name in sorted(_WORKSPACE_PROJECTION_REEXPORTS):
+        assert getattr(workspace, name) is getattr(projection, name), (
+            f"autoskillit.workspace.{name} must be identity-equal to "
+            f"autoskillit.workspace.session_skills._projection.{name}"
         )
 
 

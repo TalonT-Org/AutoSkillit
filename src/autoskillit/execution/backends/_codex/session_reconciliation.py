@@ -70,6 +70,52 @@ logger = get_logger(__name__)
 
 
 class _CodexSessionReconciliationMixin:
+    def _publish_completed_view(self, view_path: Path, parent_ids: tuple[str, ...]) -> bool:
+        """Publish native child snapshots, then remove the validated completed view."""
+        from autoskillit.execution.child_outcomes import collect_codex_observed_children
+
+        store = cast("CodexSessionStore", self)
+        publication_succeeded = True
+        for parent_session_id in dict.fromkeys(parent_ids):
+            try:
+                parent_rollout_path = store.locate_session(parent_session_id)
+                if parent_rollout_path is None:
+                    publication_succeeded = False
+                    continue
+                if not collect_codex_observed_children(
+                    parent_rollout_path=parent_rollout_path,
+                    parent_session_id=parent_session_id,
+                    log_root=store.log_dir,
+                    child_rollout_resolver=store.locate_session,
+                ):
+                    publication_succeeded = False
+            except Exception:
+                publication_succeeded = False
+                logger.warning(
+                    "codex_completed_view_child_publication_failed",
+                    view_path=str(view_path),
+                    parent_session_id=parent_session_id,
+                    exc_info=True,
+                )
+        if not publication_succeeded:
+            logger.warning(
+                "codex_completed_view_retained_for_child_publication",
+                view_path=str(view_path),
+            )
+            return False
+
+        lifecycle = _FileLease.acquire(
+            store.locks_root / "lifecycle.lock",
+            timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+        )
+        try:
+            store._validate_completed_view(view_path)
+            shutil.rmtree(view_path)
+            _fsync_directory(store.views_root)
+        finally:
+            lifecycle.release()
+        return True
+
     def _validate_manifest(
         self,
         view_path: Path,
@@ -503,17 +549,38 @@ class _CodexSessionReconciliationMixin:
                         )
                 except TimeoutError:
                     for thread_lock in reversed(thread_locks):
-                        thread_lock.release()
+                        try:
+                            thread_lock.release()
+                        except BaseException as exc:
+                            failures.append(
+                                RuntimeError(
+                                    f"Codex recovery thread lease release failed for "
+                                    f"{view_path.name}: {exc}"
+                                )
+                            )
                     continue
-                lifecycle = _FileLease.acquire(
-                    store.locks_root / "lifecycle.lock",
-                    timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
-                )
+                lifecycle: _FileLease | None = None
+                parent_session_ids: tuple[str, ...] | None = None
+                processing_succeeded = False
+                release_succeeded = True
                 try:
+                    lifecycle = _FileLease.acquire(
+                        store.locks_root / "lifecycle.lock",
+                        timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
+                    )
                     if state == "complete":
                         store._validate_completed_view(view_path)
-                        shutil.rmtree(view_path)
-                        _fsync_directory(store.views_root)
+                        final_store = manifest["final_store"]
+                        final_relpath = _safe_relative_value(str(manifest["final_relpath"]))
+                        final_root = (
+                            store.active_root if final_store == "active" else store.archive_root
+                        )
+                        parent_session_id = _thread_id(final_root / final_relpath)
+                        if parent_session_id is None:
+                            raise RuntimeError(
+                                "Completed Codex recovery view has no native parent identity"
+                            )
+                        parent_session_ids = (parent_session_id,)
                     elif state in {"prepared", "failed"} and manifest.get("child_pid") is None:
                         store._validate_pre_spawn_view(
                             view_path,
@@ -609,21 +676,60 @@ class _CodexSessionReconciliationMixin:
                         manifest["state"] = "complete"
                         store._write_manifest(attempt_lease)
                         store._validate_completed_view(view_path)
-                        shutil.rmtree(view_path)
-                        _fsync_directory(store.views_root)
+                        parent_session_ids = tuple(
+                            dict.fromkeys(str(row["session_id"]) for row in recovered_rows)
+                        )
                     else:
                         raise RuntimeError(f"Unsupported Codex recovery state retained: {state!r}")
+                    processing_succeeded = True
                 except BaseException as exc:
                     logger.error("codex_recovery_view_failed", exc_info=True)
                     failures.append(
                         RuntimeError(f"Codex recovery failed closed for {view_path.name}: {exc}")
                     )
                 finally:
-                    lifecycle.release()
+                    if lifecycle is not None:
+                        try:
+                            lifecycle.release()
+                        except BaseException as exc:
+                            release_succeeded = False
+                            failures.append(
+                                RuntimeError(
+                                    f"Codex recovery lifecycle lease release failed for "
+                                    f"{view_path.name}: {exc}"
+                                )
+                            )
                     for thread_lock in reversed(thread_locks):
-                        thread_lock.release()
+                        try:
+                            thread_lock.release()
+                        except BaseException as exc:
+                            release_succeeded = False
+                            failures.append(
+                                RuntimeError(
+                                    f"Codex recovery thread lease release failed for "
+                                    f"{view_path.name}: {exc}"
+                                )
+                            )
+                if processing_succeeded and release_succeeded and parent_session_ids:
+                    try:
+                        store._publish_completed_view(view_path, parent_session_ids)
+                    except BaseException as exc:
+                        logger.error("codex_recovery_publication_cleanup_failed", exc_info=True)
+                        failures.append(
+                            RuntimeError(
+                                f"Codex recovery publication cleanup failed for "
+                                f"{view_path.name}: {exc}"
+                            )
+                        )
             finally:
-                view_lock.release()
+                try:
+                    view_lock.release()
+                except BaseException as exc:
+                    failures.append(
+                        RuntimeError(
+                            f"Codex recovery view lease release failed for {view_path.name}: {exc}"
+                        )
+                    )
         lifecycle = _FileLease.acquire(
             store.locks_root / "lifecycle.lock",
             timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,

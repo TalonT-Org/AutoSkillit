@@ -296,10 +296,10 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
         finally:
             lifecycle.release()
 
-    def _exit_attempt(self, lease: CodexSessionAttemptLease) -> None:
+    def _exit_attempt(self, lease: CodexSessionAttemptLease) -> tuple[str, ...]:
         if lease.manifest.get("child_pid") is None:
             self._abort_pre_spawn(lease)
-            return
+            return ()
         self._restore_inert(lease)
         if lease.manifest.get("reaped") is not True:
             lease.manifest["state"] = "failed"
@@ -318,8 +318,7 @@ class CodexSessionStore(_CodexSessionReconciliationMixin):
             lease.manifest["state"] = "complete"
             self._write_manifest(lease)
             self._validate_completed_view(lease.view_path)
-            shutil.rmtree(lease.view_path)
-            _fsync_directory(self.views_root)
+            return tuple(dict.fromkeys(str(row["session_id"]) for row in rows))
         finally:
             lifecycle.release()
 

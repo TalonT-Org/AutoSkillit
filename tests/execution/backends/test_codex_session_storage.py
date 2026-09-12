@@ -51,19 +51,55 @@ def _generated_home(tmp_path: Path) -> tuple[Path, dict[str, Path]]:
     return home, inert_targets
 
 
-def _rollout(path: Path, thread_id: str, *, cwd: Path | None = None) -> bytes:
+def _rollout(
+    path: Path,
+    thread_id: str,
+    *,
+    cwd: Path | None = None,
+    child_id: str | None = None,
+) -> bytes:
     rows = [f'{{"type":"thread.started","thread_id":"{thread_id}"}}']
+    session_meta = {"id": thread_id}
     if cwd is not None:
+        session_meta["cwd"] = str(cwd)
+    rows.append(json.dumps({"type": "session_meta", "payload": session_meta}))
+    if child_id is not None:
         rows.append(
             json.dumps(
                 {
-                    "type": "session_meta",
-                    "payload": {"id": thread_id, "cwd": str(cwd)},
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "sub_agent_activity",
+                        "kind": "started",
+                        "agent_thread_id": child_id,
+                    },
                 }
             )
         )
     rows.append('{"type":"turn.completed"}')
     content = ("\n".join(rows) + "\n").encode()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return content
+
+
+def _child_rollout(path: Path, child_id: str, parent_id: str) -> bytes:
+    rows = [
+        {"type": "thread.started", "thread_id": child_id},
+        {
+            "type": "session_meta",
+            "payload": {
+                "id": child_id,
+                "parent_thread_id": parent_id,
+                "agent_role": "plan-foundation-auditor",
+            },
+        },
+        {
+            "type": "turn_context",
+            "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+        },
+    ]
+    content = ("\n".join(json.dumps(row) for row in rows) + "\n").encode()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     return content
@@ -1026,7 +1062,17 @@ def test_recovery_promotes_orphan_after_process_group_releases_view_lease(
 
     handle = lease.__enter__()
     relative = Path("2026/07/rollout-orphan.jsonl")
-    _rollout((home / "sessions").resolve() / relative, "thread-orphan", cwd=tmp_path)
+    _child_rollout(
+        store.active_root / "2026/07/rollout-orphan-child.jsonl",
+        "thread-orphan-child",
+        "thread-orphan",
+    )
+    _rollout(
+        (home / "sessions").resolve() / relative,
+        "thread-orphan",
+        cwd=tmp_path,
+        child_id="thread-orphan-child",
+    )
     handle.record_spawn(12345, 12345)
     lease.view_lease.release()
 
@@ -1035,12 +1081,21 @@ def test_recovery_promotes_orphan_after_process_group_releases_view_lease(
     assert not lease.view_path.exists()
     assert (store.active_root / relative).is_file()
     assert store.read_index(str(tmp_path))[0].session_id == "thread-orphan"
+    snapshot = json.loads((log_dir / "child-outcomes/codex/thread-orphan.json").read_text())
+    assert snapshot["children"]["thread-orphan-child"]["outcome"]["role"] == (
+        "plan-foundation-auditor"
+    )
 
 
 def test_fresh_rollout_is_promoted_durably_and_indexed_once(tmp_path: Path) -> None:
     log_dir = tmp_path / "log-root"
     index_path = log_dir / "codex-session-index.json"
     store = CodexSessionStore(log_dir=log_dir, index_path=index_path)
+    _child_rollout(
+        store.active_root / "2026/07/rollout-child.jsonl",
+        "thread-child",
+        "thread-new",
+    )
     home, inert_targets = _generated_home(tmp_path)
     expected: bytes
 
@@ -1054,6 +1109,7 @@ def test_fresh_rollout_is_promoted_durably_and_indexed_once(tmp_path: Path) -> N
         expected = _rollout(
             (home / "sessions").resolve() / "2026" / "07" / "rollout-new.jsonl",
             "thread-new",
+            child_id="thread-child",
         )
         handle.record_spawn(os.getpid(), os.getpgrp())
         handle.record_reaped(os.getpid(), os.getpgrp())
@@ -1069,6 +1125,84 @@ def test_fresh_rollout_is_promoted_durably_and_indexed_once(tmp_path: Path) -> N
     assert matching[0]["cwd"] == str(tmp_path)
     assert matching[0]["canonical_store"] == "active"
     assert matching[0]["relative_path"] == "2026/07/rollout-new.jsonl"
+    snapshot = json.loads((log_dir / "child-outcomes/codex/thread-new.json").read_text())
+    outcome = snapshot["children"]["thread-child"]["outcome"]
+    assert outcome["role"] == "plan-foundation-auditor"
+    assert outcome["effective_effort"] == "medium"
+
+
+def test_completed_view_recovery_retries_child_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    _child_rollout(
+        store.active_root / "2026/07/rollout-child.jsonl",
+        "thread-child",
+        "thread-parent",
+    )
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NoResume(),
+    )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(store, "_publish_completed_view", lambda _path, _ids: False)
+        with lease as handle:
+            _rollout(
+                (home / "sessions").resolve() / "2026/07/rollout-parent.jsonl",
+                "thread-parent",
+                child_id="thread-child",
+            )
+            handle.record_spawn(os.getpid(), os.getpgrp())
+            handle.record_reaped(os.getpid(), os.getpgrp())
+
+    assert lease.view_path.is_dir()
+    assert json.loads((lease.view_path / "manifest.json").read_text())["state"] == "complete"
+
+    store.recover()
+
+    assert not lease.view_path.exists()
+    snapshot = json.loads((log_dir / "child-outcomes/codex/thread-parent.json").read_text())
+    assert snapshot["children"]["thread-child"]["outcome"]["role"] == ("plan-foundation-auditor")
+
+
+def test_completion_publication_runs_after_thread_release_before_view_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    canonical = store.active_root / "2026/07/rollout-resume.jsonl"
+    _rollout(canonical, "thread-resume")
+    home, _ = _generated_home(tmp_path)
+    lease = store.prepare_attempt(
+        session_home=home,
+        project_dir=tmp_path,
+        launch_id="0123456789abcdef",
+        attempt=1,
+        current_resume_spec=NamedResume("thread-resume"),
+    )
+    observed: list[tuple[tuple[str, ...], int, int]] = []
+
+    def capture_lease_order(view_path: Path, parent_ids: tuple[str, ...]) -> bool:
+        assert view_path == lease.view_path
+        assert lease.thread_lease is not None
+        observed.append((parent_ids, lease.thread_lease.fd, lease.view_lease.fd))
+        return False
+
+    monkeypatch.setattr(store, "_publish_completed_view", capture_lease_order)
+    with lease as handle:
+        handle.record_spawn(os.getpid(), os.getpgrp())
+        handle.record_reaped(os.getpid(), os.getpgrp())
+
+    assert len(observed) == 1
+    assert observed[0][0] == ("thread-resume",)
+    assert observed[0][1] == -1
+    assert observed[0][2] >= 0
 
 
 @pytest.mark.parametrize(

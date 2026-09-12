@@ -503,6 +503,8 @@ def record_managed_child_attempt_outcome(
         evidence["error_code"] = skill_result.api_failure.error_code
     if skill_result.infra.exit_category:
         evidence["infra_exit_category"] = skill_result.infra.exit_category
+    if skill_result.provider.provider_used:
+        evidence["effective_provider"] = skill_result.provider.provider_used
     if skill_result.subtype == "cancelled":
         evidence["confirmed_interrupted"] = True
     if skill_result.success and not skill_result.is_error:

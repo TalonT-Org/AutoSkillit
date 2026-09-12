@@ -318,6 +318,7 @@ def test_binding_candidate_enumeration_oserror_preserves_generic_refusal(
     requested_path = resolve_binding_path(str(state_root), "requested")
     channel_dir = requested_path.parent
     channel_dir.mkdir(parents=True)
+    _write_session_binding(state_root, "recorded", _binding("recorded"))
     diagnostics: list[dict[str, object]] = []
     monkeypatch.setattr(declare_module, "_emit_join_diagnostic", diagnostics.append)
 

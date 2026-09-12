@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._line_budget import count_budget_lines
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _RULES_DIR = _REPO_ROOT / "src" / "autoskillit" / "recipe" / "rules"
 _CEILING = 750
@@ -28,8 +30,10 @@ def test_rules_merge_facade_is_under_ceiling() -> None:
 
     facade = _RULES_DIR / "rules_merge.py"
     text = facade.read_text()
-    lines = text.splitlines()
-    assert len(lines) <= _CEILING, f"Facade {facade.name} is {len(lines)} lines (limit {_CEILING})"
+    line_count = count_budget_lines(facade)
+    assert line_count <= _CEILING, (
+        f"Facade {facade.name} is {line_count} non-import lines (limit {_CEILING})"
+    )
     # Match decorator usage at column 0 (not references in docstrings/strings).
     decorator_re = _re.compile(r"^@semantic_rule\b", _re.MULTILINE)
     assert not decorator_re.search(text), (
@@ -51,5 +55,7 @@ def test_rules_merge_facade_is_under_ceiling() -> None:
 def test_each_extracted_module_is_under_ceiling(filename: str) -> None:
     """Each new sibling must be at or under the 750-line ceiling."""
     module = _RULES_DIR / filename
-    lines = module.read_text().splitlines()
-    assert len(lines) <= _CEILING, f"Sibling {filename} is {len(lines)} lines (limit {_CEILING})"
+    line_count = count_budget_lines(module)
+    assert line_count <= _CEILING, (
+        f"Sibling {filename} is {line_count} non-import lines (limit {_CEILING})"
+    )

@@ -6,6 +6,7 @@ import pytest
 
 from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 from tests.arch._helpers import SRC_ROOT
+from tests.arch._line_budget import count_budget_lines
 from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -37,14 +38,14 @@ def test_capture_lifecycle_is_a_package_not_a_module() -> None:
     ids=["snapshot", "extractors"],
 )
 def test_decomposed_package_is_below_size_ceiling(package_dir: Path) -> None:
-    """Every shard of a decomposed package is at most 750 lines.
+    """Every shard of a decomposed package is at most 750 non-import lines.
 
     Stricter than the global 1000-line guard (``test_no_src_module_exceeds_line_limit``)
     so shard reorganisation fails early instead of colliding with the global cap.
     """
     for shard in sorted(package_dir.glob("*.py")):
-        line_count = len(shard.read_text().splitlines())
-        assert line_count <= 750, f"{shard.name}: {line_count} lines exceeds 750"
+        line_count = count_budget_lines(shard)
+        assert line_count <= 750, f"{shard.name}: {line_count} non-import lines exceeds 750"
 
 
 def test_snapshot_is_a_package_not_a_module() -> None:

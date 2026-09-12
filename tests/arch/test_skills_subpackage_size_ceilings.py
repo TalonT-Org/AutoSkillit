@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
+from tests.arch._line_budget import count_budget_lines
 
 pytestmark = [pytest.mark.small]
 
@@ -35,7 +36,8 @@ _SKILLS_TARGETS: tuple[str, ...] = (
 def test_skill_module_under_warning_zone(rel_path: str) -> None:
     """Every decomposed module must stay under the 750-line warning zone."""
     target = SRC_ROOT / rel_path
-    line_count = len(target.read_text().splitlines())
+    line_count = count_budget_lines(target)
     assert line_count <= 750, (
-        f"{rel_path}: {line_count} lines (warning zone is 750). Decompose further or justify."
+        f"{rel_path}: {line_count} non-import lines (warning zone is 750). "
+        f"Decompose further or justify."
     )

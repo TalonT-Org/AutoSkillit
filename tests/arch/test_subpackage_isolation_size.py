@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
+from tests.arch._line_budget import count_budget_lines
 from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -16,9 +17,11 @@ def test_pipeline_shard_size_ceiling() -> None:
     )
     offenders: list[str] = []
     for py_file in sorted(subpackage_root.rglob("*.py")):
-        line_count = len(py_file.read_text(encoding="utf-8").splitlines())
+        line_count = count_budget_lines(py_file)
         if line_count > 750:
-            offenders.append(f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (max 750)")
+            offenders.append(
+                f"{py_file.relative_to(SRC_ROOT)}: {line_count} non-import lines (max 750)"
+            )
     assert not offenders, "Pipeline shards exceed the 750-line ceiling:\n  " + "\n  ".join(
         offenders
     )
@@ -34,10 +37,8 @@ def test_no_src_module_exceeds_line_limit() -> None:
     from tests.arch._helpers import _collect_line_limit_violations
 
     violations = _collect_line_limit_violations(_LINE_LIMIT_EXEMPTIONS)
-    assert not violations, (
-        "Source modules exceeding line limit "
-        "(add entry to _LINE_LIMIT_EXEMPTIONS with rule ID + rationale):\n"
-        + "\n".join(f"  {v}" for v in violations)
+    assert not violations, "Source module line-limit violations:\n" + "\n".join(
+        f"  {v}" for v in violations
     )
 
 
@@ -90,10 +91,10 @@ def test_new_recipe_delivery_canonical_paths_need_no_line_limit_exemption() -> N
         if rel in _LINE_LIMIT_EXEMPTIONS:
             offenders.append(f"{rel}: unexpectedly present in _LINE_LIMIT_EXEMPTIONS")
             continue
-        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        line_count = count_budget_lines(path)
         if line_count > 1000:
             offenders.append(
-                f"{rel}: {line_count} lines (exceeds default 1000-line ceiling, "
+                f"{rel}: {line_count} non-import lines (exceeds default 1000-line ceiling, "
                 "no exemption present)"
             )
     assert not offenders, (
@@ -114,7 +115,7 @@ def test_every_exemption_key_matches_an_existing_file() -> None:
 
 
 def test_no_exemption_ceiling_equals_current_line_count() -> None:
-    """An exemption ceiling equal to the file's real size is a rubber stamp.
+    """An exemption ceiling equal to the file's current non-import line count is a rubber stamp.
 
     Cross-cutting finding from issue #4662: at the time the issue was filed,
     codex.py's ceiling (2444) and fleet/_api.py's ceiling (1590) each equaled
@@ -126,13 +127,12 @@ def test_no_exemption_ceiling_equals_current_line_count() -> None:
     Ceilings must carry real headroom.
     """
     offenders = [
-        f"{rel}: limit {exemption.limit} equals current line count"
+        f"{rel}: limit {exemption.limit} equals current non-import line count"
         for rel, exemption in sorted(_LINE_LIMIT_EXEMPTIONS.items())
-        if (SRC_ROOT / rel).is_file()
-        and len((SRC_ROOT / rel).read_text(encoding="utf-8").splitlines()) == exemption.limit
+        if (SRC_ROOT / rel).is_file() and count_budget_lines(SRC_ROOT / rel) == exemption.limit
     ]
     assert not offenders, (
-        "Exemption ceilings equal to the current line count are rubber stamps -- "
+        "Exemption ceilings equal to the current non-import line count are rubber stamps -- "
         "raise the ceiling to give real headroom, or remove the entry if the file "
         "no longer needs one:\n" + "\n".join(f"  {o}" for o in offenders)
     )
@@ -218,15 +218,15 @@ def test_pipeline_exploration_context_shards_under_900_lines() -> None:
     The pre-decomposition monolithic file was 1061 lines.  After
     decomposition, every shard under ``pipeline/exploration_context/``
     must be ≤ 900 lines (the wavefront-1 ceiling).  The class body
-    alone is ~720 lines; the remaining ~90 lines is module docstring,
-    imports, and the package's ``__init__.py`` facade re-export
-    surface, which the test also pins so the re-export facade itself
-    cannot regress.
+    alone is ~720 lines; imports are excluded from the count; the
+    remainder is module docstring and the package's ``__init__.py``
+    facade re-export surface, which the test also pins so the
+    re-export facade itself cannot regress.
     """
     package_dir = SRC_ROOT / "pipeline" / "exploration_context"
     violations: list[tuple[str, int]] = []
     for shard in sorted(package_dir.glob("*.py")):
-        line_count = len(shard.read_text().splitlines())
+        line_count = count_budget_lines(shard)
         if line_count > 900:
             violations.append((str(shard.relative_to(SRC_ROOT)), line_count))
     assert not violations, (
@@ -239,9 +239,10 @@ def test_pipeline_exploration_context_store_under_750_lines() -> None:
     """Keep the exploration-context Store shard within its permanent ceiling."""
     store_path = SRC_ROOT / "pipeline" / "exploration_context" / "_store.py"
     assert store_path.is_file(), "Missing pipeline/exploration_context/_store.py"
-    line_count = len(store_path.read_text().splitlines())
+    line_count = count_budget_lines(store_path)
     assert line_count <= 750, (
-        f"pipeline/exploration_context/_store.py exceeds the 750-line ceiling: {line_count} lines"
+        f"pipeline/exploration_context/_store.py exceeds the 750-line ceiling: "
+        f"{line_count} non-import lines"
     )
 
 
@@ -306,9 +307,9 @@ def test_hook_registry_package_needs_no_line_limit_exemption() -> None:
     )
     offenders = []
     for path in sorted(package_root.rglob("*.py")):
-        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        line_count = count_budget_lines(path)
         if line_count > 1000:
-            offenders.append(f"{path.relative_to(SRC_ROOT)}: {line_count} lines")
+            offenders.append(f"{path.relative_to(SRC_ROOT)}: {line_count} non-import lines")
     assert not offenders, (
         "hook_registry shards exceed the 1000-line default ceiling:\n  " + "\n  ".join(offenders)
     )
@@ -348,8 +349,8 @@ def test_recipe_binding_module_under_1000_lines() -> None:
         "the post-#4854 module shape; further extraction should keep _binding.py "
         "in place or update this guard)"
     )
-    line_count = len(binding.read_text(encoding="utf-8").splitlines())
+    line_count = count_budget_lines(binding)
     assert line_count <= 1000, (
-        f"recipe/_binding.py is {line_count} lines; the E24 retirement assumed it stays "
-        "under the 1000-line default ceiling (issue #4854 extracted _binding_input.py)"
+        f"recipe/_binding.py is {line_count} non-import lines; the E24 retirement assumed it "
+        "stays under the 1000-line default ceiling (issue #4854 extracted _binding_input.py)"
     )

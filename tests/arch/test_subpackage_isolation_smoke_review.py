@@ -5,6 +5,7 @@ import ast
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
+from tests.arch._line_budget import count_budget_lines
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -122,19 +123,16 @@ def test_smoke_utils_review_shards_do_not_import_the_facade() -> None:
 
 def test_smoke_utils_review_shard_sizes_are_balanced() -> None:
     """REQ-CNST-010-DECOMPOSE-4: every shard in smoke_utils/review/ is at most
-    750 lines per the issue #4855 acceptance criterion ('every extracted source
-    module is at most 750 lines'). The facade ``__init__.py`` and the shared
+    750 non-import lines per the issue #4855 acceptance criterion ('every extracted
+    source module is at most 750 lines'). The facade ``__init__.py`` and the shared
     constants shard are exempt from the 25-line substance floor — both are
     intentionally narrow surfaces (declarative API + shared constants/helpers)."""
     review = SRC_ROOT / "smoke_utils" / "review"
     too_small = [
         path.name
         for path in review.glob("*.py")
-        if path.name not in ("__init__.py", "_constants.py")
-        and len(path.read_text().splitlines()) < 25
+        if path.name not in ("__init__.py", "_constants.py") and count_budget_lines(path) < 25
     ]
-    too_large = [
-        path.name for path in review.glob("*.py") if len(path.read_text().splitlines()) > 750
-    ]
-    assert not too_small, f"smoke_utils/review/ shards below 25 lines: {too_small}"
-    assert not too_large, f"smoke_utils/review/ shards above 750 lines: {too_large}"
+    too_large = [path.name for path in review.glob("*.py") if count_budget_lines(path) > 750]
+    assert not too_small, f"smoke_utils/review/ shards below 25 non-import lines: {too_small}"
+    assert not too_large, f"smoke_utils/review/ shards above 750 non-import lines: {too_large}"

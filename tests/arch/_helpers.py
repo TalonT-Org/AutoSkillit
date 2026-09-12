@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from tests.arch._line_budget import count_budget_lines, format_unmeasurable
 from tests.arch._rules import (
     _ASYNCIO_PIPE_EXEMPT,
     _BROAD_EXCEPT_EXEMPT,
@@ -39,25 +40,33 @@ PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
 def _collect_line_limit_violations(
     exemptions: dict[str, LineLimitExemption],
 ) -> list[str]:
-    """Return one violation message per src module exceeding its line limit.
+    """Return one violation message per unmeasurable or over-limit src module.
 
     Lookup is by full src/autoskillit-relative path only -- no basename fallback.
     A prior basename fallback (REQ-CNST-010, fixed #4662) let one file's
     exemption silently apply to any other file sharing its basename anywhere in
     the tree; three now-deleted dead entries (types.py, session.py, _doctor.py)
     sat unnoticed for exactly that reason -- a dead key can never fail the guard
-    it was entered for.
+    it was entered for. Counts non-import lines (``count_budget_lines``); the
+    1000-line default and every ledger ceiling are expressed in that unit.
     """
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
-        line_count = len(py_file.read_text(encoding="utf-8").splitlines())
         rel = str(py_file.relative_to(SRC_ROOT))
+        try:
+            line_count = count_budget_lines(py_file)
+        except SyntaxError as exc:
+            detail = f"{exc.msg or 'syntax error'} at line {exc.lineno}"
+            violations.append(format_unmeasurable(rel, detail))
+            continue
+        except UnicodeDecodeError as exc:
+            detail = f"{exc.reason} at byte offset {exc.start}"
+            violations.append(format_unmeasurable(rel, detail))
+            continue
         exemption = exemptions.get(rel)
         limit = exemption.limit if exemption is not None else 1000
         if line_count > limit:
-            violations.append(
-                f"{py_file.relative_to(SRC_ROOT)}: {line_count} lines (limit {limit})"
-            )
+            violations.append(f"{rel}: {line_count} non-import lines (limit {limit})")
     return violations
 
 

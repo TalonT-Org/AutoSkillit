@@ -23,10 +23,12 @@ def _load_check_module():
     return mod
 
 
-def _write_module(src_root: Path, line_count: int, name: str = "candidate.py") -> Path:
+def _write_module(
+    src_root: Path, line_count: int, name: str = "candidate.py", *, import_lines: int = 0
+) -> Path:
     path = src_root / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("value = 1\n" * line_count, encoding="utf-8")
+    path.write_text("import os\n" * import_lines + "value = 1\n" * line_count, encoding="utf-8")
     return path
 
 
@@ -93,6 +95,47 @@ def test_false_exemption_predicate_reports_failure(
 
     assert message is not None
     assert "returned False" in message
+
+
+def test_raising_exemption_predicate_reports_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    path = _write_module(mod.SRC_ROOT, 751)
+
+    def _raising_predicate() -> bool:
+        raise RuntimeError("cannot verify")
+
+    monkeypatch.setitem(
+        mod._LINE_LIMIT_EXEMPTIONS,
+        "candidate.py",
+        mod.LineLimitExemption(
+            800,
+            "REQ-CNST-010-E3: verifiable rationale",
+            predicate=_raising_predicate,
+        ),
+    )
+
+    message = mod.check_file(path)
+
+    assert message is not None
+    assert "raised RuntimeError: cannot verify" in message
+    assert "cannot be verified" in message
+
+
+def test_undecodable_file_is_reported_as_a_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    mod.SRC_ROOT.mkdir(parents=True, exist_ok=True)
+    path = mod.SRC_ROOT / "undecodable.py"
+    path.write_bytes(b"value = '\xff\xfe'\n")
+
+    message = mod.check_file(path)
+
+    assert message is not None
+    assert "undecodable.py" in message
+    assert "cannot be measured" in message
 
 
 def test_verified_exemption_within_limit_passes(
@@ -301,3 +344,77 @@ def test_path_outside_source_root_is_ignored(
     path = _write_module(tmp_path / "outside", 751)
 
     assert mod.check_file(path) is None
+
+
+def test_import_lines_do_not_count_toward_hard_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    path = _write_module(mod.SRC_ROOT, 750, import_lines=100)
+
+    assert mod.check_file(path) is None
+
+
+def test_hard_cap_message_reports_non_import_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    path = _write_module(mod.SRC_ROOT, 751, import_lines=10)
+
+    message = mod.check_file(path)
+
+    assert message is not None
+    assert "751 non-import lines" in message
+    assert "750-line hard cap" in message
+
+
+def test_import_lines_do_not_count_toward_exemption_ceiling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    monkeypatch.setitem(
+        mod._LINE_LIMIT_EXEMPTIONS,
+        "candidate.py",
+        mod.LineLimitExemption(
+            800,
+            "REQ-CNST-010-E6: verifiable rationale",
+            predicate=lambda: True,
+        ),
+    )
+    path = _write_module(mod.SRC_ROOT, 800, import_lines=50)
+
+    assert mod.check_file(path) is None
+
+
+def test_unparseable_file_is_reported_as_a_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    mod.SRC_ROOT.mkdir(parents=True, exist_ok=True)
+    path = mod.SRC_ROOT / "broken.py"
+    path.write_text("def (:\n", encoding="utf-8")
+
+    message = mod.check_file(path)
+
+    assert message is not None
+    assert "broken.py" in message
+    assert "cannot be measured" in message
+
+
+def test_main_reports_unparseable_file_alongside_other_violations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    mod.SRC_ROOT.mkdir(parents=True, exist_ok=True)
+    broken = mod.SRC_ROOT / "broken.py"
+    broken.write_text("def (:\n", encoding="utf-8")
+    oversized = _write_module(mod.SRC_ROOT, 751, "oversized.py")
+
+    assert mod.main([str(broken), str(oversized)]) == 1
+    output = capsys.readouterr()
+    assert "broken.py" in output.out
+    assert "oversized.py" in output.out
+    assert "Total: 2 violation(s)" in output.out
+    assert output.err == ""

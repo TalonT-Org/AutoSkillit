@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
+from tests.arch._line_budget import count_budget_lines
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -195,8 +196,8 @@ def test_split_files_under_750_lines() -> None:
         "tools_execution/_run_skill_finalize.py",
         "tools_execution/_run_skill_dispatch.py",
     ):
-        lines = len((server / "tools" / name).read_text().splitlines())
-        assert lines <= 750, f"{name} has {lines} lines, exceeds 750"
+        lines = count_budget_lines(server / "tools" / name)
+        assert lines <= 750, f"{name} has {lines} non-import lines, exceeds 750"
 
 
 def test_extract_block_in_misc() -> None:

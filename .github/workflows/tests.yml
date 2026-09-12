@@ -322,7 +322,7 @@ jobs:
         run: |
           base="${BASE_REVISION:?preflight must emit test-base-revision for PR and merge-group events}"
           git cat-file -e "${base}^{commit}" || {
-            echo "::error::base revision ${base} is absent from this checkout (fetch-depth must stay 0)"
+            echo "::error::base revision ${base} is not reachable in this checkout (fetch-depth must stay 0)"
             exit 1
           }
           git merge-base --is-ancestor "${base}" HEAD || {

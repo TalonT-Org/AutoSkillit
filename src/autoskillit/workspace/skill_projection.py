@@ -113,6 +113,18 @@ class SkillProjectionPreparation:
             binding=binding,
         )
 
+    def materialization_context(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        binding: PluginLaunchBinding,
+    ) -> SkillProjectionContext:
+        return _skill_projection_materialization_context(
+            self,
+            backend=backend,
+            binding=binding,
+        )
+
 
 def build_skill_projection_binding(
     projection_context: SkillProjectionContext,
@@ -198,12 +210,12 @@ def build_skill_projection_binding(
     )
 
 
-def _finalize_skill_projection_binding(
+def _skill_projection_materialization_context(
     preparation: SkillProjectionPreparation,
     *,
     backend: CodingAgentBackend,
     binding: PluginLaunchBinding,
-) -> SkillProjectionBinding:
+) -> SkillProjectionContext:
     """Bind backend conventions only after the launch artifact is reader-owned."""
     if binding.closed:
         raise PluginArtifactValidationError(
@@ -214,7 +226,7 @@ def _finalize_skill_projection_binding(
             "plugin launch path does not match its leased artifact identity"
         )
     destination = binding.plugin_dir or binding.identity.managed_path
-    context = SkillProjectionContext(
+    return SkillProjectionContext(
         cwd=preparation.cwd,
         project_root=preparation.project_root,
         catalog=preparation.catalog,
@@ -228,6 +240,20 @@ def _finalize_skill_projection_binding(
             "{{DEFAULT_BASE_BRANCH}}": preparation.default_base_branch,
         },
     )
+
+
+def _finalize_skill_projection_binding(
+    preparation: SkillProjectionPreparation,
+    *,
+    backend: CodingAgentBackend,
+    binding: PluginLaunchBinding,
+) -> SkillProjectionBinding:
+    context = _skill_projection_materialization_context(
+        preparation,
+        backend=backend,
+        binding=binding,
+    )
+    destination = binding.plugin_dir or binding.identity.managed_path
     return build_skill_projection_binding(
         context,
         artifact_paths=(str(destination),),

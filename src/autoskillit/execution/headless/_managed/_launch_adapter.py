@@ -242,6 +242,8 @@ def _food_truck_launch_spec_builder(
     orchestrator_prompt: str,
     cwd: str,
     capability_preparation: SkillProjectionPreparation | None,
+    managed_skill_catalog: ValidatedAddDir | None = None,
+    managed_home_fds: tuple[int, ...] = (),
     completion_marker: str,
     resume_session_id: str | None,
     resume_checkpoint: SessionCheckpoint | None,
@@ -280,7 +282,7 @@ def _food_truck_launch_spec_builder(
                 resolved_command=orchestrator_prompt,
                 cwd=cwd,
             )
-        return backend.build_food_truck_cmd(
+        spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
             plugin_binding=plugin_binding,
             cwd=attempt_cwd,
@@ -304,7 +306,14 @@ def _food_truck_launch_spec_builder(
             managed_attempt_id=managed_attempt_id,
             force_inactive_agent_teams=force_inactive_agent_teams,
             project_root=attempt_cwd,
+            managed_skill_catalog=managed_skill_catalog,
         )
+        if managed_home_fds:
+            spec = dataclasses.replace(
+                spec,
+                inherited_fds=(*spec.inherited_fds, *managed_home_fds),
+            )
+        return spec
 
     return build
 

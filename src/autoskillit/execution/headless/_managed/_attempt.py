@@ -379,14 +379,20 @@ def _headless_plugin_load_mode(
     backend: CodingAgentBackend,
     *,
     add_dirs: Sequence[ValidatedAddDir] = (),
+    requires_generated_home: bool = False,
 ) -> PluginLoadMode:
-    """Resolve how this concrete backend launch obtains its skill tree."""
+    """Resolve how this concrete backend launch obtains its skill tree.
+
+    ``requires_generated_home`` selects a generated home ahead of the
+    add-dirs that will materialize into it (e.g. a food-truck managed
+    catalog, built only after this mode selects ``GENERATED_HOME``).
+    """
     capabilities = backend.capabilities
     if not capabilities.skill_injection_capable:
         return PluginLoadMode.NONE
     if capabilities.plugin_install_capable:
         return PluginLoadMode.EXPLICIT_PLUGIN_DIR
-    if add_dirs:
+    if add_dirs or requires_generated_home:
         return PluginLoadMode.GENERATED_HOME
     return PluginLoadMode.PROJECTED_HOME
 

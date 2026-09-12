@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -124,13 +124,26 @@ async def _run_headless_attempt(
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
     attempt: int = 1,
+    retained_binding: PluginLaunchBinding | None = None,
 ) -> tuple[SubprocessResult, CmdSpec]:
-    """Build and execute one provider attempt under one owned plugin binding."""
-    with _plugin_launch_binding(
-        authority=plugin_authority,
-        backend=backend,
-        load_mode=plugin_load_mode,
-    ) as binding:
+    """Build and execute one provider attempt under one owned plugin binding.
+
+    ``retained_binding``, when set, is an artifact binding the caller already
+    acquired and retains ownership of across the complete logical dispatch
+    (main attempt, retry, and nudge) — this attempt uses it directly instead
+    of acquiring (and closing) its own, so every physical attempt shares one
+    artifact identity.
+    """
+    binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
+        nullcontext(retained_binding)
+        if retained_binding is not None
+        else _plugin_launch_binding(
+            authority=plugin_authority,
+            backend=backend,
+            load_mode=plugin_load_mode,
+        )
+    )
+    with binding_scope as binding:
         plugin_identity = _binding_identity(binding)
         artifact_paths = tuple(
             [*launch_preparation.artifact_paths]
@@ -249,8 +262,13 @@ async def _attempt_contract_nudge(
     natural_exit_grace_seconds: float,
     attempt: int = 2,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    retained_binding: PluginLaunchBinding | None = None,
 ) -> SkillResult | None:
-    """Resume once to recover omitted structured tokens or the completion marker."""
+    """Resume once to recover omitted structured tokens or the completion marker.
+
+    ``retained_binding``, mirroring ``_run_headless_attempt``, reuses one
+    caller-owned artifact binding rather than acquiring a fresh one.
+    """
     if backend is None or not backend.capabilities.session_resume_capable:
         return None
     if result_parser is None:
@@ -302,15 +320,24 @@ async def _attempt_contract_nudge(
         patterns_to_check = list(expected_output_patterns)
 
     effective_extras = dict(provider_extras or {})
-    if plugin_load_mode.consumes_artifact and plugin_authority is None:
+    if (
+        plugin_load_mode.consumes_artifact
+        and plugin_authority is None
+        and retained_binding is None
+    ):
         logger.warning("nudge_skip_missing_plugin_authority")
         return None
-    try:
-        with _plugin_launch_binding(
+    nudge_binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
+        nullcontext(retained_binding)
+        if retained_binding is not None
+        else _plugin_launch_binding(
             authority=plugin_authority,
             backend=backend,
             load_mode=plugin_load_mode,
-        ) as binding:
+        )
+    )
+    try:
+        with nudge_binding_scope as binding:
             managed_attempt_id = (
                 managed_lineage_observer.allocate_attempt()
                 if managed_lineage_observer is not None

@@ -70,7 +70,6 @@ from autoskillit.execution.backends._codex_cmd_builders import (
     CodexEnvPolicy,
     CodexFlags,
     _codex_app_server_base,
-    _codex_exec_base,
     _codex_exec_extras,
     _should_bypass_hook_trust,
 )
@@ -345,11 +344,20 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         project_root: Path | str | None = None,
         managed_attempt_id: str | None = None,
+        managed_skill_catalog: ValidatedAddDir | None = None,
     ) -> CmdSpec:
         # Codex uses ensure_codex_mcp_registered and CODEX_MCP_TOOL_TIMEOUT_FLOOR;
         # this shared-Protocol parameter is intentionally ignored.
         del mcp_tool_timeout_sec
-        projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
+        if (
+            managed_skill_catalog is None
+            or not managed_skill_catalog.session_home
+            or not managed_skill_catalog.skill_entries
+        ):
+            raise ValueError(
+                "Codex app-server food-truck launches require a managed catalog bound to a "
+                "nonempty session_home with a frozen, nonempty skill catalog"
+            )
         if output_format != OutputFormat.STREAM_JSON:
             logger.warning("codex_output_format_coerced")
 
@@ -400,8 +408,9 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             env_extras,
             denylist=_PROVIDER_EXTRAS_BASE_DENYLIST,
         )
-        if projected_codex_home is not None:
-            extras["CODEX_HOME"] = projected_codex_home
+        session_home = managed_skill_catalog.session_home
+        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+            extras[reserved_key] = session_home
         if exit_after_stop_delay_ms:
             extras.setdefault(
                 "AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT", str(exit_after_stop_delay_ms / 1000)
@@ -414,7 +423,9 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         env = CodexEnvPolicy().build_env(
             filtered_base,
             extras=extras,
-            required=ORCHESTRATOR_SESSION_REQUIRED_ENV | {MCP_CLIENT_BACKEND_ENV_VAR},
+            required=ORCHESTRATOR_SESSION_REQUIRED_ENV
+            | {MCP_CLIENT_BACKEND_ENV_VAR}
+            | CODEX_RESERVED_HOME_ENV_VARS,
         )
         env.update(
             _managed_native_shell_env(
@@ -424,22 +435,37 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             )
         )
 
-        cmd = _codex_exec_base(
-            sandbox="read-only",
-            extra_overrides=["web_search=disabled", *self._otlp_overrides(extras)],
-            bypass_hook_trust=_should_bypass_hook_trust(
-                self.capabilities.hook_trust_policy,
-                automated_session=True,
-            ),
+        cmd = _codex_app_server_base(extra_overrides=self._otlp_overrides(extras))
+        bypass_hook_trust = _should_bypass_hook_trust(
+            self.capabilities.hook_trust_policy, automated_session=True
         )
+        config_overrides: dict[str, object] = {
+            "bypass_hook_trust": bypass_hook_trust,
+            "web_search": "disabled",
+        }
         if model:
-            cmd += [CodexFlags.MODEL, self.translate_model(model)]
             for override in self.model_config_overrides(model):
-                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
-        if resume_session_id:
-            cmd.append(CodexFlags.RESUME_SUBCOMMAND)
-            cmd.append(resume_session_id)
-        cmd.append(prompt)
+                key, _, value = override.partition("=")
+                config_overrides[key] = value
+        catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
+        app_server_plan = CodexAppServerPlan(
+            session_home=session_home,
+            catalog_root=catalog_root,
+            expected_skill_names=frozenset(
+                name for name, _ in managed_skill_catalog.skill_entries
+            ),
+            expected_skill_entries=managed_skill_catalog.skill_entries,
+            cwd=cwd,
+            prompt=prompt,
+            model=self.translate_model(model) if model else None,
+            sandbox="read-only",
+            approval_policy="never",
+            bypass_hook_trust=bypass_hook_trust,
+            developer_instructions=None,
+            config_overrides=config_overrides,
+            client_version=AUTOSKILLIT_INSTALLED_VERSION,
+            resume_thread_id=resume_session_id or "",
+        )
 
         return CmdSpec(
             cmd=tuple(cmd),
@@ -448,6 +474,8 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             is_resume=bool(resume_session_id),
             process_idle_timeout_ms=stream_idle_timeout_ms,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            managed_skill_catalog=managed_skill_catalog,
+            app_server_plan=app_server_plan,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 
@@ -587,6 +615,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
         session_home: str | None = None,
+        managed_skill_catalog: ValidatedAddDir | None = None,
         env_extras: Mapping[str, str] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
@@ -603,28 +632,28 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         if not resume_session_id.strip():
             msg = "resume_session_id must be a non-empty string"
             raise ValueError(msg)
+        if output_format != OutputFormat.JSON:
+            logger.warning("codex_output_format_coerced")
+        if managed_skill_catalog is not None:
+            if not managed_skill_catalog.session_home or not managed_skill_catalog.skill_entries:
+                raise ValueError(
+                    "Codex app-server managed resume requires a catalog bound to a nonempty "
+                    "session_home with a frozen, nonempty skill catalog"
+                )
+            if session_home is not None and session_home != managed_skill_catalog.session_home:
+                raise ValueError(
+                    "Codex app-server managed resume home does not agree with its bound catalog"
+                )
+            session_home = managed_skill_catalog.session_home
+
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras = _codex_exec_extras(
             session_type="", include_session_baseline=True, include_agent_backend_flat=True
         )
         _merge_caller_env_extras(resume_extras, env_extras)
-        cmd = _codex_exec_base(
-            sandbox="read-only",
-            json=(output_format == OutputFormat.JSON),
-            extra_overrides=self._otlp_overrides(resume_extras),
-        )
-        cmd.append(CodexFlags.RESUME_SUBCOMMAND)
-        cmd.append(resume_session_id)
-        cmd.append(
-            f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
-        )
         if session_home is not None:
             for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
                 resume_extras[reserved_key] = session_home
-        else:
-            projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
-            if projected_codex_home is not None:
-                resume_extras["CODEX_HOME"] = projected_codex_home
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,
@@ -641,11 +670,43 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
                 attempt_id=managed_attempt_id,
             )
         )
+
+        cmd = _codex_app_server_base(extra_overrides=self._otlp_overrides(resume_extras))
+        bypass_hook_trust = _should_bypass_hook_trust(
+            self.capabilities.hook_trust_policy, automated_session=True
+        )
+        if managed_skill_catalog is not None:
+            assert session_home is not None
+            catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
+            expected_entries = managed_skill_catalog.skill_entries
+        else:
+            catalog_root = ""
+            expected_entries = ()
+        app_server_plan = CodexAppServerPlan(
+            session_home=session_home or "",
+            catalog_root=catalog_root,
+            expected_skill_names=frozenset(name for name, _ in expected_entries),
+            expected_skill_entries=expected_entries,
+            cwd=str(project_root) if project_root is not None else "",
+            prompt=prompt,
+            model=None,
+            sandbox="read-only",
+            approval_policy="never",
+            bypass_hook_trust=bypass_hook_trust,
+            developer_instructions=codex_discipline_suffix(include_scope=include_scope_discipline),
+            config_overrides={"bypass_hook_trust": bypass_hook_trust},
+            client_version=AUTOSKILLIT_INSTALLED_VERSION,
+            resume_thread_id=resume_session_id,
+        )
+
         return CmdSpec(
             cmd=tuple(cmd),
             env=env,
+            cwd=str(project_root) if project_root is not None else "",
             is_resume=True,
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
+            managed_skill_catalog=managed_skill_catalog,
+            app_server_plan=app_server_plan,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 

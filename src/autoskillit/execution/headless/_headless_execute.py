@@ -133,6 +133,7 @@ async def _execute_claude_headless(
     provider_name: str = "",
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
+    retained_binding: PluginLaunchBinding | None = None,
     provider_fallback_env: dict[str, str] | None = None,
     provider_fallback_name: str = "",
     provider_extras: Mapping[str, str] | None = None,
@@ -162,7 +163,10 @@ async def _execute_claude_headless(
 
     Acquires and retains one exact plugin binding for each physical provider
     attempt, builds that attempt's CmdSpec, and holds ownership until the
-    subprocess has been reaped.
+    subprocess has been reaped. When the caller passes ``retained_binding``
+    (a binding it already acquired and owns for the complete logical
+    dispatch), every physical attempt — main, retry, and nudge — reuses that
+    same artifact identity instead of acquiring its own.
     """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")
@@ -341,6 +345,7 @@ async def _execute_claude_headless(
                     expected_launch_contract=resume_launch_contract,
                     plugin_authority=plugin_authority,
                     plugin_load_mode=plugin_load_mode,
+                    retained_binding=retained_binding,
                     provider_extras=current_provider_extras or None,
                     timeout=timeout,
                     pty_override=pty_override,
@@ -467,6 +472,7 @@ async def _execute_claude_headless(
                         skill_contract=skill_contract,
                         plugin_authority=plugin_authority,
                         plugin_load_mode=plugin_load_mode,
+                        retained_binding=retained_binding,
                         session_env=spec.env,
                         launch_resolver=launch_resolver,
                         launch_preparation=launch_preparation,

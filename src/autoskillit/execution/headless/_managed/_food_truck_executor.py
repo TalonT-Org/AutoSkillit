@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import uuid
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import cast
 
@@ -15,6 +17,7 @@ from autoskillit.core import (
     BackendAuthorityKind,
     BackendAuthorityTier,
     CodingAgentBackend,
+    EffectiveSkillCatalogAuthority,
     LaunchResolutionRequest,
     LaunchSurface,
     LaunchValueSource,
@@ -22,6 +25,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionTerminalState,
+    ManagedSessionHome,
     NativeShellCaptureDecision,
     PluginArtifactAuthority,
     ProviderBinding,
@@ -30,6 +34,8 @@ from autoskillit.core import (
     SessionCheckpoint,
     SkillProjectionPreparation,
     SkillResult,
+    ValidatedAddDir,
+    plugin_launch_binding_scope,
     temp_dir_display_str,
 )
 from autoskillit.execution.headless._headless_helpers import (
@@ -248,30 +254,12 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             backend=backend,
             session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
         )
-        plugin_load_mode = _headless_plugin_load_mode(backend)
-        build_spec = _food_truck_launch_spec_builder(
-            backend=backend,
-            orchestrator_prompt=orchestrator_prompt,
-            cwd=cwd,
-            capability_preparation=capability_preparation,
-            completion_marker=completion_marker,
-            resume_session_id=resume_session_id,
-            resume_checkpoint=resume_checkpoint,
-            configured_model=model_identity.configured_model or None,
-            output_format=cfg.run_skill.output_format,
-            exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
-            stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
-            mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
-            step_name=step_name,
-            temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
-            allowed_write_prefix=allowed_write_prefix,
-            allowed_write_prefixes=allowed_write_prefixes,
-            sentinel_contract=sentinel_contract,
-            resume_message=resume_message,
-            native_shell_capture_decision=native_shell_capture_decision,
-            managed_lineage_ref=managed_lineage_ref,
-            force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
+        managed_catalog_requested = capability_preparation is not None
+        plugin_load_mode = _headless_plugin_load_mode(
+            backend,
+            requires_generated_home=managed_catalog_requested,
         )
+        resolved_plugin_authority = plugin_authority or self._ctx.plugin_authority
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
         effective_stale = (
@@ -296,62 +284,139 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             if cwd
             else None
         )
-        try:
-            skill_result = await headless_facade._execute_claude_headless(
-                build_spec,
-                cwd,
-                self._ctx,
-                skill_command="",
-                step_name=step_name,
-                kitchen_id=kitchen_id,
-                caller_session_id=caller_session_id,
-                order_id=order_id,
-                campaign_id=campaign_id,
-                dispatch_id=dispatch_id,
-                project_dir=project_dir,
-                timeout=float(effective_timeout),
-                stale_threshold=float(effective_stale),
-                idle_output_timeout=effective_idle_out,
-                natural_exit_grace_seconds=effective_natural_exit_grace_seconds,
-                completion_marker=completion_marker,
-                prior_completion_markers=prior_completion_markers,
-                on_spawn=on_spawn,
-                skip_clone_guard=True,
-                pty_override=False,
-                provider_name=provider_name,
-                provider_extras=merged_extras or None,
-                provider_fallback_env=provider_fallback_env,
-                provider_fallback_name=provider_fallback_name,
-                enable_deadline_extension=effective_deadline_ext,
-                max_extension_seconds=effective_max_ext,
-                ceiling_seconds=effective_ceiling_seconds,
-                systemd_scope_enabled=effective_systemd_scope_enabled,
-                marker_dir=effective_marker_dir,
-                session_id=session_id,
-                model_identity=model_identity,
-                on_session_id_resolved=on_session_id_resolved,
-                launch_resolver=self._ctx.launch_resolver,
-                launch_preparation=launch_preparation,
-                on_launch_resolved=on_launch_resolved,
-                plugin_authority=plugin_authority or self._ctx.plugin_authority,
-                plugin_load_mode=plugin_load_mode,
-                managed_lineage_observer=managed_lineage_observer,
+
+        # The retained binding and (when a managed catalog is requested) the
+        # generated home it owns span the complete logical dispatch — main
+        # attempt, provider retry, and nudge — not just spec-builder
+        # construction. Every physical attempt inside `_execute_claude_headless`
+        # reuses this same artifact identity via `retained_binding` rather than
+        # re-acquiring independently.
+        with plugin_launch_binding_scope(
+            authority=resolved_plugin_authority,
+            backend=backend,
+            load_mode=plugin_load_mode,
+        ) as retained_binding:
+            managed_catalog_scope: AbstractContextManager[ManagedSessionHome | None] = nullcontext(
+                None
             )
-        except anyio.get_cancelled_exc_class():
-            if managed_lineage_observer is not None:
-                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.CANCELLED)
-            raise
-        except Exception:
-            if managed_lineage_observer is not None:
-                managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
-            raise
-        if managed_lineage_observer is not None and not skill_result.needs_retry:
-            managed_lineage_observer.close(
-                ManagedHeadlessSessionTerminalState.SUCCEEDED
-                if skill_result.success
-                else ManagedHeadlessSessionTerminalState.FAILED
-            )
-        return skill_result
+            if managed_catalog_requested:
+                assert capability_preparation is not None
+                session_skill_manager = self._ctx.session_skill_manager
+                if session_skill_manager is None:
+                    raise RuntimeError(
+                        "food truck managed catalog dispatch requires a session skill manager"
+                    )
+                if retained_binding is None:
+                    raise RuntimeError(
+                        "food truck managed catalog dispatch requires a consumed-artifact "
+                        "plugin launch binding"
+                    )
+                if capability_preparation.catalog is None:
+                    raise RuntimeError(
+                        "food truck managed catalog dispatch requires an effective skill catalog"
+                    )
+                projection_context = capability_preparation.materialization_context(
+                    backend=backend,
+                    binding=retained_binding,
+                )
+                managed_catalog_scope = session_skill_manager.managed_catalog(
+                    uuid.uuid4().hex[:16],
+                    cast(EffectiveSkillCatalogAuthority, capability_preparation.catalog),
+                    projection_context,
+                )
+
+            with managed_catalog_scope as managed_home:
+                managed_skill_catalog: ValidatedAddDir | None = None
+                managed_home_fds: tuple[int, ...] = ()
+                if managed_home is not None:
+                    managed_skill_catalog = managed_home.skills_dir
+                    managed_home_fds = managed_home.pass_fds
+
+                build_spec = _food_truck_launch_spec_builder(
+                    backend=backend,
+                    orchestrator_prompt=orchestrator_prompt,
+                    cwd=cwd,
+                    capability_preparation=capability_preparation,
+                    managed_skill_catalog=managed_skill_catalog,
+                    managed_home_fds=managed_home_fds,
+                    completion_marker=completion_marker,
+                    resume_session_id=resume_session_id,
+                    resume_checkpoint=resume_checkpoint,
+                    configured_model=model_identity.configured_model or None,
+                    output_format=cfg.run_skill.output_format,
+                    exit_after_stop_delay_ms=cfg.run_skill.exit_after_stop_delay_ms,
+                    stream_idle_timeout_ms=cfg.run_skill.stream_idle_timeout_ms,
+                    mcp_tool_timeout_sec=cfg.run_skill.mcp_tool_timeout_sec,
+                    step_name=step_name,
+                    temp_dir_relpath=temp_dir_display_str(cfg.workspace.temp_dir),
+                    allowed_write_prefix=allowed_write_prefix,
+                    allowed_write_prefixes=allowed_write_prefixes,
+                    sentinel_contract=sentinel_contract,
+                    resume_message=resume_message,
+                    native_shell_capture_decision=native_shell_capture_decision,
+                    managed_lineage_ref=managed_lineage_ref,
+                    force_inactive_agent_teams=cfg.agent_backend.force_inactive_agent_teams,
+                )
+
+                try:
+                    skill_result = await headless_facade._execute_claude_headless(
+                        build_spec,
+                        cwd,
+                        self._ctx,
+                        skill_command="",
+                        step_name=step_name,
+                        kitchen_id=kitchen_id,
+                        caller_session_id=caller_session_id,
+                        order_id=order_id,
+                        campaign_id=campaign_id,
+                        dispatch_id=dispatch_id,
+                        project_dir=project_dir,
+                        timeout=float(effective_timeout),
+                        stale_threshold=float(effective_stale),
+                        idle_output_timeout=effective_idle_out,
+                        natural_exit_grace_seconds=effective_natural_exit_grace_seconds,
+                        completion_marker=completion_marker,
+                        prior_completion_markers=prior_completion_markers,
+                        on_spawn=on_spawn,
+                        skip_clone_guard=True,
+                        pty_override=False,
+                        provider_name=provider_name,
+                        provider_extras=merged_extras or None,
+                        provider_fallback_env=provider_fallback_env,
+                        provider_fallback_name=provider_fallback_name,
+                        enable_deadline_extension=effective_deadline_ext,
+                        max_extension_seconds=effective_max_ext,
+                        ceiling_seconds=effective_ceiling_seconds,
+                        systemd_scope_enabled=effective_systemd_scope_enabled,
+                        marker_dir=effective_marker_dir,
+                        session_id=session_id,
+                        model_identity=model_identity,
+                        on_session_id_resolved=on_session_id_resolved,
+                        launch_resolver=self._ctx.launch_resolver,
+                        launch_preparation=launch_preparation,
+                        on_launch_resolved=on_launch_resolved,
+                        plugin_authority=resolved_plugin_authority,
+                        plugin_load_mode=plugin_load_mode,
+                        retained_binding=retained_binding,
+                        managed_lineage_observer=managed_lineage_observer,
+                    )
+                except anyio.get_cancelled_exc_class():
+                    if managed_lineage_observer is not None:
+                        managed_lineage_observer.close(
+                            ManagedHeadlessSessionTerminalState.CANCELLED
+                        )
+                    raise
+                except Exception:
+                    if managed_lineage_observer is not None:
+                        managed_lineage_observer.close(ManagedHeadlessSessionTerminalState.FAILED)
+                    raise
+                if managed_lineage_observer is not None and not skill_result.needs_retry:
+                    managed_lineage_observer.close(
+                        ManagedHeadlessSessionTerminalState.SUCCEEDED
+                        if skill_result.success
+                        else ManagedHeadlessSessionTerminalState.FAILED
+                    )
+                return skill_result
 
 
 __all__ = ["DefaultHeadlessExecutor"]

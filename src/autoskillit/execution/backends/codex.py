@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -42,29 +42,17 @@ from autoskillit.core import (
     get_logger,
     required_join_is_unsupported,
 )
-from autoskillit.execution.backends._backend_cmd_builder_base import (
-    FlagVocabulary,
-    _merge_caller_env_extras,
-)
-from autoskillit.execution.backends._claude_prompt import (
-    _HEADLESS_EXCLUSIVE_VARS,
-)
+from autoskillit.execution.backends._backend_cmd_builder_base import FlagVocabulary
 from autoskillit.execution.backends._codex.app_server import CodexAppServerDriver
-from autoskillit.execution.backends._codex.session_commands import (
-    CodexSessionCommandMixin,
-)
+from autoskillit.execution.backends._codex.headless_commands import CodexHeadlessCommandMixin
 from autoskillit.execution.backends._codex_cmd_builders import (
     CODEX_ENV_PREFIX_DENYLIST,
-    CODEX_EXEC_FLAGS,
-    CODEX_TOP_LEVEL_ONLY_FLAGS,
     NON_VARIADIC_CODEX_FLAGS,
     VARIADIC_CODEX_FLAGS,
     CodexEnvPolicy,
     CodexFlags,
     CodexSessionLocator,
     CodexStateReadinessProbe,
-    _codex_exec_base,
-    _codex_exec_extras,
 )
 from autoskillit.execution.backends._codex_config import (
     CODEX_RECIPE_DELIVERY_BUDGET,
@@ -116,9 +104,7 @@ def _interactive_probe_prefix(origin: CmdOrigin) -> tuple[str, ...]:
 
 __all__ = [
     "CODEX_SKILL_DISCOVERY_CONTRACT",
-    "CODEX_EXEC_FLAGS",
     "CODEX_SPAWNABLE_BUILT_IN_AGENT_NAMES",
-    "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "CodexBackend",
     "CodexEnvPolicy",
     "CodexFlags",
@@ -148,7 +134,7 @@ def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
 
 
 @dataclass(frozen=True, slots=True)
-class CodexBackend(CodexSessionCommandMixin):
+class CodexBackend(CodexHeadlessCommandMixin):
     source_codex_home: Path | None = None
 
     def __post_init__(self) -> None:
@@ -267,7 +253,10 @@ class CodexBackend(CodexSessionCommandMixin):
 
     def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
         spec = self.build_headless_cmd(skill_command)
-        return replace(spec, cwd=cwd)
+        spec = replace(spec, cwd=cwd)
+        if spec.app_server_plan is not None:
+            spec = replace(spec, app_server_plan=replace(spec.app_server_plan, cwd=cwd))
+        return spec
 
     def stream_parser(self, completion_marker: str = "") -> CodexStreamParser:
         return CodexStreamParser(completion_marker=completion_marker)
@@ -327,35 +316,6 @@ class CodexBackend(CodexSessionCommandMixin):
 
     def version_cmd(self) -> tuple[str, ...]:
         return ("codex", "--version")
-
-    def build_headless_cmd(
-        self,
-        prompt: str,
-        *,
-        model: str | None = None,
-        add_dirs: Sequence[str] = (),
-        force_inactive_agent_teams: bool = False,  # no-op: Codex has no team concept
-        env_extras: Mapping[str, str] | None = None,
-        project_root: Path | str | None = None,
-    ) -> CmdSpec:
-        headless_extras = _codex_exec_extras(session_type="")
-        _merge_caller_env_extras(headless_extras, env_extras)
-        cmd = _codex_exec_base(
-            sandbox="workspace-write",
-            extra_overrides=self._otlp_overrides(headless_extras),
-        )
-        if model:
-            cmd += [CodexFlags.MODEL, self.translate_model(model)]
-            for override in self.model_config_overrides(model):
-                cmd += [CodexFlags.CONFIG_OVERRIDE, override]
-        for d in add_dirs:
-            cmd += [CodexFlags.ADD_DIR, d]
-        cmd.append(prompt)
-        filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
-        env = self.env_policy().build_env(filtered_base, extras=headless_extras)
-        return CmdSpec(
-            cmd=tuple(cmd), env=env, force_inactive_agent_teams=force_inactive_agent_teams
-        )
 
     def validate_session_layout(
         self,

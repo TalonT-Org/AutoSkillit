@@ -66,25 +66,6 @@ class CodexFlags(StrEnum):
     DANGEROUSLY_BYPASS_HOOK_TRUST = "--dangerously-bypass-hook-trust"
 
 
-CODEX_EXEC_FLAGS: frozenset[str] = frozenset(
-    {
-        CodexFlags.JSON,
-        CodexFlags.SANDBOX,
-        CodexFlags.MODEL,
-        CodexFlags.CONFIG_OVERRIDE,
-        CodexFlags.ADD_DIR,
-        CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST,
-    }
-)
-
-CODEX_TOP_LEVEL_ONLY_FLAGS: frozenset[str] = frozenset(
-    {
-        CodexFlags.DANGEROUSLY_BYPASS,
-        CodexFlags.MODEL_SHORT,
-        CodexFlags.PROFILE,
-    }
-)
-
 VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset({CodexFlags.ADD_DIR, CodexFlags.CONFIG_OVERRIDE})
 
 NON_VARIADIC_CODEX_FLAGS: frozenset[str] = frozenset(
@@ -124,27 +105,6 @@ CODEX_ENV_DENYLIST: frozenset[str] = (
 CODEX_ENV_PREFIX_DENYLIST: tuple[str, ...] = ("CLAUDE_CODE_",)
 
 _IMAGE_GENERATION_DISABLED = "features.image_generation=false"
-
-
-def _codex_exec_base(
-    *,
-    sandbox: str | None,
-    json: bool = True,
-    extra_overrides: Sequence[str] = (),
-    bypass_hook_trust: bool = False,
-) -> list[str]:
-    cmd: list[str] = ["codex", "exec"]
-    if json:
-        cmd.append(CodexFlags.JSON)
-    if sandbox is not None:
-        cmd.extend([CodexFlags.SANDBOX, sandbox])
-    for override in extra_overrides:
-        cmd.extend([CodexFlags.CONFIG_OVERRIDE, override])
-    cmd.extend([CodexFlags.CONFIG_OVERRIDE, _IMAGE_GENERATION_DISABLED])
-    if bypass_hook_trust:
-        # Hook trust is independent from the sandbox selected by config/CLI.
-        cmd.append(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
-    return cmd
 
 
 def _codex_app_server_base(*, extra_overrides: Sequence[str] = ()) -> list[str]:
@@ -430,10 +390,8 @@ class CodexSessionLocator(SessionLocator):
 
 
 __all__ = [
-    "CODEX_EXEC_FLAGS",
     "CODEX_ENV_DENYLIST",
     "CODEX_ENV_PREFIX_DENYLIST",
-    "CODEX_TOP_LEVEL_ONLY_FLAGS",
     "CodexEnvPolicy",
     "CodexFlags",
     "CodexSessionLocator",

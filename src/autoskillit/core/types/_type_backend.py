@@ -510,15 +510,25 @@ class CodexAppServerPlan:
     runtime_workspace_roots: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.session_home:
-            raise ValueError("session_home must not be blank")
-        if not self.catalog_root:
-            raise ValueError("catalog_root must not be blank")
         if not self.client_version:
             raise ValueError("client_version must not be blank")
+        if self.catalog_root:
+            if not self.expected_skill_names or not self.expected_skill_entries:
+                raise ValueError(
+                    "a nonempty catalog_root requires nonempty expected skill names and entries"
+                )
+        elif self.expected_skill_names or self.expected_skill_entries:
+            raise ValueError(
+                "an empty catalog_root requires empty expected skill names and entries"
+            )
         names_from_entries = frozenset(name for name, _ in self.expected_skill_entries)
         if self.expected_skill_names != names_from_entries:
             raise ValueError("expected_skill_names must match the names in expected_skill_entries")
+        for root in self.runtime_workspace_roots:
+            if not Path(root).is_absolute():
+                raise ValueError(
+                    f"runtime_workspace_roots entries must be absolute paths: {root!r}"
+                )
 
     def digest_payload(self) -> Mapping[str, object]:
         """Deterministic JSON-safe rendering of this plan for ``adapter_digest``.

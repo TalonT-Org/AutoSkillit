@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,6 +10,8 @@ import pytest
 
 from autoskillit.migration._api import check_and_migrate
 from autoskillit.migration.engine import MigrationResult
+
+_migration_api = importlib.import_module("autoskillit.migration._api")
 
 pytestmark = [pytest.mark.layer("migration"), pytest.mark.small]
 
@@ -71,7 +74,7 @@ async def test_check_and_migrate_up_to_date(tmp_path: Path) -> None:
     with (
         patch("autoskillit.recipe.find_recipe_by_name", return_value=mock_match),
         patch("autoskillit.recipe.load_recipe", return_value=mock_recipe),
-        patch("autoskillit.migration._api.applicable_migrations", return_value=[]),
+        patch.object(_migration_api, "applicable_migrations", return_value=[]),
     ):
         result = await check_and_migrate("test", tmp_path, "0.1.0")
 
@@ -89,8 +92,8 @@ async def test_check_and_migrate_migrated_successfully(tmp_path: Path) -> None:
     with (
         patch("autoskillit.recipe.find_recipe_by_name", return_value=mock_match),
         patch("autoskillit.recipe.load_recipe", return_value=mock_recipe),
-        patch("autoskillit.migration._api.applicable_migrations", return_value=["note"]),
-        patch("autoskillit.migration._api.default_migration_engine", return_value=mock_engine),
+        patch.object(_migration_api, "applicable_migrations", return_value=["note"]),
+        patch.object(_migration_api, "default_migration_engine", return_value=mock_engine),
     ):
         result = await check_and_migrate("test", tmp_path, "0.1.0")
 
@@ -110,8 +113,8 @@ async def test_check_and_migrate_migration_fails(tmp_path: Path) -> None:
     with (
         patch("autoskillit.recipe.find_recipe_by_name", return_value=mock_match),
         patch("autoskillit.recipe.load_recipe", return_value=mock_recipe),
-        patch("autoskillit.migration._api.applicable_migrations", return_value=["note"]),
-        patch("autoskillit.migration._api.default_migration_engine", return_value=mock_engine),
+        patch.object(_migration_api, "applicable_migrations", return_value=["note"]),
+        patch.object(_migration_api, "default_migration_engine", return_value=mock_engine),
     ):
         result = await check_and_migrate("test", tmp_path, "0.1.0")
 
@@ -135,8 +138,8 @@ async def test_check_and_migrate_llm_runner_blocked(tmp_path: Path) -> None:
     with (
         patch("autoskillit.recipe.find_recipe_by_name", return_value=mock_match),
         patch("autoskillit.recipe.load_recipe", return_value=mock_recipe),
-        patch("autoskillit.migration._api.applicable_migrations", return_value=["note"]),
-        patch("autoskillit.migration._api.default_migration_engine", return_value=mock_engine),
+        patch.object(_migration_api, "applicable_migrations", return_value=["note"]),
+        patch.object(_migration_api, "default_migration_engine", return_value=mock_engine),
     ):
         result = await check_and_migrate("test", tmp_path, "0.1.0")
 
@@ -161,8 +164,9 @@ async def test_check_and_migrate_version_is_passed_to_applicable_migrations(
     with (
         patch("autoskillit.recipe.find_recipe_by_name", return_value=mock_match),
         patch("autoskillit.recipe.load_recipe", return_value=mock_recipe),
-        patch(
-            "autoskillit.migration._api.applicable_migrations",
+        patch.object(
+            _migration_api,
+            "applicable_migrations",
             side_effect=_capture_applicable_migrations,
         ),
     ):

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.migration.service as _patch_migration_service
 from autoskillit.migration.engine import (
     AdvisoryResult,
     MigrationResult,
@@ -37,7 +38,8 @@ class TestDefaultMigrationServiceBehaviour:
         # the real registry, which currently returns 4 notes for ``0.0.1``
         # but could return 0 for any future version that has no chain.
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [],
         )
         # Skip the contract + diagram regeneration paths so the service returns
@@ -69,7 +71,8 @@ class TestDefaultMigrationServiceBehaviour:
         # explicit no-runner error, exercising the MigrationServiceError
         # return shape.
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [make_migration_note()],
         )
 
@@ -97,7 +100,8 @@ class TestDefaultMigrationServiceBehaviour:
         # this exercises the recipe-migration success path that returns
         # ``MigrationServiceMigrated`` with ``contracts_regenerated``.
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [make_migration_note()],
         )
 
@@ -122,7 +126,8 @@ class TestDefaultMigrationServiceBehaviour:
         # runner return failure. The service must record the failure in
         # its FailureStore and short-circuit with ``MigrationServiceError``.
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [make_migration_note()],
         )
 
@@ -160,7 +165,8 @@ class TestDefaultMigrationServiceBehaviour:
         recipe_path = _seed_recipe(tmp_path)
 
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [],
         )
 
@@ -193,7 +199,8 @@ class TestDefaultMigrationServiceBehaviour:
         recipe_path = _seed_recipe(tmp_path)
 
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [],
         )
 
@@ -224,7 +231,8 @@ class TestDefaultMigrationServiceBehaviour:
         recipe_path = _seed_recipe(tmp_path)
 
         monkeypatch.setattr(
-            "autoskillit.migration.service._applicable",
+            _patch_migration_service,
+            "_applicable",
             lambda *a, **kw: [],
         )
 

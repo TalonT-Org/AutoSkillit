@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.workspace.clone_registry as _patch_workspace_clone_registry
 from autoskillit.workspace.clone_registry import (
     batch_delete,
     cleanup_candidates,
@@ -95,7 +96,8 @@ def test_register_clone_propagates_lock_timeout(
 
     registry = tmp_path / "registry.json"
     monkeypatch.setattr(
-        "autoskillit.workspace.clone_registry.acquire_flock_with_timeout",
+        _patch_workspace_clone_registry,
+        "acquire_flock_with_timeout",
         fail_lock,
     )
 

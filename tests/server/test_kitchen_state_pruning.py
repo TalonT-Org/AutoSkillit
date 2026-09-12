@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.server.tools.tools_kitchen import prune_stale_kitchen_state
 from tests.server._helpers import _write_registry
 
@@ -125,7 +126,7 @@ def test_invalid_tracker_candidate_is_logged(monkeypatch, tmp_path):
     invalid_tracker = tracker_dir / "invalid\\name.json"
     invalid_tracker.write_text("{}")
     mock_logger = MagicMock()
-    monkeypatch.setattr("autoskillit.server.tools.tools_kitchen.logger", mock_logger)
+    monkeypatch.setattr(_patch_tools_tools_kitchen, "logger", mock_logger)
 
     prune_stale_kitchen_state(tmp_path, "K2")
 

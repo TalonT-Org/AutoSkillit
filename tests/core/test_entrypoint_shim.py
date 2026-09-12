@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.core._entrypoint_shim as _patch_core__entrypoint_shim
 from autoskillit.core import (
     _AUTOSKILLIT_INSTALL_ROOT_KEY,
     ENTRYPOINT_SHIM_SOURCE,
@@ -95,7 +96,7 @@ def test_write_entrypoint_shim_second_call_is_a_noop(
     def fail_write(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("matching shim must not be rewritten")
 
-    monkeypatch.setattr("autoskillit.core._entrypoint_shim.atomic_write", fail_write)
+    monkeypatch.setattr(_patch_core__entrypoint_shim, "atomic_write", fail_write)
     write_entrypoint_shim(home)
 
 

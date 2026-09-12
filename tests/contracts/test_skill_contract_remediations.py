@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.migration.adapters_skill as _patch_migration_adapters_skill
 from autoskillit.core import (
     SKILL_CAPABILITY_REGISTRY,
     SKILL_CONTRACT_REMEDIATIONS,
@@ -141,9 +142,7 @@ async def test_migration_adapter_rejects_a_kind_it_does_not_know(
     patched[SkillInvalidityKind.FIELD_SHAPE] = patched[SkillInvalidityKind.FIELD_SHAPE]._replace(
         action=RemediationAction.DETERMINISTIC
     )
-    monkeypatch.setattr(
-        "autoskillit.migration.adapters_skill.SKILL_CONTRACT_REMEDIATIONS", patched
-    )
+    monkeypatch.setattr(_patch_migration_adapters_skill, "SKILL_CONTRACT_REMEDIATIONS", patched)
 
     file = MigrationFile(
         name="broken-field-shape", path=skill_path, file_type="skill", current_version=None

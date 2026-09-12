@@ -18,6 +18,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
 from autoskillit.cli.session._session_reload import consume_reload_sentinel
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
@@ -96,7 +97,7 @@ def test_consume_reload_sentinel_reports_cleanup_failure_without_consuming(
 
     logger = Mock()
     monkeypatch.setattr(Path, "unlink", fail_selected_unlink)
-    monkeypatch.setattr("autoskillit.cli.session._session_reload.logger", logger)
+    monkeypatch.setattr(_patch_session__session_reload, "logger", logger)
 
     assert consume_reload_sentinel(tmp_path) is None
     assert failed_path.exists()
@@ -122,10 +123,11 @@ def test_consume_reload_sentinel_logs_lock_timeout(
     sentinel_dir.mkdir(parents=True)
     logger = Mock()
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.acquire_flock_with_timeout",
+        _patch_session__session_reload,
+        "acquire_flock_with_timeout",
         Mock(side_effect=TimeoutError),
     )
-    monkeypatch.setattr("autoskillit.cli.session._session_reload.logger", logger)
+    monkeypatch.setattr(_patch_session__session_reload, "logger", logger)
 
     assert consume_reload_sentinel(tmp_path) is None
     logger.warning.assert_called_once_with(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.planner.merge as _patch_planner_merge
 import autoskillit.planner.merge as merge_module
 from autoskillit.planner.merge import merge_files, merge_tier_results
 from tests.planner.conftest import (
@@ -59,7 +60,7 @@ def test_merge_files_propagates_lock_timeout(tmp_path, monkeypatch: pytest.Monke
     def fail_lock(*args: object, **kwargs: object) -> None:
         raise TimeoutError
 
-    monkeypatch.setattr("autoskillit.planner.merge.acquire_flock_with_timeout", fail_lock)
+    monkeypatch.setattr(_patch_planner_merge, "acquire_flock_with_timeout", fail_lock)
 
     with pytest.raises(TimeoutError):
         merge_files(file_paths=[], output_path=str(tmp_path / "combined.json"), key="phases")

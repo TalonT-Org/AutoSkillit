@@ -14,6 +14,10 @@ from typing import cast
 
 import pytest
 
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit import cli
 from autoskillit.cli.install._plugin_artifact import interactive_plugin_authority
 from autoskillit.cli.session._session_launch import (
@@ -227,11 +231,13 @@ def _install_cook_harness(
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run",
+        _patch_session__session_onboarding,
+        "is_first_run",
         lambda _project_dir: False,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.ui._timed_input.timed_prompt",
+        _patch_ui__timed_input,
+        "timed_prompt",
         lambda *args, **kwargs: "",
     )
     monkeypatch.setattr(
@@ -239,11 +245,13 @@ def _install_cook_harness(
         lambda *args, **kwargs: None,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         run_attempt,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project_dir: None,
     )
     return captured

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.config.settings import OutputBudgetConfig, QuotaGuardConfig
 from autoskillit.hooks.formatters._fmt_primitives import _HOOK_CONFIG_PATH_COMPONENTS
 from tests.server._helpers import _HOOK_CONFIG_OVERLAY_RELPATH
@@ -45,8 +46,8 @@ async def test_open_kitchen_primes_quota_cache(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", prime_mock):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", prime_mock):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
@@ -71,9 +72,7 @@ async def test_open_kitchen_writes_hook_config_json(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx) as mock_get_ctx:
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                 await _open_kitchen_handler()
@@ -126,9 +125,7 @@ async def test_open_kitchen_bridges_enabled_flag_as_disabled(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                 await _open_kitchen_handler()
@@ -157,9 +154,7 @@ async def test_open_kitchen_bridges_output_budget_policy(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                 await _open_kitchen_handler()
@@ -188,9 +183,7 @@ async def test_close_kitchen_removes_hook_config_json(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import (
                     _close_kitchen_handler,
                     _open_kitchen_handler,
@@ -359,9 +352,7 @@ async def test_update_hook_config_with_recipe_includes_recipe_allows_pr_create(
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import (
                     _open_kitchen_handler,
                     _update_hook_config_with_recipe,
@@ -393,9 +384,7 @@ async def test_update_hook_config_with_recipe_excludes_pr_create_for_non_pr_reci
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import (
                     _open_kitchen_handler,
                     _update_hook_config_with_recipe,
@@ -434,21 +423,25 @@ async def test_hook_config_git_ops_policy_skipped_when_recipe_raises(tmp_path, m
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache",
+            with patch.object(
+                _patch_tools_tools_kitchen,
+                "_prime_quota_cache",
                 new=AsyncMock(),
             ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_ingredient_defaults",
                         return_value={},
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen._update_hook_config_with_recipe",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "_update_hook_config_with_recipe",
                             side_effect=RuntimeError("recipe config failed"),
                         ):
-                            with patch(
-                                "autoskillit.server.tools.tools_kitchen._update_hook_config_with_git_ops_policy",
+                            with patch.object(
+                                _patch_tools_tools_kitchen,
+                                "_update_hook_config_with_git_ops_policy",
                                 git_ops_mock,
                             ):
                                 from autoskillit.server.tools.tools_kitchen import (
@@ -490,9 +483,7 @@ async def test_disable_quota_guard_survives_write_hook_config(tmp_path, monkeypa
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
                 from autoskillit.server.tools.tools_kitchen import (
                     _open_kitchen_handler,
                     _write_hook_config,

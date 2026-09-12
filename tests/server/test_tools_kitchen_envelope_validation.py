@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from tests.server.conftest import _make_mock_ctx
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -114,10 +115,8 @@ async def test_open_kitchen_fails_on_semantic_errors_only(tmp_path, monkeypatch)
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="demo", ctx=mock_ctx)
@@ -187,16 +186,16 @@ async def test_pipeline_health_override_wins_over_config(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-abc",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={
                                 "base_branch": "develop",
                                 "pipeline_health": "false",
@@ -247,16 +246,16 @@ async def test_pipeline_health_config_default_applied(tmp_path, monkeypatch):
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        _patch_tools_tools_kitchen,
+                        "resolve_kitchen_id",
                         return_value="test-kitchen-abc",
                     ):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
+                        with patch.object(
+                            _patch_tools_tools_kitchen,
+                            "resolve_ingredient_defaults",
                             return_value={
                                 "base_branch": "develop",
                                 "pipeline_health": "true",

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.doctor._doctor_fleet as _patch_doctor__doctor_fleet
 from autoskillit import cli
 from tests._helpers import delete_once_then_delegate
 
@@ -147,7 +148,7 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.cli.doctor import _check_sous_chef_bundled
         from autoskillit.core import Severity
 
-        monkeypatch.setattr("autoskillit.cli.doctor._doctor_fleet.pkg_root", lambda: tmp_path)
+        monkeypatch.setattr(_patch_doctor__doctor_fleet, "pkg_root", lambda: tmp_path)
         result = _check_sous_chef_bundled()
         assert result.severity == Severity.ERROR
         assert "sous-chef" in result.message
@@ -163,7 +164,8 @@ class TestGroupMFranchiseDoctorChecks:
         (hooks_dir / "guards").mkdir(parents=True)
         (hooks_dir / "guards" / "fleet_dispatch_guard.py").write_text("")
         monkeypatch.setattr(
-            "autoskillit.cli.doctor._doctor_fleet.canonical_script_basenames",
+            _patch_doctor__doctor_fleet,
+            "canonical_script_basenames",
             lambda: frozenset({"guards/fleet_dispatch_guard.py"}),
         )
         monkeypatch.setattr("autoskillit.hook_registry.HOOKS_DIR", hooks_dir)
@@ -178,7 +180,8 @@ class TestGroupMFranchiseDoctorChecks:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli.doctor._doctor_fleet.canonical_script_basenames",
+            _patch_doctor__doctor_fleet,
+            "canonical_script_basenames",
             lambda: frozenset(),
         )
         result = _check_fleet_dispatch_guard_registered()

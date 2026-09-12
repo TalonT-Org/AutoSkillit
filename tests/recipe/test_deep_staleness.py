@@ -6,6 +6,11 @@ import os
 
 import pytest
 
+import autoskillit.recipe.contracts._contracts_manifest as _patch_contracts__contracts_manifest
+import autoskillit.recipe.methodology.methodology_venue_appendix as _venue_appendix_module
+import autoskillit.recipe.rules.rules_blocks as _patch_rules_rules_blocks
+import autoskillit.recipe.rules.rules_phoropter_adjacency as _patch_rules_rules_phoropter_adjacency
+
 pytestmark = [pytest.mark.layer("recipe"), pytest.mark.small]
 
 
@@ -311,9 +316,7 @@ def test_manifest_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
     manifest_path = recipe_dir / "skill_contracts.yaml"
     manifest_path.write_text("skills:\n  old-skill:\n    inputs: []\n    outputs: []\n")
 
-    monkeypatch.setattr(
-        "autoskillit.recipe.contracts._contracts_manifest.pkg_root", lambda: tmp_path
-    )
+    monkeypatch.setattr(_patch_contracts__contracts_manifest, "pkg_root", lambda: tmp_path)
     _MANIFEST_CACHE.clear()
 
     r1 = load_bundled_manifest()
@@ -337,7 +340,7 @@ def test_block_budgets_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
     budgets_path = recipe_dir / "block_budgets.yaml"
     budgets_path.write_text("DEFAULT:\n  run_cmd: 5\n")
 
-    monkeypatch.setattr("autoskillit.recipe.rules.rules_blocks.pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(_patch_rules_rules_blocks, "pkg_root", lambda: tmp_path)
     _BUDGETS_CACHE.clear()
 
     r1 = _block_budgets()
@@ -353,7 +356,7 @@ def test_block_budgets_missing_file_returns_empty_dict(tmp_path, monkeypatch):
     """_block_budgets returns {} when block_budgets.yaml does not exist."""
     from autoskillit.recipe.rules.rules_blocks import _BUDGETS_CACHE, _block_budgets
 
-    monkeypatch.setattr("autoskillit.recipe.rules.rules_blocks.pkg_root", lambda: tmp_path)
+    monkeypatch.setattr(_patch_rules_rules_blocks, "pkg_root", lambda: tmp_path)
     _BUDGETS_CACHE.clear()
 
     result = _block_budgets()
@@ -373,7 +376,8 @@ def test_phoropter_prefix_mtime_change_forces_fresh_read(tmp_path, monkeypatch):
     registry_path.write_text("families:\n  vis-lens:\n    step_naming:\n      prefix: vis\n")
 
     monkeypatch.setattr(
-        "autoskillit.recipe.rules.rules_phoropter_adjacency.pkg_root",
+        _patch_rules_rules_phoropter_adjacency,
+        "pkg_root",
         lambda: tmp_path,
     )
     _PREFIXES_CACHE.clear()
@@ -418,7 +422,8 @@ def test_ml_sub_area_folding_mtime_change_forces_fresh_read(tmp_path, monkeypatc
     yaml_path.write_text(yaml_content_v1)
 
     monkeypatch.setattr(
-        "autoskillit.recipe.methodology.methodology_venue_appendix.BUNDLED_METHODOLOGY_TRADITIONS_DIR",
+        _venue_appendix_module,
+        "BUNDLED_METHODOLOGY_TRADITIONS_DIR",
         tmp_path,
     )
     _ML_SUB_AREA_CACHE.clear()

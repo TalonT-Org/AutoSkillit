@@ -7,6 +7,7 @@ from subprocess import CompletedProcess
 import pytest
 import structlog.testing
 
+import autoskillit._probe_canary as _patch_autoskillit__probe_canary
 from autoskillit._probe_canary import (
     N_CONSECUTIVE_FLAKE_GUARD,
     CanaryIssueUpdater,
@@ -139,7 +140,7 @@ class TestCanaryIssueUpdater:
                 )
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         num = updater.ensure_issue(state, "Probe failure", "Details here")
@@ -160,7 +161,7 @@ class TestCanaryIssueUpdater:
                 return CompletedProcess(args=args, returncode=0, stdout="", stderr="")
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         num = updater.ensure_issue(state, "Probe failure", "Updated body")
@@ -175,7 +176,7 @@ class TestCanaryIssueUpdater:
                 return CompletedProcess(args=args, returncode=1, stdout="", stderr="auth error")
             raise AssertionError(f"Unexpected gh call: {args}")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         with pytest.raises(RuntimeError, match="gh issue create failed"):
@@ -195,7 +196,7 @@ class TestCanaryIssueUpdater:
                 return CompletedProcess(args=args, returncode=1, stdout="", stderr="locked")
             raise AssertionError(f"Unexpected gh call: {args}")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
         updater = CanaryIssueUpdater(owner="test-org", repo="test-repo")
         state = CanaryState()
         with structlog.testing.capture_logs() as cap_logs:
@@ -220,7 +221,7 @@ class TestCliMain:
             gh_call_count += 1
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
 
         rc = _cli_main(
             [
@@ -274,7 +275,7 @@ class TestCliMain:
                 )
             return CompletedProcess(args=args, returncode=1, stdout="", stderr="")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
 
         rc = _cli_main(
             [
@@ -308,7 +309,7 @@ class TestCliMain:
         def mock_run_gh(args, **kwargs):
             raise AssertionError(f"Unexpected gh call: {args}")
 
-        monkeypatch.setattr("autoskillit._probe_canary.run_gh", mock_run_gh)
+        monkeypatch.setattr(_patch_autoskillit__probe_canary, "run_gh", mock_run_gh)
 
         rc = _cli_main(
             [

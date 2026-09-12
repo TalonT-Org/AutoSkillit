@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import autoskillit.recipe.helpers._io_loading as _patch_helpers__io_loading
 from autoskillit.core.io import load_yaml
 from autoskillit.recipe._io_loading import load_recipe_dict, load_recipe_dict_with_declarations
 from autoskillit.recipe.io import collect_recipes_from_candidates
@@ -66,7 +67,8 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.helpers._io_loading.load_yaml",
+        _patch_helpers__io_loading,
+        "load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -82,7 +84,8 @@ def test_load_recipe_dict_falls_back_when_json_missing(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.helpers._io_loading.load_yaml",
+        _patch_helpers__io_loading,
+        "load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -104,7 +107,8 @@ def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.helpers._io_loading.load_yaml",
+        _patch_helpers__io_loading,
+        "load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -152,7 +156,8 @@ def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.helpers._io_loading.load_yaml",
+        _patch_helpers__io_loading,
+        "load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -173,7 +178,8 @@ def test_load_recipe_dict_falls_back_when_json_is_not_mapping(tmp_path, monkeypa
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe.helpers._io_loading.load_yaml",
+        _patch_helpers__io_loading,
+        "load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 

@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.workspace._projected_artifact.authority as _patch__projected_artifact_authority
 from autoskillit.workspace import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
     ProjectionCacheKey,
@@ -164,7 +165,8 @@ class TestAssetChangesForceReprojection:
 
             real_digest = public_plugin_asset_digest(pkg_root())
             monkeypatch.setattr(
-                "autoskillit.workspace._projected_artifact.authority.public_plugin_asset_digest",
+                _patch__projected_artifact_authority,
+                "public_plugin_asset_digest",
                 lambda _root: real_digest[:-1] + ("0" if real_digest[-1] != "0" else "1"),
             )
 

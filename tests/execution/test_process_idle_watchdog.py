@@ -13,6 +13,7 @@ import anyio
 import pytest
 import structlog.testing
 
+import autoskillit.execution.process._process_race as _patch_process__process_race
 from autoskillit.execution.process._process_race import (
     CLEANUP_BUDGET_SECONDS,
     RaceAccumulator,
@@ -75,9 +76,7 @@ async def test_watch_stdout_idle_emits_suppression_evaluated_debug_log(
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    with patch(
-        "autoskillit.execution.process._process_race.logger", new=MagicMock()
-    ) as mock_debug:
+    with patch.object(_patch_process__process_race, "logger", new=MagicMock()) as mock_debug:
         with anyio.fail_after(2.0):
             async with anyio.create_task_group() as tg:
                 tg.start_soon(
@@ -114,9 +113,7 @@ async def test_watch_stdout_idle_emits_suppression_evaluated_with_marker_dir(
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    with patch(
-        "autoskillit.execution.process._process_race.logger", new=MagicMock()
-    ) as mock_debug:
+    with patch.object(_patch_process__process_race, "logger", new=MagicMock()) as mock_debug:
         with anyio.fail_after(2.0):
             async with anyio.create_task_group() as tg:
                 tg.start_soon(
@@ -151,16 +148,15 @@ async def test_watch_stdout_idle_suppression_evaluated_fires_once_during_suppres
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
 
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    with patch(
-        "autoskillit.execution.process._process_race.logger", new=MagicMock()
-    ) as mock_debug:
+    with patch.object(_patch_process__process_race, "logger", new=MagicMock()) as mock_debug:
 
         async def cancel_when_suppressed() -> None:
             # Wait for at least 2 suppressed warnings before cancelling
@@ -331,7 +327,8 @@ async def test_watch_stdout_idle_suppressed_by_dispatch_marker(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
 
@@ -375,7 +372,8 @@ async def test_watch_stdout_idle_fires_when_suppression_cap_exceeded(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
 
@@ -435,7 +433,8 @@ async def test_watch_stdout_idle_suppression_timer_resets_on_growth(
     await anyio.Path(stdout_file).write_bytes(b"initial\n")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
 
@@ -478,7 +477,8 @@ async def test_watch_stdout_idle_emits_suppression_warning(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
 
@@ -528,7 +528,8 @@ async def test_watch_stdout_idle_marker_false_fires_immediately(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: False,
     )
 
@@ -560,7 +561,8 @@ async def test_watch_stdout_idle_dispatch_marker_suppresses_stall(
 ) -> None:
     """Active dispatch marker suppresses idle stall within the suppression window."""
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
     stdout_file = tmp_path / "stdout.txt"
@@ -651,7 +653,8 @@ async def test_watch_stdout_idle_marker_suppression_bounded(
 ) -> None:
     """Suppression cap exceeded — idle stall fires despite active marker."""
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._has_active_execution_marker",
+        _patch_process__process_race,
+        "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
     stdout_file = tmp_path / "stdout.txt"

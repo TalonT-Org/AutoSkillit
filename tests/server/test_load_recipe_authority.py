@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
+import autoskillit.recipe.contracts as _patch_recipe_contracts
 from autoskillit.core import SkillResolver
 from autoskillit.recipe.schema import RecipeIngredient
 from autoskillit.server.tools.tools_recipe import load_recipe
@@ -38,8 +40,8 @@ class TestLoadRecipeReadOnly:
 
         with (
             patch.object(migration_loader, "applicable_migrations", return_value=["v0.1.0"]),
-            patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
-            patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
+            patch.object(_patch_execution_headless, "run_headless_core") as mock_headless,
+            patch.object(_patch_recipe_contracts, "generate_recipe_card") as mock_gen,
         ):
             result = json.loads(await load_recipe(name="implementation"))
         assert "error" not in result
@@ -55,7 +57,7 @@ class TestLoadRecipeReadOnly:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        with patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen:
+        with patch.object(_patch_recipe_contracts, "generate_recipe_card") as mock_gen:
             await load_recipe(name="test")
         mock_gen.assert_not_called()
 

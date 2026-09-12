@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
 from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN, generate_hooks_json
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
@@ -71,9 +72,7 @@ def test_compute_registry_hash_is_identical_for_absolute_and_relocatable_renderi
     # short-circuits to an eviction-only no-op when the plugin is installed
     # — same idiom as tests/cli/conftest.py's autouse fixture.
     monkeypatch.setattr(_hooks_mod, "is_git_worktree", lambda _path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers._is_plugin_installed", lambda **kwargs: False
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **kwargs: False)
 
     relocatable_hash = generate_hooks_json()["_autoskillit_registry_hash"]
 

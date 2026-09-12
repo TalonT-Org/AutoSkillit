@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
+import autoskillit.execution.headless._headless_launch as _patch_headless__headless_launch
 from autoskillit.core.types import (
     CONTEXT_EXHAUSTION_MARKER,
     ChannelConfirmation,
@@ -1028,9 +1030,7 @@ class TestRunHeadlessCore:
         runner.set_default(_sr(0, _success_session_json("done"), ""))
         minimal_ctx.runner = runner
 
-        with patch(
-            "autoskillit.execution.headless._headless_execute._build_skill_result"
-        ) as mock_build:
+        with patch.object(_patch_headless__headless_execute, "_build_skill_result") as mock_build:
             mock_build.return_value = SkillResult(
                 success=True,
                 result="",
@@ -2845,7 +2845,7 @@ class TestCrashSessionLog:
 
         tool_ctx.runner = raising_runner  # type: ignore[assignment]
 
-        with patch("autoskillit.execution.headless._headless_execute.logger") as mock_logger:
+        with patch.object(_patch_headless__headless_execute, "logger") as mock_logger:
             result = await run_headless_core("/investigate test", cwd=str(tmp_path), ctx=tool_ctx)
             mock_logger.error.assert_called_once()
             call_kwargs = mock_logger.error.call_args
@@ -3091,14 +3091,16 @@ class TestNudgeInfrastructureFaultPropagation:
             return first_attempt_result
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._build_skill_result",
+            _patch_headless__headless_execute,
+            "_build_skill_result",
             fake_build_skill_result,
         )
         # Force the nudge branch's hint extraction to succeed so _attempt_contract_nudge
         # proceeds all the way to acquiring its own plugin binding, rather than
         # short-circuiting to None on "no hints".
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_launch._extract_missing_token_hints",
+            _patch_headless__headless_launch,
+            "_extract_missing_token_hints",
             lambda *a, **kw: [_PathHint("OUTPUT_PATH", "/tmp/nudge-output.txt")],
         )
 

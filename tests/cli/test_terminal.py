@@ -14,6 +14,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.ui._terminal as _patch_ui__terminal
 from autoskillit.cli.ui._terminal import _RESET_SPEC
 
 pytestmark = [
@@ -33,7 +35,7 @@ class TestTerminalGuardTTYRestore:
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch.object(_patch_ui__terminal, "termios") as mock_termios,
             patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
@@ -54,7 +56,7 @@ class TestTerminalGuardTTYRestore:
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch.object(_patch_ui__terminal, "termios") as mock_termios,
             patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
@@ -76,7 +78,7 @@ class TestTerminalGuardTTYRestore:
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch.object(_patch_ui__terminal, "termios") as mock_termios,
             patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
@@ -98,7 +100,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
@@ -119,7 +121,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
@@ -140,7 +142,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch.object(_patch_ui__terminal, "termios") as mock_termios,
         ):
             mock_stdin.isatty.return_value = False
 
@@ -156,7 +158,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch.object(_patch_ui__terminal, "termios") as mock_termios,
             patch("autoskillit.cli.ui._terminal.sys.stdout"),
         ):
             mock_stdin.isatty.return_value = True
@@ -176,9 +178,9 @@ class TestTerminalGuardTTYRestore:
         fake_attrs = [0, 0, 0, 0, 0, 0, [b"\x00"] * 32]
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios") as mock_termios,
+            patch.object(_patch_ui__terminal, "termios") as mock_termios,
             patch("autoskillit.cli.ui._terminal.sys.stdout"),
-            patch("autoskillit.cli.ui._terminal.os") as mock_os,
+            patch.object(_patch_ui__terminal, "os") as mock_os,
         ):
             mock_stdin.isatty.return_value = True
             mock_stdin.fileno.return_value = 0
@@ -211,7 +213,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
@@ -233,7 +235,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = True
@@ -254,7 +256,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
         ):
             mock_stdin.isatty.return_value = False
@@ -270,7 +272,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", {"TERM_PROGRAM": "kitty"}, clear=False),
         ):
@@ -297,7 +299,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", env, clear=True),
         ):
@@ -324,7 +326,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", {"KITTY_WINDOW_ID": "1"}, clear=False),
         ):
@@ -343,7 +345,7 @@ class TestTerminalGuardTTYRestore:
 
         with (
             patch("autoskillit.cli.ui._terminal.sys.stdin") as mock_stdin,
-            patch("autoskillit.cli.ui._terminal.termios"),
+            patch.object(_patch_ui__terminal, "termios"),
             patch("autoskillit.cli.ui._terminal.sys.stdout") as mock_stdout,
             patch.dict("os.environ", {"TERM_PROGRAM": "kitty"}, clear=False),
         ):
@@ -485,9 +487,7 @@ class TestCookTerminalGuard:
             lambda fd, when, attrs: tcsetattr_calls.append(attrs),
         )
         monkeypatch.setattr("autoskillit.cli.ui._terminal.termios.error", termios.error)
-        monkeypatch.setattr(
-            "autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: False
-        )
+        monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: False)
         monkeypatch.setattr(
             "autoskillit.cli.session._session_launch.subprocess.Popen",
             lambda *a, **kw: (_ for _ in ()).throw(KeyboardInterrupt()),

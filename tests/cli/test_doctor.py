@@ -11,6 +11,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.doctor as _patch_cli_doctor
+import autoskillit.cli.doctor._doctor_hooks as _patch_doctor__doctor_hooks
+import autoskillit.cli.install._install_info as _patch_install__install_info
+import autoskillit.cli.update._update_checks_source as _patch_update__update_checks_source
 from autoskillit import cli
 from tests.fixtures.plugin_artifact_state import (
     PLUGIN_ARTIFACT_STATE_KINDS,
@@ -243,15 +248,18 @@ class TestCLIDoctor:
         from autoskillit.core import Severity
 
         monkeypatch.setattr(
-            "autoskillit.cli.doctor._check_fleet_dispatch_guard_registered",
+            _patch_cli_doctor,
+            "_check_fleet_dispatch_guard_registered",
             lambda: DoctorResult(Severity.OK, "fleet_dispatch_guard_registered", "stubbed"),
         )
         monkeypatch.setattr(
-            "autoskillit.cli.doctor._check_capture_store_stats",
+            _patch_cli_doctor,
+            "_check_capture_store_stats",
             lambda: DoctorResult(Severity.OK, "capture_store_stats", "stubbed"),
         )
         monkeypatch.setattr(
-            "autoskillit.cli.doctor._check_install_classification",
+            _patch_cli_doctor,
+            "_check_install_classification",
             lambda: DoctorResult(Severity.OK, "install_classification", "stubbed"),
         )
         # plugin_cache_integrity unconditionally warns when the legacy
@@ -261,7 +269,8 @@ class TestCLIDoctor:
         # above), so stub the check the same way the other unrelated checks
         # above are stubbed.
         monkeypatch.setattr(
-            "autoskillit.cli.doctor._check_plugin_cache_integrity",
+            _patch_cli_doctor,
+            "_check_plugin_cache_integrity",
             lambda: DoctorResult(Severity.OK, "plugin_cache_integrity", "stubbed"),
         )
         local_bin = str(tmp_path / ".local" / "bin" / "autoskillit")
@@ -917,7 +926,8 @@ def test_doctor_checks_plugin_cache_exists(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     # Force non-editable install so the cache check actually runs
     monkeypatch.setattr(
-        "autoskillit.cli.install._install_info.detect_install",
+        _patch_install__install_info,
+        "detect_install",
         lambda: InstallInfo(
             install_type=InstallType.GIT_VCS,
             commit_id=None,
@@ -1214,7 +1224,7 @@ def test_check_hook_registration_ok_when_plugin_installed(
     from autoskillit.cli.doctor._doctor_hooks import _check_hook_registration
     from autoskillit.core import Severity
 
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     settings = tmp_path / "settings.json"
     settings.write_text('{"hooks": {}}')
     result = _check_hook_registration(settings)
@@ -1230,7 +1240,7 @@ def test_check_hook_registry_drift_ok_when_plugin_installed(
     from autoskillit.cli.doctor._doctor_hooks import _check_hook_registry_drift
     from autoskillit.core import Severity
 
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     settings = tmp_path / "settings.json"
     settings.write_text('{"hooks": {}}')
     result = _check_hook_registry_drift(settings)
@@ -1247,9 +1257,10 @@ def test_check_hook_registry_drift_orphaned_still_fires_when_plugin_installed(
     from autoskillit.core import Severity
     from autoskillit.hook_registry import HookDriftResult
 
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     monkeypatch.setattr(
-        "autoskillit.cli.doctor._doctor_hooks._count_hook_registry_drift",
+        _patch_doctor__doctor_hooks,
+        "_count_hook_registry_drift",
         lambda _path: HookDriftResult(
             missing=0, orphaned=1, orphaned_cmds=frozenset(["fake_orphan_dispatch.py"])
         ),
@@ -1269,7 +1280,7 @@ def test_check_dual_registration_resolves_plugin_probe_by_default(
     from autoskillit.cli.doctor._doctor_hooks import _check_dual_registration
     from autoskillit.core import Severity
 
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
     settings = tmp_path / "settings.json"
     settings.write_text('{"hooks": {}}')
 
@@ -1636,10 +1647,11 @@ def test_check_source_version_drift_ok_outside_source_repo(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     # Simulate empty cache and no source repo: resolve returns None
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda info, home, **kw: None,
     )
 
@@ -1662,9 +1674,10 @@ def test_check_source_version_drift_ok_for_editable_install(
         url="file:///home/user/autoskillit",
         editable_source=Path("/home/user/autoskillit"),
     )
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda *_args, **_kwargs: pytest.fail("editable installs must not resolve a target"),
     )
 
@@ -1689,9 +1702,10 @@ def test_check_source_version_drift_ok_for_pinned_sha(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda info, home, **kw: ReleaseIdentity(
             ReleaseChannel.BRANCH,
             version="0.0.0",
@@ -1719,9 +1733,10 @@ def test_check_source_version_drift_ok_when_cache_empty(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda info, home, **kw: None,
     )
 
@@ -1751,9 +1766,10 @@ def test_check_source_version_drift_warning_on_drift(
         url=None,
         editable_source=None,
     )
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda info, home, **kw: ReleaseIdentity(
             ReleaseChannel.BRANCH,
             version="0.0.0",
@@ -1807,9 +1823,10 @@ def test_drift_signal_and_doctor_agree(
         ref="develop",
     )
     monkeypatch.setattr(_pkg, "__version__", "0.7.77")
-    monkeypatch.setattr("autoskillit.cli.install._install_info.detect_install", lambda: info)
+    monkeypatch.setattr(_patch_install__install_info, "detect_install", lambda: info)
     monkeypatch.setattr(
-        "autoskillit.cli.update._update_checks_source.resolve_target_identity",
+        _patch_update__update_checks_source,
+        "resolve_target_identity",
         lambda *_args, **_kwargs: target,
     )
     installed = release_identity(info, version="0.7.77")

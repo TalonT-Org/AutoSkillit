@@ -9,6 +9,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.session._session_order as _patch_session__session_order
+import autoskillit.cli.session._session_picker as _patch_session__session_picker
+import autoskillit.cli.ui._menu as _patch_ui__menu
 from autoskillit import cli
 from autoskillit.core import ClaudeFlags
 from tests.cli._interactive_process import configure_popen
@@ -27,7 +31,8 @@ class TestCLIOrderPicker:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._preview.show_cook_preview",
+            _patch_cli__preview,
+            "show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -268,7 +273,7 @@ class TestCLIOrderPicker:
             picker_calls.append(session_type)
             return None
 
-        with patch("autoskillit.cli.session._session_picker.pick_session", fake_pick_session):
+        with patch.object(_patch_session__session_picker, "pick_session", fake_pick_session):
             with patch("autoskillit.core.write_registry_entry"):
                 cli.order(resume=True)
 
@@ -292,7 +297,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [project_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.chdir(tmp_path)
 
@@ -321,7 +326,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.chdir(tmp_path)
 
@@ -349,7 +354,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [exp_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.chdir(tmp_path)
 
@@ -377,7 +382,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [builtin_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.chdir(tmp_path)
 
@@ -406,7 +411,7 @@ class TestCLIOrderPicker:
             "autoskillit.recipe.list_recipes",
             lambda *a, **kw: type("R", (), {"items": [addon_recipe]})(),
         )
-        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.chdir(tmp_path)
 
@@ -449,7 +454,7 @@ class TestCLIOrderPicker:
         monkeypatch.setattr(
             "autoskillit.recipe.list_recipes", lambda *a, **kw: type("R", (), {"items": recipes})()
         )
-        monkeypatch.setattr("autoskillit.cli.ui._menu.timed_prompt", lambda *a, **kw: "0")
+        monkeypatch.setattr(_patch_ui__menu, "timed_prompt", lambda *a, **kw: "0")
         monkeypatch.setattr(shutil, "which", lambda cmd: None)
         monkeypatch.chdir(tmp_path)
 
@@ -470,7 +475,8 @@ class TestOrderResumeParsing:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._preview.show_cook_preview",
+            _patch_cli__preview,
+            "show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -512,8 +518,9 @@ class TestOrderResumeParsing:
             captured["backend"] = backend
 
         with (
-            patch(
-                "autoskillit.cli.session._session_order._launch_cook_session",
+            patch.object(
+                _patch_session__session_order,
+                "_launch_cook_session",
                 side_effect=fake_launch,
             ),
             patch(
@@ -567,8 +574,8 @@ class TestOrderResumeParsing:
             captured["project_dir"] = project_dir
             captured["backend"] = backend
 
-        with patch(
-            "autoskillit.cli.session._session_order._launch_cook_session", side_effect=fake_launch
+        with patch.object(
+            _patch_session__session_order, "_launch_cook_session", side_effect=fake_launch
         ):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
@@ -614,11 +621,12 @@ class TestOrderResumeParsing:
             captured["backend"] = backend
 
         with (
-            patch(
-                "autoskillit.cli.session._session_order._launch_cook_session",
+            patch.object(
+                _patch_session__session_order,
+                "_launch_cook_session",
                 side_effect=fake_launch,
             ),
-            patch("autoskillit.cli.session._session_picker.pick_session", return_value=None),
+            patch.object(_patch_session__session_picker, "pick_session", return_value=None),
         ):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume"])
@@ -644,7 +652,7 @@ class TestOrderResumeParsing:
             lambda *a, **kw: find_called.append(a) or None,
         )
 
-        with patch("autoskillit.cli.session._session_order._launch_cook_session"):
+        with patch.object(_patch_session__session_order, "_launch_cook_session"):
             with pytest.raises(SystemExit) as exc_info:
                 app(["order", "--resume", "4b581974-1f19-4aec-8405-78c5ede5e233"])
             assert exc_info.value.code == 0

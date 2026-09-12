@@ -14,6 +14,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.execution.headless._headless_helpers as _patch_headless__headless_helpers
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
@@ -270,8 +272,9 @@ def test_post_session_metrics_effective_cwd_resolution(tmp_path: Path):
     mock_result_with_worktree = MagicMock()
     mock_result_with_worktree.worktree_path = worktree
 
-    with patch(
-        "autoskillit.execution.headless._headless_helpers._compute_loc_changed",
+    with patch.object(
+        _patch_headless__headless_helpers,
+        "_compute_loc_changed",
         return_value=(0, 0),
     ):
         metrics_no_wt = _compute_post_session_metrics(cwd, "abc123", mock_result_no_worktree)

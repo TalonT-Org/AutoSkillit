@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core.types import (
     CmdSpec,
     RetryReason,
@@ -64,8 +65,9 @@ class TestBackendMixingCommandRouting:
                 "backend_for",
                 return_value=claude_code_backend,
             ),
-            patch(
-                "autoskillit.execution.headless._execute_claude_headless",
+            patch.object(
+                _patch_execution_headless,
+                "_execute_claude_headless",
             ) as mock_exec,
         ):
             mock_exec.return_value = _stub_result()
@@ -128,8 +130,9 @@ class TestBackendMixingEnvPolicy:
                 "backend_for",
                 return_value=claude_code_backend,
             ),
-            patch(
-                "autoskillit.execution.headless._execute_claude_headless",
+            patch.object(
+                _patch_execution_headless,
+                "_execute_claude_headless",
                 side_effect=capture_exec,
             ),
         ):
@@ -174,8 +177,9 @@ class TestDefaultExecutorBackendMixing:
                 "backend_for",
                 return_value=claude_code_backend,
             ) as mock_backend_for,
-            patch(
-                "autoskillit.execution.headless._execute_claude_headless",
+            patch.object(
+                _patch_execution_headless,
+                "_execute_claude_headless",
             ) as mock_exec,
         ):
             mock_exec.return_value = _stub_result()

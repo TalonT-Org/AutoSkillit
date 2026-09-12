@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+import autoskillit.execution.evidence.recording as _patch_execution_recording
 from autoskillit.core import CLAUDE_CODE_CAPABILITIES, BackendCapabilities
 from autoskillit.core.types import (
     OutputFormat,
@@ -924,9 +925,7 @@ def test_build_replay_runner_detects_codex_format(tmp_path, monkeypatch):
     mock_codex_instance.scenario.return_value = mock_scenario
     mock_codex_instance.build_session_map.return_value = {}
 
-    monkeypatch.setattr(
-        "autoskillit.execution.evidence.recording.CodexScenarioPlayer", mock_codex_cls
-    )
+    monkeypatch.setattr(_patch_execution_recording, "CodexScenarioPlayer", mock_codex_cls)
 
     monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
     monkeypatch.setattr("atexit.register", Mock())

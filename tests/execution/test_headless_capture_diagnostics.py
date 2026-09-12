@@ -11,6 +11,7 @@ import anyio
 import pytest
 import structlog.testing
 
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core import (
     CmdSpec,
     ManagedHeadlessSessionLineageStatus,
@@ -217,19 +218,23 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
     observer = _AttemptObserver()
     log_root = tmp_path / "logs"
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+        _patch_headless__headless_execute,
+        "collect_version_snapshot",
         lambda _backend=None: {},
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        _patch_headless__headless_execute,
+        "_capture_git_head_sha",
         lambda _cwd: "",
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        _patch_headless__headless_execute,
+        "_compute_post_session_metrics",
         lambda *_args: PostSessionMetrics(0, 0, str(tmp_path)),
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._build_skill_result",
+        _patch_headless__headless_execute,
+        "_build_skill_result",
         lambda *_args, **_kwargs: _successful_result(),
     )
 

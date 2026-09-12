@@ -8,6 +8,8 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+import autoskillit.hooks.token_summary_hook as _patch_hooks_token_summary_hook
+
 
 def _run_hook(
     event: dict | None = None,
@@ -27,8 +29,9 @@ def _run_hook(
         stack.enter_context(redirect_stdout(buf))
         if log_root is not None:
             stack.enter_context(
-                patch(
-                    "autoskillit.hooks.token_summary_hook._log_root",
+                patch.object(
+                    _patch_hooks_token_summary_hook,
+                    "_log_root",
                     return_value=log_root,
                 )
             )
@@ -36,8 +39,9 @@ def _run_hook(
             cfg_data = json.loads(hook_config_path.read_text(encoding="utf-8"))
             kitchen_id = cfg_data.get("kitchen_id") or cfg_data.get("pipeline_id", "")
             stack.enter_context(
-                patch(
-                    "autoskillit.hooks.token_summary_hook._read_kitchen_id",
+                patch.object(
+                    _patch_hooks_token_summary_hook,
+                    "_read_kitchen_id",
                     return_value=kitchen_id,
                 )
             )

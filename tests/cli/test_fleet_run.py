@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
 from autoskillit.core import FleetErrorCode
 from autoskillit.fleet import (
     DispatchCompleted,
@@ -199,8 +200,9 @@ class TestFleetRunDispatch:
             captured_args.update(kwargs)
             return _mock_success_result()
 
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(side_effect=fake_execute),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -230,8 +232,9 @@ class TestFleetRunDispatch:
             monkeypatch.setenv("AUTOSKILLIT_NATIVE_SHELL_CAPTURE_MODE", "capture")
             return _mock_success_result()
 
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(side_effect=fake_execute),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -260,8 +263,9 @@ class TestFleetRunDispatch:
             return _mock_success_result()
 
         with (
-            patch(
-                "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+            patch.object(
+                _patch_fleet__fleet_run,
+                "_execute_fleet_run",
                 new=AsyncMock(side_effect=fake_execute),
             ),
             structlog.testing.capture_logs() as logs,
@@ -313,8 +317,9 @@ class TestFleetRunDispatch:
             captured_args.update(kwargs)
             return _mock_success_result()
 
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(side_effect=fake_execute),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -355,8 +360,9 @@ class TestFleetRunDispatch:
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(return_value=_mock_success_result()),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -375,8 +381,9 @@ class TestFleetRunDispatch:
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(return_value=_mock_failure_result(status=DispatchStatus.FAILURE)),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -395,8 +402,9 @@ class TestFleetRunDispatch:
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(return_value=_mock_failure_result(status=DispatchStatus.RESUMABLE)),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -415,8 +423,9 @@ class TestFleetRunDispatch:
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(return_value=_mock_rejected_result()),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -435,8 +444,9 @@ class TestFleetRunDispatch:
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(return_value=_mock_success_result()),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -498,8 +508,9 @@ class TestFleetRunDispatch:
             captured_args.update(kwargs)
             return _mock_success_result()
 
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(side_effect=fake_execute),
         ):
             from autoskillit.cli.fleet import fleet_run
@@ -633,8 +644,9 @@ class TestHeadlessCLIPriorFailure:
             lifecycle.append("execute_dispatch:end")
             return _mock_success_result()
 
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(side_effect=fake_execute),
         ):
             from autoskillit.cli.fleet import fleet_run

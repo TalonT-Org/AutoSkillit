@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
@@ -53,9 +54,7 @@ def test_main_does_not_call_app_after_update_restart(monkeypatch: pytest.MonkeyP
     app_called: list[bool] = []
     monkeypatch.setattr(app_module, "app", lambda: app_called.append(True))
 
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda *a, **kw: None)
 
     def fake_run_update_checks(**kwargs: object) -> None:
         raise SystemExit(0)
@@ -91,9 +90,7 @@ def test_main_install_argv_skips_obligation_repair_to_avoid_reentrancy(
     app_module = importlib.import_module("autoskillit.cli.app")
 
     monkeypatch.setattr(app_module, "app", lambda: None)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda *a, **kw: None)
     monkeypatch.setattr(
         _update_submodule("_update_checks"), "run_update_checks", lambda **kwargs: None
     )
@@ -121,9 +118,7 @@ def test_main_version_argv_skips_obligation_repair_to_avoid_probe_recursion(
     app_module = importlib.import_module("autoskillit.cli.app")
 
     monkeypatch.setattr(app_module, "app", lambda: None)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda *a, **kw: None)
     monkeypatch.setattr(
         _update_submodule("_update_checks"), "run_update_checks", lambda **kwargs: None
     )
@@ -149,9 +144,7 @@ def test_main_non_install_argv_still_calls_obligation_repair(
     app_module = importlib.import_module("autoskillit.cli.app")
 
     monkeypatch.setattr(app_module, "app", lambda: None)
-    monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(_patch_cli__init_helpers, "evict_direct_mcp_entry", lambda *a, **kw: None)
     monkeypatch.setattr(
         _update_submodule("_update_checks"), "run_update_checks", lambda **kwargs: None
     )
@@ -185,7 +178,8 @@ def test_main_repair_diagnostics_never_write_stdout(
 
     monkeypatch.setattr(app_module, "app", lambda: None)
     monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry",
+        _patch_cli__init_helpers,
+        "evict_direct_mcp_entry",
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(
@@ -245,7 +239,8 @@ def test_main_repair_classifies_missing_expected_version_as_incomplete(
 
     monkeypatch.setattr(app_module, "app", lambda: None)
     monkeypatch.setattr(
-        "autoskillit.cli._init_helpers.evict_direct_mcp_entry",
+        _patch_cli__init_helpers,
+        "evict_direct_mcp_entry",
         lambda *a, **kw: None,
     )
     monkeypatch.setattr(

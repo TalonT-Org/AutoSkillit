@@ -8,6 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.session._session_order as _patch_session__session_order
+import autoskillit.core.plugins._plugin_ids as _patch_plugins__plugin_ids
 from autoskillit import cli
 from autoskillit.config import AutomationConfig
 from autoskillit.core import ClaudeFlags
@@ -50,7 +53,7 @@ def test_order_rejects_orchestrator_skill_in_l1_tier_before_launch(
     cfg.skills.tier1 = ["process-issues"]
     with (
         patch("autoskillit.config.load_config", return_value=cfg),
-        patch("autoskillit.cli.session._session_order._launch_cook_session") as launch,
+        patch.object(_patch_session__session_order, "_launch_cook_session") as launch,
     ):
         with pytest.raises(SystemExit) as exc_info:
             cli.order(recipe, resume=resume)
@@ -68,7 +71,8 @@ class TestCLIOrderPrompt:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._preview.show_cook_preview",
+            _patch_cli__preview,
+            "show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -224,7 +228,8 @@ class TestOrderDisplayOwnership:
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Stub terminal preview to avoid subprocess.run collision with git calls."""
         monkeypatch.setattr(
-            "autoskillit.cli._preview.show_cook_preview",
+            _patch_cli__preview,
+            "show_cook_preview",
             lambda *a, **kw: None,
         )
 
@@ -297,7 +302,7 @@ class TestOrderMcpPrefixSelection:
 
     @pytest.fixture(autouse=True)
     def _stub_preview(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("autoskillit.cli._preview.show_cook_preview", lambda *a, **kw: None)
+        monkeypatch.setattr(_patch_cli__preview, "show_cook_preview", lambda *a, **kw: None)
 
     @pytest.fixture(autouse=True)
     def _interactive_stdin(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -330,7 +335,8 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
+            _patch_plugins__plugin_ids,
+            "_installed_plugins_path",
             lambda: plugins_file,
         )
         configure_popen(mock_run, returncode=0)
@@ -359,7 +365,8 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text(f'{{"version": 2, "plugins": {{"{_PLUGIN_KEY}": []}}}}')
         monkeypatch.setattr(
-            "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
+            _patch_plugins__plugin_ids,
+            "_installed_plugins_path",
             lambda: plugins_file,
         )
         configure_popen(mock_run, returncode=0)
@@ -398,7 +405,8 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
+            _patch_plugins__plugin_ids,
+            "_installed_plugins_path",
             lambda: plugins_file,
         )
         import importlib

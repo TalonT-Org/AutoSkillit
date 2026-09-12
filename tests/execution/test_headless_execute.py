@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 import structlog
 
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core import CmdSpec
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.execution.conftest import _sink_env
@@ -521,12 +522,14 @@ class TestPreSessionIndexSignaling:
         minimal_ctx.backend = backend
 
         with (
-            patch(
-                "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            patch.object(
+                _patch_headless__headless_execute,
+                "is_git_main_checkout",
                 return_value=True,
             ),
-            patch(
-                "autoskillit.execution.headless._headless_execute.validate_pre_session_index",
+            patch.object(
+                _patch_headless__headless_execute,
+                "validate_pre_session_index",
                 return_value=True,
             ),
             structlog.testing.capture_logs() as caplog,
@@ -561,12 +564,14 @@ class TestPreSessionIndexSignaling:
         minimal_ctx.backend = backend
 
         with (
-            patch(
-                "autoskillit.execution.headless._headless_execute.is_git_main_checkout",
+            patch.object(
+                _patch_headless__headless_execute,
+                "is_git_main_checkout",
                 return_value=True,
             ),
-            patch(
-                "autoskillit.execution.headless._headless_execute.validate_pre_session_index",
+            patch.object(
+                _patch_headless__headless_execute,
+                "validate_pre_session_index",
                 return_value=False,
             ) as validate_index,
             structlog.testing.capture_logs() as caplog,

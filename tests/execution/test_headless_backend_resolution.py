@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.execution.headless._headless_helpers as _patch_headless__headless_helpers
 from autoskillit.execution.backends import CodexBackend
 from tests.execution.conftest import _launch_preparation, _mock_backend
 
@@ -38,7 +39,8 @@ class TestResolveSessionLogDir:
 
         minimal_ctx.backend = _mock_backend(channel_b_capable=True)
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_helpers._session_log_dir",
+            _patch_headless__headless_helpers,
+            "_session_log_dir",
             lambda cwd, backend: Path("/fake/log/dir"),
         )
         result = _headless_mod._resolve_session_log_dir("/some/cwd", minimal_ctx.backend)

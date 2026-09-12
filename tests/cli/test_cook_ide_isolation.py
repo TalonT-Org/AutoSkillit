@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
 from tests.cli._interactive_process import InteractiveProcessStub
 
 pytestmark = [
@@ -50,7 +51,7 @@ def test_cook_session_ignores_ide_lock_file(
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
-        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
+        patch.object(_patch_cli__init_helpers, "_is_plugin_installed", return_value=False),
         patch(
             "autoskillit.cli.session._session_launch.subprocess.Popen",
             return_value=InteractiveProcessStub(),

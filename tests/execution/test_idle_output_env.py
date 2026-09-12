@@ -8,6 +8,8 @@ from typing import Any
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core.types import SubprocessResult, TerminationReason
 from tests.execution.conftest import _mock_backend
 from tests.fakes import MockSubprocessRunner
@@ -141,7 +143,8 @@ class TestExecuteClaudeHeadlessIdleEnv:
             return None
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_execute._attempt_contract_nudge",
+            _patch_headless__headless_execute,
+            "_attempt_contract_nudge",
             _no_nudge,
         )
         minimal_ctx.config.run_skill.idle_output_timeout = 45
@@ -202,7 +205,8 @@ class TestDispatchFoodTruckIdleEnvInjection:
             )
 
         monkeypatch.setattr(
-            "autoskillit.execution.headless._execute_claude_headless",
+            _patch_execution_headless,
+            "_execute_claude_headless",
             _fake_execute,
         )
 

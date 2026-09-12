@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
+import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
 from autoskillit.core.types import (
     CmdSpec,
     RetryReason,
@@ -63,7 +65,7 @@ class TestBackendOverrideCommandRouting:
                 "backend_for",
                 return_value=claude_code_backend,
             ),
-            patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
+            patch.object(_patch_execution_headless, "_execute_claude_headless") as mock_exec,
         ):
             mock_exec.return_value = _stub_result()
             from autoskillit.execution.headless import run_headless_core
@@ -96,9 +98,7 @@ class TestBackendOverrideCommandRouting:
             )
         )
 
-        with patch(
-            "autoskillit.execution.headless._headless_execute._build_skill_result"
-        ) as mock_build:
+        with patch.object(_patch_headless__headless_execute, "_build_skill_result") as mock_build:
             mock_build.return_value = _stub_result()
             from autoskillit.execution.headless import run_headless_core
 
@@ -136,7 +136,7 @@ class TestBackendOverrideCommandRouting:
                 "backend_for",
                 return_value=codex_backend,
             ),
-            patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
+            patch.object(_patch_execution_headless, "_execute_claude_headless") as mock_exec,
         ):
             mock_exec.return_value = _stub_result()
             from autoskillit.execution.headless import run_headless_core
@@ -183,8 +183,8 @@ class TestBackendOverrideCommandRouting:
                 "backend_for",
                 return_value=CodexBackend(),
             ),
-            patch(
-                "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
+            patch.object(
+                _patch_execution_headless, "_execute_claude_headless", side_effect=capture_exec
             ),
         ):
             from autoskillit.execution.headless import run_headless_core
@@ -246,8 +246,8 @@ class TestBackendOverrideEnvPolicy:
                 "backend_for",
                 return_value=claude_code_backend,
             ),
-            patch(
-                "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
+            patch.object(
+                _patch_execution_headless, "_execute_claude_headless", side_effect=capture_exec
             ),
         ):
             from autoskillit.execution.headless import run_headless_core
@@ -302,8 +302,8 @@ class TestBackendOverrideEnvPolicy:
                 "backend_for",
                 return_value=codex_backend,
             ),
-            patch(
-                "autoskillit.execution.headless._execute_claude_headless", side_effect=capture_exec
+            patch.object(
+                _patch_execution_headless, "_execute_claude_headless", side_effect=capture_exec
             ),
         ):
             from autoskillit.execution.headless import run_headless_core
@@ -347,9 +347,7 @@ class TestBackendOverrideParserSelection:
                 "backend_for",
                 return_value=step_backend,
             ),
-            patch(
-                "autoskillit.execution.headless._headless_execute._build_skill_result"
-            ) as mock_build,
+            patch.object(_patch_headless__headless_execute, "_build_skill_result") as mock_build,
         ):
             mock_build.return_value = _stub_result()
             from autoskillit.execution.headless import run_headless_core

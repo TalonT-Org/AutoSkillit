@@ -7,6 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.config.ingredient_defaults as _patch_config_ingredient_defaults
+import autoskillit.config.settings as _patch_config_settings
+
 pytestmark = [pytest.mark.layer("config"), pytest.mark.medium]
 
 
@@ -156,8 +159,9 @@ def test_resolve_ingredient_defaults_fleet_keys_survive_config_failure(tmp_path,
     )
     monkeypatch.setenv("AUTOSKILLIT_DISPATCH_ID", "dispatch-456")
 
-    with patch(
-        "autoskillit.config.settings.load_config",
+    with patch.object(
+        _patch_config_settings,
+        "load_config",
         side_effect=RuntimeError("config error"),
     ):
         defaults = resolve_ingredient_defaults(repo)
@@ -185,7 +189,7 @@ def test_resolve_ingredient_defaults_base_branch_from_config(tmp_path):
     mock_cfg.plan.adversarial_review_level = "aggressive"
     mock_cfg.diagnostics.pipeline_health = False
 
-    with patch("autoskillit.config.settings.load_config", return_value=mock_cfg):
+    with patch.object(_patch_config_settings, "load_config", return_value=mock_cfg):
         defaults = resolve_ingredient_defaults(repo)
 
     assert defaults["base_branch"] == "develop"
@@ -236,8 +240,9 @@ def test_apply_config_authoritative_overrides_unknown_key_retains_caller_value(t
     }
 
     with (
-        patch(
-            "autoskillit.config.ingredient_defaults.resolve_ingredient_defaults",
+        patch.object(
+            _patch_config_ingredient_defaults,
+            "resolve_ingredient_defaults",
             return_value={},
         ),
         structlog.testing.capture_logs() as cap_logs,

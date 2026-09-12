@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.core.runtime.session_registry as _patch_runtime_session_registry
 from autoskillit.core.runtime.session_registry import (
     bind_session_owner,
     bridge_claude_session_id,
@@ -145,7 +146,8 @@ def test_bind_session_owner_returns_false_without_linux_identity(
 ) -> None:
     write_registry_entry(tmp_path, "abc", "cook", None)
     monkeypatch.setattr(
-        "autoskillit.core.runtime.session_registry.read_starttime_ticks",
+        _patch_runtime_session_registry,
+        "read_starttime_ticks",
         lambda _pid: None,
     )
 
@@ -164,7 +166,8 @@ def test_bind_session_owner_returns_false_when_persistence_fails(
         raise OSError("disk unavailable")
 
     monkeypatch.setattr(
-        "autoskillit.core.runtime.session_registry._atomic_write",
+        _patch_runtime_session_registry,
+        "_atomic_write",
         fail_write,
     )
 

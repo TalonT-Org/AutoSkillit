@@ -9,6 +9,7 @@ from unittest.mock import patch
 import anyio
 import pytest
 
+import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import _session_log_monitor
 
@@ -30,8 +31,9 @@ class TestSessionLogMonitorStaleSuppressionGate:
             call_count["n"] += 1
             return call_count["n"] == 1  # True on first call, False on second
 
-        with patch(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+        with patch.object(
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             side_effect=side_effect,
         ):
             with anyio.fail_after(5.0):
@@ -72,8 +74,8 @@ class TestSessionLogMonitorStaleSuppressionGate:
         session_file.write_text("")
         spawn_time = time.time() - 10
 
-        with patch(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection"
+        with patch.object(
+            _patch_process__process_monitor, "_has_active_api_connection"
         ) as mock_tcp:
             with anyio.fail_after(2.0):
                 result = await _session_log_monitor(
@@ -103,8 +105,9 @@ class TestSessionLogMonitorStaleSuppressionGate:
             calls["n"] += 1
             return calls["n"] == 1
 
-        with patch(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+        with patch.object(
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             side_effect=side_effect,
         ):
             with structlog.testing.capture_logs() as logs:
@@ -150,11 +153,13 @@ class TestSessionLogMonitorStaleSuppressionGate:
             return call_count["cpu"] == 1  # True first, False second
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             fake_child_cpu,
         )
         with anyio.fail_after(5.0):
@@ -182,7 +187,8 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             lambda pid: True,
         )
 
@@ -207,7 +213,8 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             lambda pid: True,
         )
 
@@ -249,7 +256,8 @@ class TestStaleSuppressionBounded:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             lambda pid: True,
         )
 
@@ -290,11 +298,13 @@ class TestStaleSuppressionBounded:
             return call_count["n"] <= 6
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             _api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             lambda pid: False,
         )
 

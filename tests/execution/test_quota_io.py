@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+import autoskillit.execution.quota._quota_gate as _patch_quota__quota_gate
 from tests._helpers import make_quota_guard_config
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
@@ -241,7 +242,7 @@ class TestCacheSchemaVersion:
 
             real(path, payload, schema_version)
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate.write_versioned_json", spy)
+        monkeypatch.setattr(_patch_quota__quota_gate, "write_versioned_json", spy)
 
         result = QuotaFetchResult(
             windows={"five_hour": QuotaWindowEntry(utilization=50.0, resets_at=None)},
@@ -414,7 +415,7 @@ class TestCacheSchemaVersion:
                 binding=QuotaStatus(utilization=30.0, resets_at=None, window_name="five_hour"),
             )
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate._fetch_quota", fake_fetch)
+        monkeypatch.setattr(_patch_quota__quota_gate, "_fetch_quota", fake_fetch)
         config = make_quota_guard_config(
             cache_path=str(cache_path),
             credentials_path=str(tmp_path / "fake_creds.json"),
@@ -458,7 +459,7 @@ class TestCacheSchemaVersion:
             calls.append({"path": path, "expected_version": expected_version})
             return read_versioned_json(path, expected_version, logger=logger)
 
-        monkeypatch.setattr("autoskillit.execution.quota._quota_gate.read_versioned_json", spy)
+        monkeypatch.setattr(_patch_quota__quota_gate, "read_versioned_json", spy)
         status = _read_cache(str(cache_path), max_age=120)
 
         assert status is not None

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResolver, SkillResult
 from autoskillit.core.types import RetryReason
@@ -64,7 +65,7 @@ class TestMigrationSuppression:
                 stderr="",
             )
         )
-        with patch("autoskillit.execution.headless.run_headless_core", mock_headless):
+        with patch.object(_patch_execution_headless, "run_headless_core", mock_headless):
             result = json.loads(await load_recipe(name="test-script"))
 
         assert "suggestions" in result

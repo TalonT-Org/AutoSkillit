@@ -8,6 +8,7 @@ from typing import Literal
 
 import pytest
 
+import autoskillit.execution.backends.codex as _patch_backends_codex
 from autoskillit.core import (
     CODEX_SESSIONS_SUBDIR,
     BackendCapabilities,
@@ -303,7 +304,8 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             fake_log_dir = tmp_path / "fake_logs"
             fake_log_dir.mkdir()
             monkeypatch.setattr(
-                "autoskillit.execution.backends.codex.default_log_dir",
+                _patch_backends_codex,
+                "default_log_dir",
                 lambda: fake_log_dir,
             )
             session_dir = tmp_path / "session"
@@ -444,7 +446,8 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             fake_log_dir = tmp_path / "fake_logs"
             fake_log_dir.mkdir()
             monkeypatch.setattr(
-                "autoskillit.execution.backends.codex.default_log_dir",
+                _patch_backends_codex,
+                "default_log_dir",
                 lambda: fake_log_dir,
             )
             (fake_home / ".codex").mkdir()

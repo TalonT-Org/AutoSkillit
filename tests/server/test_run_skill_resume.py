@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
 from autoskillit.core import (
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineage,
@@ -530,17 +531,20 @@ async def test_resume_rejects_unbound_contract_before_downstream_work(
     tool_ctx_kitchen_open.skill_session_contract_store = store
     tool_ctx_kitchen_open.audit = audit
     monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    monkeypatch.setattr("autoskillit.server.tools.tools_execution._notify", notify)
+    monkeypatch.setattr(_patch_tools_tools_execution, "_notify", notify)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._check_ingredient_locks",
+        _patch_tools_tools_execution,
+        "_check_ingredient_locks",
         ingredient_guard,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._check_pipeline_deps",
+        _patch_tools_tools_execution,
+        "_check_pipeline_deps",
         dependency_guard,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._check_review_approach_plan_path",
+        _patch_tools_tools_execution,
+        "_check_review_approach_plan_path",
         plan_path_guard,
     )
 
@@ -588,7 +592,8 @@ async def test_resume_uses_bound_snapshot_without_current_metadata_or_source_rea
     tool_ctx_kitchen_open.write_expected_resolver = write_resolver
     tool_ctx_kitchen_open.skill_contract_resolver = contract_resolver
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.resolve_closure_write_dirs",
+        _patch_tools_tools_execution,
+        "resolve_closure_write_dirs",
         closure_write_resolver,
     )
     bind_test_skill_resume_contract(

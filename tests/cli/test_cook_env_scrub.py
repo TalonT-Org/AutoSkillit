@@ -15,6 +15,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.session._session_cook as _patch_session__session_cook
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.core import CmdSpec, ManagedSessionHome, ValidatedAddDir
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 from tests.cli._interactive_process import InteractiveProcessStub
@@ -40,7 +46,7 @@ def test_launch_cook_session_env_excludes_ide_vars(
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
-        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
+        patch.object(_patch_cli__init_helpers, "_is_plugin_installed", return_value=False),
         patch(
             "autoskillit.cli.session._session_launch.subprocess.Popen",
             return_value=InteractiveProcessStub(),
@@ -73,7 +79,7 @@ def test_launch_cook_session_extra_env_still_applied(
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
-        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
+        patch.object(_patch_cli__init_helpers, "_is_plugin_installed", return_value=False),
         patch(
             "autoskillit.cli.session._session_launch.subprocess.Popen",
             return_value=InteractiveProcessStub(),
@@ -100,7 +106,7 @@ def test_launch_cook_session_env_has_max_mcp_output_tokens(
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
-        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
+        patch.object(_patch_cli__init_helpers, "_is_plugin_installed", return_value=False),
         patch(
             "autoskillit.cli.session._session_launch.subprocess.Popen",
             return_value=InteractiveProcessStub(),
@@ -126,7 +132,7 @@ def test_launch_cook_session_env_has_mcp_connection_nonblocking(
 
     with (
         patch("shutil.which", return_value="/usr/bin/claude"),
-        patch("autoskillit.cli._init_helpers._is_plugin_installed", return_value=False),
+        patch.object(_patch_cli__init_helpers, "_is_plugin_installed", return_value=False),
         patch(
             "autoskillit.cli.session._session_launch.subprocess.Popen",
             return_value=InteractiveProcessStub(),
@@ -169,10 +175,8 @@ def _capture_cook_spec(
         return SimpleNamespace(pid=101, pgid=101, returncode=0)
 
     monkeypatch.setattr("shutil.which", lambda _cmd: "/usr/bin/claude")
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _path: False
-    )
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *_a, **_k: "")
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _path: False)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *_a, **_k: "")
     monkeypatch.setattr(
         "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",
         lambda *_a, **_k: False,
@@ -181,11 +185,13 @@ def _capture_cook_spec(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *_a, **_k: mock_mgr
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         fake_run,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _path: None,
     )
     monkeypatch.setattr("autoskillit.core.write_registry_entry", lambda *_a, **_k: None)
@@ -204,7 +210,7 @@ def test_cook_command_env_excludes_ide_vars(
     monkeypatch.chdir(tmp_path)
     # cook() derives project_dir via the same git-toplevel helper the MCP server
     # uses; subprocess.run is patched wholesale below, so pin the helper instead.
-    monkeypatch.setattr("autoskillit.cli.session._session_cook.resolve_project_dir", Path.cwd)
+    monkeypatch.setattr(_patch_session__session_cook, "resolve_project_dir", Path.cwd)
 
     spec = _capture_cook_spec(monkeypatch, tmp_path)
     env = spec.env

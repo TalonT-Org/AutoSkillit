@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit._llm_triage as _patch_autoskillit__llm_triage
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.recipe.contracts import StaleItem
 
@@ -22,7 +23,7 @@ def _patch_skill_resolver(
     resolver = DefaultSkillResolver()
     resolver._dir = bundled_root
     resolver._extended_dir = bundled_root / "missing-extended"
-    monkeypatch.setattr("autoskillit._llm_triage.default_skill_resolver", lambda: resolver)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "default_skill_resolver", lambda: resolver)
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +64,8 @@ async def test_triage_staleness_reads_skill_md_once_per_unique_skill(
         pid=0,
     )
     monkeypatch.setattr(
-        "autoskillit._llm_triage.run_managed_async",
+        _patch_autoskillit__llm_triage,
+        "run_managed_async",
         AsyncMock(return_value=fake_result),
     )
 
@@ -136,7 +138,7 @@ async def test_triage_staleness_projects_the_project_effective_override(
             pid=1,
         )
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     await triage_staleness(
         [
@@ -203,7 +205,7 @@ async def test_triage_staleness_sees_raw_stale_local_copy_not_bundled_twin(
             pid=1,
         )
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     await triage_staleness(
         [
@@ -246,7 +248,8 @@ class TestTriageStaleness:
 
         _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "autoskillit._llm_triage.run_managed_async",
+            _patch_autoskillit__llm_triage,
+            "run_managed_async",
             AsyncMock(
                 return_value=SubprocessResult(
                     returncode=1,
@@ -288,7 +291,8 @@ class TestTriageStaleness:
 
         _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "autoskillit._llm_triage.run_managed_async",
+            _patch_autoskillit__llm_triage,
+            "run_managed_async",
             AsyncMock(
                 return_value=SubprocessResult(
                     returncode=1,
@@ -336,7 +340,8 @@ class TestTriageStaleness:
 
         _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "autoskillit._llm_triage.run_managed_async",
+            _patch_autoskillit__llm_triage,
+            "run_managed_async",
             AsyncMock(
                 return_value=SubprocessResult(
                     returncode=0,
@@ -405,7 +410,8 @@ class TestTriageStaleness:
 
         _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "autoskillit._llm_triage.run_managed_async",
+            _patch_autoskillit__llm_triage,
+            "run_managed_async",
             AsyncMock(
                 return_value=SubprocessResult(
                     returncode=0,
@@ -440,7 +446,7 @@ class TestTriageStaleness:
         # Do NOT create SKILL.md — the directory doesn't exist
         _patch_skill_resolver(monkeypatch, tmp_path)
         mock_run = AsyncMock()
-        monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+        monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
         item = StaleItem(
             skill="test-skill",
@@ -503,7 +509,8 @@ class TestTriageStaleness:
 
         _patch_skill_resolver(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "autoskillit._llm_triage.run_managed_async",
+            _patch_autoskillit__llm_triage,
+            "run_managed_async",
             AsyncMock(
                 return_value=SubprocessResult(
                     returncode=0,
@@ -580,7 +587,7 @@ async def test_triage_staleness_batch_fallback_on_malformed_response(
             pid=0,
         )
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     items = [
         StaleItem(
@@ -632,7 +639,7 @@ async def test_triage_command_includes_format_required_flags(
     mock_run = AsyncMock(
         return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
@@ -686,7 +693,7 @@ async def test_triage_env_excludes_ide_vars(tmp_path: Path, monkeypatch: pytest.
     mock_run = AsyncMock(
         return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
@@ -744,7 +751,7 @@ async def test_triage_command_uses_backend_binary_name(
     mock_run = AsyncMock(
         return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
@@ -798,7 +805,7 @@ async def test_triage_staleness_does_not_use_pty(
     mock_run = AsyncMock(
         return_value=SubprocessResult(0, ndjson, "", TerminationReason.NATURAL_EXIT, pid=1)
     )
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     item = StaleItem(
         skill="test-skill", reason="hash_mismatch", stored_value="old", current_value="new"
@@ -839,7 +846,7 @@ async def test_triage_batch_non_claude_backend_returns_all_meaningful(
     ]
 
     mock_run = AsyncMock()
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     results = await _triage_batch(items, cache, cwd=tmp_path, backend=CodexBackend())
 
@@ -866,7 +873,7 @@ async def test_triage_staleness_non_claude_backend_returns_all_meaningful(
     )
 
     mock_run = AsyncMock()
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     items = [
         StaleItem(
@@ -942,7 +949,7 @@ async def test_triage_batch_claude_code_backend_does_call_subprocess(
         pid=0,
     )
     mock_run = AsyncMock(return_value=fake_result)
-    monkeypatch.setattr("autoskillit._llm_triage.run_managed_async", mock_run)
+    monkeypatch.setattr(_patch_autoskillit__llm_triage, "run_managed_async", mock_run)
 
     results = await _triage_batch(items, cache, cwd=tmp_path, backend=ClaudeCodeBackend())
 

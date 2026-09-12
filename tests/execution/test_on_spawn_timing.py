@@ -11,6 +11,8 @@ import anyio
 import psutil
 import pytest
 
+import autoskillit.execution.process as _patch_execution_process
+
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 
@@ -69,8 +71,9 @@ class TestOnPidResolvedTiming:
         mock_owner.process = mock_proc
         mock_owner.pgid = 0
 
-        with patch(
-            "autoskillit.execution.process.spawn_owned_process",
+        with patch.object(
+            _patch_execution_process,
+            "spawn_owned_process",
             return_value=mock_owner,
         ):
             try:

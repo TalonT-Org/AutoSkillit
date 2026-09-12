@@ -8,6 +8,7 @@ import time
 import anyio
 import pytest
 
+import autoskillit.execution.process._process_monitor as _patch_process__process_monitor
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import _session_log_monitor
 
@@ -43,7 +44,8 @@ class TestStaleSuppressionDispatchMarker:
             return call_count["n"] == 1
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             side_effect_fn,
         )
         with anyio.fail_after(5.0):
@@ -107,7 +109,8 @@ class TestStaleSuppressionDispatchMarker:
         session_file.write_text("")
         spawn_time = time.time() - 10
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
         with anyio.fail_after(3.0):
@@ -189,15 +192,18 @@ class TestDispatchMarkerSuppression:
             return call_count["n"] == 1
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             fake_child_proc,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             fake_dispatch_marker,
         )
         with anyio.fail_after(5.0):
@@ -225,15 +231,18 @@ class TestDispatchMarkerSuppression:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
         with structlog.testing.capture_logs() as logs:
@@ -277,15 +286,18 @@ class TestDispatchMarkerSuppression:
             return call_count["n"] == 1
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             fake_child_proc,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             fake_dispatch_marker,
         )
         with structlog.testing.capture_logs() as logs:
@@ -319,15 +331,18 @@ class TestDispatchMarkerSuppression:
         spawn_time = time.time() - 10
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             lambda pid: False,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             lambda marker_dir, session_id=None: True,
         )
         with structlog.testing.capture_logs() as logs:
@@ -369,15 +384,18 @@ class TestDispatchMarkerSuppression:
             return False
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_api_connection",
+            _patch_process__process_monitor,
+            "_has_active_api_connection",
             fake_api_conn,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_child_processes",
+            _patch_process__process_monitor,
+            "_has_active_child_processes",
             fake_child_proc,
         )
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_monitor._has_active_execution_marker",
+            _patch_process__process_monitor,
+            "_has_active_execution_marker",
             track_dispatch_marker,
         )
         with anyio.fail_after(5.0):

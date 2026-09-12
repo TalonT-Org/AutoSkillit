@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+import autoskillit.server.tools.tools_execution as _patch_tools_tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
 from tests.server._pipeline_test_helpers import _setup_project as _shared_setup_project
 from tests.server._pipeline_test_helpers import _write_tracker
@@ -269,7 +270,8 @@ class TestPipelineDepsEmptyStepNameBypass:
             return "b", False
 
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_execution._resolve_step_name_from_recipe",
+            _patch_tools_tools_execution,
+            "_resolve_step_name_from_recipe",
             _resolve_after_tracker_change,
         )
         result = json.loads(

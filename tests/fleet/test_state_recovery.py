@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.fleet._label_cleanup as label_cleanup
 from autoskillit.core import NamedResume, NoResume
 from autoskillit.fleet import CampaignState, DispatchRecord, DispatchStatus
 from autoskillit.fleet.campaign_state.state_records import ResumeDecision
@@ -297,6 +296,7 @@ class TestResumableToFailureEscalation:
         from unittest.mock import AsyncMock
 
         from autoskillit.core import FleetErrorCode
+        from autoskillit.fleet import _label_cleanup as label_cleanup
         from autoskillit.fleet.campaign_state.state import (
             upsert_dispatch_record_by_name,
             write_initial_state,

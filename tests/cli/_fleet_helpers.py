@@ -11,6 +11,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli._preview as _patch_cli__preview
+import autoskillit.cli.prompts as _patch_cli_prompts
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from tests.cli._interactive_process import InteractiveProcessStub
 
 if TYPE_CHECKING:
@@ -48,9 +51,9 @@ def _stub_campaign_resolution(
     monkeypatch.setattr("autoskillit.recipe.find_campaign_by_name", lambda *a, **kw: recipe_info)
     monkeypatch.setattr("autoskillit.recipe.load_recipe", lambda *a, **kw: recipe)
     monkeypatch.setattr("autoskillit.recipe.validate_recipe_structure", lambda *a: [])
-    monkeypatch.setattr("autoskillit.cli._preview.show_campaign_preview", lambda *a, **kw: None)
-    monkeypatch.setattr("autoskillit.cli.prompts._get_ingredients_table", lambda *a, **kw: None)
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_cli__preview, "show_campaign_preview", lambda *a, **kw: None)
+    monkeypatch.setattr(_patch_cli_prompts, "_get_ingredients_table", lambda *a, **kw: None)
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     return recipe
 
 

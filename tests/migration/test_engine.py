@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.migration.adapters_recipe as _patch_migration_adapters_recipe
 from autoskillit.migration.adapters_contract import ContractMigrationAdapter
 from autoskillit.migration.adapters_recipe import RecipeMigrationAdapter
 from autoskillit.migration.adapters_skill import SkillMigrationAdapter
@@ -40,7 +41,8 @@ class TestMigrationEngine:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [],
         )
         mock_headless = AsyncMock()
@@ -73,7 +75,8 @@ class TestMigrationEngine:
         temp_out.write_text(new_content)
 
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(True))
@@ -98,7 +101,8 @@ class TestMigrationEngine:
         recipe_path.write_text("name: test\n")
 
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(False, "headless session failed"))
@@ -126,7 +130,8 @@ class TestMigrationEngine:
         # temp output file intentionally NOT created
 
         monkeypatch.setattr(
-            "autoskillit.migration.adapters_recipe.applicable_migrations",
+            _patch_migration_adapters_recipe,
+            "applicable_migrations",
             lambda *a, **kw: [make_migration_note()],
         )
         mock_headless = AsyncMock(return_value=make_skill_result(True))

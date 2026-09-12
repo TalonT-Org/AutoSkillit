@@ -240,15 +240,17 @@ async def _open_kitchen_patched(
     """Call open_kitchen with all infrastructure side-effects patched out."""
     from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.server.tools import tools_kitchen
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     fmcp_ctx = _mock_fmcp_ctx()
-    with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()):
-        with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-            with patch("autoskillit.server.tools.tools_kitchen.create_background_task"):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen.resolve_kitchen_id",
+    with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+        with patch.object(tools_kitchen, "_write_hook_config"):
+            with patch.object(tools_kitchen, "create_background_task"):
+                with patch.object(
+                    tools_kitchen,
+                    "resolve_kitchen_id",
                     return_value="test-kitchen",
                 ):
                     raw_response = await open_kitchen(name=name, overrides=overrides, ctx=fmcp_ctx)

@@ -10,6 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.install._install_info as _patch_install__install_info
+import autoskillit.cli.update._transaction as _patch_update__transaction
+import autoskillit.server.lifecycle._lifespan as _patch_lifecycle__lifespan
 from tests._retention_surface import (
     RECLAIMER_CONVERGENCE_CASES,
     assert_second_pass_is_quiet,
@@ -256,11 +259,9 @@ def _prepare_obligation_transaction(
         "https://github.com/TalonT-Org/AutoSkillit.git",
         None,
     )
-    monkeypatch.setattr("autoskillit.cli.update._transaction.detect_install", lambda: info)
-    monkeypatch.setattr("autoskillit.cli.update._transaction.is_git_worktree", lambda _path: False)
-    monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.is_git_main_checkout", lambda _path: False
-    )
+    monkeypatch.setattr(_patch_update__transaction, "detect_install", lambda: info)
+    monkeypatch.setattr(_patch_update__transaction, "is_git_worktree", lambda _path: False)
+    monkeypatch.setattr(_patch_update__transaction, "is_git_main_checkout", lambda _path: False)
 
 
 def _branch_target(commit: str) -> Any:
@@ -341,7 +342,8 @@ def _run_branch_publication_failure(
 
     _prepare_obligation_transaction(monkeypatch, tmp_path, branch=True)
     monkeypatch.setattr(
-        "autoskillit.cli.update._transaction.publish_install_root_generation",
+        _patch_update__transaction,
+        "publish_install_root_generation",
         lambda **_kwargs: (_ for _ in ()).throw(error),
     )
     return run_update_transaction(
@@ -430,7 +432,8 @@ def test_startup_repair_heals_a_stale_cache(
 
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._lifespan.iter_all_scope_paths",
+        _patch_lifecycle__lifespan,
+        "iter_all_scope_paths",
         lambda project_root=None: iter([]),
     )
 
@@ -828,7 +831,8 @@ def test_unknown_version_probes_then_verifies_exact_state(
     )
 
     monkeypatch.setattr(
-        "autoskillit.cli.install._install_info.detect_install",
+        _patch_install__install_info,
+        "detect_install",
         lambda: MagicMock(entrypoint=None),
     )
 

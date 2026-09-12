@@ -21,6 +21,7 @@ from unittest.mock import patch
 import pytest
 
 import autoskillit.recipe.helpers._skill_helpers as _sh
+import autoskillit.recipe.rules.rules_skill_content as _patch_rules_rules_skill_content
 import autoskillit.recipe.rules.rules_skill_content as _rsc
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -154,8 +155,9 @@ def test_load_bundled_manifest_patch_path_resolves() -> None:
     patched via the facade namespace without raising AttributeError.
     """
     sentinel = {"sentinel": True}
-    with patch(
-        "autoskillit.recipe.rules.rules_skill_content.load_bundled_manifest",
+    with patch.object(
+        _patch_rules_rules_skill_content,
+        "load_bundled_manifest",
         return_value=sentinel,
     ) as mocked:
         from autoskillit.recipe.rules.rules_skill_content import load_bundled_manifest

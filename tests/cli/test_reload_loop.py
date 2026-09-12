@@ -13,6 +13,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli._init_helpers as _patch_cli__init_helpers
+import autoskillit.cli.install._plugin_artifact as _patch_install__plugin_artifact
+import autoskillit.cli.prompts as _patch_cli_prompts
+import autoskillit.cli.session._session_cook as _patch_session__session_cook
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.session._session_onboarding as _patch_session__session_onboarding
+import autoskillit.cli.session._session_process as _patch_session__session_process
+import autoskillit.cli.session._session_reload as _patch_session__session_reload
+import autoskillit.cli.ui._terminal as _patch_ui__terminal
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fakes import adapt_test_skill_semantics
 
@@ -54,7 +64,8 @@ def _stub_plugin_artifact_authority(
     plugin_dir.mkdir(exist_ok=True)
     authority = _ReloadAuthority(plugin_dir)
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (authority, PluginLoadMode.EXPLICIT_PLUGIN_DIR),
     )
 
@@ -239,16 +250,18 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda x: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("autoskillit.cli.session._session_onboarding.is_first_run", lambda _: True)
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: True)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.run_onboarding_menu",
+        _patch_session__session_onboarding,
+        "run_onboarding_menu",
         lambda *args, **kwargs: "/autoskillit:setup-project",
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.mark_onboarded",
+        _patch_session__session_onboarding,
+        "mark_onboarded",
         lambda project_dir: onboarded.append(project_dir),
     )
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *args, **kwargs: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *args, **kwargs: "")
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *args, **kwargs: manager
     )
@@ -259,14 +272,13 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
         events.append(("render", payload))
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_cook.render_skill_unavailability",
+        _patch_session__session_cook,
+        "render_skill_unavailability",
         record_render,
     )
+    monkeypatch.setattr(_patch_session__session_process, "run_cook_attempt", fake_run_cook_attempt)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt", fake_run_cook_attempt
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel", consume_sentinel
+        _patch_session__session_reload, "consume_reload_sentinel", consume_sentinel
     )
     from autoskillit.core import PluginLoadMode
 
@@ -280,7 +292,8 @@ def test_cook_keeps_managed_home_across_reload_and_transfers_resume_after_attemp
             return binding
 
     monkeypatch.setattr(
-        "autoskillit.cli.install._plugin_artifact.interactive_plugin_authority",
+        _patch_install__plugin_artifact,
+        "interactive_plugin_authority",
         lambda **_kwargs: (
             _SessionAuthority(),
             PluginLoadMode.EXPLICIT_PLUGIN_DIR,
@@ -429,11 +442,10 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/claude")
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _: False)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_onboarding.is_first_run", lambda _: False
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.ui._timed_input.timed_prompt",
+        _patch_ui__timed_input,
+        "timed_prompt",
         lambda *args, **kwargs: "",
     )
     monkeypatch.setattr(
@@ -441,11 +453,13 @@ def test_cook_rejects_repeated_and_excessive_reload_requests(
         lambda *args, **kwargs: manager,
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         lambda *args, **kwargs: SimpleNamespace(pid=1, pgid=1, returncode=0),
     )
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_reload.consume_reload_sentinel",
+        _patch_session__session_reload,
+        "consume_reload_sentinel",
         lambda _project: next(sentinel_values),
     )
 
@@ -473,8 +487,8 @@ def test_interactive_session_reload_uses_named_resume(
         "Popen",
         lambda *a, **kw: InteractiveProcessStub(pid=123),
     )
-    monkeypatch.setattr("autoskillit.cli.ui._terminal.terminal_guard", _noop_terminal_guard)
-    monkeypatch.setattr("autoskillit.cli._init_helpers._is_plugin_installed", lambda **_: True)
+    monkeypatch.setattr(_patch_ui__terminal, "terminal_guard", _noop_terminal_guard)
+    monkeypatch.setattr(_patch_cli__init_helpers, "_is_plugin_installed", lambda **_: True)
 
     from autoskillit.cli.session._session_launch import _run_interactive_session
 
@@ -517,7 +531,8 @@ def test_fleet_reload_relaunches_without_resume(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         fake_run_interactive_session,
     )
     monkeypatch.setattr(
@@ -525,7 +540,8 @@ def test_fleet_reload_relaunches_without_resume(
         lambda _capabilities: "autoskillit",
     )
     monkeypatch.setattr(
-        "autoskillit.cli.prompts._build_fleet_dispatch_prompt",
+        _patch_cli_prompts,
+        "_build_fleet_dispatch_prompt",
         lambda mcp_prefix, **kw: "test-prompt",
     )
     monkeypatch.chdir(tmp_path)

@@ -18,6 +18,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.cli.fleet._fleet_session as _patch_fleet__fleet_session
+import autoskillit.cli.prompts as _patch_cli_prompts
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.session._session_process as _patch_session__session_process
 from autoskillit.cli.session._session_launch import _launch_cook_session, _run_interactive_session
 from autoskillit.core import (
     BackendCapabilities,
@@ -120,7 +124,8 @@ def test_non_probe_fork_threads_true_intent_into_both_build_calls(
     in the non-probe fork would leave that call's captured entry False here."""
     backend, captured_kwargs = _make_non_probe_backend()
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         lambda *_a, **_kw: SimpleNamespace(returncode=0),
     )
 
@@ -150,7 +155,8 @@ def test_non_probe_fork_defaults_to_false_across_both_build_calls(
     """Omitting the kwarg entirely must leave both captured calls False, not absent."""
     backend, captured_kwargs = _make_non_probe_backend()
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_process.run_cook_attempt",
+        _patch_session__session_process,
+        "run_cook_attempt",
         lambda *_a, **_kw: SimpleNamespace(returncode=0),
     )
 
@@ -192,7 +198,8 @@ def test_launch_cook_session_forwards_force_inactive_agent_teams(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         _capture_run_interactive_session,
     )
 
@@ -236,11 +243,10 @@ def test_launch_fleet_session_adhoc_forwards_force_inactive_agent_teams(
         captured.update(kwargs)
         return None
 
+    monkeypatch.setattr(_patch_session__session_launch, "_run_interactive_session", _fake_run)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.prompts._build_fleet_dispatch_prompt",
+        _patch_cli_prompts,
+        "_build_fleet_dispatch_prompt",
         lambda *a, **kw: "dispatch-prompt",
     )
     monkeypatch.chdir(tmp_path)
@@ -266,14 +272,13 @@ def test_launch_fleet_session_campaign_forwards_force_inactive_agent_teams(
         captured.update(kwargs)
         return None
 
+    monkeypatch.setattr(_patch_session__session_launch, "_run_interactive_session", _fake_run)
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session", _fake_run
-    )
-    monkeypatch.setattr(
-        "autoskillit.cli.prompts._build_fleet_campaign_prompt",
+        _patch_cli_prompts,
+        "_build_fleet_campaign_prompt",
         lambda *a, **kw: "campaign-prompt",
     )
-    monkeypatch.setattr("autoskillit.cli.fleet._fleet_session.dump_yaml_str", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_fleet__fleet_session, "dump_yaml_str", lambda *a, **kw: "")
     monkeypatch.chdir(tmp_path)
     _write_fleet_config(tmp_path, force_inactive=force_inactive)
 

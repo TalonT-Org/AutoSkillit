@@ -20,6 +20,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.config._config_dataclasses import ProvidersConfig
 from autoskillit.core import FinalizedRecipeStep, RecipeFlowEdge
 from tests.server._helpers import _make_finalized_projection
@@ -629,12 +630,14 @@ class TestPreflightGateClosure:
 
         with (
             patch.object(server_state, "_ctx", tool_ctx),
-            patch(
-                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+            patch.object(
+                _patch_tools_tools_kitchen,
+                "_require_orchestrator_exact",
                 return_value=None,
             ),
-            patch(
-                "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+            patch.object(
+                _patch_tools_tools_kitchen,
+                "_apply_triage_gate",
                 side_effect=_triage_passthrough,
             ),
         ):
@@ -693,12 +696,14 @@ class TestPreflightGateClosure:
         with (
             patch.object(server_state, "_ctx", tool_ctx),
             patch.object(_preflight, "HOOK_REGISTRY", [synthetic]),
-            patch(
-                "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
+            patch.object(
+                _patch_tools_tools_kitchen,
+                "_require_orchestrator_exact",
                 return_value=None,
             ),
-            patch(
-                "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+            patch.object(
+                _patch_tools_tools_kitchen,
+                "_apply_triage_gate",
                 side_effect=_triage_passthrough,
             ),
         ):

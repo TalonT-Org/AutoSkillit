@@ -21,6 +21,9 @@ from contextlib import suppress
 import psutil
 import pytest
 
+import autoskillit.execution.evidence.linux_tracing as _patch_execution_linux_tracing
+import autoskillit.execution.process._process_kill as _patch_process__process_kill
+import autoskillit.execution.process._process_tether as _patch_process__process_tether
 from autoskillit.config._config_dataclasses import ProcessTetherConfig
 from autoskillit.core import read_boot_id, read_starttime_ticks
 from autoskillit.execution import (
@@ -163,7 +166,7 @@ class TestSpawnFailsClosedOnUnwritableTetherDir:
             captured["pid"] = record.child_pid
             raise OSError("simulated unwritable tether dir")
 
-        monkeypatch.setattr("autoskillit.execution.process._process_kill.write_tether", _boom)
+        monkeypatch.setattr(_patch_process__process_kill, "write_tether", _boom)
 
         with pytest.raises(OSError, match="simulated unwritable tether dir"):
             spawn_owned_process(
@@ -418,9 +421,7 @@ class TestPtyWorkloadResolutionFailureDoesNotAbortSpawn:
         async def _boom(**kwargs):
             raise TraceTargetResolutionError(root_pid=1, expected_basename="python")
 
-        monkeypatch.setattr(
-            "autoskillit.execution.evidence.linux_tracing.resolve_trace_target", _boom
-        )
+        monkeypatch.setattr(_patch_execution_linux_tracing, "resolve_trace_target", _boom)
 
         # See the sibling test above for why this is patched via the module
         # object rather than a string path.
@@ -530,7 +531,8 @@ class TestSystemdScopeWrap:
             return True
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_tether.probe_systemd_scope_available",
+            _patch_process__process_tether,
+            "probe_systemd_scope_available",
             _fail_if_probed,
         )
         result = wrap_systemd_scope(["echo", "hi"], enabled=False, ceiling_seconds=60.0)
@@ -543,7 +545,8 @@ class TestSystemdScopeWrap:
         import structlog.testing
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_tether.probe_systemd_scope_available",
+            _patch_process__process_tether,
+            "probe_systemd_scope_available",
             lambda: False,
         )
         with structlog.testing.capture_logs() as cap_logs:
@@ -555,7 +558,8 @@ class TestSystemdScopeWrap:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_tether.probe_systemd_scope_available",
+            _patch_process__process_tether,
+            "probe_systemd_scope_available",
             lambda: True,
         )
         result = wrap_systemd_scope(["echo", "hi"], enabled=True, ceiling_seconds=90.0)

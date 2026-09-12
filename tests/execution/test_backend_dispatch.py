@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core.types import (
     LaunchContractError,
     RetryReason,
@@ -22,6 +23,11 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 @pytest.mark.anyio
 async def test_run_headless_core_uses_ctx_backend_for_command_construction(minimal_ctx):
+    import importlib
+
+    headless_execute_module = importlib.import_module(
+        "autoskillit.execution.headless._headless_execute"
+    )
     backend = _mock_backend(
         pty_required=True,
         channel_b_capable=True,
@@ -40,9 +46,7 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
     mock_runner.return_value = mock_result
     minimal_ctx.runner = mock_runner
 
-    with patch(
-        "autoskillit.execution.headless._headless_execute._build_skill_result"
-    ) as mock_build_result:
+    with patch.object(headless_execute_module, "_build_skill_result") as mock_build_result:
         mock_build_result.return_value = SkillResult(
             success=True,
             result="",
@@ -81,6 +85,11 @@ async def test_run_headless_core_uses_ctx_backend_for_command_construction(minim
 class TestBackendDispatchRouting:
     @pytest.mark.anyio
     async def test_codex_backend_pty_mode_false_reaches_runner(self, minimal_ctx):
+        import importlib
+
+        headless_execute_module = importlib.import_module(
+            "autoskillit.execution.headless._headless_execute"
+        )
         backend = _mock_backend(pty_required=False, channel_b_capable=False)
         minimal_ctx.backend = backend
 
@@ -95,9 +104,7 @@ class TestBackendDispatchRouting:
         mock_runner.return_value = mock_result
         minimal_ctx.runner = mock_runner
 
-        with patch(
-            "autoskillit.execution.headless._headless_execute._build_skill_result"
-        ) as mock_build_result:
+        with patch.object(headless_execute_module, "_build_skill_result") as mock_build_result:
             mock_build_result.return_value = SkillResult(
                 success=True,
                 result="",
@@ -125,6 +132,11 @@ class TestBackendDispatchRouting:
 class TestStepBackendOverride:
     @pytest.mark.anyio
     async def test_step_backend_none_falls_back_to_ctx_backend(self, minimal_ctx):
+        import importlib
+
+        headless_execute_module = importlib.import_module(
+            "autoskillit.execution.headless._headless_execute"
+        )
         backend = _mock_backend(pty_required=True, channel_b_capable=True)
         minimal_ctx.backend = backend
         minimal_ctx.runner = AsyncMock(
@@ -136,9 +148,7 @@ class TestStepBackendOverride:
                 pid=12345,
             )
         )
-        with patch(
-            "autoskillit.execution.headless._headless_execute._build_skill_result"
-        ) as mock_build:
+        with patch.object(headless_execute_module, "_build_skill_result") as mock_build:
             mock_build.return_value = SkillResult(
                 success=True,
                 result="",
@@ -184,7 +194,7 @@ class TestStepBackendOverride:
                 "backend_for",
                 return_value=codex_backend,
             ) as mock_backend_for,
-            patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
+            patch.object(_patch_execution_headless, "_execute_claude_headless") as mock_exec,
         ):
             mock_exec.return_value = SkillResult(
                 success=True,
@@ -212,6 +222,11 @@ class TestStepBackendOverride:
 
     @pytest.mark.anyio
     async def test_step_backend_flows_to_stream_parser_and_build_result(self, minimal_ctx):
+        import importlib
+
+        headless_execute_module = importlib.import_module(
+            "autoskillit.execution.headless._headless_execute"
+        )
         ctx_backend = _mock_backend(pty_required=True, channel_b_capable=True)
         step_backend_mock = _mock_backend(
             pty_required=False, channel_b_capable=False, process_name="codex"
@@ -238,9 +253,7 @@ class TestStepBackendOverride:
                 "backend_for",
                 return_value=step_backend_mock,
             ),
-            patch(
-                "autoskillit.execution.headless._headless_execute._build_skill_result"
-            ) as mock_build,
+            patch.object(headless_execute_module, "_build_skill_result") as mock_build,
         ):
             mock_build.return_value = SkillResult(
                 success=True,
@@ -314,8 +327,14 @@ def _patch_for_flush(monkeypatch, tmp_path, skill_result):
     Mirrors _patch_common from test_flush_provider_integration.py, minus the ctx
     argument and the unused _sub_result shared state.
     """
+    import importlib
+
     import autoskillit.execution.evidence.session_log as _sl_mod
     from autoskillit.execution.headless import PostSessionMetrics
+
+    headless_execute_module = importlib.import_module(
+        "autoskillit.execution.headless._headless_execute"
+    )
 
     sub_result = SubprocessResult(
         returncode=1,
@@ -329,19 +348,23 @@ def _patch_for_flush(monkeypatch, tmp_path, skill_result):
         return sub_result
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._build_skill_result",
+        headless_execute_module,
+        "_build_skill_result",
         lambda *a, **kw: skill_result,  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._compute_post_session_metrics",
+        headless_execute_module,
+        "_compute_post_session_metrics",
         lambda *a, **kw: PostSessionMetrics(0, 0, str(tmp_path)),  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._capture_git_head_sha",
+        headless_execute_module,
+        "_capture_git_head_sha",
         lambda *a: "",  # noqa: ARG005
     )
     monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute.collect_version_snapshot",
+        headless_execute_module,
+        "collect_version_snapshot",
         lambda backend=None: {},
     )
 

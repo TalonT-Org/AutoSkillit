@@ -16,6 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.cli.fleet._fleet_run as _patch_fleet__fleet_run
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
 from autoskillit.fleet import (
     DispatchCompleted,
     DispatchEffectProvenance,
@@ -229,7 +231,8 @@ class TestFleetRunCliAdmission:
             raising=False,
         )
         monkeypatch.setattr(
-            "autoskillit.cli.session._session_launch.render_skill_unavailability",
+            _patch_session__session_launch,
+            "render_skill_unavailability",
             render,
         )
         monkeypatch.setattr(_fleet_run, "render_skill_unavailability", render, raising=False)
@@ -287,8 +290,9 @@ class TestFleetRunCliAdmission:
         async def fake_execute(**kwargs: object) -> DispatchResult:
             return rejection_result
 
-        with patch(
-            "autoskillit.cli.fleet._fleet_run._execute_fleet_run",
+        with patch.object(
+            _patch_fleet__fleet_run,
+            "_execute_fleet_run",
             new=AsyncMock(side_effect=fake_execute),
         ):
             from autoskillit.cli.fleet import fleet_run

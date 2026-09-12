@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.execution.backends._claude_session_locator as _locator_module
 from autoskillit.core import (
     SessionLocator,
     SessionSummary,
@@ -53,7 +54,8 @@ class TestClaudeSessionLocator:
         )
         monkeypatch.setattr(Path, "home", lambda: fake_home)
         monkeypatch.setattr(
-            "autoskillit.execution.backends._claude_session_locator.claude_code_project_dir",
+            _locator_module,
+            "claude_code_project_dir",
             lambda _cwd: index_dir,
         )
 
@@ -109,7 +111,8 @@ class TestClaudeSessionLocator:
             encoding="utf-8",
         )
         monkeypatch.setattr(
-            "autoskillit.execution.backends._claude_session_locator.claude_code_project_dir",
+            _locator_module,
+            "claude_code_project_dir",
             lambda _cwd: index_dir,
         )
 
@@ -128,7 +131,8 @@ class TestClaudeSessionLocator:
         index_dir.mkdir()
         (index_dir / "sessions-index.json").write_text(contents, encoding="utf-8")
         monkeypatch.setattr(
-            "autoskillit.execution.backends._claude_session_locator.claude_code_project_dir",
+            _locator_module,
+            "claude_code_project_dir",
             lambda _cwd: index_dir,
         )
 

@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core import LaunchValueSourceKind
 from autoskillit.core.types import LaunchContractError, RetryReason, SkillResult
 
@@ -83,7 +84,7 @@ async def test_codex_model_with_matching_backend_pin_launches(minimal_ctx):
 
     with (
         patch.object(minimal_ctx.launch_resolver, "backend_for", return_value=codex_backend),
-        patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
+        patch.object(_patch_execution_headless, "_execute_claude_headless") as mock_exec,
     ):
         mock_exec.return_value = _skill_result_success()
         from autoskillit.execution.headless import run_headless_core
@@ -125,7 +126,7 @@ async def test_model_key_path_reaches_launch_preparation(minimal_ctx):
             minimal_ctx.launch_resolver, "prepare", wraps=minimal_ctx.launch_resolver.prepare
         ) as mock_prepare,
         patch.object(minimal_ctx.launch_resolver, "backend_for", return_value=codex_backend),
-        patch("autoskillit.execution.headless._execute_claude_headless") as mock_exec,
+        patch.object(_patch_execution_headless, "_execute_claude_headless") as mock_exec,
     ):
         mock_exec.return_value = _skill_result_success()
         from autoskillit.execution.headless import run_headless_core

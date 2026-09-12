@@ -8,6 +8,8 @@ from typing import Literal
 import psutil
 import pytest
 
+import autoskillit.core.pipeline_tracker as _patch_core_pipeline_tracker
+import autoskillit.core.plugins._active_kitchens as _patch_plugins__active_kitchens
 from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
@@ -63,11 +65,12 @@ def _registry(monkeypatch, tmp_path, payload: object | None) -> None:
         registry_path.parent.mkdir(parents=True)
         registry_path.write_text(json.dumps(payload))
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens._active_kitchens_path",
+        _patch_plugins__active_kitchens,
+        "_active_kitchens_path",
         lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens._active_kitchens_lock", lambda _home: lock_path
+        _patch_plugins__active_kitchens, "_active_kitchens_lock", lambda _home: lock_path
     )
 
 
@@ -301,11 +304,13 @@ def test_retirement_preserves_tracker_on_unsafe_registry(monkeypatch, tmp_path, 
     registry_path.parent.mkdir(parents=True)
     registry_path.write_bytes(registry_payload)
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens._active_kitchens_path",
+        _patch_plugins__active_kitchens,
+        "_active_kitchens_path",
         lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens._active_kitchens_lock",
+        _patch_plugins__active_kitchens,
+        "_active_kitchens_lock",
         lambda _home: registry_path.with_suffix(".lock"),
     )
 
@@ -375,7 +380,7 @@ def test_retirement_preserves_tracker_when_liveness_probe_errors(monkeypatch, tm
     def _raise(_entry):
         raise psutil.AccessDenied()
 
-    monkeypatch.setattr("autoskillit.core.pipeline_tracker.kitchen_entry_alive", _raise)
+    monkeypatch.setattr(_patch_core_pipeline_tracker, "kitchen_entry_alive", _raise)
 
     assert try_retire_tracker(target) is False
     assert target.path.exists()

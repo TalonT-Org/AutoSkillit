@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.execution.headless as _patch_execution_headless
 from autoskillit.core import (
     CmdSpec,
     ManagedHeadlessSessionKind,
@@ -221,7 +222,8 @@ async def test_default_executor_accepts_managed_invalid_lineage_capture_fallback
         )
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._execute_claude_headless",
+        _patch_execution_headless,
+        "_execute_claude_headless",
         _fake_execute,
     )
 
@@ -290,7 +292,8 @@ async def test_default_executor_rebinds_changed_resumed_codex_final(
         )
 
     monkeypatch.setattr(
-        "autoskillit.execution.headless._execute_claude_headless",
+        _patch_execution_headless,
+        "_execute_claude_headless",
         _fake_execute,
     )
 

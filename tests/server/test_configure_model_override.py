@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import autoskillit.server as server
+import autoskillit.server.tools.tools_execution as tools_execution
 import autoskillit.server.tools.tools_kitchen as tools_kitchen
 from tests.server.test_tools_config import _open_context
 
@@ -84,8 +85,7 @@ async def test_model_override_beats_providers_model_overrides(
     )
     monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
     monkeypatch.setattr(_state, "_ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(tools_execution, "is_feature_enabled", lambda *a, **kw: False)
 
     hook_path = tool_ctx_kitchen_open.project_dir / ".autoskillit" / "temp" / ".hook_config.json"
     hook_path.parent.mkdir(parents=True, exist_ok=True)

@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.fleet as _patch_cli_fleet
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
+import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.cli.fleet import fleet_dispatch as _fleet_dispatch
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
@@ -91,7 +94,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
 ) -> None:
     """fleet dispatch exits 1 when claude is not on PATH."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("autoskillit.cli.fleet.is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(_patch_cli_fleet, "is_feature_enabled", lambda *a, **kw: True)
     _fleet = type(
         "Fleet",
         (),
@@ -122,7 +125,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
         )(),
     )
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     monkeypatch.setattr(shutil, "which", lambda _: None)
     with pytest.raises(SystemExit, match="1"):
         _fleet_dispatch()
@@ -141,7 +144,8 @@ def test_fleet_dispatch_exits_when_disabled(
     _stub_guards(monkeypatch)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.fleet.is_feature_enabled",
+        _patch_cli_fleet,
+        "is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),
@@ -175,7 +179,8 @@ def test_fleet_dispatch_proceeds_when_enabled(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "autoskillit.cli.fleet.is_feature_enabled",
+        _patch_cli_fleet,
+        "is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: True,
     )
     _fleet = type(
@@ -208,7 +213,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
         )(),
     )
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     captured = _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     assert captured.get("cmd") is not None, "Expected fleet session subprocess to be invoked"
@@ -227,7 +232,7 @@ def test_fleet_dispatch_sets_fleet_mode_dispatch(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     captured = _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     assert captured["env"].get("AUTOSKILLIT_FLEET_MODE") == "dispatch"
@@ -238,7 +243,7 @@ def test_fleet_dispatch_writes_no_state(monkeypatch: pytest.MonkeyPatch, tmp_pat
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     fleet_dir = tmp_path / ".autoskillit" / "temp" / "fleet"
@@ -252,7 +257,7 @@ def test_fleet_dispatch_no_campaign_env_vars(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     captured = _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     env = captured["env"]
@@ -429,7 +434,7 @@ def test_fleet_dispatch_prints_recipe_roster(
             _fake_recipe("review-pr", "BUILTIN", "Review a pull request"),
         ],
     )
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     out = capsys.readouterr().out
@@ -444,7 +449,7 @@ def test_fleet_dispatch_shows_permissions_warning(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     out = capsys.readouterr().out
@@ -456,7 +461,7 @@ def test_fleet_dispatch_aborts_on_no(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "n")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "n")
     captured = _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     assert "cmd" not in captured, "Session should not launch when user aborts"
@@ -469,7 +474,7 @@ def test_fleet_dispatch_prints_fleet_tool_surface(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     out = capsys.readouterr().out
@@ -485,7 +490,7 @@ def test_fleet_dispatch_prints_version_header(
     _stub_guards(monkeypatch)
     monkeypatch.chdir(tmp_path)
     _stub_list_recipes(monkeypatch, [])
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     _capture_subprocess(monkeypatch)
     _fleet_dispatch()
     out = capsys.readouterr().out
@@ -508,7 +513,7 @@ def test_fleet_dispatch_passes_initial_message(
         monkeypatch,
         [_fake_recipe("smoke-test", "BUILTIN", "Run smoke tests")],
     )
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     captured_kwargs: dict = {}
 
     def mock_run_session(system_prompt: str, **kwargs: object) -> None:
@@ -516,7 +521,8 @@ def test_fleet_dispatch_passes_initial_message(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         mock_run_session,
     )
     _fleet_dispatch()
@@ -539,7 +545,7 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
             _fake_recipe("implement", "BUILTIN", "Implement a feature"),
         ],
     )
-    monkeypatch.setattr("autoskillit.cli.ui._timed_input.timed_prompt", lambda *a, **kw: "")
+    monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *a, **kw: "")
     captured_kwargs: dict = {}
 
     def mock_run_session(system_prompt: str, **kwargs: object) -> None:
@@ -547,7 +553,8 @@ def test_fleet_dispatch_greeting_contains_recipe_descriptions(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         mock_run_session,
     )
     _fleet_dispatch()
@@ -612,7 +619,8 @@ def test_launch_fleet_session_forwards_initial_message_dispatch(
         return None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         mock_run,
     )
     from autoskillit.cli.fleet._fleet_session import _launch_fleet_session
@@ -643,7 +651,8 @@ def test_launch_fleet_session_clears_initial_message_on_reload(
         return "reload-session-abc" if call_count == 1 else None
 
     monkeypatch.setattr(
-        "autoskillit.cli.session._session_launch._run_interactive_session",
+        _patch_session__session_launch,
+        "_run_interactive_session",
         mock_run,
     )
     from autoskillit.cli.fleet._fleet_session import _launch_fleet_session

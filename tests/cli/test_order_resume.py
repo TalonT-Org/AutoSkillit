@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.cli.session._session_launch as _patch_session__session_launch
 from autoskillit.cli.session._session_launch import (
     _InfraExitSignal,
     _launch_cook_session,
@@ -26,8 +27,9 @@ class TestLaunchCookSessionInfraResume:
                 return _InfraExitSignal(session_id="dead-sess", category="context_exhausted")
             return None
 
-        with patch(
-            "autoskillit.cli.session._session_launch._run_interactive_session",
+        with patch.object(
+            _patch_session__session_launch,
+            "_run_interactive_session",
             side_effect=mock_run_interactive,
         ):
             _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
@@ -43,8 +45,9 @@ class TestLaunchCookSessionInfraResume:
                 return _InfraExitSignal(session_id="sess-42", category="api_error")
             return None
 
-        with patch(
-            "autoskillit.cli.session._session_launch._run_interactive_session",
+        with patch.object(
+            _patch_session__session_launch,
+            "_run_interactive_session",
             side_effect=mock_run_interactive,
         ):
             _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)
@@ -57,8 +60,9 @@ class TestLaunchCookSessionInfraResume:
             return _InfraExitSignal(session_id="sess-loop", category="process_killed")
 
         with (
-            patch(
-                "autoskillit.cli.session._session_launch._run_interactive_session",
+            patch.object(
+                _patch_session__session_launch,
+                "_run_interactive_session",
                 side_effect=mock_run_interactive,
             ),
             pytest.raises(SystemExit, match="Too many infrastructure resumes"),
@@ -73,8 +77,9 @@ class TestLaunchCookSessionInfraResume:
             call_count += 1
             return None
 
-        with patch(
-            "autoskillit.cli.session._session_launch._run_interactive_session",
+        with patch.object(
+            _patch_session__session_launch,
+            "_run_interactive_session",
             side_effect=mock_run_interactive,
         ):
             _launch_cook_session("prompt", required_env=frozenset(), **launch_kwargs)

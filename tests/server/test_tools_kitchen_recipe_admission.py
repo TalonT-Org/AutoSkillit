@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as _patch_tools_tools_kitchen
 from autoskillit.core import RecipeNotFoundError
 from autoskillit.pipeline import (
     bind_kitchen_intent,
@@ -58,10 +59,8 @@ async def test_open_kitchen_with_recipe_returns_combined_response(tmp_path, monk
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="test-recipe", ctx=mock_ctx)
@@ -91,10 +90,8 @@ async def test_open_kitchen_reports_admitted_recipe_missing_during_load(tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_str = await open_kitchen(name="nonexistent", ctx=mock_ctx)
@@ -134,22 +131,25 @@ async def test_open_kitchen_rejects_non_recipe_before_operational_mutation(
     handler = AsyncMock()
     with (
         patch("autoskillit.server._get_ctx", return_value=mock_ctx),
-        patch("autoskillit.server.tools.tools_kitchen._open_kitchen_handler", handler),
-        patch("autoskillit.server.tools.tools_kitchen.clear_recipe_execution") as clear,
-        patch("autoskillit.server.tools.tools_kitchen.create_background_task") as create_task,
-        patch(
-            "autoskillit.server.tools.tools_kitchen.bind_kitchen_intent",
+        patch.object(_patch_tools_tools_kitchen, "_open_kitchen_handler", handler),
+        patch.object(_patch_tools_tools_kitchen, "clear_recipe_execution") as clear,
+        patch.object(_patch_tools_tools_kitchen, "create_background_task") as create_task,
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "bind_kitchen_intent",
             wraps=bind_kitchen_intent,
         ) as bind_request,
-        patch(
-            "autoskillit.server.tools.tools_kitchen.claim_kitchen_request",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "claim_kitchen_request",
             wraps=claim_kitchen_request,
         ) as claim_request,
-        patch(
-            "autoskillit.server.tools.tools_kitchen.release_kitchen_request",
+        patch.object(
+            _patch_tools_tools_kitchen,
+            "release_kitchen_request",
             wraps=release_kitchen_request,
         ) as release_request,
-        patch("autoskillit.server.tools.tools_kitchen.mcp") as mock_mcp,
+        patch.object(_patch_tools_tools_kitchen, "mcp") as mock_mcp,
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen
 
@@ -206,10 +206,8 @@ async def test_open_kitchen_without_recipe_bypasses_namespace_admission(tmp_path
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+            with patch.object(_patch_tools_tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(_patch_tools_tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result = await open_kitchen(ctx=mock_ctx)

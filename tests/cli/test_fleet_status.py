@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.cli.fleet as _patch_cli_fleet
 from autoskillit.cli.fleet import fleet_status as _fleet_status
 from tests.cli._fleet_helpers import (
     DispatchDescriptor,
@@ -276,7 +277,8 @@ def test_fleet_status_exits_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.chdir(tmp_path)
     checked_features: list[str] = []
     monkeypatch.setattr(
-        "autoskillit.cli.fleet.is_feature_enabled",
+        _patch_cli_fleet,
+        "is_feature_enabled",
         lambda name, features, *, experimental_enabled=False: (
             checked_features.append(name) or False
         ),

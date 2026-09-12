@@ -12,6 +12,7 @@ import pytest
 
 import autoskillit.core.fs_observation as fs_observation
 import autoskillit.execution.process._process_monitor as process_monitor
+import autoskillit.execution.process._process_race as _patch_process__process_race
 from autoskillit.core import ObservedEntry
 from autoskillit.core.types import ChannelBStatus
 from autoskillit.execution.process import (
@@ -550,7 +551,8 @@ class TestWatchSessionLogSessionId:
             return SessionMonitorResult(ChannelBStatus.COMPLETION, "child-session")
 
         monkeypatch.setattr(
-            "autoskillit.execution.process._process_race._session_log_monitor",
+            _patch_process__process_race,
+            "_session_log_monitor",
             _completion,
         )
         acc = RaceAccumulator()
@@ -1257,7 +1259,8 @@ async def test_watch_session_log_passes_marker_dir_to_monitor_kwargs(
         return SessionMonitorResult(status=ChannelBStatus.STALE, session_id="")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._session_log_monitor",
+        _patch_process__process_race,
+        "_session_log_monitor",
         fake_session_log_monitor,
     )
 
@@ -1303,7 +1306,8 @@ async def test_watch_session_log_omits_marker_kwargs_when_none(
         return SessionMonitorResult(status=ChannelBStatus.STALE, session_id="")
 
     monkeypatch.setattr(
-        "autoskillit.execution.process._process_race._session_log_monitor",
+        _patch_process__process_race,
+        "_session_log_monitor",
         fake_session_log_monitor,
     )
 

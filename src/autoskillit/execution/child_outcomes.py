@@ -204,22 +204,19 @@ def _child_id_from_subagent_transcript_path(transcript_path: Path) -> str:
 def _extract_claude_child_metadata(records: list[dict[str, Any]]) -> dict[str, str]:
     """Extract role/model/attribution from one subagent transcript's records.
 
-    Deduplicates assistant records by ``message.id`` (mirrors
-    ``execution/session/_turn_usage.py:merge_turn_usage``'s dedup pattern);
-    later records for the same message id win.
+    Mirrors ``execution/session/_turn_usage.py:merge_turn_usage``'s dedup
+    pattern; later records for the same message id win. No explicit
+    ``message.id`` bookkeeping is needed for that: only the latest
+    non-empty ``attribution_skill``/``effective_model`` is ever kept, so
+    processing every assistant record unconditionally already lets a
+    later record's non-empty values overwrite an earlier one's.
     """
-    seen_message_ids: set[str] = set()
     attribution_skill = ""
     effective_model = ""
     for record in records:
         if record.get("type") != "assistant":
             continue
         message = record.get("message")
-        message_id = message.get("id") if isinstance(message, dict) else None
-        if isinstance(message_id, str) and message_id:
-            if message_id in seen_message_ids:
-                continue
-            seen_message_ids.add(message_id)
         skill = record.get("attributionSkill")
         if isinstance(skill, str) and skill:
             attribution_skill = skill

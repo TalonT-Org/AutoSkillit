@@ -169,7 +169,7 @@ def test_collect_claude_native_children_dedups_by_message_id(tmp_path) -> None:
             "type": "assistant",
             "attributionAgent": "Explore",
             "attributionSkill": "skill-b",
-            "message": {"id": "msg-2", "model": "model-new"},
+            "message": {"id": "msg-1", "model": "model-new"},
         },
     ]
     (subagents_dir / "agent-agent-a.jsonl").write_text(

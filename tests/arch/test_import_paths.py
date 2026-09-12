@@ -302,6 +302,7 @@ def test_req_imp_007_pretty_output_no_private_recipe_api_import() -> None:
         if in_tc and mod in {
             "autoskillit.recipe._api",
             "autoskillit.recipe.api._api",
+            "autoskillit.recipe.api_orchestration._api_orchestration",
         }:
             pytest.fail(
                 "hooks/pretty_output_hook.py TYPE_CHECKING must use "

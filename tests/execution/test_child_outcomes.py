@@ -602,7 +602,7 @@ def test_collect_codex_observed_children_continues_after_snapshot_write_failure(
     assert [outcome["child_id"] for outcome in outcomes] == ["child-2"]
 
 
-def test_codex_role_view_groups_distinct_runs_by_native_definition_name(tmp_path) -> None:
+def test_codex_role_rows_preserve_distinct_parent_child_pairs(tmp_path) -> None:
     log_root = tmp_path / "logs"
     rows = []
     expected_runs = set()

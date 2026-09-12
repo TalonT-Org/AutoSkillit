@@ -231,7 +231,10 @@ def test_connection_factory_identity_change_fails_closed(
     assert result.store_health.reason_code == "store-identity-changed"
 
 
-def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> None:
+def test_recovery_fails_closed_on_orphaned_foreign_key_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     authority = _authority(tmp_path)
     assert (
         DefaultContextAdmissionLedger(authority).recover_all().status
@@ -252,11 +255,25 @@ def test_recovery_fails_closed_on_orphaned_foreign_key_rows(tmp_path: Path) -> N
     finally:
         connection.close()
 
-    recovered = DefaultContextAdmissionLedger(authority).recover_all()
+    recovery_ledger = DefaultContextAdmissionLedger(authority)
+    original_connect = recovery_ledger._connect
+    recovery_connection: MagicMock | None = None
+
+    def retain_recovery_connection() -> sqlite3.Connection:
+        nonlocal recovery_connection
+        connection = original_connect()
+        recovery_connection = MagicMock(wraps=connection, spec=sqlite3.Connection)
+        return cast(sqlite3.Connection, recovery_connection)
+
+    monkeypatch.setattr(recovery_ledger, "_connect", retain_recovery_connection)
+
+    recovered = recovery_ledger.recover_all()
 
     assert recovered.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
     assert recovered.store_health.failure_reason is ContextAdmissionStorageFailureReason.INTEGRITY
     assert recovered.store_health.reason_code == "sqlite-foreign-key-check-failed"
+    assert recovery_connection is not None
+    recovery_connection.close.assert_called_once_with()
 
 
 def test_stream_key_decoder_enforces_byte_and_nesting_bounds(

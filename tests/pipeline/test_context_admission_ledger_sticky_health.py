@@ -17,6 +17,7 @@ from autoskillit.core import (
     ContextAdmissionAccountingStatus,
     ContextAdmissionStorageFailureReason,
     ContextAdmissionStorageHealthStatus,
+    ContextAdmissionStoreAuthority,
     ContextAdmissionStreamKey,
     ContextThreadId,
 )
@@ -222,9 +223,22 @@ def test_post_recovery_open_failure_sets_sticky_store_health(
     monkeypatch: pytest.MonkeyPatch,
     operation: str,
 ) -> None:
+    class RecordingLedger(DefaultContextAdmissionLedger):
+        def __init__(self, authority: ContextAdmissionStoreAuthority) -> None:
+            super().__init__(authority)
+            self.store_failure_calls: list[tuple[ContextAdmissionStorageFailureReason, str]] = []
+
+        def _set_store_failure(
+            self,
+            reason: ContextAdmissionStorageFailureReason,
+            reason_code: str,
+        ) -> None:
+            self.store_failure_calls.append((reason, reason_code))
+            super()._set_store_failure(reason, reason_code)
+
     authority = _authority(tmp_path)
     key = stream_key()
-    ledger = DefaultContextAdmissionLedger(authority)
+    ledger = RecordingLedger(authority)
     assert ledger.apply(key, open_event()).status is ContextAdmissionAccountingStatus.RECORDED
 
     def raise_permanent_open_failure() -> sqlite3.Connection:
@@ -246,6 +260,9 @@ def test_post_recovery_open_failure_sets_sticky_store_health(
     assert health.status is ContextAdmissionStorageHealthStatus.FAIL_CLOSED
     assert health.failure_reason is ContextAdmissionStorageFailureReason.CONFIGURATION
     assert health.reason_code == "post-recovery-open-failed"
+    assert ledger.store_failure_calls == [
+        (ContextAdmissionStorageFailureReason.CONFIGURATION, "post-recovery-open-failed")
+    ]
 
 
 def test_lineage_mismatch_sets_sticky_stream_health(tmp_path: Path) -> None:

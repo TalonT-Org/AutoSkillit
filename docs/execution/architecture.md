@@ -262,10 +262,9 @@ every plan — is emitted in both `thread/start` and `thread/resume` params;
 every entry must be an absolute path, enforced at plan construction.
 
 Physical-attempt history ownership (`session_attempt_context`, launch/attempt/
-view identity, and promotion before a later resume) is unchanged by this
-migration — it continues to use the same `CodexSessionStore` machinery
-described below, including the nudge runner call now correctly passing
-`line_driver=` for its app-server resume.
+view identity, and promotion before a later resume) continues to use the
+same `CodexSessionStore` machinery described below; the nudge runner call
+passes `line_driver=` for its app-server resume.
 
 ### Canonical stores and attempt views
 

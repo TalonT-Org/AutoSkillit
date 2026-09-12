@@ -306,14 +306,15 @@ def _preflight_checked_out_ref_mutation(
             additional_segments.append(payload)
         else:
             additional_segments.extend(tokenize_command_segments(payload))
-    # The live-text projection (rectify #4941 Part A): a heredoc/herestring
-    # body whose consumer executes it is blanked at its source position and
-    # appended once; an inert body is blanked and never appended. Both the
-    # structural-mutation regex and _raw_target_mutations' write-path scan
-    # read this projection instead of the raw command, so an inert `cat
-    # <<'EOF'` body mentioning "git push --force" as prose no longer
-    # matches, while a heredoc/pipe-fed shell that actually runs it still
-    # does.
+    # The live-text projection (rectify #4941 Part A): a heredoc body whose
+    # consumer executes it is blanked at its source position and appended
+    # once; an inert heredoc body is blanked and never appended. A herestring
+    # body is left at its single natural position either way (see
+    # live_command_text's docstring). Both the structural-mutation regex and
+    # _raw_target_mutations' write-path scan read this projection instead of
+    # the raw command, so an inert `cat <<'EOF'` body mentioning
+    # "git push --force" as prose no longer matches, while a heredoc/pipe-fed
+    # shell that actually runs it still does.
     live_text = live_command_text(command)
     structural_mutation = bool(
         re.search(

@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification._flags import _FlagArity
+    from autoskillit.hooks._classification._flag_arity import _FlagArity
     from autoskillit.hooks._classification._python_program_analysis import (
         _InterpreterCommandSpec,
         _python_program_command_specs,
@@ -37,22 +37,57 @@ if TYPE_CHECKING:
     _SHELL_INVOCATION_FLAG_SPEC: dict[str, _FlagArity]
     _PYTHON_INVOCATION_FLAG_SPEC: dict[str, _FlagArity]
 else:
-    # _python_program_analysis and _substitution_scanning are leaf siblings
-    # (no back-reference into the facade), so they can be imported at the
-    # top of the file without the circular-bootstrap hazard that governs
-    # the _flags import at the bottom of this module.
+    # _flag_arity, _python_program_analysis, and _substitution_scanning are
+    # leaf siblings (no back-reference into the facade), so they can be
+    # imported at the top of the file without the circular-bootstrap hazard
+    # that governs the _flags import at the bottom of this module. _FlagArity
+    # used to come from _flags directly (PR #4983 review: that forced a
+    # bidirectional _flags<->_interpreters coupling -- _flags needed
+    # all_evaluated_segments/live_command_text from here, and here needed
+    # _FlagArity from _flags); it now comes from this dependency-free leaf
+    # instead, leaving only the _flags -> _interpreters edge.
     if __package__:
-        from . import _python_program_analysis, _substitution_scanning
+        from . import _flag_arity, _python_program_analysis, _substitution_scanning
     else:
+        import _flag_arity
         import _python_program_analysis
         import _substitution_scanning
 
+    _FlagArity = _flag_arity._FlagArity
     _InterpreterCommandSpec = _python_program_analysis._InterpreterCommandSpec
     _python_program_command_specs = _python_program_analysis._python_program_command_specs
     _extract_process_substitution_occurrences = (
         _substitution_scanning._extract_process_substitution_occurrences
     )
     _iter_substitution_occurrences = _substitution_scanning._iter_substitution_occurrences
+
+    # Flags that consume a following value when the shell/Python interpreter
+    # itself (not a heredoc/herestring body) reads a script from a
+    # positional operand. Only VALUE-arity flags are listed: any other
+    # `-`/`+`-prefixed token is skipped as boolean by the default bucket in
+    # `_walk_invocation_flags`. Defined here (rather than at the bottom of
+    # the file) now that _FlagArity no longer forces a deferred, re-entrant
+    # import -- see the comment above.
+    _SHELL_INVOCATION_FLAG_SPEC: dict[str, _FlagArity] = {
+        "-o": _FlagArity.VALUE,
+        "+o": _FlagArity.VALUE,
+        "-O": _FlagArity.VALUE,
+        "+O": _FlagArity.VALUE,
+        "--rcfile": _FlagArity.VALUE,
+        "--init-file": _FlagArity.VALUE,
+        # Bash 5.2 help does not print --rcfile/--init-file's operand arity;
+        # covered by the generative flag-spec test instead of the
+        # live-`--help` contract test (see
+        # tests/hooks/test_gh_api_flag_spec_contract.py).
+        "-c": _FlagArity.VALUE,
+    }
+    _PYTHON_INVOCATION_FLAG_SPEC: dict[str, _FlagArity] = {
+        "-c": _FlagArity.VALUE,
+        "-m": _FlagArity.VALUE,
+        "-W": _FlagArity.VALUE,
+        "-X": _FlagArity.VALUE,
+        "--check-hash-based-pycs": _FlagArity.VALUE,
+    }
 
 
 def has_interpreter_write(command: str) -> bool:
@@ -505,14 +540,23 @@ def all_evaluated_segments(
 def live_command_text(command: str) -> str:
     """Return an occurrence-aware live-text projection of *command*.
 
-    Every stdin-literal (heredoc/herestring) occurrence is blanked at its
-    original position; one whose consumer executes it (per `stdin_consumer`)
-    is appended once, in source order, so a regex-based scanner sees its
-    content exactly once without ever re-deriving liveness from the raw
-    string. An inert literal's body is blanked and never appended, so it
-    cannot trigger a raw-text match. A `-c`/`eval`/`python -c` payload is
-    already present verbatim in the base text at its natural position and
-    is never duplicated by re-appending it.
+    A heredoc occurrence is blanked at its original position; one whose
+    consumer executes it (per `stdin_consumer`) is appended once, in source
+    order, so a regex-based scanner sees its content exactly once without
+    ever re-deriving liveness from the raw string. An inert heredoc's body is
+    blanked and never appended, so it cannot trigger a raw-text match. A
+    `-c`/`eval`/`python -c` payload is already present verbatim in the base
+    text at its natural position and is never duplicated by re-appending it.
+
+    A herestring occurrence is never blanked: the tokenizer does not track
+    its `source_span` (only a heredoc's placeholder-substitution pass does),
+    so it is left exactly once at its natural position in `base`, live or
+    inert, and is excluded below rather than re-appended. This differs from
+    heredoc's inert-body blanking -- a `#4983` follow-up tracks closing that
+    gap -- but it is not a false positive/negative for any current caller: a
+    herestring's raw source text already reads identically to its evaluated
+    payload text, so a scanner matching against `base` alone sees the same
+    content a second, appended copy would have added.
     """
     segments = _tokenize_command_segments_with_redirects(command)
     payloads = evaluated_payloads(command)
@@ -530,7 +574,7 @@ def live_command_text(command: str) -> str:
     appended = [
         payload.text
         for payload in payloads
-        if payload.origin not in ("-c", "eval", "python-c") and payload.text
+        if payload.origin not in ("-c", "eval", "python-c", "herestring") and payload.text
     ]
     return " ".join([base, *appended]) if appended else base
 

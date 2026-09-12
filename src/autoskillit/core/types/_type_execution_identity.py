@@ -76,6 +76,7 @@ class ChildOutcomeDict(TypedDict):
     role: str
     attribution_skill: str
     effective_model: str
+    effective_effort: str
     effective_provider: str
     terminal_reason: str
     raw_reason: str

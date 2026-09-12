@@ -177,6 +177,7 @@ class TestChildOutcomesProjection:
         "role": "",
         "attribution_skill": "",
         "effective_model": "",
+        "effective_effort": "",
         "effective_provider": "",
         "terminal_reason": "unknown",
         "raw_reason": "",

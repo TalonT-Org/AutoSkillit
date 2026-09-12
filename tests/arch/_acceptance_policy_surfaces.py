@@ -49,7 +49,7 @@ class PolicyRelaxationApproval:
 
 POLICY_SURFACES: tuple[PolicySurface, ...] = (
     PolicySurface(
-        "tests/arch/_subpackage_isolation_line_limits.py",
+        "tests/arch/_line_budget.py",
         "_LINE_LIMIT_EXEMPTIONS",
         "exemption_map",
     ),

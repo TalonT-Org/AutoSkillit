@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import SnapshotCaptureReason, SnapshotCaptureStatus
 from tests.arch._helpers import SRC_ROOT
-from tests.arch._subpackage_isolation_line_limits import _LINE_LIMIT_EXEMPTIONS, count_budget_lines
+from tests.arch._line_budget import _LINE_LIMIT_EXEMPTIONS, count_budget_lines
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

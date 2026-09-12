@@ -6,6 +6,7 @@ import ast
 import re as _stdlib_re
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from tests.arch._rules import (
     _ASYNCIO_PIPE_EXEMPT,
@@ -22,6 +23,9 @@ from tests.arch._rules import (
     _rel,  # noqa: F401  # shared by layer and subpackage checks
 )
 from tests.arch._subpackage_isolation_line_limits import LineLimitExemption
+
+if TYPE_CHECKING:
+    import pytest
 
 # ── Path constants ────────────────────────────────────────────────────────────
 # Must be absolute for xdist compatibility -- do not use relative paths.
@@ -553,53 +557,26 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
     return False
 
 
-def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
-    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
-    tree = ast.parse(path.read_text())
-    result: list[ast.ImportFrom] = []
+def _runtime_imports(path: Path) -> tuple[list[ast.ImportFrom], list[ast.Import]]:
+    """Return (``from`` imports, plain imports) outside ``TYPE_CHECKING`` guards from one parse.
 
-    def _walk(stmts: list) -> None:
-        for stmt in stmts:
-            if isinstance(stmt, ast.ImportFrom):
-                result.append(stmt)
-            elif isinstance(stmt, ast.If):
-                test = stmt.test
-                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-                )
-                if not is_tc:
-                    _walk(stmt.body)
-                    _walk(stmt.orelse)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.ClassDef):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.Try):
-                _walk(stmt.body)
-                for handler in stmt.handlers:
-                    _walk(handler.body)
-                _walk(stmt.orelse)
-                _walk(getattr(stmt, "finalbody", []))
-
-    _walk(tree.body)
-    return result
-
-
-def _runtime_plain_imports(path: Path) -> list[ast.Import]:
-    """Return plain ``import X.Y.Z`` nodes not inside a TYPE_CHECKING guard.
-
-    Complements ``_runtime_import_froms``: the one-way-import guard treats
-    ``import shard.path as alias`` (an ``ast.Import`` node) and
-    ``from shard.path import X`` (an ``ast.ImportFrom`` node) symmetrically,
-    so both must be inspected for the invariant to actually be enforceable.
+    The one-way-import guards treat ``import shard.path as alias`` (``ast.Import``) and
+    ``from shard.path import X`` (``ast.ImportFrom``) symmetrically, so paired callers take
+    both lists from a single parse and a single traversal. Traversal is deliberately selective:
+    ``if``/``else``, function, class, and ``try`` bodies are entered; a ``TYPE_CHECKING``
+    conditional (either spelling) is skipped entirely; other compound statements are not
+    entered. ``SyntaxError`` propagates.
     """
     tree = ast.parse(path.read_text())
-    result: list[ast.Import] = []
+    import_froms: list[ast.ImportFrom] = []
+    plain_imports: list[ast.Import] = []
 
-    def _walk(stmts: list) -> None:
+    def _walk(stmts: list[ast.stmt]) -> None:
         for stmt in stmts:
-            if isinstance(stmt, ast.Import):
-                result.append(stmt)
+            if isinstance(stmt, ast.ImportFrom):
+                import_froms.append(stmt)
+            elif isinstance(stmt, ast.Import):
+                plain_imports.append(stmt)
             elif isinstance(stmt, ast.If):
                 test = stmt.test
                 is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
@@ -620,7 +597,35 @@ def _runtime_plain_imports(path: Path) -> list[ast.Import]:
                 _walk(getattr(stmt, "finalbody", []))
 
     _walk(tree.body)
-    return result
+    return import_froms, plain_imports
+
+
+def _runtime_import_froms(path: Path) -> list[ast.ImportFrom]:
+    """Return ImportFrom nodes not inside a TYPE_CHECKING guard."""
+    return _runtime_imports(path)[0]
+
+
+# ── Section B.1: Test fixture utilities shared by import-analysis test modules ─
+
+
+def _write_source(root: Path, rel: str, source: str) -> None:
+    """Write ``source`` to ``root / rel``, creating parent directories as needed."""
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(source)
+
+
+def _install_parse_counter(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Patch ``ast.parse`` to count calls; returns a live single-element counter."""
+    original_parse = ast.parse
+    counter = [0]
+
+    def counting_parse(*args, **kwargs):
+        counter[0] += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(ast, "parse", counting_parse)
+    return counter
 
 
 # ── Section C: Skill frontmatter and iteration helpers ───────────────────────

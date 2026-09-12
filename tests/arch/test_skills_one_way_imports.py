@@ -9,9 +9,12 @@ existing REQ-ARCH-001 semantics).
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from tests.arch._helpers import SRC_ROOT, _runtime_import_froms, _runtime_plain_imports
+from tests.arch._helpers import SRC_ROOT, _install_parse_counter, _runtime_imports, _write_source
 
 pytestmark = [pytest.mark.small]
 
@@ -36,14 +39,8 @@ _ALLOWED_FACADES: frozenset[str] = frozenset(
 )
 
 
-def test_no_external_module_imports_skill_shards_directly() -> None:
-    """No module outside ``autoskillit.workspace`` may import a skill shard path.
-
-    Inspects both ``from shard import X`` (``ast.ImportFrom``) and
-    ``import shard.path as alias`` / ``import shard.path`` (``ast.Import``)
-    forms so the facade-only invariant is enforced regardless of import
-    syntax used by callers.
-    """
+def _collect_external_skill_shard_import_violations() -> list[str]:
+    """Loop body shared by the guard test and its parse-count meta-test."""
     violations: list[str] = []
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         rel = py_file.relative_to(SRC_ROOT)
@@ -53,14 +50,15 @@ def test_no_external_module_imports_skill_shards_directly() -> None:
         # Skip the workspace package itself (its __init__.py may import from siblings).
         if parts[0] == "workspace":
             continue
-        for import_from in _runtime_import_froms(py_file):
+        import_froms, plain_imports = _runtime_imports(py_file)
+        for import_from in import_froms:
             module = import_from.module or ""
             if module in _FORBIDDEN_SHARDS:
                 violations.append(
                     f"{rel}:{import_from.lineno} imports from forbidden shard {module!r}; "
                     f"import from one of the facades: {sorted(_ALLOWED_FACADES)}"
                 )
-        for plain_import in _runtime_plain_imports(py_file):
+        for plain_import in plain_imports:
             for alias in plain_import.names:
                 if alias.name in _FORBIDDEN_SHARDS or any(
                     alias.name.startswith(f"{shard}.") for shard in _FORBIDDEN_SHARDS
@@ -69,7 +67,57 @@ def test_no_external_module_imports_skill_shards_directly() -> None:
                         f"{rel}:{plain_import.lineno} imports forbidden shard {alias.name!r}; "
                         f"import from one of the facades: {sorted(_ALLOWED_FACADES)}"
                     )
+    return violations
+
+
+def test_no_external_module_imports_skill_shards_directly() -> None:
+    """No module outside ``autoskillit.workspace`` may import a skill shard path.
+
+    Inspects both ``from shard import X`` (``ast.ImportFrom``) and
+    ``import shard.path as alias`` / ``import shard.path`` (``ast.Import``)
+    forms so the facade-only invariant is enforced regardless of import
+    syntax used by callers.
+    """
+    violations = _collect_external_skill_shard_import_violations()
     assert not violations, (
         "External modules must not import skill shard paths directly:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def test_external_skill_shard_guard_parses_each_inspected_file_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_source(tmp_path, "server/handler.py", "import os\n")
+    _write_source(tmp_path, "cli/main.py", "from autoskillit.workspace.skills import discover\n")
+    _write_source(tmp_path, "workspace/skills_records.py", "import os\n")
+    monkeypatch.setattr(sys.modules[__name__], "SRC_ROOT", tmp_path)
+    counter = _install_parse_counter(monkeypatch)
+
+    _collect_external_skill_shard_import_violations()
+
+    inspected = [
+        p for p in tmp_path.rglob("*.py") if p.relative_to(tmp_path).parts[0] != "workspace"
+    ]
+    assert counter[0] == len(inspected) == 2
+
+
+def test_external_skill_shard_guard_flags_both_import_forms(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _write_source(
+        tmp_path,
+        "server/handler.py",
+        "from autoskillit.workspace.skills_records import SkillRecord\n"
+        "import autoskillit.workspace.skills_overrides as overrides\n",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "SRC_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError) as excinfo:
+        test_no_external_module_imports_skill_shards_directly()
+
+    message = str(excinfo.value)
+    from_form = "server/handler.py:1 imports from forbidden shard "
+    plain_form = "server/handler.py:2 imports forbidden shard "
+    assert from_form + "'autoskillit.workspace.skills_records'" in message
+    assert plain_form + "'autoskillit.workspace.skills_overrides'" in message

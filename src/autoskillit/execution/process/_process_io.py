@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import tempfile
 import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO
+from typing import IO, cast
 
 from autoskillit.core import CapturedStream, LineDriver, SpillSpec, get_logger
 
@@ -199,11 +200,28 @@ def drive_process_io(
         try:
             _write_lines(driver.initial_lines())
         except Exception as exc:  # noqa: BLE001 — any driver/pipe fault here is a failure
+            logger.warning("line_driver_initial_lines_failed", exc_info=True)
             _fail(f"line driver failed building the initial request: {exc}")
 
         while True:
             try:
-                chunk = stdout_pipe.read(_TEE_CHUNK_SIZE)
+                # read1(), not read(): BufferedReader.read(n) on a non-interactive
+                # stream (a pipe is never a tty) keeps issuing raw reads until it
+                # has n bytes or hits EOF — it will NOT return early just because
+                # data is already sitting in the pipe. A long-lived process that
+                # writes small, irregular frames (one JSON-RPC message at a time)
+                # almost never fills a 64KiB chunk, so read() blocks the tee for
+                # the life of the process, starving on_line()/the driver of every
+                # frame until EOF (process exit) unblocks it — by which point any
+                # buffered response is decoded too late to write a reply back
+                # (the child's stdin is already gone, so the write fails with
+                # EPIPE). read1() makes at most one underlying read() syscall and
+                # returns whatever is immediately available, exactly like a raw
+                # read() on the file descriptor would. read1() is a BufferedIOBase
+                # method, not part of the generic IO[bytes] protocol this parameter
+                # is typed with — cast() reflects what subprocess.Popen(...).stdout
+                # (the only real caller) actually hands us: an io.BufferedReader.
+                chunk = cast(io.BufferedReader, stdout_pipe).read1(_TEE_CHUNK_SIZE)
             except OSError as exc:
                 _fail(f"stdout pipe read failed: {exc}")
                 break
@@ -229,6 +247,7 @@ def drive_process_io(
                 try:
                     outgoing = driver.on_line(decoded_line)
                 except Exception as exc:  # noqa: BLE001 — a driver bug is a driver failure
+                    logger.warning("line_driver_on_line_failed", exc_info=True)
                     _fail(f"line driver raised in on_line: {exc}")
                     break
                 try:

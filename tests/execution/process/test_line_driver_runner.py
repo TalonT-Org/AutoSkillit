@@ -361,6 +361,13 @@ class TestDriveProcessIoUnit:
                 del size
                 return self._data.pop(0) if self._data else b""
 
+            # drive_process_io calls read1(), not read() — see the read1()
+            # docstring note in _process_io.py. Each scripted chunk already
+            # models one discrete "whatever's immediately available" read,
+            # so read1() reuses the exact same one-chunk-per-call behavior.
+            def read1(self, size: int) -> bytes:
+                return self.read(size)
+
         class _CapturingWriter:
             def __init__(self) -> None:
                 self.written: list[bytes] = []
@@ -433,6 +440,11 @@ class TestDriveProcessIoUnit:
             def read(self, size: int) -> bytes:
                 del size
                 return self._data.pop(0) if self._data else b""
+
+            # See the sibling _ScriptedReader above: drive_process_io calls
+            # read1(), and one scripted chunk per call already models that.
+            def read1(self, size: int) -> bytes:
+                return self.read(size)
 
         class _CapturingWriter:
             def write(self, data: bytes) -> int:

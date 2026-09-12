@@ -15,21 +15,15 @@ from autoskillit.core import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureMode,
     SkillSessionConfig,
-    ValidatedAddDir,
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 _ATTEMPT_ID = "c" * 32
-_CODEX_SKILL_ADD_DIRS = (
-    ValidatedAddDir(
-        path="/tmp/project/add-dir",
-        session_home="/tmp/project",
-        skill_entries=(("test", "test/SKILL.md"),),
-    ),
-)
+_CODEX_SKILL_ADD_DIRS = codex_skill_add_dirs("/tmp/project")
 _PROTECTED_KEYS = frozenset(
     {
         NATIVE_SHELL_CAPTURE_MODE_ENV_VAR,

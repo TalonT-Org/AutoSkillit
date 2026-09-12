@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from autoskillit.core import ValidatedAddDir
+
 CODEX_SCHEMA_VERSION: int = 2
 CODEX_FIXTURE_MIN_VERSION: str = "0.136.0"
 
@@ -24,6 +26,25 @@ def fixture_path(name: str) -> Path:
     return Path(__file__).parent / name
 
 
+def codex_skill_add_dirs(
+    cwd: str, *, skill_name: str = "test-skill"
+) -> tuple[ValidatedAddDir, ...]:
+    """A single ValidatedAddDir satisfying CodexBackend's app-server skill-session invariant.
+
+    ``build_skill_session_cmd`` requires exactly one add-dir bound to a nonempty
+    ``session_home`` with a frozen, nonempty skill catalog; this is the canonical
+    fixture shape for tests that only need the invariant satisfied, not a specific
+    catalog layout.
+    """
+    return (
+        ValidatedAddDir(
+            path=f"{cwd}/add-dir",
+            session_home=cwd,
+            skill_entries=((skill_name, f"{skill_name}/SKILL.md"),),
+        ),
+    )
+
+
 __all__ = [
     "CODEX_FIXTURE_MIN_VERSION",
     "CODEX_SCHEMA_VERSION",
@@ -37,5 +58,6 @@ __all__ = [
     "SESSION_WITH_REASONING",
     "TURN_FAILED_ERROR",
     "TURN_FAILED_MODEL_CAPACITY",
+    "codex_skill_add_dirs",
     "fixture_path",
 ]

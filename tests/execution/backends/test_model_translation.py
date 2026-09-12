@@ -4,21 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import SkillSessionConfig, ValidatedAddDir
+from autoskillit.core import SkillSessionConfig
 from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_CODEX_SKILL_ADD_DIRS = (
-    ValidatedAddDir(
-        path="/repo/add-dir",
-        session_home="/repo",
-        skill_entries=(("test", "test/SKILL.md"),),
-    ),
-)
+_CODEX_SKILL_ADD_DIRS = codex_skill_add_dirs("/repo")
 
 
 class TestCodexTranslateModel:

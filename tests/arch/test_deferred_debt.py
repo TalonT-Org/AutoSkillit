@@ -8,6 +8,8 @@ from tests.arch._deferred_debt import (
     TrackedDeferral,
     assert_deferrals_have_regression_tests,
     assert_entries_still_apply,
+    assert_not_stale,
+    assert_rationale_present,
 )
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
@@ -54,6 +56,28 @@ def test_live_key_absent_from_registry_is_not_this_helpers_concern() -> None:
         registry_name="TEST_REGISTRY",
         live_keys={"unexpected-live-key"},
     )
+
+
+def test_stale_entry_is_rejected() -> None:
+    entry = TrackedDeferral(
+        issue=1234,
+        rationale="A concrete deferred architectural violation remains live.",
+        added_date=date(2020, 1, 1),
+        regression_test="tests/arch/test_deferred_debt.py::test_every_entry_present_passes",
+    )
+    with pytest.raises(AssertionError, match="TEST_REGISTRY"):
+        assert_not_stale({"stale-key": entry}, registry_name="TEST_REGISTRY")
+
+
+def test_rationale_too_short_is_rejected() -> None:
+    entry = TrackedDeferral(
+        issue=1234,
+        rationale="too short",
+        added_date=date.today(),
+        regression_test="tests/arch/test_deferred_debt.py::test_every_entry_present_passes",
+    )
+    with pytest.raises(AssertionError, match="TEST_REGISTRY"):
+        assert_rationale_present({"vague-key": entry}, registry_name="TEST_REGISTRY")
 
 
 def test_deferral_without_regression_test_is_rejected() -> None:

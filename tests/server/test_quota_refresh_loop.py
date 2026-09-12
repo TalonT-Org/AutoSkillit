@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -30,7 +31,7 @@ async def test_quota_refresh_loop_calls_refresh_at_each_interval(monkeypatch):
         nonlocal call_count
         call_count += 1
 
-    monkeypatch.setattr(_misc.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(_misc, "asyncio", SimpleNamespace(sleep=fake_sleep))
     monkeypatch.setattr(_misc, "_refresh_quota_cache", fake_refresh)
 
     config = QuotaGuardConfig(cache_refresh_interval=240)
@@ -48,7 +49,7 @@ async def test_quota_refresh_loop_exits_cleanly_on_cancel(monkeypatch):
     async def immediate_cancel(n):
         raise asyncio.CancelledError
 
-    monkeypatch.setattr(_misc.asyncio, "sleep", immediate_cancel)
+    monkeypatch.setattr(_misc, "asyncio", SimpleNamespace(sleep=immediate_cancel))
     monkeypatch.setattr(_misc, "_refresh_quota_cache", AsyncMock())
     task = asyncio.create_task(
         _misc._quota_refresh_loop(QuotaGuardConfig(), supports_quota_check=True)
@@ -78,7 +79,7 @@ async def test_quota_refresh_loop_continues_after_refresh_exception(monkeypatch)
         if call_count == 1:
             raise OSError("network blip")
 
-    monkeypatch.setattr(_misc.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(_misc, "asyncio", SimpleNamespace(sleep=fake_sleep))
     monkeypatch.setattr(_misc, "_refresh_quota_cache", flaky_refresh)
 
     with pytest.raises(asyncio.CancelledError):
@@ -93,9 +94,9 @@ async def test_quota_refresh_loop_returns_immediately_when_unsupported(monkeypat
     from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        _misc.asyncio,
-        "sleep",
-        AsyncMock(side_effect=AssertionError("should not sleep")),
+        _misc,
+        "asyncio",
+        SimpleNamespace(sleep=AsyncMock(side_effect=AssertionError("should not sleep"))),
     )
     monkeypatch.setattr(
         _misc,

@@ -1071,51 +1071,54 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "retryable."
     ),
     # -- execution._session_log_recovery::recover_crashed_sessions --
-    # Coordinates include the child-outcome reconciliation pass from issue #4623
-    # and the typed infrastructure-outcome imports from issue #4927.
-    f"{_SR}::L52": _retries_after_input_changes(
+    # Coordinates include the child-outcome reconciliation pass from issue #4623,
+    # the typed infrastructure-outcome imports from issue #4927, and deferring
+    # the #4623 pass's own child_outcomes import to inside the try block (issue
+    # #4672 decomposition — module-level would circularly import back through
+    # the evidence/ gateway that now wraps this file).
+    f"{_SR}::L58": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SR}::L61": _retries_after_input_changes(
+    f"{_SR}::L67": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L63": _resolves_with_contention(
+    f"{_SR}::L69": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SR}::L76": _retries_after_input_changes(
+    f"{_SR}::L82": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SR}::L83": _self_limiting(
+    f"{_SR}::L89": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SR}::L94": _resolves_with_contention(
+    f"{_SR}::L100": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SR}::L105": _self_limiting(
+    f"{_SR}::L111": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SR}::L110": _self_limiting(
+    f"{_SR}::L116": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SR}::L113": _self_limiting(
+    f"{_SR}::L119": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SR}::L118": _retries_after_input_changes(
+    f"{_SR}::L124": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L128": _self_limiting(
+    f"{_SR}::L134": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SR}::L150": _self_limiting(
+    f"{_SR}::L156": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SR}::L156": _retries_after_input_changes(
+    f"{_SR}::L162": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SR}::L196": _retries_after_input_changes(
+    f"{_SR}::L202": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

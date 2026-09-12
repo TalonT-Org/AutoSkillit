@@ -100,8 +100,10 @@ class TestMigrateRecipe:
     async def test_migrate_recipe_up_to_date(self, tmp_path, monkeypatch):  # SRV-UPD-1
         """migrate_recipe returns up_to_date when no migrations applicable and contract fresh."""
         monkeypatch.chdir(tmp_path)
+        from autoskillit.migration import loader as migration_loader
+
         with (
-            patch("autoskillit.migration.loader.applicable_migrations", return_value=[]),
+            patch.object(migration_loader, "applicable_migrations", return_value=[]),
             patch("autoskillit.recipe.load_recipe_card", return_value={"skill_hashes": {}}),
             patch("autoskillit.recipe.check_contract_staleness", return_value=[]),
         ):

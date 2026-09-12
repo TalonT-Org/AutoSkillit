@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.server.git as server_git
 import autoskillit.server.tools.tools_git as tools_git
 from autoskillit.core.types import MergeFailedStep, MergeState
 from autoskillit.server.tools.tools_git import merge_worktree
@@ -103,7 +104,7 @@ class TestMergeWorktree:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # worktree remove
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # branch -D
         install_prepared_recipe_segment(monkeypatch, tools_git, step_name="merge")
-        with patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")):
+        with patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")):
             result = json.loads(await merge_worktree(str(wt), "dev", step_name="merge"))
         assert result["merge_succeeded"] is True
         assert result["into_branch"] == "dev"

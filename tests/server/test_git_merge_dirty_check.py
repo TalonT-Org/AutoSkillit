@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+import autoskillit.server.git as server_git
 from autoskillit.config import AutomationConfig
 from autoskillit.core import (
     MergeFailedStep,
@@ -77,11 +78,12 @@ async def test_dirty_main_repo_returns_error(tmp_path):
     runner.push(_make_result(0, " M src/foo.py\n M tests/bar.py\n"))  # step 7.6: dirty!
 
     with (
-        patch(
-            "autoskillit.server.git.scan_editable_installs_for_worktree",
+        patch.object(
+            server_git,
+            "scan_editable_installs_for_worktree",
             return_value=EditableScanResult(),
         ),
-        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+        patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
             fake_wt,
@@ -114,11 +116,12 @@ async def test_clean_main_repo_proceeds_to_merge(tmp_path):
     runner.push(_make_result(0, ""))  # branch -D
 
     with (
-        patch(
-            "autoskillit.server.git.scan_editable_installs_for_worktree",
+        patch.object(
+            server_git,
+            "scan_editable_installs_for_worktree",
             return_value=EditableScanResult(),
         ),
-        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+        patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
             fake_wt,
@@ -145,11 +148,12 @@ async def test_dirty_check_error_format(tmp_path):
     runner.push(_make_result(0, dirty_output))  # step 7.6: dirty
 
     with (
-        patch(
-            "autoskillit.server.git.scan_editable_installs_for_worktree",
+        patch.object(
+            server_git,
+            "scan_editable_installs_for_worktree",
             return_value=EditableScanResult(),
         ),
-        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+        patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
             fake_wt,
@@ -181,7 +185,7 @@ async def test_embedded_worktree_returns_error(tmp_path):
 
     # Mock resolve_main_worktree to return tmp_path (the parent), so the
     # worktree at tmp_path/worktrees/impl-foo is correctly detected as embedded.
-    with patch("autoskillit.server.git.resolve_main_worktree", return_value=tmp_path):
+    with patch.object(server_git, "resolve_main_worktree", return_value=tmp_path):
         result = await perform_merge(
             fake_wt,
             "dev",
@@ -235,11 +239,12 @@ async def test_non_embedded_worktree_proceeds_past_spatial_check(tmp_path):
     runner.push(_make_result(0, ""))
 
     with (
-        patch(
-            "autoskillit.server.git.scan_editable_installs_for_worktree",
+        patch.object(
+            server_git,
+            "scan_editable_installs_for_worktree",
             return_value=EditableScanResult(),
         ),
-        patch("autoskillit.server.git.resolve_main_worktree", return_value=Path("/repo")),
+        patch.object(server_git, "resolve_main_worktree", return_value=Path("/repo")),
     ):
         result = await perform_merge(
             fake_wt,

@@ -34,8 +34,10 @@ class TestLoadRecipeReadOnly:
     async def test_load_recipe_does_not_call_migration_engine(self, tmp_path, monkeypatch):
         """load_recipe must not trigger headless migration even when migrations are applicable."""
         monkeypatch.chdir(tmp_path)
+        from autoskillit.migration import loader as migration_loader
+
         with (
-            patch("autoskillit.migration.loader.applicable_migrations", return_value=["v0.1.0"]),
+            patch.object(migration_loader, "applicable_migrations", return_value=["v0.1.0"]),
             patch("autoskillit.execution.headless.run_headless_core") as mock_headless,
             patch("autoskillit.recipe.contracts.generate_recipe_card") as mock_gen,
         ):
@@ -79,13 +81,16 @@ class TestLoadRecipeAuthorityClobber:
         mock_ctx.config.migration.suppressed = []
         mock_ctx.kitchen_id = "test-kitchen"
         mock_ctx.config.linux_tracing.log_dir = ""
+        from autoskillit.server.tools import tools_recipe
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        with patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe._require_enabled",
+            with patch.object(
+                tools_recipe,
+                "_require_enabled",
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):
@@ -135,13 +140,16 @@ class TestLoadRecipeTypeGate:
         mock_recipe_info = MagicMock()
         mock_recipe_info.path = "/fake/recipe.yaml"
         mock_ctx.recipes.find.return_value = mock_recipe_info
+        from autoskillit.server.tools import tools_recipe
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        with patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe._require_enabled",
+            with patch.object(
+                tools_recipe,
+                "_require_enabled",
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):
@@ -181,13 +189,16 @@ class TestLoadRecipeTypeGate:
         mock_recipe_info = MagicMock()
         mock_recipe_info.path = "/fake/recipe.yaml"
         mock_ctx.recipes.find.return_value = mock_recipe_info
+        from autoskillit.server.tools import tools_recipe
 
-        with patch(
-            "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+        with patch.object(
+            tools_recipe,
+            "_get_ctx_or_none",
             return_value=mock_ctx,
         ):
-            with patch(
-                "autoskillit.server.tools.tools_recipe._require_enabled",
+            with patch.object(
+                tools_recipe,
+                "_require_enabled",
                 return_value=None,
             ):
                 with patch("autoskillit.server.logger"):

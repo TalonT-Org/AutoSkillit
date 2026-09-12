@@ -803,14 +803,17 @@ async def _resolve_recipe_section(result: dict[str, Any], *, section: str = "con
 def _write_registry(monkeypatch: Any, tmp_path: Any, entries: list[dict[str, Any]]) -> Any:
     """Write a fake active-kitchens registry for prune_stale_kitchen_state tests."""
     from autoskillit.core._plugin_cache import write_versioned_json
+    from autoskillit.core.plugins import _active_kitchens
 
     registry_path = tmp_path / "active_kitchens.json"
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens._active_kitchens_path",
+        _active_kitchens,
+        "_active_kitchens_path",
         lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core.plugins._active_kitchens._active_kitchens_lock",
+        _active_kitchens,
+        "_active_kitchens_lock",
         lambda _home: tmp_path / "active_kitchens.lock",
     )
     write_versioned_json(registry_path, {"kitchens": entries}, schema_version=2)
@@ -839,12 +842,16 @@ async def _noop_quota_refresher(config: Any, **kwargs) -> None:
 
 def _patch_dispatch_quota_no_sleep(monkeypatch: Any) -> None:
     """Patch dispatch_food_truck's quota dependencies for non-quota tests."""
+    from autoskillit.server import _misc
+
     monkeypatch.setattr(
-        "autoskillit.server._misc.check_and_sleep_if_needed",
+        _misc,
+        "check_and_sleep_if_needed",
         _no_sleep_quota_checker,
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc._refresh_quota_cache",
+        _misc,
+        "_refresh_quota_cache",
         _noop_quota_refresher,
     )
 

@@ -20,13 +20,13 @@ async def test_open_kitchen_sets_active_recipe_packs(tmp_path, monkeypatch):
     """After _open_kitchen_handler(), ctx.active_recipe_packs is frozenset()."""
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
+    import autoskillit.server as server
+    from autoskillit.server.tools import tools_kitchen
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
+            with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                     await _open_kitchen_handler()
@@ -41,9 +41,10 @@ def test_close_kitchen_clears_active_recipe_packs(tmp_path, monkeypatch):
     mock_ctx = _make_mock_ctx()
     mock_ctx.project_dir = tmp_path
     mock_ctx.active_recipe_packs = frozenset(["research"])
+    import autoskillit.server as server
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
             from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()
@@ -61,13 +62,14 @@ async def test_open_kitchen_starts_quota_refresh_task(tmp_path, monkeypatch):
     async def instant_loop(config, *, supports_quota_check=True):
         await asyncio.sleep(0)
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch("autoskillit.server.tools.tools_kitchen._prime_quota_cache", AsyncMock()):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen._quota_refresh_loop", instant_loop
-                    ):
+    import autoskillit.server as server
+    from autoskillit.server.tools import tools_kitchen
+
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
+            with patch.object(tools_kitchen, "_prime_quota_cache", AsyncMock()):
+                with patch.object(tools_kitchen, "_write_hook_config"):
+                    with patch.object(tools_kitchen, "_quota_refresh_loop", instant_loop):
                         from autoskillit.server.tools.tools_kitchen import _open_kitchen_handler
 
                         await _open_kitchen_handler()
@@ -84,9 +86,10 @@ def test_close_kitchen_cancels_quota_refresh_task(tmp_path, monkeypatch):
     mock_ctx.project_dir = tmp_path
     mock_task = MagicMock(spec=asyncio.Task)
     mock_ctx.quota_refresh_task = mock_task
+    import autoskillit.server as server
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
             from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()
@@ -105,9 +108,10 @@ def test_close_kitchen_reconfigures_worker_capacity(tmp_path, monkeypatch):
     mock_ctx.project_dir = tmp_path
     mock_ctx.config = AutomationConfig()
     mock_ctx.worker_capacity = DefaultManagedWorkerCapacity(max_concurrent=6, timeout=42.0)
+    import autoskillit.server as server
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
             from autoskillit.server.tools.tools_kitchen import _close_kitchen_handler
 
             _close_kitchen_handler()
@@ -144,15 +148,16 @@ async def test_open_kitchen_ingredients_only_strips_content(tmp_path, monkeypatc
     prior_initialization_state = mock_ctx.recipe_initialization_state
     mock_ctx.recipe_name = "already-active"
     mock_ctx.gate.enabled = True
+    import autoskillit.server as server
+    from autoskillit.server.tools import tools_kitchen
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
+            with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        tools_kitchen,
+                        "_apply_triage_gate",
                         new=AsyncMock(side_effect=lambda r, *a, **kw: r),
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -195,15 +200,16 @@ async def test_open_kitchen_ingredients_only_preserves_metadata(tmp_path, monkey
     mock_ctx.active_recipe_features = None
     mock_ctx.active_recipe_steps = None
     mock_ctx.active_recipe_ingredients = None
+    import autoskillit.server as server
+    from autoskillit.server.tools import tools_kitchen
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
+            with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(tools_kitchen, "_write_hook_config"):
+                    with patch.object(
+                        tools_kitchen,
+                        "_apply_triage_gate",
                         new=AsyncMock(side_effect=lambda r, *a, **kw: r),
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -230,13 +236,13 @@ async def test_open_kitchen_ingredients_only_no_name_ignored(tmp_path, monkeypat
     monkeypatch.chdir(tmp_path)
     mock_ctx = _make_mock_ctx()
     mock_ctx.enable_components = AsyncMock()
+    import autoskillit.server as server
+    from autoskillit.server.tools import tools_kitchen
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
+            with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(tools_kitchen, "_write_hook_config"):
                     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
                     result_json = await open_kitchen(ingredients_only=True, ctx=mock_ctx)
@@ -352,19 +358,21 @@ async def test_open_kitchen_uses_project_dir_for_recipe_lookup(tmp_path, monkeyp
     mock_ctx.active_recipe_packs = frozenset()
     mock_ctx.active_recipe_features = frozenset()
     mock_ctx.quota_refresh_task = None
+    import autoskillit.server as server
+    from autoskillit.server.tools import tools_kitchen
 
-    with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server.logger"):
-            with patch(
-                "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
-            ):
-                with patch(
-                    "autoskillit.server.tools.tools_kitchen._apply_triage_gate",
+    with patch.object(server, "_get_ctx", return_value=mock_ctx):
+        with patch.object(server, "logger"):
+            with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
+                with patch.object(
+                    tools_kitchen,
+                    "_apply_triage_gate",
                     new=AsyncMock(side_effect=lambda r, *a, **kw: r),
                 ):
-                    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                        with patch(
-                            "autoskillit.server.tools.tools_kitchen._build_hook_diagnostic_warning",
+                    with patch.object(tools_kitchen, "_write_hook_config"):
+                        with patch.object(
+                            tools_kitchen,
+                            "_build_hook_diagnostic_warning",
                             return_value="",
                         ):
                             from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -415,17 +423,13 @@ def test_get_recipe_uses_project_dir(tmp_path, monkeypatch):
     mock_ctx.project_dir = different_dir
     mock_ctx.recipes = real_repo
     mock_ctx.backend = None
+    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch("autoskillit.server.lifecycle._state._get_ctx_or_none", return_value=mock_ctx),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
-            return_value={},
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
-            return_value={},
-        ),
+        patch.object(_state, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(tools_kitchen, "resolve_ingredient_defaults", return_value={}),
+        patch.object(tools_kitchen, "build_config_authoritative_layer", return_value={}),
     ):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
@@ -454,21 +458,14 @@ def test_recipe_resource_returns_composed_content():
     )
     mock_ctx.backend = None
     mock_ctx.session_serve_overrides = None
+    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch("autoskillit.server.lifecycle._state._get_ctx_or_none", return_value=mock_ctx),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
-            return_value={},
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
-            return_value={},
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.build_config_default_layer",
-            return_value={},
-        ),
+        patch.object(_state, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(tools_kitchen, "resolve_ingredient_defaults", return_value={}),
+        patch.object(tools_kitchen, "build_config_authoritative_layer", return_value={}),
+        patch.object(tools_kitchen, "build_config_default_layer", return_value={}),
     ):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
@@ -504,8 +501,9 @@ def test_missing_recipe_resource_preserves_active_execution():
     previous = MagicMock()
     previous.snapshot.execution_id = "previous-execution"
     mock_ctx.active_recipe_execution = previous
+    from autoskillit.server.lifecycle import _state
 
-    with patch("autoskillit.server.lifecycle._state._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_state, "_get_ctx_or_none", return_value=mock_ctx):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
         result = json.loads(get_recipe("missing"))
@@ -520,8 +518,9 @@ def test_recipe_resource_preserves_namespace_error_before_composition(recipe_pre
     mock_ctx.recipes = MagicMock()
     mock_ctx.recipes.find.return_value = object() if recipe_present else None
     mock_ctx.skill_resolver.resolve_effective.return_value = object()
+    from autoskillit.server.lifecycle import _state
 
-    with patch("autoskillit.server.lifecycle._state._get_ctx_or_none", return_value=mock_ctx):
+    with patch.object(_state, "_get_ctx_or_none", return_value=mock_ctx):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 
         result = json.loads(get_recipe("shared-name"))
@@ -548,17 +547,13 @@ def test_recipe_resource_returns_error_for_invalid_recipe():
         "suggestions": [],
     }
     mock_ctx.backend = None
+    from autoskillit.server.lifecycle import _state
+    from autoskillit.server.tools import tools_kitchen
 
     with (
-        patch("autoskillit.server.lifecycle._state._get_ctx_or_none", return_value=mock_ctx),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.resolve_ingredient_defaults",
-            return_value={},
-        ),
-        patch(
-            "autoskillit.server.tools.tools_kitchen.build_config_authoritative_layer",
-            return_value={},
-        ),
+        patch.object(_state, "_get_ctx_or_none", return_value=mock_ctx),
+        patch.object(tools_kitchen, "resolve_ingredient_defaults", return_value={}),
+        patch.object(tools_kitchen, "build_config_authoritative_layer", return_value={}),
     ):
         from autoskillit.server.tools.tools_kitchen import get_recipe
 

@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 import anyio
 import pytest
 
+import autoskillit.server.lifecycle._guards as guards
+import autoskillit.server.tools.tools_github as tools_github
 from autoskillit.config import AutomationConfig
 from autoskillit.core import SkillResult
 from autoskillit.core.types import RetryReason
@@ -806,10 +808,10 @@ async def test_report_bug_model_as_profile_resolves_provider(
     tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
     tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
-    _is_feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
-    monkeypatch.setattr(_is_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(tools_github, "is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_model_as_profile",
+        guards,
+        "_resolve_model_as_profile",
         lambda *a: (
             "MiniMax-M2.7",
             "minimax",
@@ -842,8 +844,7 @@ async def test_report_bug_model_as_profile_disabled_when_feature_off(
     tool_ctx_kitchen_open.config.report_bug.report_dir = str(tmp_path / "bug-reports")
     tool_ctx_kitchen_open.config.report_bug.github_filing = False
 
-    _is_feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
-    monkeypatch.setattr(_is_feat, lambda *a, **kw: False)
+    monkeypatch.setattr(tools_github, "is_feature_enabled", lambda *a, **kw: False)
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("report text")
@@ -871,11 +872,8 @@ async def test_report_bug_config_model_as_profile(tool_ctx_kitchen_open, tmp_pat
         map_calls.append(model_value)
         return ("MiniMax-M2.7", "minimax", {"ANTHROPIC_BASE_URL": "https://api.minimax.chat/v1"})
 
-    _is_feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
-    monkeypatch.setattr(_is_feat, lambda *a, **kw: True)
-    monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_model_as_profile", fake_resolve
-    )
+    monkeypatch.setattr(tools_github, "is_feature_enabled", lambda *a, **kw: True)
+    monkeypatch.setattr(guards, "_resolve_model_as_profile", fake_resolve)
 
     mock_executor = AsyncMock()
     mock_executor.run.return_value = _skill_ok("report text")

@@ -102,17 +102,21 @@ async def test_open_kitchen_warns_on_orphaned_hooks(tmp_path, monkeypatch):
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text("{}")
+    from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        "autoskillit.server._misc._claude_settings_path",
+        _misc,
+        "_claude_settings_path",
         lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc._count_hook_registry_drift",
+        _misc,
+        "_count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=1),
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc.find_broken_hook_scripts",
+        _misc,
+        "find_broken_hook_scripts",
         lambda _: [],
     )
 
@@ -145,17 +149,21 @@ async def test_open_kitchen_warns_on_missing_hook_scripts(tmp_path, monkeypatch)
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text("{}")
+    from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        "autoskillit.server._misc._claude_settings_path",
+        _misc,
+        "_claude_settings_path",
         lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc.find_broken_hook_scripts",
+        _misc,
+        "find_broken_hook_scripts",
         lambda _: ["python3 /missing/status_health_guard.py"],
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc._count_hook_registry_drift",
+        _misc,
+        "_count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=0),
     )
 
@@ -190,12 +198,14 @@ async def test_build_hook_diagnostic_warning_skips_missing_when_plugin_active(
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text('{"hooks": {}}')
+    from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        "autoskillit.server._misc._claude_settings_path",
+        _misc,
+        "_claude_settings_path",
         lambda scope, **_kwargs: settings_dir / "settings.json",
     )
-    monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr(_misc, "validate_plugin_cache_hooks", lambda **_: [])
     from autoskillit.server._misc import _build_hook_diagnostic_warning
 
     result = _build_hook_diagnostic_warning(MARKETPLACE_PREFIX)
@@ -214,17 +224,20 @@ async def test_build_hook_diagnostic_warning_orphaned_still_fires_when_plugin_ac
     settings_dir = tmp_path / ".claude"
     settings_dir.mkdir()
     (settings_dir / "settings.json").write_text('{"hooks": {}}')
+    from autoskillit.server import _misc
 
     monkeypatch.setattr(
-        "autoskillit.server._misc._claude_settings_path",
+        _misc,
+        "_claude_settings_path",
         lambda scope, **_kwargs: settings_dir / "settings.json",
     )
     monkeypatch.setattr(
-        "autoskillit.server._misc._count_hook_registry_drift",
+        _misc,
+        "_count_hook_registry_drift",
         lambda _: HookDriftResult(missing=0, orphaned=1),
     )
-    monkeypatch.setattr("autoskillit.server._misc.find_broken_hook_scripts", lambda _: [])
-    monkeypatch.setattr("autoskillit.server._misc.validate_plugin_cache_hooks", lambda **_: [])
+    monkeypatch.setattr(_misc, "find_broken_hook_scripts", lambda _: [])
+    monkeypatch.setattr(_misc, "validate_plugin_cache_hooks", lambda **_: [])
     from autoskillit.server._misc import _build_hook_diagnostic_warning
 
     result = _build_hook_diagnostic_warning(MARKETPLACE_PREFIX)
@@ -246,9 +259,10 @@ async def test_prime_quota_cache_catches_typeerror(monkeypatch):
 
     mock_ctx = MagicMock()
     mock_ctx.config.quota_guard = MagicMock()
+    import autoskillit.server.lifecycle._state as server_state
 
-    with patch("autoskillit.server.lifecycle._state._get_ctx", return_value=mock_ctx):
-        with patch("autoskillit.server._misc.logger") as mock_logger:
+    with patch.object(server_state, "_get_ctx", return_value=mock_ctx):
+        with patch.object(_misc_mod, "logger") as mock_logger:
             # Must not raise — fails open
             await _prime_quota_cache(supports_quota_check=True)
             mock_logger.warning.assert_called_once_with("quota_prime_failed", exc_info=True)

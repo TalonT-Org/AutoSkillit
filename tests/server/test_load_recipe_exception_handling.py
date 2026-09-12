@@ -40,8 +40,11 @@ class TestLoadRecipeExceptionHandling:
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        with patch(
-            "autoskillit.recipe._api_orchestration.load_recipe_dict_with_declarations",
+        from autoskillit.recipe import _api_orchestration
+
+        with patch.object(
+            _api_orchestration,
+            "load_recipe_dict_with_declarations",
             side_effect=YAMLError("bad yaml"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -72,10 +75,13 @@ class TestLoadRecipeExceptionHandling:
             source=RecipeSource.PROJECT,
             path=recipe_path,
         )
+        from autoskillit.recipe import _api_orchestration
+
         with (
             patch("autoskillit.recipe.find_recipe_by_name", return_value=fake_match),
-            patch(
-                "autoskillit.recipe._api_orchestration._parse_recipe",
+            patch.object(
+                _api_orchestration,
+                "_parse_recipe",
                 side_effect=ValueError("bad structure"),
             ),
         ):
@@ -97,8 +103,11 @@ class TestLoadRecipeExceptionHandling:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        with patch(
-            "autoskillit.recipe._api_orchestration.load_recipe_card",
+        from autoskillit.recipe import _api_orchestration
+
+        with patch.object(
+            _api_orchestration,
+            "load_recipe_card",
             side_effect=FileNotFoundError("missing"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -119,8 +128,11 @@ class TestLoadRecipeExceptionHandling:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        with patch(
-            "autoskillit.recipe._api_orchestration.run_semantic_rules",
+        from autoskillit.recipe import _api_orchestration
+
+        with patch.object(
+            _api_orchestration,
+            "run_semantic_rules",
             side_effect=AttributeError("programming error"),
         ):
             result = json.loads(await load_recipe(name="test"))
@@ -151,8 +163,11 @@ class TestLoadRecipeFailClosed:
             "load",
             lambda *_a, **_kw: MagicMock(steps={}, ingredients={}),
         )
-        with patch(
-            "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+        from autoskillit.server.tools import tools_recipe
+
+        with patch.object(
+            tools_recipe,
+            "_apply_triage_gate",
             new=AsyncMock(return_value=test_result),
         ):
             raw = await load_recipe(name="test-recipe")
@@ -175,8 +190,11 @@ class TestLoadRecipeFailClosed:
             "load",
             lambda *_a, **_kw: MagicMock(steps={}, ingredients={}),
         )
-        with patch(
-            "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+        from autoskillit.server.tools import tools_recipe
+
+        with patch.object(
+            tools_recipe,
+            "_apply_triage_gate",
             new=AsyncMock(return_value=test_result),
         ):
             raw = await load_recipe(name="test-recipe")
@@ -204,8 +222,11 @@ class TestLoadRecipeFailClosed:
             "load",
             lambda *_a, **_kw: MagicMock(steps={}, ingredients={}),
         )
-        with patch(
-            "autoskillit.server.tools.tools_recipe._apply_triage_gate",
+        from autoskillit.server.tools import tools_recipe
+
+        with patch.object(
+            tools_recipe,
+            "_apply_triage_gate",
             new=AsyncMock(return_value=test_result),
         ):
             raw = await load_recipe(name="test-recipe")

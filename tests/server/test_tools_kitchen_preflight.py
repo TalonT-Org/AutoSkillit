@@ -145,7 +145,9 @@ class TestCheckDispatchFeasibilityUnit:
             "step2": _make_recipe_step("step2", tool="run_python"),
         }
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1", "step2"],
                 active_recipe_steps=active_steps,
@@ -164,7 +166,9 @@ class TestCheckDispatchFeasibilityUnit:
             "step1": _make_recipe_step("step1", tool="run_skill"),
         }
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -191,7 +195,9 @@ class TestCheckDispatchFeasibilityUnit:
         config_backend = AgentBackendConfig(
             recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
         )
-        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "get_backend", return_value=backend):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["resolve_review"],
                 active_recipe_steps=active_steps,
@@ -230,7 +236,9 @@ class TestCheckDispatchFeasibilityUnit:
 
         resolver.resolve_invocation.side_effect = SkillContractError("skill not found")
 
-        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "get_backend", return_value=backend):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["unknown_step"],
                 active_recipe_steps=active_steps,
@@ -264,7 +272,9 @@ class TestCheckDispatchFeasibilityUnit:
         config_backend = AgentBackendConfig(
             recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
         )
-        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "get_backend", return_value=backend):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["resolve_review"],
                 active_recipe_steps=active_steps,
@@ -302,7 +312,9 @@ class TestCheckDispatchFeasibilityUnit:
         config_backend = AgentBackendConfig(
             recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
         )
-        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "get_backend", return_value=backend):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["resolve_review"],
                 active_recipe_steps=active_steps,
@@ -335,7 +347,9 @@ class TestCheckDispatchFeasibilityUnit:
         config_backend = AgentBackendConfig(
             recipe_overrides={"test-recipe": {"resolve_review": "codex"}},
         )
-        with patch("autoskillit.server.tools._preflight.get_backend", return_value=backend):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "get_backend", return_value=backend):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["resolve_review"],
                 active_recipe_steps=active_steps,
@@ -359,7 +373,9 @@ class TestCheckDispatchFeasibilityUnit:
             "step1": _make_recipe_step("step1", tool="run_skill"),
         }
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -378,7 +394,9 @@ class TestCheckDispatchFeasibilityUnit:
 
         backend = _make_codex_backend()
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=[],
                 active_recipe_steps={},
@@ -396,7 +414,9 @@ class TestCheckDispatchFeasibilityUnit:
         active_steps: dict[str, Any] = {
             "step1": _make_recipe_step("step1", tool="run_skill"),
         }
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", []):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", []):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -415,7 +435,9 @@ class TestCheckDispatchFeasibilityUnit:
             "step1": _make_recipe_step("step1", tool="run_skill"),
         }
         dormancy = _make_dormancy_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [dormancy]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [dormancy]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -446,7 +468,9 @@ class TestCheckDispatchFeasibilityUnit:
             default_provider="myprofile",
         )
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -465,7 +489,9 @@ class TestCheckDispatchFeasibilityUnit:
             "step1": _make_recipe_step("step1", tool="run_skill"),
         }
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -484,7 +510,9 @@ class TestCheckDispatchFeasibilityUnit:
             "step1": _make_recipe_step("step1", tool="run_skill"),
         }
         synthetic = _make_fix_required_hook()
-        with patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]):
+        from autoskillit.server.tools import _preflight
+
+        with patch.object(_preflight, "HOOK_REGISTRY", [synthetic]):
             result = _check_dispatch_feasibility(
                 post_prune_step_names=["step1"],
                 active_recipe_steps=active_steps,
@@ -597,8 +625,10 @@ class TestPreflightGateClosure:
         async def _triage_passthrough(result, *_a, **_kw):
             return result
 
+        import autoskillit.server.lifecycle._state as server_state
+
         with (
-            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
+            patch.object(server_state, "_ctx", tool_ctx),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
                 return_value=None,
@@ -657,9 +687,12 @@ class TestPreflightGateClosure:
             return result
 
         synthetic = _make_fix_required_hook()
+        import autoskillit.server.lifecycle._state as server_state
+        from autoskillit.server.tools import _preflight
+
         with (
-            patch("autoskillit.server.lifecycle._state._ctx", tool_ctx),
-            patch("autoskillit.server.tools._preflight.HOOK_REGISTRY", [synthetic]),
+            patch.object(server_state, "_ctx", tool_ctx),
+            patch.object(_preflight, "HOOK_REGISTRY", [synthetic]),
             patch(
                 "autoskillit.server.tools.tools_kitchen._require_orchestrator_exact",
                 return_value=None,

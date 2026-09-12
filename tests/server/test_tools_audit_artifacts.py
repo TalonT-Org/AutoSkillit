@@ -36,6 +36,7 @@ from autoskillit.core import (
     load_standalone_audit_evidence,
 )
 from autoskillit.pipeline.audit_admission_ledger import DefaultAuditAdmissionLedger
+from autoskillit.server.recipe import _recipe_execution
 from autoskillit.server.recipe._recipe_execution import DefaultInputPreflightResolver
 from autoskillit.server.tools.tools_audit_artifacts import (
     _build_semantic_result,
@@ -275,8 +276,11 @@ async def test_semantic_handler_reports_safe_wrong_authority_before_store_recove
     )
     serving_ledger = DefaultAuditAdmissionLedger(serving_authority)
 
+    import autoskillit.server as server
+
     monkeypatch.setattr(
-        "autoskillit.server._get_ctx",
+        server,
+        "_get_ctx",
         lambda: SimpleNamespace(
             audit_admission_ledger=serving_ledger,
             timing_log=SimpleNamespace(record=lambda *_args: None),
@@ -328,8 +332,11 @@ async def test_semantic_handler_classifies_same_authority_missing_handles_as_sta
         handle = issued_handle
         ledger.prepare(prepare)
 
+    import autoskillit.server as server
+
     monkeypatch.setattr(
-        "autoskillit.server._get_ctx",
+        server,
+        "_get_ctx",
         lambda: SimpleNamespace(
             audit_admission_ledger=ledger,
             timing_log=SimpleNamespace(record=lambda *_args: None),
@@ -469,7 +476,8 @@ def test_disposition_final_cas_rejects_prepared_artifact_toctou(
         recipe_execution_lock=_TamperAtFinalCas(tamper),
     )
     monkeypatch.setattr(
-        "autoskillit.server.recipe._recipe_execution.get_recipe_execution",
+        _recipe_execution,
+        "get_recipe_execution",
         lambda _tool_ctx: installed,
     )
 
@@ -510,7 +518,8 @@ def test_disposition_final_cas_commits_unchanged_verified_copy(
         recipe_execution_lock=_TamperAtFinalCas(lambda: None),
     )
     monkeypatch.setattr(
-        "autoskillit.server.recipe._recipe_execution.get_recipe_execution",
+        _recipe_execution,
+        "get_recipe_execution",
         lambda _tool_ctx: installed,
     )
 

@@ -305,9 +305,11 @@ async def test_load_recipe_rejects_config_authority_override(tool_ctx_kitchen_op
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
+    from autoskillit.server.tools import tools_recipe
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
         result_str = await load_recipe(
@@ -328,9 +330,11 @@ async def test_load_recipe_ingredients_only_rejects_authority_override(tool_ctx_
     from autoskillit.server.tools.tools_recipe import load_recipe
 
     tool_ctx_kitchen_open.recipes = MagicMock()
+    from autoskillit.server.tools import tools_recipe
 
-    with patch(
-        "autoskillit.server.tools.tools_recipe._get_ctx_or_none",
+    with patch.object(
+        tools_recipe,
+        "_get_ctx_or_none",
         return_value=tool_ctx_kitchen_open,
     ):
         result_str = await load_recipe(

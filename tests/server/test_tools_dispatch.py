@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
+import autoskillit.server.tools.tools_fleet_dispatch as tools_fleet_dispatch
 from autoskillit.core import DefaultManagedWorkerCapacity
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
@@ -127,7 +129,8 @@ class TestDispatchFoodTruckExecution:
             source="stdout",
         )
         monkeypatch.setattr(
-            "autoskillit.fleet._api.parse_l3_result_block",
+            fleet_api,
+            "parse_l3_result_block",
             lambda **_kwargs: canned_result,
         )
 
@@ -316,11 +319,13 @@ class TestDispatchFoodTruckExecution:
         from autoskillit.server.tools.tools_fleet_dispatch import dispatch_food_truck
 
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_dispatch._require_fleet",
+            tools_fleet_dispatch,
+            "_require_fleet",
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_dispatch.execute_dispatch",
+            tools_fleet_dispatch,
+            "execute_dispatch",
             AsyncMock(side_effect=asyncio.CancelledError()),
         )
 

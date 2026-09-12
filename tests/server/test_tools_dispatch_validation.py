@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import autoskillit.fleet._api as fleet_api
 from autoskillit.core import DefaultManagedWorkerCapacity
 from tests.fakes import InMemoryHeadlessExecutor, InMemoryRecipeRepository
 from tests.server._helpers import (
@@ -475,7 +476,8 @@ async def test_dispatch_food_truck_plugin_authority_succeeds(tool_ctx, monkeypat
     from autoskillit.fleet.result_parser import L3ParseResult
 
     monkeypatch.setattr(
-        "autoskillit.fleet._api.parse_l3_result_block",
+        fleet_api,
+        "parse_l3_result_block",
         lambda **_kwargs: L3ParseResult(
             outcome="completed_clean",
             payload={"success": True},

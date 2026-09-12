@@ -22,6 +22,7 @@ from autoskillit.server._audit_authority_materializer import (
     DefaultAuditAuthorityMaterializer,
 )
 from autoskillit.server.recipe._recipe_execution import get_recipe_execution
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_audit_artifacts import (
     write_audit_semantic_result,
 )
@@ -102,11 +103,15 @@ async def test_attested_run_skill_materializes_publishes_captures_and_exact_repl
     dispatch_prompts: list[str] = []
     hostile_authority_path = "/hostile/provider/ledger.sqlite3"
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution.is_feature_enabled",
+        tools_execution,
+        "is_feature_enabled",
         lambda *args, **kwargs: True,
     )
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *args, **kwargs: (
             "vertex",
             {AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR: hostile_authority_path},

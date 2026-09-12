@@ -22,6 +22,7 @@ from autoskillit.core import (
     pkg_root,
 )
 from autoskillit.pipeline.exploration_context import OwnerBoundExplorationContextStore
+from autoskillit.server import _explorer_projection
 from autoskillit.server._explorer_projection import (
     _issue_explorer_binding_env,
     _resolve_exploration_applicabilities,
@@ -61,7 +62,8 @@ def test_profile_auto_uses_only_factory_trusted_repository(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        "autoskillit.server._explorer_projection.resolve_repository_profile",
+        _explorer_projection,
+        "resolve_repository_profile",
         lambda root: RepositoryProfileId.AUTOSKILLIT,
     )
     tool_ctx = SimpleNamespace(exploration_context_store=SimpleNamespace(trusted_root=tmp_path))
@@ -212,15 +214,18 @@ def test_issue_explorer_binding_env_surfaces_a_typed_failure_for_codex(
     tools_execution/_run_skill_dispatch.py:412-418 and became an untyped
     SkillResult.crashed(...)."""
     monkeypatch.setattr(
-        "autoskillit.server._explorer_projection.is_explorer_binding_eligible",
+        _explorer_projection,
+        "is_explorer_binding_eligible",
         lambda **kwargs: True,
     )
     monkeypatch.setattr(
-        "autoskillit.server._explorer_projection.load_bundled_agent_definitions",
+        _explorer_projection,
+        "load_bundled_agent_definitions",
         lambda: tuple(SimpleNamespace(name=name) for name in BUNDLED_EXPLORER_ROLES),
     )
     monkeypatch.setattr(
-        "autoskillit.server._explorer_projection.agent_definition_digest",
+        _explorer_projection,
+        "agent_definition_digest",
         lambda definition: "digest",
     )
     backend = SimpleNamespace(

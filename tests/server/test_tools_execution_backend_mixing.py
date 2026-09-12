@@ -8,7 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import autoskillit.server as server
 from autoskillit.core import SkillExecutionRole, SkillSource
+from autoskillit.server.tools import tools_execution
 from autoskillit.server.tools.tools_execution import run_skill
 from autoskillit.workspace.skills import EffectiveSkillInvocation, SkillInfo
 
@@ -78,11 +80,14 @@ async def test_provider_profile_cannot_override_global_backend_authority(
     tool_ctx_kitchen_open.executor = executor
     _install_codex_launch_backend(tool_ctx_kitchen_open, tmp_path, monkeypatch)
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {
@@ -122,11 +127,14 @@ async def test_global_backend_authority_is_explicit_without_provider_override(
     tool_ctx_kitchen_open.executor = executor
     tool_ctx_kitchen_open.backend = get_backend("claude-code")
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {"BASE_URL": "https://api.minimax.chat/v1"},
@@ -164,11 +172,14 @@ async def test_provider_profile_does_not_emit_backend_authority_log(
     _install_codex_launch_backend(tool_ctx_kitchen_open, tmp_path, monkeypatch)
     _install_skill_invocation(tool_ctx_kitchen_open, name="probe")
 
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {
@@ -220,11 +231,14 @@ async def test_provider_profile_preserves_authoritative_backend_for_materializat
 
     _install_skill_invocation(tool_ctx_kitchen_open, name="test-skill")
 
-    monkeypatch.setattr("autoskillit.server._ctx", tool_ctx_kitchen_open)
-    _feat = "autoskillit.server.tools.tools_execution.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(server, "_ctx", tool_ctx_kitchen_open)
+    _feat = tools_execution
+    monkeypatch.setattr(_feat, "is_feature_enabled", lambda *a, **kw: True)
+    from autoskillit.server.lifecycle import _guards
+
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        _guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: (
             "minimax",
             {

@@ -493,7 +493,8 @@ def test_completion_normalizes_unexpected_execution_preparation_failures(
         raise RuntimeError("resolver unavailable")
 
     monkeypatch.setattr(
-        "autoskillit.server.recipe._recipe_initialization.prepare_recipe_execution",
+        recipe_initialization,
+        "prepare_recipe_execution",
         _raise_prepare,
     )
 

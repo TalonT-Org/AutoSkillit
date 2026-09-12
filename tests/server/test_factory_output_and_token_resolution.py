@@ -11,6 +11,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
     resolve_skill_name,
 )
+from autoskillit.server import _factory
 from autoskillit.server._factory import _gh_cli_token, _LazyTokenFactory, make_context
 from tests.server._factory_test_helpers import _runner
 
@@ -39,7 +40,7 @@ def test_make_context_github_client_uses_env_token(monkeypatch, tmp_path):
 
 def test_make_context_github_client_no_token(monkeypatch, tmp_path):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: None)
+    monkeypatch.setattr(_factory, "_gh_cli_token", lambda: None)
     ctx = make_context(AutomationConfig(), runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is False
 
@@ -47,7 +48,7 @@ def test_make_context_github_client_no_token(monkeypatch, tmp_path):
 def test_make_context_github_client_uses_gh_cli_fallback(monkeypatch, tmp_path):
     """When no config token or GITHUB_TOKEN env var, fall back to gh auth token."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: "gh-cli-token")
+    monkeypatch.setattr(_factory, "_gh_cli_token", lambda: "gh-cli-token")
     config = AutomationConfig()
     ctx = make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)
     assert ctx.github_client.has_token is True
@@ -56,7 +57,7 @@ def test_make_context_github_client_uses_gh_cli_fallback(monkeypatch, tmp_path):
 def test_make_context_github_client_config_token_takes_priority_over_gh_cli(monkeypatch, tmp_path):
     """Config token takes priority over gh CLI token."""
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    monkeypatch.setattr("autoskillit.server._factory._gh_cli_token", lambda: "gh-cli-token")
+    monkeypatch.setattr(_factory, "_gh_cli_token", lambda: "gh-cli-token")
     config = AutomationConfig()
     config.github.token = "config-token"
     ctx = make_context(config, runner=None, plugin_dir=".", project_dir=tmp_path)

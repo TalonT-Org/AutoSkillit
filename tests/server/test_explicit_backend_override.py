@@ -112,6 +112,8 @@ class TestExplicitOverrideProviderPrecedence:
 
         from autoskillit.config._config_dataclasses import AgentBackendConfig
         from autoskillit.core.types._type_protocols_backend import CodingAgentBackend
+        from autoskillit.server.lifecycle import _guards
+        from autoskillit.server.tools import tools_execution
         from autoskillit.server.tools.tools_execution import run_skill
         from tests.fakes import InMemoryHeadlessExecutor
 
@@ -183,7 +185,8 @@ class TestExplicitOverrideProviderPrecedence:
 
         # Provider profile metadata cannot compete with explicit backend authority.
         monkeypatch.setattr(
-            "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+            _guards,
+            "_resolve_provider_profile",
             lambda *a, **kw: (
                 "minimax",
                 {
@@ -193,7 +196,8 @@ class TestExplicitOverrideProviderPrecedence:
             ),
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_execution.is_feature_enabled",
+            tools_execution,
+            "is_feature_enabled",
             lambda *a, **kw: True,
         )
 

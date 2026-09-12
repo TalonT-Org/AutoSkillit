@@ -212,9 +212,9 @@ def _suppress_nudge(monkeypatch):
     async def _noop(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute._attempt_contract_nudge", _noop
-    )
+    from autoskillit.execution.headless import _headless_execute
+
+    monkeypatch.setattr(_headless_execute, "_attempt_contract_nudge", _noop)
 
 
 @pytest.fixture(autouse=True)
@@ -229,9 +229,9 @@ def _suppress_pre_session_index(monkeypatch):
     async def _noop(*_args, **_kwargs):
         return False
 
-    monkeypatch.setattr(
-        "autoskillit.execution.headless._headless_execute.validate_pre_session_index", _noop
-    )
+    from autoskillit.execution.headless import _headless_execute
+
+    monkeypatch.setattr(_headless_execute, "validate_pre_session_index", _noop)
 
 
 @pytest.fixture(autouse=True)
@@ -243,17 +243,14 @@ def _patch_kitchen_reaper(monkeypatch):
     filesystem absence to make these no-ops; this fixture makes that
     guarantee explicit and stable regardless of host filesystem state.
     """
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_kitchen.discover_campaign_state_files",
-        lambda _project_dir: [],
-    )
+    from autoskillit.server.tools import tools_kitchen
+
+    monkeypatch.setattr(tools_kitchen, "discover_campaign_state_files", lambda _project_dir: [])
 
     async def _noop_reaper(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_kitchen.reap_stale_dispatches_async", _noop_reaper
-    )
+    monkeypatch.setattr(tools_kitchen, "reap_stale_dispatches_async", _noop_reaper)
 
 
 @pytest.fixture

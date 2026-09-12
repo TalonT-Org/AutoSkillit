@@ -8,6 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastmcp.exceptions import ResourceError
 
+import autoskillit.server._misc as misc
+import autoskillit.server.lifecycle._lifespan as lifespan
+import autoskillit.server.tools.tools_kitchen as tools_kitchen
 from autoskillit.core.types._type_constants_registries import AGENT_PACK_REGISTRY
 from tests.server.conftest import _make_mock_ctx
 
@@ -353,9 +356,9 @@ async def test_plan_review_pre_revealed_for_non_notification_backend(tmp_path, m
     ctx.gate = DefaultGateState(enabled=False)
     ctx.project_dir = tmp_path
 
-    with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-        with patch("autoskillit.server._misc._prime_quota_cache", new=AsyncMock()):
-            with patch("autoskillit.server.lifecycle._lifespan.register_active_kitchen"):
+    with patch.object(tools_kitchen, "_write_hook_config"):
+        with patch.object(misc, "_prime_quota_cache", new=AsyncMock()):
+            with patch.object(lifespan, "register_active_kitchen"):
                 await _skill_auto_gate_boot(ctx)
 
     templates = await mcp.list_resource_templates()

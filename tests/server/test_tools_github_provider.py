@@ -6,6 +6,8 @@ import json
 
 import pytest
 
+import autoskillit.server.lifecycle._guards as guards
+import autoskillit.server.tools.tools_github as tools_github
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.server.tools.tools_github import report_bug
 
@@ -32,10 +34,10 @@ async def test_report_bug_forwards_provider_name_as_distinct_parameter(
     executor = InMemoryHeadlessExecutor()
     tool_ctx_kitchen_open.executor = executor
 
-    _feat = "autoskillit.server.tools.tools_github.is_feature_enabled"
-    monkeypatch.setattr(_feat, lambda *a, **kw: True)
+    monkeypatch.setattr(tools_github, "is_feature_enabled", lambda *a, **kw: True)
     monkeypatch.setattr(
-        "autoskillit.server.lifecycle._guards._resolve_provider_profile",
+        guards,
+        "_resolve_provider_profile",
         lambda *a, **kw: ("bedrock", {"AWS_REGION": "us-east-1"}),
     )
 

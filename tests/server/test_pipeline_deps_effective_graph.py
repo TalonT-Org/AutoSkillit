@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import autoskillit.server.tools.tools_kitchen as tools_kitchen
 from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge
 from autoskillit.server.tools._pipeline_deps import _derive_phase_a_deps
 from autoskillit.server.tools.tools_kitchen import open_kitchen
@@ -116,7 +117,8 @@ async def test_remediation_uses_only_effective_projection_predecessors(
     """Pruned and deferred remediation routes never derive dependencies from removed steps."""
     if defer_from_defaults:
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_kitchen.build_config_default_layer",
+            tools_kitchen,
+            "build_config_default_layer",
             lambda _defaults: {"audit_impl": "false"},
         )
 

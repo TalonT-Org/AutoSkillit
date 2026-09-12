@@ -14,7 +14,9 @@ import pytest
 import yaml
 
 import autoskillit
+import autoskillit.recipe as recipe
 import autoskillit.recipe.io as recipe_io
+import autoskillit.recipe.repository as recipe_repository
 from tests.recipe._testing import count_discovery_calls, isolate_recipe_discovery_cache
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -85,10 +87,8 @@ class TestDefaultMigrationService:
             yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
         )
 
-        monkeypatch.setattr(
-            "autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}}
-        )
-        monkeypatch.setattr("autoskillit.recipe.check_contract_staleness", lambda *a, **kw: [])
+        monkeypatch.setattr(recipe, "load_recipe_card", lambda *a, **kw: {"skill_hashes": {}})
+        monkeypatch.setattr(recipe, "check_contract_staleness", lambda *a, **kw: [])
 
         service = DefaultMigrationService(default_migration_engine())
         result = await service.migrate(recipe_path)
@@ -119,10 +119,8 @@ class TestDefaultMigrationService:
             yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
         )
 
-        monkeypatch.setattr(
-            "autoskillit.recipe.load_recipe_card", lambda *a, **kw: {"skill_hashes": {}}
-        )
-        monkeypatch.setattr("autoskillit.recipe.check_contract_staleness", lambda *a, **kw: [])
+        monkeypatch.setattr(recipe, "load_recipe_card", lambda *a, **kw: {"skill_hashes": {}})
+        monkeypatch.setattr(recipe, "check_contract_staleness", lambda *a, **kw: [])
 
         service = DefaultMigrationService(default_migration_engine())
         result = await service.migrate(recipe_path)
@@ -155,11 +153,13 @@ class TestDefaultMigrationService:
         )
 
         monkeypatch.setattr(
-            "autoskillit.recipe.load_recipe_card",
+            recipe,
+            "load_recipe_card",
             lambda *a, **kw: {"skill_hashes": {}},
         )
         monkeypatch.setattr(
-            "autoskillit.recipe.check_contract_staleness",
+            recipe,
+            "check_contract_staleness",
             lambda *a, **kw: [
                 StaleItem(
                     skill="(manifest)",
@@ -169,7 +169,7 @@ class TestDefaultMigrationService:
                 )
             ],
         )
-        monkeypatch.setattr("autoskillit.recipe.generate_recipe_card", lambda *a, **kw: {})
+        monkeypatch.setattr(recipe, "generate_recipe_card", lambda *a, **kw: {})
 
         service = DefaultMigrationService(default_migration_engine())
         result = await service.migrate(recipe_path)
@@ -199,10 +199,11 @@ class TestDefaultMigrationService:
         )
 
         monkeypatch.setattr(
-            "autoskillit.recipe.load_recipe_card",
+            recipe,
+            "load_recipe_card",
             lambda *a, **kw: {"skill_hashes": {}},
         )
-        monkeypatch.setattr("autoskillit.recipe.check_contract_staleness", lambda *a, **kw: [])
+        monkeypatch.setattr(recipe, "check_contract_staleness", lambda *a, **kw: [])
 
         service = DefaultMigrationService(default_migration_engine())
         result = await service.migrate(recipe_path)
@@ -229,12 +230,12 @@ class TestDefaultMigrationService:
             yaml.dump(recipe_data, default_flow_style=False, allow_unicode=True)
         )
 
-        monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: None)
+        monkeypatch.setattr(recipe, "load_recipe_card", lambda *a, **kw: None)
 
         def _raise(*a, **kw):
             raise OSError("disk error")
 
-        monkeypatch.setattr("autoskillit.recipe.generate_recipe_card", _raise)
+        monkeypatch.setattr(recipe, "generate_recipe_card", _raise)
 
         service = DefaultMigrationService(default_migration_engine())
         result = await service.migrate(recipe_path)
@@ -307,8 +308,8 @@ class TestDefaultMigrationService:
             default_migration_engine(), run_headless=AsyncMock(return_value=success_result)
         )
 
-        monkeypatch.setattr("autoskillit.recipe.load_recipe_card", lambda *a, **kw: None)
-        monkeypatch.setattr("autoskillit.recipe.generate_recipe_card", lambda *a, **kw: {})
+        monkeypatch.setattr(recipe, "load_recipe_card", lambda *a, **kw: None)
+        monkeypatch.setattr(recipe, "generate_recipe_card", lambda *a, **kw: {})
 
         result = await service.migrate(recipe_path)
 
@@ -455,7 +456,7 @@ def test_default_recipe_repository_find_delegates_to_list_recipes(
         call_count += 1
         return recipe_io.list_recipes(project_dir)
 
-    monkeypatch.setattr("autoskillit.recipe.repository.list_recipes", counting_list)
+    monkeypatch.setattr(recipe_repository, "list_recipes", counting_list)
 
     recipes_dir = tmp_path / ".autoskillit" / "recipes"
     recipes_dir.mkdir(parents=True)

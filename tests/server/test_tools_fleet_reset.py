@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import autoskillit.server.tools.tools_fleet_reset as tools_fleet_reset
 from autoskillit.core import TerminationReason
 from autoskillit.core.runtime import read_boot_id, read_starttime_ticks
 from autoskillit.fleet import DispatchRecord, DispatchStatus, write_initial_state
@@ -70,15 +71,18 @@ def _setup_tool(tool_ctx, monkeypatch, state_path: Path) -> None:
 
     monkeypatch.setattr(_state, "_ctx", tool_ctx)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_fleet_reset._require_enabled",
+        tools_fleet_reset,
+        "_require_enabled",
         lambda: None,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_fleet_reset._require_fleet",
+        tools_fleet_reset,
+        "_require_fleet",
         lambda _name: None,
     )
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
+        tools_fleet_reset,
+        "discover_campaign_state_files",
         lambda _project_dir: [state_path],
     )
 
@@ -199,15 +203,18 @@ class TestResetDispatchErrors:
         tool_ctx = build_ctx_open()
         monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_enabled",
+            tools_fleet_reset,
+            "_require_enabled",
             lambda: None,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_fleet",
+            tools_fleet_reset,
+            "_require_fleet",
             lambda _name: json.dumps({"success": False, "error": "not_fleet"}),
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
+            tools_fleet_reset,
+            "discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -226,11 +233,13 @@ class TestResetDispatchErrors:
         tool_ctx = build_ctx_open()
         monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_enabled",
+            tools_fleet_reset,
+            "_require_enabled",
             lambda: json.dumps({"success": False, "error": "gate_closed"}),
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
+            tools_fleet_reset,
+            "discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -250,7 +259,8 @@ class TestResetDispatchErrors:
         _setup_tool(tool_ctx, monkeypatch, state_path)
 
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset.resolve_stale_running",
+            tools_fleet_reset,
+            "resolve_stale_running",
             lambda _d, _m, **_kw: True,
         )
 
@@ -329,15 +339,18 @@ class TestResetDispatchEdgeCases:
         tool_ctx = build_ctx_open()
         monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_enabled",
+            tools_fleet_reset,
+            "_require_enabled",
             lambda: None,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_fleet",
+            tools_fleet_reset,
+            "_require_fleet",
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
+            tools_fleet_reset,
+            "discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -406,15 +419,18 @@ class TestResetDispatchEdgeCases:
         tool_ctx = build_ctx_open()
         monkeypatch.setattr(_state, "_ctx", tool_ctx)
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_enabled",
+            tools_fleet_reset,
+            "_require_enabled",
             lambda: None,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset._require_fleet",
+            tools_fleet_reset,
+            "_require_fleet",
             lambda _name: None,
         )
         monkeypatch.setattr(
-            "autoskillit.server.tools.tools_fleet_reset.discover_campaign_state_files",
+            tools_fleet_reset,
+            "discover_campaign_state_files",
             lambda _project_dir: [state_path],
         )
 
@@ -550,11 +566,10 @@ class TestResetDispatchStateOnly:
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
         with (
-            patch(
-                "autoskillit.server.tools.tools_fleet_reset.reset_dispatch_artifacts"
-            ) as mock_rda,
-            patch(
-                "autoskillit.server.tools.tools_fleet_reset.cleanup_orphaned_labels",
+            patch.object(tools_fleet_reset, "reset_dispatch_artifacts") as mock_rda,
+            patch.object(
+                tools_fleet_reset,
+                "cleanup_orphaned_labels",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_col,
@@ -622,9 +637,10 @@ class TestResetDispatchStateOnly:
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
         with (
-            patch("autoskillit.server.tools.tools_fleet_reset.reset_dispatch_artifacts"),
-            patch(
-                "autoskillit.server.tools.tools_fleet_reset.cleanup_orphaned_labels",
+            patch.object(tools_fleet_reset, "reset_dispatch_artifacts"),
+            patch.object(
+                tools_fleet_reset,
+                "cleanup_orphaned_labels",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_col,
@@ -651,11 +667,10 @@ class TestResetDispatchStateOnly:
         from autoskillit.server.tools.tools_fleet_reset import reset_dispatch
 
         with (
-            patch(
-                "autoskillit.server.tools.tools_fleet_reset.reset_dispatch_artifacts"
-            ) as mock_rda,
-            patch(
-                "autoskillit.server.tools.tools_fleet_reset.cleanup_orphaned_labels",
+            patch.object(tools_fleet_reset, "reset_dispatch_artifacts") as mock_rda,
+            patch.object(
+                tools_fleet_reset,
+                "cleanup_orphaned_labels",
                 new_callable=AsyncMock,
                 return_value=True,
             ),

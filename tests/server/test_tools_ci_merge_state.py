@@ -44,9 +44,10 @@ async def test_check_repo_merge_state_uses_token_factory(tool_ctx_kitchen_open, 
             "ci_applicable": False,
         }
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr(tools_ci, "fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
     install_prepared_recipe_segment(monkeypatch, tools_ci, step_name="merge_state")
@@ -77,9 +78,10 @@ async def test_check_repo_merge_state_falls_back_to_config_token_when_no_factory
             "ci_applicable": False,
         }
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr(tools_ci, "fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
 
@@ -100,9 +102,10 @@ async def test_check_repo_merge_state_error_includes_http_status(
         )
         raise httpx.HTTPStatusError("403 Forbidden", request=response.request, response=response)
 
-    monkeypatch.setattr("autoskillit.server.tools.tools_ci.fetch_repo_merge_state", fake_fetch)
+    monkeypatch.setattr(tools_ci, "fetch_repo_merge_state", fake_fetch)
     monkeypatch.setattr(
-        "autoskillit.server.tools.tools_ci.resolve_repo_from_remote",
+        tools_ci,
+        "resolve_repo_from_remote",
         AsyncMock(return_value="owner/repo"),
     )
     install_prepared_recipe_segment(monkeypatch, tools_ci, step_name="merge_state")

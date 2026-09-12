@@ -12,6 +12,7 @@ from autoskillit.config import AgentBackendConfig, AutomationConfig
 from autoskillit.core import AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR
 from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
 from autoskillit.execution.process import DefaultSubprocessRunner
+from autoskillit.server import _factory
 from autoskillit.server._factory import make_context
 from tests.server._factory_test_helpers import _runner
 
@@ -146,7 +147,7 @@ def test_make_context_skips_replay_runner_for_non_claude_backend(
     monkeypatch.setenv("REPLAY_SCENARIO_DIR", str(tmp_path))
 
     mock_build = Mock()
-    monkeypatch.setattr("autoskillit.server._factory.build_replay_runner", mock_build)
+    monkeypatch.setattr(_factory, "build_replay_runner", mock_build)
 
     cfg = AutomationConfig(agent_backend=AgentBackendConfig(backend="aider"))
     ctx = make_context(cfg, plugin_dir=str(tmp_path), project_dir=tmp_path)

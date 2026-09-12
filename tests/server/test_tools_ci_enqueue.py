@@ -30,8 +30,9 @@ async def test_enqueue_pr_delegates_to_watcher_enqueue(
     tool_ctx_kitchen_open.merge_queue_watcher = watcher
     install_prepared_recipe_segment(monkeypatch, tools_ci_merge_queue, step_name="enqueue")
 
-    with patch(
-        "autoskillit.server.tools.tools_ci_merge_queue.resolve_repo_from_remote",
+    with patch.object(
+        tools_ci_merge_queue,
+        "resolve_repo_from_remote",
         new_callable=AsyncMock,
         return_value="owner/repo",
     ):

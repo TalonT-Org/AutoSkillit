@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+import autoskillit.server._misc as misc
 from autoskillit.config import AutomationConfig, ClassifyFixConfig
 from autoskillit.core.types import RestartScope
 from autoskillit.server.tools.tools_git import classify_fix
@@ -95,8 +96,9 @@ class TestClassifyFix:
         """git fetch must be issued before git diff."""
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # fetch succeeds
         tool_ctx_kitchen_open.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
-        with patch(
-            "autoskillit.server._misc.resolve_remote_name",
+        with patch.object(
+            misc,
+            "resolve_remote_name",
             new=AsyncMock(return_value="origin"),
         ):
             await classify_fix(str(tmp_path), "main")
@@ -163,8 +165,9 @@ class TestClassifyFixRemoteResolution:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # fetch succeeds
         tool_ctx_kitchen_open.runner.push(_make_result(0, "src/foo.py\n", ""))  # diff succeeds
 
-        with patch(
-            "autoskillit.server._misc.resolve_remote_name",
+        with patch.object(
+            misc,
+            "resolve_remote_name",
             new=AsyncMock(return_value="upstream"),
         ):
             await classify_fix(str(tmp_path), "main")
@@ -180,8 +183,9 @@ class TestClassifyFixRemoteResolution:
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))  # fetch succeeds
         tool_ctx_kitchen_open.runner.push(_make_result(0, "src/bar.py\n", ""))  # diff succeeds
 
-        with patch(
-            "autoskillit.server._misc.resolve_remote_name",
+        with patch.object(
+            misc,
+            "resolve_remote_name",
             new=AsyncMock(return_value="origin"),
         ):
             await classify_fix(str(tmp_path), "main")

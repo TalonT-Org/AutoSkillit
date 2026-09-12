@@ -784,6 +784,7 @@ async def test_open_kitchen_sous_chef_projection_raises_returns_failure_envelope
     mock_ctx.project_dir = tmp_path
     mock_ctx.backend = ClaudeCodeBackend()
     mock_ctx.skill_resolver = SkillsDirectoryProvider().resolver
+    from autoskillit.server.tools import _serve_helpers
 
     with patch("autoskillit.server._get_ctx", return_value=mock_ctx):
         with patch("autoskillit.server.logger"):
@@ -791,8 +792,9 @@ async def test_open_kitchen_sous_chef_projection_raises_returns_failure_envelope
                 "autoskillit.server.tools.tools_kitchen._prime_quota_cache", new=AsyncMock()
             ):
                 with patch("autoskillit.server.tools.tools_kitchen._write_hook_config"):
-                    with patch(
-                        "autoskillit.server.tools._serve_helpers.project_agent_skill_document",
+                    with patch.object(
+                        _serve_helpers,
+                        "project_agent_skill_document",
                         side_effect=OSError("projection failed"),
                     ):
                         from autoskillit.server.tools.tools_kitchen import open_kitchen

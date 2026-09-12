@@ -131,8 +131,11 @@ Inspect consumers.
     correlation_key = store.create_provisional(contract=contract, snapshot=snapshot)
     store.finalize(correlation_key, "resume-vector")
     loaded = store.load("resume-vector").contract
+    from autoskillit.workspace import skills as workspace_skills
+
     monkeypatch.setattr(
-        "autoskillit.workspace.skills._bind_exploration_vector_markers",
+        workspace_skills,
+        "_bind_exploration_vector_markers",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("unexpected reparse")),
     )
 

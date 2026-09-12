@@ -23,7 +23,6 @@ if TYPE_CHECKING:
         _INTERPRETER_RE,
         _LITERAL_OPEN_PATH_RE,
         _LITERAL_PATH_CONSTRUCTOR_RE,
-        _SUBPROCESS_APIS_RE,
         _WRITE_APIS_RE,
         _WRITE_CALL_SITE_RE,
         StdinLiteral,
@@ -57,13 +56,25 @@ else:
 
 
 def has_interpreter_write(command: str) -> bool:
-    if not _INTERPRETER_RE.search(command):
+    """Return True when a live (executed) interpreter payload writes a file.
+
+    Scans `live_command_text(command)` -- the occurrence-aware projection
+    that blanks an inert heredoc/herestring body -- rather than the raw
+    command, so a `python3 script.py <<'EOF'` whose body merely contains
+    `open(..., "w")` as inert stdin data (the script has an operand and
+    never executes its stdin) is not mistaken for a live write.
+    """
+    text = live_command_text(command)
+    if not _INTERPRETER_RE.search(text):
         return False
-    return bool(_WRITE_APIS_RE.search(command))
+    return bool(_WRITE_APIS_RE.search(text))
 
 
 def extract_interpreter_write_paths(command: str) -> list[str] | None:
     """Extract literal file paths from an interpreter write command.
+
+    Scans `live_command_text(command)` (see `has_interpreter_write`) so an
+    inert stdin body's mention of a write call never fabricates a target.
 
     Returns:
         None    — command is not an interpreter write (no prefix or no write API).
@@ -71,32 +82,24 @@ def extract_interpreter_write_paths(command: str) -> list[str] | None:
                   (dynamic variable, f-string, shutil two-arg, or mixed).
         [paths] — all write target paths are static literals (may be relative).
     """
-    if not _INTERPRETER_RE.search(command):
+    text = live_command_text(command)
+    if not _INTERPRETER_RE.search(text):
         return None
-    if not _WRITE_APIS_RE.search(command):
+    if not _WRITE_APIS_RE.search(text):
         return None
 
-    call_site_count = len(_WRITE_CALL_SITE_RE.findall(command))
+    call_site_count = len(_WRITE_CALL_SITE_RE.findall(text))
 
     paths: list[str] = []
-    for m in _LITERAL_OPEN_PATH_RE.finditer(command):
+    for m in _LITERAL_OPEN_PATH_RE.finditer(text):
         paths.append(m.group(2))
-    for m in _LITERAL_PATH_CONSTRUCTOR_RE.finditer(command):
+    for m in _LITERAL_PATH_CONSTRUCTOR_RE.finditer(text):
         paths.append(m.group(2))
 
     if len(paths) < call_site_count:
         return []
 
     return paths if paths else []
-
-
-def has_interpreter_wrapped_command(command: str, *, target_commands: Sequence[str]) -> bool:
-    if not _INTERPRETER_RE.search(command):
-        return False
-    if not _SUBPROCESS_APIS_RE.search(command):
-        return False
-    cmd_lower = command.lower()
-    return any(tc.lower() in cmd_lower for tc in target_commands)
 
 
 _SHELL_INTERPRETERS: frozenset[str] = frozenset({"bash", "sh", "zsh", "dash"})
@@ -460,7 +463,9 @@ def evaluated_payloads(command: str) -> list[EvaluatedPayload]:
     return payloads
 
 
-def all_evaluated_segments(command: str) -> list[list[str]] | None:
+def all_evaluated_segments(
+    command: str, *, include_process_substitutions: bool = False
+) -> list[list[str]] | None:
     """Return every segment that will actually execute, across every consumer.
 
     Outer segments, every recursively tokenized SHELL payload, every
@@ -470,11 +475,17 @@ def all_evaluated_segments(command: str) -> list[list[str]] | None:
     string `subprocess.run("...")` spec (no shell) is excluded -- it never
     reaches an argv-splitting shell. Returns `None` when the outer command
     or any evaluated shell payload cannot be tokenized (fail-open).
+    ``include_process_substitutions`` is threaded through to
+    `tokenize_shell_payload_segments` for callers (e.g.
+    `planner_gh_discovery_guard.py`) that must also see `<(...)`/`>(...)`
+    bodies; the default preserves the historic shell-substitution-only reach.
     """
     outer = tokenize_command_segments(command)
     if not outer and command.strip():
         return None
-    shell_segments = tokenize_shell_payload_segments(command)
+    shell_segments = tokenize_shell_payload_segments(
+        command, include_process_substitutions=include_process_substitutions
+    )
     if shell_segments is None:
         return None
 
@@ -577,6 +588,39 @@ def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[
     return (specs, has_unresolved)
 
 
+def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
+    """Return True when a PYTHON-consumer payload resolves to invoking *target*.
+
+    Successor to the deleted `has_interpreter_wrapped_command`'s raw
+    substring scan: walks every PYTHON-consumer payload from
+    `evaluated_payloads` (a `python -c` program, or a heredoc/herestring/pipe
+    body a bare `python3`/`python3 -` executes) through
+    `_python_program_command_specs`. A literal argv spec
+    (`subprocess.run(["gh", "pr", "create", ...])`) matches when its leading
+    tokens equal *target*, regardless of `shell=`. A string spec
+    (`os.system("gh pr create ...")`, or `subprocess.run("...", shell=True)`)
+    is tokenized as shell text and matched only when
+    `_InterpreterCommandSpec.invokes_shell` is true -- a plain string passed
+    to `subprocess.run` without `shell=True` never reaches an argv-splitting
+    shell and must not match even when its leading words equal *target*.
+    """
+    target_list = list(target)
+    width = len(target_list)
+    for payload in evaluated_payloads(command):
+        if payload.kind != StdinConsumer.PYTHON:
+            continue
+        specs, _has_unresolved = _python_program_command_specs(payload.text)
+        for spec in specs:
+            if isinstance(spec.payload, list):
+                if spec.payload[:width] == target_list:
+                    return True
+            elif spec.invokes_shell:
+                for segment in tokenize_command_segments(spec.payload):
+                    if segment[:width] == target_list:
+                        return True
+    return False
+
+
 if not TYPE_CHECKING:
     # _FlagArity must come from the _flags sibling directly, not the facade:
     # the facade binds _FlagArity only after its own
@@ -644,7 +688,6 @@ if not TYPE_CHECKING:
     _INTERPRETER_RE = _classification._INTERPRETER_RE
     _LITERAL_OPEN_PATH_RE = _classification._LITERAL_OPEN_PATH_RE
     _LITERAL_PATH_CONSTRUCTOR_RE = _classification._LITERAL_PATH_CONSTRUCTOR_RE
-    _SUBPROCESS_APIS_RE = _classification._SUBPROCESS_APIS_RE
     _WRITE_APIS_RE = _classification._WRITE_APIS_RE
     _WRITE_CALL_SITE_RE = _classification._WRITE_CALL_SITE_RE
     StdinLiteral = _classification.StdinLiteral

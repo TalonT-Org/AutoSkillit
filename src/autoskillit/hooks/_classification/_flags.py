@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import re
-import shlex
 from collections.abc import Mapping, Sequence
 from enum import StrEnum, auto
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from autoskillit.hooks._classification._interpreters import (
+        all_evaluated_segments,
+        live_command_text,
+    )
     from autoskillit.hooks._runtime._command_classification import (
         ArgvToken,
         SearchPattern,
         _command_start_index,
-        _normalize_newlines_for_tokenize,
         command_verb,
         extract_git_subcommand_and_flags,
     )
@@ -70,7 +72,6 @@ _GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
 )
 _SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
 _SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
-_PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 _WC_FLAG_RE = re.compile(r"-l+|--lines$")
 
 
@@ -340,53 +341,44 @@ def is_allowed_protected_path_metadata_command(segment: list[str]) -> bool:
     return False
 
 
-def _tokenize_protected_read_segments(command: str) -> list[list[str]]:
-    try:
-        lexer = shlex.shlex(
-            _normalize_newlines_for_tokenize(command), posix=True, punctuation_chars=";&|()"
-        )
-        lexer.whitespace_split = True
-        tokens = list(lexer)
-    except (ValueError, TypeError):
-        return []
-
-    segments: list[list[str]] = []
-    current: list[str] = []
-    for token in tokens:
-        if token in _PROTECTED_READ_SHELL_OPS:
-            if current:
-                segments.append(current)
-                current = []
-        else:
-            current.append(token)
-    if current:
-        segments.append(current)
-    return segments
-
-
 def command_has_blocked_protected_path_read(
     command: str, protected_path_patterns: Sequence[SearchPattern]
 ) -> bool:
-    """Return True when a command reads a protected recipe/skill/agent path."""
-    if not any(pattern.search(command) for pattern in protected_path_patterns):
+    """Return True when a command reads a protected recipe/skill/agent path.
+
+    Reads *command* through `live_command_text` (rectify #4941 Part B) rather
+    than the raw string, so a protected-path mention inside an inert
+    heredoc/herestring body (prose in a fenced Markdown block, an inline
+    backtick example) never trips the check, while a live SHELL/PYTHON/TEXT
+    stdin body's mention still does. `all_evaluated_segments` replaces the
+    private `_tokenize_protected_read_segments` tokenizer for the per-segment
+    allowed-metadata-command check. When the live text matches but no argv
+    segment accounts for the occurrence (a PYTHON/TEXT stdin body's content
+    is prose/source, never its own argv segment), the read stays fail-closed
+    rather than being silently lost because its source isn't an argv segment.
+    """
+    live_text = live_command_text(command)
+    if not any(pattern.search(live_text) for pattern in protected_path_patterns):
         return False
 
-    if "<<" in command or _SHELL_SUBSTITUTION_RE.search(command):
+    if _SHELL_SUBSTITUTION_RE.search(live_text):
         return True
 
-    segments = _tokenize_protected_read_segments(command)
+    segments = all_evaluated_segments(command)
     if not segments:
         return True
 
-    if len(segments) > 1 and _SHELL_STATE_VAR_RE.search(command):
+    if len(segments) > 1 and _SHELL_STATE_VAR_RE.search(live_text):
         return True
 
+    any_segment_matched = False
     for segment in segments:
         segment_text = " ".join(segment)
         if any(pattern.search(segment_text) for pattern in protected_path_patterns):
+            any_segment_matched = True
             if not is_allowed_protected_path_metadata_command(segment):
                 return True
-    return False
+    return not any_segment_matched
 
 
 if not TYPE_CHECKING:
@@ -398,6 +390,25 @@ if not TYPE_CHECKING:
     ArgvToken = _classification.ArgvToken
     SearchPattern = _classification.SearchPattern
     _command_start_index = _classification._command_start_index
-    _normalize_newlines_for_tokenize = _classification._normalize_newlines_for_tokenize
     command_verb = _classification.command_verb
     extract_git_subcommand_and_flags = _classification.extract_git_subcommand_and_flags
+
+    if __package__:
+        from . import _interpreters
+    else:
+        import _interpreters
+
+    # Bind directly to _interpreters (never the _command_classification
+    # facade): all_evaluated_segments/live_command_text are facade-level
+    # wrappers defined at the very bottom of _command_classification.py,
+    # AFTER its own block B rebinds _flags/_interpreters -- a facade-first
+    # load order (the standard hook-script bootstrap: `from
+    # _command_classification import ...`) reaches this module's own bottom
+    # bootstrap while the facade is still mid-way through that very block B,
+    # before its wrapper defs exist, so an eager facade lookup here would
+    # raise AttributeError. _interpreters.py defines both functions directly
+    # (not via its own bottom bootstrap), well before either of ITS bottom
+    # bootstrap blocks, so a partially-initialized _interpreters module
+    # reached through any reentrant load order already has them bound.
+    all_evaluated_segments = _interpreters.all_evaluated_segments
+    live_command_text = _interpreters.live_command_text

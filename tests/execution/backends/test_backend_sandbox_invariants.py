@@ -6,19 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec, OutputFormat, SkillSessionConfig, ValidatedAddDir
+from autoskillit.core import CmdSpec, OutputFormat, SkillSessionConfig
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
-_SKILL_SESSION_ADD_DIRS = (
-    ValidatedAddDir(
-        path="/work/add-dir",
-        session_home="/work",
-        skill_entries=(("test-skill", "test-skill/SKILL.md"),),
-    ),
-)
+# Deliberately decoupled from the builder calls' cwd="" below — this fixture's
+# session_home is independent of the launch cwd, so it stays hardcoded here
+# rather than threading cwd through.
+_SKILL_SESSION_ADD_DIRS = codex_skill_add_dirs("/work")
 
 
 @pytest.fixture(autouse=True)

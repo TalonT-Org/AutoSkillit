@@ -4,18 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ValidatedAddDir
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
-_SKILL_SESSION_ADD_DIRS = (
-    ValidatedAddDir(
-        path="/repo/add-dir",
-        session_home="/repo",
-        skill_entries=(("investigate", "investigate/SKILL.md"),),
-    ),
-)
+_SKILL_SESSION_ADD_DIRS = codex_skill_add_dirs("/repo", skill_name="investigate")
 
 _REQUIRED_IN_BOTH: frozenset[str] = frozenset(
     {

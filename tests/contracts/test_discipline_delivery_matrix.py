@@ -26,14 +26,13 @@ from autoskillit.core import (
     SESSION_TYPE_FLEET,
     SESSION_TYPE_ORCHESTRATOR,
     SESSION_TYPE_SKILL,
-    ValidatedAddDir,
     load_bundled_agent_definitions,
 )
 from autoskillit.execution.backends._codex_explorer_projection import _generate_agent_tomls
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
-from tests.fixtures.codex import prompt_text
+from tests.fixtures.codex import codex_skill_add_dirs, prompt_text
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -56,24 +55,13 @@ def _build_orchestrator_spec(backend):
         )
 
 
-def _codex_skill_add_dirs(cwd: str = "/tmp") -> tuple[ValidatedAddDir, ...]:
-    """A single ValidatedAddDir satisfying CodexBackend's app-server skill-session invariant."""
-    return (
-        ValidatedAddDir(
-            path=f"{cwd}/add-dir",
-            session_home=cwd,
-            skill_entries=(("investigate", "investigate/SKILL.md"),),
-        ),
-    )
-
-
 def _build_skill_session_spec(backend, skill_command: str, cwd: str = "/tmp", **kwargs):
     """Build a skill-session CmdSpec, supplying Codex's required add-dir catalog binding.
 
     Claude has no such requirement, so its call is passed through unchanged.
     """
     if isinstance(backend, CodexBackend) and "add_dirs" not in kwargs:
-        kwargs["add_dirs"] = _codex_skill_add_dirs(cwd)
+        kwargs["add_dirs"] = codex_skill_add_dirs(cwd, skill_name="investigate")
     return backend.build_skill_session_cmd(skill_command, cwd, **kwargs)
 
 

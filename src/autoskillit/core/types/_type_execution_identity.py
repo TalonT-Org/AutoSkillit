@@ -16,6 +16,7 @@ __all__ = [
     "BackendPinResolution",
     "ChildExecutionIdentity",
     "ChildExecutionIdentityDict",
+    "ChildOutcomeDict",
     "ExecutionIdentity",
     "ExecutionIdentityDict",
 ]
@@ -53,6 +54,36 @@ class ChildExecutionIdentityDict(TypedDict):
     requested_effort: str
     effective_effort: str
     session_id: str
+
+
+class ChildOutcomeDict(TypedDict):
+    """Stable persistence/projection schema for one child run's terminal reason.
+
+    Field-for-field identical to
+    ``hooks._child_outcome_snapshot.ChildOutcomeWireDict``, the stdlib-only
+    hook module's wire schema (that module cannot import ``core``, so it
+    duplicates this shape rather than importing it); a contract test in
+    ``tests/hooks/test_child_outcomes.py`` pins the field-name parity.
+    ``terminal_reason`` is one of the seven canonical values: ``completed``,
+    ``context_exhausted``, ``turn_limited``, ``error``, ``abandoned``,
+    ``interrupted``, ``unknown`` (issue #4623).
+    """
+
+    child_id: str
+    launch_alias: str
+    backend: str
+    parent_session_id: str
+    role: str
+    attribution_skill: str
+    effective_model: str
+    effective_provider: str
+    terminal_reason: str
+    raw_reason: str
+    raw_subtype: str
+    raw_code: str
+    evidence_source: str
+    transcript_locator: str
+    start_confirmed: bool
 
 
 class ExecutionIdentityDict(TypedDict):

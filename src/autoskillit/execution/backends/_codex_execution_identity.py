@@ -106,6 +106,37 @@ def _message_text(events: list[Mapping[str, Any]]) -> str:
     return "\n".join(blocks)
 
 
+def linked_child_thread_ids(events: list[Mapping[str, Any]], *, parent_id: str) -> tuple[str, ...]:
+    """Return every child thread id observed via a ``kind == "started"`` activity record.
+
+    Independent of any requested/planned child identity — the same
+    structural filter :func:`extract_codex_execution_identity` applies for
+    its strict planned-child matching, reused unchanged by
+    ``execution/child_outcomes.py`` for unplanned/undeclared child discovery
+    (issue #4623), so the filter is defined exactly once.
+    """
+    return tuple(
+        sorted(
+            {
+                str(payload["agent_thread_id"])
+                for payload in _payloads(events, "event_msg")
+                if payload.get("type") == "sub_agent_activity"
+                and payload.get("kind") == "started"
+                and isinstance(payload.get("agent_thread_id"), str)
+                and payload.get("agent_thread_id") != parent_id
+            }
+        )
+    )
+
+
+def read_codex_rollout_events(path: Path) -> list[Mapping[str, Any]]:
+    """Bounded read of one Codex rollout file's JSONL events.
+
+    Public alias of ``_read_rollout``, tolerant of ``.zst``-compressed rollouts.
+    """
+    return _read_rollout(path)
+
+
 def extract_codex_execution_identity(
     parent_rollout_path: Path,
     *,
@@ -148,20 +179,12 @@ def extract_codex_execution_identity(
         cli_version=cli_version,
         parent_session_id=parent_id,
     )
+    # Computed unconditionally (not gated by `requested.children`) so unplanned/
+    # undeclared child discovery (execution/child_outcomes.py, issue #4623) can
+    # reuse this exact structural filter without re-deriving it.
+    linked_child_ids = linked_child_thread_ids(parent_events, parent_id=parent_id)
     if not requested.children:
         return effective
-    linked_child_ids = tuple(
-        sorted(
-            {
-                str(payload["agent_thread_id"])
-                for payload in _payloads(parent_events, "event_msg")
-                if payload.get("type") == "sub_agent_activity"
-                and payload.get("kind") == "started"
-                and isinstance(payload.get("agent_thread_id"), str)
-                and payload.get("agent_thread_id") != parent_id
-            }
-        )
-    )
     if len(linked_child_ids) != len(requested.children):
         raise ValueError("Codex parent rollout child count disagrees with requested plan")
     if child_rollout_paths is None:

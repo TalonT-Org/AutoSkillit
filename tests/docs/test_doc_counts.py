@@ -188,17 +188,11 @@ def _count_hooks_by_event() -> dict[str, int]:
     """
     from autoskillit.hook_registry import HOOK_REGISTRY  # local import to avoid hard dep
 
-    by_event: dict[str, set[str]] = {
-        "PreToolUse": set(),
-        "PostToolUse": set(),
-        "PostToolUseFailure": set(),
-        "SessionStart": set(),
-        "Stop": set(),
-    }
+    by_event: dict[str, set[str]] = {}
     # join_followup_guard adds one PreToolUse script to the count.
     for hook_def in HOOK_REGISTRY:
         for script in hook_def.scripts:
-            by_event[hook_def.event_type].add(script)
+            by_event.setdefault(hook_def.event_type, set()).add(script)
     return {event: len(scripts) for event, scripts in by_event.items()}
 
 

@@ -1082,7 +1082,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_result_write_reconciliation.py",
             "execution/test_planner_write_isolation.py",
             "execution/test_session_log_flush.py",
-            # execution/ — fixture-mediated pipeline dependents (19 files):
+            # execution/ — fixture-mediated pipeline dependents (20 files):
             # These use minimal_ctx or tool_ctx fixtures which import
             # autoskillit.pipeline at call time. Validated by REQ-GUARD-007.
             "execution/test_backend_dispatch.py",
@@ -1096,6 +1096,7 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "execution/test_headless_env_injection.py",
             "execution/test_headless_env_scrub.py",
             "execution/test_headless_execute.py",
+            "execution/test_headless_managed_attempt_recording.py",
             "execution/test_headless_provider_fallback.py",
             "execution/test_headless_synthesis.py",
             "execution/test_idle_output_env.py",
@@ -1360,6 +1361,9 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             # file-level: Codex output-budget config and generated agent contracts
             "execution/backends/test_codex_config.py",
             "execution/backends/test_codex_backend.py",
+            # file-level: exercises the hook-authored child-outcome snapshot module
+            # directly (issue #4623) via autoskillit.hooks's public re-export.
+            "execution/test_child_outcomes.py",
             # hook_registry imports from autoskillit.hooks at module scope
             # (HOOK_REGISTRY, generate_hooks_json) for the registry init wiring.
             "hook_registry",

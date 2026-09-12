@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final, Generic, Literal, TypedDict, TypeVar
 
-from ._type_execution_identity import ChildExecutionIdentityDict
+from ._type_execution_identity import ChildExecutionIdentityDict, ChildOutcomeDict
 from ._type_results_execution import SubagentModelOutcomeDict
 
 __all__ = [
@@ -37,7 +37,7 @@ __all__ = [
 
 T = TypeVar("T")
 
-SESSION_INDEX_SCHEMA_VERSION: Final[int] = 10
+SESSION_INDEX_SCHEMA_VERSION: Final[int] = 11
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,6 +315,7 @@ class SessionIndexEntry(TypedDict):
     native_shell_capture: dict[str, object] | None
     session_type: str | None
     subagent_model_outcomes: list[SubagentModelOutcomeDict]
+    child_outcomes: list[ChildOutcomeDict]
     schema_version: int
 
 

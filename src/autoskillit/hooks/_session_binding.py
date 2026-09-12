@@ -288,13 +288,16 @@ def binding_snapshot(path: Path) -> Generator[SessionBinding | None, None, None]
         yield read_binding(path)
 
 
-def enumerate_binding_paths(channel_dir: Path) -> tuple[Path, ...]:
-    """Return a bounded, sorted snapshot of binding candidates for diagnostics."""
+def enumerate_binding_paths(channel_dir: Path) -> tuple[tuple[Path, ...], bool]:
+    """Return bounded sorted candidates for diagnostics and whether the scan truncated."""
     try:
         candidates = sorted(channel_dir.glob("skill_guard_*.flag"))
     except OSError:
-        return ()
-    return tuple(candidates[:_BINDING_CANDIDATE_LIMIT])
+        return (), False
+    return (
+        tuple(candidates[:_BINDING_CANDIDATE_LIMIT]),
+        len(candidates) > _BINDING_CANDIDATE_LIMIT,
+    )
 
 
 def resolve_projection_manifest_path(hook_file: Path) -> Path | None:

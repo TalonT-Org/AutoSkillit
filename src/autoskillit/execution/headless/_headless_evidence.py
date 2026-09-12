@@ -13,6 +13,7 @@ from autoskillit.core import (
     CODEX_CONTEXT_EXHAUSTION_MARKER,
     WORKTREE_SKILLS,
     AgentSessionResult,
+    ChildOutcomeDict,
     CliSubtype,
     ExecutionIdentity,
     FailureRecord,
@@ -107,12 +108,8 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
         error_code == CODEX_CONTEXT_EXHAUSTION_MARKER
         or CODEX_CONTEXT_EXHAUSTION_MARKER in (agent_result.error or "")
     )
-    errors: list[str] = []
-    if agent_result.error:
-        errors.append(agent_result.error)
-
+    errors: list[str] = [agent_result.error] if agent_result.error else []
     api_error_status: int | None = _CODEX_ERROR_CODE_API_STATUS.get(error_code)
-
     token_usage = raw.get("canonical_token_usage") or raw.get("token_usage")
 
     command_executions: list[dict[str, Any]] = raw.get("command_executions", [])
@@ -124,7 +121,6 @@ def _adapt_agent_result(agent_result: AgentSessionResult) -> ClaudeSessionResult
     tool_uses = command_executions + mcp_tool_calls + file_change_entries
 
     assistant_messages: list[str] = raw.get("agent_messages", [])
-
     seen_ndjson_unknown_event_count: int = raw.get("ndjson_unknown_event_count", 0)
     seen_ndjson_unknown_item_count: int = raw.get("ndjson_unknown_item_count", 0)
 
@@ -262,6 +258,7 @@ def _build_session_telemetry(
     loc_deletions: int,
     session_id: str,
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...],
+    child_outcomes: tuple[ChildOutcomeDict, ...],
     step_name: str = "",
     order_id: str = "",
 ) -> SessionTelemetry:
@@ -279,6 +276,7 @@ def _build_session_telemetry(
         loc_insertions=loc_insertions,
         loc_deletions=loc_deletions,
         subagent_model_outcomes=subagent_model_outcomes,
+        child_outcomes=child_outcomes,
         execution_identity=skill_result.execution_identity,
     )
 
@@ -290,6 +288,7 @@ def _build_error_path_telemetry(
     order_id: str = "",
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...] = (),
+    child_outcomes: tuple[ChildOutcomeDict, ...] = (),
 ) -> SessionTelemetry:
     """Build SessionTelemetry for crash/cancel paths where no SkillResult exists."""
     if github_api_log is not None:
@@ -306,5 +305,6 @@ def _build_error_path_telemetry(
         loc_insertions=0,
         loc_deletions=0,
         subagent_model_outcomes=subagent_model_outcomes,
+        child_outcomes=child_outcomes,
         execution_identity=execution_identity,
     )

@@ -23,11 +23,18 @@ pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
 
 
 def _extract_hook_commands() -> list[str]:
-    """Extract all command strings from generate_hooks_json() output."""
+    """Extract all command strings from generate_hooks_json() output.
+
+    Iterates every event type the generator actually produced (rather than a
+    fixed subset) so a new event type — e.g. the SubagentStart/SubagentStop/
+    SessionEnd child-terminal-reason hook added for issue #4623 — is covered
+    for standalone subprocess executability without needing this list
+    updated by hand.
+    """
     data = generate_hooks_json()
     hooks = data.get("hooks", {})
     commands: list[str] = []
-    for event_type in ("PreToolUse", "PostToolUse", "SessionStart"):
+    for event_type in hooks:
         for entry in hooks.get(event_type, []):
             for hook in entry.get("hooks", []):
                 cmd = hook.get("command", "")
@@ -68,8 +75,13 @@ def test_hook_command_executable(command: str) -> None:
     # Replace python3 with sys.executable for test isolation
     if parts[0] == "python3":
         parts[0] = sys.executable
-    # Run with a minimal valid event on stdin (tool_name only)
-    event = json.dumps({"tool_name": "Read", "tool_input": {}})
+    # Run with a minimal valid event on stdin. ``session_id`` is included
+    # alongside the tool-call fields because this parametrization now also
+    # covers non-tool-call events (Stop/SubagentStart/SubagentStop/SessionEnd)
+    # whose real payloads always carry session_id — e.g. guards/join_stop_guard.py
+    # denies a Stop payload with no session_id, which is a correct decision
+    # given a genuinely malformed event, not a subprocess-invocation failure.
+    event = json.dumps({"tool_name": "Read", "tool_input": {}, "session_id": "test-session-id"})
     proc = subprocess.run(parts, input=event, capture_output=True, text=True, timeout=10)
     assert proc.returncode == 0, (
         f"Hook command failed with exit code {proc.returncode}.\n"

@@ -1,4 +1,4 @@
-"""Tests for KitchenMarker hash field support."""
+"""Tests for kitchen marker persistence and lifecycle."""
 
 from __future__ import annotations
 
@@ -13,63 +13,44 @@ from tests._helpers import delete_once_then_delegate
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
 
-def test_kitchen_marker_has_hash_fields():
-    from autoskillit.core.runtime.kitchen_state import KitchenMarker
-
-    marker = KitchenMarker(
-        session_id="s",
-        opened_at=datetime.now(UTC),
-        recipe_name="r",
-        content_hash="sha256:abc",
-        composite_hash="sha256:def",
-    )
-    assert marker.content_hash == "sha256:abc"
-    assert marker.composite_hash == "sha256:def"
-
-
-def test_marker_roundtrip_with_hashes(tmp_path, monkeypatch):
-    from autoskillit.core.runtime.kitchen_state import read_marker, write_marker
+def test_write_marker_emits_reduced_schema(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import write_marker
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
-    write_marker("sess1", "recipe", content_hash="sha256:a", composite_hash="sha256:b")
-    marker = read_marker("sess1")
-    assert marker is not None
-    assert marker.content_hash == "sha256:a"
-    assert marker.composite_hash == "sha256:b"
+    write_marker("sess1", "recipe")
+    payload = json.loads((tmp_path / "kitchen_state" / "sess1.json").read_text(encoding="utf-8"))
+    assert set(payload) == {"session_id", "opened_at", "recipe_name", "marker_version"}
 
 
-def test_marker_backward_compat_no_hashes(tmp_path, monkeypatch):
-    from autoskillit.core.runtime.kitchen_state import read_marker
+def test_read_marker_ignores_retired_hash_keys(tmp_path, monkeypatch):
+    from autoskillit.core.runtime.kitchen_state import KitchenMarker, read_marker
 
     monkeypatch.setenv("AUTOSKILLIT_STATE_DIR", str(tmp_path))
     state_dir = tmp_path / "kitchen_state"
     state_dir.mkdir()
+    opened_at = datetime.now(UTC)
     (state_dir / "old.json").write_text(
         json.dumps(
             {
                 "session_id": "old",
-                "opened_at": datetime.now(UTC).isoformat(),
+                "opened_at": opened_at.isoformat(),
                 "recipe_name": "r",
                 "marker_version": 1,
+                "content_hash": "sha256:abc",
+                "composite_hash": "sha256:def",
             }
-        )
+        ),
+        encoding="utf-8",
     )
     marker = read_marker("old")
-    assert marker is not None
-    assert marker.content_hash == ""
-    assert marker.composite_hash == ""
-
-
-def test_kitchen_marker_hash_defaults():
-    from autoskillit.core.runtime.kitchen_state import KitchenMarker
-
-    marker = KitchenMarker(
-        session_id="s",
-        opened_at=datetime.now(UTC),
+    assert marker == KitchenMarker(
+        session_id="old",
+        opened_at=opened_at,
         recipe_name="r",
+        marker_version=1,
     )
-    assert marker.content_hash == ""
-    assert marker.composite_hash == ""
+    assert not hasattr(marker, "content_hash")
+    assert not hasattr(marker, "composite_hash")
 
 
 # --- Group P-1: Kitchen state namespacing ---

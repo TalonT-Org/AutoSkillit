@@ -133,6 +133,33 @@ def _anomaly(
     }
 
 
+def api_retry_exhaustion_anomaly(subtype: str, api_retry_count: int) -> dict[str, object]:
+    """Build the API-retry-exhaustion anomaly record (fires regardless of token_usage presence)."""
+    return _anomaly(
+        AnomalyKind.API_RETRY_EXHAUSTION,
+        AnomalySeverity.WARNING,
+        {"subtype": subtype, "api_retry_count": api_retry_count},
+        {},
+        OUTCOME_ANOMALY_SEQ_SENTINEL,
+        OUTCOME_ANOMALY_PID_SENTINEL,
+    )
+
+
+def ndjson_drift_anomaly(unknown_event_count: int, unknown_item_count: int) -> dict[str, object]:
+    """Build the NDJSON-unknown-event/item-drift anomaly record."""
+    return _anomaly(
+        AnomalyKind.NDJSON_DRIFT,
+        AnomalySeverity.WARNING,
+        {
+            "ndjson_unknown_event_count": unknown_event_count,
+            "ndjson_unknown_item_count": unknown_item_count,
+        },
+        {},
+        OUTCOME_ANOMALY_SEQ_SENTINEL,
+        OUTCOME_ANOMALY_PID_SENTINEL,
+    )
+
+
 def detect_anomalies(
     snapshots: list[dict[str, object]],
     pid: int,

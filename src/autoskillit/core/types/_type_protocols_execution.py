@@ -338,6 +338,8 @@ class HeadlessExecutor(Protocol):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
         execution_identity: ExecutionIdentity = ExecutionIdentity.empty(),
+        child_role: str | None = None,
+        child_attribution_skill: str = "",
     ) -> SkillResult: ...
 
     async def dispatch_food_truck(

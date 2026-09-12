@@ -498,6 +498,7 @@ def _flush(
         "loc_insertions": 0,
         "loc_deletions": 0,
         "subagent_model_outcomes": (),
+        "child_outcomes": (),
         "model_identity": ModelIdentity.unknown(),
         "execution_identity": ExecutionIdentity.empty(),
     }
@@ -532,6 +533,7 @@ def _flush(
         loc_insertions=defaults.pop("loc_insertions"),
         loc_deletions=defaults.pop("loc_deletions"),
         subagent_model_outcomes=defaults.pop("subagent_model_outcomes"),
+        child_outcomes=defaults.pop("child_outcomes"),
         execution_identity=defaults.pop("execution_identity"),
     )
 

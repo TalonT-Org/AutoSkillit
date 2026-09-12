@@ -104,6 +104,7 @@ class TestExecutionTypesNotInResults:
             BackendPinResolution,
             ChildExecutionIdentity,
             ChildExecutionIdentityDict,
+            ChildOutcomeDict,
             ExecutionIdentity,
             ExecutionIdentityDict,
         )
@@ -114,11 +115,13 @@ class TestExecutionTypesNotInResults:
         assert resolution.kind is None
         assert get_type_hints(BackendPinResolution)["kind"] == BackendAuthorityKind | None
         assert BackendAuthorityKind.__module__.endswith("._type_execution_identity")
+        assert ChildOutcomeDict.__module__.endswith("._type_execution_identity")
         assert set(identity_all) == {
             "BackendAuthorityKind",
             "BackendPinResolution",
             "ChildExecutionIdentity",
             "ChildExecutionIdentityDict",
+            "ChildOutcomeDict",
             "ExecutionIdentity",
             "ExecutionIdentityDict",
         }

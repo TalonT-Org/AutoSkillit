@@ -613,6 +613,9 @@ def main(argv: list[str]) -> int:
     except subprocess.TimeoutExpired:
         print("git timed out while reading the base revision.", file=sys.stderr)
         return 1
+    except (OSError, UnicodeError) as exc:
+        print(f"{HUMAN_REQUIRED_MARKER} unable to read policy sources: {exc}", file=sys.stderr)
+        return 1
     if diagnostics:
         print("Acceptance-policy relaxations require human approval:\n")
         for diagnostic in diagnostics:

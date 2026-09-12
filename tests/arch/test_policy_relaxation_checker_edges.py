@@ -27,3 +27,20 @@ def test_exemption_rejects_unknown_keyword() -> None:
             'EXEMPTIONS = {"entry": Exemption(limit=1, owner="team")}',
             surface,
         )
+
+
+@pytest.mark.parametrize("error", [OSError("denied"), UnicodeError("invalid text")])
+def test_main_reports_source_read_errors(
+    error: Exception,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_evaluation(*_args: object) -> list[str]:
+        raise error
+
+    monkeypatch.setattr(check, "evaluate", fail_evaluation)
+
+    assert check.main(["--staged", "--repo-root", "."]) == 1
+    assert capsys.readouterr().err == (
+        f"{check.HUMAN_REQUIRED_MARKER} unable to read policy sources: {error}\n"
+    )

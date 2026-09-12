@@ -510,9 +510,8 @@ class TestNudgeRetainedBindingAndManagedCatalog:
         assert result is not None and result.success is True
         assert mock_runner.call_args_list, "runner was never called"
         call_kwargs = mock_runner.call_args_list[0][3]
-        # backend is a Mock(): every call to backend.line_driver(...) returns the
-        # same auto-specced Mock singleton, so identity here proves the runner
-        # received exactly backend.line_driver(spec)'s return value.
+        # Mock()'s singleton return value: this only proves the runner got whatever
+        # backend.line_driver(...) returns, not that it was called with the right spec.
         assert call_kwargs["line_driver"] is backend.line_driver.return_value
         backend.line_driver.assert_called_once()
 

@@ -70,13 +70,15 @@ logger = get_logger(__name__)
 
 
 class _CodexSessionReconciliationMixin:
-    def _publish_completed_view(self, view_path: Path, parent_ids: tuple[str, ...]) -> bool:
+    def _publish_completed_view(
+        self, view_path: Path, parent_session_ids: tuple[str, ...]
+    ) -> bool:
         """Publish native child snapshots, then remove the validated completed view."""
         from autoskillit.execution.child_outcomes import collect_codex_observed_children
 
         store = cast("CodexSessionStore", self)
         publication_succeeded = True
-        for parent_session_id in dict.fromkeys(parent_ids):
+        for parent_session_id in dict.fromkeys(parent_session_ids):
             try:
                 parent_rollout_path = store.locate_session(parent_session_id)
                 if parent_rollout_path is None:

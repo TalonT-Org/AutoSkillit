@@ -255,13 +255,10 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             backend=backend,
             session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
         )
-        # A managed generated-home catalog is only meaningful for backends that
-        # cannot already serve skills from an explicit plugin directory (Codex).
-        # Backends with plugin_install_capable=True (Claude) get their skill
-        # content from capability_preparation.finalize()'s existing projection
-        # into that plugin dir, as before Part D — materializing a *second*,
-        # separate ephemeral catalog for them would duplicate bundled skills
-        # already served via --plugin-dir and fail session-layout validation.
+        # A managed generated-home catalog only applies to backends that can't
+        # serve skills from an explicit plugin directory; backends that can
+        # (plugin_install_capable) already get skills via --plugin-dir, so a
+        # second ephemeral catalog would duplicate content and fail validation.
         managed_catalog_requested = (
             capability_preparation is not None
             and backend.capabilities.skill_injection_capable
@@ -271,12 +268,10 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             backend,
             requires_generated_home=managed_catalog_requested,
         )
-        # Capability projection always needs one exact artifact binding to
-        # project from, independent of whether the physical launch itself
-        # consumes an artifact — a GENERATED_HOME launch (e.g. a managed Codex
-        # catalog) carries no launch-level binding at all, so a non-consuming
-        # plugin_load_mode is coerced to PROJECTED_HOME for this acquisition
-        # only, mirroring _launch_cook_session's projection_load_mode pattern.
+        # Capability projection always needs one binding to project from, even
+        # when the launch itself consumes none (e.g. GENERATED_HOME) -- so a
+        # non-consuming mode is coerced to PROJECTED_HOME here, mirroring
+        # _launch_cook_session's projection_load_mode pattern.
         projection_load_mode = (
             plugin_load_mode
             if plugin_load_mode.consumes_artifact
@@ -308,15 +303,10 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             else None
         )
 
-        # The projection binding — always one that consumes an artifact,
-        # coerced above when the physical launch itself does not (Codex's
-        # GENERATED_HOME) — spans the complete logical dispatch: main attempt,
-        # provider retry, and nudge, not just spec-builder construction. The
-        # binding actually threaded into the physical launch (`launch_binding`,
-        # below) is this same object only when the launch's own load mode
-        # consumes an artifact; otherwise the launch carries none at all, and
-        # every physical attempt inside `_execute_claude_headless` reuses
-        # whichever of the two applies rather than re-acquiring independently.
+        # This binding spans the whole logical dispatch (main attempt, provider
+        # retry, and nudge), not just this construction -- every physical attempt
+        # reuses it (or the coerced `launch_binding` below) rather than
+        # re-acquiring independently.
         with plugin_launch_binding_scope(
             authority=resolved_plugin_authority,
             backend=backend,

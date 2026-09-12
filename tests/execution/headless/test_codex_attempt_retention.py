@@ -366,6 +366,154 @@ async def test_generated_home_attempt_retains_rollout_before_nudge_and_named_res
 
 
 @pytest.mark.anyio
+async def test_generated_home_attempt_and_nudge_reuse_retained_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller-retained binding threads through both the main generated-home
+    attempt and its nudge without either ever acquiring a fresh one from the
+    plugin artifact authority — mirroring how
+    ``DefaultHeadlessExecutor.dispatch_food_truck`` retains one binding across
+    the complete logical dispatch (main attempt + nudge + retry).
+    """
+    from autoskillit.execution.headless._headless_launch import (
+        _attempt_contract_nudge,
+        _run_headless_attempt,
+    )
+    from tests.execution.backends._plugin_binding import plugin_binding
+
+    backend = _retention_backend(tmp_path, monkeypatch)
+    cwd = tmp_path.resolve()
+    home = _generated_home(tmp_path, "retained-home")
+    plugin_dir = tmp_path / "plugin"
+    plugin_dir.mkdir()
+    authority = FakePluginArtifactAuthority(plugin_dir)
+    retained_plugin_dir = tmp_path / "retained-plugin"
+    retained_plugin_dir.mkdir()
+    retained_binding = plugin_binding(retained_plugin_dir, inherited_fds=(99,))
+
+    def build_with_retained_binding(binding, _extras, _attempt_id=None) -> CmdSpec:
+        assert binding is retained_binding, (
+            "the retained binding must reach build_spec directly, not a freshly "
+            "acquired (or absent) one"
+        )
+        return CmdSpec(
+            cmd=("codex", "exec", "/autoskillit:test"),
+            cwd=str(cwd),
+            env={"CODEX_HOME": str(home), "CODEX_SQLITE_HOME": str(home)},
+            inherited_fds=binding.inherited_fds,
+        )
+
+    runner = _RolloutRunner(write_rollout=True, reap=True)
+    launch_resolver, launch_preparation = _launch_inputs(backend, cwd=str(cwd))
+
+    await _run_headless_attempt(
+        build_spec=build_with_retained_binding,
+        runner=runner,
+        backend=backend,
+        launch_resolver=launch_resolver,
+        launch_preparation=launch_preparation,
+        expected_launch_contract=None,
+        plugin_authority=authority,
+        plugin_load_mode=PluginLoadMode.GENERATED_HOME,
+        provider_extras=None,
+        timeout=10.0,
+        pty_override=False,
+        completion_marker="%%DONE%%",
+        stale_threshold=1.0,
+        completion_drain_timeout=1.0,
+        natural_exit_grace_seconds=1.0,
+        linux_tracing_config=None,
+        idle_output_timeout=None,
+        max_suppression_seconds=0.0,
+        child_deferral_ceiling=0.0,
+        on_spawn=None,
+        enable_deadline_extension=False,
+        max_extension_seconds=0.0,
+        ceiling_seconds=_EXECUTION_CEILING_SECONDS,
+        systemd_scope_enabled=False,
+        marker_dir=None,
+        session_id=None,
+        on_session_id_resolved=None,
+        stream_parser=Mock(),
+        backend_resume_session_id="",
+        lifecycle_observation_enabled=False,
+        attempt=1,
+        managed_attempt_id="d" * 32,
+        retained_binding=retained_binding,
+    )
+
+    assert authority.bindings == [], "retained_binding must bypass fresh acquisition"
+    assert 99 in runner.calls[0]["pass_fds"]
+
+    def build_resume_cmd(**kwargs: object) -> CmdSpec:
+        session_home = str(kwargs["session_home"])
+        binding = kwargs["plugin_binding"]
+        return CmdSpec(
+            cmd=("codex", "exec", "resume", _THREAD_ID),
+            cwd=str(cwd),
+            env={"CODEX_HOME": session_home, "CODEX_SQLITE_HOME": session_home},
+            is_resume=True,
+            inherited_fds=binding.inherited_fds if binding is not None else (),
+        )
+
+    backend.build_resume_cmd.side_effect = build_resume_cmd
+    nudge_resolver, nudge_preparation = _launch_inputs(backend, cwd=str(cwd))
+    nudge_parser = Mock()
+    nudge_parser.parse_stdout.return_value = SimpleNamespace(
+        output="%%DONE%%", raw={}, session_id=_THREAD_ID
+    )
+
+    nudge_result = await _attempt_contract_nudge(
+        skill_result=SkillResult(
+            success=False,
+            result="",
+            session_id=_THREAD_ID,
+            subtype="empty_output",
+            is_error=False,
+            exit_code=0,
+            needs_retry=True,
+            retry_reason=RetryReason.EARLY_STOP,
+            stderr="",
+            kill_reason=KillReason.NATURAL_EXIT,
+            evidence=WriteEvidence.none_observed(),
+        ),
+        subprocess_result=SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        ),
+        expected_output_patterns=[],
+        completion_marker="%%DONE%%",
+        cwd=str(cwd),
+        runner=runner,
+        backend=backend,
+        result_parser=nudge_parser,
+        retry_reason=RetryReason.EARLY_STOP,
+        plugin_authority=authority,
+        plugin_load_mode=PluginLoadMode.GENERATED_HOME,
+        session_env={"CODEX_HOME": str(home)},
+        launch_resolver=nudge_resolver,
+        launch_preparation=nudge_preparation,
+        natural_exit_grace_seconds=1.0,
+        attempt=2,
+        ceiling_seconds=_EXECUTION_CEILING_SECONDS,
+        retained_binding=retained_binding,
+    )
+
+    assert nudge_result is not None and nudge_result.success
+    assert authority.bindings == [], "retained_binding must be reused for the nudge too"
+    assert backend.build_resume_cmd.call_args.kwargs["plugin_binding"] is retained_binding
+    assert 99 in runner.calls[1]["pass_fds"]
+    assert retained_binding.closed is False, (
+        "the caller (not _run_headless_attempt/_attempt_contract_nudge) owns "
+        "closing a binding it retained"
+    )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("mode", "write_rollout", "reap", "termination"),
     [

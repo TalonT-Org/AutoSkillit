@@ -1,4 +1,13 @@
-"""Tests for _codex_exec_base shared command preamble factory."""
+"""Arch guard: no raw `["codex", "exec", ...]` list literal in CodexBackend.
+
+`_codex_exec_base` (the exec-transport command preamble factory this file
+used to unit-test) was removed when Part D converted every remaining
+exec-transport Codex builder (`build_headless_cmd`, `build_food_truck_cmd`,
+`build_resume_cmd`) to the app-server transport; `build_skill_session_cmd`
+made the same move in Part C. Only `build_interactive_cmd` still speaks
+exec-style argv, and it never used a raw list literal for the `codex exec`
+preamble.
+"""
 
 from __future__ import annotations
 
@@ -7,43 +16,9 @@ import inspect
 
 import pytest
 
-from autoskillit.execution.backends.codex import CodexBackend, CodexFlags, _codex_exec_base
+from autoskillit.execution.backends.codex import CodexBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-
-class TestCodexExecBase:
-    def test_returns_expected_preamble(self) -> None:
-        result = _codex_exec_base(sandbox="workspace-write", bypass_hook_trust=False)
-        assert result == [
-            "codex",
-            "exec",
-            "--json",
-            "--sandbox",
-            "workspace-write",
-            "-c",
-            "features.image_generation=false",
-        ]
-
-    def test_without_json(self) -> None:
-        result = _codex_exec_base(sandbox="read-only", json=False)
-        assert "--json" not in result
-
-    def test_with_extra_overrides(self) -> None:
-        result = _codex_exec_base(sandbox="read-only", extra_overrides=["web_search=disabled"])
-        config_indices = [i for i, v in enumerate(result) if v == "-c"]
-        assert len(config_indices) == 2
-        assert result[config_indices[0] + 1] == "web_search=disabled"
-        assert result[config_indices[1] + 1] == "features.image_generation=false"
-
-    def test_bypass_hook_trust_appends_flag(self) -> None:
-        result = _codex_exec_base(sandbox="workspace-write", bypass_hook_trust=True)
-        assert CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST in result
-        config_indices = [i for i, v in enumerate(result) if v == "-c"]
-        last_config_end = config_indices[-1] + 1
-        trust_idx = result.index(CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST)
-        assert trust_idx > last_config_end
-        assert trust_idx == len(result) - 1
 
 
 class TestNoRawCodexExecListLiteral:
@@ -76,5 +51,7 @@ class TestNoRawCodexExecListLiteral:
                                 break
                 raise AssertionError(
                     f"Raw ['codex', 'exec', ...] list literal found in "
-                    f"CodexBackend.{func_name}. Use _codex_exec_base() instead."
+                    f"CodexBackend.{func_name}. Codex no longer speaks the exec "
+                    f"transport for this construction path; route through the "
+                    f"shared command-builder helpers instead of inlining argv."
                 )

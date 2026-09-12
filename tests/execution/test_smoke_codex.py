@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 import pytest
 
-from autoskillit.core import BackendEventKind, SessionEvent
+from autoskillit.core import BackendEventKind, SessionEvent, ValidatedAddDir
 from autoskillit.core.types import Severity
 from autoskillit.execution.backends import CompositeSessionLocator
 from autoskillit.execution.backends.codex import (
@@ -122,19 +122,36 @@ class TestCodexSmokeInteractiveCmdBuild:
 @_skip_unless_codex_smoke
 @pytest.mark.smoke
 class TestCodexSmokeFoodTruckCmdBuild:
-    """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec."""
+    """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec.
+
+    Part D moved food-truck launches to the app-server transport: sandbox no
+    longer lives on argv (it flows through CodexAppServerPlan.sandbox / the
+    JSON-RPC thread config instead — see
+    tests/execution/backends/test_codex_backend.py::TestCodexBuildFoodTruckCmd::
+    test_no_sandbox_flag_sandbox_is_read_only_in_plan for the source-verified
+    pattern this mirrors), and building now requires a real managed skill
+    catalog (raises ValueError without one).
+    """
 
     def test_food_truck_cmd_has_required_flags(self) -> None:
+        catalog = ValidatedAddDir(
+            path="/tmp/add-dir",
+            session_home="/tmp",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        )
         with plugin_binding(Path("/tmp/fake-plugin")) as binding:
             cmd = CodexBackend().build_food_truck_cmd(
                 orchestrator_prompt="test",
                 plugin_binding=binding,
                 cwd="/tmp",
                 completion_marker="DONE",
+                managed_skill_catalog=catalog,
             )
-        assert "--json" in cmd.cmd
-        assert "--sandbox" in cmd.cmd
-        assert cmd.cmd[cmd.cmd.index("--sandbox") + 1] == "read-only"
+        assert cmd.cmd[:4] == ("codex", "app-server", "--listen", "stdio://")
+        assert "--json" not in cmd.cmd
+        assert "--sandbox" not in cmd.cmd
+        assert cmd.app_server_plan is not None
+        assert cmd.app_server_plan.sandbox == "read-only"
 
 
 @_skip_unless_codex_smoke

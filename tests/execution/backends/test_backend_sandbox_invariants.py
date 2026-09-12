@@ -46,10 +46,11 @@ class TestCodexSandboxInvariants:
             plugin_binding=plugin_binding(Path("/pkg")),
             cwd="",
             completion_marker="%%DONE%%",
+            managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
         )
-        positions = [i for i, v in enumerate(spec.cmd) if v == "--sandbox"]
-        assert len(positions) == 1, f"expected exactly one --sandbox, got {len(positions)}"
-        assert spec.cmd[positions[0] + 1] == "read-only"
+        assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == "read-only"
 
 
 class TestClaudeCodeSandboxAbsence:

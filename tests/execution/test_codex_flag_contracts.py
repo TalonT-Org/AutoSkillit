@@ -6,12 +6,7 @@ import pytest
 
 from autoskillit.core import BareResume, NamedResume, NoResume, OutputFormat
 from autoskillit.core.types import CmdSpec
-from autoskillit.execution.backends.codex import (
-    CODEX_EXEC_FLAGS,
-    CODEX_TOP_LEVEL_ONLY_FLAGS,
-    CodexBackend,
-    CodexFlags,
-)
+from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 from autoskillit.execution.headless._headless_helpers import _CODEX_VALUE_BEARING_FLAGS
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
@@ -42,6 +37,7 @@ def _build_food_truck(*, resume_session_id: str = "") -> CmdSpec:
             cwd="/work",
             completion_marker="%%DONE%%",
             resume_session_id=resume_session_id,
+            managed_skill_catalog=codex_skill_add_dirs("/work")[0],
         )
 
 
@@ -72,64 +68,6 @@ class TestCodexExecFlagValues:
 
     def test_dangerously_bypass_hook_trust_value(self) -> None:
         assert CodexFlags.DANGEROUSLY_BYPASS_HOOK_TRUST == "--dangerously-bypass-hook-trust"
-
-
-class TestCodexFlagRegistryAudit:
-    @pytest.fixture(autouse=True)
-    def _clean_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
-        monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
-
-    @pytest.mark.parametrize(
-        "builder_call",
-        [
-            _build_food_truck,
-            lambda: _build_food_truck(resume_session_id="sess-test"),
-            lambda: CodexBackend().build_headless_cmd("do stuff"),
-            lambda: CodexBackend().build_resume_cmd(
-                resume_session_id="sess-test", prompt="continue"
-            ),
-        ],
-        ids=[
-            "food_truck",
-            "food_truck_resume",
-            "headless",
-            "resume",
-        ],
-    )
-    def test_exec_builder_flags_are_all_in_codex_exec_flags(self, builder_call) -> None:
-        """build_skill_session_cmd moved to the app-server transport and no longer
-        speaks the codex-exec flag vocabulary; its shape is covered by
-        test_codex_exec_builder_invariants.py::test_skill_session_builder_starts_with_codex_app_server."""
-        spec = builder_call()
-        flags = _extract_flags(spec.cmd)
-        unknown = flags - CODEX_EXEC_FLAGS
-        assert not unknown, (
-            f"Builder produced flags not valid for codex exec: {unknown}. "
-            f"If this flag is valid for codex exec, add it to CODEX_EXEC_FLAGS."
-        )
-
-
-class TestCodexExecFlagMetadataCoverage:
-    def test_every_flag_member_is_categorized(self) -> None:
-        flag_members = {m for m in CodexFlags if str(m).startswith("-")}
-        categorized = CODEX_EXEC_FLAGS | CODEX_TOP_LEVEL_ONLY_FLAGS
-        uncategorized = flag_members - categorized
-        assert not uncategorized, (
-            f"CodexFlags members not categorized in CODEX_EXEC_FLAGS or "
-            f"CODEX_TOP_LEVEL_ONLY_FLAGS: {uncategorized}. "
-            f"Add to the appropriate set."
-        )
-
-    def test_exec_and_top_level_are_disjoint(self) -> None:
-        overlap = CODEX_EXEC_FLAGS & CODEX_TOP_LEVEL_ONLY_FLAGS
-        assert not overlap, f"Flags in both sets: {overlap}"
-
-    def test_all_categorized_flags_are_valid_members(self) -> None:
-        all_flags = frozenset(CodexFlags)
-        categorized = CODEX_EXEC_FLAGS | CODEX_TOP_LEVEL_ONLY_FLAGS
-        invalid = categorized - all_flags
-        assert not invalid, f"Categorized flags not in CodexFlags: {invalid}"
 
 
 class TestCodexValueBearingFlagsSubset:

@@ -258,33 +258,32 @@ class TestCodexBackendCommands:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert spec.cmd[0] == "codex"
 
-    def test_build_headless_cmd_exec_at_1(self) -> None:
+    def test_build_headless_cmd_app_server_at_1(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.cmd[1] == "exec"
+        assert spec.cmd[1] == "app-server"
 
-    def test_build_headless_cmd_has_json_flag(self) -> None:
+    def test_build_headless_cmd_no_json_flag(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert "--json" in spec.cmd
+        assert "--json" not in spec.cmd
 
-    def test_build_headless_cmd_has_sandbox_flag(self) -> None:
+    def test_build_headless_cmd_sandbox_in_plan(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert "--sandbox" in spec.cmd
-        idx = spec.cmd.index("--sandbox")
-        assert spec.cmd[idx + 1] == "workspace-write"
+        assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan.sandbox == "workspace-write"
 
     def test_no_approval_flag_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "-a" not in spec.cmd
 
-    def test_build_headless_cmd_prompt_is_last(self) -> None:
+    def test_build_headless_cmd_prompt_on_plan_not_argv(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert spec.cmd[-1] == "do stuff"
+        assert spec.app_server_plan.prompt == "do stuff"
+        assert "do stuff" not in spec.cmd
 
     def test_build_headless_cmd_with_model(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff", model="o3")
-        assert "--model" in spec.cmd
-        idx = spec.cmd.index("--model")
-        assert spec.cmd[idx + 1] == "o3"
+        assert "--model" not in spec.cmd
+        assert spec.app_server_plan.model == CodexBackend().translate_model("o3")
 
     def test_build_headless_cmd_returns_cmd_spec(self) -> None:
         spec = CodexBackend().build_headless_cmd("x")
@@ -343,12 +342,18 @@ class TestCodexBackendCommands:
                 ),
             ),
         )
+        food_truck_catalog = ValidatedAddDir(
+            path="/repo/add-dir",
+            session_home="/repo",
+            skill_entries=(("investigate", "investigate/SKILL.md"),),
+        )
         food_truck = CodexBackend().build_food_truck_cmd(
             orchestrator_prompt="dispatch",
             plugin_binding=None,
             cwd="/repo",
             completion_marker="DONE",
             env_extras=OTLP_EXTRAS,
+            managed_skill_catalog=food_truck_catalog,
         )
         skill_overrides = _config_overrides(skill)
         food_truck_overrides = _config_overrides(food_truck)
@@ -357,7 +362,9 @@ class TestCodexBackendCommands:
             skill.app_server_plan.config_overrides["sandbox_workspace_write.network_access"]
             is True
         )
-        assert "web_search=disabled" in food_truck_overrides
+        assert food_truck.app_server_plan is not None
+        assert food_truck.app_server_plan.config_overrides["web_search"] == "disabled"
+        assert "web_search=disabled" not in food_truck_overrides
         assert tuple(value for value in skill_overrides if value.startswith("otel.")) == (
             _OTLP_OVERRIDES
         )
@@ -376,16 +383,24 @@ class TestCodexBackendCommands:
         assert spec.cmd[0] == "codex"
         assert spec.cwd == "/work"
 
+    def test_build_cmd_rewrites_both_spec_and_plan_cwd(self) -> None:
+        """build_cmd's shallow replace() must update both CmdSpec.cwd and the
+        nested app_server_plan.cwd, not just the outer spec (Part D)."""
+        spec = CodexBackend().build_cmd("do stuff", "/work")
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.cwd == "/work"
+
     def test_build_resume_cmd_with_session_id(self) -> None:
         from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_resume_cmd(resume_session_id="sess-123", prompt="continue")
         assert spec.cmd[0] == "codex"
-        assert spec.cmd[1] == "exec"
-        assert "resume" in spec.cmd
-        assert "sess-123" in spec.cmd
-        assert spec.cmd[-1].endswith("continue")
-        assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert spec.cmd[1] == "app-server"
+        assert "resume" not in spec.cmd
+        assert "sess-123" not in spec.cmd
+        assert spec.app_server_plan.resume_thread_id == "sess-123"
+        assert spec.app_server_plan.prompt == "continue"
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.app_server_plan.developer_instructions
 
     def test_resume_cmd_prepends_discipline_digests(self) -> None:
         from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
@@ -393,9 +408,10 @@ class TestCodexBackendCommands:
         spec = CodexBackend().build_resume_cmd(
             resume_session_id="sess-123", prompt="continue working"
         )
-        assert spec.cmd[-1].startswith(OUTPUT_DISCIPLINE_DIGEST)
-        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
-        assert spec.cmd[-1].endswith("continue working")
+        instructions = spec.app_server_plan.developer_instructions
+        assert instructions.startswith(OUTPUT_DISCIPLINE_DIGEST)
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in instructions
+        assert spec.app_server_plan.prompt == "continue working"
 
     def test_build_resume_cmd_empty_id_raises(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -418,23 +434,27 @@ class TestCodexBackendCommands:
         assert spec.env["CODEX_HOME"] == "/session-home"
         assert spec.env["CODEX_SQLITE_HOME"] == "/session-home"
 
-    def test_build_resume_cmd_falls_back_to_plugin_home_without_session_home(self) -> None:
+    def test_build_resume_cmd_does_not_select_plugin_home_without_session_home(self) -> None:
+        """Part D: 'Do not select a plugin projection as CODEX_HOME' for resume —
+        without an explicit/managed home, resume proceeds against the selected
+        native home and registers no managed root at all."""
         spec = CodexBackend().build_resume_cmd(
             resume_session_id="sess-123",
             prompt="continue",
             plugin_binding=plugin_binding(Path("/plugin")),
         )
-        assert spec.env["CODEX_HOME"] == "/plugin"
+        assert "CODEX_HOME" not in spec.env
         assert "CODEX_SQLITE_HOME" not in spec.env
+        assert spec.app_server_plan.session_home == ""
 
     def test_build_resume_cmd_env_uses_filtered_base(self, monkeypatch) -> None:
         monkeypatch.setenv("PATH", "/usr/bin")
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
         assert "PATH" in spec.env
 
-    def test_build_resume_cmd_has_json_flag(self) -> None:
+    def test_build_resume_cmd_no_json_flag(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
-        assert "--json" in spec.cmd
+        assert "--json" not in spec.cmd
 
     def test_build_interactive_cmd_returns_cmd_spec(self) -> None:
         spec = CodexBackend().build_interactive_cmd()
@@ -550,44 +570,38 @@ class TestCodexHeadlessCmd:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert spec.cmd == (
             "codex",
-            "exec",
-            "--json",
-            "--sandbox",
-            "workspace-write",
+            "app-server",
+            "--listen",
+            "stdio://",
             "-c",
             "features.image_generation=false",
-            "do stuff",
         )
 
-    def test_sandbox_with_workspace_write(self) -> None:
+    def test_sandbox_with_workspace_write_in_plan(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
-        assert "--sandbox" in spec.cmd
-        idx = spec.cmd.index("--sandbox")
-        assert spec.cmd[idx + 1] == "workspace-write"
+        assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == "workspace-write"
 
     def test_no_approval_never_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "-a" not in spec.cmd
         assert "never" not in spec.cmd
+        assert spec.app_server_plan.approval_policy == "never"
 
-    def test_model_flag(self) -> None:
+    def test_model_carried_on_plan(self) -> None:
         spec = CodexBackend().build_headless_cmd("x", model="o3")
-        assert "--model" in spec.cmd
-        idx = spec.cmd.index("--model")
-        assert spec.cmd[idx + 1] == "o3"
+        assert "--model" not in spec.cmd
+        assert spec.app_server_plan.model == CodexBackend().translate_model("o3")
 
-    def test_add_dir_flag(self) -> None:
+    def test_add_dir_becomes_runtime_workspace_root(self) -> None:
         spec = CodexBackend().build_headless_cmd("x", add_dirs=["/extra"])
-        assert "--add-dir" in spec.cmd
-        idx = spec.cmd.index("--add-dir")
-        assert spec.cmd[idx + 1] == "/extra"
+        assert "--add-dir" not in spec.cmd
+        assert spec.app_server_plan.runtime_workspace_roots == ("/extra",)
 
-    def test_multiple_add_dir_flags(self) -> None:
+    def test_multiple_add_dirs_become_runtime_workspace_roots(self) -> None:
         spec = CodexBackend().build_headless_cmd("x", add_dirs=["/a", "/b"])
-        add_dir_indices = [i for i, v in enumerate(spec.cmd) if v == "--add-dir"]
-        assert len(add_dir_indices) == 2
-        assert spec.cmd[add_dir_indices[0] + 1] == "/a"
-        assert spec.cmd[add_dir_indices[1] + 1] == "/b"
+        assert spec.app_server_plan.runtime_workspace_roots == ("/a", "/b")
 
     def test_no_dangerously_skip_permissions(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
@@ -605,29 +619,57 @@ class TestCodexHeadlessCmd:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "--output-format" not in spec.cmd
 
-    def test_bypass_hook_trust_absent_from_headless_cmd(self) -> None:
+    def test_bypass_hook_trust_absent_from_argv_true_in_plan(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert "--dangerously-bypass-hook-trust" not in spec.cmd
+        assert spec.app_server_plan.bypass_hook_trust is True
+
+    def test_no_catalog_registered_no_managed_skill_catalog(self) -> None:
+        """Ordinary headless launches have no managed catalog and register no
+        extra skill root — the server's native home is used as-is."""
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert spec.managed_skill_catalog is None
+        assert spec.app_server_plan.catalog_root == ""
+        assert spec.app_server_plan.expected_skill_names == frozenset()
+        assert spec.app_server_plan.expected_skill_entries == ()
+
+    def test_empty_home_sentinel_when_no_finalized_codex_home(self, monkeypatch) -> None:
+        monkeypatch.delenv("CODEX_HOME", raising=False)
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert spec.app_server_plan.session_home == ""
+
+    def test_explicit_home_resolved_from_finalized_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("CODEX_HOME", "/tmp/explicit-codex-home")
+        spec = CodexBackend().build_headless_cmd("do stuff")
+        assert spec.app_server_plan.session_home == "/tmp/explicit-codex-home"
 
 
 class TestCodexResumeCmd:
-    def test_positional_structure(self) -> None:
+    def test_app_server_cmd_structure(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert spec.cmd == (
+            "codex",
+            "app-server",
+            "--listen",
+            "stdio://",
+            "-c",
+            "features.image_generation=false",
+        )
+
+    def test_resume_thread_id_and_prompt_carried_on_plan(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.resume_thread_id == "abc123"
+        assert spec.app_server_plan.prompt == "continue"
+
+    def test_discipline_suffix_carried_as_developer_instructions(self) -> None:
         from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert spec.cmd[:-1] == (
-            "codex",
-            "exec",
-            "--json",
-            "--sandbox",
-            "read-only",
-            "-c",
-            "features.image_generation=false",
-            "resume",
-            "abc123",
-        )
-        assert spec.cmd[-1].startswith(OUTPUT_DISCIPLINE_DIGEST)
-        assert spec.cmd[-1].endswith("continue")
+        assert spec.app_server_plan.developer_instructions is not None
+        assert spec.app_server_plan.developer_instructions.startswith(OUTPUT_DISCIPLINE_DIGEST)
+        # the prompt itself is no longer concatenated with the discipline suffix
+        assert spec.app_server_plan.prompt == "continue"
 
     def test_empty_session_id_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -641,23 +683,12 @@ class TestCodexResumeCmd:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
         assert "-a" not in spec.cmd
         assert "never" not in spec.cmd
+        assert spec.app_server_plan.approval_policy == "never"
 
-    def test_json_flag_present_in_resume(self) -> None:
+    def test_resume_cmd_sandbox_is_read_only_in_plan(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert "--json" in spec.cmd
-
-    def test_non_json_output_format_omits_json_flag(self) -> None:
-        spec = CodexBackend().build_resume_cmd(
-            resume_session_id="abc123",
-            prompt="continue",
-            output_format=OutputFormat.STREAM_JSON,
-        )
-        assert "--json" not in spec.cmd
-
-    def test_resume_cmd_includes_sandbox_flag(self) -> None:
-        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert "--sandbox" in spec.cmd
-        assert "read-only" in spec.cmd
+        assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan.sandbox == "read-only"
 
     def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
@@ -670,9 +701,76 @@ class TestCodexResumeCmd:
         leaking = (_HEADLESS_EXCLUSIVE_VARS - reinjected) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into resume env: {leaking}"
 
-    def test_bypass_hook_trust_absent_from_resume_cmd(self) -> None:
+    def test_bypass_hook_trust_absent_from_argv_true_in_plan(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="s1", prompt="go")
         assert "--dangerously-bypass-hook-trust" not in spec.cmd
+        assert spec.app_server_plan.bypass_hook_trust is True
+
+    def test_no_managed_catalog_no_registration(self) -> None:
+        spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
+        assert spec.managed_skill_catalog is None
+        assert spec.app_server_plan.catalog_root == ""
+        assert spec.app_server_plan.expected_skill_names == frozenset()
+
+    def test_no_plugin_projection_selected_as_codex_home(self, monkeypatch) -> None:
+        """Part D removed CODEX_HOME-from-plugin-binding selection for resume; a
+        non-managed resume preserves the selected native/explicit home only."""
+        monkeypatch.delenv("CODEX_HOME", raising=False)
+        binding = plugin_binding(Path("/some-plugin-dir"))
+        spec = CodexBackend().build_resume_cmd(
+            resume_session_id="abc123", prompt="continue", plugin_binding=binding
+        )
+        assert "CODEX_HOME" not in spec.env
+        assert spec.app_server_plan.session_home == ""
+
+    def test_managed_catalog_requires_nonempty_session_home(self) -> None:
+        catalog = ValidatedAddDir(
+            path="/tmp/session/add-dir", session_home="", skill_entries=(("foo", "foo/SKILL.md"),)
+        )
+        with pytest.raises(ValueError, match="managed resume"):
+            CodexBackend().build_resume_cmd(
+                resume_session_id="abc123", prompt="continue", managed_skill_catalog=catalog
+            )
+
+    def test_managed_catalog_requires_nonempty_entries(self) -> None:
+        catalog = ValidatedAddDir(
+            path="/tmp/session/add-dir", session_home="/tmp/session", skill_entries=()
+        )
+        with pytest.raises(ValueError, match="managed resume"):
+            CodexBackend().build_resume_cmd(
+                resume_session_id="abc123", prompt="continue", managed_skill_catalog=catalog
+            )
+
+    def test_managed_catalog_registers_frozen_catalog(self) -> None:
+        catalog = ValidatedAddDir(
+            path="/tmp/session/add-dir",
+            session_home="/tmp/session",
+            skill_entries=(("foo", "foo/SKILL.md"),),
+        )
+        spec = CodexBackend().build_resume_cmd(
+            resume_session_id="abc123", prompt="continue", managed_skill_catalog=catalog
+        )
+        assert spec.managed_skill_catalog == catalog
+        assert spec.app_server_plan.session_home == "/tmp/session"
+        assert spec.app_server_plan.catalog_root == "/tmp/session/add-dir/skills"
+        assert spec.app_server_plan.expected_skill_names == frozenset({"foo"})
+        assert spec.app_server_plan.expected_skill_entries == (("foo", "foo/SKILL.md"),)
+        assert spec.env["CODEX_HOME"] == "/tmp/session"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/tmp/session"
+
+    def test_managed_catalog_and_explicit_session_home_must_agree(self) -> None:
+        catalog = ValidatedAddDir(
+            path="/tmp/session/add-dir",
+            session_home="/tmp/session",
+            skill_entries=(("foo", "foo/SKILL.md"),),
+        )
+        with pytest.raises(ValueError, match="does not agree"):
+            CodexBackend().build_resume_cmd(
+                resume_session_id="abc123",
+                prompt="continue",
+                managed_skill_catalog=catalog,
+                session_home="/tmp/other-session",
+            )
 
 
 class TestCodexHeadlessCmdEnv:
@@ -1388,11 +1486,17 @@ class TestCodexDynaconfBackendEnv:
 
 
 class TestCodexBuildFoodTruckCmd:
+    _CATALOG = ValidatedAddDir(
+        path="/work/add-dir",
+        session_home="/work",
+        skill_entries=(("test", "test/SKILL.md"),),
+    )
     BASE: dict[str, object] = {
         "orchestrator_prompt": "dispatch the work",
         "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": _CATALOG,
     }
 
     @pytest.fixture(autouse=True)
@@ -1400,36 +1504,37 @@ class TestCodexBuildFoodTruckCmd:
         monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
         monkeypatch.delenv("AUTOSKILLIT_KITCHEN_SESSION_ID", raising=False)
 
-    # --- Structural / flag tests (non-resume) ---
+    # --- Structural / flag tests (app-server transport, non-resume) ---
 
     def test_cmd_0_is_codex(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert spec.cmd[0] == "codex"
 
-    def test_cmd_1_is_exec(self) -> None:
+    def test_app_server_cmd_prefix(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert spec.cmd[1] == "exec"
+        assert spec.cmd[:4] == ("codex", "app-server", "--listen", "stdio://")
 
-    def test_json_flag_present(self) -> None:
+    def test_no_json_flag(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "--json" in spec.cmd
+        assert "--json" not in spec.cmd
 
-    def test_sandbox_read_only(self) -> None:
+    def test_no_sandbox_flag_sandbox_is_read_only_in_plan(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "--sandbox" in spec.cmd
-        idx = spec.cmd.index("--sandbox")
-        assert spec.cmd[idx + 1] == "read-only"
+        assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == "read-only"
 
-    def test_config_override_web_search_disabled(self) -> None:
+    def test_config_override_web_search_disabled_in_plan(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "-c" in spec.cmd
-        idx = spec.cmd.index("-c")
-        assert spec.cmd[idx + 1] == "web_search=disabled"
+        assert spec.app_server_plan.config_overrides["web_search"] == "disabled"
+        # not on argv: sandbox/hook-trust/prompt/config no longer live in -c overrides
+        assert "web_search=disabled" not in _config_overrides(spec)
 
     def test_approval_never(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "-a" not in spec.cmd
         assert "never" not in spec.cmd
+        assert spec.app_server_plan.approval_policy == "never"
 
     def test_no_add_dir_flag(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
@@ -1439,9 +1544,45 @@ class TestCodexBuildFoodTruckCmd:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
         assert "--plugin-dir" not in spec.cmd
 
-    def test_fresh_food_truck_receives_projected_catalog_home(self) -> None:
+    def test_no_resume_thread_id_when_none(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert spec.env["CODEX_HOME"] == "/pkg"
+        assert spec.app_server_plan.resume_thread_id == ""
+
+    def test_food_truck_without_managed_catalog_raises(self) -> None:
+        base_without_catalog = {k: v for k, v in self.BASE.items() if k != "managed_skill_catalog"}
+        with pytest.raises(ValueError, match="managed catalog"):
+            CodexBackend().build_food_truck_cmd(**base_without_catalog)
+
+    def test_food_truck_with_catalog_missing_session_home_raises(self) -> None:
+        bad_catalog = ValidatedAddDir(
+            path="/work/add-dir", session_home="", skill_entries=(("test", "test/SKILL.md"),)
+        )
+        with pytest.raises(ValueError, match="managed catalog"):
+            CodexBackend().build_food_truck_cmd(
+                **{**self.BASE, "managed_skill_catalog": bad_catalog}
+            )
+
+    def test_food_truck_with_catalog_missing_entries_raises(self) -> None:
+        bad_catalog = ValidatedAddDir(path="/work/add-dir", session_home="/work", skill_entries=())
+        with pytest.raises(ValueError, match="managed catalog"):
+            CodexBackend().build_food_truck_cmd(
+                **{**self.BASE, "managed_skill_catalog": bad_catalog}
+            )
+
+    def test_managed_catalog_registered_on_plan_and_spec(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.managed_skill_catalog == self._CATALOG
+        assert spec.app_server_plan.catalog_root == "/work/add-dir/skills"
+        assert spec.app_server_plan.expected_skill_names == frozenset({"test"})
+        assert spec.app_server_plan.expected_skill_entries == (("test", "test/SKILL.md"),)
+
+    def test_fresh_food_truck_receives_bound_catalog_home_not_plugin_binding(self) -> None:
+        """Part D removed the CODEX_HOME-from-plugin-binding selection for food trucks —
+        CODEX_HOME now comes exclusively from the bound managed catalog's session_home."""
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert spec.env["CODEX_HOME"] == "/work"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/work"
+        assert spec.app_server_plan.session_home == "/work"
 
     def test_food_truck_forwards_explicit_inspector_model(self) -> None:
         from autoskillit.core import FLEET_INSPECTOR_MODEL_ENV_VAR
@@ -1454,30 +1595,34 @@ class TestCodexBuildFoodTruckCmd:
 
     def test_mcp_tools_only_prompt_reinforcement(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "ORCHESTRATION DIRECTIVE" in spec.cmd[-1]
+        assert "ORCHESTRATION DIRECTIVE" in spec.app_server_plan.prompt
 
     def test_fresh_orchestrator_includes_output_discipline_digest(self) -> None:
         from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert OUTPUT_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.app_server_plan.prompt
 
     def test_food_truck_includes_intake_discipline_digest(self) -> None:
         from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in spec.app_server_plan.prompt
 
     def test_food_truck_excludes_scope_discipline_digest(self) -> None:
         """Orchestrators dispatch run_skill calls; they never author code changes (#4478)."""
         from autoskillit.core import CODEX_SCOPE_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.cmd[-1]
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST not in spec.app_server_plan.prompt
 
-    def test_prompt_is_last_token(self) -> None:
+    def test_prompt_carried_on_plan(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "dispatch the work" in spec.cmd[-1]
+        assert "dispatch the work" in spec.app_server_plan.prompt
+
+    def test_no_production_builder_emits_prompt_as_argv_positional(self) -> None:
+        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
+        assert "dispatch the work" not in spec.cmd
 
     def test_returns_cmdspec_with_tuple_cmd(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
@@ -1522,55 +1667,41 @@ class TestCodexBuildFoodTruckCmd:
 
     # --- Resume path tests ---
 
-    def test_resume_subcommand_present(self) -> None:
+    def test_no_resume_argv_positional(self) -> None:
+        """Resume no longer flows through the codex-exec 'resume <id>' argv shape —
+        thread continuity is a JSON-RPC thread/resume field on the plan."""
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc"},
         )
-        assert "resume" in spec.cmd
+        assert "resume" not in spec.cmd
+        assert "sess-abc" not in spec.cmd
 
-    def test_resumed_food_truck_receives_same_projected_catalog_home(self) -> None:
+    def test_resumed_food_truck_receives_same_bound_catalog_home(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc"},
         )
-        assert spec.env["CODEX_HOME"] == "/pkg"
+        assert spec.env["CODEX_HOME"] == "/work"
 
-    def test_resume_session_id_follows_resume(self) -> None:
+    def test_resume_session_id_carried_on_plan(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc"},
         )
-        idx = spec.cmd.index("resume")
-        assert spec.cmd[idx + 1] == "sess-abc"
+        assert spec.app_server_plan.resume_thread_id == "sess-abc"
 
-    def test_resume_prompt_is_last(self) -> None:
+    def test_resume_prompt_carried_on_plan(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc"},
         )
-        assert "dispatch the work" in spec.cmd[-1]
-
-    def test_resume_json_flag_present(self) -> None:
-        spec = CodexBackend().build_food_truck_cmd(
-            **{**self.BASE, "resume_session_id": "sess-abc"},
-        )
-        assert "--json" in spec.cmd
+        assert "dispatch the work" in spec.app_server_plan.prompt
 
     def test_resume_cmd_structure(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
             **{**self.BASE, "resume_session_id": "sess-abc"},
         )
-        assert spec.cmd[0] == "codex"
-        assert spec.cmd[1] == "exec"
-        assert "--json" in spec.cmd
-        resume_idx = spec.cmd.index("resume")
-        assert spec.cmd[resume_idx + 1] == "sess-abc"
-        assert "dispatch the work" in spec.cmd[-1]
-
-    def test_no_resume_when_none(self) -> None:
-        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "resume" not in spec.cmd
-
-    def test_non_resume_json_present(self) -> None:
-        spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "--json" in spec.cmd
+        assert spec.cmd[:4] == ("codex", "app-server", "--listen", "stdio://")
+        assert spec.app_server_plan.resume_thread_id == "sess-abc"
+        assert "dispatch the work" in spec.app_server_plan.prompt
+        assert spec.managed_skill_catalog == self._CATALOG
 
     def test_food_truck_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
@@ -1590,9 +1721,11 @@ class TestCodexBuildFoodTruckCmd:
         ) & spec.env.keys()
         assert not leaking, f"_HEADLESS_EXCLUSIVE_VARS leaked into food truck env: {leaking}"
 
-    def test_bypass_hook_trust_present_in_food_truck_cmd(self) -> None:
+    def test_bypass_hook_trust_absent_from_argv_present_in_plan(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)
-        assert "--dangerously-bypass-hook-trust" in spec.cmd
+        assert "--dangerously-bypass-hook-trust" not in spec.cmd
+        assert spec.app_server_plan.bypass_hook_trust is True
+        assert spec.app_server_plan.config_overrides["bypass_hook_trust"] is True
 
     def test_stream_idle_timeout_routed_to_cmdspec(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -1688,6 +1821,11 @@ class TestCodexForwardVarsInjection:
         "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
     }
 
     @pytest.fixture(autouse=True)
@@ -1760,6 +1898,11 @@ class TestCodexMcpClientBackendRequired:
         "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
     }
 
     @pytest.fixture(autouse=True)
@@ -1873,9 +2016,11 @@ class TestClaudeCodeBackendProcessIdleDefault:
 class TestCodexDiscardDispositions:
     """Codex builder parameter disposition contracts.
 
-    plugin_binding -> delivered as a sanitized CODEX_HOME for build_food_truck_cmd;
-        build_skill_session_cmd no longer honors it, since CODEX_HOME there is
-        sourced exclusively from the mandatory add-dir's session_home.
+    plugin_binding -> preserved only for its content/authority/FD uses (Part D);
+        neither build_food_truck_cmd nor build_skill_session_cmd select CODEX_HOME
+        from it any more — both source CODEX_HOME exclusively from a bound managed
+        catalog's session_home (the mandatory add-dir for skill sessions, the
+        required managed_skill_catalog for food trucks).
     output_format -> logged warning when != JSON.
     exit_after_stop_delay_ms -> AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT env injection via setdefault.
     stream_idle_timeout_ms -> routed to CmdSpec.process_idle_timeout_ms + env injection.
@@ -1898,6 +2043,11 @@ class TestCodexDiscardDispositions:
         "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test", "test/SKILL.md"),),
+        ),
     }
 
     def test_plugin_binding_not_delivered_by_skill_builder(self) -> None:
@@ -1909,9 +2059,16 @@ class TestCodexDiscardDispositions:
         )
         assert spec.env["CODEX_HOME"] == "/work"
 
-    def test_plugin_binding_delivered_by_food_truck_builder(self) -> None:
-        spec = CodexBackend().build_food_truck_cmd(**self.FOOD_TRUCK_BASE)
-        assert spec.env["CODEX_HOME"] == "/pkg"
+    def test_plugin_binding_not_delivered_by_food_truck_builder(self) -> None:
+        """Part D removed the CODEX_HOME-from-plugin-binding selection for food
+        trucks — CODEX_HOME now comes exclusively from the bound managed catalog's
+        session_home, while the plugin binding is preserved only for its FDs."""
+        binding = plugin_binding(Path("/pkg"), inherited_fds=(7,))
+        spec = CodexBackend().build_food_truck_cmd(
+            **{**self.FOOD_TRUCK_BASE, "plugin_binding": binding}
+        )
+        assert spec.env["CODEX_HOME"] == "/work"
+        assert spec.inherited_fds == (7,)
 
     def test_output_format_warning_skill_builder(self) -> None:
         with structlog.testing.capture_logs() as cap_logs:

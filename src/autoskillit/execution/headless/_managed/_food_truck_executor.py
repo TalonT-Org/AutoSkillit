@@ -28,6 +28,7 @@ from autoskillit.core import (
     ManagedSessionHome,
     NativeShellCaptureDecision,
     PluginArtifactAuthority,
+    PluginLoadMode,
     ProviderBinding,
     ResolvedLaunchContract,
     SemanticLaunchPlan,
@@ -259,6 +260,17 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             backend,
             requires_generated_home=managed_catalog_requested,
         )
+        # Capability projection always needs one exact artifact binding to
+        # project from, independent of whether the physical launch itself
+        # consumes an artifact — a GENERATED_HOME launch (e.g. a managed Codex
+        # catalog) carries no launch-level binding at all, so a non-consuming
+        # plugin_load_mode is coerced to PROJECTED_HOME for this acquisition
+        # only, mirroring _launch_cook_session's projection_load_mode pattern.
+        projection_load_mode = (
+            plugin_load_mode
+            if plugin_load_mode.consumes_artifact
+            else PluginLoadMode.PROJECTED_HOME
+        )
         resolved_plugin_authority = plugin_authority or self._ctx.plugin_authority
 
         effective_timeout = timeout if timeout is not None else fleet_cfg.default_timeout_sec
@@ -285,17 +297,20 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             else None
         )
 
-        # The retained binding and (when a managed catalog is requested) the
-        # generated home it owns span the complete logical dispatch — main
-        # attempt, provider retry, and nudge — not just spec-builder
-        # construction. Every physical attempt inside `_execute_claude_headless`
-        # reuses this same artifact identity via `retained_binding` rather than
-        # re-acquiring independently.
+        # The projection binding — always one that consumes an artifact,
+        # coerced above when the physical launch itself does not (Codex's
+        # GENERATED_HOME) — spans the complete logical dispatch: main attempt,
+        # provider retry, and nudge, not just spec-builder construction. The
+        # binding actually threaded into the physical launch (`launch_binding`,
+        # below) is this same object only when the launch's own load mode
+        # consumes an artifact; otherwise the launch carries none at all, and
+        # every physical attempt inside `_execute_claude_headless` reuses
+        # whichever of the two applies rather than re-acquiring independently.
         with plugin_launch_binding_scope(
             authority=resolved_plugin_authority,
             backend=backend,
-            load_mode=plugin_load_mode,
-        ) as retained_binding:
+            load_mode=projection_load_mode,
+        ) as projection_binding:
             managed_catalog_scope: AbstractContextManager[ManagedSessionHome | None] = nullcontext(
                 None
             )
@@ -306,7 +321,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     raise RuntimeError(
                         "food truck managed catalog dispatch requires a session skill manager"
                     )
-                if retained_binding is None:
+                if projection_binding is None:
                     raise RuntimeError(
                         "food truck managed catalog dispatch requires a consumed-artifact "
                         "plugin launch binding"
@@ -317,7 +332,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                     )
                 projection_context = capability_preparation.materialization_context(
                     backend=backend,
-                    binding=retained_binding,
+                    binding=projection_binding,
                 )
                 managed_catalog_scope = session_skill_manager.managed_catalog(
                     uuid.uuid4().hex[:16],
@@ -331,12 +346,14 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 if managed_home is not None:
                     managed_skill_catalog = managed_home.skills_dir
                     managed_home_fds = managed_home.pass_fds
+                launch_binding = projection_binding if plugin_load_mode.consumes_artifact else None
 
                 build_spec = _food_truck_launch_spec_builder(
                     backend=backend,
                     orchestrator_prompt=orchestrator_prompt,
                     cwd=cwd,
                     capability_preparation=capability_preparation,
+                    projection_binding=projection_binding,
                     managed_skill_catalog=managed_skill_catalog,
                     managed_home_fds=managed_home_fds,
                     completion_marker=completion_marker,
@@ -397,7 +414,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                         on_launch_resolved=on_launch_resolved,
                         plugin_authority=resolved_plugin_authority,
                         plugin_load_mode=plugin_load_mode,
-                        retained_binding=retained_binding,
+                        retained_binding=launch_binding,
                         managed_lineage_observer=managed_lineage_observer,
                     )
                 except anyio.get_cancelled_exc_class():

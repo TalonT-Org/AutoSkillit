@@ -242,6 +242,7 @@ def _food_truck_launch_spec_builder(
     orchestrator_prompt: str,
     cwd: str,
     capability_preparation: SkillProjectionPreparation | None,
+    projection_binding: PluginLaunchBinding | None = None,
     managed_skill_catalog: ValidatedAddDir | None = None,
     managed_home_fds: tuple[int, ...] = (),
     completion_marker: str,
@@ -262,7 +263,15 @@ def _food_truck_launch_spec_builder(
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
     force_inactive_agent_teams: bool = False,
 ) -> _BuildSpec:
-    """Bind food-truck inputs while finalizing semantic capability per binding."""
+    """Bind food-truck inputs while finalizing semantic capability per binding.
+
+    ``projection_binding`` is the caller-retained artifact binding used only to
+    project semantic capability content (``capability_preparation.finalize``) —
+    it is independent of the per-attempt ``plugin_binding`` the launch itself
+    receives, since a ``GENERATED_HOME`` launch (e.g. a managed Codex catalog)
+    carries no launch-level artifact binding at all even though its capability
+    preparation still needs one exact binding to project from.
+    """
 
     def build(
         plugin_binding: PluginLaunchBinding | None,
@@ -271,11 +280,11 @@ def _food_truck_launch_spec_builder(
     ) -> CmdSpec:
         attempt_cwd = cwd
         if capability_preparation is not None:
-            if plugin_binding is None:
+            if projection_binding is None:
                 raise RuntimeError("semantic food-truck dispatch requires a plugin launch binding")
             capability_contract = capability_preparation.finalize(
                 backend=backend,
-                binding=plugin_binding,
+                binding=projection_binding,
             )
             attempt_cwd = validated_dispatch_cwd(
                 capability_contract,

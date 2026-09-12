@@ -50,7 +50,7 @@ method to its ACP session method analogue for both `ClaudeCodeBackend` and
 | `conventions` | (backend conventions) | Returns `BackendConventions` with no profile-skill source | Returns `BackendConventions`, including the selected Codex home's `skills/` as its declared profile-skill source | Profile sources are declared data, not an unguarded backend setup path. |
 | `build_cmd` | `session/new` (headless one-shot) | Builds `CmdSpec` invoking the `claude` binary | Builds `CmdSpec` invoking the `codex` binary | — |
 | `build_skill_session_cmd` | `session/new` (skill session; optional resume via `config.resume_session_id`) | Builds `CmdSpec` for skill execution with optional resume | Builds `CmdSpec`; a projected binding supplies `CODEX_HOME` and `inherited_fds`; output-mode coercion is logged and idle-stop policy becomes `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT` | Codex consumes projection-as-home rather than `--plugin-dir`, but it does not discard artifact ownership. |
-| `build_resume_cmd` | `session/resume` | Uses `--resume <session_id>` flag | Uses positional `resume <session_id>` subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, lines 978–979); validates non-empty `resume_session_id` (raises `ValueError`) | Positional subcommand vs. flag; input validation. |
+| `build_resume_cmd` | `session/resume` | Uses `--resume <session_id>` flag | Builds an app-server `CmdSpec` (`CodexAppServerPlan`) whose driver issues JSON-RPC `thread/resume` with `threadId` in `params` — no CLI flag or subcommand appears in `argv`; validates non-empty `resume_session_id` (raises `ValueError`) | JSON-RPC method vs. CLI flag; input validation retained. See §4.3. |
 | `build_interactive_cmd` | `session/new` or `session/resume` (via `ResumeSpec`: `NoResume | BareResume | NamedResume`) | System prompt as `--append-system-prompt <value>` (only applied on `NoResume`) | System prompt as `-c developer_instructions=<value>` (line 931; same `NoResume` restriction); **`tools` arg silently discarded with `logger.warning("codex_tools_ignored")`** at lines 909–913 | `CodexFlags.CONFIG_OVERRIDE = "-c"`; `tools` arg discarded with warning rather than error. |
 | `build_food_truck_cmd` | `session/new` (orchestrator-level session, L2) | Builds `CmdSpec` for food-truck orchestrator | Builds `CmdSpec`; projected-home path and inherited descriptors come from `PluginLaunchBinding`; sandbox is `read-only` and there is no `--tools AskUserQuestion` | Load-path syntax and sandbox policy differ; artifact lifetime does not. |
 | `build_inspector_cmd` | No ACP analogue (lightweight probe, not a session) | Raises `CapabilityNotSupportedError` (`inspector_capable=False` in `CLAUDE_CODE_CAPABILITIES`; unreachable `AssertionError` stub at line 875 is dead code) | Raises `CapabilityNotSupportedError` when `inspector_capable=False` | — (both backends gate via `inspector_capable=False`) |
@@ -375,16 +375,24 @@ The `-c key=value` form is Codex's config override mechanism; it sets the
 `developer_instructions` field in Codex's TOML config rather than passing a
 flag.
 
-### 4.3 Positional RESUME_SUBCOMMAND
+### 4.3 Positional RESUME_SUBCOMMAND vs. JSON-RPC thread/resume
 
-| Backend | Mechanism |
+| Backend / builder | Mechanism |
 |---|---|
 | Claude Code | `--resume <session_id>` as a flag (named argument) |
-| Codex | `resume <session_id>` as a positional subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, lines 98–107); appears in `build_resume_cmd` (lines 978–979), `build_interactive_cmd`, and `build_skill_session_cmd` |
+| Codex `build_interactive_cmd` (TUI, `codex exec`-based) | `resume <session_id>` as a positional subcommand (`CodexFlags.RESUME_SUBCOMMAND = "resume"`, `_codex_cmd_builders.py` line 62) |
+| Codex `build_resume_cmd` (headless resume / contract nudge) | JSON-RPC `thread/resume` with `threadId` carried in `params` (`_codex/session_commands.py`, `build_resume_cmd`) — no CLI subcommand appears in `argv` at all |
 
-Codex's resume is a subcommand of the `codex exec` invocation rather than a
-flag. The positional form requires the session ID to be present and non-empty
-(`build_resume_cmd` raises `ValueError` if `resume_session_id` is empty).
+`build_interactive_cmd` is the only Codex builder that still speaks `codex
+exec` argv (Part D, #4945, left the TUI migration open on #4717), so it is
+the only one still using the positional `CodexFlags.RESUME_SUBCOMMAND`.
+`build_resume_cmd` moved to the app-server transport: it constructs a
+`CodexAppServerPlan` whose driver issues `thread/resume` instead of
+appending a positional subcommand to `argv`. `CodexFlags.RESUME_SUBCOMMAND`
+itself remains a valid enum member — it is just no longer used by
+`build_resume_cmd`. Both builders retain the same input validation: the
+session id must be present and non-empty (`build_resume_cmd` raises
+`ValueError` if `resume_session_id` is empty).
 
 ### 4.4 No Channel B
 
@@ -431,10 +439,34 @@ the binding's descriptor tuple into `CmdSpec.inherited_fds`.
 | `build_skill_session_cmd` / `build_food_truck_cmd` | `exit_after_stop_delay_ms` | Converted to seconds in `AUTOSKILLIT_IDLE_OUTPUT_TIMEOUT`. |
 | `build_interactive_cmd` | `tools` | Unsupported tool selection emits `codex_tools_ignored`. |
 | `validate_skill_content` | skill document | Returns `[]`; Codex does not impose Claude's frontmatter requirement. |
+| `build_food_truck_cmd` | `managed_skill_catalog` | Codex-required: raises `ValueError` unless bound to a nonempty `session_home` with a frozen, nonempty skill catalog (the source of the app-server plan's frozen `expected_skill_entries`); Claude discards the parameter (`del managed_skill_catalog`). |
 
 The obsolete `plugin_source` discard assignments and their F841 narrative are
 intentionally absent. A future builder cannot accept-and-drop an artifact path
 or descriptor without failing the plugin lifecycle ratchets.
+
+### 4.8 Expected-entry attestation and workspace roots (app-server transport)
+
+Two guarantees carried over from the exec-argv era are re-implemented, not
+relaxed, on the app-server transport:
+
+- **Expected-entry attestation.** Every managed app-server launch freezes
+  `expected_skill_names`/`expected_skill_entries` on its `CodexAppServerPlan`
+  at command-build time. `CodexAppServerDriver` enforces that frozen set
+  itself — via its own `skills/extraRoots/set` and `skills/list` requests and
+  response checks — rather than delegating discovery correctness to Codex's
+  own skill-loading behavior. A `skills/list` response missing an expected
+  skill, resolving one to an unexpected path, or reporting one disabled fails
+  the launch (see `_accept_skills_list` in `_codex/app_server.py`).
+- **Managed/native root isolation.** A managed catalog registers exactly one
+  extra root (`catalog_root`, derived from `CODEX_SKILL_DISCOVERY_CONTRACT.
+  catalog_relpath`); an ordinary no-catalog headless launch (`build_headless_
+  cmd`) registers none and skips both `skills/extraRoots/set` and
+  `skills/list`, deferring to the server's native or already-finalized home.
+- **`runtimeWorkspaceRoots` are always absolute.** The field is emitted in
+  both `thread/start` and `thread/resume` params; `CodexAppServerPlan.
+  __post_init__` rejects any non-absolute entry at construction, before the
+  plan ever reaches the driver.
 
 ---
 

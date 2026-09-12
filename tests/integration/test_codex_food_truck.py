@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import CmdSpec
+from autoskillit.core import CmdSpec, ValidatedAddDir
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
 
@@ -16,6 +16,11 @@ class TestCodexFoodTruckCommand:
         "orchestrator_prompt": "run the plan",
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test", "test/SKILL.md"),),
+        ),
     }
 
     @pytest.fixture(autouse=True)
@@ -34,23 +39,25 @@ class TestCodexFoodTruckCommand:
         spec = self._build()
         assert spec.cmd[0] == "codex"
 
-    def test_exec_subcommand_at_index_1(self) -> None:
+    def test_app_server_subcommand_at_index_1(self) -> None:
         spec = self._build()
-        assert spec.cmd[1] == "exec"
+        assert spec.cmd[1] == "app-server"
 
-    def test_json_flag_present(self) -> None:
+    def test_no_json_flag(self) -> None:
         spec = self._build()
-        assert "--json" in spec.cmd
+        assert "--json" not in spec.cmd
 
-    def test_sandbox_read_only(self) -> None:
+    def test_sandbox_read_only_in_plan(self) -> None:
         spec = self._build()
-        idx = spec.cmd.index("--sandbox")
-        assert spec.cmd[idx + 1] == "read-only"
+        assert "--sandbox" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.sandbox == "read-only"
 
-    def test_web_search_disabled_flag(self) -> None:
+    def test_web_search_disabled_in_plan_config_overrides(self) -> None:
         spec = self._build()
-        idx = spec.cmd.index("-c")
-        assert spec.cmd[idx + 1] == "web_search=disabled"
+        assert spec.app_server_plan.config_overrides["web_search"] == "disabled"
+        overrides = [spec.cmd[i + 1] for i, v in enumerate(spec.cmd[:-1]) if v == "-c"]
+        assert "web_search=disabled" not in overrides
 
     def test_image_generation_disabled_flag(self) -> None:
         spec = self._build()

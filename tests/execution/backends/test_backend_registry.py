@@ -49,7 +49,6 @@ class TestBackendRegistry:
         expected = {
             "BACKEND_REGISTRY",
             "CODEX_AUTO_COMPACT_LIMIT",
-            "CODEX_EXEC_FLAGS",
             "CODEX_SKILL_DISCOVERY_CONTRACT",
             "CODEX_LIMITS_LAST_VERIFIED_VERSION",
             "CODEX_MCP_REQUIRED_KEYS",
@@ -58,7 +57,6 @@ class TestBackendRegistry:
             "MANAGED_CODEX_LEAF_GUARD_SET",
             "MANAGED_CODEX_PARENT_GUARD_SET",
             "CODEX_HISTORY_RETENTION_TOKEN_LIMIT",
-            "CODEX_TOP_LEVEL_ONLY_FLAGS",
             "CODEX_RECIPE_DELIVERY_BUDGET",
             "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT",
             "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST",

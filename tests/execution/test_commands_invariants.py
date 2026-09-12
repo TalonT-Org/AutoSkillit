@@ -60,6 +60,7 @@ def test_headless_exclusive_vars_contains_max_mcp_output_tokens() -> None:
                 plugin_binding=binding,
                 cwd="/tmp",
                 completion_marker="%%DONE%%",
+                managed_skill_catalog=codex_skill_add_dirs("/tmp")[0],
             )
         ),
     ],
@@ -112,6 +113,7 @@ def test_all_session_builders_inject_max_mcp_output_tokens(builder_call) -> None
                 plugin_binding=binding,
                 cwd="/tmp",
                 completion_marker="%%DONE%%",
+                managed_skill_catalog=codex_skill_add_dirs("/tmp")[0],
             )
         ),
     ],
@@ -372,28 +374,35 @@ def test_cwd_in_headless_exclusive_vars() -> None:
                 plugin_binding=binding,
                 cwd="/tmp",
                 completion_marker="%%DONE%%",
+                managed_skill_catalog=codex_skill_add_dirs("/tmp")[0],
             )
         ),
         lambda: CodexBackend().build_headless_cmd("do stuff"),
         lambda: CodexBackend().build_resume_cmd(resume_session_id="sess-test", prompt="continue"),
+        lambda: CodexBackend().build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            add_dirs=codex_skill_add_dirs("/tmp"),
+        ),
     ],
-    ids=["food_truck", "headless", "resume"],
+    ids=["food_truck", "headless", "resume", "skill_session"],
 )
-def test_codex_exec_builders_start_with_codex_exec(builder_call) -> None:
-    """build_skill_session_cmd moved to the app-server transport; see the dedicated
-    test_codex_skill_session_builder_starts_with_codex_app_server below."""
+def test_codex_builders_start_with_codex_app_server(builder_call) -> None:
+    """All four Codex command builders speak the app-server transport as of Part D
+    (build_skill_session_cmd moved first, in Part C).
+
+    Narrower than, and not fully redundant with,
+    tests/arch/test_codex_exec_builder_invariants.py::test_all_builders_start_with_codex_app_server
+    — that arch-layer test exercises a different builder-construction path
+    (OTLP env extras, a shared plugin-binding context manager applied to
+    every builder) and additionally asserts the absence of
+    --json/--sandbox/--dangerously-bypass-hook-trust/resume argv and the
+    app_server_plan identity; this execution-layer test only pins the
+    ("codex", "app-server") prefix using this file's own fixture-construction
+    conventions (codex_skill_add_dirs, _with_plugin_binding).
+    """
     spec = builder_call()
-    assert spec.cmd[0] == "codex"
-    assert spec.cmd[1] == "exec"
-
-
-def test_codex_skill_session_builder_starts_with_codex_app_server() -> None:
-    spec = CodexBackend().build_skill_session_cmd(
-        "/investigate foo",
-        cwd="/tmp",
-        completion_marker="%%DONE%%",
-        add_dirs=codex_skill_add_dirs("/tmp"),
-    )
     assert spec.cmd[0] == "codex"
     assert spec.cmd[1] == "app-server"
 

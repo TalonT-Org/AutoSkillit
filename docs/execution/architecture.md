@@ -230,6 +230,43 @@ to private, empty inert directories within the generated home. Attempt entry
 atomically points them at the view; every exit restores and verifies the inert
 links.
 
+### Codex app-server headless transport
+
+Every Codex headless command builder — `build_skill_session_cmd`,
+`build_food_truck_cmd`, `build_resume_cmd`, and ordinary `build_headless_cmd`
+(the base for `build_cmd`) — now emits a `codex app-server --listen stdio://`
+JSON-RPC invocation (`CodexAppServerPlan`) instead of `codex exec` argv.
+`CodexAppServerDriver` (`execution/backends/_codex/app_server.py`) drives the
+fixed `initialize` → `skills/extraRoots/set` → `skills/list` →
+`thread/start`/`thread/resume` → `turn/start` handshake over that transport.
+Only `build_interactive_cmd` (the TUI) remains on `codex exec` argv and the
+legacy `<generated_home>/skills` alias described above — that migration
+stays open on #4717 and is not resolved by this transport change.
+
+Managed skill and orchestrator roots are derived from the shared
+`CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath`, never from a fresh scan:
+the frozen catalog an app-server launch registers is exactly the one the
+orchestrator materialized via `SessionSkillManager.managed_catalog()`, which
+compiles a raw effective catalog for the selected backend and then delegates
+into the existing `managed_session()` generated-home transaction. Expected-
+entry attestation is enforced by the driver's own `skills/extraRoots/set` +
+`skills/list` checks against the plan's frozen `expected_skill_entries` — it
+is never delegated to Codex's own skill discovery.
+
+Ordinary headless launches without a managed catalog (`build_headless_cmd`)
+register no extra skill root and skip catalog attestation entirely: the
+server's native (or an already-finalized explicit) home is used as-is, and
+`CodexAppServerPlan.__post_init__` admits this explicit no-catalog/empty-home
+state alongside the managed state. `runtimeWorkspaceRoots` — carried on
+every plan — is emitted in both `thread/start` and `thread/resume` params;
+every entry must be an absolute path, enforced at plan construction.
+
+Physical-attempt history ownership (`session_attempt_context`, launch/attempt/
+view identity, and promotion before a later resume) is unchanged by this
+migration — it continues to use the same `CodexSessionStore` machinery
+described below, including the nudge runner call now correctly passing
+`line_driver=` for its app-server resume.
+
 ### Canonical stores and attempt views
 
 The authoritative roots beneath `default_log_dir()` are:

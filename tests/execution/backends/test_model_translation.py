@@ -92,14 +92,17 @@ class TestCodexBuildCmdTranslatesModel:
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="sonnet",
+            managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
         )
-        model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == CODEX_MODEL_ALIASES["sonnet"]
+        assert "--model" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.model == CODEX_MODEL_ALIASES["sonnet"]
 
     def test_build_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="sonnet")
-        model_idx = list(spec.cmd).index("--model")
-        assert spec.cmd[model_idx + 1] == CODEX_MODEL_ALIASES["sonnet"]
+        assert "--model" not in spec.cmd
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.model == CODEX_MODEL_ALIASES["sonnet"]
 
     def test_build_interactive_cmd(self) -> None:
         spec = CodexBackend().build_interactive_cmd(model="sonnet")
@@ -171,19 +174,17 @@ class TestClaudeModelConfigOverrides:
 class TestCodexEffortInjectionInCmds:
     def test_headless_cmd_sonnet_has_effort_medium(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="sonnet")
-        cmd = list(spec.cmd)
-        assert "-c" in cmd
-        assert "model_reasoning_effort=medium" in cmd
+        assert "model_reasoning_effort" not in " ".join(spec.cmd)
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "medium"
 
     def test_headless_cmd_opus_has_effort_high(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="opus")
-        cmd = list(spec.cmd)
-        assert "model_reasoning_effort=high" in cmd
+        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "high"
 
     def test_headless_cmd_haiku_has_effort_high(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="haiku")
-        cmd = list(spec.cmd)
-        assert "model_reasoning_effort=high" in cmd
+        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "high"
 
     def test_skill_session_cmd_has_effort(self) -> None:
         config = SkillSessionConfig(
@@ -200,8 +201,10 @@ class TestCodexEffortInjectionInCmds:
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="sonnet",
+            managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
         )
-        assert "model_reasoning_effort=medium" in list(spec.cmd)
+        assert "model_reasoning_effort" not in " ".join(spec.cmd)
+        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "medium"
 
     def test_food_truck_opus_suffix_uses_shared_model_with_high_effort(self) -> None:
         spec = CodexBackend().build_food_truck_cmd(
@@ -210,12 +213,12 @@ class TestCodexEffortInjectionInCmds:
             cwd="/repo",
             completion_marker="%%DONE%%",
             model="opus[1m]",
+            managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
         )
-        cmd = list(spec.cmd)
-        model_idx = cmd.index("--model")
-        assert cmd[model_idx + 1] == CODEX_MODEL_ALIASES["opus"]
-        assert "[1m]" not in cmd[model_idx + 1]
-        assert "model_reasoning_effort=high" in cmd
+        assert "--model" not in spec.cmd
+        assert spec.app_server_plan.model == CODEX_MODEL_ALIASES["opus"]
+        assert "[1m]" not in spec.app_server_plan.model
+        assert spec.app_server_plan.config_overrides["model_reasoning_effort"] == "high"
 
     def test_interactive_cmd_has_effort(self) -> None:
         spec = CodexBackend().build_interactive_cmd(model="sonnet")
@@ -223,7 +226,7 @@ class TestCodexEffortInjectionInCmds:
 
     def test_no_effort_for_native_model_in_headless_cmd(self) -> None:
         spec = CodexBackend().build_headless_cmd("test prompt", model="gpt-5.5")
-        assert "model_reasoning_effort" not in " ".join(spec.cmd)
+        assert "model_reasoning_effort" not in spec.app_server_plan.config_overrides
 
 
 class TestModelClass:

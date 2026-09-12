@@ -440,6 +440,245 @@ class TestNudgePtyMode:
         assert runner.call_args_list[0][3]["pass_fds"] == (91,)
 
 
+class TestNudgeRetainedBindingAndManagedCatalog:
+    """_attempt_contract_nudge's retained_binding reuse, managed_skill_catalog
+    pass-through, and line_driver forwarding to the runner (Part D)."""
+
+    @pytest.mark.anyio
+    async def test_nudge_passes_backend_line_driver_to_runner(self, tmp_path: Path) -> None:
+        """_attempt_contract_nudge forwards backend.line_driver(spec) to the runner.
+
+        Regression guard: this call site used to omit line_driver= entirely.
+        """
+        from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
+        from tests.fakes import MockSubprocessRunner
+
+        marker = "%%NUDGE_DONE%%"
+        mock_runner = MockSubprocessRunner()
+        mock_runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+        )
+        backend = _mock_backend(pty_required=False, session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(backend, cwd=str(tmp_path))
+
+        result_parser = Mock()
+        parsed_session = Mock(output=marker, raw={}, session_id="nudge-session")
+        result_parser.parse_stdout.return_value = parsed_session
+
+        skill_result = SkillResult(
+            success=False,
+            result="",
+            session_id="test-session",
+            subtype="empty_output",
+            is_error=False,
+            exit_code=0,
+            needs_retry=True,
+            retry_reason=RetryReason.CONTRACT_RECOVERY,
+            stderr="",
+            kill_reason=KillReason.NATURAL_EXIT,
+            evidence=WriteEvidence.none_observed(),
+        )
+        subprocess_result = SubprocessResult(
+            returncode=0,
+            stdout="",
+            stderr="",
+            termination=TerminationReason.NATURAL_EXIT,
+            pid=0,
+        )
+
+        result = await _attempt_contract_nudge(
+            skill_result=skill_result,
+            subprocess_result=subprocess_result,
+            expected_output_patterns=[],
+            completion_marker=marker,
+            cwd=str(tmp_path),
+            runner=mock_runner,
+            backend=backend,
+            result_parser=result_parser,
+            retry_reason=RetryReason.EARLY_STOP,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
+        )
+
+        assert result is not None and result.success is True
+        assert mock_runner.call_args_list, "runner was never called"
+        call_kwargs = mock_runner.call_args_list[0][3]
+        # backend is a Mock(): every call to backend.line_driver(...) returns the
+        # same auto-specced Mock singleton, so identity here proves the runner
+        # received exactly backend.line_driver(spec)'s return value.
+        assert call_kwargs["line_driver"] is backend.line_driver.return_value
+        backend.line_driver.assert_called_once()
+
+    @pytest.mark.anyio
+    async def test_nudge_reuses_retained_binding_without_fresh_acquisition(
+        self, tmp_path: Path
+    ) -> None:
+        """A caller-retained binding bypasses _plugin_launch_binding's own
+        acquire_launch_binding call, and the nudge never closes it — ownership
+        stays with the caller across the complete logical dispatch."""
+        from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
+        from tests.execution.backends._plugin_binding import plugin_binding
+        from tests.fakes import MockSubprocessRunner
+
+        class Authority:
+            def __init__(self) -> None:
+                self.acquire_calls = 0
+
+            def acquire_launch_binding(self, *, backend, load_mode):
+                self.acquire_calls += 1
+                raise AssertionError("retained_binding must bypass fresh acquisition entirely")
+
+        authority = Authority()
+        retained_binding = plugin_binding(tmp_path / "retained-plugin", inherited_fds=(91,))
+
+        marker = "%%NUDGE_DONE%%"
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+        )
+        backend = _mock_backend(pty_required=False, session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(backend, cwd=str(tmp_path))
+        backend.build_resume_cmd.return_value = CmdSpec(
+            cmd=("codex", "app-server", "--listen", "stdio://"),
+            env={},
+            inherited_fds=(91,),
+        )
+        parser = Mock()
+        parser.parse_stdout.return_value = Mock(
+            output=marker, raw={}, session_id="nudge-native-session"
+        )
+
+        result = await _attempt_contract_nudge(
+            skill_result=SkillResult(
+                success=False,
+                result="",
+                session_id="test-session",
+                subtype="empty_output",
+                is_error=False,
+                exit_code=0,
+                needs_retry=True,
+                retry_reason=RetryReason.EARLY_STOP,
+                stderr="",
+                kill_reason=KillReason.NATURAL_EXIT,
+                evidence=WriteEvidence.none_observed(),
+            ),
+            subprocess_result=SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            ),
+            expected_output_patterns=[],
+            completion_marker=marker,
+            cwd=str(tmp_path),
+            runner=runner,
+            backend=backend,
+            result_parser=parser,
+            retry_reason=RetryReason.EARLY_STOP,
+            plugin_authority=authority,
+            plugin_load_mode=PluginLoadMode.EXPLICIT_PLUGIN_DIR,
+            retained_binding=retained_binding,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
+        )
+
+        assert result is not None and result.success is True
+        assert authority.acquire_calls == 0
+        call_kwargs = backend.build_resume_cmd.call_args.kwargs
+        assert call_kwargs["plugin_binding"] is retained_binding
+        assert retained_binding.closed is False, (
+            "the nudge must not close a binding it does not own"
+        )
+        assert runner.call_args_list[0][3]["pass_fds"] == (91,)
+
+    @pytest.mark.anyio
+    async def test_nudge_passes_managed_skill_catalog_to_build_resume_cmd(
+        self, tmp_path: Path
+    ) -> None:
+        from autoskillit.core import ValidatedAddDir
+        from autoskillit.execution.headless._headless_launch import _attempt_contract_nudge
+        from tests.fakes import MockSubprocessRunner
+
+        marker = "%%NUDGE_DONE%%"
+        catalog = ValidatedAddDir(
+            path=str(tmp_path / "managed-skills"),
+            session_home=str(tmp_path / "codex-home"),
+            skill_entries=(("do-a", "do-a"),),
+        )
+
+        runner = MockSubprocessRunner()
+        runner.set_default(
+            SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            )
+        )
+        backend = _mock_backend(pty_required=False, session_resume_capable=True)
+        launch_resolver, launch_preparation = _launch_inputs(backend, cwd=str(tmp_path))
+        backend.build_resume_cmd.return_value = CmdSpec(
+            cmd=("codex", "app-server", "--listen", "stdio://"),
+            env={},
+        )
+        parser = Mock()
+        parser.parse_stdout.return_value = Mock(output=marker, raw={}, session_id="nudge-session")
+
+        result = await _attempt_contract_nudge(
+            skill_result=SkillResult(
+                success=False,
+                result="",
+                session_id="test-session",
+                subtype="empty_output",
+                is_error=False,
+                exit_code=0,
+                needs_retry=True,
+                retry_reason=RetryReason.EARLY_STOP,
+                stderr="",
+                kill_reason=KillReason.NATURAL_EXIT,
+                evidence=WriteEvidence.none_observed(),
+            ),
+            subprocess_result=SubprocessResult(
+                returncode=0,
+                stdout="",
+                stderr="",
+                termination=TerminationReason.NATURAL_EXIT,
+                pid=0,
+            ),
+            expected_output_patterns=[],
+            completion_marker=marker,
+            cwd=str(tmp_path),
+            runner=runner,
+            backend=backend,
+            result_parser=parser,
+            retry_reason=RetryReason.EARLY_STOP,
+            managed_skill_catalog=catalog,
+            launch_resolver=launch_resolver,
+            launch_preparation=launch_preparation,
+            natural_exit_grace_seconds=3.0,
+        )
+
+        assert result is not None and result.success is True
+        call_kwargs = backend.build_resume_cmd.call_args.kwargs
+        assert call_kwargs["managed_skill_catalog"] is catalog
+
+
 class TestNudgeTurnUsage:
     @pytest.mark.anyio
     @pytest.mark.parametrize(

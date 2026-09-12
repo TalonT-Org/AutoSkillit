@@ -1,12 +1,13 @@
 """Tests for headless.py dispatch flow: food truck dispatch, pack injection, executor protocol."""
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
-from autoskillit.core import PluginArtifactIdentity, PluginLaunchBinding
+from autoskillit.core import PluginArtifactIdentity, PluginLaunchBinding, ValidatedAddDir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -46,6 +47,32 @@ class _StaticPluginAuthority:
             inherited_fds=(),
             _lease=lease,
         )
+
+
+class _FakeManagedSessionHome:
+    """Duck-typed stand-in for ``ManagedSessionHome`` — only the two fields
+    ``dispatch_food_truck`` reads off the yielded object."""
+
+    def __init__(self, skills_dir: ValidatedAddDir, pass_fds: tuple[int, ...] = ()) -> None:
+        self.skills_dir = skills_dir
+        self.pass_fds = pass_fds
+
+
+class _FakeSessionSkillManager:
+    """Duck-typed stand-in for ``SessionSkillManager.managed_catalog``.
+
+    Records every invocation so tests can assert the managed-catalog path
+    was (or was deliberately not) reached.
+    """
+
+    def __init__(self, home: _FakeManagedSessionHome) -> None:
+        self._home = home
+        self.managed_catalog_calls: list[tuple[str, object, object]] = []
+
+    @contextmanager
+    def managed_catalog(self, session_id: str, catalog: object, projection_context: object):
+        self.managed_catalog_calls.append((session_id, catalog, projection_context))
+        yield self._home
 
 
 def _make_success_stdout(marker: str = "%%FT_DONE%%") -> str:
@@ -315,6 +342,7 @@ class TestDispatchFoodTruck:
         from tests.fakes import MockSubprocessRunner
 
         finalized_bindings: list[PluginLaunchBinding] = []
+        materialized_bindings: list[PluginLaunchBinding] = []
 
         class LifetimeRunner(MockSubprocessRunner):
             observed_live_binding = False
@@ -336,17 +364,30 @@ class TestDispatchFoodTruck:
             )
         )
         authority = _StaticPluginAuthority(tmp_path)
+        managed_home = _FakeManagedSessionHome(
+            skills_dir=ValidatedAddDir(path=str(tmp_path / "managed-skills"))
+        )
+        session_skill_manager = _FakeSessionSkillManager(managed_home)
 
         class Preparation:
+            catalog = object()
+
             def finalize(self, *, backend, binding):
                 assert backend.name == "claude-code"
                 assert binding.closed is False
                 finalized_bindings.append(binding)
                 return None
 
+            def materialization_context(self, *, backend, binding):
+                assert backend.name == "claude-code"
+                assert binding.closed is False
+                materialized_bindings.append(binding)
+                return object()
+
         minimal_ctx.runner = runner
         minimal_ctx.backend = ClaudeCodeBackend()
         minimal_ctx.plugin_authority = authority
+        minimal_ctx.session_skill_manager = session_skill_manager
 
         executor = DefaultHeadlessExecutor(minimal_ctx)
         await executor.dispatch_food_truck(
@@ -360,6 +401,12 @@ class TestDispatchFoodTruck:
         assert len(finalized_bindings) == 1
         assert runner.observed_live_binding
         assert finalized_bindings[0].closed is True
+        # Same one retained binding backs both the materialization context and
+        # the later spec-build finalize() call.
+        assert materialized_bindings == finalized_bindings
+        assert len(session_skill_manager.managed_catalog_calls) == 1
+        _session_id, catalog, _projection_context = session_skill_manager.managed_catalog_calls[0]
+        assert catalog is Preparation.catalog
 
     @pytest.mark.anyio
     async def test_dispatch_food_truck_passes_resume_session_id_to_cmd_builder(
@@ -481,6 +528,153 @@ class TestDispatchFoodTruckPackInjection:
         env = kwargs.get("env")
         assert env is not None
         assert "AUTOSKILLIT_FOOD_TRUCK_TOOL_TAGS" not in env
+
+
+class TestDispatchFoodTruckManagedCatalogGuards:
+    """RuntimeError guards for the managed-catalog path added in dispatch_food_truck.
+
+    ``capability_preparation is not None`` requests a managed skill catalog for
+    the dispatch; the three guards below fire in order (session skill manager,
+    then consumed-artifact binding, then catalog) before any catalog
+    materialization or command building is attempted.
+    """
+
+    @pytest.mark.anyio
+    async def test_raises_without_session_skill_manager(self, minimal_ctx, tmp_path: Path) -> None:
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+        class Preparation:
+            catalog = object()
+
+            def finalize(self, *, backend, binding):
+                raise AssertionError("finalize should not be reached")
+
+            def materialization_context(self, *, backend, binding):
+                raise AssertionError("materialization_context should not be reached")
+
+        minimal_ctx.backend = ClaudeCodeBackend()
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
+        assert minimal_ctx.session_skill_manager is None
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        with pytest.raises(RuntimeError, match="session skill manager"):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="DONE",
+                capability_preparation=Preparation(),
+            )
+
+    @pytest.mark.anyio
+    async def test_raises_without_artifact_authority(self, minimal_ctx, tmp_path: Path) -> None:
+        """Managed-catalog dispatch always coerces its projection acquisition to a
+        consuming load mode (Codex's GENERATED_HOME launch carries no launch-level
+        binding at all, but its capability projection still needs one) — with no
+        authority present at all, that acquisition fails closed before dispatch
+        ever reaches the session-skill-manager guards."""
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.execution.conftest import _mock_backend
+
+        class Preparation:
+            catalog = object()
+
+            def finalize(self, *, backend, binding):
+                raise AssertionError("finalize should not be reached")
+
+            def materialization_context(self, *, backend, binding):
+                raise AssertionError("materialization_context should not be reached")
+
+        class _UnreachableSessionSkillManager:
+            def managed_catalog(self, session_id, catalog, projection_context):
+                raise AssertionError("managed_catalog should not be reached")
+
+        minimal_ctx.backend = _mock_backend(food_truck_capable=True)
+        minimal_ctx.plugin_authority = None
+        minimal_ctx.session_skill_manager = _UnreachableSessionSkillManager()
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        with pytest.raises(RuntimeError, match="requires plugin artifact authority"):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="DONE",
+                capability_preparation=Preparation(),
+            )
+
+    @pytest.mark.anyio
+    async def test_raises_without_consumed_artifact_binding(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        """Defensive guard: even a present authority that returns no binding at all
+        (violating its own PluginArtifactAuthority contract) must fail closed rather
+        than proceed to materialize a managed catalog from nothing."""
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+        from tests.execution.conftest import _mock_backend
+
+        class Preparation:
+            catalog = object()
+
+            def finalize(self, *, backend, binding):
+                raise AssertionError("finalize should not be reached")
+
+            def materialization_context(self, *, backend, binding):
+                raise AssertionError("materialization_context should not be reached")
+
+        class _UnreachableSessionSkillManager:
+            def managed_catalog(self, session_id, catalog, projection_context):
+                raise AssertionError("managed_catalog should not be reached")
+
+        class _NullBindingAuthority:
+            def acquire_launch_binding(self, *, backend, load_mode):
+                return None
+
+        minimal_ctx.backend = _mock_backend(food_truck_capable=True)
+        minimal_ctx.plugin_authority = _NullBindingAuthority()
+        minimal_ctx.session_skill_manager = _UnreachableSessionSkillManager()
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        with pytest.raises(RuntimeError, match="consumed-artifact"):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="DONE",
+                capability_preparation=Preparation(),
+            )
+
+    @pytest.mark.anyio
+    async def test_raises_without_effective_skill_catalog(
+        self, minimal_ctx, tmp_path: Path
+    ) -> None:
+        from autoskillit.execution.headless import DefaultHeadlessExecutor
+
+        class Preparation:
+            catalog = None
+
+            def finalize(self, *, backend, binding):
+                raise AssertionError("finalize should not be reached")
+
+            def materialization_context(self, *, backend, binding):
+                raise AssertionError("materialization_context should not be reached")
+
+        class _UnreachableSessionSkillManager:
+            def managed_catalog(self, session_id, catalog, projection_context):
+                raise AssertionError("managed_catalog should not be reached")
+
+        # ClaudeCodeBackend is plugin_install_capable, so plugin_launch_binding_scope
+        # actually acquires a binding here — clearing the earlier guard and letting
+        # this test isolate the catalog guard specifically.
+        minimal_ctx.backend = ClaudeCodeBackend()
+        minimal_ctx.plugin_authority = _StaticPluginAuthority(tmp_path)
+        minimal_ctx.session_skill_manager = _UnreachableSessionSkillManager()
+
+        executor = DefaultHeadlessExecutor(minimal_ctx)
+        with pytest.raises(RuntimeError, match="effective skill catalog"):
+            await executor.dispatch_food_truck(
+                "some prompt",
+                str(tmp_path),
+                completion_marker="DONE",
+                capability_preparation=Preparation(),
+            )
 
 
 class TestDispatchFoodTruckGuards:

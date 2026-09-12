@@ -265,12 +265,10 @@ def _food_truck_launch_spec_builder(
 ) -> _BuildSpec:
     """Bind food-truck inputs while finalizing semantic capability per binding.
 
-    ``projection_binding`` is the caller-retained artifact binding used only to
-    project semantic capability content (``capability_preparation.finalize``) —
-    it is independent of the per-attempt ``plugin_binding`` the launch itself
-    receives, since a ``GENERATED_HOME`` launch (e.g. a managed Codex catalog)
-    carries no launch-level artifact binding at all even though its capability
-    preparation still needs one exact binding to project from.
+    ``projection_binding`` projects semantic capability content and is
+    independent of the per-attempt ``plugin_binding``: a ``GENERATED_HOME``
+    launch carries no launch-level binding even though capability projection
+    still needs one to project from.
     """
 
     def build(

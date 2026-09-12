@@ -307,6 +307,10 @@ jobs:
             echo "::error::base revision ${base} is not reachable in this checkout (fetch-depth must stay 0)"
             exit 1
           }
+          git merge-base --is-ancestor "${base}" HEAD || {
+            echo "::error::preflight base revision ${base} must be an ancestor of HEAD"
+            exit 1
+          }
           if git cat-file -e "${base}:scripts/check_policy_relaxation.py" 2>/dev/null; then
             git show "${base}:scripts/check_policy_relaxation.py" > "${RUNNER_TEMP}/check_policy_relaxation.py"
             uv run python "${RUNNER_TEMP}/check_policy_relaxation.py" --base "${base}" --repo-root "${GITHUB_WORKSPACE}"

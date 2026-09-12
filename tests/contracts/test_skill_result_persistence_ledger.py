@@ -15,7 +15,7 @@ from typing import get_args, get_origin, get_type_hints
 
 import pytest
 
-from autoskillit.core import ExecutionIdentity, SkillResult
+from autoskillit.core import ExecutionIdentity, FaultDomain, InfraOutcome, SkillResult
 from tests.execution.conftest import _flush
 
 pytestmark = pytest.mark.medium
@@ -163,9 +163,11 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
         success=False,
         needs_retry=True,
         retry_reason="resume",
-        infra_exit_category="api_error",
-        infra_cleanup_incomplete=True,
-        infra_fault_domain="infrastructure",
+        infra=InfraOutcome(
+            exit_category="api_error",
+            cleanup_incomplete=True,
+            fault_domain=FaultDomain.INFRASTRUCTURE,
+        ),
         api_error_status=503,
         is_error=True,
         execution_identity=identity,
@@ -175,6 +177,8 @@ def test_durable_ledger_rows_exist_in_real_flushed_artifacts(tmp_path) -> None:
     )
     summary = json.loads((tmp_path / "sessions" / "test-session-001" / "summary.json").read_text())
     index = json.loads((tmp_path / "sessions.jsonl").read_text().strip())
+    assert "infra" not in summary
+    assert "infra" not in index
 
     # Values for every persisted/summary-only/index-only artifact_key, keyed by
     # artifact_key -- checked for equality (not just key presence) so a flush bug

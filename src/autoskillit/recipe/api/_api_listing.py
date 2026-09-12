@@ -37,13 +37,10 @@ logger = get_logger(__name__)
 
 
 def _invalid_validation_result(message: str) -> dict[str, Any]:
-    """Return the stable validation result shape for an input error."""
+    """Return the established validation result shape for an input error."""
     return {
         "valid": False,
-        "errors": [message],
-        "quality": {},
         "findings": [{"error": message}],
-        "contracts": [],
     }
 
 
@@ -110,7 +107,7 @@ def validate_from_path(
 
     Returns:
         {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
-        File and parse errors use the same keys with empty quality and contract data.
+        File and parse errors return only "valid" and "findings".
     """
     if not path.is_file():
         return _invalid_validation_result(f"File not found: {path}")
@@ -121,8 +118,6 @@ def validate_from_path(
         data = load_yaml(substituted)
     except YAMLError as exc:
         return _invalid_validation_result(f"YAML parse error: {exc}")
-    except OSError as exc:
-        return _invalid_validation_result(f"File read error: {exc}")
 
     if not isinstance(data, dict):
         return _invalid_validation_result("File must contain a YAML mapping")

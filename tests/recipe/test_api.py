@@ -67,12 +67,9 @@ def _setup_project_recipe(tmp_path: Path, name: str, content: str) -> Path:
 
 
 def _assert_validation_failure_shape(result: dict[str, Any], message_fragment: str) -> None:
-    assert set(result) == {"valid", "errors", "quality", "findings", "contracts"}
+    assert set(result) == {"valid", "findings"}
     assert result["valid"] is False
-    assert result["quality"] == {}
-    assert result["contracts"] == []
-    assert result["errors"] == [result["findings"][0]["error"]]
-    assert message_fragment in result["errors"][0]
+    assert message_fragment in result["findings"][0]["error"]
 
 
 @pytest.mark.parametrize(
@@ -100,7 +97,7 @@ def test_validate_from_path_early_errors_have_stable_shape(
     _assert_validation_failure_shape(result, message_fragment)
 
 
-def test_validate_from_path_converts_file_read_error(
+def test_validate_from_path_propagates_file_read_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from autoskillit.recipe.api._api_listing import validate_from_path
@@ -113,9 +110,8 @@ def test_validate_from_path_converts_file_read_error(
 
     monkeypatch.setattr(Path, "read_text", fail_read_text)
 
-    result = validate_from_path(recipe_path)
-
-    _assert_validation_failure_shape(result, "File read error: permission denied")
+    with pytest.raises(OSError, match="permission denied"):
+        validate_from_path(recipe_path)
 
 
 def _make_recipe_with_ingredient(name: str, ingredient: object) -> object:

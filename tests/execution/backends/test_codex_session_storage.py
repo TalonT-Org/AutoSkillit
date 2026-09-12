@@ -1171,6 +1171,99 @@ def test_completed_view_recovery_retries_child_publication(
     assert snapshot["children"]["thread-child"]["outcome"]["role"] == ("plan-foundation-auditor")
 
 
+def test_recovery_storage_cleanup_failure_does_not_block_other_views(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_dir = tmp_path / "log-root"
+    store = CodexSessionStore(log_dir=log_dir)
+    home, _ = _generated_home(tmp_path)
+    parent_a = "thread-parent-a"
+    parent_b = "thread-parent-b"
+    child_a = "thread-child-a"
+    child_b = "thread-child-b"
+    _rollout(
+        store.active_root / "2026/07/rollout-parent-a.jsonl",
+        parent_a,
+        cwd=tmp_path,
+        child_id=child_a,
+    )
+    for child_id, parent_id in ((child_a, parent_a), (child_b, parent_b)):
+        _child_rollout(
+            store.active_root / f"2026/07/rollout-{child_id}.jsonl",
+            child_id,
+            parent_id,
+        )
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(store, "_publish_completed_view", lambda _path, _ids: False)
+        first = store.prepare_attempt(
+            session_home=home,
+            project_dir=tmp_path,
+            launch_id="0123456789abcdef",
+            attempt=1,
+            current_resume_spec=NamedResume(parent_a),
+        )
+        with first as handle:
+            handle.record_spawn(os.getpid(), os.getpgrp())
+            handle.record_reaped(os.getpid(), os.getpgrp())
+
+        second = store.prepare_attempt(
+            session_home=home,
+            project_dir=tmp_path,
+            launch_id="0123456789abcdef",
+            attempt=2,
+            current_resume_spec=NoResume(),
+        )
+        with second as handle:
+            _rollout(
+                (home / "sessions").resolve() / "2026/07/rollout-parent-b.jsonl",
+                parent_b,
+                cwd=tmp_path,
+                child_id=child_b,
+            )
+            handle.record_spawn(os.getpid(), os.getpgrp())
+            handle.record_reaped(os.getpid(), os.getpgrp())
+
+    assert first.view_path.is_dir()
+    assert second.view_path.is_dir()
+    rebuilt: list[bool] = []
+    original_rebuild = store._rebuild_index_unlocked
+    original_rmtree = reconciliation.shutil.rmtree
+
+    def track_rebuild() -> None:
+        rebuilt.append(True)
+        original_rebuild()
+
+    def fail_first_cleanup(path: Path, *args: object, **kwargs: object) -> None:
+        if Path(path) == first.view_path:
+            raise OSError("simulated first-view cleanup failure")
+        original_rmtree(path, *args, **kwargs)
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(store, "_rebuild_index_unlocked", track_rebuild)
+        scoped.setattr(reconciliation.shutil, "rmtree", fail_first_cleanup)
+        with pytest.raises(RuntimeError, match="simulated first-view cleanup failure"):
+            store.recover()
+
+    assert rebuilt == [True]
+    assert first.view_path.is_dir()
+    assert not second.view_path.exists()
+    for parent_id, child_id in ((parent_a, child_a), (parent_b, child_b)):
+        snapshot = json.loads((log_dir / f"child-outcomes/codex/{parent_id}.json").read_text())
+        assert snapshot["children"][child_id]["outcome"]["role"] == "plan-foundation-auditor"
+    assert {summary.session_id for summary in store.read_index(str(tmp_path))} == {
+        parent_a,
+        parent_b,
+    }
+    for lock_path in (
+        store.locks_root / "lifecycle.lock",
+        store._thread_lock_path(parent_a),
+        store.locks_root / f"view-{first.view_id}.lock",
+    ):
+        lease = storage._FileLease.acquire(lock_path, timeout=0.0)
+        lease.release()
+
+
 def test_completion_publication_runs_after_thread_release_before_view_release(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

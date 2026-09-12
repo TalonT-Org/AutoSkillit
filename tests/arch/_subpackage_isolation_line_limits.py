@@ -68,7 +68,11 @@ def count_budget_lines(path: Path) -> int:
     import_lines: set[int] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            assert node.end_lineno is not None
+            if node.end_lineno is None:
+                raise SyntaxError(
+                    f"import statement at line {node.lineno} has no end_lineno",
+                    (str(path), node.lineno, node.col_offset, None),
+                )
             import_lines.update(range(node.lineno, node.end_lineno + 1))
     return _physical_line_count(source) - len(import_lines)
 

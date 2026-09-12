@@ -49,8 +49,9 @@ def check_file(path: Path) -> str | None:
     try:
         line_count = count_budget_lines(path)
     except SyntaxError as exc:
+        detail = exc.msg or "syntax error"
         return (
-            f"{rel}: cannot be measured -- {exc.msg} at line {exc.lineno}; "
+            f"{rel}: cannot be measured -- {detail} at line {exc.lineno}; "
             f"REQ-CNST-010 fails closed on source Python cannot parse"
         )
     if line_count <= HARD_CAP:

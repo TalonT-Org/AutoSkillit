@@ -270,6 +270,17 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
+        writer="autoskillit.hooks._child_outcome_snapshot._snapshot:_write_document",
+        artifact=(
+            "child-outcomes/<backend>/<parent-session-id>.json under the resolved "
+            "diagnostic log root — the child-terminal-reason snapshot (issue #4623); "
+            "portable child IDs/metadata only, never a machine-specific transcript "
+            "path when the existing identity/locator can resolve one"
+        ),
+        machine_local=False,
+        detection=None,
+    ),
+    DurableArtifactWriterDef(
         writer="autoskillit.workspace.session_skill_catalog:write_skill_unavailability_metadata",
         artifact="add-dir/skill-unavailability.json",
         machine_local=False,

@@ -705,6 +705,8 @@ class ExecutorCall:
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None
     execution_identity: ExecutionIdentity = ExecutionIdentity()
+    child_role: str | None = None
+    child_attribution_skill: str = ""
 
 
 @dataclasses.dataclass
@@ -831,6 +833,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
         execution_identity: ExecutionIdentity = ExecutionIdentity(),
+        child_role: str | None = None,
+        child_attribution_skill: str = "",
     ) -> SkillResult:
         self.calls.append(
             ExecutorCall(
@@ -881,6 +885,8 @@ class InMemoryHeadlessExecutor(HeadlessExecutor):
                 managed_lineage_ref=managed_lineage_ref,
                 on_launch_resolved=on_launch_resolved,
                 execution_identity=execution_identity,
+                child_role=child_role,
+                child_attribution_skill=child_attribution_skill,
             )
         )
         if self._queue:

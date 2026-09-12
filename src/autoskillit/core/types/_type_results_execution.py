@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, NotRequired, TypedDict
 
 from ._type_constants import KNOWN_CI_EVENTS
-from ._type_execution_identity import ExecutionIdentity
+from ._type_execution_identity import ChildOutcomeDict, ExecutionIdentity
 from ._type_token import TurnTokenEntry
 
 __all__ = [
@@ -72,6 +72,7 @@ class SessionTelemetry:
     loc_insertions: int
     loc_deletions: int
     subagent_model_outcomes: tuple[SubagentModelOutcomeDict, ...]
+    child_outcomes: tuple[ChildOutcomeDict, ...]
     turn_usage: list[TurnTokenEntry] = field(default_factory=list)
     execution_identity: ExecutionIdentity = ExecutionIdentity.empty()
 
@@ -88,6 +89,7 @@ class SessionTelemetry:
             loc_insertions=0,
             loc_deletions=0,
             subagent_model_outcomes=(),
+            child_outcomes=(),
             execution_identity=ExecutionIdentity.empty(),
         )
 

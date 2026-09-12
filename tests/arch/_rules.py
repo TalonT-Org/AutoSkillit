@@ -129,6 +129,7 @@ _BROAD_EXCEPT_EXEMPT = frozenset(
         "recipe_confirmed_post_hook.py",
         "capture_lifecycle_hook.py",
         "exploration_request_identity_guard.py",
+        "child_outcome_hook.py",
     }
 )
 

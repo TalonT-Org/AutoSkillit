@@ -21,9 +21,13 @@ class TestCodexTomlFormatContract:
             f"got {type(config).__name__}"
         )
         for event_type, entries in config.items():
-            assert event_type in ("PreToolUse", "PostToolUse", "SessionStart"), (
-                f"Unknown event type key: {event_type}"
-            )
+            assert event_type in (
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "SessionStart",
+                "Stop",
+            ), f"Unknown event type key: {event_type}"
             assert isinstance(entries, list)
             for entry in entries:
                 assert "event" not in entry, (

@@ -876,11 +876,11 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _INTERACTIVE_ENV_EXCLUSIONS (TERM/NO_COLOR headless-hardening keys) when"
         "building the interactive Claude Code base env."
     ),
-    "execution/backends/_claude/session_commands.py:175": (
+    "execution/backends/_claude/session_commands.py:178": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/_claude/session_commands.py:287": (
+    "execution/backends/_claude/session_commands.py:290": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
@@ -888,19 +888,19 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex generic-prompt launch."
     ),
-    "execution/backends/_codex/session_commands.py:278": (
+    "execution/backends/_codex/session_commands.py:281": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:418": (
+    "execution/backends/_codex/session_commands.py:421": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:538": (
+    "execution/backends/_codex/session_commands.py:541": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:611": (
+    "execution/backends/_codex/session_commands.py:614": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
@@ -1166,6 +1166,16 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
             "AutoSkillit-private session/orchestration variable in the"
             "AUTOSKILLIT_PRIVATE_ENV_VARS / _HEADLESS_EXCLUSIVE_VARS baseline; must not leak"
             "between sibling or nested sessions."
+        ),
+    ),
+    "AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR": AmbientEnvDisposition(
+        var="AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "AutoSkillit-owned diagnostic log-root channel for the child-terminal-reason"
+            "snapshot authority (issue #4623); distinct from the operator-owned"
+            "AUTOSKILLIT_LOG_DIR and must not leak across test boundaries."
         ),
     ),
     "AUTOSKILLIT_CODEX_STARTUP_TRACE": AmbientEnvDisposition(
@@ -1699,6 +1709,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
     ),
     "CHANGES_REQUESTED": AmbientEnvDisposition(
         var="CHANGES_REQUESTED",
+        disposition="scrub",
+        owner="autoskillit",
+        justification=(
+            "R4 predicate-(b) false positive: an all-uppercase enum/status/regex-name/label member"
+            "of an unrelated lookup collection; never set as a real OS environment variable."
+        ),
+    ),
+    "CHILD_OUTCOME_LOG_DIR_ENV_VAR": AmbientEnvDisposition(
+        var="CHILD_OUTCOME_LOG_DIR_ENV_VAR",
         disposition="scrub",
         owner="autoskillit",
         justification=(

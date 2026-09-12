@@ -255,6 +255,8 @@ def test_make_context_protocol_substitution(tmp_path):
             model: str = "",
             step_name: str = "",
             add_dirs=(),
+            child_role: str | None = None,
+            child_attribution_skill: str = "",
         ) -> SkillResult:
             return SkillResult(
                 success=True,

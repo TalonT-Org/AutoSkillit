@@ -31,6 +31,9 @@ class HookDef:
         "PostToolUseFailure",
         "SessionStart",
         "Stop",
+        "SubagentStart",
+        "SubagentStop",
+        "SessionEnd",
     ] = "PreToolUse"
     scripts: list[str] = field(default_factory=list)
     timeout_seconds: int | None = None

@@ -290,6 +290,15 @@ still the session start time. Rows removed from the live projection are appended
 to `sessions-archive.jsonl`; protected sessions and deletion failures remain live
 and are not archived.
 
+The child-terminal-reason snapshot (issue #4623,
+`child-outcomes/{backend}/{parent_session_id}.json`) is exempt from this
+eviction — it is the canonical source `summary.json`/`sessions.jsonl` project
+from, not itself a retained-projection artifact, and it survives its own
+parent's `sessions/` directory being pruned or never having existed (an
+orphan or interactive-only parent). See [Child Terminal
+Reasons](../developer/diagnostics.md#child-terminal-reasons) for the full
+row shape and reason taxonomy.
+
 ## Recording and replay
 
 `execution/recording.py` provides `RecordingSubprocessRunner` (records every

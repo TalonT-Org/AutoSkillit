@@ -81,6 +81,8 @@ class _DefaultHeadlessExecutorBase:
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
         execution_identity: ExecutionIdentity = ExecutionIdentity(),
         on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+        child_role: str | None = None,
+        child_attribution_skill: str = "",
     ) -> SkillResult:
         from autoskillit.execution.headless import run_headless_core
 
@@ -136,6 +138,8 @@ class _DefaultHeadlessExecutorBase:
             managed_lineage_ref=managed_lineage_ref,
             execution_identity=execution_identity,
             on_launch_resolved=on_launch_resolved,
+            child_role=child_role,
+            child_attribution_skill=child_attribution_skill,
         )
 
 

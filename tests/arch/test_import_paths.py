@@ -113,6 +113,21 @@ def test_req_imp_002_no_core_submodule_imports() -> None:
 # server/ and cli/ are Part B scope; REQ-IMP-003/004/005/006 cover those.
 # ---------------------------------------------------------------------------
 
+# Issue #4623: execution/child_outcomes.py is the execution-layer reader for
+# the child-terminal-reason snapshot, whose canonical write authority is the
+# stdlib-only hooks/_child_outcome_snapshot submodule. hooks/__init__.py must
+# not re-export that API at the package level (that would make it reachable
+# by any consumer, including hooks themselves, defeating the layering this
+# feature requires), so the reader imports the submodule directly instead.
+# Mirrors the twin exemption already granted for this exact import in
+# tests/arch/test_layer_enforcement.py's REQ-ARCH-001 check
+# (_CROSS_PACKAGE_SUBMODULE_EXEMPTIONS).
+_REQ_IMP_001_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("execution/child_outcomes.py", "autoskillit.hooks._child_outcome_snapshot"),
+    }
+)
+
 
 def test_req_imp_001_no_cross_package_submodule_imports() -> None:
     """No non-server/cli file may import from an internal sub-module of a different package."""
@@ -127,7 +142,10 @@ def test_req_imp_001_no_cross_package_submodule_imports() -> None:
             if len(parts) >= 3 and parts[1] in PACKAGES:
                 target_pkg = parts[1]
                 if target_pkg != this_pkg:
-                    violations.append(f"{path.relative_to(SRC)}: {mod}")
+                    rel_str = str(path.relative_to(SRC))
+                    if (rel_str, mod) in _REQ_IMP_001_EXEMPTIONS:
+                        continue
+                    violations.append(f"{rel_str}: {mod}")
     assert not violations, "REQ-IMP-001 violations:\n" + "\n".join(violations)
 
 

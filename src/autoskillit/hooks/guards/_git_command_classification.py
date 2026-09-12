@@ -9,15 +9,22 @@ primitives and the helpers used exclusively by them moved from
 `_resolve_git_common_dir`) and dispatches into the inner classifiers
 transitively through `_classify_git_segment`.
 
-This module is stdlib-only at the package level: it imports six symbols from
-`_command_classification` (the tokenization primitives `_consume_str_flag`,
-`_SHELL_OPS`, `extract_git_subcommand_and_flags`,
-`has_interpreter_wrapped_command`, `has_nested_shell`, and the structural
-type `_FlagArity`) and one symbol from `_github_mutation_analysis`
-(`_DYNAMIC_SHELL_TOKEN_RE`). Both are bare-name flat-mode siblings resolved
-via `git_ops_guard.py`'s `sys.path` bootstrap (or the test-side bootstrap in
-`tests/infra/test_git_ops_guard.py`). It does NOT re-export any
-`_command_classification` symbol.
+This module is stdlib-only at the package level: it imports seven symbols
+from `_command_classification` (the tokenization/classification primitives
+`_command_position_candidate_spans`, `_consume_str_flag`,
+`all_evaluated_segments`, `command_verb_and_args`,
+`extract_git_subcommand_and_flags`, `extract_interpreter_command_payloads`,
+`live_command_text`, and the structural type `_FlagArity`) and one symbol
+from `_github_mutation_analysis` (`_DYNAMIC_SHELL_TOKEN_RE`). Both are
+bare-name flat-mode siblings resolved via `git_ops_guard.py`'s `sys.path`
+bootstrap (or the test-side bootstrap in `tests/infra/test_git_ops_guard.py`).
+It does NOT re-export any `_command_classification` symbol.
+
+`_contains_blocked_git_op` reads the command exclusively through
+`all_evaluated_segments`/`live_command_text` (rectify #4941 Part A) rather
+than a raw `shlex.split`/text-bag scan, so a `git` invocation delivered via
+`bash -c`, a heredoc, a herestring, or a pipe is seen the same way a direct
+invocation is.
 
 Public API surface:
     Classifiers (7):
@@ -25,7 +32,7 @@ Public API surface:
         _classify_update_ref, _classify_branch_position, _classify_reset,
         _contains_blocked_git_op
     Helpers (consumed transitively by the classifiers above):
-        _tokenize_text, _git_result, _git_text, _parse_worktree_owners,
+        _git_result, _git_text, _parse_worktree_owners,
         _resolve_git_common_dir, _normal_branch_ref, _symbolic_head,
         _resolve_attempted_sha, _consume_option_value, _refspec_targets,
         _same_repository, _resolve_remote_url, _local_path_from_remote_url
@@ -35,17 +42,18 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 from pathlib import Path
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _SHELL_OPS,
+    _command_position_candidate_spans,
     _consume_str_flag,
     _FlagArity,
+    all_evaluated_segments,
+    command_verb_and_args,
     extract_git_subcommand_and_flags,
-    has_interpreter_wrapped_command,
-    has_nested_shell,
+    extract_interpreter_command_payloads,
+    live_command_text,
 )
 from _github_mutation_analysis import (  # type: ignore[import-not-found]  # noqa: E402
     _DYNAMIC_SHELL_TOKEN_RE,
@@ -155,61 +163,56 @@ def _contains_blocked_git_op(
 ) -> tuple[str, ...] | None:
     """Return the matching blocked git op tuple, or None if no match.
 
-    Tokenises with shlex. A 'git' token (or /path/to/git) is considered a
-    command start when it is at position 0 or immediately follows a shell
-    separator token. env-prefixed invocations (VAR=1 git ...) are skipped
-    (fail-open), matching artifact_download_guard behavior.
+    Reads *cmd* exclusively through `all_evaluated_segments`, the single
+    authority for "what will actually execute, and as what argv" (rectify
+    #4941 Part A): a direct invocation, one delivered via `bash -c`/`eval`,
+    one fed through a heredoc/herestring/pipe to a shell, and a literal-argv
+    `subprocess.run(["git", ...])` are all seen the same way, at every
+    command-position candidate span (top level, and inside an inline
+    function/group body). A 'git' token (or /path/to/git, or a wrapper- or
+    env-assignment-prefixed invocation) is a command start via
+    `command_verb_and_args`. Returns `None` when `all_evaluated_segments`
+    cannot tokenize *cmd* (fail-open).
 
     `blocked_ops` is passed by the caller (the orchestrator's `main()`
     passes `_BLOCKED_GIT_OPS` to keep the constant co-located with itself
     per the sync-invariant test in `test_risky_git_ops_coverage.py`).
     """
-    try:
-        tokens = shlex.split(cmd)
-    except ValueError:
+    segments = all_evaluated_segments(cmd)
+    if segments is None:
         return None
 
-    for i, token in enumerate(tokens):
-        if token != "git" and not token.endswith("/git"):
-            continue
-        # Only treat as a command start at position 0 or after a shell operator.
-        if i != 0 and tokens[i - 1] not in _SHELL_OPS:
-            continue
-        result = extract_git_subcommand_and_flags(tokens[i:])
-        if result is None:
-            continue
-        subcommand, remaining = result
-        if subcommand == "<unresolved>":
-            # An unrecognized global git flag means the real subcommand
-            # could not be found at all -- deny unconditionally rather
-            # than matching against blocked_ops's literal tuples,
-            # which "<unresolved>" can never equal (an unhandled case
-            # would silently fall through to "not blocked" here).
-            return (subcommand,)
-        for op_tuple in blocked_ops:
-            if subcommand != op_tuple[0]:
+    for segment in segments:
+        for start, end in _command_position_candidate_spans(segment):
+            verb, args = command_verb_and_args(segment[start:end])
+            if verb != "git" and not verb.endswith("/git"):
                 continue
-            flags = op_tuple[1:]
-            if all(f in remaining for f in flags):
-                return op_tuple
+            result = extract_git_subcommand_and_flags([verb, *args])
+            if result is None:
+                continue
+            subcommand, remaining = result
+            if subcommand == "<unresolved>":
+                # An unrecognized global git flag means the real subcommand
+                # could not be found at all -- deny unconditionally rather
+                # than matching against blocked_ops's literal tuples,
+                # which "<unresolved>" can never equal (an unhandled case
+                # would silently fall through to "not blocked" here).
+                return (subcommand,)
+            for op_tuple in blocked_ops:
+                if subcommand != op_tuple[0]:
+                    continue
+                flags = op_tuple[1:]
+                if all(f in remaining for f in flags):
+                    return op_tuple
 
-    # Check for interpreter-wrapped invocations (python3 -c "subprocess.run(['git', ...])")
-    if has_interpreter_wrapped_command(cmd, target_commands=["git"]):
-        text_tokens = _tokenize_text(cmd.lower())
-        for op_tuple in blocked_ops:
-            if op_tuple[0] in text_tokens and all(f in text_tokens for f in op_tuple[1:]):
-                return op_tuple
-
-    # Check for nested shell invocations (bash -c "git commit --amend")
-    if has_nested_shell(cmd):
-        text_tokens = _tokenize_text(cmd.lower())
-        for op_tuple in blocked_ops:
-            if (
-                "git" in text_tokens
-                and op_tuple[0] in text_tokens
-                and all(f in text_tokens for f in op_tuple[1:])
-            ):
-                return op_tuple
+    # A Python payload whose subprocess/os call could not be resolved to a
+    # literal argv or string (dynamic argument, unrecognized call shape)
+    # means a "git" mention anywhere in what will actually run cannot be
+    # ruled out -- deny unconditionally rather than silently falling
+    # through to "not blocked".
+    _payloads, has_unresolved = extract_interpreter_command_payloads(cmd)
+    if has_unresolved and "git" in _tokenize_text(live_command_text(cmd)):
+        return ("<unresolved>",)
 
     return None
 

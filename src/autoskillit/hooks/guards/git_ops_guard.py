@@ -35,6 +35,7 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     extract_interpreter_command_payloads,
     extract_interpreter_write_paths,
     extract_redirect_targets,
+    live_command_text,
     tokenize_command_segments,
     tokenize_shell_payload_segments,
 )
@@ -190,7 +191,7 @@ def _deny_checked_out_ref(
     raise SystemExit(0)
 
 
-def _raw_write_targets(command: str, segments: list[list[str]]) -> tuple[list[str], bool]:
+def _raw_write_targets(text: str, segments: list[list[str]]) -> tuple[list[str], bool]:
     targets: list[str] = []
     ambiguous = False
     for segment in segments:
@@ -210,8 +211,8 @@ def _raw_write_targets(command: str, segments: list[list[str]]) -> tuple[list[st
                 ambiguous = True
             elif candidate:
                 targets.append(candidate)
-    interpreter_paths = extract_interpreter_write_paths(command)
-    if interpreter_paths == [] and "open(" in command:
+    interpreter_paths = extract_interpreter_write_paths(text)
+    if interpreter_paths == [] and "open(" in text:
         ambiguous = True
     elif interpreter_paths:
         targets.extend(interpreter_paths)
@@ -219,9 +220,9 @@ def _raw_write_targets(command: str, segments: list[list[str]]) -> tuple[list[st
 
 
 def _raw_target_mutations(
-    command: str, segments: list[list[str]], context: dict[str, object]
+    text: str, segments: list[list[str]], context: dict[str, object]
 ) -> list[tuple[str, str, bool]]:
-    targets, ambiguous = _raw_write_targets(command, segments)
+    targets, ambiguous = _raw_write_targets(text, segments)
     if ambiguous:
         return [("", "<unresolved>", True)]
     common = Path(str(context["common_git_dir"])).resolve()
@@ -297,15 +298,32 @@ def _preflight_checked_out_ref_mutation(
     outer_segments = tokenize_command_segments(command)
     nested_segments = tokenize_shell_payload_segments(command)
     interpreter_payloads, interpreter_unresolved = extract_interpreter_command_payloads(command)
+    additional_segments: list[list[str]] = []
+    if nested_segments:
+        additional_segments.extend(nested_segments)
+    for payload in interpreter_payloads:
+        if isinstance(payload, list):
+            additional_segments.append(payload)
+        else:
+            additional_segments.extend(tokenize_command_segments(payload))
+    # The live-text projection (rectify #4941 Part A): a heredoc/herestring
+    # body whose consumer executes it is blanked at its source position and
+    # appended once; an inert body is blanked and never appended. Both the
+    # structural-mutation regex and _raw_target_mutations' write-path scan
+    # read this projection instead of the raw command, so an inert `cat
+    # <<'EOF'` body mentioning "git push --force" as prose no longer
+    # matches, while a heredoc/pipe-fed shell that actually runs it still
+    # does.
+    live_text = live_command_text(command)
     structural_mutation = bool(
         re.search(
             r"\bgit\b[^\n;&|]*(?:update-ref|branch\s+(?:-f|--force)|checkout\s+-B|switch\s+-C|"
             r"reset\b|fetch\b|push\b|symbolic-ref\s+HEAD)\b",
-            command,
+            live_text,
         )
         or any(
             os.path.basename(command_verb_and_args(segment)[0]) in _RAW_WRITE_VERBS
-            for segment in outer_segments
+            for segment in [*outer_segments, *additional_segments]
         )
     )
     if not execution_cwd:
@@ -379,18 +397,12 @@ def _preflight_checked_out_ref_mutation(
     context = _repository_context(current_cwd)
     if context is None:
         return
-    additional_segments: list[list[str]] = []
-    if nested_segments:
-        additional_segments.extend(nested_segments)
-    for payload in interpreter_payloads:
-        if isinstance(payload, list):
-            additional_segments.append(payload)
-        else:
-            additional_segments.extend(tokenize_command_segments(payload))
     mutations: list[tuple[str, str, bool]] = []
     for segment in additional_segments:
         mutations.extend(_classify_git_segment(segment, context))
-    mutations.extend(_raw_target_mutations(command, outer_segments, context))
+    mutations.extend(
+        _raw_target_mutations(live_text, [*outer_segments, *additional_segments], context)
+    )
     if interpreter_unresolved and structural_mutation:
         mutations.append(("", "<unresolved>", True))
 

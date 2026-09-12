@@ -282,6 +282,42 @@ def test_codex_app_server_plan_accepts_absolute_runtime_workspace_roots():
     assert plan.runtime_workspace_roots == ("/tmp/extra-root",)
 
 
+def test_codex_app_server_plan_digest_distinguishes_runtime_workspace_roots():
+    """adapter_digest is computed over digest_payload() (_managed/_launch_adapter.py);
+    a plan that changes only its runtime workspace roots must render a different
+    payload, or a regression that drops the field from digest_payload() (or
+    neutralizes it behind a lossy transform) would go undetected."""
+    from autoskillit.core import CodexAppServerPlan
+
+    def _plan(runtime_workspace_roots: tuple[str, ...]) -> CodexAppServerPlan:
+        return CodexAppServerPlan(
+            session_home="",
+            catalog_root="",
+            expected_skill_names=frozenset(),
+            expected_skill_entries=(),
+            cwd="/tmp/session",
+            prompt="p",
+            model=None,
+            sandbox="workspace-write",
+            approval_policy="never",
+            bypass_hook_trust=True,
+            developer_instructions=None,
+            config_overrides={},
+            client_version="0.10.1109",
+            runtime_workspace_roots=runtime_workspace_roots,
+        )
+
+    plan_a = _plan(("/tmp/extra-root-a",))
+    plan_b = _plan(("/tmp/extra-root-b",))
+    payload_a, payload_b = plan_a.digest_payload(), plan_b.digest_payload()
+    assert payload_a["runtime_workspace_roots"] != payload_b["runtime_workspace_roots"]
+    assert payload_a != payload_b
+
+    # Corollary regression guard: identical runtime_workspace_roots (including
+    # the empty default) must not spuriously distinguish otherwise-identical plans.
+    assert _plan(()).digest_payload() == _plan(()).digest_payload()
+
+
 def test_cmd_spec_normalizes_inherited_fds():
     from autoskillit.core import CmdSpec
 

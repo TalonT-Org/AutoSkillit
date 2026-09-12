@@ -190,9 +190,18 @@ class TestResourceExhaustionGuardEvaluationShapeMatrix:
     """Deny family proven through every semantically executing, non-Python shape.
 
     A Python argv-list shape's `subprocess.run([...])` call never evaluates
-    `while`/`done`/`&`/`kill %N` as shell syntax -- they are chopped into
-    separate literal argv strings, so those shapes are excluded rather than
-    inheriting a blanket deny expectation (rectify #4941 Part B, plan 1.1).
+    `while`/`done`/`&` as shell syntax -- they are chopped into separate
+    literal argv strings, so those shapes are excluded rather than inheriting
+    a blanket deny expectation (rectify #4941 Part B, plan 1.1).
+
+    This does NOT extend to `kill %N`: unlike the backgrounded-loop regex
+    (which requires `while` directly followed by whitespace -- broken by the
+    quote/comma boundaries inside a Python list-literal's repr), the looser
+    `_KILL_JOBSPEC_RE` in resource_exhaustion_guard.py only requires "kill"
+    and a "%N" token within the same statement, so it still matches across
+    a list literal like `['kill', '%1']`. See
+    test_python_consumer_shape_allows_kill_jobspec below -- confirmed by
+    running the guard, not assumed.
     """
 
     @pytest.mark.parametrize("shape", _MATRIX_APPLICABLE_SHAPES, ids=lambda s: s.id)
@@ -220,9 +229,16 @@ class TestResourceExhaustionGuardEvaluationShapeMatrix:
         assert not _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must allow"
 
     @pytest.mark.parametrize("shape", _MATRIX_PYTHON_SHAPES, ids=lambda s: s.id)
-    def test_python_consumer_shape_allows_kill_jobspec(self, shape) -> None:
+    def test_python_consumer_shape_denies_kill_jobspec(self, shape) -> None:
+        """Unlike the backgrounded-loop case, `_KILL_JOBSPEC_RE` is a loose
+        same-statement proximity match ("kill" ... "%N", bounded only by
+        `;&|\\n`) that still fires across a Python list literal's repr, e.g.
+        `['kill', '%1']` -- so this shape is (over-cautiously, but not
+        incorrectly enough to fix here) still denied. This documents the
+        guard's actual current behavior rather than assuming symmetry with
+        the backgrounded-loop exemption above."""
         cmd = shape.build("kill %1")
-        assert not _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must allow"
+        assert _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must deny"
 
 
 class TestResourceExhaustionGuardEdgeCases:

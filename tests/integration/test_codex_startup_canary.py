@@ -34,13 +34,9 @@ except ImportError:  # pragma: no cover - exercised only on unsupported platform
 pytestmark = [pytest.mark.large, pytest.mark.canary]
 
 _CANARY_ENV = "AUTOSKILLIT_CODEX_STARTUP_CANARY"
-# Exact rollout/inode/lease wire-schema pin the two tests below assert against
-# (session_meta/response_item record shapes, rollout filename/compression
-# conventions). The broader `_installed_supported_codex` selection gate below
-# only requires CodexBackend().capabilities.min_version -- a binary that
-# clears that transport floor but isn't this exact build skips the
-# schema-pinned assertions via `_skip_unless_schema_pinned` instead of
-# silently passing against a schema it was never verified against.
+# Exact build this file's rollout/inode/lease-schema assertions are pinned to;
+# see _skip_unless_schema_pinned for why a compatible-but-different build skips
+# those assertions instead of silently passing.
 _SUPPORTED_VERSION = "codex-cli 0.147.0"
 _OUTPUT_CAP = 64 * 1024
 _INSTALLED_CODEX_HOME = Path.home() / ".codex"

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import ast
 import json
-import subprocess
 
 import pytest
 
@@ -463,31 +463,31 @@ class TestMalformedAndOutOfOrderFrames:
 
 
 class TestNoSubprocessOrNetworkIO:
-    def test_driver_module_imports_no_subprocess_or_socket(self) -> None:
+    def test_driver_module_has_no_subprocess_or_socket_usage(self) -> None:
+        """Guards the module truly never shells out or does raw network I/O.
+
+        AST-based rather than string-grep: catches `from subprocess import Popen`
+        style imports and any call through an `asyncio.create_subprocess_*`
+        attribute, not just the exact substrings a grep would need to enumerate.
+        """
         import autoskillit.execution.backends._codex.app_server as module
 
         source = module.__file__
         assert source is not None
-        text = open(source, encoding="utf-8").read()
-        for banned in ("import subprocess", "import socket", "asyncio.create_subprocess"):
-            assert banned not in text, f"driver must perform no subprocess/network I/O: {banned}"
+        with open(source, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=source)
 
-    def test_no_autoskillit_process_imports(self) -> None:
-        import autoskillit.execution.backends._codex.app_server as module
-
-        source = module.__file__
-        assert source is not None
-        text = open(source, encoding="utf-8").read()
-        assert "subprocess.run" not in text
-        assert "subprocess.Popen" not in text
-
-
-class TestSubprocessRunUnused:
-    """Guards the module truly never shells out (belt-and-suspenders on the above)."""
-
-    def test_module_has_no_subprocess_attribute_usage(self) -> None:
-        import autoskillit.execution.backends._codex.app_server as module
-
-        assert not hasattr(module, "subprocess")
-        # sanity: the stdlib subprocess module itself is unaffected by this guard
-        assert subprocess.run is not None
+        banned_modules = {"subprocess", "socket"}
+        banned_asyncio_attrs = {"create_subprocess_exec", "create_subprocess_shell"}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert alias.name not in banned_modules, (
+                        f"driver must perform no subprocess/network I/O: import {alias.name}"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                assert node.module not in banned_modules, (
+                    f"driver must perform no subprocess/network I/O: from {node.module} import ..."
+                )
+            elif isinstance(node, ast.Attribute) and node.attr in banned_asyncio_attrs:
+                raise AssertionError(f"driver must perform no subprocess/network I/O: {node.attr}")

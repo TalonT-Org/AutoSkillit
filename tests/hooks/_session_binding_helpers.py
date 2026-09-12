@@ -38,7 +38,12 @@ def copy_projected_hook(tmp_path: Path, name: str = "join-plugin") -> tuple[Path
     runtime_dir = hooks_dir / "_runtime"
     runtime_dir.mkdir(parents=True)
     for filename in _PROJECTED_HOOK_FILES:
-        shutil.copy2(_SOURCE_FOR[filename] / filename, hooks_dir / filename)
+        dest = (
+            runtime_dir / filename
+            if filename in _PROJECTED_HOOK_FILES_RUNTIME
+            else hooks_dir / filename
+        )
+        shutil.copy2(_SOURCE_FOR[filename] / filename, dest)
     return projection_root, hooks_dir / "skill_load_post_hook.py"
 
 

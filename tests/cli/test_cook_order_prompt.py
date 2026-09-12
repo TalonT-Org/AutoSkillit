@@ -330,7 +330,8 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
+            "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
+            lambda: plugins_file,
         )
         configure_popen(mock_run, returncode=0)
 
@@ -358,7 +359,8 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text(f'{{"version": 2, "plugins": {{"{_PLUGIN_KEY}": []}}}}')
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
+            "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
+            lambda: plugins_file,
         )
         configure_popen(mock_run, returncode=0)
 
@@ -396,7 +398,8 @@ class TestOrderMcpPrefixSelection:
         plugins_file = tmp_path / "plugins.json"
         plugins_file.write_text('{"version": 2, "plugins": {}}')
         monkeypatch.setattr(
-            "autoskillit.core._plugin_ids._installed_plugins_path", lambda: plugins_file
+            "autoskillit.core.plugins._plugin_ids._installed_plugins_path",
+            lambda: plugins_file,
         )
         import importlib
         import sys as _sys

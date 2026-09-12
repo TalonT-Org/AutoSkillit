@@ -277,7 +277,7 @@ class TestVerifyInstallState:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
+        import autoskillit.core.plugins._plugin_artifact_identity as plugin_artifact_identity
         from autoskillit import __version__
 
         _publish_generation(home, __version__)
@@ -428,7 +428,7 @@ class TestVerifyInstallState:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
+        import autoskillit.core.plugins._plugin_artifact_identity as plugin_artifact_identity
         from autoskillit.workspace import verify_install_state
 
         identity = _queue_registered_retirement(home)

@@ -21,7 +21,7 @@ def test_codex_version_populated_with_codex_backend() -> None:
 def test_codex_version_empty_when_no_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._version_snapshot as mod
+    import autoskillit.core.io.version_snapshot as mod
 
     monkeypatch.delenv("AUTOSKILLIT_AGENT_BACKEND", raising=False)
 

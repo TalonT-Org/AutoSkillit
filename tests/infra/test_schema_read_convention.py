@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 
 _SHARED_READ_SIDE_VALIDATORS = {
     "read_installed_plugin_artifact_identity": (
-        "src/autoskillit/core/_plugin_artifact_identity.py"
+        "src/autoskillit/core/plugins/_plugin_artifact_identity.py"
     ),
     "read_projected_plugin_identity": ("src/autoskillit/workspace/_projection_cache.py"),
 }
@@ -99,12 +99,12 @@ def _scan_read_versioned_json_callers() -> set[str]:
 # Documented exceptions: modules that write versioned JSON but do not read it back.
 # Rationale for each is in the comment.
 _READ_SIDE_EXCEPTIONS: dict[str, str] = {
-    "src/autoskillit/core/_retiring_cache.py": (
+    "src/autoskillit/core/plugins/_retiring_cache.py": (
         "Retiring-cache writer — the classified reader (_read_retiring_cache_unlocked) "
         "is colocated in the same module but uses the stricter schema validator rather "
         "than read_versioned_json."
     ),
-    "src/autoskillit/core/_active_kitchens.py": (
+    "src/autoskillit/core/plugins/_active_kitchens.py": (
         "Active-kitchen mutations use the stricter exact-schema registry validator "
         "(_read_active_kitchens_unlocked) instead of read_versioned_json."
     ),
@@ -121,7 +121,7 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
         "entries, decoded to typed QuotaConstraint records) rather than read_versioned_json's "
         "generic reader, mirroring the _retiring_cache.py/_active_kitchens.py pattern above."
     ),
-    "src/autoskillit/core/_execution_marker.py": (
+    "src/autoskillit/core/pipeline/_execution_marker.py": (
         "Progress signal — written and deleted, never read back"
     ),
     "src/autoskillit/execution/session_log.py": (

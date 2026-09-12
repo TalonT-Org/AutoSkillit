@@ -101,7 +101,26 @@ POLICY_SURFACES: tuple[PolicySurface, ...] = (
     ),
 )
 
-POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = ()
+POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
+    PolicyRelaxationApproval(
+        path="tests/arch/test_subpackage_isolation_file_counts.py",
+        symbol="FILE_COUNT_LIMITS",
+        key="core/io",
+        before="8",
+        after="9",
+        issue=4671,
+        approved_by="Trecek",
+    ),
+    PolicyRelaxationApproval(
+        path="tests/arch/test_subpackage_isolation_file_counts.py",
+        symbol="FILE_COUNT_LIMITS",
+        key="core/plugins",
+        before="5",
+        after="10",
+        issue=4671,
+        approved_by="Trecek",
+    ),
+)
 
 POLICY_AUTHORITY_PATHS = (
     "tests/arch/_acceptance_policy_surfaces.py",

@@ -18,29 +18,29 @@ from autoskillit.core import (
     mapping_entry_byte_ranges_from_yaml,
     pkg_root,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     _SCRIPTS_PLACEHOLDER as _SCRIPTS_PLACEHOLDER,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     NON_RECIPE_DIRS as NON_RECIPE_DIRS,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     RECIPE_SCAN_DIRS as RECIPE_SCAN_DIRS,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     _collect_recipes_from_candidates,
     _discover_recipe_collection,
     _enumerate_candidates_in_scan_dirs,
     clear_recipe_discovery_caches,
     load_recipe_dict_with_declarations,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     is_recipe_scan_path as is_recipe_scan_path,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     substitute_scripts_placeholder as substitute_scripts_placeholder,
 )
-from autoskillit.recipe._io_loading import (
+from autoskillit.recipe.helpers._io_loading import (
     substitute_temp_placeholder as substitute_temp_placeholder,
 )
 from autoskillit.recipe.order import BUNDLED_RECIPE_ORDER
@@ -83,11 +83,14 @@ def load_recipe(path: Path, temp_dir_relpath: str = ".autoskillit/temp") -> Reci
         temp_dir_relpath=temp_dir_relpath,
     )
     recipe = _parse_recipe(data, declared_data=declared_data)
-    from autoskillit.recipe.staleness_cache import compute_recipe_hash  # noqa: PLC0415
+    from autoskillit.recipe.contracts.staleness_cache import compute_recipe_hash  # noqa: PLC0415
 
     recipe.content_hash = compute_recipe_hash(path)
     # Deferred import breaks the circular dependency with _analysis.py.
-    from autoskillit.recipe._analysis import _build_step_graph, extract_blocks  # noqa: PLC0415
+    from autoskillit.recipe.analysis._analysis import (  # noqa: PLC0415
+        _build_step_graph,
+        extract_blocks,
+    )
 
     recipe.blocks = extract_blocks(recipe, _build_step_graph(recipe))
     return recipe

@@ -25,7 +25,7 @@ _ALLOWED_PATHS_BY_OPERATION = {
     "canonical_bytes": frozenset({"src/autoskillit/server/_audit_authority_materializer.py"}),
     "constructor": frozenset(),
     "create": frozenset({"src/autoskillit/server/_audit_authority_materializer.py"}),
-    "from_dict": frozenset({"src/autoskillit/core/audit_cycle_verifier.py"}),
+    "from_dict": frozenset({"src/autoskillit/core/audit/audit_cycle_verifier.py"}),
     "replace": frozenset(),
 }
 

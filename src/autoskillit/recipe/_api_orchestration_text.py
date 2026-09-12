@@ -13,7 +13,7 @@ from autoskillit.core import (
     build_parameter_forwarding_rules,
     get_logger,
 )
-from autoskillit.recipe._rule_helpers import (
+from autoskillit.recipe.helpers._rule_helpers import (
     _is_failure_sentinel_value,
     extract_sentinel_json_blocks,
 )

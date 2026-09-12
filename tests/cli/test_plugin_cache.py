@@ -156,7 +156,7 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._plugin_cache as plugin_cache
+    import autoskillit.core.plugins._plugin_artifact_retirement as plugin_artifact_retirement
     from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -169,13 +169,13 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
 
-    real_rmtree = plugin_cache.shutil.rmtree
+    real_rmtree = plugin_artifact_retirement.shutil.rmtree
 
     def fail_reclaim(path):
         (path / "plugin.json").unlink()
         raise PermissionError("injected installed reclaim failure")
 
-    monkeypatch.setattr(plugin_cache.shutil, "rmtree", fail_reclaim)
+    monkeypatch.setattr(plugin_artifact_retirement.shutil, "rmtree", fail_reclaim)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
     assert not identity.managed_path.exists()
@@ -183,7 +183,7 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
     assert append_result.record_id in {
         queued.record_id for queued in read_retiring_cache().records
     }
-    monkeypatch.setattr(plugin_cache.shutil, "rmtree", real_rmtree)
+    monkeypatch.setattr(plugin_artifact_retirement.shutil, "rmtree", real_rmtree)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
     assert append_result.record_id not in {
@@ -249,7 +249,6 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._plugin_artifact_identity as plugin_artifact_identity
     from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -265,11 +264,12 @@ def test_installed_reclaim_keeps_authority_on_identity_io_error(
     def fail_digest(_path: Path, **_kwargs: object) -> str:
         raise PermissionError("injected transient digest failure")
 
-    monkeypatch.setattr(
-        plugin_artifact_identity,
-        "directory_tree_digest",
-        fail_digest,
-    )
+    # core/plugins/_plugin_artifact_identity.py:10 imports directory_tree_digest
+    # from ..io directly and calls it via bare name from its own globals; the
+    # old core._plugin_artifact_identity shim path is bypassed entirely.
+    from autoskillit.core.plugins import _plugin_artifact_identity as _real_pai
+
+    monkeypatch.setattr(_real_pai, "directory_tree_digest", fail_digest)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
     assert read_retiring_cache().records == (record,)

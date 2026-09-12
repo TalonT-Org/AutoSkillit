@@ -13,7 +13,7 @@ materializes the canonical `hooks.json` that Claude Code reads.
 **Guarded tools:** `merge_worktree`, `push_to_remote`
 Denies merges and pushes targeting branches in `safety.protected_branches`
 (`main`, `develop`, `stable` by default). Pure-function check via
-`core/branch_guard.is_protected_branch`.
+`core/git/branch_guard.is_protected_branch`.
 
 ### `quota_guard.py`
 **Guarded tool:** `run_skill`

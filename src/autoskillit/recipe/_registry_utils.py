@@ -1,31 +1,27 @@
-"""Shared utilities for recipe registry loaders."""
+"""Backward-compat shim for ``recipe/_registry_utils.py``.
+
+Real implementation: ``autoskillit.recipe.helpers._registry_utils`` (#4671 D).
+Preserves old import path ``autoskillit.recipe._registry_utils``.
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Final
+from autoskillit.recipe.helpers._registry_utils import (
+    _MISSING_MTIME,
+    EXPECTED_SCHEMA_VERSION,
+    Final,
+    Path,
+    annotations,
+    dir_mtime,
+    parse_int_field,
+)
 
-EXPECTED_SCHEMA_VERSION: Final = "1.0.0"
-_MISSING_MTIME: float = -1.0
-
-
-def dir_mtime(path: Path) -> float:
-    """Return directory mtime, or ``_MISSING_MTIME`` if the path is inaccessible."""
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return _MISSING_MTIME
-
-
-def parse_int_field(
-    data: dict, field_name: str, default: int, source_path: Path, kind: str
-) -> int:
-    """Parse an integer field from a registry YAML dict, with a descriptive error."""
-    val = data.get(field_name, default)
-    try:
-        return int(val)
-    except (ValueError, TypeError) as e:
-        name = data.get("name", "?")
-        raise TypeError(
-            f"{kind} '{name}' field '{field_name}' must be an integer: {source_path}"
-        ) from e
+__all__ = [
+    "EXPECTED_SCHEMA_VERSION",
+    "Final",
+    "Path",
+    "_MISSING_MTIME",
+    "annotations",
+    "dir_mtime",
+    "parse_int_field",
+]

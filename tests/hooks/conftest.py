@@ -8,7 +8,7 @@ import pytest
 
 # The two tool-name shapes the run_cmd matcher (`mcp__.*autoskillit.*__run_cmd`)
 # must accept: the marketplace-prefixed install form and Codex's direct-prefix
-# production form (codex.py + core/_plugin_ids.py).
+# production form (codex.py + core/plugins/_plugin_ids.py).
 _RUN_CMD_TOOL_MARKETPLACE: str = "mcp__plugin_autoskillit_autoskillit__run_cmd"
 _RUN_CMD_TOOL_DIRECT: str = "mcp__autoskillit__run_cmd"
 _FAILURE_GRADE_RE = re.compile(r"\b(failed|error|invalid)\b", re.IGNORECASE)

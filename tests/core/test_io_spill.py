@@ -48,7 +48,7 @@ def test_large_output_is_published_losslessly_with_metadata(tmp_path):
 
 
 def test_write_permission_failure_returns_no_path_or_partial_file(tmp_path, monkeypatch):
-    from autoskillit.core import io
+    from autoskillit.core.io import io
 
     def fail_create(*_args, **_kwargs):
         raise PermissionError("permission denied")
@@ -60,7 +60,7 @@ def test_write_permission_failure_returns_no_path_or_partial_file(tmp_path, monk
 
 
 def test_replace_failure_removes_temporary_and_final_files(tmp_path, monkeypatch):
-    from autoskillit.core import io
+    from autoskillit.core.io import io
 
     def fail_replace(*_args, **_kwargs):
         raise OSError("replace failed")

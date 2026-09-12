@@ -1,202 +1,64 @@
-from ._active_kitchens import (
-    ActiveKitchensReadResult as ActiveKitchensReadResult,
-)
-from ._active_kitchens import ActiveKitchensState as ActiveKitchensState
-from ._active_kitchens import KitchenProcessIdentity as KitchenProcessIdentity
-from ._active_kitchens import any_kitchen_open as any_kitchen_open
-from ._active_kitchens import kitchen_entry_alive as kitchen_entry_alive
-from ._active_kitchens import read_active_kitchens_registry as read_active_kitchens_registry
-from ._active_kitchens import register_active_kitchen as register_active_kitchen
-from ._active_kitchens import (
-    sample_kitchen_process_identity as sample_kitchen_process_identity,
-)
-from ._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
 from ._capacity import MIN_FREE_BYTES_THRESHOLD as MIN_FREE_BYTES_THRESHOLD
 from ._capacity import SpaceProbe as SpaceProbe
 from ._capacity import default_space_probe as default_space_probe
 from ._capacity import platform_temp_root as platform_temp_root
-from ._claude_env import build_agent_env as build_agent_env
-from ._claude_env import build_claude_env as build_claude_env
-from ._claude_env import build_maintenance_env as build_maintenance_env
-from ._claude_env import resolve_dbus_session_bus_address as resolve_dbus_session_bus_address
-from ._cmd_runner import CmdRunner as CmdRunner
-from ._cmd_runner import default_cmd_runner as default_cmd_runner
-from ._cmd_runner import run_gh as run_gh
-from ._cmd_runner import run_git as run_git
-from ._delivery_bounds import recipe_delivery_request_digest as recipe_delivery_request_digest
-from ._delivery_bounds import (
-    resolve_general_output_token_limit as resolve_general_output_token_limit,
-)
-from ._delivery_bounds import resolve_recipe_delivery_decision as resolve_recipe_delivery_decision
-from ._delivery_bounds import (
-    resolve_recipe_envelope_byte_limit as resolve_recipe_envelope_byte_limit,
-)
-from ._delivery_bounds import (
-    resolve_recipe_section_response_bound as resolve_recipe_section_response_bound,
-)
 from ._entrypoint_shim import ENTRYPOINT_SHIM_SOURCE as ENTRYPOINT_SHIM_SOURCE
 from ._entrypoint_shim import entrypoint_shim_path as entrypoint_shim_path
 from ._entrypoint_shim import write_entrypoint_shim as write_entrypoint_shim
-from ._execution_marker import execution_marker as execution_marker
 from ._install_binding import InstallBinding as InstallBinding
 from ._install_binding import (
     install_binding_matches_current_state as install_binding_matches_current_state,
 )
 from ._install_binding import resolve_install_binding as resolve_install_binding
-from ._install_detect import DirectUrlInfo as DirectUrlInfo
-from ._install_detect import _is_release_tag as _is_release_tag
-from ._install_detect import _is_stable_track as _is_stable_track
-from ._install_detect import distribution_version_at as distribution_version_at
-from ._install_detect import is_dev_install as is_dev_install
-from ._install_detect import parse_direct_url as parse_direct_url
-from ._json import fast_dumps as fast_dumps
-from ._json import fast_loads as fast_loads
 from ._managed_worker_capacity import DefaultManagedWorkerCapacity as DefaultManagedWorkerCapacity
 from ._managed_worker_capacity import ManagedWorkerCapacityError as ManagedWorkerCapacityError
 from ._managed_worker_capacity import ManagedWorkerPermit as ManagedWorkerPermit
-from ._plugin_artifact_identity import (
-    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
-)
-from ._plugin_artifact_identity import (
-    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
-)
-from ._plugin_artifact_identity import (
-    classify_directory_tree_digest_error as classify_directory_tree_digest_error,
-)
-from ._plugin_artifact_identity import (
-    generation_artifact_root as generation_artifact_root,
-)
-from ._plugin_artifact_identity import (
-    generation_plugin_selector_path as generation_plugin_selector_path,
-)
-from ._plugin_artifact_identity import (
-    generation_selector_path as generation_selector_path,
-)
-from ._plugin_artifact_identity import (
-    generation_staging_root as generation_staging_root,
-)
-from ._plugin_artifact_identity import (
-    generation_store_root as generation_store_root,
-)
-from ._plugin_artifact_identity import (
-    generation_version_root as generation_version_root,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_artifact_lease_path as installed_plugin_artifact_lease_path,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_artifact_manifest_path as installed_plugin_artifact_manifest_path,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_artifact_root as installed_plugin_artifact_root,
-)
-from ._plugin_artifact_identity import (
-    installed_plugin_cache_dir as installed_plugin_cache_dir,
-)
-from ._plugin_artifact_identity import (
-    read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
-)
-from ._plugin_artifact_identity import (
-    resolve_current_generation as resolve_current_generation,
-)
-from ._plugin_artifact_identity import (
-    resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
-)
-from ._plugin_artifact_retirement import (
-    PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,
-)
-from ._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
-from ._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
-from ._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
-from ._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
-from ._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
-from ._plugin_ids import _installed_plugins_path as _installed_plugins_path
-from ._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
-from ._plugin_ids import installed_plugin_semantic_key as installed_plugin_semantic_key
-from ._plugin_ids import parse_installed_plugin_semantic_key as parse_installed_plugin_semantic_key
-from ._plugin_ids import project_agent_tool_name as project_agent_tool_name
-from ._plugin_ids import registered_install_paths as registered_install_paths
-from ._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
 from ._release_identity import AdvanceVerdict as AdvanceVerdict
 from ._release_identity import ReleaseChannel as ReleaseChannel
 from ._release_identity import ReleaseIdentity as ReleaseIdentity
 from ._release_identity import advance_verdict as advance_verdict
 from ._release_identity import update_available as update_available
 from ._release_identity import version_advanced as version_advanced
-from ._retiring_cache import _InstallLock as _InstallLock
-from ._retiring_cache import append_retiring_record as append_retiring_record
-from ._retiring_cache import due_retiring_records as due_retiring_records
-from ._retiring_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
-from ._retiring_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
-from ._retiring_cache import read_retiring_cache as read_retiring_cache
-from ._retiring_cache import remove_retiring_records as remove_retiring_records
-from ._retiring_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
-from ._step_context import current_order_id as current_order_id
-from ._step_context import current_step_name as current_step_name
-from ._terminal_table import TerminalColumn as TerminalColumn
-from ._terminal_table import _render_gfm_table as _render_gfm_table
-from ._terminal_table import _render_terminal_table as _render_terminal_table
-from ._version_snapshot import collect_version_snapshot as collect_version_snapshot
-from .agent_definition import AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN
-from .agent_definition import AGENT_PROVISIONING_BASELINE as AGENT_PROVISIONING_BASELINE
-from .agent_definition import (
-    AGENT_PROVISIONING_SKILL_DERIVED as AGENT_PROVISIONING_SKILL_DERIVED,
-)
-from .agent_definition import BUNDLED_EXPLORER_ROLES as BUNDLED_EXPLORER_ROLES
-from .agent_definition import (
-    CODEX_DISABLED_WEB_SEARCH_POLICY as CODEX_DISABLED_WEB_SEARCH_POLICY,
-)
-from .agent_definition import CODEX_EXPLORER_IDENTITY as CODEX_EXPLORER_IDENTITY
-from .agent_definition import (
-    REPOSITORY_IMPACT_PROFILER_ROLE as REPOSITORY_IMPACT_PROFILER_ROLE,
-)
-from .agent_definition import SEMANTIC_CODE_NAVIGATOR_ROLE as SEMANTIC_CODE_NAVIGATOR_ROLE
-from .agent_definition import WEB_EVIDENCE_RESEARCHER_ROLE as WEB_EVIDENCE_RESEARCHER_ROLE
-from .agent_definition import AgentDef as AgentDef
-from .agent_definition import AgentDefinitionError as AgentDefinitionError
-from .agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef
-from .agent_definition import agent_definition_digest as agent_definition_digest
-from .agent_definition import canonical_reader_tools_to_bare as canonical_reader_tools_to_bare
-from .agent_definition import load_agent_definition as load_agent_definition
-from .agent_definition import load_agent_definitions as load_agent_definitions
-from .agent_definition import load_bundled_agent_definitions as load_bundled_agent_definitions
-from .agent_definition import normalize_codex_cli_version as normalize_codex_cli_version
-from .audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
-from .audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
-from .audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
-from .audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
-from .audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
-from .audit_semantic_codec import AuditSemanticCodecError as AuditSemanticCodecError
-from .audit_semantic_codec import (
+from .audit.audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
+from .audit.audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
+from .audit.audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
+from .audit.audit_cycle_verifier import InventoryAdmissionEvaluator as InventoryAdmissionEvaluator
+from .audit.audit_cycle_verifier import VerifiedAuditCycle as VerifiedAuditCycle
+from .audit.audit_semantic_codec import AuditSemanticCodecError as AuditSemanticCodecError
+from .audit.audit_semantic_codec import (
     canonical_full_reference_records_match as canonical_full_reference_records_match,
 )
-from .audit_semantic_codec import (
+from .audit.audit_semantic_codec import (
     load_audit_semantic_result as load_audit_semantic_result,
 )
-from .audit_semantic_codec import (
+from .audit.audit_semantic_codec import (
     load_standalone_audit_evidence as load_standalone_audit_evidence,
 )
-from .bash_write_targets import contains_test_gate_command as contains_test_gate_command
-from .bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
-from .branch_guard import is_protected_branch as is_protected_branch
-from .claude_conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
-from .claude_conventions import LayoutError as LayoutError
-from .claude_conventions import validate_add_dir as validate_add_dir
-from .claude_conventions import validate_worktree_path as validate_worktree_path
-from .closure_hashing import HASH_RE as HASH_RE
-from .closure_hashing import canonical_json_bytes as canonical_json_bytes
-from .closure_hashing import compute_bytes_hash as compute_bytes_hash
-from .closure_hashing import compute_canonical_hash as compute_canonical_hash
-from .closure_hashing import compute_file_hash as compute_file_hash
-from .closure_hashing import compute_report_hash as compute_report_hash
-from .closure_hashing import compute_request_hash as compute_request_hash
-from .closure_hashing import compute_row_hash as compute_row_hash
-from .closure_hashing import parse_canonical_json_bytes as parse_canonical_json_bytes
-from .closure_verifier import VerificationResult as VerificationResult
-from .closure_verifier import verify_closure_report as verify_closure_report
+from .audit.closure_hashing import HASH_RE as HASH_RE
+from .audit.closure_hashing import canonical_json_bytes as canonical_json_bytes
+from .audit.closure_hashing import compute_bytes_hash as compute_bytes_hash
+from .audit.closure_hashing import compute_canonical_hash as compute_canonical_hash
+from .audit.closure_hashing import compute_file_hash as compute_file_hash
+from .audit.closure_hashing import compute_report_hash as compute_report_hash
+from .audit.closure_hashing import compute_request_hash as compute_request_hash
+from .audit.closure_hashing import compute_row_hash as compute_row_hash
+from .audit.closure_hashing import parse_canonical_json_bytes as parse_canonical_json_bytes
+from .audit.closure_verifier import VerificationResult as VerificationResult
+from .audit.closure_verifier import verify_closure_report as verify_closure_report
+from .claude_env.claude_env import build_agent_env as build_agent_env
+from .claude_env.claude_env import build_claude_env as build_claude_env
+from .claude_env.claude_env import build_maintenance_env as build_maintenance_env
+from .claude_env.claude_env import (
+    resolve_dbus_session_bus_address as resolve_dbus_session_bus_address,
+)
+from .claude_env.conventions import ClaudeDirectoryConventions as ClaudeDirectoryConventions
+from .claude_env.conventions import LayoutError as LayoutError
+from .claude_env.conventions import validate_add_dir as validate_add_dir
+from .claude_env.conventions import validate_worktree_path as validate_worktree_path
+from .claude_env.feature_flags import (
+    _collect_disabled_feature_tags as _collect_disabled_feature_tags,
+)
+from .claude_env.feature_flags import is_feature_enabled as is_feature_enabled
 from .context_admission import (
     CONTEXT_ADMISSION_REDUCER_REGISTRY as CONTEXT_ADMISSION_REDUCER_REGISTRY,
 )
@@ -206,6 +68,7 @@ from .context_admission import (
 from .context_admission import (
     ContextAdmissionValidationError as ContextAdmissionValidationError,
 )
+from .context_admission import ProducerSurface as ProducerSurface
 from .context_admission import (
     UnsupportedContextAdmissionProtocolError as UnsupportedContextAdmissionProtocolError,
 )
@@ -221,42 +84,83 @@ from .context_admission import (
 from .context_admission import (
     resolve_context_admission_coverage as resolve_context_admission_coverage,
 )
-from .feature_flags import _collect_disabled_feature_tags as _collect_disabled_feature_tags
-from .feature_flags import is_feature_enabled as is_feature_enabled
 from .fs_observation import VANISHED_ERRORS as VANISHED_ERRORS
 from .fs_observation import ObservedEntry as ObservedEntry
 from .fs_observation import observe_path_mode as observe_path_mode
 from .fs_observation import safe_mtime as safe_mtime
 from .fs_observation import scan_observed as scan_observed
-from .git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
-from .git_remote import GitHubRepositoryRef as GitHubRepositoryRef
-from .git_remote import RemoteIdentityProbe as RemoteIdentityProbe
-from .git_remote import RemoteIdentityResolution as RemoteIdentityResolution
-from .git_remote import parse_github_remote_url as parse_github_remote_url
-from .git_remote import resolve_clone_remote_name_sync as resolve_clone_remote_name_sync
-from .git_remote import (
+from .git.bash_write_targets import contains_test_gate_command as contains_test_gate_command
+from .git.bash_write_targets import extract_bash_write_targets as extract_bash_write_targets
+from .git.branch_guard import is_protected_branch as is_protected_branch
+from .git.git_remote import REMOTE_PRECEDENCE as REMOTE_PRECEDENCE
+from .git.git_remote import GitHubRepositoryRef as GitHubRepositoryRef
+from .git.git_remote import RemoteIdentityProbe as RemoteIdentityProbe
+from .git.git_remote import RemoteIdentityResolution as RemoteIdentityResolution
+from .git.git_remote import parse_github_remote_url as parse_github_remote_url
+from .git.git_remote import resolve_clone_remote_name_sync as resolve_clone_remote_name_sync
+from .git.git_remote import (
     resolve_repository_remote_identity_sync as resolve_repository_remote_identity_sync,
 )
-from .github_url import _parse_issue_ref as _parse_issue_ref
-from .github_url import normalize_owner_repo as normalize_owner_repo
-from .github_url import parse_github_repo as parse_github_repo
+from .git.github_url import _parse_issue_ref as _parse_issue_ref
+from .git.github_url import normalize_owner_repo as normalize_owner_repo
+from .git.github_url import parse_github_repo as parse_github_repo
+from .install.cmd_runner import CmdRunner as CmdRunner
+from .install.cmd_runner import default_cmd_runner as default_cmd_runner
+from .install.cmd_runner import run_gh as run_gh
+from .install.cmd_runner import run_git as run_git
+from .install.install_detect import DirectUrlInfo as DirectUrlInfo
+from .install.install_detect import _is_release_tag as _is_release_tag
+from .install.install_detect import _is_stable_track as _is_stable_track
+from .install.install_detect import distribution_version_at as distribution_version_at
+from .install.install_detect import is_dev_install as is_dev_install
+from .install.install_detect import parse_direct_url as parse_direct_url
 from .io import _AUTOSKILLIT_GITIGNORE_ENTRIES as _AUTOSKILLIT_GITIGNORE_ENTRIES
 from .io import _COMMITTED_BY_DESIGN as _COMMITTED_BY_DESIGN
+from .io import GENERATED_FILES as GENERATED_FILES
+from .io import ContainmentError as ContainmentError
 from .io import ReadResult as ReadResult
+from .io import TerminalColumn as TerminalColumn
 from .io import TreeEntry as TreeEntry
 from .io import TreeVanishedError as TreeVanishedError
 from .io import YAMLError as YAMLError
+from .io import _render_gfm_table as _render_gfm_table
+from .io import _render_terminal_table as _render_terminal_table
 from .io import atomic_write as atomic_write
+from .io import check_metadata_stable as check_metadata_stable
+from .io import claude_code_log_path as claude_code_log_path
+from .io import claude_code_project_dir as claude_code_project_dir
+from .io import collect_version_snapshot as collect_version_snapshot
 from .io import compose_yaml as compose_yaml
 from .io import decode_versioned_json_bytes as decode_versioned_json_bytes
+from .io import default_log_dir as default_log_dir
+from .io import destination_location as destination_location
 from .io import directory_tree_digest as directory_tree_digest
 from .io import dump_yaml_str as dump_yaml_str
 from .io import ensure_project_temp as ensure_project_temp
+from .io import fast_dumps as fast_dumps
+from .io import fast_loads as fast_loads
+from .io import find_latest_session_id as find_latest_session_id
+from .io import github_review_ledger_path as github_review_ledger_path
+from .io import is_generated_path as is_generated_path
+from .io import is_git_main_checkout as is_git_main_checkout
+from .io import is_git_worktree as is_git_worktree
+from .io import is_in_git_repo as is_in_git_repo
 from .io import is_python_bytecode_path as is_python_bytecode_path
 from .io import is_yaml_mapping_node as is_yaml_mapping_node
 from .io import load_yaml as load_yaml
 from .io import mapping_entry_byte_ranges_from_yaml as mapping_entry_byte_ranges_from_yaml
+from .io import pkg_root as pkg_root
+from .io import read_stable_contained_bytes as read_stable_contained_bytes
+from .io import read_stable_contained_range as read_stable_contained_range
 from .io import read_versioned_json as read_versioned_json
+from .io import recipe_delivery_request_digest as recipe_delivery_request_digest
+from .io import resolve_contained_path as resolve_contained_path
+from .io import resolve_general_output_token_limit as resolve_general_output_token_limit
+from .io import resolve_main_worktree as resolve_main_worktree
+from .io import resolve_project_dir as resolve_project_dir
+from .io import resolve_recipe_delivery_decision as resolve_recipe_delivery_decision
+from .io import resolve_recipe_envelope_byte_limit as resolve_recipe_envelope_byte_limit
+from .io import resolve_recipe_section_response_bound as resolve_recipe_section_response_bound
 from .io import resolve_skill_temp_dir as resolve_skill_temp_dir
 from .io import resolve_temp_dir as resolve_temp_dir
 from .io import safe_upsert_section as safe_upsert_section
@@ -269,38 +173,146 @@ from .logging import PluginArtifactLifecycleLease as PluginArtifactLifecycleLeas
 from .logging import configure_logging as configure_logging
 from .logging import get_logger as get_logger
 from .logging import log_plugin_artifact_lifecycle as log_plugin_artifact_lifecycle
-from .path_containment import ContainmentError as ContainmentError
-from .path_containment import check_metadata_stable as check_metadata_stable
-from .path_containment import read_stable_contained_bytes as read_stable_contained_bytes
-from .path_containment import read_stable_contained_range as read_stable_contained_range
-from .path_containment import resolve_contained_path as resolve_contained_path
-from .paths import GENERATED_FILES as GENERATED_FILES
-from .paths import claude_code_log_path as claude_code_log_path
-from .paths import claude_code_project_dir as claude_code_project_dir
-from .paths import default_log_dir as default_log_dir
-from .paths import destination_location as destination_location
-from .paths import find_latest_session_id as find_latest_session_id
-from .paths import github_review_ledger_path as github_review_ledger_path
-from .paths import is_generated_path as is_generated_path
-from .paths import is_git_main_checkout as is_git_main_checkout
-from .paths import is_git_worktree as is_git_worktree
-from .paths import is_in_git_repo as is_in_git_repo
-from .paths import pkg_root as pkg_root
-from .paths import resolve_main_worktree as resolve_main_worktree
-from .paths import resolve_project_dir as resolve_project_dir
-from .pipeline_tracker import TrackerAuthorityReadResult as TrackerAuthorityReadResult
-from .pipeline_tracker import TrackerAuthorityTarget as TrackerAuthorityTarget
-from .pipeline_tracker import TrackerParticipantKey as TrackerParticipantKey
-from .pipeline_tracker import initialize_kitchen_tracker as initialize_kitchen_tracker
-from .pipeline_tracker import initialize_manual_tracker as initialize_manual_tracker
-from .pipeline_tracker import mutate_tracker as mutate_tracker
-from .pipeline_tracker import pipeline_tracker_directory as pipeline_tracker_directory
-from .pipeline_tracker import pipeline_tracker_path as pipeline_tracker_path
-from .pipeline_tracker import read_tracker_authority as read_tracker_authority
-from .pipeline_tracker import release_tracker_lease as release_tracker_lease
-from .pipeline_tracker import retain_tracker_lease as retain_tracker_lease
-from .pipeline_tracker import tracker_lease_path as tracker_lease_path
-from .pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .pipeline._execution_marker import execution_marker as execution_marker
+from .pipeline._step_context import current_order_id as current_order_id
+from .pipeline._step_context import current_step_name as current_step_name
+from .pipeline.pipeline_tracker import TrackerAuthorityReadResult as TrackerAuthorityReadResult
+from .pipeline.pipeline_tracker import TrackerAuthorityTarget as TrackerAuthorityTarget
+from .pipeline.pipeline_tracker import TrackerData as TrackerData
+from .pipeline.pipeline_tracker import TrackerMutation as TrackerMutation
+from .pipeline.pipeline_tracker import TrackerOwnerKind as TrackerOwnerKind
+from .pipeline.pipeline_tracker import TrackerParticipantKey as TrackerParticipantKey
+from .pipeline.pipeline_tracker import initialize_kitchen_tracker as initialize_kitchen_tracker
+from .pipeline.pipeline_tracker import initialize_manual_tracker as initialize_manual_tracker
+from .pipeline.pipeline_tracker import mutate_tracker as mutate_tracker
+from .pipeline.pipeline_tracker import pipeline_tracker_directory as pipeline_tracker_directory
+from .pipeline.pipeline_tracker import pipeline_tracker_path as pipeline_tracker_path
+from .pipeline.pipeline_tracker import read_tracker_authority as read_tracker_authority
+from .pipeline.pipeline_tracker import release_tracker_lease as release_tracker_lease
+from .pipeline.pipeline_tracker import retain_tracker_lease as retain_tracker_lease
+from .pipeline.pipeline_tracker import tracker_lease_path as tracker_lease_path
+from .pipeline.pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .plugins._active_kitchens import (
+    ActiveKitchensReadResult as ActiveKitchensReadResult,
+)
+from .plugins._active_kitchens import ActiveKitchensState as ActiveKitchensState
+from .plugins._active_kitchens import KitchenProcessIdentity as KitchenProcessIdentity
+from .plugins._active_kitchens import any_kitchen_open as any_kitchen_open
+from .plugins._active_kitchens import kitchen_entry_alive as kitchen_entry_alive
+from .plugins._active_kitchens import (
+    read_active_kitchens_registry as read_active_kitchens_registry,
+)
+from .plugins._active_kitchens import register_active_kitchen as register_active_kitchen
+from .plugins._active_kitchens import (
+    sample_kitchen_process_identity as sample_kitchen_process_identity,
+)
+from .plugins._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
+from .plugins._plugin_artifact_identity import (
+    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
+)
+from .plugins._plugin_artifact_identity import (
+    INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_SCHEMA_VERSION,  # noqa: E501
+)
+from .plugins._plugin_artifact_identity import (
+    classify_directory_tree_digest_error as classify_directory_tree_digest_error,
+)
+from .plugins._plugin_artifact_identity import (
+    generation_artifact_root as generation_artifact_root,
+)
+from .plugins._plugin_artifact_identity import (
+    generation_plugin_selector_path as generation_plugin_selector_path,
+)
+from .plugins._plugin_artifact_identity import (
+    generation_selector_path as generation_selector_path,
+)
+from .plugins._plugin_artifact_identity import (
+    generation_staging_root as generation_staging_root,
+)
+from .plugins._plugin_artifact_identity import (
+    generation_store_root as generation_store_root,
+)
+from .plugins._plugin_artifact_identity import (
+    generation_version_root as generation_version_root,
+)
+from .plugins._plugin_artifact_identity import (
+    installed_plugin_artifact_lease_path as installed_plugin_artifact_lease_path,
+)
+from .plugins._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_path as installed_plugin_artifact_manifest_path,
+)
+from .plugins._plugin_artifact_identity import (
+    installed_plugin_artifact_manifest_payload as installed_plugin_artifact_manifest_payload,
+)
+from .plugins._plugin_artifact_identity import (
+    installed_plugin_artifact_root as installed_plugin_artifact_root,
+)
+from .plugins._plugin_artifact_identity import (
+    installed_plugin_cache_dir as installed_plugin_cache_dir,
+)
+from .plugins._plugin_artifact_identity import (
+    read_installed_plugin_artifact_identity as read_installed_plugin_artifact_identity,
+)
+from .plugins._plugin_artifact_identity import (
+    resolve_current_generation as resolve_current_generation,
+)
+from .plugins._plugin_artifact_identity import (
+    resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
+)
+from .plugins._plugin_artifact_retirement import (
+    PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,
+)
+from .plugins._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
+from .plugins._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
+from .plugins._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
+from .plugins._plugin_ids import DIRECT_PREFIX as DIRECT_PREFIX
+from .plugins._plugin_ids import MARKETPLACE_PREFIX as MARKETPLACE_PREFIX
+from .plugins._plugin_ids import _installed_plugins_path as _installed_plugins_path
+from .plugins._plugin_ids import detect_autoskillit_mcp_prefix as detect_autoskillit_mcp_prefix
+from .plugins._plugin_ids import installed_plugin_semantic_key as installed_plugin_semantic_key
+from .plugins._plugin_ids import (
+    parse_installed_plugin_semantic_key as parse_installed_plugin_semantic_key,
+)
+from .plugins._plugin_ids import project_agent_tool_name as project_agent_tool_name
+from .plugins._plugin_ids import registered_install_paths as registered_install_paths
+from .plugins._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
+from .plugins._retiring_cache import _InstallLock as _InstallLock
+from .plugins._retiring_cache import append_retiring_record as append_retiring_record
+from .plugins._retiring_cache import due_retiring_records as due_retiring_records
+from .plugins._retiring_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
+from .plugins._retiring_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
+from .plugins._retiring_cache import read_retiring_cache as read_retiring_cache
+from .plugins._retiring_cache import remove_retiring_records as remove_retiring_records
+from .plugins._retiring_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
+from .plugins.agent_definition import (
+    AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN,
+)
+from .plugins.agent_definition import AGENT_PROVISIONING_BASELINE as AGENT_PROVISIONING_BASELINE
+from .plugins.agent_definition import (
+    AGENT_PROVISIONING_SKILL_DERIVED as AGENT_PROVISIONING_SKILL_DERIVED,
+)
+from .plugins.agent_definition import BUNDLED_EXPLORER_ROLES as BUNDLED_EXPLORER_ROLES
+from .plugins.agent_definition import (
+    CODEX_DISABLED_WEB_SEARCH_POLICY as CODEX_DISABLED_WEB_SEARCH_POLICY,
+)
+from .plugins.agent_definition import CODEX_EXPLORER_IDENTITY as CODEX_EXPLORER_IDENTITY
+from .plugins.agent_definition import (
+    REPOSITORY_IMPACT_PROFILER_ROLE as REPOSITORY_IMPACT_PROFILER_ROLE,
+)
+from .plugins.agent_definition import SEMANTIC_CODE_NAVIGATOR_ROLE as SEMANTIC_CODE_NAVIGATOR_ROLE
+from .plugins.agent_definition import WEB_EVIDENCE_RESEARCHER_ROLE as WEB_EVIDENCE_RESEARCHER_ROLE
+from .plugins.agent_definition import AgentDef as AgentDef
+from .plugins.agent_definition import AgentDefinitionError as AgentDefinitionError
+from .plugins.agent_definition import CodexAgentProjectionDef as CodexAgentProjectionDef
+from .plugins.agent_definition import agent_definition_digest as agent_definition_digest
+from .plugins.agent_definition import (
+    canonical_reader_tools_to_bare as canonical_reader_tools_to_bare,
+)
+from .plugins.agent_definition import load_agent_definition as load_agent_definition
+from .plugins.agent_definition import load_agent_definitions as load_agent_definitions
+from .plugins.agent_definition import (
+    load_bundled_agent_definitions as load_bundled_agent_definitions,
+)
+from .plugins.agent_definition import normalize_codex_cli_version as normalize_codex_cli_version
 from .runtime._linux_proc import is_pid_alive as is_pid_alive
 from .runtime._linux_proc import is_pid_zombie as is_pid_zombie
 from .runtime._linux_proc import is_session_alive as is_session_alive
@@ -1071,7 +1083,6 @@ from .types import ProcessedEventRecord as ProcessedEventRecord
 from .types import ProcessStaleError as ProcessStaleError
 from .types import ProducerCoverageDef as ProducerCoverageDef
 from .types import ProducerInstanceId as ProducerInstanceId
-from .types import ProducerSurface as ProducerSurface
 from .types import PromptContractError as PromptContractError
 from .types import ProposeOccurrenceEvent as ProposeOccurrenceEvent
 from .types import ProtectedPoolOwnerId as ProtectedPoolOwnerId

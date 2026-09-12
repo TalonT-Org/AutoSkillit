@@ -8,13 +8,130 @@ from tests.arch._helpers import SRC_ROOT
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
+# Shim files at core/ and recipe/ top level are 2-line forwarding re-exports
+# that preserve old import paths after moving real implementations into
+# sub-packages. The arch test excludes these from the file count because they
+# contribute no real module surface; only the underlying real modules are counted.
+_SHIM_FILENAMES: frozenset[str] = frozenset(
+    {
+        # Phase A: core/install/, core/claude_env/, core/io/ sub-packages
+        "_install_detect.py",
+        "_cmd_runner.py",
+        "_claude_env.py",
+        "claude_conventions.py",
+        "feature_flags.py",
+        # NOTE: ``core/io.py`` is absent. A module cannot sit beside a
+        # same-named package — Python resolves ``autoskillit.core.io`` to
+        # ``core/io/`` unconditionally, so the shim was unreachable dead code
+        # and was deleted. ``core/io/io.py`` is the real module and is counted.
+        "paths.py",
+        "path_containment.py",
+        "_json.py",
+        "_terminal_table.py",
+        "_version_snapshot.py",
+        "_delivery_bounds.py",
+        # Phase B: core/git/ sub-package
+        "git_remote.py",
+        "github_url.py",
+        "bash_write_targets.py",
+        "branch_guard.py",
+        # Phase B: core/audit/ sub-package
+        "audit_cycle_verifier.py",
+        "audit_semantic_codec.py",
+        "closure_hashing.py",
+        "closure_verifier.py",
+        # Phase B: core/plugins/ sub-package
+        "_plugin_cache.py",
+        "_plugin_artifact_identity.py",
+        "_plugin_ids.py",
+        "agent_definition.py",
+        # The three plugin-cache lifecycle shards #4741 split out of the
+        # monolithic _plugin_cache.py, co-located with the facade that already
+        # treats them as siblings and re-exports their symbols.
+        "_active_kitchens.py",
+        "_plugin_artifact_retirement.py",
+        "_retiring_cache.py",
+        # Phase B: core/pipeline/ sub-package
+        "pipeline_tracker.py",
+        "tool_sequence_analysis.py",
+        "_execution_marker.py",
+        "_step_context.py",
+        # Phase C: core/context_admission/ sub-package
+        # NOTE: ``context_admission.py`` was moved into the
+        # ``core/context_admission/`` sub-package itself, which re-exports
+        # every symbol through its ``__init__.py``. The import
+        # ``from autoskillit.core.context_admission import X`` resolves
+        # through the sub-package, so no top-level shim is needed.
+        "context_admission_helpers.py",
+        "context_admission_accept_release.py",
+        "context_admission_expiry_rollover.py",
+        "context_admission_generation.py",
+        "context_admission_indeterminate.py",
+        "context_admission_prepare_stage_dispatch.py",
+        "context_admission_propose_reserve.py",
+    }
+)
+_RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
+    {
+        # Phase D: recipe/analysis/, recipe/helpers/, recipe/ingredients/,
+        # recipe/cmd_rpc/, recipe/contracts/, recipe/methodology/ sub-packages.
+        # Each entry below is a 2-line forwarding shim preserving the pre-Phase-D
+        # import path (``from autoskillit.recipe.<old_name> import X``).
+        "_analysis.py",
+        "_analysis_bfs.py",
+        "_analysis_blocks.py",
+        "_analysis_detectors.py",
+        "_analysis_graph.py",
+        "_git_helpers.py",
+        "_io_loading.py",
+        "_rule_helpers.py",
+        "_skill_helpers.py",
+        "_skill_placeholder_parser.py",
+        "_registry_utils.py",
+        "_recipe_composition.py",
+        "_recipe_ingredients.py",
+        "_recipe_raw_repair.py",
+        "_cmd_rpc.py",
+        "_cmd_rpc_guards.py",
+        "_cmd_rpc_issues.py",
+        "_cmd_rpc_merge.py",
+        # NOTE: ``recipe/contracts.py`` is absent for the same reason as
+        # ``core/io.py`` above — it sat beside ``recipe/contracts/`` and so was
+        # unreachable. ``recipe/contracts/contracts.py`` is the real module.
+        "_contracts_card.py",
+        "_contracts_manifest.py",
+        "_contracts_staleness.py",
+        "_contracts_types.py",
+        "staleness_cache.py",
+        "methodology_disambiguation.py",
+        "methodology_tradition_registry.py",
+        "methodology_tradition_router.py",
+        "methodology_venue_appendix.py",
+        "experiment_type_registry.py",
+    }
+)
+
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 49,  # +_managed_worker_capacity shared fleet/fixed-batch authority
+    "core": 10,  # 10 files + __init__ + buffer (was 21 before 11 files moved to sub-packages)
+    "core/install": 4,  # 2 files + __init__ + buffer
+    "core/claude_env": 4,  # 3 files + __init__ + buffer
+    "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
+    "core/git": 5,  # 4 files + __init__ + buffer
+    "core/audit": 5,  # 4 files + __init__ + buffer
+    "core/plugins": 10,  # 7 files + __init__ + buffer
+    "core/pipeline": 5,  # 4 files + __init__ + buffer
+    "core/context_admission": 9,  # 8 files + __init__
     # _type_truth replaces the retired _type_tradition_manifest shard.
     "core/types": 76,
     "core/runtime": 11,
     "config": 20,
-    "recipe": 53,  # +7 shards added by issue #4905 decomposition of _api_orchestration.py
+    "recipe": 23,  # 23 files + __init__ + buffer (was 52 before 29 files moved to sub-packages)
+    "recipe/analysis": 6,  # 5 moved files + __init__
+    "recipe/helpers": 7,  # 6 moved files + __init__
+    "recipe/ingredients": 5,  # 3 moved files + 1 file extracted to fit 750-line cap + __init__
+    "recipe/cmd_rpc": 5,  # 4 moved files + __init__
+    "recipe/contracts": 7,  # 6 moved files + __init__
+    "recipe/methodology": 6,  # 5 moved files + __init__
     "recipe/rules": 66,
     "server": 20,
     "execution": 23,
@@ -272,10 +389,76 @@ def test_no_subpackage_exceeds_10_files() -> None:
             dirs_to_check.append(nested_dir)
     for sub_dir in dirs_to_check:
         rel_key = str(sub_dir.relative_to(SRC_ROOT))
-        py_files = list(sub_dir.glob("*.py"))
+        # Pick the correct shim registry based on package.
+        # Match both the top-level package (``recipe``) and any sub-package
+        # (``recipe/analysis``). The top-level package's rel_key has no
+        # trailing slash; the sub-package paths do.
+        if rel_key == "recipe" or rel_key.startswith("recipe/"):
+            shim_set = _RECIPE_SHIM_FILENAMES
+        elif rel_key == "core" or rel_key.startswith("core/"):
+            shim_set = _SHIM_FILENAMES
+        else:
+            shim_set = frozenset()
+        py_files = [p for p in sub_dir.glob("*.py") if p.name not in shim_set]
         limit = FILE_COUNT_LIMITS.get(rel_key, 10)
         if len(py_files) > limit:
             violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+# ── Phase B Test 8: closure_hashing behavior snapshot ────────────────────────
+# Captured on 2026-09-10 against the post-Phase-B state of
+# ``core/audit/closure_hashing.py``. If the hash value changes after a
+# future move or refactor of closure_hashing.py, the test fails — meaning
+# behavior has drifted and a snapshot re-capture is required.
+
+
+def test_phase_b_closure_hashing_behavior_snapshot() -> None:
+    """Phase B Test 8: closure_hashing.compute_bytes_hash output is byte-stable.
+
+    Captured value: ``sha256:7e3849047077040f30bbab03278adefccd7beba842425cb3b35dee4b9299baa9``
+    against the input ``b"phase_b_capture_v1_known_input"``.
+
+    If a future move (Phase B → core/audit/, or any further refactor) changes
+    the closure-hashing algorithm, this test fails. The expected behavior is
+    SHA-256 of the input bytes, prefixed with ``"sha256:"``.
+    """
+    from autoskillit.core.audit.closure_hashing import compute_bytes_hash
+
+    assert (
+        compute_bytes_hash(b"phase_b_capture_v1_known_input")
+        == "sha256:7e3849047077040f30bbab03278adefccd7beba842425cb3b35dee4b9299baa9"
+    )
+
+
+# ── Phase D Test 4: semantic-rule registry populated after sub-package moves ─
+# Every @semantic_rule decorator must register in the canonical _RULE_REGISTRY.
+# The registry is populated purely as an import side effect of recipe/__init__.py
+# pulling in each rule module, so a dropped import silently removes rules rather
+# than raising. The floor below is therefore a regression detector, and it is set
+# just under the measured count (242 on 2026-09-10) rather than at the Phase D
+# plan's original 80: a floor of 80 would let two thirds of the registry vanish
+# while still reporting green.
+_RULE_REGISTRY_FLOOR = 240
+
+
+def test_phase_d_semantic_rule_registry_populated() -> None:
+    """Phase D Test 4: _RULE_REGISTRY keeps its full rule population.
+
+    The registry is populated as a side effect of recipe/__init__.py importing
+    every rule module for its @semantic_rule decorator. If a future commit
+    removes an import from recipe/__init__.py, that rule module's decorator
+    would not fire and this count would drop.
+
+    When rules are intentionally added or retired, update _RULE_REGISTRY_FLOOR
+    to sit just under the new measured count.
+    """
+    from autoskillit.recipe.registry import _RULE_REGISTRY
+
+    assert len(_RULE_REGISTRY) >= _RULE_REGISTRY_FLOOR, (
+        f"_RULE_REGISTRY has {len(_RULE_REGISTRY)} entries; expected "
+        f"≥{_RULE_REGISTRY_FLOOR}. A rule module may have lost its import in "
+        f"recipe/__init__.py, so its @semantic_rule decorators never fired."
     )

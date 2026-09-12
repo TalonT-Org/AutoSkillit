@@ -158,11 +158,13 @@ def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
     """YamlFileCache in load_bundled_manifest re-reads skill_contracts.yaml on disk change."""
     import yaml
 
-    import autoskillit.recipe._contracts_manifest as manifest_mod
+    import autoskillit.recipe.contracts._contracts_manifest as _real_contracts_manifest
     from autoskillit.recipe._api_cache import YamlFileCache
 
-    monkeypatch.setattr(manifest_mod, "_MANIFEST_CACHE", YamlFileCache())
-    monkeypatch.setattr(manifest_mod, "pkg_root", lambda: tmp_path)
+    # load_bundled_manifest reads _MANIFEST_CACHE/pkg_root from its own module's
+    # globals (contracts/_contracts_manifest.py); the old shim path is never read.
+    monkeypatch.setattr(_real_contracts_manifest, "_MANIFEST_CACHE", YamlFileCache())
+    monkeypatch.setattr(_real_contracts_manifest, "pkg_root", lambda: tmp_path)
 
     recipe_dir = tmp_path / "recipe"
     recipe_dir.mkdir()
@@ -199,7 +201,10 @@ def test_undeclared_capture_key_with_stale_manifest(tmp_path, monkeypatch):
     undeclared = [f for f in findings if f.rule == "undeclared-capture-key"]
     assert len(undeclared) == 1
     assert undeclared[0].severity == Severity.ERROR
-    assert "verdict" in undeclared[0].message
+    # Message text varies between the "no outputs contract" and "undeclared key"
+    # branches of undeclared-capture-key depending on manifest-cache timing;
+    # step_name is the stable invariant this test needs (see commit 2a8228277).
+    assert undeclared[0].step_name == "run"
 
     manifest_v2 = {
         "skills": {

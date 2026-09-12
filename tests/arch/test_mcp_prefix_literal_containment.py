@@ -18,7 +18,7 @@ _CONFINED_LITERALS = frozenset(
     }
 )
 
-_CANONICAL_MODULE = "core/_plugin_ids.py"
+_CANONICAL_MODULE = "core/plugins/_plugin_ids.py"
 
 
 def _string_literals_in_module(path: Path) -> list[tuple[int, str]]:

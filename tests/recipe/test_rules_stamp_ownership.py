@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _sh
 import autoskillit.recipe.rules.rules_stamp_ownership as _rso
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER, Severity
 from autoskillit.core.io import load_yaml

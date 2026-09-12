@@ -505,7 +505,7 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import autoskillit.core._plugin_cache as plugin_cache
+    import autoskillit.core.plugins._plugin_artifact_retirement as plugin_artifact_retirement
     from autoskillit.workspace import ProjectedPluginRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -523,18 +523,18 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     append_result = owner.enqueue_retirement(identity, deadline)
     record = read_retiring_cache().records[0]
 
-    real_rmtree = plugin_cache.shutil.rmtree
+    real_rmtree = plugin_artifact_retirement.shutil.rmtree
 
     def fail_reclaim(_path):
         raise PermissionError("injected projection reclaim failure")
 
-    monkeypatch.setattr(plugin_cache.shutil, "rmtree", fail_reclaim)
+    monkeypatch.setattr(plugin_artifact_retirement.shutil, "rmtree", fail_reclaim)
 
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.DEFERRED_IO_ERROR
     assert append_result.record_id in {
         queued.record_id for queued in read_retiring_cache().records
     }
-    monkeypatch.setattr(plugin_cache.shutil, "rmtree", real_rmtree)
+    monkeypatch.setattr(plugin_artifact_retirement.shutil, "rmtree", real_rmtree)
     assert owner.try_reclaim(record, deadline) is RetirementOutcome.RECLAIMED
     assert append_result.record_id not in {
         queued.record_id for queued in read_retiring_cache().records

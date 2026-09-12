@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from types import MappingProxyType
 
 import pytest
 
-import autoskillit.core._claude_env as claude_env
 from autoskillit.core import build_agent_env, build_maintenance_env
 from autoskillit.core._claude_env import (
     IDE_ENV_ALWAYS_EXTRAS,
@@ -250,7 +250,7 @@ def test_build_maintenance_env_preserves_only_named_base_values(
     monkeypatch: pytest.MonkeyPatch,
     protected_key: str,
 ) -> None:
-    monkeypatch.setattr(claude_env.os, "name", "posix")
+    monkeypatch.setattr(os, "name", "posix")
     allowed = {
         "HOME": "/home/user",
         "PATH": "/usr/bin",
@@ -317,10 +317,10 @@ def test_build_maintenance_env_adds_windows_process_values_only_on_windows(
         "COMSPEC": r"C:\Windows\System32\cmd.exe",
         "PATHEXT": ".COM;.EXE;.BAT",
     }
-    monkeypatch.setattr(claude_env.os, "name", "posix")
+    monkeypatch.setattr(os, "name", "posix")
     assert dict(build_maintenance_env(base)) == {"DBUS_SESSION_BUS_ADDRESS": "disabled:"}
 
-    monkeypatch.setattr(claude_env.os, "name", "nt")
+    monkeypatch.setattr(os, "name", "nt")
     assert dict(build_maintenance_env(base)) == {**base, "DBUS_SESSION_BUS_ADDRESS": "disabled:"}
 
 

@@ -114,16 +114,22 @@ class TestPredicateBuildStepGraph:
 
 def test_run_semantic_rules_builds_raw_step_edges_exactly_once(monkeypatch):
     """Raw routing edges are built once regardless of how many rules need the graph."""
-    from autoskillit.recipe import _analysis
+    import autoskillit.recipe.analysis._analysis as _real_analysis
+    import autoskillit.recipe.analysis._analysis_graph as _real_analysis_graph
 
     call_count = []
-    real_fn = _analysis._build_raw_step_edges
+    real_fn = _real_analysis_graph._build_raw_step_edges
 
     def counting_fn(recipe):
         call_count.append(1)
         return real_fn(recipe)
 
-    monkeypatch.setattr(_analysis, "_build_raw_step_edges", counting_fn)
+    # Both real modules hold their own import-time binding of _build_raw_step_edges and
+    # call it by bare name: analysis/_analysis.py (make_validation_context) and
+    # analysis/_analysis_graph.py (_build_step_graph). Patching the
+    # autoskillit.recipe._analysis shim instead would intercept neither call site.
+    monkeypatch.setattr(_real_analysis, "_build_raw_step_edges", counting_fn)
+    monkeypatch.setattr(_real_analysis_graph, "_build_raw_step_edges", counting_fn)
 
     recipe = _parse_recipe(
         {
@@ -141,6 +147,7 @@ def test_run_semantic_rules_builds_raw_step_edges_exactly_once(monkeypatch):
 
 def test_run_semantic_rules_calls_analyze_dataflow_exactly_once(monkeypatch):
     """analyze_dataflow is called only once regardless of how many rules consume it."""
+    import autoskillit.recipe.analysis._analysis as _real_analysis
     from autoskillit.recipe import _analysis
 
     call_count = []
@@ -150,7 +157,11 @@ def test_run_semantic_rules_calls_analyze_dataflow_exactly_once(monkeypatch):
         call_count.append(1)
         return real_fn(recipe, **kwargs)
 
+    # make_validation_context resolves analyze_dataflow via the real analysis._analysis
+    # module's own globals (same module defines and calls it), bypassing the
+    # autoskillit.recipe._analysis shim; patch the real module too so counting_fn is seen.
     monkeypatch.setattr(_analysis, "analyze_dataflow", counting_fn)
+    monkeypatch.setattr(_real_analysis, "analyze_dataflow", counting_fn)
 
     recipe = _parse_recipe(
         {

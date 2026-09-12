@@ -29,7 +29,7 @@ SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
 #: registry data as evidence only; no execution path may derive a plugin source
 #: or managed root from it.
 REGISTRY_READ_ALLOWLIST: dict[str, str] = {
-    "core/_plugin_ids.py": (
+    "core/plugins/_plugin_ids.py": (
         "Defines registered_install_paths(), the stdlib evidence parser. Its output "
         "cannot authorize a source, launch path, or managed artifact root."
     ),
@@ -109,7 +109,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "A revalidated invalid direct child is atomically renamed while its original-key "
         "exclusive lease and the managed-home install lock are held.",
     ),
-    ("core/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
+    ("core/pipeline/pipeline_tracker.py", "try_retire_tracker", "target.path.unlink"): (
         1,
         "Exclusive per-tracker lease, tracker lock, strict registry lock, and fresh "
         "authority/liveness reads guard deletion of exactly one tracker JSON.",
@@ -143,17 +143,21 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Orphan-staging sweep removes only private staging directories that were "
         "never promoted to a published generation (crash-before-flip debris).",
     ),
-    ("core/_plugin_artifact_retirement.py", "try_reclaim", "record.manifest_path.unlink"): (
+    (
+        "core/plugins/_plugin_artifact_retirement.py",
+        "try_reclaim",
+        "record.manifest_path.unlink",
+    ): (
         1,
         "The shared retirement engine revalidates the owner-specific exact queued "
         "incarnation before deleting its canonical manifest.",
     ),
-    ("core/_plugin_artifact_retirement.py", "try_reclaim", "os.rename"): (
+    ("core/plugins/_plugin_artifact_retirement.py", "try_reclaim", "os.rename"): (
         1,
         "The shared retirement engine moves an exact incarnation to its private "
         "retry-staging path while holding the owner-specific exclusive lease.",
     ),
-    ("core/_plugin_artifact_retirement.py", "try_reclaim", "shutil.rmtree"): (
+    ("core/plugins/_plugin_artifact_retirement.py", "try_reclaim", "shutil.rmtree"): (
         1,
         "The shared retirement engine holds the owner-specific exclusive lease and "
         "revalidates exact identity before removing an artifact tree.",
@@ -483,7 +487,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 
 STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     (
-        "core/_retiring_cache.py",
+        "core/plugins/_retiring_cache.py",
         "_write_retiring_cache_unlocked",
         "write_versioned_json:strict=True",
     ): (

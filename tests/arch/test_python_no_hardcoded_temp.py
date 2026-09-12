@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: canonical default literal used by resolve_temp_dir +
     # temp_dir_display_str (the single source of truth).
-    "core/io.py": "canonical default literal used by resolve_temp_dir",
+    "core/io/io.py": "canonical default literal used by resolve_temp_dir",
     # Justification: load_recipe() default parameter value (matches resolver default).
     "recipe/io.py": "load_recipe default arg matches canonical default",
     # Justification: default fallback values for temp_dir_relpath in load_and_validate
@@ -30,7 +30,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     "recipe/_api_listing.py": "validate_from_path default temp_dir_relpath",
     # Justification: _build_active_recipe default temp_dir_relpath parameter mirrors
     # the canonical default used by _api.py (mirrors _api_listing.py pattern).
-    "recipe/_recipe_composition.py": "fallback default for temp_dir_relpath kwargs",
+    "recipe/ingredients/_recipe_composition.py": "fallback default for temp_dir_relpath kwargs",
     # Justification: validate_from_path signature now includes temp_dir_relpath with
     # the canonical default value, mirroring the _api.py pattern.
     "recipe/repository.py": "validate_from_path default arg mirrors canonical default",
@@ -64,7 +64,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: docstring for _write_hook_config() references the canonical
     # hook config path so callers know where the file is written.
     "server/tools/tools_kitchen/_hook_config.py": "docstring example",
-    "recipe/_cmd_rpc_issues.py": "ensure_results default temp_subdir matches canonical default",
+    "recipe/cmd_rpc/_cmd_rpc_issues.py": "ensure_results default temp_subdir matches canonical",
     "hooks/guards/skill_load_guard.py": "stdlib-only guard; cannot use resolve_temp_dir()",
     "core/runtime/session_provenance.py": "IL-0 stdlib-only module; cannot use resolve_temp_dir()",
     "core/runtime/kitchen_state.py": "IL-0 stdlib-only; reads hook config from canonical path",

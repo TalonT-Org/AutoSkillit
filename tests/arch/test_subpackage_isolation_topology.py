@@ -91,7 +91,7 @@ def test_recipe_subpackage_importable() -> None:
 
 
 def test_contracts_module_has_staleitem() -> None:
-    """T2: recipe/contracts.py exposes StaleItem and load_bundled_manifest."""
+    """T2: recipe/contracts/contracts.py exposes StaleItem and load_bundled_manifest."""
     from autoskillit.recipe.contracts import StaleItem, load_bundled_manifest  # noqa: F401
 
 

@@ -75,6 +75,7 @@ def stdlib_json_mod(monkeypatch: pytest.MonkeyPatch):
     """
     monkeypatch.setitem(sys.modules, "orjson", None)  # type: ignore[arg-type]
     monkeypatch.delitem(sys.modules, "autoskillit.core._json", raising=False)
+    monkeypatch.delitem(sys.modules, "autoskillit.core.io.json", raising=False)
     return importlib.import_module("autoskillit.core._json")
 
 

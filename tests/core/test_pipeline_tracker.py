@@ -63,10 +63,11 @@ def _registry(monkeypatch, tmp_path, payload: object | None) -> None:
         registry_path.parent.mkdir(parents=True)
         registry_path.write_text(json.dumps(payload))
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens._active_kitchens_path", lambda _home: registry_path
+        "autoskillit.core.plugins._active_kitchens._active_kitchens_path",
+        lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens._active_kitchens_lock", lambda _home: lock_path
+        "autoskillit.core.plugins._active_kitchens._active_kitchens_lock", lambda _home: lock_path
     )
 
 
@@ -300,10 +301,11 @@ def test_retirement_preserves_tracker_on_unsafe_registry(monkeypatch, tmp_path, 
     registry_path.parent.mkdir(parents=True)
     registry_path.write_bytes(registry_payload)
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens._active_kitchens_path", lambda _home: registry_path
+        "autoskillit.core.plugins._active_kitchens._active_kitchens_path",
+        lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens._active_kitchens_lock",
+        "autoskillit.core.plugins._active_kitchens._active_kitchens_lock",
         lambda _home: registry_path.with_suffix(".lock"),
     )
 

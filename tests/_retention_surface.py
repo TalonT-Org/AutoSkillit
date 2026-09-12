@@ -151,7 +151,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/_projection_cache.py", "prune_stale_projections"),
         ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry"),
         (
-            "src/autoskillit/core/_plugin_artifact_retirement.py",
+            "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
             "PluginArtifactRetirementEngine.try_reclaim",
         ),
         (
@@ -272,11 +272,11 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry")
     ),
     (
-        "src/autoskillit/core/_plugin_artifact_retirement.py",
+        "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
         "PluginArtifactRetirementEngine.try_reclaim",
     ): _convergence_adapters(
         (
-            "src/autoskillit/core/_plugin_artifact_retirement.py",
+            "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
             "PluginArtifactRetirementEngine.try_reclaim",
         )
     ),
@@ -539,7 +539,7 @@ _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
 _PP = "src/autoskillit/workspace/_projection_cache.py::prune_stale_projections"
 _PRE = "src/autoskillit/workspace/_projection_cache.py::_reconcile_projection_entry"
 _PC = (
-    "src/autoskillit/core/_plugin_artifact_retirement.py::"
+    "src/autoskillit/core/plugins/_plugin_artifact_retirement.py::"
     "PluginArtifactRetirementEngine.try_reclaim"
 )
 _CT = (
@@ -837,7 +837,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),
-    # -- core._plugin_artifact_retirement::try_reclaim --
+    # -- core.plugins._plugin_artifact_retirement::try_reclaim --
     f"{_PC}::L180": _retries_after_input_changes(
         "The record's artifact_kind does not match this coordinator's own kind; a type/"
         "ownership guard, not a liveness decision."

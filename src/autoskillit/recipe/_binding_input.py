@@ -35,12 +35,12 @@ from autoskillit.core import (
     BoundValueOrigin,
     BoundValueState,
 )
-from autoskillit.recipe._contracts_types import (
+from autoskillit.recipe.contracts._contracts_types import (
     _CONTEXT_REF_RE,
     SkillContract,
     SkillInput,
 )
-from autoskillit.recipe._contracts_types import (
+from autoskillit.recipe.contracts._contracts_types import (
     INPUT_REF_RE as _INPUT_REF_RE,
 )
 

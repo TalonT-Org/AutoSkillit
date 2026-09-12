@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
-from ..closure_hashing import canonical_json_bytes, compute_canonical_hash
+from ..audit.closure_hashing import canonical_json_bytes, compute_canonical_hash
 from ._type_audit_admission_validation import (
     _require_digest,
     _require_nonempty,

@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _sh
 from autoskillit.core.paths import pkg_root
 from autoskillit.hooks._github_mutation_analysis import (
     GitHubMutationStatus,

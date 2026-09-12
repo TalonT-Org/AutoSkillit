@@ -23,12 +23,13 @@ from typing import Any
 
 import autoskillit.recipe._api_orchestration as _orch
 from autoskillit.core import FinalizedRecipeProjection, RecipeFlowEdge, RecipeStepGuard, YAMLError
-from autoskillit.recipe._analysis import make_validation_context
 from autoskillit.recipe._api_orchestration_assemble import _finalize_recipe_steps
 from autoskillit.recipe._api_orchestration_parse import _parse_and_compose
 from autoskillit.recipe._api_orchestration_types import _LoadPipelineInputs, _ValidationResult
 from autoskillit.recipe._binding import bind_recipe
-from autoskillit.recipe._recipe_composition import (
+from autoskillit.recipe.analysis._analysis import make_validation_context
+from autoskillit.recipe.helpers._rule_helpers import filter_pruning_false_positives
+from autoskillit.recipe.ingredients._recipe_composition import (
     _analysis_edges_from_effective_routes,
     _assert_content_integrity,
     _DeferredGuardState,
@@ -41,8 +42,7 @@ from autoskillit.recipe._recipe_composition import (
     _validate_post_sweep_effective_graph,
     _validate_route_consistency,
 )
-from autoskillit.recipe._recipe_raw_repair import _resolve_skip_guards_in_content
-from autoskillit.recipe._rule_helpers import filter_pruning_false_positives
+from autoskillit.recipe.ingredients._recipe_raw_repair import _resolve_skip_guards_in_content
 from autoskillit.recipe.schema import Recipe, RecipeStep
 
 __all__ = ["_record_pipeline_error", "_run_validation_pipeline"]
@@ -295,7 +295,7 @@ def _run_validation_pipeline(
                 resolver=_skill_resolver,
                 project_root=_pdir,
             )
-            from autoskillit.recipe.contracts import stale_to_suggestions
+            from autoskillit.recipe.contracts.contracts import stale_to_suggestions
 
             suggestions.extend(stale_to_suggestions(stale))
         t0 = _orch._t("staleness_check", t0, name)

@@ -260,7 +260,7 @@ def test_generate_recipe_card_emits_only_declared_absence_values(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from autoskillit.recipe import _contracts_card
+    import autoskillit.recipe.contracts._contracts_card as _real_contracts_card
 
     manifest = {
         "version": "test",
@@ -280,7 +280,10 @@ def test_generate_recipe_card_emits_only_declared_absence_values(
             }
         },
     }
-    monkeypatch.setattr(_contracts_card, "load_bundled_manifest", lambda: manifest)
+    # generate_recipe_card (contracts/_contracts_card.py) reads load_bundled_manifest
+    # from its own module globals; the old recipe._contracts_card shim path is
+    # never read by the real call site, so only this patch is needed.
+    monkeypatch.setattr(_real_contracts_card, "load_bundled_manifest", lambda: manifest)
     recipes_dir = tmp_path / ".autoskillit" / "scripts"
     recipes_dir.mkdir(parents=True)
     pipeline = recipes_dir / "test-pipeline.yaml"

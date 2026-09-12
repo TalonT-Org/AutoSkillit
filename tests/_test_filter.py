@@ -242,6 +242,43 @@ _CONTEXT_ADMISSION_REDUCER_SHARD_CASCADE: frozenset[str] = frozenset({"core", "p
 
 MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
     "_cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
+    # De-underscored stems added after #4671 Phase A core decomposition.
+    # Each entry mirrors its underscored shim counterpart's cascade.
+    "cmd_runner": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
+    "install_detect": frozenset({"cli", "core", "recipe", "smoke_utils", "_probe_canary"}),
+    "claude_env": frozenset({"core", "execution", "test_llm_triage.py", "cli"}),
+    "conventions": frozenset({"core", "execution", "server", "workspace"}),
+    "delivery_bounds": frozenset({"core", "execution", "server"}),
+    "json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
+    "terminal_table": frozenset({"core", "cli", "pipeline", "recipe"}),
+    "version_snapshot": frozenset({"core", "execution"}),
+    "yaml_io": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
+    "audit": frozenset({"core", "execution", "pipeline", "recipe", "server", "workspace"}),
+    "git": frozenset({"core", "pipeline", "server", "workspace"}),
+    "plugins": frozenset(
+        {
+            "core",
+            "cli",
+            "execution",
+            "fleet",
+            "hook_registry",
+            "pipeline",
+            "server",
+            "smoke_utils",
+            "workspace",
+        }
+    ),
+    "pipeline": frozenset(
+        {
+            "core",
+            "cli",
+            "execution",
+            "pipeline",
+            "recipe",
+            "server",
+            "workspace",
+        }
+    ),
     "_json": frozenset({"core", "execution", "pipeline", "recipe", "server"}),
     "agent_definition": frozenset({"core", "execution", "pipeline", "server", "workspace"}),
     "artifact_lease": frozenset({"core", "workspace"}),
@@ -366,7 +403,7 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
             "infra/test_generated_files.py",
         }
     ),
-    "_claude_env": frozenset({"core", "execution", "_llm_triage", "cli"}),
+    "_claude_env": frozenset({"core", "execution", "test_llm_triage.py", "cli"}),
     "_version_snapshot": frozenset({"core", "execution"}),
     "claude_conventions": frozenset({"core", "execution", "server", "workspace"}),
     "_type_resume": frozenset({"core", "cli", "execution", "fleet"}),
@@ -375,7 +412,17 @@ MODULE_CASCADE_CORE: dict[str, frozenset[str]] = {
         {"cli", "core", "execution", "pipeline", "recipe", "server", "workspace"}
     ),
     "_type_protocols_backend": frozenset(
-        {"_llm_triage", "cli", "core", "execution", "fleet", "pipeline", "server", "workspace"}
+        {
+            "_llm_triage",
+            "test_llm_triage.py",
+            "cli",
+            "core",
+            "execution",
+            "fleet",
+            "pipeline",
+            "server",
+            "workspace",
+        }
     ),
     "_type_skill_semantics": frozenset(
         {"cli", "core", "execution", "fleet", "migration", "pipeline", "server", "workspace"}

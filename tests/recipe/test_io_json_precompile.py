@@ -66,7 +66,7 @@ def test_load_recipe_dict_prefers_json_when_fresh(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe._io_loading.load_yaml",
+        "autoskillit.recipe.helpers._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -82,7 +82,7 @@ def test_load_recipe_dict_falls_back_when_json_missing(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe._io_loading.load_yaml",
+        "autoskillit.recipe.helpers._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -104,7 +104,7 @@ def test_load_recipe_dict_falls_back_when_json_stale(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe._io_loading.load_yaml",
+        "autoskillit.recipe.helpers._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -152,7 +152,7 @@ def test_load_recipe_dict_handles_json_decode_error(tmp_path, monkeypatch):
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe._io_loading.load_yaml",
+        "autoskillit.recipe.helpers._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -173,7 +173,7 @@ def test_load_recipe_dict_falls_back_when_json_is_not_mapping(tmp_path, monkeypa
 
     load_yaml_calls = []
     monkeypatch.setattr(
-        "autoskillit.recipe._io_loading.load_yaml",
+        "autoskillit.recipe.helpers._io_loading.load_yaml",
         lambda *a, **kw: load_yaml_calls.append(1) or _MINIMAL_RECIPE,
     )
 
@@ -204,7 +204,7 @@ def test_collect_recipes_identical_with_json(tmp_path, monkeypatch):
         future_mtime_ns = yaml_path.stat().st_mtime_ns + 10_000_000_000
         os.utime(json_path, ns=(future_mtime_ns, future_mtime_ns))
 
-    import autoskillit.recipe._io_loading as io_loading
+    import autoskillit.recipe.helpers._io_loading as io_loading
 
     fast_loads_calls = []
     original_fast_loads = io_loading.fast_loads

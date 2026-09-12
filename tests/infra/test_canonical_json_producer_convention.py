@@ -121,42 +121,42 @@ _TYPED_PRODUCER_MODULE = "src/autoskillit/server/tools/tools_audit_artifacts.py"
 
 _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
     "authority": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 429),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", 429),
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
         skill_md_refs=(),
     ),
     "disposition_report": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 449),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", 449),
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_disposition_report",
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "inventory": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_cycle_verifier.py", 577),
+        consumer_site=("src/autoskillit/core/audit/audit_cycle_verifier.py", 577),
         producer_symbol="_write_or_verify",
         producer_path=_MATERIALIZER_PRODUCER_PATH,
         producer_function="_write_or_verify",
         skill_md_refs=(),
     ),
     "plan_association": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/recipe/_cmd_rpc_guards.py", 280),
+        consumer_site=("src/autoskillit/recipe/cmd_rpc/_cmd_rpc_guards.py", 280),
         producer_symbol="write_audit_disposition_bundle",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_plan_association",
         skill_md_refs=(("src/autoskillit/skills_extended/make-plan/SKILL.md", 369, 381),),
     ),
     "audit_semantic_result": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 229),
+        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 229),
         producer_symbol="write_audit_semantic_result",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_semantic_result",
         skill_md_refs=(("src/autoskillit/skills_extended/audit-impl/SKILL.md", 103, 117),),
     ),
     "standalone_audit_evidence": CanonicalArtifactDef(
-        consumer_site=("src/autoskillit/core/audit_semantic_codec.py", 276),
+        consumer_site=("src/autoskillit/core/audit/audit_semantic_codec.py", 276),
         producer_symbol="write_standalone_audit_evidence",
         producer_path=_TYPED_PRODUCER_MODULE,
         producer_function="_write_standalone_evidence",
@@ -170,7 +170,7 @@ _CANONICAL_JSON_ARTIFACT_REGISTRY: dict[str, CanonicalArtifactDef] = {
 # flip to require_canonical=True is caught by test_non_canonical_exceptions_below.
 _NON_CANONICAL_JSON_EXCEPTIONS: dict[str, tuple[tuple[str, int], str]] = {
     "closure_report.json": (
-        ("src/autoskillit/core/closure_verifier.py", 59),
+        ("src/autoskillit/core/audit/closure_verifier.py", 59),
         "Closure reports are written by write_versioned_json (see the "
         "_write_report fixture in tests/core/test_closure_verifier.py), not "
         "write_canonical_versioned_json — no content-addressed tamper-evidence "

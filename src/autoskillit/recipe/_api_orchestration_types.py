@@ -22,7 +22,7 @@ from autoskillit.core import (
     RecipeFlowEdge,
     SkillLister,
 )
-from autoskillit.recipe._recipe_composition import _DeferredGuardState
+from autoskillit.recipe.ingredients._recipe_composition import _DeferredGuardState
 from autoskillit.recipe.io import RecipeInfo
 from autoskillit.recipe.schema import Recipe, RecipeStep
 

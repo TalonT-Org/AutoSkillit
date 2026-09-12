@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _sh
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import RuleFinding, run_semantic_rules
 

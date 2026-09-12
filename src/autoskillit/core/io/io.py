@@ -25,63 +25,11 @@ import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypeGuard
+from typing import Any, Literal, Protocol
 
-import yaml
-from yaml import YAMLError as YAMLError  # explicit re-export for callers and type checkers
-
-from ._json import fast_dumps as _fast_dumps
-from .types._type_helpers import extract_skill_name
-from .types._type_results import SpilledOutput, SpillSpec
-
-try:
-    from yaml import CSafeLoader as _Loader
-except ImportError:
-    _Loader = yaml.SafeLoader  # type: ignore[misc,assignment]
-
-
-class _UniqueKeyLoader(_Loader):
-    """Safe loader that rejects duplicate mapping keys before construction."""
-
-
-def _construct_unique_mapping(
-    loader: _UniqueKeyLoader,
-    node: yaml.MappingNode,
-    deep: bool = False,
-) -> dict[Any, Any]:
-    loader.flatten_mapping(node)
-    mapping: dict[Any, Any] = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)
-        try:
-            duplicate = key in mapping
-        except TypeError as exc:
-            raise yaml.constructor.ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                "found an unhashable key",
-                key_node.start_mark,
-            ) from exc
-        if duplicate:
-            raise yaml.constructor.ConstructorError(
-                "while constructing a mapping",
-                node.start_mark,
-                f"found duplicate key {key!r}",
-                key_node.start_mark,
-            )
-        mapping[key] = loader.construct_object(value_node, deep=deep)
-    return mapping
-
-
-_UniqueKeyLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-    _construct_unique_mapping,
-)
-
-try:
-    from yaml import CDumper as _Dumper
-except ImportError:
-    from yaml import Dumper as _Dumper  # type: ignore[misc,assignment]
+from ..types._type_helpers import extract_skill_name
+from ..types._type_results import SpilledOutput, SpillSpec
+from .json import fast_dumps as _fast_dumps
 
 
 class _AtomicWriteDurabilityError(OSError):
@@ -97,20 +45,16 @@ class _AtomicWriteDurabilityError(OSError):
 __all__ = [
     "ReadResult",
     "TreeVanishedError",
-    "YAMLError",
     "atomic_write",
-    "compose_yaml",
-    "ensure_project_temp",
-    "is_yaml_mapping_node",
-    "load_yaml",
-    "mapping_entry_byte_ranges_from_yaml",
-    "dump_yaml_str",
     "decode_versioned_json_bytes",
+    "ensure_project_temp",
+    "is_python_bytecode_path",
     "read_versioned_json",
     "resolve_skill_temp_dir",
     "resolve_temp_dir",
     "safe_upsert_section",
     "spill_output",
+    "strict_walk",
     "temp_dir_display_str",
     "write_versioned_json",
     "write_canonical_versioned_json",
@@ -649,7 +593,7 @@ def write_canonical_versioned_json(
     exclusive: bool = False,
 ) -> None:
     """Atomically write versioned canonical JSON for hash-bound artifacts."""
-    from .closure_hashing import canonical_json_bytes
+    from ..audit.closure_hashing import canonical_json_bytes
 
     if not isinstance(payload, dict):
         raise TypeError("write_canonical_versioned_json requires a dict payload")
@@ -668,7 +612,7 @@ def decode_versioned_json_bytes(
 
     try:
         if require_canonical:
-            from .closure_hashing import parse_canonical_json_bytes
+            from ..audit.closure_hashing import parse_canonical_json_bytes
 
             raw = parse_canonical_json_bytes(data)
         else:
@@ -799,96 +743,3 @@ def ensure_project_temp(project_dir: Path, override: str | None = None) -> Path:
                     existing.rstrip("\n") + "\n" + "\n".join(missing) + "\n",
                 )
     return temp_dir
-
-
-def load_yaml(source: os.PathLike[str] | str) -> Any:
-    """Load YAML from a file path or raw string.
-
-    Pass any ``os.PathLike`` (including ``pathlib.Path``) to read from disk,
-    or a ``str`` to parse directly. Uses binary mode for portable UTF-8/BOM
-    handling when reading from a path.
-    """
-    if isinstance(source, os.PathLike):
-        with open(source, "rb") as fh:
-            return yaml.load(fh, Loader=_UniqueKeyLoader)
-    return yaml.load(source, Loader=_UniqueKeyLoader)
-
-
-def compose_yaml(source: str) -> yaml.Node | None:
-    """Parse *source* into a mark-annotated YAML node tree (not a data structure).
-
-    Unlike :func:`load_yaml`, retains ``start_mark`` / ``end_mark`` character
-    offsets on every node, which the byte-range tracker in
-    ``server/tools/_serve_helpers.py`` uses to compute per-step byte spans
-    of the original ``content`` text. Returns ``None`` when the source is
-    empty (matches :func:`yaml.compose` semantics).
-    """
-    return yaml.compose(source, Loader=_Loader)
-
-
-def is_yaml_mapping_node(node: object) -> TypeGuard[yaml.MappingNode]:
-    """Return whether *node* is a YAML mapping without leaking the YAML dependency."""
-    return isinstance(node, yaml.MappingNode)
-
-
-def mapping_entry_byte_ranges_from_yaml(
-    content: str, mapping_path: tuple[str, ...]
-) -> dict[str, tuple[int, int]]:
-    """Compute UTF-8 byte ranges for entries under a YAML mapping path.
-
-    Walks the persisted YAML ``content`` field via :func:`compose_yaml` to read
-    each selected mapping entry's key/value ``start_mark`` / ``end_mark`` character
-    offsets, then converts them to UTF-8 byte offsets so the result can be
-    used directly to slice the payload back at the byte level.
-
-    Fails open: returns ``{}`` on any malformed or non-mapping document. The
-    guards (rather than a bare ``except YAMLError``) handle the documented
-    case where ``yaml.compose`` succeeds but produces a non-mapping root
-    (a bare sequence, or a ``steps:`` key whose value is a scalar) — a bare
-    ``except`` would miss ``TypeError`` / ``ValueError`` raised from
-    tuple-unpacking such a non-mapping node tree.
-
-    Centralizes the yaml import: this module is the only place in the
-    package that imports ``yaml`` directly (REQs in
-    ``tests/arch/test_subpackage_isolation_module_boundaries.py::
-    test_only_yaml_imports_yaml_directly`` and
-    ``tests/core/test_io.py::test_only_yaml_imports_yaml_directly``).
-    """
-    out: dict[str, tuple[int, int]] = {}
-    if not content or not mapping_path:
-        return out
-    try:
-        root = compose_yaml(content)
-    except yaml.YAMLError:
-        return out
-    if not isinstance(root, yaml.MappingNode):
-        return out
-    current = root
-    for segment in mapping_path:
-        next_node = None
-        for key_node, value_node in current.value:
-            if getattr(key_node, "value", None) == segment:
-                next_node = value_node
-                break
-        if not isinstance(next_node, yaml.MappingNode):
-            return out
-        current = next_node
-    for entry_key, entry_value in current.value:
-        start_idx = entry_key.start_mark.index
-        end_idx = entry_value.end_mark.index
-        out[str(entry_key.value)] = (
-            len(content[:start_idx].encode("utf-8")),
-            len(content[:end_idx].encode("utf-8")),
-        )
-    return out
-
-
-def dump_yaml_str(data: Any, **kwargs: Any) -> str:
-    """Serialize data to a YAML string.
-
-    Accepts ``yaml.dump`` kwargs (e.g. ``sort_keys=False``,
-    ``default_flow_style=False``). Distinct from the removed ``dump_yaml`` which wrote
-    to disk.
-    """
-    kwargs.pop("Dumper", None)
-    return yaml.dump(data, Dumper=_Dumper, **kwargs)

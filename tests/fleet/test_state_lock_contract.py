@@ -41,8 +41,8 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.featur
 
 _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
     {
-        "core/_retiring_cache.py",
-        "core/_active_kitchens.py",
+        "core/plugins/_retiring_cache.py",
+        "core/plugins/_active_kitchens.py",
         "core/runtime/artifact_lease.py",
         "core/runtime/session_registry.py",  # session registry mutation transaction lock
         "cli/session/pty/_exec.py",
@@ -56,7 +56,8 @@ _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
         "planner/merge.py",
         "server/tools/_overlay_state.py",  # session overlay transaction lock
         "server/tools/tools_pipeline_tracker/_handlers.py",  # mark_step_complete: flock sidecar
-        "core/pipeline_tracker.py",  # tracker authority: lease-before-tracker-lock order
+        "core/pipeline/pipeline_tracker.py",  # tracker authority: lease-before-tracker-lock order
+        "core/pipeline_tracker.py",  # backward-compat shim re-exports fcntl for monkeypatch tests
         "server/recipe/_recipe_artifact.py",  # shared/exclusive immutable-generation lock
         "hooks/resume_gate_post_hook.py",
         "hooks/_capture/_resolver.py",

@@ -115,7 +115,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # clone_registry.py — clones dict (CloneRegistry.__exit__ atomic write-back)
     ("src/autoskillit/workspace/clone_registry.py", 97),
     # staleness_cache.py — cache dict
-    ("src/autoskillit/recipe/staleness_cache.py", 67),
+    ("src/autoskillit/recipe/contracts/staleness_cache.py", 67),
     # _hook_repair.py — hooks.json self-heal for plugin cache and projection scopes,
     # triggered by the in-process repair primitive instead of startup drift detection
     # (co-owned with Claude plugin system). Cache repair at line 298; projection repair
@@ -130,9 +130,9 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     ("src/autoskillit/server/tools/_overlay_state.py", 132),
     # pipeline_tracker.py — locked tracker init/merge/mutation writes centralize the existing
     # unversioned tracker file schema.
-    ("src/autoskillit/core/pipeline_tracker.py", 299),
-    ("src/autoskillit/core/pipeline_tracker.py", 321),
-    ("src/autoskillit/core/pipeline_tracker.py", 339),
+    ("src/autoskillit/core/pipeline/pipeline_tracker.py", 330),
+    ("src/autoskillit/core/pipeline/pipeline_tracker.py", 352),
+    ("src/autoskillit/core/pipeline/pipeline_tracker.py", 370),
     # tools_status.py — mcp_data dict
     ("src/autoskillit/server/tools/tools_status.py", 587),
     # tools_github.py — bug report dict (non-blocking report-bug status file)
@@ -170,7 +170,7 @@ _LEGACY_JSON_WRITES: set[tuple[str, int]] = {
     # planner/manifests.py — finalize_wp_manifest: wp_index.json rebuild (list payload)
     ("src/autoskillit/planner/manifests.py", 315),
     # _cmd_rpc_issues.py — emit_fallback_map: BEM fallback execution map (recipe-internal)
-    ("src/autoskillit/recipe/_cmd_rpc_issues.py", 78),
+    ("src/autoskillit/recipe/cmd_rpc/_cmd_rpc_issues.py", 78),
     # _probe_canary.py — CanaryState save() 3-field state file (intentionally unversioned)
     ("src/autoskillit/_probe_canary.py", 51),
 }

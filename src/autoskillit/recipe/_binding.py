@@ -34,18 +34,18 @@ from autoskillit.recipe._binding_input import (
     _structured_skill_inputs,
     _tokenize_skill_command,
 )
-from autoskillit.recipe._contracts_manifest import (
+from autoskillit.recipe.contracts._contracts_manifest import (
     compute_skill_contract_identity as _compute_skill_contract_identity,
 )
-from autoskillit.recipe._contracts_manifest import (
+from autoskillit.recipe.contracts._contracts_manifest import (
     get_callable_contract,
     get_skill_contract,
     load_bundled_manifest,
 )
-from autoskillit.recipe._contracts_types import (
+from autoskillit.recipe.contracts._contracts_types import (
     _CONTEXT_REF_RE,
 )
-from autoskillit.recipe._contracts_types import (
+from autoskillit.recipe.contracts._contracts_types import (
     INPUT_REF_RE as _INPUT_REF_RE,
 )
 from autoskillit.recipe.schema import RecipeStep

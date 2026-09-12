@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import autoskillit.core.path_containment as path_containment
+import autoskillit.core.io.path_containment as path_containment
 from autoskillit.core.path_containment import (
     ContainmentError,
     check_metadata_stable,

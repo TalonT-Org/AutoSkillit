@@ -1726,7 +1726,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("recipe/_api_listing.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
-        Path("recipe/_contracts_staleness.py"): {
+        Path("recipe/contracts/_contracts_staleness.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
         Path("recipe/rules/rules_skill_content.py"): {
@@ -1741,7 +1741,7 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("recipe/rules/rules_features.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
-        Path("recipe/_skill_helpers.py"): {
+        Path("recipe/helpers/_skill_helpers.py"): {
             "DefaultSkillResolver"
         },  # shared helper, deferred default factory fallback
         Path("workspace/session_skill_provider.py"): {

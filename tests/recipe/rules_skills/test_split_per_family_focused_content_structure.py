@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _real_sh
 from autoskillit.core import Severity
 from autoskillit.recipe.io import load_recipe
 from autoskillit.recipe.registry import run_semantic_rules
@@ -68,7 +68,7 @@ def test_transition_boundary_anti_confirmation_rule_fires(tmp_path: Path) -> Non
     recipe_path.write_text(make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_real_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]
@@ -91,7 +91,7 @@ def test_transition_boundary_anti_confirmation_rule_passes(tmp_path: Path) -> No
     recipe_path.write_text(make_recipe_for_skill("test-skill", {}))
     recipe = load_recipe(recipe_path)
 
-    with patch.object(_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
+    with patch.object(_real_sh, "SKILL_SEARCH_DIRS", [tmp_path]):
         findings = run_semantic_rules(recipe)
 
     rule_ids = [f.rule for f in findings]

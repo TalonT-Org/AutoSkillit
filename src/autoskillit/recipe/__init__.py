@@ -6,12 +6,54 @@ from autoskillit.core import get_logger
 
 logger = get_logger(__name__)
 
+# Submodule imports — ensure each shim module is bound as an attribute of
+# ``autoskillit.recipe`` so that pre-Part-D callers (e.g.,
+# ``autoskillit.recipe.methodology_disambiguation``) keep working after the
+# move into ``autoskillit.recipe.methodology.*``. Python only exposes a
+# submodule as a parent-package attribute when the parent package triggers
+# the load; importing the new path does not retroactively bind the old name.
+# __init__.py files must be pure re-export facades (no module-scope function
+# defs), so this loop runs inline rather than through a helper function.
+import importlib as _importlib
+
+_LEGACY_SHIM_MODULES: tuple[str, ...] = (
+    "_analysis",
+    "_analysis_bfs",
+    "_analysis_blocks",
+    "_analysis_detectors",
+    "_analysis_graph",
+    "_cmd_rpc",
+    "_cmd_rpc_guards",
+    "_cmd_rpc_issues",
+    "_cmd_rpc_merge",
+    "_contracts_card",
+    "_contracts_manifest",
+    "_contracts_staleness",
+    "_contracts_types",
+    "_git_helpers",
+    "_io_loading",
+    "_recipe_composition",
+    "_recipe_ingredients",
+    "_recipe_raw_repair",
+    "_registry_utils",
+    "_rule_helpers",
+    "_skill_helpers",
+    "_skill_placeholder_parser",
+    "contracts",
+    "experiment_type_registry",
+    "methodology_disambiguation",
+    "methodology_tradition_registry",
+    "methodology_tradition_router",
+    "methodology_venue_appendix",
+    "staleness_cache",
+)
+
+for _name in _LEGACY_SHIM_MODULES:
+    _importlib.import_module(f"{__name__}.{_name}")
+del _importlib, _name
+
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415
-from autoskillit.recipe._analysis import (  # noqa: E402
-    RouteEdge,
-    _extract_routing_edges,
-)
 from autoskillit.recipe._api import (  # noqa: E402
     format_recipe_list_response,
     list_all,
@@ -19,15 +61,11 @@ from autoskillit.recipe._api import (  # noqa: E402
     validate_from_path,
 )
 from autoskillit.recipe._binding import bind_recipe, bind_step_invocation  # noqa: E402
-from autoskillit.recipe._recipe_ingredients import (  # noqa: E402
-    ListRecipesResult,
-    LoadRecipeResult,
-    OpenKitchenResult,
-    RecipeListItem,
-    build_ingredient_rows,
-    format_ingredients_table,
+from autoskillit.recipe.analysis._analysis import (  # noqa: E402
+    RouteEdge,
+    _extract_routing_edges,
 )
-from autoskillit.recipe.contracts import (  # noqa: E402
+from autoskillit.recipe.contracts.contracts import (  # noqa: E402
     OutcomeInvariantEntry,
     ResultFieldSpec,
     SkillContract,
@@ -44,24 +82,29 @@ from autoskillit.recipe.contracts import (  # noqa: E402
     resolve_skill_name,
     validate_recipe_cards,
 )
+from autoskillit.recipe.contracts.staleness_cache import (  # noqa: E402
+    StalenessEntry,
+    compute_recipe_hash,
+    read_staleness_cache,
+    write_staleness_cache,
+)
 from autoskillit.recipe.diagrams import (  # noqa: E402
     annotate_diagram_with_pruning,
     check_diagram_staleness,
     diagram_stale_to_suggestions,
     load_recipe_diagram,
 )
-from autoskillit.recipe.experiment_type_registry import (  # noqa: E402
-    BUNDLED_EXPERIMENT_TYPES_DIR,
-    ExperimentTypeSpec,
-    get_experiment_type_by_name,
-    is_silent_type,
-    load_all_experiment_types,
-    load_types_from_dir,
-    parse_experiment_type,
-)
 from autoskillit.recipe.identity import (  # noqa: E402
     check_rerun_detection,
     find_prior_runs,
+)
+from autoskillit.recipe.ingredients._recipe_ingredients import (  # noqa: E402
+    ListRecipesResult,
+    LoadRecipeResult,
+    OpenKitchenResult,
+    RecipeListItem,
+    build_ingredient_rows,
+    format_ingredients_table,
 )
 from autoskillit.recipe.io import (  # noqa: E402
     GROUP_LABELS,
@@ -80,7 +123,16 @@ from autoskillit.recipe.io import (  # noqa: E402
     step_byte_ranges_from_yaml,
 )
 from autoskillit.recipe.loader import parse_recipe_metadata  # noqa: E402
-from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
+from autoskillit.recipe.methodology.experiment_type_registry import (  # noqa: E402
+    BUNDLED_EXPERIMENT_TYPES_DIR,
+    ExperimentTypeSpec,
+    get_experiment_type_by_name,
+    is_silent_type,
+    load_all_experiment_types,
+    load_types_from_dir,
+    parse_experiment_type,
+)
+from autoskillit.recipe.methodology.methodology_disambiguation import (  # noqa: E402
     CrossTraditionOverlapDef,
     DisambiguationExceptionDef,
     DisambiguationResult,
@@ -88,7 +140,7 @@ from autoskillit.recipe.methodology_disambiguation import (  # noqa: E402
     disambiguate,
     load_disambiguation_rules,
 )
-from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_tradition_registry import (  # noqa: E402
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     MethodologyTraditionSpec,
     VenueAppendixDef,
@@ -98,12 +150,12 @@ from autoskillit.recipe.methodology_tradition_registry import (  # noqa: E402
     load_traditions_from_dir,
     parse_methodology_tradition,
 )
-from autoskillit.recipe.methodology_tradition_router import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_tradition_router import (  # noqa: E402
     TraditionRouterResult,
     UnionRuleDef,
     classify_methodology,
 )
-from autoskillit.recipe.methodology_venue_appendix import (  # noqa: E402
+from autoskillit.recipe.methodology.methodology_venue_appendix import (  # noqa: E402
     AlternateParentDef,
     MLSubAreaFoldingDef,
     VenueAppendixMatch,
@@ -299,12 +351,6 @@ from autoskillit.recipe.schema import (  # noqa: E402
     StepResultCondition,
     StepResultRoute,
 )
-from autoskillit.recipe.staleness_cache import (  # noqa: E402
-    StalenessEntry,
-    compute_recipe_hash,
-    read_staleness_cache,
-    write_staleness_cache,
-)
 from autoskillit.recipe.validator import (  # noqa: E402
     RuleFinding,
     analyze_dataflow,
@@ -321,7 +367,7 @@ from autoskillit.recipe._binding import (  # noqa: E402
     bind_runtime_skill_invocation,
     compute_skill_contract_identity,
 )
-from autoskillit.recipe.contracts import (  # noqa: E402
+from autoskillit.recipe.contracts.contracts import (  # noqa: E402
     AuditAuthorityPublicationSpec,
     AuditOutputMode,
     select_audit_output_contract,

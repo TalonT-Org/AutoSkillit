@@ -1,0 +1,475 @@
+"""Bash command write-target extraction (stdlib-only, IL-0).
+
+Independent re-implementation of the write-target extraction logic from
+hooks/_command_classification.py and hooks/guards/write_guard.py, suitable
+for import by IL-1 modules (execution/).
+
+hooks/ retains its own function bodies unchanged because hook scripts import
+via sys.path manipulation and cannot use autoskillit package imports.
+A parity test corpus guards against drift between the two implementations.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import shlex
+from collections.abc import Iterable, Sequence
+
+__all__ = ["contains_test_gate_command", "extract_bash_write_targets"]
+
+_SPLIT_TOKENS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
+_CANONICAL_TEST_GATE_COMMANDS: frozenset[tuple[str, ...]] = frozenset(
+    {
+        ("task", "test-check"),
+        ("task", "test-all"),
+        ("task", "test-filtered"),
+    }
+)
+
+_HEREDOC_BODY_RE = re.compile(
+    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
+    re.DOTALL,
+)
+
+# After _strip_heredoc_bodies() a heredoc collapses to "<<WORD ...\nWORD".
+# This removes the marker and terminator, keeping the rest of the opening
+# line (real redirects), so segments carry only executable tokens.
+_HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
+
+_REDIRECT_TOKEN_RE = re.compile(r"^(\d*)>{1,2}(.+)$")
+_REDIRECT_OP_ONLY_RE = re.compile(r"^(\d*)>{1,2}$")
+_FD_REDIRECT_RE = re.compile(r"^\d*>{1,2}&")
+_TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
+_SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
+
+_PSEUDO_DEVICE_PATHS: frozenset[str] = frozenset(
+    {
+        "/dev/null",
+        "/dev/zero",
+        "/dev/stdout",
+        "/dev/stderr",
+        "/dev/stdin",
+    }
+)
+
+_WRITE_VERBS: frozenset[str] = frozenset(
+    {
+        "sed",
+        "tee",
+        "mv",
+        "cp",
+        "patch",
+        "rm",
+        "unlink",
+    }
+)
+
+# Every value-taking git global flag, mirroring _command_classification.py's
+# _GIT_GLOBAL_FLAG_SPEC (source of truth; kept in sync manually -- this
+# module is an independent re-implementation for IL-0 import, see the
+# module docstring). A flag missing here is misread by the loop below as a
+# 1-token boolean skip, so its value gets mistaken for the git subcommand --
+# e.g. `git --namespace refs/foo checkout -- file` previously stopped the
+# loop at `refs/foo`, never reaching `checkout`.
+_GIT_FLAG_WITH_VALUE: frozenset[str] = frozenset(
+    {"-C", "--git-dir", "--work-tree", "-c", "--namespace", "--config-env"}
+)
+
+_COMMAND_WRAPPERS: frozenset[str] = frozenset({"command", "nice", "time", "sudo", "nohup"})
+_WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
+_WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
+
+_ENV_VALUE_FLAGS: frozenset[str] = frozenset(
+    {"-u", "--unset", "-C", "--chdir", "-S", "--split-string", "--argv0"}
+)
+
+_WRAPPER_VALUE_FLAGS_DETACHED: frozenset[str] = frozenset(
+    {
+        "-u",
+        "--user",
+        "-n",
+        "--adjustment",
+        "-k",
+        "--kill-after",
+        "-s",
+        "--signal",
+        "-g",
+        "--group",
+        "-p",
+        "--priority",
+    }
+)
+
+
+def _resolve_write_target(path: str, cwd: str = "") -> str | None:
+    if not path:
+        return None
+    if path.startswith("&") or _FD_REDIRECT_RE.match(path):
+        return None
+    if _SHELL_VAR_RE.search(path):
+        path = os.path.expandvars(path)
+        if _SHELL_VAR_RE.search(path):
+            return None
+    if os.path.isabs(path):
+        return path
+    if cwd:
+        return os.path.join(cwd, path)
+    return None
+
+
+def _strip_heredoc_bodies(command: str) -> str:
+    return _HEREDOC_BODY_RE.sub(r"\1\n\3", command)
+
+
+def _normalize_newlines(command: str) -> str:
+    result: list[str] = []
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if c == "\\" and not in_single and i + 1 < len(command):
+            result.append(c)
+            result.append(command[i + 1])
+            i += 2
+            continue
+        if c == "'" and not in_double:
+            in_single = not in_single
+        elif c == '"' and not in_single:
+            in_double = not in_double
+        elif c == "\n" and not in_single and not in_double:
+            result.append(" ; ")
+            i += 1
+            continue
+        result.append(c)
+        i += 1
+    return "".join(result)
+
+
+def _tokenize_command_segments(command: str) -> list[list[str]]:
+    try:
+        stripped = _HEREDOC_MARKER_RE.sub(r"\2", _strip_heredoc_bodies(command))
+        lexer = shlex.shlex(
+            _normalize_newlines(stripped),
+            posix=True,
+            punctuation_chars=";&|",
+        )
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except (ValueError, TypeError):
+        return []
+    segments: list[list[str]] = []
+    current: list[str] = []
+    for token in tokens:
+        if token in _SPLIT_TOKENS:
+            if current:
+                segments.append(current)
+                current = []
+        else:
+            current.append(token)
+    if current:
+        segments.append(current)
+    return segments
+
+
+def contains_test_gate_command(
+    command: str,
+    configured_commands: Iterable[Sequence[str]] = (),
+) -> bool:
+    """Return whether a Bash command invokes a managed test gate."""
+    gate_commands = _CANONICAL_TEST_GATE_COMMANDS | {
+        tuple(candidate) for candidate in configured_commands if candidate
+    }
+    for segment in _tokenize_command_segments(command):
+        normalized = tuple(segment)
+        while normalized and "=" in normalized[0] and not normalized[0].startswith(("/", "./")):
+            normalized = normalized[1:]
+        if any(normalized[: len(gate)] == gate for gate in gate_commands):
+            return True
+        if normalized[:2] == ("uv", "run"):
+            normalized = normalized[2:]
+        if any(normalized[: len(gate)] == gate for gate in gate_commands):
+            return True
+        if normalized[:1] == ("pytest",):
+            return True
+        if (
+            len(normalized) >= 3
+            and normalized[0].startswith("python")
+            and normalized[1:3] == ("-m", "pytest")
+        ):
+            return True
+    return False
+
+
+def _extract_redirect_targets(tokens: list[str], cwd: str = "") -> list[str]:
+    targets: list[str] = []
+    depth = 0
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "(" or (tok.startswith("(") and len(tok) > 1):
+            depth += 1
+            if tok.endswith(")") and len(tok) > 1:
+                depth -= 1
+            i += 1
+            continue
+        if tok == ")":
+            if depth > 0:
+                depth -= 1
+            i += 1
+            continue
+        if tok.endswith(")") and len(tok) > 1:
+            if depth > 0:
+                depth -= 1
+            i += 1
+            continue
+        if depth > 0:
+            i += 1
+            continue
+        if tok in (">", ">>"):
+            if i + 1 < len(tokens):
+                path = tokens[i + 1]
+                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                    path = path[:-1]
+                resolved = _resolve_write_target(path, cwd)
+                if resolved is not None:
+                    targets.append(resolved)
+                i += 2
+                continue
+        elif _REDIRECT_OP_ONLY_RE.match(tok):
+            if i + 1 < len(tokens):
+                path = tokens[i + 1]
+                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                    path = path[:-1]
+                resolved = _resolve_write_target(path, cwd)
+                if resolved is not None:
+                    targets.append(resolved)
+                i += 2
+                continue
+        else:
+            m = _REDIRECT_TOKEN_RE.match(tok)
+            if m:
+                path = m.group(2)
+                while path and path[-1] in _TRAILING_SHELL_CLOSERS:
+                    path = path[:-1]
+                resolved = _resolve_write_target(path, cwd)
+                if resolved is not None:
+                    targets.append(resolved)
+        i += 1
+    return targets
+
+
+def _is_posix_assignment(token: str) -> bool:
+    if "=" not in token or token.startswith("="):
+        return False
+    name, _sep, _value = token.partition("=")
+    if not name:
+        return False
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False
+    return all(c.isalnum() or c == "_" for c in name)
+
+
+def _consume_wrapper_options(start: int, segment: list[str]) -> int:
+    """Skip past a wrapper's attached/detached value options.
+
+    Wrappers (sudo, nice, nohup, time, command) accept option flags before
+    the inner command. Many take values either attached (--user=root) or as
+    the next detached token (-u root). Returns the index of the first
+    non-option token.
+    """
+    i = start
+    while i < len(segment):
+        token = segment[i]
+        if token == "--":
+            return i + 1
+        if not token.startswith("-"):
+            return i
+        if "=" in token:
+            i += 1
+            continue
+        if token in _WRAPPER_VALUE_FLAGS_DETACHED and i + 1 < len(segment):
+            i += 2
+            continue
+        i += 1
+    return i
+
+
+def _command_start_index(segment: list[str]) -> int | None:
+    if not segment:
+        return None
+    start = 0
+    while start < len(segment):
+        token = segment[start]
+        if _is_posix_assignment(token):
+            start += 1
+            continue
+        if token == "env":
+            start += 1
+            while start < len(segment) and (
+                segment[start].startswith("-") or "=" in segment[start]
+            ):
+                if segment[start] in _ENV_VALUE_FLAGS and start + 1 < len(segment):
+                    start += 2
+                    continue
+                start += 1
+            continue
+        if token in _COMMAND_WRAPPERS:
+            new_start = _consume_wrapper_options(start + 1, segment)
+            if new_start <= start + 1:
+                start += 1
+                continue
+            start = new_start
+            continue
+        if token in _WRAPPERS_WITH_DURATION and start + 1 < len(segment):
+            start += 2
+            continue
+        if (
+            token in _WRAPPERS_WITH_SHORT_FLAG
+            and start + 1 < len(segment)
+            and segment[start + 1].startswith("-")
+        ):
+            start += 2
+            continue
+        break
+    return start if start < len(segment) else None
+
+
+def _command_verb(segment: list[str]) -> str:
+    start = _command_start_index(segment)
+    if start is None:
+        return ""
+    return segment[start]
+
+
+def _is_gh_command(segment: list[str]) -> bool:
+    return _command_verb(segment) == "gh"
+
+
+def _extract_segment_targets(segment: list[str], cwd: str) -> list[str] | None:
+    start = _command_start_index(segment)
+    if start is None:
+        return None
+    segment = segment[start:]
+
+    if _is_gh_command(segment):
+        return None
+
+    verb = _command_verb(segment)
+    targets: list[str] = []
+    found_write = False
+
+    if verb == "git" and len(segment) >= 2:
+        idx = 1
+        while idx < len(segment):
+            tok = segment[idx]
+            if tok in _GIT_FLAG_WITH_VALUE:
+                idx += 2
+                if idx >= len(segment):
+                    break
+            elif tok.startswith("-") and "=" not in tok and tok not in ("--", "--hard"):
+                idx += 1
+            else:
+                break
+        if idx < len(segment):
+            subcmd = segment[idx]
+            if subcmd == "checkout" and "--" in segment[idx + 1 :]:
+                found_write = True
+                double_dash = segment.index("--", idx + 1)
+                for t in segment[double_dash + 1 :]:
+                    resolved = _resolve_write_target(t, cwd)
+                    if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(resolved)
+            elif subcmd == "reset" and "--hard" in segment[idx + 1 :]:
+                found_write = True
+    elif verb in _WRITE_VERBS:
+        found_write = True
+        non_flag: list[str] = []
+        skip_next = False
+        for t in segment[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if t.startswith("-") or t.startswith("&") or _FD_REDIRECT_RE.match(t):
+                continue
+            if _REDIRECT_OP_ONLY_RE.match(t):
+                skip_next = True
+                continue
+            if _REDIRECT_TOKEN_RE.match(t):
+                continue
+            non_flag.append(t)
+        if verb == "sed":
+            flags = [t for t in segment[1:] if t.startswith("-")]
+            has_inplace = any(t.startswith("-i") or t == "--in-place" for t in flags)
+            if has_inplace and non_flag:
+                path = non_flag[-1]
+                resolved = _resolve_write_target(path, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
+        elif verb == "tee":
+            for t in non_flag:
+                resolved = _resolve_write_target(t, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
+        elif verb in ("mv", "cp"):
+            if len(non_flag) >= 2:
+                path = non_flag[-1]
+                resolved = _resolve_write_target(path, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
+        elif verb == "patch":
+            for t in non_flag:
+                resolved = _resolve_write_target(t, cwd)
+                if resolved is not None:
+                    if resolved not in _PSEUDO_DEVICE_PATHS:
+                        targets.append(resolved)
+                    break
+        elif verb in ("rm", "unlink"):
+            for t in non_flag:
+                resolved = _resolve_write_target(t, cwd)
+                if resolved is not None and resolved not in _PSEUDO_DEVICE_PATHS:
+                    targets.append(resolved)
+
+    if found_write:
+        return targets
+    return None
+
+
+def extract_bash_write_targets(command: str, cwd: str = "") -> list[str]:
+    """Extract filesystem write targets from a Bash command string.
+
+    Uses shlex tokenization + verb-aware segment dispatch + redirect
+    extraction. Returns only paths that are actual write destinations
+    (redirect targets, tee targets, cp/mv destinations, sed -i targets).
+
+    Returns [] for read-only commands, slash-command tokens, and URL paths.
+    Pseudo-device paths (/dev/null, /dev/stderr, etc.) are excluded.
+    """
+    segments = _tokenize_command_segments(command)
+    if cwd and not os.path.isabs(cwd):
+        cwd = ""
+
+    all_targets: list[str] = []
+
+    for segment in segments:
+        result = _extract_segment_targets(segment, cwd)
+        if result is not None:
+            all_targets.extend(result)
+
+    try:
+        flat_tokens = shlex.split(_strip_heredoc_bodies(command))
+    except (ValueError, TypeError, AttributeError):
+        flat_tokens = []
+    redirect_paths = _extract_redirect_targets(flat_tokens, cwd)
+    for path in redirect_paths:
+        if path not in _PSEUDO_DEVICE_PATHS:
+            all_targets.append(path)
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for t in all_targets:
+        if t not in seen:
+            seen.add(t)
+            unique.append(t)
+    return unique

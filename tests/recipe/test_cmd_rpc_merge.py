@@ -49,7 +49,7 @@ def test_attempt_cheap_rebase_fetches_base_branch():
     call_log: list[list[str]] = []
     fake = _fake_run_git_factory(call_log=call_log)
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = attempt_cheap_rebase("/work", "pr-branch", "develop", "/tmp/report.md")
 
     assert result == {"status": "clean"}
@@ -76,7 +76,7 @@ def test_proactive_rebase_next_pr_fetches_base_branch():
     call_log: list[list[str]] = []
     fake = _fake_run_git_factory(call_log=call_log)
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = proactive_rebase_next_pr("/work", "next-pr-branch", "develop", "/tmp/report.md")
 
     assert result == {"status": "clean"}
@@ -106,7 +106,7 @@ def test_queue_ejected_fix_returns_fetch_error_on_network_failure():
     ]
     fake = _fake_run_git_factory(responses=responses)
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = queue_ejected_fix("/work", "develop")
 
     assert result["status"] == "fetch_error", f"Expected fetch_error, got: {result}"
@@ -125,7 +125,7 @@ def test_queue_ejected_fix_returns_conflicts_with_stderr():
     ]
     fake = _fake_run_git_factory(responses=responses, call_log=[])
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = queue_ejected_fix(work_dir="/tmp/test", base_branch="main")
 
     assert result["status"] == "conflicts"
@@ -145,7 +145,7 @@ def test_queue_ejected_fix_distinguishes_dirty_tree():
     ]
     fake = _fake_run_git_factory(responses=responses, call_log=[])
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = queue_ejected_fix(work_dir="/tmp/test", base_branch="main")
 
     assert result["status"] == "conflicts"
@@ -170,7 +170,7 @@ def test_attempt_cheap_rebase_publishes_bounded_conflict_report(tmp_path):
     fake = _fake_run_git_factory(responses=responses, call_log=call_log)
     report_path = tmp_path / "ejected.md"
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = attempt_cheap_rebase(
             work_dir="/tmp/test",
             ejected_pr_branch="pr-branch",
@@ -206,7 +206,7 @@ def test_proactive_rebase_next_pr_publishes_conflict_report(tmp_path):
     fake = _fake_run_git_factory(responses=responses, call_log=[])
     report_path = tmp_path / "proactive.md"
 
-    with patch("autoskillit.recipe._cmd_rpc_merge.run_git", side_effect=fake):
+    with patch("autoskillit.recipe.cmd_rpc._cmd_rpc_merge.run_git", side_effect=fake):
         result = proactive_rebase_next_pr(
             work_dir="/tmp/test",
             next_pr_branch="next-pr",

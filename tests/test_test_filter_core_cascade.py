@@ -101,6 +101,7 @@ class TestModuleCascadeCore:
             "branch_guard",
             "_plugin_ids",
             "_terminal_table",
+            "terminal_table",
             "_plugin_artifact_identity",
             "_plugin_cache",
             "_retiring_cache",
@@ -109,9 +110,23 @@ class TestModuleCascadeCore:
             "_entrypoint_shim",
             "github_url",
             "paths",
+            "path_containment",
             "_install_binding",
             "_claude_env",
+            "claude_env",
             "_cmd_runner",
+            "cmd_runner",
+            "install_detect",
+            "conventions",
+            "delivery_bounds",
+            "json",
+            "version_snapshot",
+            "yaml_io",
+            "audit",
+            "git",
+            "plugins",
+            "pipeline",
+            "context_admission",
             "_version_snapshot",
             "claude_conventions",
             "_type_resume",
@@ -338,7 +353,17 @@ class TestModuleCascadeCore:
 
     def test_type_protocols_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_protocols_backend"] == frozenset(
-            {"core", "execution", "fleet", "pipeline", "cli", "workspace", "_llm_triage", "server"}
+            {
+                "core",
+                "execution",
+                "fleet",
+                "pipeline",
+                "cli",
+                "workspace",
+                "_llm_triage",
+                "test_llm_triage.py",
+                "server",
+            }
         )
 
     def test_json_cascade(self) -> None:
@@ -1001,7 +1026,7 @@ class TestBuildTestScopeCoreCascade:
         """_step_context → narrow cascade of 4 dirs."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/core/_step_context.py"},
+            changed_files={"src/autoskillit/core/pipeline/_step_context.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

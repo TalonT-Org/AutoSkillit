@@ -19,14 +19,14 @@ from autoskillit.recipe._api_orchestration_text import (
     _build_stop_step_semantics,
 )
 from autoskillit.recipe._api_orchestration_types import _LoadPipelineInputs, _ValidationResult
-from autoskillit.recipe._io_loading import assert_no_raw_placeholders
-from autoskillit.recipe._recipe_composition import _DeferredGuardState
-from autoskillit.recipe._recipe_ingredients import (
+from autoskillit.recipe.diagrams import annotate_diagram_with_pruning, load_recipe_diagram
+from autoskillit.recipe.helpers._io_loading import assert_no_raw_placeholders
+from autoskillit.recipe.ingredients._recipe_composition import _DeferredGuardState
+from autoskillit.recipe.ingredients._recipe_ingredients import (
     DeferredGuard,
     LoadRecipeResult,
     format_ingredients_table,
 )
-from autoskillit.recipe.diagrams import annotate_diagram_with_pruning, load_recipe_diagram
 from autoskillit.recipe.schema import Recipe
 
 __all__ = ["_assemble_load_result", "_finalize_recipe_steps"]

@@ -68,7 +68,7 @@ incarnation, and the store root has a version-independent `current` symlink
 one level up pointing at whichever `{version}/{incarnation_id}` is live
 overall (`generation_store_root` / `generation_version_root` /
 `generation_selector_path` / `generation_plugin_selector_path` in
-`core/_plugin_artifact_identity.py` — shared path-shape functions also used by
+`core/plugins/_plugin_artifact_identity.py` — shared path-shape functions also used by
 the pre-existing plugin generation store). `publish_install_root_generation()`
 (`workspace/_projected_artifact/_generation_publication.py`) finalizes a
 generation whose content an installer already wrote directly at its final,

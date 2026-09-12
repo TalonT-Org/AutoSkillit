@@ -100,7 +100,7 @@ class TestFindLatestSessionId:
         os.utime(older, (1000.0, 1000.0))
         os.utime(newer, (2000.0, 2000.0))
 
-        with patch("autoskillit.core.paths.claude_code_project_dir", return_value=proj_dir):
+        with patch("autoskillit.core.io.paths.claude_code_project_dir", return_value=proj_dir):
             result = find_latest_session_id("/home/user/myproject")
         assert result == "bbb222"
 
@@ -111,7 +111,7 @@ class TestFindLatestSessionId:
 
         proj_dir = tmp_path / "empty"
         proj_dir.mkdir()
-        with patch("autoskillit.core.paths.claude_code_project_dir", return_value=proj_dir):
+        with patch("autoskillit.core.io.paths.claude_code_project_dir", return_value=proj_dir):
             result = find_latest_session_id("/home/user/myproject")
         assert result is None
 
@@ -121,7 +121,7 @@ class TestFindLatestSessionId:
         from autoskillit.core.paths import find_latest_session_id
 
         missing = tmp_path / "nonexistent"
-        with patch("autoskillit.core.paths.claude_code_project_dir", return_value=missing):
+        with patch("autoskillit.core.io.paths.claude_code_project_dir", return_value=missing):
             result = find_latest_session_id("/home/user/myproject")
         assert result is None
 
@@ -135,7 +135,7 @@ class TestFindLatestSessionId:
         (proj_dir / "ccc333.jsonl").write_text("{}")
 
         with (
-            patch("autoskillit.core.paths.claude_code_project_dir", return_value=proj_dir),
+            patch("autoskillit.core.io.paths.claude_code_project_dir", return_value=proj_dir),
             patch("pathlib.Path.cwd", return_value=Path("/fake/cwd")),
         ):
             result = find_latest_session_id()  # cwd=None → uses Path.cwd()
@@ -204,7 +204,8 @@ class TestInstallBindingSeal:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         import autoskillit.core._install_binding as binding
-        import autoskillit.core._plugin_artifact_identity as identity
+        import autoskillit.core._plugin_artifact_identity as shim_identity
+        import autoskillit.core.plugins._plugin_artifact_identity as identity
         from autoskillit.core import (
             _AUTOSKILLIT_INSTALL_ROOT_KEY,
             ArtifactLease,
@@ -216,7 +217,12 @@ class TestInstallBindingSeal:
             assert plugin_ref == _AUTOSKILLIT_INSTALL_ROOT_KEY
             return home / ".relocated-generations" / version
 
+        # core/_install_binding.py's _acquire_self_lease does a per-call inline
+        # `from ._plugin_artifact_identity import generation_version_root` — a
+        # relative import resolving to the OLD SHIM path (core._plugin_artifact_identity),
+        # not the new real location. Both patches are load-bearing.
         monkeypatch.setattr(identity, "generation_version_root", relocated_version_root)
+        monkeypatch.setattr(shim_identity, "generation_version_root", relocated_version_root)
 
         incarnation = generation_artifact_root(
             tmp_path / "install-home",

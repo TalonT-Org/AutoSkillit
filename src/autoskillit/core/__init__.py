@@ -17,11 +17,15 @@ _PRIVATE_REEXPORTS = frozenset(
         "_is_stable_track",
         "_collect_disabled_feature_tags",
         "_AUTOSKILLIT_GITIGNORE_ENTRIES",
+        "_AUTOSKILLIT_INSTALL_ROOT_KEY",
+        "_AUTOSKILLIT_PLUGIN_KEY",
         "_COMMITTED_BY_DESIGN",
         "_MAX_ASSOCIATION_FILES",
         "_MAX_REFERENCED_ARTIFACTS_PER_CALL",
         "_PLAN_ASSOCIATION_DOMAIN",
         "_PLAN_ASSOCIATION_KEYS",
+        "_installed_plugins_path",
+        "_parse_issue_ref",
     }
 )
 __all__ = [n for n in __all__ if n not in _PRIVATE_REEXPORTS]

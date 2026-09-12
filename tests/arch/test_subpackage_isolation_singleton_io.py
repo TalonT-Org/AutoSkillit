@@ -99,7 +99,7 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_lifecycle",
         # _REMOVE_LABELS = sorted(...) — stable label list derived from LABEL_LIFECYCLE_REGISTRY
         "_label_cleanup",  # fleet/_label_cleanup.py: _REMOVE_LABELS constant (see comment above)
-        "_step_context",  # core/_step_context.py: current_step_name, current_order_id ContextVars
+        "_step_context",  # core/pipeline/_step_context.py: ctx vars
         "_api_cache",  # recipe/_api_cache.py: _LOAD_CACHE = LoadCache()
         "_contracts_manifest",  # recipe/_contracts_manifest.py: _MANIFEST_CACHE = YamlFileCache()
         "skill_capabilities",  # workspace/skill_capabilities.py: bounded evidence cache

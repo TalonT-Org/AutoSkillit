@@ -5,13 +5,13 @@ _contracts_card.py, _contracts_staleness.py.
 """
 
 from autoskillit.core import resolve_skill_name as resolve_skill_name  # noqa: F401
-from autoskillit.recipe._contracts_card import (  # noqa: F401
+from autoskillit.recipe.contracts._contracts_card import (  # noqa: F401
     _generate_recipe_card_for_recipe,
     generate_recipe_card,
     load_recipe_card,
     validate_recipe_cards,
 )
-from autoskillit.recipe._contracts_manifest import (  # noqa: F401
+from autoskillit.recipe.contracts._contracts_manifest import (  # noqa: F401
     classify_step_arg_style,
     compute_skill_hash,
     count_positional_args,
@@ -25,11 +25,11 @@ from autoskillit.recipe._contracts_manifest import (  # noqa: F401
     resolve_input_specs,
     select_audit_output_contract,
 )
-from autoskillit.recipe._contracts_staleness import (  # noqa: F401
+from autoskillit.recipe.contracts._contracts_staleness import (  # noqa: F401
     check_contract_staleness,
     stale_to_suggestions,
 )
-from autoskillit.recipe._contracts_types import (  # noqa: F401
+from autoskillit.recipe.contracts._contracts_types import (  # noqa: F401
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,

@@ -16,7 +16,12 @@ from autoskillit.core import (
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _DELIVERY_BOUNDS = (
-    Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "core" / "_delivery_bounds.py"
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "autoskillit"
+    / "core"
+    / "io"
+    / "delivery_bounds.py"
 )
 
 

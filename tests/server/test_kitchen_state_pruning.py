@@ -64,7 +64,9 @@ def test_pruner_does_not_raise(monkeypatch, tmp_path):
     def _raise():
         raise OSError("boom")
 
-    monkeypatch.setattr("autoskillit.core.pipeline_tracker.read_active_kitchens_registry", _raise)
+    monkeypatch.setattr(
+        "autoskillit.core.pipeline.pipeline_tracker.read_active_kitchens_registry", _raise
+    )
 
     prune_stale_kitchen_state(tmp_path, "K2")
 
@@ -96,11 +98,11 @@ def test_unsafe_active_registry_preserves_tracker(monkeypatch, tmp_path, registr
     registry_path = tmp_path / "active_kitchens.json"
     registry_path.write_text(registry_text)
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens._active_kitchens_path",
+        "autoskillit.core.plugins._active_kitchens._active_kitchens_path",
         lambda _home: registry_path,
     )
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens._active_kitchens_lock",
+        "autoskillit.core.plugins._active_kitchens._active_kitchens_lock",
         lambda _home: tmp_path / "active_kitchens.lock",
     )
 

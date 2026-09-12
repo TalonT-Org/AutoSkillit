@@ -896,7 +896,8 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
     # entry and reports as alive under an exact-PID-existence check alone.
     allowed_files = {
         SRC_ROOT / "core" / "runtime" / "_linux_proc.py",  # defines the shared primitive
-        SRC_ROOT / "core" / "_active_kitchens.py",  # cross-boot stored_create_time needs psutil
+        # cross-boot stored_create_time needs psutil
+        SRC_ROOT / "core" / "plugins" / "_active_kitchens.py",
         SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",  # /proc unreadable fallback
         SRC_ROOT
         / "execution"
@@ -2517,7 +2518,7 @@ def test_enumeration_stat_allowlist_regression_tests_resolve(
 # Issue #4770: directory_tree_digest silently dropped subtrees whose scandir()
 # failed mid-walk because os.walk(followlinks=False) received no onerror callback.
 # Path.rglob() has the identical silent-suppression contract. strict_walk()
-# (core/io.py) is the one funnel that fails loudly on a race instead; every raw
+# (core/io/io.py) is the one funnel that fails loudly on a race instead; every raw
 # os.walk/os.fwalk/Path.rglob() call used for identity- or tamper-evidence
 # enumeration must go through it. (path, rationale) rows, matching
 # _DETACHED_SPAWN_ALLOWLIST's shape — each entry documents the specific
@@ -2553,7 +2554,7 @@ _TREE_ENUMERATION_ALLOWLIST: list[tuple[Path, str]] = [
         "silent corruption)",
     ),
     (
-        SRC_ROOT / "core" / "_plugin_artifact_identity.py",
+        SRC_ROOT / "core" / "plugins" / "_plugin_artifact_identity.py",
         "_classify_bytecode_contamination is diagnostic-only, called after a "
         "digest mismatch has already been raised, purely to embellish the error "
         "message with a bytecode-contamination hint; omission only affects "

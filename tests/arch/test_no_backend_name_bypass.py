@@ -18,7 +18,7 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         # Claude-specific JSONL stdout format; parse_session_result() is Claude-only
         "execution/headless/_headless_result.py",
         # IL-0 module: cannot import BackendCapabilities (IL-1); routes version data by name
-        "core/_version_snapshot.py",
+        "core/io/version_snapshot.py",
         # FeatureDef.requires_backend_alignment is config-layer; no capabilities at scan time
         "cli/session/_session_launch.py",
     }

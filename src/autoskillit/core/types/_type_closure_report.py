@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..closure_hashing import HASH_RE as _HASH_RE
-from ..closure_hashing import compute_report_hash, compute_row_hash
+from ..audit.closure_hashing import HASH_RE as _HASH_RE
+from ..audit.closure_hashing import compute_report_hash, compute_row_hash
 
 __all__ = [
     "CLOSURE_REPORT_SCHEMA_VERSION",

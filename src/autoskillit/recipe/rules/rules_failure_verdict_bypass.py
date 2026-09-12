@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from autoskillit.core import Severity, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._analysis_bfs import _bfs_capped, _build_step_graph
+from autoskillit.recipe._analysis_bfs import _bfs_capped
 from autoskillit.recipe._rule_helpers import is_success_stop
 from autoskillit.recipe._skill_helpers import get_allowed_values_for_skill
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
@@ -25,7 +25,11 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 )
 def _check_failure_verdict_bypass_reachable(ctx: ValidationContext) -> list[RuleFinding]:
     findings: list[RuleFinding] = []
-    full_graph = _build_step_graph(ctx.recipe)
+    # Reuse the context's pre-built routing graph rather than rebuilding it. Beyond
+    # avoiding a redundant O(steps) build, ctx.step_graph reflects the effective
+    # routing edges when the caller supplied them, which _build_step_graph(ctx.recipe)
+    # would not — matching what every other ctx.step_graph-based rule analyzes.
+    full_graph = ctx.step_graph
 
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":

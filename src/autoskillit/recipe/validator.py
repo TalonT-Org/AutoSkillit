@@ -15,14 +15,14 @@ from autoskillit.core import (
     get_logger,
     get_tool_def,
 )
-from autoskillit.recipe._analysis import (  # noqa: F401
+from autoskillit.recipe.analysis._analysis import (  # noqa: F401
     ValidationContext,
     _build_step_graph,
     _extract_routing_edges,
     analyze_dataflow,
     make_validation_context,
 )
-from autoskillit.recipe.contracts import (
+from autoskillit.recipe.contracts.contracts import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,
     INPUT_REF_RE,

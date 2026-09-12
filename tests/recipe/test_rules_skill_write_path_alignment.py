@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-import autoskillit.recipe._skill_helpers as _sh
+import autoskillit.recipe.helpers._skill_helpers as _sh
 from autoskillit.core import Severity
 from autoskillit.core.types import RecipeSource
 from autoskillit.recipe.io import load_recipe

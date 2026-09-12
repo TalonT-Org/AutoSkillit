@@ -40,7 +40,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | Dispatch timeout resolver | `test_dispatch_timeout_guard.py` | `_run_dispatch` using hardcoded timeout instead of `resolve_dispatch_timeout()` |
 | Doctor read-only | `test_doctor_readonly.py` | `run_doctor()` performing filesystem writes (REQ-DOCTOR-READONLY) |
 | Persisted enum decoding | `test_persisted_enum_decoding.py` | Bare persisted-enum construction in registered decoders instead of tolerant construction or record quarantine |
-| No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup in `session_log.py` or `tool_sequence_analysis.py` — dedup is pre-applied |
+| No requestId dedup in flush | `test_flush_no_rid_guard.py` | Inline `seen_request_ids` dedup in `session_log.py` or `core/pipeline/tool_sequence_analysis.py` — dedup is pre-applied |
 | GFM table rendering | `test_gfm_rendering_guard.py` | GFM table rendering bypassing `_render_gfm_table()` — all table output must route through it |
 | CLI prompts via timed_prompt | `test_input_tty_contracts.py` | `input()` calls in `src/autoskillit/cli/` not routed through `timed_prompt()` |
 | Interactive ordering gate | `test_interactive_ordering_gate.py` | Interactive launch sites that skip `assert_interactive_ordering()` before `_session_launch` |
@@ -51,7 +51,7 @@ classified `REJECT` with `category: "arch_violation"`.
 | No hardcoded model IDs in translation tests | `test_no_hardcoded_model_ids_in_translation_tests.py` | String literal alias-resolved model IDs in `assert` comparisons in `test_model_translation.py` — assertions must reference `CODEX_MODEL_ALIASES[key]` to prevent co-authoring of wrong values |
 | No error-dict returns | `test_no_error_dict_return.py` | `load_and_validate()` returning `{"error": ...}` dict — errors must propagate via exceptions |
 | No hook tracker writes | `test_tracker_write_provenance.py` | Hook scripts referencing `pipeline_tracker` and performing file writes — step completion is server-authoritative, only `server/tools/` may mutate tracker state |
-| No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable in `session_log.py` or `tool_sequence_analysis.py` |
+| No inline requestId dedup | `test_no_inline_jsonl_request_id_dedup.py` | `seen_request_ids` variable in `session_log.py` or `core/pipeline/tool_sequence_analysis.py` |
 | No Path.cwd() in server tools | `test_no_path_cwd_in_tools.py` | `Path.cwd()` in server tool handlers — use injected project path instead |
 | No raw SIGTERM handler | `test_no_raw_signal_handler.py` | `signal.signal(SIGTERM, ...)` in `cli/app.py` — must use `anyio.open_signal_receiver` |
 | PTY coherence | `test_pty_coherence.py` | Dispatch paths that allocate PTY without respecting dispatch-type `pty_override=False` |

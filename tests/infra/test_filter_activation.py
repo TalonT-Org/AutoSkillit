@@ -48,7 +48,7 @@ def test_ci_filter_codepath_produces_scope():
 
     manifest = load_manifest(REPO_ROOT)
     scope = build_test_scope(
-        changed_files={"src/autoskillit/core/paths.py"},
+        changed_files={"src/autoskillit/core/io/paths.py"},
         mode=FilterMode.CONSERVATIVE,
         manifest=manifest,
         tests_root=REPO_ROOT / "tests",

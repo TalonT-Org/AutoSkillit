@@ -70,7 +70,7 @@ class TestLoadYamlExtended:
             captured["Loader"] = Loader
             return original_load(data, Loader=Loader, **kw)
 
-        monkeypatch.setattr("autoskillit.core.io.yaml.load", spy)
+        monkeypatch.setattr("autoskillit.core.io.yaml_io.yaml.load", spy)
 
         if input_kind == "path":
             p = tmp_path / "t.yaml"
@@ -104,7 +104,7 @@ class TestLoadYamlExtended:
     def test_loader_is_csafe_or_safe(self):
         import yaml as _yaml
 
-        from autoskillit.core.io import _Loader
+        from autoskillit.core.io.yaml_io import _Loader
 
         if getattr(_yaml, "__with_libyaml__", False):
             assert _Loader is _yaml.CSafeLoader
@@ -142,7 +142,7 @@ class TestDumpYamlStr:
     def test_dumper_is_cdumper_or_dumper(self):
         import yaml as _yaml
 
-        from autoskillit.core.io import _Dumper
+        from autoskillit.core.io.yaml_io import _Dumper
 
         if getattr(_yaml, "__with_libyaml__", False):
             assert _Dumper is _yaml.CDumper
@@ -163,25 +163,36 @@ class TestDumpYamlStr:
             captured["Dumper"] = kw.get("Dumper")
             return original_dump(data, **kw)
 
-        monkeypatch.setattr("autoskillit.core.io.yaml.dump", spy)
+        monkeypatch.setattr("autoskillit.core.io.yaml_io.yaml.dump", spy)
         dump_yaml_str({"x": 1})
         assert captured["Dumper"] is _yaml.CDumper
 
 
 class TestYamlConsolidationArchitecture:
     def test_only_yaml_imports_yaml_directly(self):
-        """Only core/io.py may contain 'import yaml' at any scope."""
+        """Only core/io/yaml_io.py may contain 'import yaml' at any scope.
+
+        The core/io/ sub-package decomposition extracted the YAML loader
+        into core/io/yaml_io.py, which is now the package's sole pyyaml
+        import surface — no yaml import remains in core/io/io.py.
+
+        The allowlist is deliberately tight: permitting core/io/io.py as well
+        would let a yaml import creep back into it without failing, which is
+        exactly the consolidation this test exists to protect. This matches the
+        allowlist in tests/arch/test_subpackage_isolation_module_boundaries.py
+        so the two guards cannot disagree about the invariant.
+        """
         import ast
         from pathlib import Path
 
         from autoskillit.core.paths import pkg_root
 
         src_dir = pkg_root()
-        allowed_rel = str(Path("core") / "io.py")
+        allowed_rels = {str(Path("core") / "io" / "yaml_io.py")}
         violations = []
         for py_file in sorted(src_dir.rglob("*.py")):
             rel = str(py_file.relative_to(src_dir))
-            if rel == allowed_rel:
+            if rel in allowed_rels:
                 continue
             tree = ast.parse(py_file.read_text())
             for node in ast.walk(tree):
@@ -192,12 +203,14 @@ class TestYamlConsolidationArchitecture:
                 elif isinstance(node, ast.ImportFrom):
                     if (node.module or "").startswith("yaml"):
                         violations.append(f"{rel}: from {node.module} import ...")
-        assert not violations, f"Direct yaml imports found outside core/io.py: {violations}"
+        assert not violations, (
+            f"Direct yaml imports found outside core/io/yaml_io.py: {violations}"
+        )
 
 
 def test_atomic_write_is_canonical_public_name():
     """_atomic_write must not appear in core.io.__all__; atomic_write must."""
-    import autoskillit.core.io as io_mod
+    import autoskillit.core.io.io as io_mod
 
     assert "atomic_write" in io_mod.__all__
     assert "_atomic_write" not in io_mod.__all__
@@ -211,7 +224,7 @@ def test_atomic_write_importable_via_core_gateway():
 
 def test_atomic_write_private_alias_removed():
     """_atomic_write must not be importable as a module attribute."""
-    import autoskillit.core.io as io_mod
+    import autoskillit.core.io.io as io_mod
 
     assert not hasattr(io_mod, "_atomic_write")
 
@@ -234,7 +247,7 @@ def test_write_versioned_json_preserves_existing_keys_atomically(tmp_path, monke
     """Asserts the helper routes through ``atomic_write`` (no partial-file
     fallout on a simulated mid-write crash)."""
 
-    from autoskillit.core import io as io_mod
+    from autoskillit.core.io import io as io_mod
     from autoskillit.core.io import write_versioned_json
 
     calls: list[tuple[str, str]] = []
@@ -349,7 +362,7 @@ def test_write_canonical_versioned_json_forwards_exclusive(tmp_path):
 
 
 def test_write_versioned_json_forwards_strict_durability(tmp_path, monkeypatch):
-    from autoskillit.core import io as io_mod
+    from autoskillit.core.io import io as io_mod
 
     observed: list[bool] = []
 

@@ -39,8 +39,6 @@ def _write_kitchen_marker(project_dir: Path, session_id: str) -> None:
         "opened_at": datetime.now(UTC).isoformat(),
         "recipe_name": None,
         "marker_version": 1,
-        "content_hash": "",
-        "composite_hash": "",
     }
     marker_path.write_text(json.dumps(payload), encoding="utf-8")
 

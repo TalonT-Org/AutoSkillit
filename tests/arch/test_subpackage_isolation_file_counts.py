@@ -159,7 +159,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "execution/github_review": 15,
     "execution/headless": 15,
     "execution/session": 20,
-    "workspace": 24,
+    "workspace": 13,
     "hooks": 27,  # +1 _capture_spawn.py extracted from _capture_process.py (#4732)
     "hooks/guards": 41,
     "smoke_utils": 11,

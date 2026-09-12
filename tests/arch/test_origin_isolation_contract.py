@@ -32,10 +32,10 @@ PYTHON_SCAN_DIRS = (
 )
 
 PYTHON_ALLOWLIST: set[tuple[str, str]] = {
-    ("_clone_remote.py", "_ensure_origin_isolated"),
-    ("_clone_remote.py", "_probe_single_remote"),
-    ("_clone_remote.py", "_probe_clone_source_url"),
-    ("_clone_remote.py", "_add_or_set_upstream"),
+    ("_remote.py", "_ensure_origin_isolated"),
+    ("_remote.py", "_probe_single_remote"),
+    ("_remote.py", "_probe_clone_source_url"),
+    ("_remote.py", "_add_or_set_upstream"),
 }
 
 SHELL_SCAN_DIRS = (

@@ -43,9 +43,10 @@ def test_every_registered_module_exists() -> None:
     assert AMBIENT_HOME_MODULES == {
         "core/plugins/_active_kitchens.py": frozenset(),
         "cli/install/_plugin_artifact.py": frozenset(),
-        "workspace/_install_state.py": frozenset({"_home"}),
+        "workspace/_installed/_state.py": frozenset({"_home"}),
         "workspace/_projected_artifact/authority.py": frozenset(),
         "workspace/_projected_artifact/_generation_publication.py": frozenset(),
+        "workspace/_projected_artifact/_generation_prune.py": frozenset(),
         "workspace/_projected_artifact/_hook_repair.py": frozenset(
             {"repair_broken_projection_hooks"}
         ),

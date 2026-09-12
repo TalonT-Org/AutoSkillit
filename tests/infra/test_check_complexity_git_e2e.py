@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.infra.conftest import _MINIMAL_LIMITS, _git, _source_with_function, load_check_script
+from tests.infra._complexity_helpers import (
+    _MINIMAL_LIMITS,
+    _git,
+    _source_with_function,
+    load_check_script,
+)
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.medium]
 

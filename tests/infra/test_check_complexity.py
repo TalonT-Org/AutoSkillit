@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.infra.conftest import (
+from tests.infra._complexity_helpers import (
     _CONSTRUCT_CASES,
     _MINIMAL_LIMITS,
     _git,

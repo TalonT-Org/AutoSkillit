@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
 
 from tests.arch._acceptance_policy_surfaces import POLICY_SURFACES
+from tests.infra._complexity_helpers import load_check_script
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -16,18 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _CHECK_SCRIPT = REPO_ROOT / "scripts" / "check_complexity.py"
 _CHECK_MODULE_NAME = "_autoskillit_check_complexity_limits"
 
-
-def _load_check_module():
-    spec = importlib.util.spec_from_file_location(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[_CHECK_MODULE_NAME] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-check = _load_check_module()
+check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 
 
 def test_live_registry_is_valid():

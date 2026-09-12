@@ -1,3 +1,5 @@
+"""REQ-CNST-010 line-budget measurement (issue #4965)."""
+
 from __future__ import annotations
 
 import ast
@@ -15,6 +17,20 @@ def _physical_line_count(source: str) -> int:
     if not source:
         return 0
     return source.count("\n") + (0 if source.endswith("\n") else 1)
+
+
+def format_unmeasurable(rel: str, detail: str) -> str:
+    """Return the shared "cannot be measured" message for `rel`.
+
+    Both callers of `count_budget_lines` that must report an unmeasurable file --
+    the pre-commit gate (`scripts/check_file_lengths.py`) and the full-tree scan
+    (`tests/arch/_helpers.py`) -- route through this formatter so a file that
+    cannot be parsed or decoded is reported identically regardless of caller.
+    """
+    return (
+        f"{rel}: cannot be measured -- {detail}; "
+        f"REQ-CNST-010 fails closed on source Python cannot parse"
+    )
 
 
 def count_budget_lines(path: Path) -> int:

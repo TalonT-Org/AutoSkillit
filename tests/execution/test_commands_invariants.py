@@ -389,18 +389,12 @@ def test_cwd_in_headless_exclusive_vars() -> None:
     ids=["food_truck", "headless", "resume", "skill_session"],
 )
 def test_codex_builders_start_with_codex_app_server(builder_call) -> None:
-    """All four Codex command builders speak the app-server transport as of Part D
-    (build_skill_session_cmd moved first, in Part C).
+    """All four Codex command builders speak the app-server transport.
 
-    Narrower than, and not fully redundant with,
-    tests/arch/test_codex_exec_builder_invariants.py::test_all_builders_start_with_codex_app_server
-    — that arch-layer test exercises a different builder-construction path
-    (OTLP env extras, a shared plugin-binding context manager applied to
-    every builder) and additionally asserts the absence of
-    --json/--sandbox/--dangerously-bypass-hook-trust/resume argv and the
-    app_server_plan identity; this execution-layer test only pins the
-    ("codex", "app-server") prefix using this file's own fixture-construction
-    conventions (codex_skill_add_dirs, _with_plugin_binding).
+    Deliberately narrower than, and not redundant with,
+    tests/arch/test_codex_exec_builder_invariants.py::test_all_builders_start_with_codex_app_server,
+    which exercises a different builder-construction path and additionally asserts
+    legacy-argv absence and app_server_plan identity.
     """
     spec = builder_call()
     assert spec.cmd[0] == "codex"

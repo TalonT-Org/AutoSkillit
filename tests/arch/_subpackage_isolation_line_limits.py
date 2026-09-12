@@ -9,7 +9,7 @@ from pathlib import Path
 @dataclasses.dataclass(frozen=True)
 class LineLimitExemption:
     """A REQ-CNST-010-EN-NN entry permitting one src module to exceed the
-    1000 non-import-line full-tree default (measured by ``count_budget_lines``)
+    full-tree default of 1000 non-import lines (measured by ``count_budget_lines``)
     enforced by test_no_src_module_exceeds_line_limit, up to `limit` (today's
     exemptions range as high as 1600; this table enforces no absolute ceiling
     of its own).
@@ -18,10 +18,10 @@ class LineLimitExemption:
     rationale's factual claim at check time. An exemption with `predicate=None`
     is honored by the full-tree test_no_src_module_exceeds_line_limit guard
     (legacy rationale-only contract, unchanged) but will be voided by the
-    diff-scoped REQ-CNST-010 gate a follow-on part adds -- whose 750 non-import-line
-    default ceiling applies only to lines touched in a diff -- touching that file in
-    a future diff will force either decomposition or a real, verifiable
-    predicate.
+    diff-scoped REQ-CNST-010 gate a follow-on part adds -- whose default ceiling
+    of 750 non-import lines applies only to lines touched in a diff -- touching
+    that file in a future diff will force either decomposition or a real,
+    verifiable predicate.
     """
 
     limit: int

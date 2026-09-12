@@ -1696,7 +1696,7 @@ def test_drop_sub_recipe_step_preserves_future_fields() -> None:
 
 
 def test_path_mtime_ns_exists_and_old_helpers_removed() -> None:
-    """recipe/_api.py must expose _path_mtime_ns; _file_mtime_ns/_dir_mtime_ns removed."""
+    """recipe/api/_api.py must expose _path_mtime_ns; old helpers are removed."""
     import autoskillit.recipe.api._api as api
 
     assert hasattr(api, "_path_mtime_ns"), "_path_mtime_ns must exist"

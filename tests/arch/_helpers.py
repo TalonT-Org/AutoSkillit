@@ -51,7 +51,8 @@ def _collect_line_limit_violations(
         try:
             line_count = count_budget_lines(py_file)
         except SyntaxError as exc:
-            violations.append(f"{rel}: cannot be measured -- {exc.msg} at line {exc.lineno}")
+            detail = exc.msg or "syntax error"
+            violations.append(f"{rel}: cannot be measured -- {detail} at line {exc.lineno}")
             continue
         exemption = exemptions.get(rel)
         limit = exemption.limit if exemption is not None else 1000

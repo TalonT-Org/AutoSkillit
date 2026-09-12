@@ -42,6 +42,10 @@ class PolicySurface:
     kind: str
     default: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.kind not in _SURFACE_KINDS:
+            raise UnsupportedSurfaceShape(f"unknown surface kind {self.kind!r}")
+
 
 @dataclasses.dataclass(frozen=True)
 class PolicyRelaxationApproval:

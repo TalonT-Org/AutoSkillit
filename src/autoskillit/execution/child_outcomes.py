@@ -63,6 +63,24 @@ def normalize_backend_name(backend_name: str) -> str:
     return "claude_code" if backend_name == AGENT_BACKEND_CLAUDE_CODE else backend_name
 
 
+def _safe_resolve_snapshot_path(
+    log_root: Path, *, backend: str, parent_session_id: str, caller: str
+) -> Path | None:
+    """Resolve the canonical snapshot path, or None + a ``{caller}_snapshot_path_invalid`` log.
+
+    Absorbs the identical try/except this module's six writer/reader
+    functions each wrapped around ``resolve_snapshot_path`` individually.
+    ``caller`` preserves each call site's own distinct log-event name.
+    """
+    try:
+        return resolve_snapshot_path(
+            log_root, backend=backend, parent_session_id=parent_session_id
+        )
+    except Exception:
+        logger.debug(f"{caller}_snapshot_path_invalid", exc_info=True)
+        return None
+
+
 def collect_native_children_for_backend(
     *,
     step_backend: CodingAgentBackend,
@@ -143,12 +161,10 @@ def collect_child_outcomes(
     snapshot, matching the "silent children remain countable unknown, never
     omitted" design; an absent snapshot simply means zero observed children.
     """
-    try:
-        snapshot_path = resolve_snapshot_path(
-            log_root, backend=backend, parent_session_id=parent_session_id
-        )
-    except Exception:
-        logger.debug("child_outcome_snapshot_path_invalid", exc_info=True)
+    snapshot_path = _safe_resolve_snapshot_path(
+        log_root, backend=backend, parent_session_id=parent_session_id, caller="child_outcome"
+    )
+    if snapshot_path is None:
         return ()
     document = read_snapshot(snapshot_path)
     wire_rows = project_outcomes(document)
@@ -252,12 +268,13 @@ def collect_claude_native_children(
     transcripts = enumerate_claude_subagent_transcripts(parent_transcript_path)
     if not transcripts:
         return
-    try:
-        snapshot_path = resolve_snapshot_path(
-            log_root, backend="claude_code", parent_session_id=parent_session_id
-        )
-    except Exception:
-        logger.debug("claude_child_outcome_snapshot_path_invalid", exc_info=True)
+    snapshot_path = _safe_resolve_snapshot_path(
+        log_root,
+        backend="claude_code",
+        parent_session_id=parent_session_id,
+        caller="claude_child_outcome",
+    )
+    if snapshot_path is None:
         return
     for transcript_path in transcripts:
         child_id = _child_id_from_subagent_transcript_path(transcript_path)
@@ -311,12 +328,13 @@ def collect_codex_observed_children(
     linked_child_ids = linked_child_thread_ids(events, parent_id=parent_session_id)
     if not linked_child_ids:
         return
-    try:
-        snapshot_path = resolve_snapshot_path(
-            log_root, backend="codex", parent_session_id=parent_session_id
-        )
-    except Exception:
-        logger.debug("codex_child_outcome_snapshot_path_invalid", exc_info=True)
+    snapshot_path = _safe_resolve_snapshot_path(
+        log_root,
+        backend="codex",
+        parent_session_id=parent_session_id,
+        caller="codex_child_outcome",
+    )
+    if snapshot_path is None:
         return
     for child_id in linked_child_ids:
         observe_child(
@@ -403,12 +421,13 @@ def observe_managed_child_attempt(
     (``managed_attempt_id`` when a lineage observer allocated one, else a
     plain diagnostic attempt id), not a backend-native session id.
     """
-    try:
-        snapshot_path = resolve_snapshot_path(
-            log_root, backend=backend, parent_session_id=parent_session_id
-        )
-    except Exception:
-        logger.debug("managed_child_attempt_snapshot_path_invalid", exc_info=True)
+    snapshot_path = _safe_resolve_snapshot_path(
+        log_root,
+        backend=backend,
+        parent_session_id=parent_session_id,
+        caller="managed_child_attempt",
+    )
+    if snapshot_path is None:
         return
     observe_child(
         snapshot_path, backend=backend, parent_session_id=parent_session_id, child_id=child_id
@@ -445,12 +464,13 @@ def bind_managed_child_launch_alias(
     """
     if not launch_alias:
         return
-    try:
-        snapshot_path = resolve_snapshot_path(
-            log_root, backend=backend, parent_session_id=parent_session_id
-        )
-    except Exception:
-        logger.debug("managed_child_launch_alias_snapshot_path_invalid", exc_info=True)
+    snapshot_path = _safe_resolve_snapshot_path(
+        log_root,
+        backend=backend,
+        parent_session_id=parent_session_id,
+        caller="managed_child_launch_alias",
+    )
+    if snapshot_path is None:
         return
     observe_child(
         snapshot_path,
@@ -484,12 +504,13 @@ def record_managed_child_attempt_outcome(
     here still cannot classify a cause without inventing one; it stays
     unknown with the raw evidence preserved for diagnosis.
     """
-    try:
-        snapshot_path = resolve_snapshot_path(
-            log_root, backend=backend, parent_session_id=parent_session_id
-        )
-    except Exception:
-        logger.debug("managed_child_attempt_outcome_snapshot_path_invalid", exc_info=True)
+    snapshot_path = _safe_resolve_snapshot_path(
+        log_root,
+        backend=backend,
+        parent_session_id=parent_session_id,
+        caller="managed_child_attempt_outcome",
+    )
+    if snapshot_path is None:
         return
     evidence: dict[str, Any] = {
         "evidence_source": evidence_source,

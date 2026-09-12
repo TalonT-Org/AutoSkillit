@@ -27,11 +27,17 @@ from autoskillit.execution.headless import (
     _extract_worktree_path,
     _normalize_messages,
 )
+from autoskillit.pipeline.audit import DefaultAuditLog
 from tests.conftest import _make_result, _make_timeout_result
 from tests.execution.conftest import _mock_backend, _sr, _success_session_json
 from tests.fixtures.codex import TURN_FAILED_MODEL_CAPACITY, fixture_path
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+
+@pytest.fixture(scope="function")
+def audit_log() -> DefaultAuditLog:
+    return DefaultAuditLog()
 
 
 def test_inject_completion_directive_appends_marker():
@@ -2038,7 +2044,7 @@ class TestBuildSkillResultCompleted:
             is False
         )
 
-    def test_success_empty_completed_returns_needs_retry_true(self, tool_ctx):
+    def test_success_empty_completed_returns_needs_retry_true(self):
         """Full path: stdout with success+empty under COMPLETED → needs_retry=True."""
         stdout = json.dumps(
             {
@@ -2066,7 +2072,7 @@ class TestBuildSkillResultCompleted:
         assert parsed["subtype"] == "empty_result"
         assert parsed["cli_subtype"] == "success"
 
-    def test_success_empty_completed_subtype_captured_in_audit_log(self, tool_ctx):
+    def test_success_empty_completed_subtype_captured_in_audit_log(self, audit_log):
         """_capture_failure receives the normalized subtype for audit log integrity."""
         stdout = json.dumps(
             {
@@ -2087,16 +2093,16 @@ class TestBuildSkillResultCompleted:
             result,
             completion_marker="",
             skill_command="/test",
-            audit=tool_ctx.audit,
+            audit=audit_log,
             backend=ClaudeCodeBackend(),
         )
-        report = tool_ctx.audit.get_report()
+        report = audit_log.get_report()
         assert len(report) == 1
         assert report[0].subtype == "empty_result"
         assert report[0].needs_retry is True
         assert sr.cli_subtype == "success"
 
-    def test_build_skill_result_subtype_never_contradicts_success(self, tool_ctx):
+    def test_build_skill_result_subtype_never_contradicts_success(self):
         """Test B: _build_skill_result never produces contradictory (success, subtype) pairs."""
         # Path 1: COMPLETED + UNMONITORED + "success" + empty result → RETRIABLE
         stdout_empty = json.dumps(
@@ -2151,7 +2157,7 @@ class TestBuildSkillResultCompleted:
         )
         assert sr2.cli_subtype == "success"
 
-    def test_build_skill_result_channel_b_empty_stdout_is_retriable(self, tool_ctx):
+    def test_build_skill_result_channel_b_empty_stdout_is_retriable(self):
         """Channel-B assistant evidence cannot replace a terminal result."""
         result = _make_result(
             returncode=0,
@@ -2533,25 +2539,25 @@ class TestBuildSkillResultTokenUsage:
 class TestFailureCaptureInBuildSkillResult:
     """_build_skill_result(backend=ClaudeCodeBackend()) captures failures into audit."""
 
-    def test_captures_non_zero_exit_code(self, tool_ctx):
+    def test_captures_non_zero_exit_code(self, audit_log):
         result = _make_result(
             returncode=1,
             stdout=_failed_session_json(),
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         _build_skill_result(
-            result, skill_command="/test:cmd", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+            result, skill_command="/test:cmd", audit=audit_log, backend=ClaudeCodeBackend()
         )
-        assert len(tool_ctx.audit.get_report()) == 1
+        assert len(audit_log.get_report()) == 1
 
-    def test_does_not_capture_clean_success(self, tool_ctx):
+    def test_does_not_capture_clean_success(self, audit_log):
         result = _make_result(returncode=0, stdout=_success_session_json("done"))
         _build_skill_result(
-            result, skill_command="/test:cmd", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+            result, skill_command="/test:cmd", audit=audit_log, backend=ClaudeCodeBackend()
         )
-        assert tool_ctx.audit.get_report() == []
+        assert audit_log.get_report() == []
 
-    def test_captured_record_has_correct_skill_command(self, tool_ctx):
+    def test_captured_record_has_correct_skill_command(self, audit_log):
         result = _make_result(
             returncode=1,
             stdout=_failed_session_json(),
@@ -2560,12 +2566,12 @@ class TestFailureCaptureInBuildSkillResult:
         _build_skill_result(
             result,
             skill_command="/autoskillit:implement-worktree",
-            audit=tool_ctx.audit,
+            audit=audit_log,
             backend=ClaudeCodeBackend(),
         )
-        assert tool_ctx.audit.get_report()[0].skill_command == "/autoskillit:implement-worktree"
+        assert audit_log.get_report()[0].skill_command == "/autoskillit:implement-worktree"
 
-    def test_captured_record_has_timestamp(self, tool_ctx):
+    def test_captured_record_has_timestamp(self, audit_log):
         from datetime import datetime
 
         result = _make_result(
@@ -2574,30 +2580,30 @@ class TestFailureCaptureInBuildSkillResult:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         _build_skill_result(
-            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+            result, skill_command="/test", audit=audit_log, backend=ClaudeCodeBackend()
         )
-        record = tool_ctx.audit.get_report()[0]
+        record = audit_log.get_report()[0]
         assert datetime.fromisoformat(record.timestamp)  # valid ISO 8601 format
 
-    def test_stale_termination_is_captured(self, tool_ctx):
+    def test_stale_termination_is_captured(self, audit_log):
         result = _make_result(returncode=0, termination_reason=TerminationReason.STALE)
         _build_skill_result(
-            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+            result, skill_command="/test", audit=audit_log, backend=ClaudeCodeBackend()
         )
-        report = tool_ctx.audit.get_report()
+        report = audit_log.get_report()
         assert len(report) == 1
         assert report[0].subtype == "stale"
 
-    def test_needs_retry_is_captured(self, tool_ctx):
+    def test_needs_retry_is_captured(self, audit_log):
         result = _make_result(returncode=1, stdout=_context_exhausted_session_json())
         _build_skill_result(
-            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+            result, skill_command="/test", audit=audit_log, backend=ClaudeCodeBackend()
         )
-        report = tool_ctx.audit.get_report()
+        report = audit_log.get_report()
         assert len(report) == 1
         assert report[0].needs_retry is True
 
-    def test_stderr_truncated_to_500_chars(self, tool_ctx):
+    def test_stderr_truncated_to_500_chars(self, audit_log):
         long_stderr = "e" * 2000
         result = _make_result(
             returncode=1,
@@ -2606,9 +2612,9 @@ class TestFailureCaptureInBuildSkillResult:
             channel_confirmation=ChannelConfirmation.UNMONITORED,
         )
         _build_skill_result(
-            result, skill_command="/test", audit=tool_ctx.audit, backend=ClaudeCodeBackend()
+            result, skill_command="/test", audit=audit_log, backend=ClaudeCodeBackend()
         )
-        assert len(tool_ctx.audit.get_report()[0].stderr) <= 500
+        assert len(audit_log.get_report()[0].stderr) <= 500
 
 
 class TestStalePathStdoutCheck:

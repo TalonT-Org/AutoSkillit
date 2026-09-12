@@ -188,7 +188,13 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                     "get_logger() must be called with __name__, not a literal or other value",
                 )
 
-        # Rule ARCH-006 (visitor): no f-string with sensitive variable names in logger args
+        self._check_sensitive_log_fstrings(node)
+        self._check_raw_trace_target(node)
+
+        self.generic_visit(node)
+
+    def _check_sensitive_log_fstrings(self, node: ast.Call) -> None:
+        func = node.func
         if isinstance(func, ast.Attribute) and func.attr in _LOGGER_METHODS:
             for arg in node.args:
                 if isinstance(arg, ast.JoinedStr):  # f-string
@@ -210,7 +216,8 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                                     f"'{var_name}' -- use structlog kwargs instead",
                                 )
 
-        # Rule ARCH-008 (visitor): start_linux_tracing must not receive a raw .pid Attribute
+    def _check_raw_trace_target(self, node: ast.Call) -> None:
+        func = node.func
         # Resolve function name: bare Name or trailing Attribute.attr
         called_name: str | None = None
         if isinstance(func, ast.Name):
@@ -231,8 +238,6 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
                         "use resolve_trace_target() or trace_target_from_pid() to get a "
                         "TraceTarget first (issue #806)",
                     )
-
-        self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign) -> None:  # ARCH-009
         """logger variable name: get_logger() result must be bound to 'logger'."""
@@ -303,36 +308,13 @@ class ArchitectureViolationVisitor(ast.NodeVisitor):
         are exempt. Files in _STRENUM_SRC_COMPARE_EXEMPT_PATHS are fully exempt (Literal-typed
         fields that share names with StrEnum fields).
         """
-        if self._strenum_src_compare_exempt:
-            self.generic_visit(node)
-            return
-
-        # Only flag == and != operators
-        if not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
-            self.generic_visit(node)
-            return
-
-        # Check left side: must be an Attribute with a known StrEnum field name
-        if not isinstance(node.left, ast.Attribute):
-            self.generic_visit(node)
-            return
-
-        attr = node.left
-        if attr.attr not in _STRENUM_FIELD_NAMES:
-            self.generic_visit(node)
-            return
-
-        # Check that the comparator is a string constant (not a .value access)
-        for comparator in node.comparators:
-            # Exempt: comparison against .value attribute access (f.severity.value == "error")
-            if isinstance(comparator, ast.Attribute) and comparator.attr == "value":
-                continue
-            if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
+        if not self._strenum_src_compare_exempt:
+            for field_name, literal in _raw_strenum_string_comparisons(node):
                 self._add(
                     node,
                     _RULE["ARCH-010"],
-                    f"StrEnum field {attr.attr!r} compared against raw string literal "
-                    f"{comparator.value!r} -- use the enum member instead",
+                    f"StrEnum field {field_name!r} compared against raw string literal "
+                    f"{literal!r} -- use the enum member instead",
                 )
         self.generic_visit(node)
 
@@ -346,6 +328,22 @@ def _scan(path: Path) -> list[Violation]:
     visitor = ArchitectureViolationVisitor(filepath=path)
     visitor.visit(tree)
     return visitor.violations
+
+
+def _raw_strenum_string_comparisons(node: ast.Compare) -> list[tuple[str, str]]:
+    if not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
+        return []
+    if not isinstance(node.left, ast.Attribute):
+        return []
+    if node.left.attr not in _STRENUM_FIELD_NAMES:
+        return []
+    comparisons = []
+    for comparator in node.comparators:
+        if isinstance(comparator, ast.Attribute) and comparator.attr == "value":
+            continue
+        if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
+            comparisons.append((node.left.attr, comparator.value))
+    return comparisons
 
 
 def _scan_strenum_compare(path: Path) -> list[Violation]:
@@ -367,28 +365,18 @@ def _scan_strenum_compare(path: Path) -> list[Violation]:
     for node in ast.walk(tree):
         if not isinstance(node, ast.Compare):
             continue
-        if not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
-            continue
-        if not isinstance(node.left, ast.Attribute):
-            continue
-        attr = node.left
-        if attr.attr not in _STRENUM_FIELD_NAMES:
-            continue
-        for comparator in node.comparators:
-            if isinstance(comparator, ast.Attribute) and comparator.attr == "value":
-                continue
-            if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
-                violations.append(
-                    Violation(
-                        path,
-                        node.lineno,  # type: ignore[attr-defined]
-                        node.col_offset,  # type: ignore[attr-defined]
-                        f"StrEnum field {attr.attr!r} compared against raw string literal "
-                        f"{comparator.value!r} -- use the enum member instead",
-                        "ARCH-010",
-                        "development",
-                    )
+        for field_name, literal in _raw_strenum_string_comparisons(node):
+            violations.append(
+                Violation(
+                    path,
+                    node.lineno,
+                    node.col_offset,
+                    f"StrEnum field {field_name!r} compared against raw string literal "
+                    f"{literal!r} -- use the enum member instead",
+                    "ARCH-010",
+                    "development",
                 )
+            )
     return violations
 
 
@@ -494,19 +482,16 @@ def _has_cancellation_shield(func_node: ast.AsyncFunctionDef | ast.FunctionDef) 
     return False
 
 
-def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
-    """Return True if the function has a top-level try/except Exception.
-
-    A leading gate-check guard (if ... return/raise ...) before the try is permitted,
-    matching the canonical gated-tool pattern used across the server layer.
-    """
+def _guarded_toplevel_try(
+    func_node: ast.AsyncFunctionDef | ast.FunctionDef,
+) -> ast.Try | None:
     body = func_node.body
     # Skip docstring
     stmts = [
         s for s in body if not isinstance(s, ast.Expr) or not isinstance(s.value, ast.Constant)
     ]
     if not stmts:
-        return False
+        return None
     # Skip leading guard `if ... return` statements (gate checks, early validation exits)
     idx = 0
     while idx < len(stmts):
@@ -539,7 +524,7 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
     ):
         idx += 1
     if idx >= len(stmts):
-        return False
+        return None
     first = stmts[idx]
     # Accept: direct try/except, or with-block wrapping a try/except at its top level
     try_node: ast.Try | None = None
@@ -547,8 +532,10 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
         try_node = first
     elif isinstance(first, ast.With) and first.body and isinstance(first.body[0], ast.Try):
         try_node = first.body[0]
-    if try_node is None:
-        return False
+    return try_node
+
+
+def _try_catches_broad_exception(try_node: ast.Try) -> bool:
     # Check that at least one handler catches Exception or BaseException
     for handler in try_node.handlers:
         if handler.type is None:  # bare except:
@@ -566,6 +553,40 @@ def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.Functio
     return False
 
 
+def _has_toplevel_except_exception(func_node: ast.AsyncFunctionDef | ast.FunctionDef) -> bool:
+    """Return True if the function has a top-level try/except Exception.
+
+    A leading gate-check guard (if ... return/raise ...) before the try is permitted,
+    matching the canonical gated-tool pattern used across the server layer.
+    """
+    try_node = _guarded_toplevel_try(func_node)
+    return try_node is not None and _try_catches_broad_exception(try_node)
+
+
+def _iter_runtime_import_nodes(
+    stmts: list[ast.stmt],
+) -> Iterator[ast.ImportFrom | ast.Import]:
+    for stmt in stmts:
+        if isinstance(stmt, (ast.ImportFrom, ast.Import)):
+            yield stmt
+        elif isinstance(stmt, ast.If):
+            test = stmt.test
+            is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+            )
+            if not is_tc:
+                yield from _iter_runtime_import_nodes(stmt.body)
+                yield from _iter_runtime_import_nodes(stmt.orelse)
+        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            yield from _iter_runtime_import_nodes(stmt.body)
+        elif isinstance(stmt, ast.Try):
+            yield from _iter_runtime_import_nodes(stmt.body)
+            for handler in stmt.handlers:
+                yield from _iter_runtime_import_nodes(handler.body)
+            yield from _iter_runtime_import_nodes(stmt.orelse)
+            yield from _iter_runtime_import_nodes(getattr(stmt, "finalbody", []))
+
+
 def _runtime_imports(path: Path) -> tuple[list[ast.ImportFrom], list[ast.Import]]:
     """Return (``from`` imports, plain imports) outside ``TYPE_CHECKING`` guards from one parse.
 
@@ -580,32 +601,11 @@ def _runtime_imports(path: Path) -> tuple[list[ast.ImportFrom], list[ast.Import]
     import_froms: list[ast.ImportFrom] = []
     plain_imports: list[ast.Import] = []
 
-    def _walk(stmts: list[ast.stmt]) -> None:
-        for stmt in stmts:
-            if isinstance(stmt, ast.ImportFrom):
-                import_froms.append(stmt)
-            elif isinstance(stmt, ast.Import):
-                plain_imports.append(stmt)
-            elif isinstance(stmt, ast.If):
-                test = stmt.test
-                is_tc = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
-                    isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-                )
-                if not is_tc:
-                    _walk(stmt.body)
-                    _walk(stmt.orelse)
-            elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.ClassDef):
-                _walk(stmt.body)
-            elif isinstance(stmt, ast.Try):
-                _walk(stmt.body)
-                for handler in stmt.handlers:
-                    _walk(handler.body)
-                _walk(stmt.orelse)
-                _walk(getattr(stmt, "finalbody", []))
-
-    _walk(tree.body)
+    for node in _iter_runtime_import_nodes(tree.body):
+        if isinstance(node, ast.ImportFrom):
+            import_froms.append(node)
+        else:
+            plain_imports.append(node)
     return import_froms, plain_imports
 
 

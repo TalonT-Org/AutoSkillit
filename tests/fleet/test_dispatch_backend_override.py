@@ -140,22 +140,17 @@ class TestFoodTruckBackendOverridePrelaunch:
         prelaunch = Mock(return_value=PreLaunchReadiness((), {}))
         monkeypatch.setattr(type(backend), "ensure_pre_launch", prelaunch)
 
-        # capability_preparation is always attached by execute_dispatch, so this real
-        # CodexBackend (skill_injection_capable, not plugin_install_capable) now also
-        # routes through managed_catalog() for its generated home. Replace the real
-        # SessionSkillManager with a duck-typed fake so this test stays isolated to
-        # its actual subject — the outer no-arg prelaunch gate — instead of also
-        # exercising unrelated generated-home config/auth machinery.
+        # execute_dispatch always attaches capability_preparation, so this real
+        # CodexBackend now also routes through managed_catalog(); fake the session
+        # skill manager to keep this test scoped to the prelaunch gate.
         managed_home_dir = tmp_path / "managed-home"
         managed_home_dir.mkdir()
         managed_skill_dir = tmp_path / "managed-skills" / "test-skill"
         managed_skill_dir.mkdir(parents=True)
 
         class _FakeManagedHome:
-            # Codex's build_food_truck_cmd rejects an empty session_home or an
-            # empty skill catalog, so the fake needs both fields populated with
-            # real, existing directories — not just a bare path — to reach the
-            # real subprocess launch.
+            # build_food_truck_cmd rejects an empty session_home/skill catalog, so
+            # this fake needs real, existing directories, not bare paths.
             skills_dir = ValidatedAddDir(
                 path=str(managed_skill_dir.parent),
                 session_home=str(managed_home_dir),
@@ -170,10 +165,8 @@ class TestFoodTruckBackendOverridePrelaunch:
 
         tool_ctx.session_skill_manager = _FakeSessionSkillManager()
 
-        # The generated-home attempt also owns Codex's native rollout/lease
-        # bookkeeping (Part A, orthogonal to this test's subject) via
-        # backend.session_attempt_context — replace it with a no-op so this
-        # unit test doesn't need a real staged rollout on disk.
+        # session_attempt_context owns real rollout/lease bookkeeping that needs a
+        # staged rollout on disk; replace it with a no-op for this unit test.
         @contextmanager
         def _fake_session_attempt_context(self, **kwargs):
             class _FakeHandle:

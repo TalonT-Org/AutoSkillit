@@ -108,6 +108,12 @@ def _evaluated_payloads_call(command: str) -> list[Any]:
     return evaluated_payloads(command)
 
 
+def _live_command_text_call(command: str) -> str:
+    from _command_classification import live_command_text
+
+    return live_command_text(command)
+
+
 class GitHubMutationStatus(StrEnum):
     NONE = "none"
     SINGLE_RESOLVED = "single_resolved"
@@ -258,9 +264,10 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             )
             continue
         process_occurrences = _extract_process_substitution_occurrences_call(payload)
+        live_payload_text = _live_command_text_call(payload)
         payload_repeatable = (
             inherited_repeatable
-            or bool(_REPEATABLE_SHELL_RE.search(payload))
+            or bool(_REPEATABLE_SHELL_RE.search(live_payload_text))
             or bool(process_occurrences)
         )
         for _kind, _start, _end, body, balanced in process_occurrences:
@@ -274,7 +281,7 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
         tokenized_segments = _tokenize_with_redirects(payload)
         segments = [segment.tokens for segment in tokenized_segments]
         if not tokenized_segments and payload.strip():
-            if _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+            if _POSSIBLE_GITHUB_EXEC_RE.search(live_payload_text):
                 reasons.append(
                     (
                         "shell_parse_unresolved",
@@ -363,7 +370,7 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             specs, has_unresolved = _extract_interpreter_segment_specs_call(
                 executable_tokens, stdin_literals=command_segment.stdin_literals
             )
-            if has_unresolved and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
+            if has_unresolved and _POSSIBLE_GITHUB_EXEC_RE.search(live_payload_text):
                 reasons.append(
                     (
                         "interpreter_structure_unresolved",

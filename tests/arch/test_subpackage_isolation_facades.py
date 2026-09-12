@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
+from tests.contracts.test_package_gateways import DECOMPOSITION_MOVE_SETS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -201,58 +202,30 @@ def test_ops_decomposition_has_expected_siblings() -> None:
 
 def test_execution_github_ops_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "execution" / "github_ops"
-    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
-        "__init__",
-        "_github_http",
-        "ci",
-        "github",
-        "pr_analysis",
-        "diff_annotator",
-        "remote_resolver",
-    }
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_github_ops"
+    ] | {"__init__"}
 
 
 def test_execution_evidence_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "execution" / "evidence"
-    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
-        "__init__",
-        "session_log",
-        "_session_log_recovery",
-        "_session_retention",
-        "session_index",
-        "anomaly_detection",
-        "linux_tracing",
-        "otlp_sink",
-        "recording",
-        "_recording_skills",
-    }
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_evidence"
+    ] | {"__init__"}
 
 
 def test_execution_runtime_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "execution" / "runtime"
-    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
-        "__init__",
-        "launch_resolution",
-        "commands",
-        "clone_guard",
-        "testing",
-        "db",
-    }
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_runtime"
+    ] | {"__init__"}
 
 
 def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
     pkg = SRC_ROOT / "hooks" / "_runtime"
-    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == {
-        "__init__",
-        "_hook_constants",
-        "_hook_payload",
-        "_hook_settings",
-        "_hook_utils",
-        "_policy_event",
-        "_command_classification",
-        "_github_mutation_analysis",
-        "_exploration_request_record",
-    }
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "hooks_runtime"
+    ] | {"__init__"}
 
 
 @pytest.mark.parametrize(

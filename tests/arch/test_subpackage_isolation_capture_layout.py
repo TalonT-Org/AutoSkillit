@@ -334,13 +334,11 @@ EXTRACTORS_SYMBOL_HOMES: dict[str, str] = {
 }
 
 
-def test_snapshot_symbols_live_in_their_expected_shard() -> None:
-    """Every symbol in SNAPSHOT_SYMBOL_HOMES is defined in exactly its named shard."""
+def _defined_symbol_shards(shard_dir: Path) -> dict[str, list[str]]:
     import ast as _ast
 
-    snapshot_dir = SRC_ROOT / "exploration" / "snapshot"
     defined: dict[str, list[str]] = {}
-    for shard_file in sorted(snapshot_dir.glob("_*.py")):
+    for shard_file in sorted(shard_dir.glob("_*.py")):
         tree = _ast.parse(shard_file.read_text())
         stem = shard_file.stem  # e.g., "_records"
         for node in _ast.walk(tree):
@@ -354,6 +352,13 @@ def test_snapshot_symbols_live_in_their_expected_shard() -> None:
                 for target in node.targets:
                     if isinstance(target, _ast.Name):
                         defined.setdefault(target.id, []).append(stem)
+    return defined
+
+
+def test_snapshot_symbols_live_in_their_expected_shard() -> None:
+    """Every symbol in SNAPSHOT_SYMBOL_HOMES is defined in exactly its named shard."""
+    snapshot_dir = SRC_ROOT / "exploration" / "snapshot"
+    defined = _defined_symbol_shards(snapshot_dir)
     failures = []
     for sym, expected_shard in SNAPSHOT_SYMBOL_HOMES.items():
         homes = defined.get(sym, [])
@@ -366,24 +371,8 @@ def test_snapshot_symbols_live_in_their_expected_shard() -> None:
 
 def test_extractors_symbols_live_in_their_expected_shard() -> None:
     """Every symbol in EXTRACTORS_SYMBOL_HOMES is defined in exactly its named shard."""
-    import ast as _ast
-
     extractors_dir = SRC_ROOT / "exploration" / "collectors" / "extractors"
-    defined: dict[str, list[str]] = {}
-    for shard_file in sorted(extractors_dir.glob("_*.py")):
-        tree = _ast.parse(shard_file.read_text())
-        stem = shard_file.stem
-        for node in _ast.walk(tree):
-            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
-                defined.setdefault(node.name, []).append(stem)
-            elif isinstance(node, _ast.AnnAssign) and isinstance(node.target, _ast.Name):
-                if node.value is None:
-                    continue
-                defined.setdefault(node.target.id, []).append(stem)
-            elif isinstance(node, _ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, _ast.Name):
-                        defined.setdefault(target.id, []).append(stem)
+    defined = _defined_symbol_shards(extractors_dir)
     failures = []
     for sym, expected_shard in EXTRACTORS_SYMBOL_HOMES.items():
         homes = defined.get(sym, [])

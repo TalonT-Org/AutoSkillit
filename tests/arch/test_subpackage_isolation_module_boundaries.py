@@ -153,6 +153,41 @@ def test_server_uses_recipe_io_not_recipe_loader_for_discovery() -> None:
     assert "from autoskillit.recipe.loader import load_recipe" not in combined_src
 
 
+def _type_checking_import_lines(tree: ast.Module) -> set[int]:
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            for statement in node.body:
+                for child in ast.walk(statement):
+                    if isinstance(child, ast.Import | ast.ImportFrom):
+                        lines.add(child.lineno)
+    return lines
+
+
+def _core_autoskillit_import_violations(tree: ast.Module, filename: str) -> list[str]:
+    type_checking_lines = _type_checking_import_lines(tree)
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.lineno in type_checking_lines:
+                continue
+            parts = node.module.split(".")
+            if parts[0] == "autoskillit" and len(parts) > 1:
+                violations.append(f"core/{filename}:{node.lineno}: imports {node.module}")
+        elif isinstance(node, ast.Import):
+            if node.lineno in type_checking_lines:
+                continue
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    violations.append(f"core/{filename}:{node.lineno}: imports {alias.name}")
+    return violations
+
+
 def test_core_has_no_autoskillit_imports() -> None:
     """REQ-CNST-004: core/ modules must not import from any autoskillit sub-package.
 
@@ -166,33 +201,7 @@ def test_core_has_no_autoskillit_imports() -> None:
         if py_file.name in _SHIM_FILENAMES:
             continue  # shims re-export from sub-packages by definition
         tree = ast.parse(py_file.read_text())
-        tc_lines: set[int] = set()
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.If)
-                and isinstance(node.test, ast.Name)
-                and node.test.id == "TYPE_CHECKING"
-            ):
-                for stmt in node.body:
-                    for child in ast.walk(stmt):
-                        if isinstance(child, ast.Import | ast.ImportFrom):
-                            tc_lines.add(child.lineno)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                if node.lineno in tc_lines:
-                    continue
-                parts = node.module.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    violations.append(f"core/{py_file.name}:{node.lineno}: imports {node.module}")
-            elif isinstance(node, ast.Import):
-                if node.lineno in tc_lines:
-                    continue
-                for alias in node.names:
-                    parts = alias.name.split(".")
-                    if parts[0] == "autoskillit" and len(parts) > 1:
-                        violations.append(
-                            f"core/{py_file.name}:{node.lineno}: imports {alias.name}"
-                        )
+        violations.extend(_core_autoskillit_import_violations(tree, py_file.name))
     assert not violations, "core/ has autoskillit internal imports:\n" + "\n".join(
         f"  {v}" for v in violations
     )
@@ -232,6 +241,41 @@ def test_isolated_modules_do_not_import_server_or_cli() -> None:
     )
 
 
+def _tool_source_paths(server_dir: Path) -> list[Path]:
+    tool_sources = list((server_dir / "tools").glob("tools_*.py"))
+    for package_dir in (server_dir / "tools").iterdir():
+        if not package_dir.is_dir() or not package_dir.name.startswith("tools_"):
+            continue
+        tool_sources.extend(
+            module for module in package_dir.glob("*.py") if module.name != "__init__.py"
+        )
+    return sorted(tool_sources)
+
+
+def _tool_handler_business_logic_violations(tool_sources: list[Path]) -> list[str]:
+    violations: list[str] = []
+    for py_file in tool_sources:
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if not any(_is_mcp_tool_decorator(decorator) for decorator in node.decorator_list):
+                continue
+            body_module = ast.Module(body=node.body, type_ignores=[])
+            for child in ast.walk(body_module):
+                if isinstance(child, (ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp)):
+                    violations.append(
+                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
+                        "comprehension found — move to domain layer"
+                    )
+                elif isinstance(child, ast.For):
+                    violations.append(
+                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
+                        "for-loop found — move to domain layer"
+                    )
+    return violations
+
+
 def test_server_tool_handlers_have_no_business_logic() -> None:
     """REQ-CNST-008: @mcp.tool handler functions must contain no comprehensions or for-loops.
 
@@ -240,41 +284,8 @@ def test_server_tool_handlers_have_no_business_logic() -> None:
     in a domain layer module.
     """
     server_dir = SRC_ROOT / "server"
-    violations: list[str] = []
-    tool_sources: list[Path] = []
-    for py_file in (server_dir / "tools").glob("tools_*.py"):
-        tool_sources.append(py_file)
-    for pkg_dir in (server_dir / "tools").iterdir():
-        if not pkg_dir.is_dir():
-            continue
-        if not pkg_dir.name.startswith("tools_"):
-            continue
-        for submodule in pkg_dir.glob("*.py"):
-            if submodule.name == "__init__.py":
-                continue
-            tool_sources.append(submodule)
-    tool_sources.sort()
-
-    for py_file in tool_sources:
-        tree = ast.parse(py_file.read_text())
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
-                continue
-            # Walk only the function body for business-logic patterns
-            body_module = ast.Module(body=node.body, type_ignores=[])
-            for child in ast.walk(body_module):
-                if isinstance(child, (ast.ListComp, ast.DictComp, ast.SetComp, ast.GeneratorExp)):
-                    violations.append(
-                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
-                        f"comprehension found — move to domain layer"
-                    )
-                elif isinstance(child, ast.For):
-                    violations.append(
-                        f"server/{py_file.name}: {node.name}() line {child.lineno}: "
-                        f"for-loop found — move to domain layer"
-                    )
+    tool_sources = _tool_source_paths(server_dir)
+    violations = _tool_handler_business_logic_violations(tool_sources)
     assert not violations, "Tool handlers contain business logic:\n" + "\n".join(
         f"  {v}" for v in violations
     )

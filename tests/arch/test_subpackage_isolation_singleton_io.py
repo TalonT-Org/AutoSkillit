@@ -235,14 +235,9 @@ def _scan_module_level_io(path: Path) -> list[tuple[int, int, str]]:
     return violations
 
 
-@pytest.mark.parametrize("source_file", _SOURCE_FILES)
-def test_singleton_definition_locality(source_file: Path) -> None:
-    """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
+def _singleton_locality_violations(source_file: Path) -> list[str]:
     mod_stem = source_file.stem
     source_path = _rel(source_file)
-    if mod_stem in SINGLETON_ALLOWED_MODULES:
-        pytest.skip(f"{mod_stem!r} is in SINGLETON_ALLOWED_MODULES")
-
     tree = ast.parse(source_file.read_text())
     violations: list[str] = []
     for node in tree.body:  # module-level only
@@ -277,6 +272,17 @@ def test_singleton_definition_locality(source_file: Path) -> None:
             f"add {mod_stem!r} to SINGLETON_ALLOWED_MODULES if intentional"
         )
 
+    return violations
+
+
+@pytest.mark.parametrize("source_file", _SOURCE_FILES)
+def test_singleton_definition_locality(source_file: Path) -> None:
+    """Module-level constructor calls are only permitted in SINGLETON_ALLOWED_MODULES."""
+    mod_stem = source_file.stem
+    if mod_stem in SINGLETON_ALLOWED_MODULES:
+        pytest.skip(f"{mod_stem!r} is in SINGLETON_ALLOWED_MODULES")
+
+    violations = _singleton_locality_violations(source_file)
     assert not violations, f"Singleton locality violations in {_rel(source_file)}:\n" + "\n".join(
         violations
     )
@@ -306,8 +312,7 @@ def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -
     unrelated = tmp_path / "_types.py"
     unrelated.write_text("TRANSITION_RESCUE_BUDGET = SweepBudgetSpec()\n")
 
-    with pytest.raises(AssertionError, match="Singleton locality violations"):
-        test_singleton_definition_locality(unrelated)
+    assert _singleton_locality_violations(unrelated)
 
 
 @pytest.mark.parametrize(
@@ -326,14 +331,7 @@ def test_singleton_locality_detects_non_allowed(tmp_path: Path) -> None:
     snippet = "class Foo: pass\nfoo = Foo()\n"
     f = tmp_path / "fake_module.py"
     f.write_text(snippet)
-    tree = ast.parse(snippet)
-    found = False
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            func_name = _get_call_func_name(node.value)
-            if func_name and func_name not in _SINGLETON_SAFE_CALL_NAMES:
-                found = True
-    assert found
+    assert _singleton_locality_violations(f)
 
 
 def test_no_module_level_io_detects_open_call(tmp_path: Path) -> None:

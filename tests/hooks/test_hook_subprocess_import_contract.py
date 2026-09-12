@@ -33,7 +33,7 @@ _HOOKS_DIR = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _hooks_dir_on_syspath() -> None:  # pyright: ignore[reportUnusedFunction]
+def _hooks_dir_on_syspath() -> None:
     """Ensure bare-name imports like ``_session_binding`` resolve in test worker.
 
     Each test worker has its own ``sys.modules`` namespace, so prepending the

@@ -289,7 +289,7 @@ def binding_snapshot(path: Path) -> Generator[SessionBinding | None, None, None]
 
 
 def enumerate_binding_paths(channel_dir: Path) -> tuple[tuple[Path, ...], bool]:
-    """Return bounded sorted candidates and whether more than the limit exist."""
+    """Return bounded sorted candidates for diagnostics and whether the scan truncated."""
     try:
         candidates = sorted(channel_dir.glob("skill_guard_*.flag"))
     except OSError:

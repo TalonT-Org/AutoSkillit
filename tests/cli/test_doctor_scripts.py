@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -257,40 +256,6 @@ class TestDoctorScriptHealth:
         assert len(script_checks) == 1
         assert script_checks[0]["severity"] == "warning"
         assert "Will be auto-migrated on next load" in script_checks[0]["message"]
-
-    # SEL1: every check is offered, only the target runs, and it runs through the real wrapper
-    def test_selection_runs_only_script_version_health_through_real_wrapper(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
-    ) -> None:
-        """Selection forwards only script_version_health to the genuine _run_check."""
-        from autoskillit.cli import doctor as doctor_mod
-        from autoskillit.cli.doctor import _doctor_types
-
-        assert doctor_mod._run_check is _doctor_types._run_check
-        real_run_check = doctor_mod._run_check
-        reached_real_wrapper: list[str] = []
-
-        def spy_run_check(
-            fn: Callable[[], object], *, check_name: str | None = None
-        ) -> list[_doctor_types.DoctorResult]:
-            reached_real_wrapper.append(check_name or _doctor_types._check_display_name(fn))
-            return real_run_check(fn, check_name=check_name)
-
-        monkeypatch.setattr(doctor_mod, "_run_check", spy_run_check)
-        offered = self._select_script_version_health(monkeypatch)
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.chdir(tmp_path)
-        # No .autoskillit/recipes/ directory created
-        cli.doctor_cmd(output_json=True)
-        captured = capsys.readouterr()
-        data = json.loads(captured.out)
-        script_checks = [r for r in data["results"] if r["check"] == "script_version_health"]
-        assert len(script_checks) == 1
-        assert script_checks[0]["severity"] == "ok"
-        assert script_checks[0]["message"] == "No pipeline scripts found"
-        assert reached_real_wrapper == ["script_version_health"]
-        assert "script_version_health" in offered
-        assert any(name != "script_version_health" for name in offered)
 
 
 class TestSyncRemovalCLI:

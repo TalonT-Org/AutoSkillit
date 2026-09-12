@@ -210,6 +210,9 @@ COMMAND_CLASSIFYING_GUARDS = [
     SRC_ROOT / "hooks" / "guards" / "github_mutation_guard.py",
     SRC_ROOT / "hooks" / "guards" / "unsafe_install_guard.py",
     SRC_ROOT / "hooks" / "guards" / "artifact_download_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "resource_exhaustion_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "test_runner_guard.py",
+    SRC_ROOT / "hooks" / "guards" / "compose_pr_body_guard.py",
 ]
 
 
@@ -318,7 +321,7 @@ def test_guard_handles_bypass_family(guard_file: str, bypass_family: str) -> Non
     if bypass_family == "interpreter_write":
         assert "has_interpreter_write" in source or "_command_classification" in source
     elif bypass_family == "interpreter_subprocess":
-        assert "has_interpreter_wrapped_command" in source or "_command_classification" in source
+        assert "interpreter_invokes" in source or "_command_classification" in source
     elif bypass_family == "github_mutation_analysis":
         assert "analyze_github_mutations" in source
 
@@ -343,10 +346,25 @@ def test_command_classification_exports_tokenization() -> None:
         "strip_heredoc_bodies",
         "all_evaluated_segments",
         "live_command_text",
+        "interpreter_invokes",
     ):
         assert f"def {name}" in source, (
             f"_command_classification.py must define {name}() for structural command parsing"
         )
+
+
+def test_shell_ops_and_wrapped_command_no_longer_in_facade() -> None:
+    """Rectify #4941 Part B: every guard migrated onto all_evaluated_segments/
+
+    interpreter_invokes, so the raw-scan primitives _SHELL_OPS and
+    has_interpreter_wrapped_command are dead and must no longer be defined.
+    """
+    source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
+    assert "_SHELL_OPS" not in source
+    classification_source = (
+        SRC_ROOT / "hooks" / "_classification" / "_interpreters.py"
+    ).read_text()
+    assert "def has_interpreter_wrapped_command" not in classification_source
 
 
 REQUIRED_BIDIRECTIONAL_FAMILIES = {

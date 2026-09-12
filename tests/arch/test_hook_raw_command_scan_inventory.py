@@ -223,77 +223,23 @@ def _observed_raw_scans() -> tuple[tuple[str, str, str], ...]:
     return tuple(sorted(set(findings)))
 
 
-# Materialized baseline as of rectify #4941 Part A. Each entry is
-# (relpath, function, primitive). git_ops_guard's own blocklist
-# (`_git_command_classification.py::_contains_blocked_git_op`) and the
-# checked-out-ref preflight (`git_ops_guard.py::_preflight_checked_out_ref_mutation`,
-# `_raw_target_mutations`) are absent here on purpose: Part A migrated both
-# onto `all_evaluated_segments`/`live_command_text`. Every other guard's
-# private parser is Part B's scope and remains in the census unchanged.
+# Materialized baseline as of rectify #4941 Part B. Every guard's private
+# parser named in Part A's baseline has now migrated onto
+# `all_evaluated_segments`/`live_command_text`/`interpreter_invokes`, and
+# each such call is sanctioned (never inventoried) by this scanner. The
+# handful of entries below are the two kinds of unavoidable exception the
+# raw-scan census is designed to surface as a conscious, reviewed diff:
+# (1) `_classification/_tokenizer.py`'s own sites (the sole general parsing
+# authority for command text) and `_interpreters.py`'s own internal
+# tokenizer use in building that authority, and (2) `compose_pr_body_guard.py`'s
+# private per-evaluated-payload segmentation walk, needed because
+# `all_evaluated_segments` flattens across payloads while `$VAR` resolution
+# must stay scoped to the one payload that defines it.
 _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
     {
-        # _classification/_flags.py -- protected-path read detection (Part B 2.9).
-        ("hooks/_classification/_flags.py", "_tokenize_protected_read_segments", "shlex.shlex"),
-        (
-            "hooks/_classification/_flags.py",
-            "command_has_blocked_protected_path_read",
-            "_SHELL_STATE_VAR_RE.search",
-        ),
-        (
-            "hooks/_classification/_flags.py",
-            "command_has_blocked_protected_path_read",
-            "_SHELL_SUBSTITUTION_RE.search",
-        ),
-        (
-            "hooks/_classification/_flags.py",
-            "command_has_blocked_protected_path_read",
-            "str.__contains__",
-        ),
-        # _classification/_interpreters.py -- the write-path/wrapped-command
-        # regex helpers Part A leaves untouched (their guard consumers,
-        # write_guard.py and pr_create_guard.py/planner_gh_discovery_guard.py,
-        # are Part B's scope), and the authority's own internal tokenizer use.
-        (
-            "hooks/_classification/_interpreters.py",
-            "extract_interpreter_write_paths",
-            "_INTERPRETER_RE.search",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "extract_interpreter_write_paths",
-            "_LITERAL_OPEN_PATH_RE.finditer",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "extract_interpreter_write_paths",
-            "_LITERAL_PATH_CONSTRUCTOR_RE.finditer",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "extract_interpreter_write_paths",
-            "_WRITE_APIS_RE.search",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "has_interpreter_wrapped_command",
-            "_INTERPRETER_RE.search",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "has_interpreter_wrapped_command",
-            "_SUBPROCESS_APIS_RE.search",
-        ),
-        ("hooks/_classification/_interpreters.py", "has_interpreter_wrapped_command", "str.lower"),
-        (
-            "hooks/_classification/_interpreters.py",
-            "has_interpreter_write",
-            "_INTERPRETER_RE.search",
-        ),
-        (
-            "hooks/_classification/_interpreters.py",
-            "has_interpreter_write",
-            "_WRITE_APIS_RE.search",
-        ),
+        # _classification/_interpreters.py -- the authority's own internal
+        # tokenizer use (all_evaluated_segments/tokenize_shell_payload_segments
+        # feeding each other and the tokenizer facade).
         (
             "hooks/_classification/_interpreters.py",
             "all_evaluated_segments",
@@ -314,11 +260,13 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
             "tokenize_shell_payload_segments",
             "tokenize_command_segments",
         ),
-        # guards/ -- every one of these is a Part B migration target.
-        ("hooks/guards/artifact_download_guard.py", "_deny_subcommand", "shlex.split"),
-        ("hooks/guards/compose_pr_body_guard.py", "_extract_create_body_paths", "shlex.split"),
+        (
+            "hooks/_classification/_interpreters.py",
+            "interpreter_invokes",
+            "tokenize_command_segments",
+        ),
         # git_ops_guard.py's own outer-segment/nested-payload tokenization,
-        # unchanged by Part A (its structural_mutation/_raw_target_mutations
+        # unchanged since Part A (its structural_mutation/_raw_target_mutations
         # inputs were migrated to live_command_text; these two calls are the
         # sanctioned tokenizer entry points feeding the per-segment cd/git
         # classification loop and the additional_segments builder).
@@ -332,48 +280,21 @@ _EXPECTED_RAW_COMMAND_SCANS: frozenset[tuple[str, str, str]] = frozenset(
             "_preflight_checked_out_ref_mutation",
             "tokenize_shell_payload_segments",
         ),
+        # compose_pr_body_guard.py -- per-evaluated-payload segmentation
+        # (Part B 2.10): `all_evaluated_segments` flattens every payload's
+        # segments into one list, losing which segments belong to which
+        # payload; a $VAR lookup for a nested bash -c/heredoc/pipe body's
+        # `gh pr create` must resolve only from that same payload's own
+        # assignments, so this guard tokenizes each evaluated payload
+        # independently rather than consuming the shared authority.
         (
-            "hooks/guards/planner_gh_discovery_guard.py",
-            "_is_gh_discovery",
-            "has_interpreter_wrapped_command",
-        ),
-        (
-            "hooks/guards/planner_gh_discovery_guard.py",
-            "_is_gh_discovery",
-            "tokenize_command_segments",
-        ),
-        (
-            "hooks/guards/planner_gh_discovery_guard.py",
-            "_is_gh_discovery",
-            "tokenize_shell_payload_segments",
-        ),
-        ("hooks/guards/pr_create_guard.py", "_is_gh_pr_create", "has_interpreter_wrapped_command"),
-        ("hooks/guards/pr_create_guard.py", "_is_gh_pr_create", "shlex.split"),
-        (
-            "hooks/guards/pr_create_guard.py",
-            "_is_gh_pr_create",
-            "tokenize_shell_payload_segments",
-        ),
-        (
-            "hooks/guards/resource_exhaustion_guard.py",
-            "_iter_scan_texts",
-            "extract_shell_command_payloads",
-        ),
-        ("hooks/guards/test_runner_guard.py", "_is_direct_pytest", "_SHELL_SEG_RE.split"),
-        (
-            "hooks/guards/unsafe_install_guard.py",
-            "_iter_install_segments",
+            "hooks/guards/compose_pr_body_guard.py",
+            "_iter_evaluated_payload_segments",
             "extract_shell_command_payloads",
         ),
         (
-            "hooks/guards/unsafe_install_guard.py",
-            "_iter_install_segments",
-            "tokenize_command_segments",
-        ),
-        ("hooks/guards/write_guard.py", "_extract_bash_write_targets", "shlex.split"),
-        (
-            "hooks/guards/write_guard.py",
-            "_extract_bash_write_targets",
+            "hooks/guards/compose_pr_body_guard.py",
+            "_iter_evaluated_payload_segments",
             "tokenize_command_segments",
         ),
     }

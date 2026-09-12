@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock
@@ -1154,6 +1155,9 @@ class TestApplyManifest:
             apply_manifest({"docs/a.md"}, {"docs/*.md": ["docs"]})
 
 
+_CONTRIBUTING_DOC_TOKEN_RE = re.compile(r"""(['"])contributing\.md\1""")
+
+
 def _contributing_document_scope() -> set[Path]:
     """Conservative scope for a change to docs/developer/contributing.md against the
     real manifest and the real tests/ tree."""
@@ -1197,7 +1201,7 @@ class TestProductionManifestScope:
         assert file_targets, "route must name at least one file-level reader"
         for target in file_targets:
             source = (PROJECT_ROOT / "tests" / target).read_text(encoding="utf-8")
-            assert "contributing.md" in source, (
+            assert _CONTRIBUTING_DOC_TOKEN_RE.search(source), (
                 f"{target!r} is routed as a reader of docs/developer/contributing.md "
                 "but never references the document"
             )
@@ -1208,7 +1212,7 @@ class TestProductionManifestScope:
         referencing = {
             module
             for module in infra_dir.rglob("test_*.py")
-            if "contributing.md" in module.read_text(encoding="utf-8")
+            if _CONTRIBUTING_DOC_TOKEN_RE.search(module.read_text(encoding="utf-8"))
         }
         assert infra_dir / "test_ci_workflow.py" in referencing
 

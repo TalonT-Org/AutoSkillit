@@ -34,9 +34,6 @@ TEST_ALLOWLIST: dict[tuple[str, int], str] = {
     ): "global-mutated variable Pyright cannot resolve",
     ("recipe/test_research_campaign_rules.py", 7): "side-effect import for rule registration",
     ("recipe/test_research_sub_recipe_rules.py", 9): "side-effect import for rule registration",
-    ("hooks/test_hook_subprocess_import_contract.py", 36): (
-        "no-argument autouse session fixture Pyright reads as an unused private function"
-    ),
 }
 
 # The exploration identity guard has two standalone sibling imports that static

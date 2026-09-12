@@ -33,10 +33,6 @@ check = load_check_script(_CHECK_MODULE_NAME, _CHECK_SCRIPT)
 # --- shared helpers --------------------------------------------------------------------
 
 
-def _reader(sources: dict[str, str]):
-    return sources.get
-
-
 def _policy(exemptions=None, max_complexity=10, min_rationale_chars=60):
     return check.ComplexityPolicy(max_complexity, min_rationale_chars, exemptions or {})
 
@@ -194,7 +190,7 @@ def test_allowed_complexity():
 def test_evaluate_new_function_violation():
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
     heads = {"src/x.py": _source_with_function("f", 11)}
-    violations = check.evaluate(changes, _reader(heads), _reader({}), _policy())
+    violations = check.evaluate(changes, heads.get, {}.get, _policy())
     assert len(violations) == 1
     v = violations[0]
     assert v.qualname == "f" and v.complexity == 11 and v.allowed == 10
@@ -205,14 +201,14 @@ def test_evaluate_new_function_violation():
 def test_evaluate_new_function_at_threshold_is_clean():
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
     heads = {"src/x.py": _source_with_function("f", 10)}
-    assert check.evaluate(changes, _reader(heads), _reader({}), _policy()) == []
+    assert check.evaluate(changes, heads.get, {}.get, _policy()) == []
 
 
 def test_evaluate_growth_above_base_is_violation():
     changes = [check.ChangedFile(path="src/x.py", base_path="src/x.py")]
     heads = {"src/x.py": _source_with_function("f", 23)}
     bases = {"src/x.py": _source_with_function("f", 22)}
-    violations = check.evaluate(changes, _reader(heads), _reader(bases), _policy())
+    violations = check.evaluate(changes, heads.get, bases.get, _policy())
     assert len(violations) == 1
     assert violations[0].base_complexity == 22
     assert "was 22 at the base revision" in check._reason(violations[0], 10)
@@ -222,7 +218,7 @@ def test_evaluate_unchanged_complexity_is_clean():
     changes = [check.ChangedFile(path="src/x.py", base_path="src/x.py")]
     source = _source_with_function("f", 22)
     violations = check.evaluate(
-        changes, _reader({"src/x.py": source}), _reader({"src/x.py": source}), _policy()
+        changes, {"src/x.py": source}.get, {"src/x.py": source}.get, _policy()
     )
     assert violations == []
 
@@ -231,21 +227,21 @@ def test_evaluate_shrink_is_clean():
     changes = [check.ChangedFile(path="src/x.py", base_path="src/x.py")]
     heads = {"src/x.py": _source_with_function("f", 25)}
     bases = {"src/x.py": _source_with_function("f", 30)}
-    assert check.evaluate(changes, _reader(heads), _reader(bases), _policy()) == []
+    assert check.evaluate(changes, heads.get, bases.get, _policy()) == []
 
 
 def test_evaluate_exempted_at_limit_is_clean():
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
     heads = {"src/x.py": _source_with_function("f", 14)}
     policy = _policy(exemptions={"src/x.py::f": (14, "rationale")})
-    assert check.evaluate(changes, _reader(heads), _reader({}), policy) == []
+    assert check.evaluate(changes, heads.get, {}.get, policy) == []
 
 
 def test_evaluate_exempted_above_limit_is_violation():
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
     heads = {"src/x.py": _source_with_function("f", 15)}
     policy = _policy(exemptions={"src/x.py::f": (14, "rationale")})
-    violations = check.evaluate(changes, _reader(heads), _reader({}), policy)
+    violations = check.evaluate(changes, heads.get, {}.get, policy)
     assert len(violations) == 1
     assert violations[0].exemption == (14, "rationale")
     assert "exempted up to 14" in check._reason(violations[0], 10)
@@ -258,7 +254,7 @@ def test_evaluate_vanished_function_inherits_ceiling():
     ]
     heads = {"src/new.py": _source_with_function("f", 18)}
     bases = {"src/old.py": _source_with_function("f", 18)}
-    assert check.evaluate(changes, _reader(heads), _reader(bases), _policy()) == []
+    assert check.evaluate(changes, heads.get, bases.get, _policy()) == []
 
 
 def test_evaluate_vanished_function_growth_names_old_path():
@@ -268,7 +264,7 @@ def test_evaluate_vanished_function_growth_names_old_path():
     ]
     heads = {"src/new.py": _source_with_function("f", 19)}
     bases = {"old/path.py": _source_with_function("f", 18)}
-    violations = check.evaluate(changes, _reader(heads), _reader(bases), _policy())
+    violations = check.evaluate(changes, heads.get, bases.get, _policy())
     assert len(violations) == 1
     reason = check._reason(violations[0], 10)
     assert "was 18 at the base revision" in reason
@@ -288,7 +284,7 @@ def test_evaluate_function_moved_between_modified_files_is_clean():
         "src/a.py": _source_with_function("f", 20) + "\n\ndef other():\n    pass\n",
         "src/b.py": "def existing():\n    pass\n",
     }
-    assert check.evaluate(changes, _reader(heads), _reader(bases), _policy()) == []
+    assert check.evaluate(changes, heads.get, bases.get, _policy()) == []
 
 
 def test_evaluate_surviving_function_is_not_an_inheritance_source():
@@ -301,7 +297,7 @@ def test_evaluate_surviving_function_is_not_an_inheritance_source():
         "src/new.py": _source_with_function("f", 25),
     }
     bases = {"src/a.py": _source_with_function("f", 20)}
-    violations = check.evaluate(changes, _reader(heads), _reader(bases), _policy())
+    violations = check.evaluate(changes, heads.get, bases.get, _policy())
     assert len(violations) == 1
     assert violations[0].path == "src/new.py"
     assert violations[0].base_complexity is None
@@ -312,7 +308,7 @@ def test_evaluate_rename_uses_same_file_base_lookup():
     changes = [check.ChangedFile(path="src/new.py", base_path="src/old.py")]
     heads = {"src/new.py": _source_with_function("f", 12)}
     bases = {"src/old.py": _source_with_function("f", 11)}
-    violations = check.evaluate(changes, _reader(heads), _reader(bases), _policy())
+    violations = check.evaluate(changes, heads.get, bases.get, _policy())
     assert len(violations) == 1
     assert violations[0].base_complexity == 11
     assert violations[0].base_path == "src/old.py"
@@ -322,7 +318,7 @@ def test_evaluate_rename_into_scope_inherits_ceiling():
     changes = [check.ChangedFile(path="src/new.py", base_path="docs/old.py")]
     heads = {"src/new.py": _source_with_function("f", 20)}
     bases = {"docs/old.py": _source_with_function("f", 20)}
-    assert check.evaluate(changes, _reader(heads), _reader(bases), _policy()) == []
+    assert check.evaluate(changes, heads.get, bases.get, _policy()) == []
 
 
 def test_evaluate_rename_out_of_scope_still_records_vanished():
@@ -332,7 +328,7 @@ def test_evaluate_rename_out_of_scope_still_records_vanished():
     ]
     heads = {"src/new.py": _source_with_function("f", 20)}
     bases = {"src/old.py": _source_with_function("f", 20)}
-    assert check.evaluate(changes, _reader(heads), _reader(bases), _policy()) == []
+    assert check.evaluate(changes, heads.get, bases.get, _policy()) == []
 
 
 def test_evaluate_deleted_out_of_scope_and_added_in_scope_inherits():
@@ -342,13 +338,13 @@ def test_evaluate_deleted_out_of_scope_and_added_in_scope_inherits():
     ]
     heads = {"src/new.py": _source_with_function("f", 18)}
     bases = {"docs/old.py": _source_with_function("f", 18)}
-    assert check.evaluate(changes, _reader(heads), _reader(bases), _policy()) == []
+    assert check.evaluate(changes, heads.get, bases.get, _policy()) == []
 
 
 def test_evaluate_head_syntax_error_is_skipped(capsys):
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
     heads = {"src/x.py": "def f(:\n    pass\n"}
-    violations = check.evaluate(changes, _reader(heads), _reader({}), _policy())
+    violations = check.evaluate(changes, heads.get, {}.get, _policy())
     assert violations == []
     assert "does not parse" in capsys.readouterr().err
 
@@ -357,7 +353,7 @@ def test_evaluate_unparseable_base_yields_new_function_violation(capsys):
     changes = [check.ChangedFile(path="src/x.py", base_path="src/x.py")]
     heads = {"src/x.py": _source_with_function("f", 11)}
     bases = {"src/x.py": "def f(:\n    pass\n"}
-    violations = check.evaluate(changes, _reader(heads), _reader(bases), _policy())
+    violations = check.evaluate(changes, heads.get, bases.get, _policy())
     assert len(violations) == 1
     assert violations[0].base_complexity is None
     assert "does not parse" in capsys.readouterr().err
@@ -366,14 +362,14 @@ def test_evaluate_unparseable_base_yields_new_function_violation(capsys):
 def test_evaluate_missing_required_head_source_raises_git_failure():
     changes = [check.ChangedFile(path="src/x.py", base_path=None)]
     with pytest.raises(check.GitFailure):
-        check.evaluate(changes, _reader({}), _reader({}), _policy())
+        check.evaluate(changes, {}.get, {}.get, _policy())
 
 
 def test_evaluate_missing_required_base_source_raises_git_failure():
     changes = [check.ChangedFile(path="src/x.py", base_path="src/x.py")]
     heads = {"src/x.py": _source_with_function("f", 5)}
     with pytest.raises(check.GitFailure):
-        check.evaluate(changes, _reader(heads), _reader({}), _policy())
+        check.evaluate(changes, heads.get, {}.get, _policy())
 
 
 # --- rendering ----------------------------------------------------------------------------
@@ -642,7 +638,7 @@ _VALID_LIMITS = (
 
 
 def test_load_policy_reads_literal_snapshot():
-    policy = check.load_policy(_reader({check.LIMITS_PATH.as_posix(): _VALID_LIMITS}))
+    policy = check.load_policy({check.LIMITS_PATH.as_posix(): _VALID_LIMITS}.get)
     assert policy.max_complexity == 10
     assert policy.min_rationale_chars == 60
     assert policy.exemptions == {"src/x.py::f": (14, _RATIONALE_60)}
@@ -667,7 +663,7 @@ def test_load_policy_reads_literal_snapshot():
 )
 def test_load_policy_rejects_invalid_shapes(source):
     with pytest.raises(check.PolicyUnavailable):
-        check.load_policy(_reader({check.LIMITS_PATH.as_posix(): source}))
+        check.load_policy({check.LIMITS_PATH.as_posix(): source}.get)
 
 
 def test_load_policy_never_executes_module_body():
@@ -675,7 +671,7 @@ def test_load_policy_never_executes_module_body():
         "MAX_COMPLEXITY = 10\nMIN_RATIONALE_CHARS = 60\nCOMPLEXITY_EXEMPTIONS = {}\n"
         "1 / 0  # would raise ZeroDivisionError if this module were executed\n"
     )
-    policy = check.load_policy(_reader({check.LIMITS_PATH.as_posix(): source}))
+    policy = check.load_policy({check.LIMITS_PATH.as_posix(): source}.get)
     assert policy.max_complexity == 10
 
 
@@ -718,64 +714,64 @@ def test_staged_policy_unstaged_exemption_does_not_authorize(tmp_path, monkeypat
 
 def test_validate_exemptions_malformed_key_no_separator():
     policy = _policy(exemptions={"src/x.py.f": (14, "x" * 60)})
-    problems = check.validate_exemptions(policy, _reader({}))
+    problems = check.validate_exemptions(policy, {}.get)
     assert len(problems) == 1 and "malformed key" in problems[0]
 
 
 def test_validate_exemptions_malformed_key_empty_qualname():
     policy = _policy(exemptions={"src/x.py::": (14, "x" * 60)})
-    assert "malformed key" in check.validate_exemptions(policy, _reader({}))[0]
+    assert "malformed key" in check.validate_exemptions(policy, {}.get)[0]
 
 
 def test_validate_exemptions_malformed_key_outside_scan_roots():
     policy = _policy(exemptions={"docs/x.py::f": (14, "x" * 60)})
-    assert "malformed key" in check.validate_exemptions(policy, _reader({}))[0]
+    assert "malformed key" in check.validate_exemptions(policy, {}.get)[0]
 
 
 def test_validate_exemptions_malformed_key_dotdot_component():
     policy = _policy(exemptions={"src/../x.py::f": (14, "x" * 60)})
-    assert "malformed key" in check.validate_exemptions(policy, _reader({}))[0]
+    assert "malformed key" in check.validate_exemptions(policy, {}.get)[0]
 
 
 def test_validate_exemptions_rationale_too_short():
     policy = _policy(exemptions={"src/x.py::f": (14, "x" * 59)})
-    source_for = _reader({"src/x.py": _source_with_function("f", 14)})
+    source_for = {"src/x.py": _source_with_function("f", 14)}.get
     assert "at least" in check.validate_exemptions(policy, source_for)[0]
 
 
 def test_validate_exemptions_limit_not_above_max():
     policy = _policy(exemptions={"src/x.py::f": (10, "x" * 60)})
-    source_for = _reader({"src/x.py": _source_with_function("f", 10)})
+    source_for = {"src/x.py": _source_with_function("f", 10)}.get
     assert "must exceed MAX_COMPLEXITY" in check.validate_exemptions(policy, source_for)[0]
 
 
 def test_validate_exemptions_file_missing():
     policy = _policy(exemptions={"src/x.py::f": (14, "x" * 60)})
-    assert "file not found" in check.validate_exemptions(policy, _reader({}))[0]
+    assert "file not found" in check.validate_exemptions(policy, {}.get)[0]
 
 
 def test_validate_exemptions_qualname_missing():
     policy = _policy(exemptions={"src/x.py::f": (14, "x" * 60)})
-    source_for = _reader({"src/x.py": "def g():\n    pass\n"})
+    source_for = {"src/x.py": "def g():\n    pass\n"}.get
     problem = check.validate_exemptions(policy, source_for)[0]
     assert "stale" in problem and "function not found" in problem
 
 
 def test_validate_exemptions_no_longer_exceeds():
     policy = _policy(exemptions={"src/x.py::f": (14, "x" * 60)})
-    source_for = _reader({"src/x.py": _source_with_function("f", 10)})
+    source_for = {"src/x.py": _source_with_function("f", 10)}.get
     assert "no longer exceeds" in check.validate_exemptions(policy, source_for)[0]
 
 
 def test_validate_exemptions_below_current_complexity():
     policy = _policy(exemptions={"src/x.py::f": (14, "x" * 60)})
-    source_for = _reader({"src/x.py": _source_with_function("f", 16)})
+    source_for = {"src/x.py": _source_with_function("f", 16)}.get
     assert "below the current complexity" in check.validate_exemptions(policy, source_for)[0]
 
 
 def test_validate_exemptions_valid_entry_is_clean():
     policy = _policy(exemptions={"src/x.py::f": (14, "x" * 60)})
-    source_for = _reader({"src/x.py": _source_with_function("f", 14)})
+    source_for = {"src/x.py": _source_with_function("f", 14)}.get
     assert check.validate_exemptions(policy, source_for) == []
 
 

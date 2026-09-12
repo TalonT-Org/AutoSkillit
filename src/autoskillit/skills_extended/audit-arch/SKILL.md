@@ -183,10 +183,10 @@ infrastructure -> depends on nothing project-specific
 **Rule:** A changed Python source file under `src/autoskillit/` may not exceed
 750 non-import lines (physical lines minus the inclusive AST line spans occupied
 by import statements, as measured by `count_budget_lines` in
-`tests/arch/_line_budget.py`). It may exceed 750 non-import
+`tests/arch/_subpackage_isolation_line_limits.py`). It may exceed 750 non-import
 lines, up to the diff-scoped gate's absolute maximum of 1000 non-import lines,
 only when registered in `_LINE_LIMIT_EXEMPTIONS`
-(`tests/arch/_line_budget.py`) under a `REQ-CNST-010-E<N>`
+(`tests/arch/_subpackage_isolation_line_limits.py`) under a `REQ-CNST-010-E<N>`
 rule ID with a machine-checkable predicate. Test files are outside this gate's
 scope by design.
 

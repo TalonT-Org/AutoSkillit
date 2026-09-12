@@ -76,7 +76,7 @@ def _module_has_arch_small_markers(path: Path) -> bool:
 
 
 def test_facade_keeps_registration_and_line_limit_authority() -> None:
-    from tests.arch import _line_budget as line_limit_owner
+    from tests.arch import _subpackage_isolation_line_limits as line_limit_owner
 
     assert "REQ-ARCH-002" in facade.ISOLATION_RULES
     assert facade._LINE_LIMIT_EXEMPTIONS is line_limit_owner._LINE_LIMIT_EXEMPTIONS

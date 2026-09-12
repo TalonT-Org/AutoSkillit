@@ -311,7 +311,7 @@ class TestRecordingSubprocessRunnerValidation:
         entirely — the recording wrapper must reject this itself."""
         from unittest.mock import MagicMock
 
-        from autoskillit.execution.recording import RecordingSubprocessRunner
+        from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
 
         runner = RecordingSubprocessRunner(recorder=MagicMock())
         with pytest.raises(ValueError, match="mutually exclusive"):
@@ -327,7 +327,7 @@ class TestRecordingSubprocessRunnerValidation:
     async def test_rejects_line_driver_with_input_data(self, tmp_path: Path) -> None:
         from unittest.mock import MagicMock
 
-        from autoskillit.execution.recording import RecordingSubprocessRunner
+        from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
 
         runner = RecordingSubprocessRunner(recorder=MagicMock())
         with pytest.raises(ValueError, match="mutually exclusive"):

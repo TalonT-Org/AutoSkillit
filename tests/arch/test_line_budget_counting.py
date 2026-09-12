@@ -110,6 +110,21 @@ def test_collect_line_limit_violations_reports_unparseable_file(
     assert "cannot be measured" in violations[0]
 
 
+def test_collect_line_limit_violations_reports_undecodable_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    src_root = tmp_path / "src"
+    src_root.mkdir()
+    monkeypatch.setattr("tests.arch._helpers.SRC_ROOT", src_root)
+    (src_root / "e.py").write_bytes(b"value = '\xff\xfe'\n")
+
+    violations = _collect_line_limit_violations({})
+
+    assert len(violations) == 1
+    assert "e.py" in violations[0]
+    assert "cannot be measured" in violations[0]
+
+
 def _is_count_budget_lines_call(node: ast.AST) -> bool:
     return (
         isinstance(node, ast.Call)

@@ -7,7 +7,7 @@ import re as _stdlib_re
 from collections.abc import Iterator
 from pathlib import Path
 
-from tests.arch._line_budget import count_budget_lines
+from tests.arch._line_budget import count_budget_lines, format_unmeasurable
 from tests.arch._rules import (
     _ASYNCIO_PIPE_EXEMPT,
     _BROAD_EXCEPT_EXEMPT,
@@ -52,8 +52,12 @@ def _collect_line_limit_violations(
         try:
             line_count = count_budget_lines(py_file)
         except SyntaxError as exc:
-            detail = exc.msg or "syntax error"
-            violations.append(f"{rel}: cannot be measured -- {detail} at line {exc.lineno}")
+            detail = f"{exc.msg or 'syntax error'} at line {exc.lineno}"
+            violations.append(format_unmeasurable(rel, detail))
+            continue
+        except UnicodeDecodeError as exc:
+            detail = f"{exc.reason} at byte offset {exc.start}"
+            violations.append(format_unmeasurable(rel, detail))
             continue
         exemption = exemptions.get(rel)
         limit = exemption.limit if exemption is not None else 1000

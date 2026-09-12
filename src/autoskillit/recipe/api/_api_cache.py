@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass as _dc
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from autoskillit.core import SessionType, get_logger, pkg_root, session_type
 from autoskillit.recipe.ingredients._recipe_ingredients import LoadRecipeResult
@@ -57,7 +57,7 @@ class LoadCache:
         if not isinstance(result, Mapping):
             msg = f"copy_result expected a Mapping, got {type(result).__name__}"
             raise TypeError(msg)
-        r = result.copy()
+        r = cast(LoadRecipeResult, dict(result))
         if "suggestions" in r:
             r["suggestions"] = list(r["suggestions"])
         if "kitchen_rules" in r:

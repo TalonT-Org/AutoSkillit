@@ -768,7 +768,8 @@ def _resolve_mode(
 ) -> tuple[str, Callable[[str], str | None]]:
     if staged:
         return "HEAD", _index_reader(repo_root)
-    assert base is not None
+    if base is None:
+        raise GitFailure("_resolve_mode requires --base when --staged is not set")
     resolved = merge_base(repo_root, base)
     if resolved is None:
         raise GitFailure(f"unable to resolve a base revision from {base!r}")

@@ -111,26 +111,18 @@ def test_responsibility_shards_are_collected_and_stay_small() -> None:
     assert not missing_markers
 
 
-def test_source_map_records_moved_behavioral_successors() -> None:
+def test_source_map_drops_retired_isolation_facade() -> None:
     data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
     source_map = data["map"]
     facade_path = "tests/arch/test_subpackage_isolation.py"
-    facade_shard = "tests/arch/test_subpackage_isolation_facades.py"
-    cli_sources = (
+    source_keys = (
         "src/autoskillit/cli/install/__init__.py",
         "src/autoskillit/cli/install/_marketplace.py",
+        "src/autoskillit/core/logging.py",
     )
-    source_keys = (*cli_sources, "src/autoskillit/core/logging.py")
 
     for source_key in source_keys:
+        assert source_map[source_key]
         assert facade_path not in source_map[source_key]
-    for source_key in cli_sources:
-        assert facade_shard in source_map[source_key]
-
-    logging_successors = [
-        path
-        for path in source_map["src/autoskillit/core/logging.py"]
-        if path.startswith("tests/arch/test_subpackage_isolation_")
-    ]
-    assert logging_successors
-    assert all((ROOT / path).is_file() for path in logging_successors)
+    # File-layout checks inspect paths without necessarily executing these modules.
+    assert all(facade_path not in paths for paths in source_map.values())

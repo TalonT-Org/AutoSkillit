@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from enum import StrEnum, auto
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from autoskillit.hooks._classification._flag_arity import _FlagArity
     from autoskillit.hooks._classification._interpreters import (
         all_evaluated_segments,
         live_command_text,
@@ -19,6 +19,20 @@ if TYPE_CHECKING:
         command_verb,
         extract_git_subcommand_and_flags,
     )
+else:
+    # _flag_arity is a leaf sibling (no back-reference into the facade or
+    # into _interpreters), so it can be imported at the top of the file
+    # without the circular-bootstrap hazard that governs the _interpreters
+    # import at the bottom of this module. _FlagArity used to be defined
+    # directly in this file, which forced _interpreters.py to reach back
+    # into _flags at ITS OWN bottom bootstrap just to get it -- a
+    # bidirectional _flags<->_interpreters coupling this extraction removes.
+    if __package__:
+        from . import _flag_arity
+    else:
+        import _flag_arity
+
+    _FlagArity = _flag_arity._FlagArity
 
 
 # Moved from _command_classification.py (rectify #4941 Part A) to keep that
@@ -79,29 +93,6 @@ _GIT_GLOBAL_FLAGS: frozenset[str] = frozenset(
     {"-C", "--work-tree", "--git-dir", "--no-pager", "--bare", "-c"}
 )
 _GIT_GLOBAL_FLAGS_WITH_VALUE: frozenset[str] = frozenset({"-C", "--work-tree", "--git-dir", "-c"})
-
-
-class _FlagArity(StrEnum):
-    """Per-flag arity classification used by every {flag: arity} spec table.
-
-    BOOLEAN — the flag takes no value; the next token is its own argument.
-    VALUE — the flag takes exactly one value in the next token (or joined via
-    `=` for long forms, or glued onto a short form like -XPOST).
-
-    A StrEnum, not a plain Enum: this module can be loaded under the dotted
-    `autoskillit.hooks._classification._flags` package name and the bare
-    `_classification._flags` standalone name. The two loads produce distinct
-    `_FlagArity` class objects, so an `is`
-    comparison between a value sourced from one and `_FlagArity.VALUE`
-    sourced from the other silently fails even though both represent the
-    same arity. StrEnum members compare equal by their underlying str value
-    across class identities (`A.VALUE == B.VALUE` is True even when `A is
-    not B`), so every comparison against `_FlagArity.VALUE`/`.BOOLEAN`
-    anywhere in the codebase must use `==`, never `is`.
-    """
-
-    BOOLEAN = auto()
-    VALUE = auto()
 
 
 def _argv_token_after_prefix(token: ArgvToken, prefix: str, value_text: str) -> ArgvToken:

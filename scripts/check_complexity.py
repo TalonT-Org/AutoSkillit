@@ -344,6 +344,16 @@ def _plumbing_text(result: subprocess.CompletedProcess[bytes]) -> str:
     return result.stdout.decode("utf-8", errors="replace")
 
 
+def _plumbing_stderr(result: subprocess.CompletedProcess[bytes]) -> str:
+    """Format captured stderr for a GitFailure message, or "" when git wrote none.
+
+    _git() always captures stderr; git's actual diagnostic text (the real cause of a
+    plumbing failure) lives there, not on stdout -- surface it instead of discarding it.
+    """
+    text = result.stderr.decode("utf-8", errors="replace").strip()
+    return f" | stderr: {text}" if text else ""
+
+
 def _decode_source(data: bytes) -> str:
     """Decode a Python blob using its own encoding cookie/BOM, like the stdlib tokenizer."""
     encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
@@ -420,12 +430,18 @@ def changed_files(repo_root: Path, *, staged: bool, base_rev: str) -> list[Chang
         diff_args = ["diff", "--name-status", "-M", "-z", "--diff-filter=AMRD", base_rev]
     result = _git(repo_root, *diff_args)
     if result.returncode != 0:
-        raise GitFailure(f"git {' '.join(diff_args)} failed: {_plumbing_text(result)}")
+        raise GitFailure(
+            f"git {' '.join(diff_args)} failed (exit {result.returncode}): "
+            f"{_plumbing_text(result)}{_plumbing_stderr(result)}"
+        )
     changes = _parse_name_status(_plumbing_text(result))
     if not staged:
         untracked = _git(repo_root, "ls-files", "--others", "--exclude-standard", "-z")
         if untracked.returncode != 0:
-            raise GitFailure("git ls-files --others --exclude-standard failed")
+            raise GitFailure(
+                f"git ls-files --others --exclude-standard failed (exit {untracked.returncode}): "
+                f"{_plumbing_text(untracked)}{_plumbing_stderr(untracked)}"
+            )
         for name in _plumbing_text(untracked).split("\0"):
             if name:
                 changes.append(ChangedFile(path=name, base_path=None))

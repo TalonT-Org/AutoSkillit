@@ -1,10 +1,10 @@
-"""Recipe API facade for listing, validation, and orchestration."""
+"""Recipe API facade preserving the former recipe._api import surface."""
 
 from __future__ import annotations
 
 from autoskillit.core import (
-    SkillLister,  # noqa: F401 — preserved for lister_targets substring check
-    resolve_temp_dir,  # noqa: F401 — preserved for tests
+    SkillLister,  # noqa: F401
+    resolve_temp_dir,  # noqa: F401
 )
 from autoskillit.recipe._binding import bind_recipe  # noqa: F401
 from autoskillit.recipe.api._api_cache import (  # noqa: F401
@@ -55,11 +55,11 @@ from autoskillit.recipe.ingredients._recipe_composition import (  # noqa: F401
 from autoskillit.recipe.ingredients._recipe_ingredients import (
     DeferredGuard,  # noqa: F401
     ListRecipesResult,  # noqa: F401
-    LoadRecipeResult,  # noqa: F401 — preserved for tests
+    LoadRecipeResult,  # noqa: F401
     OpenKitchenResult,  # noqa: F401
     RecipeListItem,  # noqa: F401
     build_ingredient_rows,  # noqa: F401
-    format_ingredients_table,  # noqa: F401 — preserved for tests
+    format_ingredients_table,  # noqa: F401
 )
 from autoskillit.recipe.ingredients._recipe_raw_repair import (
     _resolve_skip_guards_in_content,  # noqa: F401

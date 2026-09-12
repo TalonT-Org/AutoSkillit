@@ -143,13 +143,16 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "src/autoskillit/workspace/session_skill_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         ),
-        ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates"),
-        ("src/autoskillit/workspace/worktree.py", "remove_git_worktree"),
-        ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar"),
+        ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"),
+        ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"),
+        ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar"),
         ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention"),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
-        ("src/autoskillit/workspace/_projection_cache.py", "prune_stale_projections"),
-        ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry"),
+        ("src/autoskillit/workspace/_installed/_projection_cache.py", "prune_stale_projections"),
+        (
+            "src/autoskillit/workspace/_installed/_projection_cache.py",
+            "_reconcile_projection_entry",
+        ),
         (
             "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
             "PluginArtifactRetirementEngine.try_reclaim",
@@ -167,7 +170,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "prune_stale_generations",
         ),
         (
-            "src/autoskillit/workspace/_install_state.py",
+            "src/autoskillit/workspace/_installed/_state.py",
             "_enqueue_legacy_installed_plugin_versions",
         ),
         (
@@ -244,14 +247,17 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
             "DefaultSessionSkillManager.cleanup_stale",
         )
     ),
-    ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates"): _convergence_adapters(
-        ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates")
+    ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"): _convergence_adapters(
+        ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates")
     ),
-    ("src/autoskillit/workspace/worktree.py", "remove_git_worktree"): _convergence_adapters(
-        ("src/autoskillit/workspace/worktree.py", "remove_git_worktree")
+    ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree"): _convergence_adapters(
+        ("src/autoskillit/workspace/clone/_worktree.py", "remove_git_worktree")
     ),
-    ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar"): _convergence_adapters(
-        ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar")
+    (
+        "src/autoskillit/workspace/clone/_worktree.py",
+        "remove_worktree_sidecar",
+    ): _convergence_adapters(
+        ("src/autoskillit/workspace/clone/_worktree.py", "remove_worktree_sidecar")
     ),
     (
         "src/autoskillit/execution/evidence/_session_retention.py",
@@ -263,16 +269,19 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one")
     ),
     (
-        "src/autoskillit/workspace/_projection_cache.py",
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
         "prune_stale_projections",
     ): _convergence_adapters(
-        ("src/autoskillit/workspace/_projection_cache.py", "prune_stale_projections")
+        ("src/autoskillit/workspace/_installed/_projection_cache.py", "prune_stale_projections")
     ),
     (
-        "src/autoskillit/workspace/_projection_cache.py",
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
         "_reconcile_projection_entry",
     ): _convergence_adapters(
-        ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry")
+        (
+            "src/autoskillit/workspace/_installed/_projection_cache.py",
+            "_reconcile_projection_entry",
+        )
     ),
     (
         "src/autoskillit/core/plugins/_plugin_artifact_retirement.py",
@@ -311,11 +320,11 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         )
     ),
     (
-        "src/autoskillit/workspace/_install_state.py",
+        "src/autoskillit/workspace/_installed/_state.py",
         "_enqueue_legacy_installed_plugin_versions",
     ): _convergence_adapters(
         (
-            "src/autoskillit/workspace/_install_state.py",
+            "src/autoskillit/workspace/_installed/_state.py",
             "_enqueue_legacy_installed_plugin_versions",
         )
     ),
@@ -429,7 +438,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "GenerationArtifactRetirementOwner.try_reclaim",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/_projected_artifact/_generation_publication.py",
+        "src/autoskillit/workspace/_projected_artifact/_generation_prune.py",
         "_reconcile_generation_candidate",
     ): _DELEGATED_MUTATION_REASON,
     (
@@ -441,14 +450,14 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_rollback_repair",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/_projection_cache.py",
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
         "ProjectedPluginRetirementOwner.enqueue_retirement",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/_projection_cache.py",
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
         "ProjectedPluginRetirementOwner.try_reclaim",
     ): _DELEGATED_MUTATION_REASON,
-    ("src/autoskillit/workspace/clone.py", "remove_clone"): _DELEGATED_MUTATION_REASON,
+    ("src/autoskillit/workspace/clone/__init__.py", "remove_clone"): _DELEGATED_MUTATION_REASON,
     (
         "src/autoskillit/workspace/session_skill_lifecycle.py",
         "_remove_and_verify",
@@ -474,7 +483,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "main",
     ): _COMMAND_BOUNDARY_REASON,
     (
-        "src/autoskillit/workspace/_install_state.py",
+        "src/autoskillit/workspace/_installed/_state.py",
         "reconcile_install_artifacts",
     ): _COMMAND_BOUNDARY_REASON,
     # Separately bounded lifecycle operations.
@@ -539,12 +548,12 @@ _D = "src/autoskillit/fleet/_dispatch_reaper.py::reap_stale_dispatches"
 _CS = (
     "src/autoskillit/workspace/session_skill_manager.py::DefaultSessionSkillManager.cleanup_stale"
 )
-_WGW = "src/autoskillit/workspace/worktree.py::remove_git_worktree"
-_WWS = "src/autoskillit/workspace/worktree.py::remove_worktree_sidecar"
+_WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
+_WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
 _SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
-_PP = "src/autoskillit/workspace/_projection_cache.py::prune_stale_projections"
-_PRE = "src/autoskillit/workspace/_projection_cache.py::_reconcile_projection_entry"
+_PP = "src/autoskillit/workspace/_installed/_projection_cache.py::prune_stale_projections"
+_PRE = "src/autoskillit/workspace/_installed/_projection_cache.py::_reconcile_projection_entry"
 _PC = (
     "src/autoskillit/core/plugins/_plugin_artifact_retirement.py::"
     "PluginArtifactRetirementEngine.try_reclaim"
@@ -556,7 +565,7 @@ _GP = (
     "src/autoskillit/workspace/_projected_artifact/"
     "_generation_publication.py::prune_stale_generations"
 )
-_IL = "src/autoskillit/workspace/_install_state.py::_enqueue_legacy_installed_plugin_versions"
+_IL = "src/autoskillit/workspace/_installed/_state.py::_enqueue_legacy_installed_plugin_versions"
 _HC = (
     "src/autoskillit/workspace/_projected_artifact/"
     "_hook_repair.py::repair_broken_plugin_cache_hooks"
@@ -717,7 +726,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "the entry already vanished -- the mtime re-check under lease is the reclamation-"
         "defining age/liveness re-verification for this candidate.",
     ),
-    # -- workspace.worktree::remove_git_worktree --
+    # -- workspace.clone._worktree::remove_git_worktree --
     f"{_WGW}::L168": _self_limiting(
         "The worktree path does not exist on disk at all; nothing here to reclaim."
     ),
@@ -725,7 +734,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "The git worktree remove call already succeeded; this reports a completed removal, "
         "not a retention skip."
     ),
-    # -- workspace.worktree::remove_worktree_sidecar --
+    # -- workspace.clone._worktree::remove_worktree_sidecar --
     f"{_WWS}::L209": _self_limiting(
         "The sidecar directory does not exist on disk at all; nothing here to reclaim or retain."
     ),
@@ -781,7 +790,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "A lifecycle or OSError during the delete attempt is an execution failure, not "
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
-    # -- workspace._projection_cache::prune_stale_projections --
+    # -- workspace._installed._projection_cache::prune_stale_projections --
     f"{_PP}::L801": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
@@ -793,7 +802,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),
-    # -- workspace._projection_cache::_reconcile_projection_entry --
+    # -- workspace._installed._projection_cache::_reconcile_projection_entry --
     f"{_PRE}::L592": _retries_after_input_changes(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
@@ -959,33 +968,33 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "liveness evidence."
     ),
     # -- workspace._projected_artifact._generation_publication::prune_stale_generations --
-    f"{_GP}::L811": _self_limiting(
+    f"{_GP}::L529": _self_limiting(
         "The generation store does not exist, so this invocation has no candidates to prune."
     ),
-    f"{_GP}::L824": _self_limiting(
+    f"{_GP}::L542": _self_limiting(
         "A hidden, symlinked, or non-directory version entry cannot contain a generation "
         "incarnation this reclaimer owns."
     ),
-    f"{_GP}::L832": _self_limiting(
+    f"{_GP}::L550": _self_limiting(
         "An unmanaged hidden entry is outside the deterministic generation-residue "
         "lifecycle namespace."
     ),
-    f"{_GP}::L834": _self_limiting(
+    f"{_GP}::L552": _self_limiting(
         "A symlink or non-directory incarnation cannot be a managed generation retirement "
         "candidate."
     ),
-    f"{_GP}::L836": _self_limiting(
+    f"{_GP}::L554": _self_limiting(
         "The selected generation remains active and is not a stale candidate for this pass."
     ),
-    f"{_GP}::L839": _self_limiting(
+    f"{_GP}::L557": _self_limiting(
         "The generation root or version directory vanished during enumeration, leaving no "
         "stable candidate set for this pass."
     ),
-    f"{_GP}::L842": _self_limiting(
+    f"{_GP}::L560": _self_limiting(
         "Generation enumeration hit an I/O failure, so this fail-open maintenance pass "
         "defers every candidate without making a retention decision."
     ),
-    # -- workspace._install_state::_enqueue_legacy_installed_plugin_versions --
+    # -- workspace._installed._state::_enqueue_legacy_installed_plugin_versions --
     f"{_IL}::L417": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),

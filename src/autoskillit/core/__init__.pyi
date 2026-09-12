@@ -465,6 +465,7 @@ from .types import CAMPAIGN_ID_ENV_VAR as CAMPAIGN_ID_ENV_VAR
 from .types import CANONICAL_LAUNCH_DIGEST_FIELDS as CANONICAL_LAUNCH_DIGEST_FIELDS
 from .types import CAPTURE_VALID_VALUE_TYPES as CAPTURE_VALID_VALUE_TYPES
 from .types import CATEGORY_TAGS as CATEGORY_TAGS
+from .types import CHILD_OUTCOME_LOG_DIR_ENV_VAR as CHILD_OUTCOME_LOG_DIR_ENV_VAR
 from .types import CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION as CLAUDE_ANNOTATION_SUPPORT_MIN_VERSION
 from .types import CLAUDE_CODE_CAPABILITIES as CLAUDE_CODE_CAPABILITIES
 from .types import (
@@ -858,6 +859,7 @@ from .types import CharsToTokensPolicy as CharsToTokensPolicy
 from .types import ChildExecutionIdentity as ChildExecutionIdentity
 from .types import ChildExecutionIdentityDict as ChildExecutionIdentityDict
 from .types import ChildModelPolicySpec as ChildModelPolicySpec
+from .types import ChildOutcomeDict as ChildOutcomeDict
 from .types import ChildSpawnCardinalityError as ChildSpawnCardinalityError
 from .types import ChildSpawnSpec as ChildSpawnSpec
 from .types import CIRunScope as CIRunScope

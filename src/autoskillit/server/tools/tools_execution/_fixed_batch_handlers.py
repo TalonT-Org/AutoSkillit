@@ -267,6 +267,8 @@ class _ManagedLeafLaunchAdapter:
                         key_path="managed_fixed_batch",
                     ),
                     caller_session_id=self.launch.parent_session_id,
+                    child_role=leaf_projection.binding.assignment.role,
+                    child_attribution_skill=self.source_name,
                 )
                 return ManagedLeafLaunchResult(
                     outcome=OUTCOME_SUCCESS if result.success else OUTCOME_FAILURE,

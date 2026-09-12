@@ -65,6 +65,16 @@ from autoskillit.execution.backends import (
 )
 from autoskillit.execution.backends._codex_prelaunch import codex_prelaunch_transaction
 from autoskillit.execution.backends._codex_session_storage import CodexSessionStore
+from autoskillit.execution.child_outcomes import (
+    ManagedAttemptRecorder,
+    collect_child_outcomes,
+    collect_claude_native_children,
+    collect_codex_observed_children,
+    collect_native_children_for_backend,
+    enumerate_claude_subagent_transcripts,
+    normalize_backend_name,
+    reconcile_child_outcome_snapshots,
+)
 from autoskillit.execution.ci import DefaultCIWatcher
 from autoskillit.execution.commands import ClaudeHeadlessCmd
 from autoskillit.execution.db import (
@@ -394,6 +404,15 @@ __all__ = [
     "sync_hooks_to_codex_config",
     "read_rollout_thread_id",
     "resolve_unique_codex_host_correlation",
+    # child_outcomes
+    "ManagedAttemptRecorder",
+    "collect_child_outcomes",
+    "collect_claude_native_children",
+    "collect_codex_observed_children",
+    "collect_native_children_for_backend",
+    "enumerate_claude_subagent_transcripts",
+    "normalize_backend_name",
+    "reconcile_child_outcome_snapshots",
     # anomaly_detection
     "detect_anomalies",
     "AnomalyKind",

@@ -25,6 +25,7 @@ from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES,
     CAMPAIGN_ID_ENV_VAR,
+    CHILD_OUTCOME_LOG_DIR_ENV_VAR,
     CLAUDE_INJECTED_CLIENT_RESULT_TOKENS,
     CODEX_RESERVED_HOME_ENV_VARS,
     CODEX_STARTUP_TRACE_ENV_VAR,
@@ -190,6 +191,7 @@ class BackendCmdBuilderBase(ABC):
         write_prefixes: tuple[str, ...] = (),
         cwd: str = "",
         scenario_step_name: str = "",
+        child_outcome_log_dir: str = "",
     ) -> dict[str, str]:
         """Assemble the shared env keys consumed by both backends.
 
@@ -198,15 +200,19 @@ class BackendCmdBuilderBase(ABC):
         attestation pair) are layered on by each concrete backend's own builders,
         not by this shared assembly — see ``claude.py``'s ``_claude_host_attestation_env()``.
 
-        Conditional keys (ten): ``AUTOSKILLIT_SESSION_TYPE``,
+        Conditional keys (eleven): ``AUTOSKILLIT_SESSION_TYPE``,
         ``AUTOSKILLIT_APPLICABLE_GUARDS``, ``AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES``,
         ``SCENARIO_STEP_NAME``, ``CAMPAIGN_ID_ENV_VAR``, ``KITCHEN_SESSION_ID_ENV_VAR``,
         ``AUTOSKILLIT_ALLOWED_WRITE_PREFIX``, ``AUTOSKILLIT_ALLOWED_WRITE_PREFIXES``,
-        ``AUTOSKILLIT_CWD``, ``AUTOSKILLIT_STATE_ROOT_ENV_VAR``. Each is included
-        only when its input is non-empty (campaign/kitchen IDs are also read
-        from the ambient ``os.environ``). A non-empty ``cwd`` supplies both the
-        command's project context and the ``AUTOSKILLIT_STATE_ROOT`` signal
-        guards use to locate ``.autoskillit/`` state in worktree topologies.
+        ``AUTOSKILLIT_CWD``, ``AUTOSKILLIT_STATE_ROOT_ENV_VAR``,
+        ``CHILD_OUTCOME_LOG_DIR_ENV_VAR``. Each is included only when its input is
+        non-empty (campaign/kitchen IDs are also read from the ambient
+        ``os.environ``). A non-empty ``cwd`` supplies both the command's project
+        context and the ``AUTOSKILLIT_STATE_ROOT`` signal guards use to locate
+        ``.autoskillit/`` state in worktree topologies. A non-empty
+        ``child_outcome_log_dir`` binds the launched child's own child-terminal-
+        reason snapshot hooks (issue #4623) to the same resolved diagnostic root
+        the launching parent uses.
         """
         extras: dict[str, str] = dict(SHARED_BASELINE_ENV)
         extras["AUTOSKILLIT_HEADLESS"] = "1"
@@ -231,6 +237,8 @@ class BackendCmdBuilderBase(ABC):
         if cwd:
             extras["AUTOSKILLIT_CWD"] = cwd
             extras[AUTOSKILLIT_STATE_ROOT_ENV_VAR] = cwd
+        if child_outcome_log_dir:
+            extras[CHILD_OUTCOME_LOG_DIR_ENV_VAR] = child_outcome_log_dir
         return extras
 
     def _apply_config(self, config: SkillSessionConfig) -> dict[str, Any]:
@@ -254,6 +262,7 @@ class BackendCmdBuilderBase(ABC):
             "stream_idle_timeout_ms": config.stream_idle_timeout_ms,
             "mcp_tool_timeout_sec": config.mcp_tool_timeout_sec,
             "scenario_step_name": config.scenario_step_name,
+            "child_outcome_log_dir": config.child_outcome_log_dir,
             "temp_dir_relpath": config.temp_dir_relpath,
             "allowed_write_prefix": config.allowed_write_prefix,
             "allowed_write_prefixes": config.allowed_write_prefixes,

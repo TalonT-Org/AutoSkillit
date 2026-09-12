@@ -7,6 +7,7 @@ import pytest
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     CAMPAIGN_ID_ENV_VAR,
+    CHILD_OUTCOME_LOG_DIR_ENV_VAR,
     KITCHEN_SESSION_ID_ENV_VAR,
     SkillSessionConfig,
 )
@@ -81,8 +82,9 @@ class TestAssembleSharedEnvExtras:
             write_prefixes=("/tmp/a", "/tmp/b"),
             cwd="/work",
             scenario_step_name="step1",
+            child_outcome_log_dir="/child-root",
         )
-        assert len(result) == 13
+        assert len(result) == 14
         assert result["MAX_MCP_OUTPUT_TOKENS"] == "50000"
         assert result["MCP_CONNECTION_NONBLOCKING"] == "0"
         assert "AUTOSKILLIT_ATTESTED_CLIENT_GATE_TOKENS" not in result
@@ -98,6 +100,7 @@ class TestAssembleSharedEnvExtras:
         assert result["AUTOSKILLIT_CWD"] == "/work"
         assert result[AUTOSKILLIT_STATE_ROOT_ENV_VAR] == "/work"
         assert result["SCENARIO_STEP_NAME"] == "step1"
+        assert result[CHILD_OUTCOME_LOG_DIR_ENV_VAR] == "/child-root"
 
     def test_conditional_keys_absent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(CAMPAIGN_ID_ENV_VAR, raising=False)
@@ -116,6 +119,7 @@ class TestAssembleSharedEnvExtras:
         assert "AUTOSKILLIT_SESSION_TYPE" not in result
         assert "AUTOSKILLIT_APPLICABLE_GUARDS" not in result
         assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" not in result
+        assert CHILD_OUTCOME_LOG_DIR_ENV_VAR not in result
 
 
 class TestApplyConfig:
@@ -124,6 +128,7 @@ class TestApplyConfig:
             completion_marker="%%DONE%%",
             model="sonnet",
             scenario_step_name="s1",
+            child_outcome_log_dir="/diag-root",
             allowed_write_prefix="/tmp",
             allowed_write_prefixes=("/a", "/b"),
             sandbox_mode="read-only",
@@ -132,6 +137,7 @@ class TestApplyConfig:
         assert result["completion_marker"] == "%%DONE%%"
         assert result["model"] == "sonnet"
         assert result["scenario_step_name"] == "s1"
+        assert result["child_outcome_log_dir"] == "/diag-root"
         assert result["allowed_write_prefix"] == "/tmp"
         assert result["allowed_write_prefixes"] == ("/a", "/b")
         assert result["sandbox_mode"] == "read-only"

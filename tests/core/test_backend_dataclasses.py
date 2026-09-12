@@ -552,6 +552,7 @@ def test_skill_session_config_fields_exhaustive():
         "native_shell_capture_decision",
         "managed_lineage_ref",
         "managed_attempt_id",
+        "child_outcome_log_dir",
     }
 
 

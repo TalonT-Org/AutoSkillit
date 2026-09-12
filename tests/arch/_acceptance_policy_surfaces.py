@@ -120,6 +120,25 @@ POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
         issue=4671,
         approved_by="Trecek",
     ),
+    # #4623 threads ManagedAttemptRecorder wiring (Step 5) and child_outcomes
+    # telemetry (Step 6) through _execute_claude_headless. Already trimmed from
+    # 749 to 738 lines via safe extraction (the recorder construction and its
+    # on_spawn/on_session_id_resolved wrappers moved to
+    # headless/_managed/_attempt.py, a sibling module with headroom); the
+    # remainder is per-exception-handler recording call sites and cancellation-
+    # handling closures that read/write this function's own nonlocal state and
+    # cannot be extracted without a materially riskier restructuring of that
+    # control flow. Approved as-is rather than attempted under time pressure;
+    # a further-decomposition follow-up remains open against #4623.
+    PolicyRelaxationApproval(
+        path="tests/arch/test_execution_source_split.py",
+        symbol="HEADLESS_SIZE_BUDGETS",
+        key="headless/_headless_execute.py",
+        before="711",
+        after="738",
+        issue=4623,
+        approved_by="Trecek",
+    ),
 )
 
 POLICY_AUTHORITY_PATHS = (

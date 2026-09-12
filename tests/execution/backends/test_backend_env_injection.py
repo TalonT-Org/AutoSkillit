@@ -9,6 +9,7 @@ import pytest
 from autoskillit.core import (
     AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+    CHILD_OUTCOME_LOG_DIR_ENV_VAR,
     CmdSpec,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
@@ -113,6 +114,67 @@ def test_skill_session_audit_authority_env_contract(
         assert AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR not in non_attested.env
     else:
         assert non_attested.env[AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR] == absent_value
+
+
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        pytest.param(ClaudeCodeBackend, id="claude"),
+        pytest.param(CodexBackend, id="codex"),
+    ],
+)
+def test_skill_session_cmd_injects_child_outcome_log_dir(
+    backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
+) -> None:
+    """The resolved child-terminal-reason snapshot root (issue #4623) reaches the
+
+    launched command's own env only when a non-empty value is supplied — the
+    var is otherwise omitted entirely, mirroring the AUTOSKILLIT_CWD case.
+    """
+    backend = backend_factory()
+
+    carrying = backend.build_skill_session_cmd(
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        child_outcome_log_dir="/diag-root",
+        add_dirs=codex_skill_add_dirs("/clone"),
+    )
+    assert carrying.env[CHILD_OUTCOME_LOG_DIR_ENV_VAR] == "/diag-root"
+
+    omitted = backend.build_skill_session_cmd(
+        "/autoskillit:investigate",
+        "/clone",
+        completion_marker="DONE",
+        add_dirs=codex_skill_add_dirs("/clone"),
+    )
+    assert CHILD_OUTCOME_LOG_DIR_ENV_VAR not in omitted.env
+
+
+@pytest.mark.parametrize(
+    "backend_factory",
+    [
+        pytest.param(ClaudeCodeBackend, id="claude"),
+        pytest.param(CodexBackend, id="codex"),
+    ],
+)
+def test_interactive_cmd_never_carries_child_outcome_log_dir(
+    backend_factory: type[ClaudeCodeBackend] | type[CodexBackend],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An interactive cook launch never inherits AUTOSKILLIT_CHILD_OUTCOME_LOG_DIR.
+
+    Simulates a headless-launched process (which received the var on its own
+    env) spawning an interactive cook session as its own child: the ambient
+    value must be scrubbed, not forwarded — interactive hooks resolve their
+    own operator/default root instead (issue #4623 design decision).
+    """
+    monkeypatch.setenv(CHILD_OUTCOME_LOG_DIR_ENV_VAR, "/leaked-headless-root")
+    backend = backend_factory()
+
+    spec = backend.build_interactive_cmd()
+
+    assert CHILD_OUTCOME_LOG_DIR_ENV_VAR not in spec.env
 
 
 def test_native_otlp_activation_uses_each_backends_supported_launch_contract(

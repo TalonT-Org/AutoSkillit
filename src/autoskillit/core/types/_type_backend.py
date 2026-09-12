@@ -585,6 +585,7 @@ class SkillSessionConfig:
     stream_idle_timeout_ms: int = 0
     mcp_tool_timeout_sec: float = 0.0
     scenario_step_name: str = ""
+    child_outcome_log_dir: str = ""
     temp_dir_relpath: str | None = None
     allowed_write_prefix: str = ""
     allowed_write_prefixes: tuple[str, ...] = ()

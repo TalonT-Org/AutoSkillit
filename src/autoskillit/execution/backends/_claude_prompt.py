@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, NamedTuple
 
 from autoskillit.core import (
+    CHILD_OUTCOME_LOG_DIR_ENV_VAR,
     CODEX_INTAKE_DISCIPLINE_DIGEST,
     CODEX_SCOPE_DISCIPLINE_DIGEST,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
@@ -53,7 +54,14 @@ _CLAUDE_SKILL_SESSION_HARDENING: dict[str, str] = {
 # Keys excluded from the host env when building the interactive base env.
 # Kept separate from _HEADLESS_ENV_HARDENING so that future headless-only
 # additions to that set do not silently change interactive env filtering.
-_INTERACTIVE_ENV_EXCLUSIONS: frozenset[str] = frozenset(_HEADLESS_ENV_HARDENING)
+# CHILD_OUTCOME_LOG_DIR_ENV_VAR is excluded here too: it is injected into
+# every headless launch's own env (issue #4623), and a headless session that
+# spawns an interactive cook session as its own child must not leak that
+# headless-only diagnostic root into it — interactive hooks resolve their own
+# operator/default root instead.
+_INTERACTIVE_ENV_EXCLUSIONS: frozenset[str] = frozenset(_HEADLESS_ENV_HARDENING) | {
+    CHILD_OUTCOME_LOG_DIR_ENV_VAR
+}
 
 _PROTECTED_MANAGED_SESSION_ENV_VARS: frozenset[str] = frozenset(
     {
@@ -101,6 +109,7 @@ _HEADLESS_EXCLUSIVE_VARS: frozenset[str] = frozenset(
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIX",
         "AUTOSKILLIT_ALLOWED_WRITE_PREFIXES",
         "AUTOSKILLIT_CAMPAIGN_ID",
+        CHILD_OUTCOME_LOG_DIR_ENV_VAR,
         FLEET_INSPECTOR_MODEL_ENV_VAR,
         "AUTOSKILLIT_CWD",
         "AUTOSKILLIT_COMPLETION_MARKER",

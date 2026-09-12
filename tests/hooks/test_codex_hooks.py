@@ -122,7 +122,13 @@ class TestGenerateCodexHooksConfig:
         result = generate_codex_hooks_config()
         assert isinstance(result, dict)
         for key in result:
-            assert key in ("PreToolUse", "PostToolUse", "SessionStart")
+            assert key in (
+                "PreToolUse",
+                "PostToolUse",
+                "PostToolUseFailure",
+                "SessionStart",
+                "Stop",
+            )
 
 
 class TestGeneratedHooksTrustBypass:

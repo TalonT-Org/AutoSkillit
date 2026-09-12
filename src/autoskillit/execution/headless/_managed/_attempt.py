@@ -36,7 +36,9 @@ from autoskillit.core import (
     get_logger,
     new_managed_attempt_id,
 )
+from autoskillit.execution.child_outcomes import ManagedAttemptRecorder, normalize_backend_name
 from autoskillit.execution.session import ManagedHeadlessSessionLineageCASMismatch
+from autoskillit.execution.session_log import resolve_log_dir
 
 logger = get_logger(__name__)
 
@@ -496,3 +498,36 @@ def _resolve_idle_output_timeout(override: float | None, configured: float) -> f
         else:
             raw_idle = float(configured)
     return raw_idle if raw_idle > 0.0 else None
+
+
+def build_managed_attempt_wiring(
+    *,
+    child_role: str | None,
+    child_attribution_skill: str,
+    step_backend: CodingAgentBackend,
+    session_id: str | None,
+    diagnostic_log_dir: str,
+    on_spawn: Callable[[int, int], None] | None,
+    on_candidate: Callable[[str], None] | None,
+) -> tuple[ManagedAttemptRecorder, Callable[[int, int], None], Callable[[str], None]]:
+    """Construct the Step-5 (#4623) recorder plus its on_spawn/on_session_id_resolved
+    callback wrappers for one ``_execute_claude_headless`` call.
+
+    A no-op recorder (``log_root=None``) when ``child_role`` is None — ordinary,
+    non-managed sessions leave every managed-attempt recording call a no-op.
+    """
+    recorder = ManagedAttemptRecorder(
+        log_root=resolve_log_dir(diagnostic_log_dir) if child_role is not None else None,
+        backend=normalize_backend_name(step_backend.name) if child_role is not None else "",
+        parent_session_id=session_id or "",
+        role=child_role or "",
+        attribution_skill=child_attribution_skill,
+    )
+
+    def _observe_spawn(pid: int, extra: int) -> None:
+        recorder.on_spawn(pid, extra, downstream=on_spawn)
+
+    def _bind_alias(native_session_id: str) -> None:
+        recorder.bind_launch_alias(native_session_id, downstream=on_candidate)
+
+    return recorder, _observe_spawn, _bind_alias

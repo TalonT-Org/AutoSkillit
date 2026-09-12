@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import fcntl
-import inspect
 import io
 import json
-import re
 import subprocess
 import sys
 import time
@@ -164,33 +162,6 @@ def test_hook_config_is_read_from_state_root_outside_hook_cwd(
     assert settings.disabled is True
 
 
-def test_kitchen_marker_hash_fields_share_one_inert_tracked_annotation() -> None:
-    """Placeholder hashes remain one deliberately tracked compatibility surface."""
-    from autoskillit.hooks.guards.open_kitchen_guard import _write_kitchen_marker
-
-    lines = inspect.getsource(_write_kitchen_marker).splitlines()
-    content_hash_line = next(
-        index for index, line in enumerate(lines) if '"content_hash":' in line
-    )
-    composite_hash_line = next(
-        index for index, line in enumerate(lines) if '"composite_hash":' in line
-    )
-    annotations = [
-        (index, match)
-        for index, line in enumerate(lines)
-        if (match := re.search(r"inert-tracked:#([1-9][0-9]*)", line))
-    ]
-
-    assert len(annotations) == 1
-    annotation_line, _ = annotations[0]
-    assert annotation_line + 1 == content_hash_line
-    assert composite_hash_line == content_hash_line + 1
-    assert "content_hash" in lines[annotation_line]
-    assert "composite_hash" in lines[annotation_line]
-    assert "inert-tracked:" not in lines[content_hash_line]
-    assert "inert-tracked:" not in lines[composite_hash_line]
-
-
 def _run_guard(env_extra: dict, tool_input: dict) -> dict:
     hook_path = pkg_root() / "hooks" / "guards" / "open_kitchen_guard.py"
     stdin_payload = json.dumps({"tool_input": tool_input})
@@ -295,6 +266,7 @@ def test_open_kitchen_guard_writes_marker_on_permit(tmp_path: Path, monkeypatch)
     marker_path = tmp_path / "kitchen_state" / "session-abc.json"
     assert marker_path.exists(), f"Marker not written at {marker_path}"
     data = json.loads(marker_path.read_text())
+    assert set(data) == {"session_id", "opened_at", "recipe_name", "marker_version"}
     assert data["session_id"] == "session-abc"
     assert data["recipe_name"] == "my_recipe"
     assert data["marker_version"] == 1

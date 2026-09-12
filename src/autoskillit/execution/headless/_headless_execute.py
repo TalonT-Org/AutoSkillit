@@ -41,8 +41,10 @@ from autoskillit.core import (
     is_git_main_checkout,
     is_git_worktree,
     is_in_git_repo,
+    new_managed_attempt_id,
 )
 from autoskillit.core import resolve_skill_temp_dir as _resolve_skill_temp_dir
+from autoskillit.execution.child_outcomes import collect_and_project_child_outcomes
 from autoskillit.execution.clone_guard import (
     GUARD_EXCLUDE_PREFIX,
     build_clone_guard_policy,
@@ -153,6 +155,8 @@ async def _execute_claude_headless(
     skill_contract: SkillContract | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
+    child_role: str | None = None,
+    child_attribution_skill: str = "",
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
@@ -300,14 +304,30 @@ async def _execute_claude_headless(
     physical_attempt = 0
     sink_env = dict(sink.env)
     current_provider_extras.update(sink_env)
+    recorder, _observe_managed_spawn, _bind_managed_launch_alias = (
+        _diag.build_managed_attempt_wiring(
+            child_role=child_role,
+            child_attribution_skill=child_attribution_skill,
+            step_backend=_step_backend,
+            session_id=session_id,
+            diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
+            on_spawn=on_spawn,
+            on_candidate=lineage_callbacks.on_candidate,
+        )
+    )
+
     try:
         while True:
+            physical_child_id: str | None = None
             try:
                 managed_attempt_id = (
                     managed_lineage_observer.allocate_attempt()
                     if managed_lineage_observer is not None
                     else None
                 )
+                if child_role is not None:
+                    physical_child_id = managed_attempt_id or new_managed_attempt_id()
+                recorder.start_attempt(physical_child_id)
                 if not launch_logged:
                     _diag.log_launch(managed_lineage_observer)
                     launch_logged = True
@@ -332,14 +352,14 @@ async def _execute_claude_headless(
                     idle_output_timeout=base_effective_idle,
                     max_suppression_seconds=cfg.max_suppression_seconds,
                     child_deferral_ceiling=cfg.completion_child_deferral_ceiling_seconds,
-                    on_spawn=on_spawn,
+                    on_spawn=_observe_managed_spawn,
                     enable_deadline_extension=enable_deadline_extension,
                     max_extension_seconds=max_extension_seconds,
                     ceiling_seconds=ceiling_seconds,
                     systemd_scope_enabled=systemd_scope_enabled,
                     marker_dir=marker_dir,
                     session_id=session_id,
-                    on_session_id_resolved=lineage_callbacks.on_candidate,
+                    on_session_id_resolved=_bind_managed_launch_alias,
                     stream_parser=_stream_parser,
                     backend_resume_session_id=backend_resume_session_id,
                     lifecycle_observation_enabled=lifecycle_observation_enabled,
@@ -359,6 +379,7 @@ async def _execute_claude_headless(
                     skill_command=skill_command,
                     order_id=order_id,
                 )
+                recorder.record_exception_outcome(skill_result, "infrastructure_fault")
                 break
             except Exception as exc:
                 logger.error("headless_runner_crashed", exc_info=True)
@@ -370,11 +391,13 @@ async def _execute_claude_headless(
                     skill_command=skill_command,
                     order_id=order_id,
                 )
+                recorder.record_exception_outcome(skill_result, "crashed")
                 break
             except BaseException as exc:
                 logger.warning("headless_runner_cancelled", exc_info=True)
                 result = None
                 skill_result = SkillResult.cancelled()
+                recorder.record_exception_outcome(skill_result, "cancelled")
                 defer_cancellation(exc)
                 break
             assert _result is not None
@@ -461,6 +484,7 @@ async def _execute_claude_headless(
                     logger.warning("headless_nudge_cancelled", exc_info=True)
                     skill_result = SkillResult.cancelled()
                     result = None
+                    recorder.record_exception_outcome(skill_result, "nudge_cancelled")
                     defer_cancellation(exc)
                     break
                 if nudge_success is not None:
@@ -486,8 +510,12 @@ async def _execute_claude_headless(
                     logger.warning("headless_clone_guard_cancelled", exc_info=True)
                     skill_result = SkillResult.cancelled()
                     result = None
+                    recorder.record_exception_outcome(skill_result, "clone_guard_cancelled")
                     defer_cancellation(exc)
                     break
+
+            # skill_result is final now (post nudge/clone-guard); record before retry decides.
+            recorder.record_outcome(skill_result, "attempt_final")
 
             if (
                 skill_result.retry_reason in {RetryReason.STALE, RetryReason.BUDGET_EXHAUSTED}
@@ -522,6 +550,12 @@ async def _execute_claude_headless(
             terminal_session_id=skill_result.session_id,
             captured_session_id=resolved_session_ids[0],
             model_identity=model_identity,
+        )
+        child_outcomes = collect_and_project_child_outcomes(
+            step_backend=_step_backend,
+            cwd=cwd,
+            evidence_session_id=evidence_session_id,
+            diagnostic_log_dir=ctx.config.linux_tracing.log_dir,
         )
         provider_outcome = ProviderOutcome(
             provider_used=current_provider_name,
@@ -569,6 +603,7 @@ async def _execute_claude_headless(
                 loc_deletions=_metrics.loc_deletions,
                 session_id=evidence_session_id,
                 subagent_model_outcomes=subagent_model_outcomes,
+                child_outcomes=child_outcomes,
                 step_name=step_name,
                 order_id=order_id,
             )
@@ -580,6 +615,7 @@ async def _execute_claude_headless(
                 order_id=order_id,
                 execution_identity=skill_result.execution_identity,
                 subagent_model_outcomes=subagent_model_outcomes,
+                child_outcomes=child_outcomes,
             )
 
         skill_result = dataclasses.replace(

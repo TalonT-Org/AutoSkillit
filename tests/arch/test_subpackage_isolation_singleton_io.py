@@ -114,6 +114,13 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         # _UNCLASSIFIED_EVIDENCE_SOURCES = sorted(...) at import time -- the completeness-
         # vs-enum self-check that every EvidenceSource has a _REVOCABILITY entry (S1-1).
         "_reclamation",  # core/runtime/_reclamation.py
+        # hooks/_child_outcome_snapshot/_snapshot.py: sibling stdlib-only modules resolved
+        # once at import time via importlib.import_module/getattr (issue #4623) rather than
+        # a literal dual `if __package__: from .. import X else: import X` branch.
+        "_snapshot",
+        # hooks/lifecycle/child_outcome_hook.py: same importlib/getattr resolution pattern
+        # for its own sibling snapshot module (issue #4623).
+        "child_outcome_hook",
     }
 )
 

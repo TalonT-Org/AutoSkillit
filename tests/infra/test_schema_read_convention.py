@@ -24,14 +24,26 @@ _SHARED_READ_SIDE_VALIDATORS = {
 }
 
 
-@functools.lru_cache(maxsize=1)
-def _scan_write_versioned_json_callers_cached() -> frozenset[str]:
-    """AST-scan src/autoskillit/ for modules that call write_versioned_json.
+def _call_name(func: ast.expr) -> str | None:
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
 
-    Returns repo-relative module paths (e.g. "src/autoskillit/fleet/campaign_state/state.py").
+
+@functools.lru_cache(maxsize=1)
+def _scan_versioned_json_callers_cached() -> tuple[frozenset[str], frozenset[str]]:
+    """One AST pass over src/autoskillit/: (writer modules, reader modules).
+
+    Writers call ``write_versioned_json``; readers call ``read_versioned_json`` or a registered
+    shared validator. Paths are repo-relative (e.g.
+    "src/autoskillit/fleet/campaign_state/state.py"). Unparseable files are skipped, unlike the
+    arch import guards.
     """
     src_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-    modules: set[str] = set()
+    writers: set[str] = set()
+    readers: set[str] = set()
 
     for py_file in src_root.rglob("*.py"):
         try:
@@ -39,61 +51,32 @@ def _scan_write_versioned_json_callers_cached() -> frozenset[str]:
         except SyntaxError:
             continue
 
+        writes = reads = False
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            func = node.func
-            is_write_versioned_json = (
-                isinstance(func, ast.Name) and func.id == "write_versioned_json"
-            ) or (isinstance(func, ast.Attribute) and func.attr == "write_versioned_json")
-            if is_write_versioned_json:
-                rel = str(py_file.relative_to(src_root.parent.parent))
-                modules.add(rel)
-                break  # one match per module is enough
+            call_name = _call_name(node.func)
+            if call_name == "write_versioned_json":
+                writes = True
+            elif call_name == "read_versioned_json" or call_name in _SHARED_READ_SIDE_VALIDATORS:
+                reads = True
+            if writes and reads:
+                break  # one match per predicate per module is enough
+        rel = str(py_file.relative_to(src_root.parent.parent))
+        if writes:
+            writers.add(rel)
+        if reads:
+            readers.add(rel)
 
-    return frozenset(modules)
+    return frozenset(writers), frozenset(readers)
 
 
 def _scan_write_versioned_json_callers() -> set[str]:
-    return set(_scan_write_versioned_json_callers_cached())
-
-
-@functools.lru_cache(maxsize=1)
-def _scan_read_versioned_json_callers_cached() -> frozenset[str]:
-    """AST-scan for modules that call a direct or shared versioned-JSON validator.
-
-    Returns repo-relative module paths.
-    """
-    src_root = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-    modules: set[str] = set()
-
-    for py_file in src_root.rglob("*.py"):
-        try:
-            tree = ast.parse(py_file.read_text(), filename=str(py_file))
-        except SyntaxError:
-            continue
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            call_name = (
-                func.id
-                if isinstance(func, ast.Name)
-                else func.attr
-                if isinstance(func, ast.Attribute)
-                else None
-            )
-            if call_name == "read_versioned_json" or (call_name in _SHARED_READ_SIDE_VALIDATORS):
-                rel = str(py_file.relative_to(src_root.parent.parent))
-                modules.add(rel)
-                break
-
-    return frozenset(modules)
+    return set(_scan_versioned_json_callers_cached()[0])
 
 
 def _scan_read_versioned_json_callers() -> set[str]:
-    return set(_scan_read_versioned_json_callers_cached())
+    return set(_scan_versioned_json_callers_cached()[1])
 
 
 # Documented exceptions: modules that write versioned JSON but do not read it back.
@@ -190,23 +173,13 @@ class TestSchemaReadConvention:
             )
 
     @pytest.mark.parametrize(
-        ("scanner", "cached_scanner"),
+        "scanner",
         [
-            pytest.param(
-                _scan_write_versioned_json_callers,
-                _scan_write_versioned_json_callers_cached,
-                id="write",
-            ),
-            pytest.param(
-                _scan_read_versioned_json_callers,
-                _scan_read_versioned_json_callers_cached,
-                id="read",
-            ),
+            pytest.param(_scan_write_versioned_json_callers, id="write"),
+            pytest.param(_scan_read_versioned_json_callers, id="read"),
         ],
     )
-    def test_scanner_cache_isolated_from_caller_mutation(
-        self, monkeypatch, scanner, cached_scanner
-    ):
+    def test_scanner_cache_isolated_from_caller_mutation(self, monkeypatch, scanner):
         original_parse = ast.parse
         parse_count = 0
 
@@ -218,18 +191,40 @@ class TestSchemaReadConvention:
         monkeypatch.setattr(ast, "parse", counting_parse)
         first_modules = scanner()
         expected_modules = set(first_modules)
-        midpoint_cache_info = cached_scanner.cache_info()
+        midpoint_cache_info = _scan_versioned_json_callers_cached.cache_info()
         midpoint_parse_count = parse_count
 
         first_modules.add(f"src/autoskillit/sentinel_{scanner.__name__}.py")
         second_modules = scanner()
 
-        final_cache_info = cached_scanner.cache_info()
+        final_cache_info = _scan_versioned_json_callers_cached.cache_info()
         assert second_modules is not first_modules
         assert second_modules == expected_modules
         assert final_cache_info.hits == midpoint_cache_info.hits + 1
         assert final_cache_info.misses == midpoint_cache_info.misses
         assert parse_count == midpoint_parse_count
+
+    def test_writer_and_reader_scans_share_one_cached_pass(self, monkeypatch):
+        original_parse = ast.parse
+        parse_count = 0
+
+        def counting_parse(*args, **kwargs):
+            nonlocal parse_count
+            parse_count += 1
+            return original_parse(*args, **kwargs)
+
+        monkeypatch.setattr(ast, "parse", counting_parse)
+        writers = _scan_write_versioned_json_callers()
+        midpoint_cache_info = _scan_versioned_json_callers_cached.cache_info()
+        midpoint_parse_count = parse_count
+
+        readers = _scan_read_versioned_json_callers()
+
+        final_cache_info = _scan_versioned_json_callers_cached.cache_info()
+        assert final_cache_info.hits == midpoint_cache_info.hits + 1
+        assert final_cache_info.misses == midpoint_cache_info.misses
+        assert parse_count == midpoint_parse_count
+        assert (frozenset(writers), frozenset(readers)) == _scan_versioned_json_callers_cached()
 
     def test_new_write_versioned_json_caller_without_read_side_fails(self, monkeypatch):
         """Meta-test: injecting a fake writer without a reader must cause the ratchet to fail."""

@@ -109,6 +109,7 @@ from autoskillit.execution.headless._managed._food_truck_executor import (
     DefaultHeadlessExecutor,
 )
 from autoskillit.execution.recording import RecordingSubprocessRunner
+from autoskillit.execution.session_log import resolve_log_dir
 
 if TYPE_CHECKING:
     from autoskillit.pipeline.context import ToolContext
@@ -177,6 +178,8 @@ async def run_headless_core(
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
     execution_identity: ExecutionIdentity = ExecutionIdentity(),
     on_launch_resolved: Callable[[ResolvedLaunchContract], None] | None = None,
+    child_role: str | None = None,
+    child_attribution_skill: str = "",
 ) -> SkillResult:
     """Shared headless runner used by run_skill.
 
@@ -400,6 +403,7 @@ async def run_headless_core(
             native_shell_capture_decision=native_shell_capture_decision,
             managed_lineage_ref=managed_lineage_ref,
             force_inactive_agent_teams=(ctx.config.agent_backend.force_inactive_agent_teams),
+            child_outcome_log_dir=str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
         )
 
         logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
@@ -464,6 +468,8 @@ async def run_headless_core(
                 on_session_id_resolved=on_session_id_resolved,
                 skill_contract=skill_contract,
                 managed_lineage_observer=managed_lineage_observer,
+                child_role=child_role,
+                child_attribution_skill=child_attribution_skill,
             )
         except anyio.get_cancelled_exc_class():
             if managed_lineage_observer is not None:

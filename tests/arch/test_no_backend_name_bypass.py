@@ -21,6 +21,11 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         "core/io/version_snapshot.py",
         # FeatureDef.requires_backend_alignment is config-layer; no capabilities at scan time
         "cli/session/_session_launch.py",
+        # The child-outcome snapshot's backend key IS the compared identity, not a
+        # capability of it: normalize_backend_name() bridges AGENT_BACKEND_CLAUDE_CODE's
+        # hyphenated form to the hook layer's underscored "claude_code" convention, and
+        # collect_native_children_for_backend() routes to the matching collector by name.
+        "execution/child_outcomes.py",
     }
 )
 

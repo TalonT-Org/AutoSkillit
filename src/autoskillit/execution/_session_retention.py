@@ -11,10 +11,19 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from autoskillit.core import VANISHED_ERRORS, atomic_write, get_logger, scan_observed
+from autoskillit.core import (
+    VANISHED_ERRORS,
+    atomic_write,
+    fast_dumps,
+    fast_loads,
+    get_logger,
+    scan_observed,
+)
 
 logger = get_logger(__name__)
 
@@ -111,3 +120,22 @@ def apply_session_retention(
             logger.warning("session_retention_delete_failed", path=entry.path, exc_info=True)
             surviving_names.add(entry.name)
     return surviving_names
+
+
+def refresh_summary_child_outcomes(
+    summary_path: Path, child_outcomes: Sequence[Mapping[str, Any]]
+) -> None:
+    """Patch only ``child_outcomes`` into an already-committed summary.json.
+
+    Reused recovery (``reuse_committed_recovery``) skips the full artifact
+    rewrite in ``flush_session_log``, but later, more precise
+    terminal-reason evidence (issue #4623) must still reach the committed
+    summary — every other already-published field is preserved.
+    """
+    try:
+        committed = fast_loads(summary_path.read_text(encoding="utf-8"))
+        if child_outcomes and committed.get("child_outcomes") != child_outcomes:
+            committed["child_outcomes"] = child_outcomes
+            atomic_write(summary_path, fast_dumps(committed, sort_keys=True, indent=True) + "\n")
+    except (OSError, ValueError):
+        logger.warning("summary_child_outcomes_refresh_failed", path=summary_path, exc_info=True)

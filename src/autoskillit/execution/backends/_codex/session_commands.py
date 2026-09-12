@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
-import tomllib
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -15,7 +13,6 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
-    BUNDLED_EXPLORER_ROLES,
     CODEX_INTERACTIVE_REQUIRED_ENV,
     CODEX_RESERVED_HOME_ENV_VARS,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
@@ -47,11 +44,9 @@ from autoskillit.core import (
     SkillExecutionRole,
     SkillSessionConfig,
     ValidatedAddDir,
-    atomic_write,
     extract_skill_name,
     get_logger,
 )
-from autoskillit.execution.backends import _codex_config as _codex_cfg
 from autoskillit.execution.backends._backend_cmd_builder_base import (
     SHARED_BASELINE_ENV,
     BackendCmdBuilderBase,
@@ -69,12 +64,7 @@ from autoskillit.execution.backends._claude_prompt import (
     codex_discipline_suffix,
 )
 from autoskillit.execution.backends._cmd_builder import CmdBuilder
-from autoskillit.execution.backends._codex.explorer_projection import (
-    _canonical_explorer_mcp_transport,
-    _render_parent_explorer_config,
-    _validate_injected_explorer_parent_policy,
-    _validated_explorer_binding_envs,
-)
+from autoskillit.execution.backends._codex.session_setup import setup_codex_session_dir
 from autoskillit.execution.backends._codex_cmd_builders import (
     _IMAGE_GENERATION_DISABLED,
     CodexEnvPolicy,
@@ -86,14 +76,6 @@ from autoskillit.execution.backends._codex_cmd_builders import (
 )
 from autoskillit.execution.backends._codex_config import _format_toml_value
 from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
-from autoskillit.execution.backends._codex_explorer_projection import (
-    _bundled_agent_definitions,
-    _generate_agent_tomls,
-    _preflight_agent_projection,
-    _register_agent_tomls,
-    _render_cli_auth_store,
-    _render_parent_sandbox_config,
-)
 
 logger = get_logger(__name__)
 
@@ -155,6 +137,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         stream_idle_timeout_ms: int = 0,
         project_root: Path | str | None = None,
         scenario_step_name: str = "",
+        child_outcome_log_dir: str = "",
         temp_dir_relpath: str | None = None,
         allowed_write_prefix: str = "",
         allowed_write_prefixes: tuple[str, ...] = (),
@@ -177,6 +160,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             exit_after_stop_delay_ms = cfg["exit_after_stop_delay_ms"]
             stream_idle_timeout_ms = cfg["stream_idle_timeout_ms"]
             scenario_step_name = cfg["scenario_step_name"]
+            child_outcome_log_dir = cfg["child_outcome_log_dir"]
             temp_dir_relpath = cfg["temp_dir_relpath"]
             allowed_write_prefix = cfg["allowed_write_prefix"]
             allowed_write_prefixes = cfg["allowed_write_prefixes"]
@@ -242,6 +226,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             write_prefixes=allowed_write_prefixes,
             cwd=cwd,
             scenario_step_name=scenario_step_name,
+            child_outcome_log_dir=child_outcome_log_dir,
         )
         extras["AUTOSKILLIT_HEADLESS_AUTO_GATE"] = "1"
         extras[AGENT_BACKEND_DYNACONF_ENV_VAR] = AGENT_BACKEND_CODEX
@@ -674,77 +659,11 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
     ) -> frozenset[str]:
         assert self.source_codex_home is not None
-        codex_home_source = self.source_codex_home
-        config_path = session_dir / "config.toml"
-        if not config_path.is_file():
-            raise FileNotFoundError(f"pre-launch Codex config snapshot is missing: {config_path}")
-        definitions = _bundled_agent_definitions() if agent_defs is None else agent_defs
-        explorer_binding_envs = _validated_explorer_binding_envs(definitions, explorer_binding_env)
-        explorer_mcp_transport = (
-            _canonical_explorer_mcp_transport(config_path) if explorer_binding_envs else None
-        )
-        if explorer_binding_envs and parent_sandbox_mode != "read-only":
-            raise ValueError("explorer shared-principal projection requires a read-only parent")
-        policy_definitions = definitions if explorer_binding_envs else agent_defs
-        _validate_injected_explorer_parent_policy(policy_definitions, parent_sandbox_mode)
-        projected_definitions = _preflight_agent_projection(
+        return setup_codex_session_dir(
+            self.source_codex_home,
             session_dir,
-            definitions,
-            exact_definitions=agent_defs is not None,
+            parent_sandbox_mode=parent_sandbox_mode,
+            agent_defs=agent_defs,
+            explorer_binding_env=explorer_binding_env,
+            execution_role=execution_role,
         )
-        rendered_parent_config = _render_parent_sandbox_config(
-            config_path.read_text(encoding="utf-8"),
-            parent_sandbox_mode,
-        )
-        rendered_parent_config = _render_cli_auth_store(
-            rendered_parent_config,
-            execution_role,
-        )
-        if explorer_binding_envs:
-            assert explorer_mcp_transport is not None
-            shared_binding = next(iter(explorer_binding_envs.values()))
-            rendered_parent_config = _render_parent_explorer_config(
-                rendered_parent_config,
-                explorer_mcp_transport=explorer_mcp_transport,
-                explorer_binding_env=shared_binding,
-            )
-        finalized_config = tomllib.loads(rendered_parent_config)
-        if (
-            execution_role is SkillExecutionRole.ORCHESTRATOR
-            and finalized_config.get("cli_auth_credentials_store") != "file"
-        ):
-            raise ValueError("finalized ORCHESTRATOR config lost the file credential store")
-        atomic_write(config_path, rendered_parent_config)
-
-        auth_source = codex_home_source / "auth.json"
-        auth_dest = session_dir / "auth.json"
-        auth_target = auth_source.resolve(strict=False)
-        auth_dest.symlink_to(auth_target)
-        logger.debug(
-            "codex_auth_symlink",
-            src=str(auth_target),
-            dest=str(auth_dest),
-        )
-
-        env_source = codex_home_source / ".env"
-        if env_source.exists():
-            shutil.copy2(env_source, session_dir / ".env")
-
-        toml_definitions = projected_definitions
-        if not explorer_binding_envs and agent_defs is None:
-            toml_definitions = tuple(
-                d for d in projected_definitions if d.name not in BUNDLED_EXPLORER_ROLES
-            )
-        _generate_agent_tomls(
-            session_dir,
-            toml_definitions,
-            explorer_binding_envs=explorer_binding_envs,
-            explorer_mcp_transport=explorer_mcp_transport,
-        )
-        registered = _register_agent_tomls(
-            session_dir,
-            toml_definitions,
-            explorer_binding_envs=explorer_binding_envs,
-        )
-        logger.debug("codex_agents_registered", count=registered)
-        return _codex_cfg.effective_codex_agent_names(session_dir)

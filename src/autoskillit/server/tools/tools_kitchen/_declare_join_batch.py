@@ -203,8 +203,8 @@ def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | 
     if not recorded_session_ids:
         return None
 
-    single_recorded_session = len(recorded_session_ids) == 1 and not truncated
-    status = "wrong_session_id" if single_recorded_session else "ambiguous_session_bindings"
+    unambiguous_single_match = len(recorded_session_ids) == 1 and not truncated
+    status = "wrong_session_id" if unambiguous_single_match else "ambiguous_session_bindings"
     _emit_join_diagnostic(
         {
             "gate": "declare_join_batch",
@@ -212,7 +212,7 @@ def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | 
             "status": status,
         }
     )
-    if single_recorded_session:
+    if unambiguous_single_match:
         recorded_session_id = next(iter(recorded_session_ids))
         return _session_mismatch_error(requested_session_id, recorded_session_id)
     if truncated:

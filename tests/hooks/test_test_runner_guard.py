@@ -13,7 +13,7 @@ from contextlib import redirect_stdout
 import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, NEW_SUBDIR_BASENAMES
-from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 

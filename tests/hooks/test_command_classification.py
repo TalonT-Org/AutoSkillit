@@ -42,7 +42,7 @@ from autoskillit.hooks._runtime._github_mutation_analysis import (
     GitHubMutationStatus,
     analyze_github_mutations,
 )
-from tests.hooks._evaluation_shape_matrix import (
+from tests._evaluation_shape_matrix import (
     DEFERRED_SHAPES,
     EVALUATION_SHAPE_MATRIX,
     wrap_git_op,

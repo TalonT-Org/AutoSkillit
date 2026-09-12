@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 

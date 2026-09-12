@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, RISKY_GIT_OPERATIONS
-from tests.hooks._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX, wrap_git_op
+from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX, wrap_git_op
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 

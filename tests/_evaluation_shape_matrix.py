@@ -4,8 +4,11 @@ Centralizes the delivery shapes a heredoc/herestring/pipe/`-c`/substitution
 payload can take, so the tokenizer-binding tests, the payload-authority
 tests, the blocklist coverage matrix, and each guard's sampling tests all
 draw from one definition instead of hand-rolling their own subset (rectify
-#4941 Part A -- see "How Tests Missed This" § 6). Sibling of
-``_flag_form_matrix.py``; no tests live in this module.
+#4941 Part A -- see "How Tests Missed This" § 6). Lives at the tests/ root
+(alongside other cross-cutting, multi-directory test helpers like
+``_helpers.py``) rather than in tests/hooks/, because it is consumed by
+tests/hooks/, tests/infra/, and tests/arch/ modules -- not scoped to a
+single test directory. No tests live in this module.
 """
 
 from __future__ import annotations

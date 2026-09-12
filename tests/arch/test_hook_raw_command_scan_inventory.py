@@ -29,13 +29,13 @@ from pathlib import Path
 
 import pytest
 
+from tests._evaluation_shape_matrix import DEFERRED_SHAPES
 from tests.arch._deferred_debt import (
     TrackedDeferral,
     assert_deferrals_have_regression_tests,
     assert_not_stale,
     assert_rationale_present,
 )
-from tests.hooks._evaluation_shape_matrix import DEFERRED_SHAPES
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 

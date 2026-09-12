@@ -8,7 +8,7 @@ from enum import StrEnum, auto
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._runtime._command_classification import (
         _GIT_ADD_CONTENT_FLAGS,
         _GIT_DIFF_CONTENT_FLAGS,
         _GIT_DIFF_METADATA_FLAGS,

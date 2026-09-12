@@ -72,6 +72,7 @@ from autoskillit.workspace import (
 from autoskillit.workspace import (
     build_skill_projection_binding as build_skill_projection_binding,
 )
+from autoskillit.workspace import clone_registry as clone_registry
 from autoskillit.workspace import (
     compile_session_skill_catalog as compile_session_skill_catalog,
 )
@@ -81,7 +82,6 @@ from autoskillit.workspace import (
 from autoskillit.workspace import (
     resolve_closure_write_dirs as resolve_closure_write_dirs,
 )
-from autoskillit.workspace.clone import clone_registry as clone_registry
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig

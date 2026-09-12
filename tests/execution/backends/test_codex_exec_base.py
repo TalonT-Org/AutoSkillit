@@ -1,12 +1,8 @@
 """Arch guard: no raw `["codex", "exec", ...]` list literal in CodexBackend.
 
-`_codex_exec_base` (the exec-transport command preamble factory this file
-used to unit-test) was removed when Part D converted every remaining
-exec-transport Codex builder (`build_headless_cmd`, `build_food_truck_cmd`,
-`build_resume_cmd`) to the app-server transport; `build_skill_session_cmd`
-made the same move in Part C. Only `build_interactive_cmd` still speaks
-exec-style argv, and it never used a raw list literal for the `codex exec`
-preamble.
+Every CodexBackend command builder now speaks the app-server transport via
+shared command-builder helpers; this guards against a raw exec-transport
+argv literal creeping back into any of them.
 """
 
 from __future__ import annotations

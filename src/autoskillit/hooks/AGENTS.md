@@ -36,3 +36,19 @@ Codex's `config.toml` hooks are a separate consumer (`execution/backends/_codex_
 with no expansion-token equivalent; its commands always bake a real absolute path via
 `execution.backends._codex_hooks._resolve_codex_hooks_dir()` (retained plugin-cache incarnation when installed,
 else the dev-source checkout).
+
+`_classification/_tokenizer.py` is the sole general parsing authority for command text
+(rectify #4941 Part A): it is the only module that reads a raw command string to derive
+segments, redirect syntax, and stdin literals (heredoc/herestring bodies bound to the
+segment that consumes them, via `StdinLiteral`). Every other scanner in `_classification/`
+and `guards/` must consume `_classification/_interpreters.py`'s
+`evaluated_payloads`/`all_evaluated_segments`/`live_command_text` projection — "what will
+actually execute, and by whom" — rather than re-deriving liveness by scanning the raw
+command itself; `tests/arch/test_hook_raw_command_scan_inventory.py` makes any new raw scan
+under `hooks/` a conscious, reviewed diff. `StdinLiteral` is the second instance of the
+`ArgvToken` "tag once at tokenization, consume tagged provenance downstream" pattern
+(`_tokenizer.py`, commit `6624dda71`, issue #4680): future token-level provenance should
+extend this path rather than add a parallel parser. Part A migrated only
+`git_ops_guard.py`/`_git_command_classification.py` and `_github_mutation_analysis.py` onto
+this authority; the remaining guards' private parsers are temporary, reviewed debt tracked
+in that inventory test until a follow-on part migrates them too.

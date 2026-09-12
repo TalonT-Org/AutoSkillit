@@ -894,7 +894,8 @@ class TestRunHeadlessCore:
         assert result.result == "Task completed."
         assert flushed[-1]["needs_retry"] is False
         assert flushed[-1]["retry_reason"] == "none"
-        assert flushed[-1]["infra_exit_category"] == "completed"
+        assert result.infra.exit_category == "completed"
+        assert flushed[-1]["infra"] is result.infra
         # Assert the runner was called exactly once with a command containing the skill
         assert len(tool_ctx.runner.call_args_list) == 1
         cmd, _cwd, _timeout, _kwargs = tool_ctx.runner.call_args_list[0]
@@ -2805,7 +2806,8 @@ class TestCrashSessionLog:
         assert crash_calls[0]["success"] is False
         assert crash_calls[0]["needs_retry"] is False
         assert crash_calls[0]["retry_reason"] == "none"
-        assert crash_calls[0]["infra_exit_category"] == ""
+        assert skill_result.infra.exit_category == ""
+        assert crash_calls[0]["infra"] is skill_result.infra
 
     @pytest.mark.anyio
     async def test_crash_exception_text_passed_to_flush(self, monkeypatch, tool_ctx, tmp_path):

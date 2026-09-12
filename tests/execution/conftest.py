@@ -20,6 +20,7 @@ from autoskillit.core import (
     BackendCapabilities,
     CmdSpec,
     ExecutionIdentity,
+    FaultDomain,
     InfraExitCategory,
     LaunchPreparation,
     LaunchResolutionRequest,
@@ -457,7 +458,11 @@ def _subagent_assistant_ndjson(
 def _flush(
     tmp_path: Path, *, backend: str = "claude-code", session_locator=None, **overrides
 ) -> None:
-    from autoskillit.core.types._type_results import ModelIdentity, ProviderOutcome
+    from autoskillit.core.types._type_results import (
+        InfraOutcome,
+        ModelIdentity,
+        ProviderOutcome,
+    )
     from autoskillit.core.types._type_results_execution import (
         RecipeIdentity,
         SessionTelemetry,
@@ -473,9 +478,10 @@ def _flush(
         "success": True,
         "needs_retry": False,
         "retry_reason": "none",
-        "infra_exit_category": "completed",
-        "infra_cleanup_incomplete": False,
-        "infra_fault_domain": "unknown",
+        "infra": InfraOutcome(
+            exit_category="completed",
+            fault_domain=FaultDomain.LOGIC,
+        ),
         "api_error_status": None,
         "is_error": False,
         "subtype": "completed",

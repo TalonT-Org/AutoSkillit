@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class TestFlushSignatureGuard:
-    """flush_session_log must not accept bare provider or recipe string kwargs."""
+    """flush_session_log must require typed provider, recipe, and infra inputs."""
 
     def test_no_bare_provider_used_kwarg(self):
         from autoskillit.execution.session_log import flush_session_log
@@ -53,6 +53,23 @@ class TestFlushSignatureGuard:
         sig = inspect.signature(flush_session_log)
         assert "recipe_identity" in sig.parameters
         param = sig.parameters["recipe_identity"]
+        assert param.default is inspect.Parameter.empty
+
+    def test_no_bare_infra_kwargs(self):
+        from autoskillit.execution.session_log import flush_session_log
+
+        sig = inspect.signature(flush_session_log)
+        assert "infra_exit_category" not in sig.parameters
+        assert "infra_cleanup_incomplete" not in sig.parameters
+        assert "infra_fault_domain" not in sig.parameters
+
+    def test_infra_is_required_keyword_only_parameter(self):
+        from autoskillit.execution.session_log import flush_session_log
+
+        sig = inspect.signature(flush_session_log)
+        assert "infra" in sig.parameters
+        param = sig.parameters["infra"]
+        assert param.kind is inspect.Parameter.KEYWORD_ONLY
         assert param.default is inspect.Parameter.empty
 
 

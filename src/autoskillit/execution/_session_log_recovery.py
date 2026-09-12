@@ -9,7 +9,9 @@ from pathlib import Path
 
 from autoskillit.core import (
     CampaignProtector,
+    FaultDomain,
     InfraExitCategory,
+    InfraOutcome,
     RetryReason,
     get_logger,
     is_pid_zombie,
@@ -165,15 +167,11 @@ def recover_crashed_sessions(
                 success=False,
                 needs_retry=False,
                 retry_reason=RetryReason.NONE.value,
-                infra_exit_category=InfraExitCategory.UNCLASSIFIED.value,
-                infra_cleanup_incomplete=False,
-                # FaultDomain has no UNKNOWN/UNCLASSIFIED member (only LOGIC and
-                # INFRASTRUCTURE) -- "unknown" is the established crash-recovery
-                # sentinel for a never-classified session (matches
-                # tests/execution/conftest.py's _flush() default). Do not
-                # "fix" this into FaultDomain.LOGIC.value: that would mislabel
-                # a crashed, never-classified session as a logic-domain failure.
-                infra_fault_domain="unknown",
+                infra=InfraOutcome(
+                    exit_category=InfraExitCategory.UNCLASSIFIED.value,
+                    cleanup_incomplete=False,
+                    fault_domain=FaultDomain.INFRASTRUCTURE,
+                ),
                 api_error_status=None,
                 is_error=True,
                 subtype="crashed",

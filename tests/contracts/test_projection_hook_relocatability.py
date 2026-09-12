@@ -42,7 +42,12 @@ class TestProjectedHooksAreRelocatable:
 
         # Build a fake source root from the real one
         fake_source = tmp_path / "fake-pkg"
-        shutil.copytree(pkg_root(), fake_source, symlinks=False)
+        shutil.copytree(
+            pkg_root(),
+            fake_source,
+            symlinks=False,
+            ignore=shutil.ignore_patterns("__pycache__", "*.py[co]"),
+        )
         monkeypatch.setattr(_paths, "pkg_root", lambda: fake_source)
 
         # Plant the incident's stale shape: valid structure, current hash,

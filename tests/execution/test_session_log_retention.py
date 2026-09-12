@@ -113,6 +113,16 @@ def test_recover_crashed_sessions_finalizes_orphaned_file(tmp_path):
     summary = json.loads((sessions[0] / "summary.json").read_text())
     assert summary["termination_reason"] == "CRASHED"
     assert summary["success"] is False
+    assert summary["infra_exit_category"] == "unclassified"
+    assert summary["infra_cleanup_incomplete"] is False
+    assert summary["infra_fault_domain"] == "infrastructure"
+
+    index_rows = (tmp_path / "logs" / "sessions.jsonl").read_text().splitlines()
+    assert len(index_rows) == 1
+    index = json.loads(index_rows[0])
+    assert index["infra_exit_category"] == "unclassified"
+    assert index["infra_cleanup_incomplete"] is False
+    assert index["infra_fault_domain"] == "infrastructure"
 
 
 def test_recovery_replay_upserts_without_rewriting_committed_directory(

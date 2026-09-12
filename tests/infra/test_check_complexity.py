@@ -418,8 +418,8 @@ def test_report_fail_mode_banner():
     assert report.startswith("Cyclomatic complexity check FAILED.")
 
 
-def _sample_violation():
-    return check.Violation(
+def test_annotations_emitted_only_under_github_actions(monkeypatch):
+    violation = check.Violation(
         key="src/x.py::f",
         path="src/x.py",
         qualname="f",
@@ -431,10 +431,6 @@ def _sample_violation():
         base_path=None,
         exemption=None,
     )
-
-
-def test_annotations_emitted_only_under_github_actions(monkeypatch):
-    violation = _sample_violation()
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     warn_lines = check.render_annotations([violation], "warn", 10)
     assert len(warn_lines) == 1

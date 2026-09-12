@@ -1,4 +1,4 @@
-"""Structural guard: git network commands in clone.py must have timeouts."""
+"""Structural guard: git network commands in clone/__init__.py must have timeouts."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ _GIT_NETWORK_SUBCOMMANDS = {"push", "clone", "fetch", "pull", "ls-remote"}
 
 def test_git_network_commands_have_timeout() -> None:
     """All subprocess.run() calls with git network commands must have timeout=."""
-    src = (Path(__file__).parent.parent.parent / "src/autoskillit/workspace/clone.py").read_text()
+    src = (
+        Path(__file__).parent.parent.parent / "src/autoskillit/workspace/clone/__init__.py"
+    ).read_text()
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if not (

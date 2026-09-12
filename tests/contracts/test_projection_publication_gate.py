@@ -27,7 +27,7 @@ def _plant_stale_projection(
     home: Path,
     semantic_key: str,
 ) -> tuple[Path, Path, Path, Path, Path]:
-    from autoskillit.workspace._projection_cache import (
+    from autoskillit.workspace._installed._projection_cache import (
         projected_artifact_lease_path,
         projected_artifact_manifest_path,
         projected_plugin_artifact_digest,
@@ -330,7 +330,7 @@ class TestPublicationGateIntegration:
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.hook_registry import PLUGIN_ROOT_TOKEN
         from autoskillit.workspace import project_default_plugin_authority
-        from autoskillit.workspace._projection_cache import (
+        from autoskillit.workspace._installed._projection_cache import (
             projected_artifact_manifest_path,
             projected_plugin_artifact_digest,
         )
@@ -437,11 +437,13 @@ class TestProjectionRepair:
     def test_startup_repair_heals_a_stale_projection(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        from autoskillit.workspace._installed._projection_cache import (
+            projected_plugin_artifact_digest,
+        )
         from autoskillit.workspace._projected_artifact._hook_repair import (
             PluginHookRepairStatus,
             repair_broken_projection_hooks,
         )
-        from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         projections_root, projection, hooks_path, manifest_path, _ = _plant_stale_projection(
@@ -469,7 +471,7 @@ class TestProjectionRepair:
         """T-B2 independence: repair runs even when the plugin cache is healthy
         and no obligation is pending."""
         from autoskillit.server.lifecycle._lifespan import run_startup_hook_health_check
-        from autoskillit.workspace._projection_cache import (
+        from autoskillit.workspace._installed._projection_cache import (
             projected_artifact_lease_path,
             projected_artifact_manifest_path,
             projected_plugin_artifact_digest,

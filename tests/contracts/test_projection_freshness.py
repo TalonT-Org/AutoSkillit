@@ -320,7 +320,7 @@ class TestBytecodeExclusion:
     """The copier and the digest vocabulary must never disagree about bytecode.
 
     ``is_projected_asset`` excludes ``__pycache__`` directories and
-    ``.pyc``/``.pyo`` files at every depth — see ``_projection_cache.py``.
+    ``.pyc``/``.pyo`` files at every depth — see ``_installed/_projection_cache.py``.
     These tests exercise that exclusion at the call sites that actually
     matter: the file copier (``_copy_non_skill_plugin_assets``, which writes
     what a session executes), the digest vocabulary walk
@@ -349,10 +349,10 @@ class TestBytecodeExclusion:
         (source / "scripts" / "__pycache__" / "module.cpython-311.pyc").write_bytes(b"fake pyc")
 
     def test_copier_excludes_bytecode_at_every_depth(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._installed._projection_cache import is_projected_asset
         from autoskillit.workspace._projected_artifact.materialization import (
             _copy_non_skill_plugin_assets,
         )
-        from autoskillit.workspace._projection_cache import is_projected_asset
 
         source = tmp_path / "source"
         source.mkdir()
@@ -392,10 +392,12 @@ class TestBytecodeExclusion:
         agree on the exact file set when bytecode is present in the source.
         """
 
+        from autoskillit.workspace._installed._projection_cache import (
+            iter_public_plugin_asset_files,
+        )
         from autoskillit.workspace._projected_artifact.materialization import (
             _copy_non_skill_plugin_assets,
         )
-        from autoskillit.workspace._projection_cache import iter_public_plugin_asset_files
 
         source = tmp_path / "source"
         source.mkdir()
@@ -444,7 +446,9 @@ class TestBytecodeExclusion:
 
     def test_iter_walk_excludes_bytecode_directly(self, tmp_path: Path) -> None:
         """Direct membership check, independent of the copier comparison above."""
-        from autoskillit.workspace._projection_cache import iter_public_plugin_asset_files
+        from autoskillit.workspace._installed._projection_cache import (
+            iter_public_plugin_asset_files,
+        )
 
         source = tmp_path / "source"
         source.mkdir()

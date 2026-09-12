@@ -44,7 +44,7 @@ from autoskillit.core._plugin_ids import (
 )
 from autoskillit.execution.backends import ClaudeCodeBackend, CodexBackend
 from autoskillit.workspace import DefaultSkillResolver, compile_session_skill_catalog
-from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
+from autoskillit.workspace._installed._projection_cache import projected_plugin_artifact_digest
 from tests.cli._interactive_process import InteractiveProcessStub
 from tests.fakes import adapt_test_skill_semantics
 from tests.fixtures.plugin_artifact_state import (

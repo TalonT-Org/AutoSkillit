@@ -270,7 +270,7 @@ def test_all_refused_projection_preserves_previous_publication_and_names_details
         SkillSemanticAdaptationResult,
         SkillSemanticOperation,
     )
-    from autoskillit.workspace._projection_cache import projected_plugin_artifact_digest
+    from autoskillit.workspace._installed._projection_cache import projected_plugin_artifact_digest
     from tests.fakes import adapt_test_skill_semantics
 
     catalog, plans = _semantic_catalog(
@@ -545,7 +545,7 @@ def test_projection_reclaim_preserves_outcome_when_writer_close_fails(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    from autoskillit.workspace._projection_cache import projected_artifact_lease_path
+    from autoskillit.workspace._installed._projection_cache import projected_artifact_lease_path
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     binding = _authority(tmp_path).acquire_launch_binding(
@@ -589,7 +589,7 @@ def test_projection_prune_allows_terminal_reconciliation_when_writer_close_fails
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    from autoskillit.workspace._projection_cache import projected_artifact_lease_path
+    from autoskillit.workspace._installed._projection_cache import projected_artifact_lease_path
 
     projections_root = tmp_path / "projections"
     stale = projections_root / ("a" * 24)
@@ -663,7 +663,7 @@ def test_transient_projection_io_does_not_trigger_destructive_repair(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import autoskillit.workspace._projection_cache as projection_cache
+    import autoskillit.workspace._installed._projection_cache as projection_cache
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     authority = _authority(tmp_path)

@@ -57,7 +57,7 @@ def _publish_cache_incarnation(
     metadata.parent.mkdir(parents=True)
     metadata.write_text(json.dumps({"name": "autoskillit", "version": version}))
     from autoskillit.core import ArtifactLease, installed_plugin_artifact_lease_path
-    from autoskillit.workspace._installed_artifact import (
+    from autoskillit.workspace._installed._artifact import (
         write_installed_plugin_artifact_manifest_locked,
     )
 
@@ -161,7 +161,7 @@ def test_malformed_persisted_obligation_degrades_to_pending_unknown(
 
 def test_dangling_obligation_symlink_degrades_to_pending_unknown(tmp_path: Path) -> None:
     from autoskillit.workspace import PublicationObligation, read_obligation
-    from autoskillit.workspace._update_obligation import _obligation_path
+    from autoskillit.workspace._installed._update_obligation import _obligation_path
 
     path = _obligation_path(tmp_path)
     path.parent.mkdir(parents=True)
@@ -596,7 +596,7 @@ def test_missing_dispatcher_rolls_back_failed_repair(tmp_path: Path) -> None:
         installed_plugin_artifact_manifest_path,
         installed_plugin_semantic_key,
     )
-    from autoskillit.workspace._installed_artifact import (
+    from autoskillit.workspace._installed._artifact import (
         write_installed_plugin_artifact_manifest_locked,
     )
     from autoskillit.workspace._projected_artifact._hook_repair import (

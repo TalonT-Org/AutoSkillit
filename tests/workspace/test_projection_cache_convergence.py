@@ -14,8 +14,8 @@ from unittest.mock import Mock
 import pytest
 from structlog.testing import capture_logs
 
+import autoskillit.workspace._installed._projection_cache as projection_cache
 import autoskillit.workspace._projected_artifact._artifact_residue as artifact_residue
-import autoskillit.workspace._projection_cache as projection_cache
 from autoskillit.core import (
     ArtifactLease,
     ArtifactLeaseContention,
@@ -457,7 +457,7 @@ def test_invalid_projection_classes_converge_after_one_prune(
     root = home.autoskillit_dir / "plugin-projections"
     candidate, manifest = _seed_invalid_projection(root, failure_class)
     target = (
-        "src/autoskillit/workspace/_projection_cache.py",
+        "src/autoskillit/workspace/_installed/_projection_cache.py",
         "prune_stale_projections",
     )
     run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]

@@ -142,6 +142,8 @@ def _exemption_value(node: ast.expr, context: str) -> SurfaceValue:
             limit = _int_constant(keyword.value, context)
         elif keyword.arg == "predicate":
             predicate_source = ast.unparse(keyword.value)
+        else:
+            raise UnsupportedSurfaceShape(f"{context}: unexpected exemption argument")
     if limit is None:
         raise UnsupportedSurfaceShape(f"{context}: exemption has no literal limit")
     return SurfaceValue(limit=limit, predicate_source=predicate_source)

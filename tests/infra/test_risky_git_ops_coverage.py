@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import importlib.util
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -20,14 +19,11 @@ from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX, wrap_git_op
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _GUARDS_DIR = Path(__file__).parent.parent.parent / "src" / "autoskillit" / "hooks" / "guards"
-# Mirror the standalone hook process import mode (see test_git_ops_guard.py):
 # _git_command_classification.py uses bare-name imports (`from
 # _command_classification import ...`) that resolve only when the hooks
-# directory is on sys.path. The orchestrator bootstraps this in production;
-# the test must do it explicitly.
-_HOOKS_SRC = str(Path(__file__).parent.parent.parent / "src" / "autoskillit" / "hooks")
-if _HOOKS_SRC not in sys.path:
-    sys.path.insert(0, _HOOKS_SRC)
+# directory is on sys.path; the sys.path bootstrap for this is centralized
+# in tests/conftest.py (it must run before collection, which a fixture
+# cannot do).
 
 
 def _command_inspecting_guard_scripts() -> list[tuple[str, Path]]:

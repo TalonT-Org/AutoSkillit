@@ -3,6 +3,7 @@
 import functools
 import os
 import shutil
+import sys
 from collections.abc import Mapping
 from pathlib import Path as _Path
 from types import MappingProxyType
@@ -29,6 +30,23 @@ from autoskillit.core.types import (
 )
 from tests._helpers import _collect_structlog_proxies, _flush_structlog_proxy_caches
 from tests.arch._policy_gate_plumbing import TEST_BASE_KEY, BaseRefContext
+
+# Mirror the standalone hook process import mode: guards' sibling modules
+# (e.g. _git_command_classification.py) use bare-name imports that resolve
+# only when src/autoskillit/hooks is on sys.path; the orchestrator bootstraps
+# this in production. Centralized here as module-level code -- not a fixture
+# -- because it must run before the affected test modules' own top-level
+# imports are collected; a fixture executes too late (at test-call time,
+# after collection/import already completed). Also adds hooks/_runtime/
+# itself: post-decompose (#4947), the bare-name sibling modules these
+# imports resolve (_command_classification, _github_mutation_analysis,
+# _hook_payload) live under _runtime/, not directly under hooks/.
+_HOOKS_SRC = str(_Path(__file__).resolve().parent.parent / "src" / "autoskillit" / "hooks")
+if _HOOKS_SRC not in sys.path:
+    sys.path.insert(0, _HOOKS_SRC)
+_HOOKS_RUNTIME_SRC = str(_Path(_HOOKS_SRC) / "_runtime")
+if _HOOKS_RUNTIME_SRC not in sys.path:
+    sys.path.insert(0, _HOOKS_RUNTIME_SRC)
 
 _AMBIENT_ENV_AT_STARTUP: Mapping[str, str] = MappingProxyType(dict(os.environ))
 

@@ -17,7 +17,7 @@ from `_command_classification` (the tokenization/classification primitives
 `live_command_text`, and the structural type `_FlagArity`) and one symbol
 from `_github_mutation_analysis` (`_DYNAMIC_SHELL_TOKEN_RE`). Both are
 bare-name flat-mode siblings resolved via `git_ops_guard.py`'s `sys.path`
-bootstrap (or the test-side bootstrap in `tests/infra/test_git_ops_guard.py`).
+bootstrap (or the test-side bootstrap centralized in `tests/conftest.py`).
 It does NOT re-export any `_command_classification` symbol.
 
 `_contains_blocked_git_op` reads the command exclusively through

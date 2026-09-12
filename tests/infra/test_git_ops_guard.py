@@ -20,14 +20,10 @@ from pathlib import Path
 
 import pytest
 
-# Mirror the standalone hook process import mode: the new sibling module
-# uses bare-name imports (_github_mutation_analysis, _command_classification)
-# that resolve only when the hooks directory is on sys.path. The orchestrator
-# bootstraps this in production; the test must do it explicitly.
-_HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks")
-if _HOOKS_SRC not in sys.path:
-    sys.path.insert(0, _HOOKS_SRC)
-
+# The sys.path bootstrap needed for _git_command_classification.py's own
+# internal bare-name sibling imports (_github_mutation_analysis,
+# _command_classification) is centralized in tests/conftest.py -- it must
+# run before this module's own top-level imports, which a fixture cannot do.
 from autoskillit.hooks._runtime._command_classification import _FlagArity  # noqa: E402
 from autoskillit.hooks.guards._git_command_classification import (  # noqa: E402
     _GIT_FETCH_FLAG_SPEC,

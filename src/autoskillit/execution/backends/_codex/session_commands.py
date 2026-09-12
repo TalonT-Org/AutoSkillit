@@ -6,6 +6,7 @@ import os
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import cast
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -676,7 +677,7 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
             self.capabilities.hook_trust_policy, automated_session=True
         )
         if managed_skill_catalog is not None:
-            assert session_home is not None
+            session_home = cast(str, session_home)
             catalog_root = str(Path(session_home) / CODEX_SKILL_DISCOVERY_CONTRACT.catalog_relpath)
             expected_entries = managed_skill_catalog.skill_entries
         else:

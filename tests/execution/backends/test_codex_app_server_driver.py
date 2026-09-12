@@ -73,8 +73,11 @@ def _skills_list_result(
     default_skills = [
         {"name": "foo", "path": f"{_CATALOG_ROOT}/foo/SKILL.md", "enabled": True},
     ]
+    # "data" is the real wire key (confirmed live against codex-cli 0.153.4's
+    # app-server) -- see TestSkillsList.test_results_keyed_response_is_not_accepted
+    # for the regression proving the driver does not also accept "results".
     return {
-        "results": [
+        "data": [
             {
                 "cwd": cwd,
                 "skills": default_skills if skills is None else skills,
@@ -270,6 +273,31 @@ class TestSkillsList:
         )
         assert driver.failure is not None
         assert "disabled" in driver.failure
+
+    def test_results_keyed_response_is_not_accepted(self) -> None:
+        """ "data" is the only real wire key for skills/list's per-cwd
+        entries (confirmed live against codex-cli 0.153.4's app-server) --
+        a response shaped with the old assumed "results" key instead must
+        not be silently treated as an equivalent substitute. It is read as
+        carrying zero entries and fails the same way any other response
+        missing the cwd would."""
+        driver = CodexAppServerDriver(_make_plan())
+        driver.on_line(_response(1, result=_initialize_result()))
+        driver.on_line(_response(2, result={}))
+        legacy_shaped_result = {
+            "results": [
+                {
+                    "cwd": _CWD,
+                    "skills": [
+                        {"name": "foo", "path": f"{_CATALOG_ROOT}/foo/SKILL.md", "enabled": True}
+                    ],
+                    "errors": [],
+                }
+            ]
+        }
+        driver.on_line(_response(3, result=legacy_shaped_result))
+        assert driver.failure is not None
+        assert _CWD in driver.failure
 
 
 class TestThreadAndTurn:

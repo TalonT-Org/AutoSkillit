@@ -394,12 +394,10 @@ class _RegisteredRootsProbeDriver:
         )
 
     def _extract_rows(self, result: Mapping[str, object]) -> dict[str, str | None] | None:
-        # NOTE: the real app-server (codex-cli 0.153.4) nests skills/list's
-        # per-cwd entries under "data", not "results" -- confirmed live
-        # against the installed binary. CodexAppServerDriver reads
-        # "results" (see app_server.py's _accept_skills_list), which is a
-        # pre-existing production bug outside this test-only task's scope;
-        # flagged for the owning stream rather than fixed here.
+        # The real app-server (codex-cli 0.153.4) nests skills/list's
+        # per-cwd entries under "data" -- confirmed live against the
+        # installed binary; matches CodexAppServerDriver's own
+        # _accept_skills_list (app_server.py).
         entries = result.get("data") or []
         for entry in entries:
             if isinstance(entry, dict) and entry.get("cwd") == self.cwd:

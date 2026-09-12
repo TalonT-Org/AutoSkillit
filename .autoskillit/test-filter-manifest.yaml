@@ -306,6 +306,9 @@ scripts/check_tool_annotations.py:
   - arch/
 scripts/check_policy_relaxation.py:
   - arch/test_acceptance_policy_relaxation_gate.py
+scripts/check_complexity.py:
+  - infra/
+  - arch/
 scripts/check_launch_path_totality.py:
   - arch/
 scripts/check_persisted_enum_decoding.py:

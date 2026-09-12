@@ -307,12 +307,38 @@ jobs:
             echo "::error::base revision ${base} is not reachable in this checkout (fetch-depth must stay 0)"
             exit 1
           }
+          git merge-base --is-ancestor "${base}" HEAD || {
+            echo "::error::preflight base revision ${base} must be an ancestor of HEAD"
+            exit 1
+          }
           if git cat-file -e "${base}:scripts/check_policy_relaxation.py" 2>/dev/null; then
             git show "${base}:scripts/check_policy_relaxation.py" > "${RUNNER_TEMP}/check_policy_relaxation.py"
             uv run python "${RUNNER_TEMP}/check_policy_relaxation.py" --base "${base}" --repo-root "${GITHUB_WORKSPACE}"
           else
             echo "::notice::checker absent at ${base} (bootstrap); running the working-tree copy"
             uv run python scripts/check_policy_relaxation.py --base "${base}"
+          fi
+
+      - name: Cyclomatic complexity gate
+        if: matrix.shard == 'general' && (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        env:
+          BASE_REVISION: ${{ needs.preflight.outputs.test-base-revision }}
+        run: |
+          base="${BASE_REVISION:?preflight must emit test-base-revision for PR and merge-group events}"
+          git cat-file -e "${base}^{commit}" || {
+            echo "::error::base revision ${base} is not reachable in this checkout (fetch-depth must stay 0)"
+            exit 1
+          }
+          git merge-base --is-ancestor "${base}" HEAD || {
+            echo "::error::preflight base revision ${base} must be an ancestor of HEAD"
+            exit 1
+          }
+          if git cat-file -e "${base}:scripts/check_complexity.py" 2>/dev/null; then
+            git show "${base}:scripts/check_complexity.py" > "${RUNNER_TEMP}/check_complexity.py"
+            uv run python "${RUNNER_TEMP}/check_complexity.py" --base "${base}" --repo-root "${GITHUB_WORKSPACE}"
+          else
+            echo "::notice::checker absent at ${base} (bootstrap); running the working-tree copy"
+            uv run python scripts/check_complexity.py --base "${base}"
           fi
 
       - name: Upload filter stats

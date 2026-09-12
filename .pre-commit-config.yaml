@@ -109,6 +109,15 @@ repos:
         files: ^src/autoskillit/.*\.py$
         pass_filenames: false
 
+      - id: check-complexity
+        name: Check cyclomatic complexity ratchet (staged vs HEAD)
+        language: system
+        entry: python scripts/check_complexity.py --staged
+        files: ^(src|tests|scripts)/.*\.py$
+        pass_filenames: false
+        verbose: true
+        always_run: true
+
       - id: check-policy-relaxation
         name: Check acceptance-policy relaxation (staged vs HEAD)
         language: system

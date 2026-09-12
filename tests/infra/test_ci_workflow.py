@@ -560,6 +560,50 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     assert "GITHUB_EVENT_PATH:" not in workflow_source
 
 
+def test_complexity_gate_step_runs_base_copy_on_general_shard() -> None:
+    workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
+    test_job_steps = workflow["jobs"]["test"]["steps"]
+    complexity_steps = [
+        step for step in test_job_steps if step.get("name") == "Cyclomatic complexity gate"
+    ]
+    assert len(complexity_steps) == 1
+    step = complexity_steps[0]
+    assert step["if"] == (
+        "matrix.shard == 'general' && "
+        "(github.event_name == 'pull_request' || github.event_name == 'merge_group')"
+    )
+    assert step["env"] == {"BASE_REVISION": "${{ needs.preflight.outputs.test-base-revision }}"}
+
+    run = step["run"]
+    cat_file_index = run.index('git cat-file -e "${base}^{commit}"')
+    ancestor_index = run.index('git merge-base --is-ancestor "${base}" HEAD')
+    bootstrap_guard_index = run.index('git cat-file -e "${base}:scripts/check_complexity.py"')
+    # Guard-before-execution order: both reachability guards must precede the
+    # bootstrap-branching logic entirely, not merely appear somewhere in the script.
+    assert cat_file_index < ancestor_index < bootstrap_guard_index
+
+    # The base-copy and bootstrap invocations must live inside their own branch of the
+    # if/else -- not just appear anywhere in the script -- so split on the real keywords.
+    branch_source = run[bootstrap_guard_index:]
+    if_branch, _, remainder = branch_source.partition("else")
+    else_branch, _, _ = remainder.partition("fi")
+
+    assert 'git show "${base}:scripts/check_complexity.py"' in if_branch
+    assert (
+        'uv run python "${RUNNER_TEMP}/check_complexity.py" --base "${base}" '
+        '--repo-root "${GITHUB_WORKSPACE}"'
+    ) in if_branch
+    assert "--repo-root" not in else_branch
+    assert 'uv run python scripts/check_complexity.py --base "${base}"' in else_branch
+
+    relaxation_index = next(
+        index
+        for index, candidate in enumerate(test_job_steps)
+        if candidate.get("name") == "Policy relaxation gate"
+    )
+    assert test_job_steps.index(step) == relaxation_index + 1
+
+
 def test_workflow_uses_one_explicit_uv_cache_writer() -> None:
     workflow = load_yaml(_repo_root() / ".github" / "workflows" / "tests.yml")
     triggers = workflow.get("on", workflow.get(True))

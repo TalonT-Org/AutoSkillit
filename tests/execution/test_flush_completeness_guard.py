@@ -56,7 +56,7 @@ class TestFlushSignatureGuard:
         assert param.default is inspect.Parameter.empty
 
     def test_no_bare_infra_kwargs(self):
-        from autoskillit.execution.session_log import flush_session_log
+        from autoskillit.execution.evidence.session_log import flush_session_log
 
         sig = inspect.signature(flush_session_log)
         assert "infra_exit_category" not in sig.parameters
@@ -64,7 +64,7 @@ class TestFlushSignatureGuard:
         assert "infra_fault_domain" not in sig.parameters
 
     def test_infra_is_required_keyword_only_parameter(self):
-        from autoskillit.execution.session_log import flush_session_log
+        from autoskillit.execution.evidence.session_log import flush_session_log
 
         sig = inspect.signature(flush_session_log)
         assert "infra" in sig.parameters

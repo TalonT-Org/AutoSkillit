@@ -259,7 +259,7 @@ def _stmt_complexity(stmt: ast.stmt) -> int:
     if isinstance(stmt, ast.Match):
         return _match_complexity(stmt)
     if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        return 1 + _body_complexity(stmt.body)
+        return cyclomatic_complexity(stmt)
     if isinstance(stmt, ast.ClassDef):
         return _body_complexity(stmt.body)
     return 0

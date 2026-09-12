@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce REQ-CNST-010's diff-scoped 750-line hard cap.
+"""Enforce REQ-CNST-010's diff-scoped 750-non-import-line hard cap.
 
 Every non-test file under src/autoskillit/ must be <=750 non-import lines
 (physical lines minus lines occupied by import statements, as measured by

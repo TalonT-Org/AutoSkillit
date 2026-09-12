@@ -1731,10 +1731,10 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
             "DefaultBackgroundSupervisor",  # field default_factory
             "DefaultMcpResponseLog",
         },
-        Path("recipe/_api_orchestration_validate.py"): {
+        Path("recipe/api_orchestration/_api_orchestration_validate.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
-        Path("recipe/_api_listing.py"): {
+        Path("recipe/api/_api_listing.py"): {
             "DefaultSkillResolver"
         },  # deferred default factory fallback
         Path("recipe/contracts/_contracts_staleness.py"): {

@@ -115,7 +115,7 @@ _SKILL_NAMES_CACHE: dict[tuple[int, int, int], frozenset[str]] = {}
 
 def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, frozenset[str]]:
     """Return {skill_name: categories} for all bundled skills."""
-    from autoskillit.recipe._api_cache import _path_mtime_ns  # noqa: PLC0415
+    from autoskillit.recipe.api._api_cache import _path_mtime_ns  # noqa: PLC0415
 
     key = (
         id(lister),
@@ -136,7 +136,7 @@ def _get_skill_category_map(lister: SkillLister | None = None) -> dict[str, froz
 
 def _get_bundled_skill_names(lister: SkillLister | None = None) -> frozenset[str]:
     """Return the set of all bundled skill names."""
-    from autoskillit.recipe._api_cache import _path_mtime_ns  # noqa: PLC0415
+    from autoskillit.recipe.api._api_cache import _path_mtime_ns  # noqa: PLC0415
 
     key = (
         id(lister),

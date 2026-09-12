@@ -40,7 +40,7 @@ class TestLoadRecipeExceptionHandling:
         recipes_dir = tmp_path / ".autoskillit" / "recipes"
         recipes_dir.mkdir(parents=True)
         (recipes_dir / "test.yaml").write_text("name: test\n")
-        from autoskillit.recipe import _api_orchestration
+        from autoskillit.recipe.api_orchestration import _api_orchestration
 
         with patch.object(
             _api_orchestration,
@@ -75,10 +75,13 @@ class TestLoadRecipeExceptionHandling:
             source=RecipeSource.PROJECT,
             path=recipe_path,
         )
-        from autoskillit.recipe import _api_orchestration
+        from autoskillit.recipe.api_orchestration import (
+            _api_orchestration,
+            _api_orchestration_match,
+        )
 
         with (
-            patch("autoskillit.recipe.find_recipe_by_name", return_value=fake_match),
+            patch.object(_api_orchestration_match, "find_recipe_by_name", return_value=fake_match),
             patch.object(
                 _api_orchestration,
                 "_parse_recipe",
@@ -103,7 +106,7 @@ class TestLoadRecipeExceptionHandling:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        from autoskillit.recipe import _api_orchestration
+        from autoskillit.recipe.api_orchestration import _api_orchestration
 
         with patch.object(
             _api_orchestration,
@@ -128,7 +131,7 @@ class TestLoadRecipeExceptionHandling:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        from autoskillit.recipe import _api_orchestration
+        from autoskillit.recipe.api_orchestration import _api_orchestration
 
         with patch.object(
             _api_orchestration,
@@ -151,7 +154,7 @@ class TestLoadRecipeFailClosed:
     @pytest.mark.anyio
     async def test_load_recipe_fail_closed_empty_content(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
-        from autoskillit.recipe._api_cache import _LOAD_CACHE
+        from autoskillit.recipe.api._api_cache import _LOAD_CACHE
 
         _LOAD_CACHE.clear()
         test_result = {"valid": True, "content": "", "dispatch_feasible": True}
@@ -178,7 +181,7 @@ class TestLoadRecipeFailClosed:
     @pytest.mark.anyio
     async def test_load_recipe_fail_closed_missing_content(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
-        from autoskillit.recipe._api_cache import _LOAD_CACHE
+        from autoskillit.recipe.api._api_cache import _LOAD_CACHE
 
         _LOAD_CACHE.clear()
         test_result = {"valid": True, "dispatch_feasible": True}

@@ -116,7 +116,7 @@ the grace window or how many later versions have superseded it.
 
 The old "restart the process" remedy is gone. `assert_generator_process_fresh()`
 (`workspace/_projected_artifact/authority.py`) and the content-hash staleness
-detector (`recipe/_api_cache.py`) both remain as defensive backstops for
+detector (`recipe/api/_api_cache.py`) both remain as defensive backstops for
 installs shaped outside this lifecycle (dev/editable checkouts, external
 tampering) — they no longer fire on AutoSkillit's own upgrades, because those
 upgrades never mutate or delete a root a live process is reading from.

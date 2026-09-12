@@ -35,9 +35,9 @@ def _setup_cache_recipe(tmp_path: Path) -> Path:
 
 def test_load_cache_content_survives_consumer_pop(tmp_path, monkeypatch):
     """Mutating a returned result must not corrupt the cache entry."""
-    from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _setup_cache_recipe(tmp_path)
@@ -58,9 +58,9 @@ def test_load_cache_content_survives_consumer_pop(tmp_path, monkeypatch):
 
 def test_load_cache_suggestions_not_aliased(tmp_path, monkeypatch):
     """Appending to returned suggestions must not affect cached entry."""
-    from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _setup_cache_recipe(tmp_path)
@@ -76,9 +76,9 @@ def test_load_cache_suggestions_not_aliased(tmp_path, monkeypatch):
 
 def test_load_cache_returns_distinct_objects(tmp_path, monkeypatch):
     """Each cache hit must return a new dict object, not the cached reference."""
-    from autoskillit.recipe import _api_cache
     from autoskillit.recipe._api import load_and_validate
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     _setup_cache_recipe(tmp_path)
@@ -92,7 +92,7 @@ def test_load_cache_returns_distinct_objects(tmp_path, monkeypatch):
 
 def test_copy_result_produces_independent_copy():
     """copy_result must return a dict that shares no mutable references with the input."""
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api._api_cache import LoadCache
 
     cache = LoadCache()
     original = {
@@ -118,3 +118,29 @@ def test_copy_result_produces_independent_copy():
     copy.pop("content", None)
     assert "content" in original
     assert len(original["suggestions"]) == 1
+
+
+def test_copy_result_accepts_mapping_without_copy() -> None:
+    """A Mapping need not provide the dict.copy method."""
+    from collections.abc import Mapping
+
+    from autoskillit.recipe.api._api_cache import LoadCache
+
+    class MappingWithoutCopy(Mapping):
+        def __init__(self, values):
+            self.values = values
+
+        def __getitem__(self, key):
+            return self.values[key]
+
+        def __iter__(self):
+            return iter(self.values)
+
+        def __len__(self):
+            return len(self.values)
+
+    original = MappingWithoutCopy({"suggestions": [{"rule": "stale-contract"}]})
+    result = LoadCache().copy_result(original)  # type: ignore[arg-type]
+
+    assert result == dict(original)
+    assert result["suggestions"] is not original["suggestions"]

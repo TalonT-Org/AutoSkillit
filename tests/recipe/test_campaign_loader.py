@@ -224,7 +224,7 @@ def test_load_and_validate_campaign_enumerates_and_collects_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Semantic dispatch-target lookups share one central discovery result."""
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
     from autoskillit.recipe._api import load_and_validate
 
     monkeypatch.setattr(cache_mod, "_LOAD_CACHE", cache_mod.LoadCache())

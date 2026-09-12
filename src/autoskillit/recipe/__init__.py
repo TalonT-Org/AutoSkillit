@@ -46,6 +46,17 @@ _LEGACY_SHIM_MODULES: tuple[str, ...] = (
     "methodology_tradition_router",
     "methodology_venue_appendix",
     "staleness_cache",
+    "_api",
+    "_api_cache",
+    "_api_listing",
+    "_api_orchestration",
+    "_api_orchestration_assemble",
+    "_api_orchestration_cache",
+    "_api_orchestration_match",
+    "_api_orchestration_parse",
+    "_api_orchestration_text",
+    "_api_orchestration_types",
+    "_api_orchestration_validate",
 )
 
 for _name in _LEGACY_SHIM_MODULES:
@@ -54,16 +65,16 @@ del _importlib, _name
 
 # Rule registration — import triggers @semantic_rule registration.
 from autoskillit.recipe import registry as _reg  # noqa: E402, PLC0415
-from autoskillit.recipe._api import (  # noqa: E402
-    format_recipe_list_response,
-    list_all,
-    load_and_validate,
-    validate_from_path,
-)
 from autoskillit.recipe._binding import bind_recipe, bind_step_invocation  # noqa: E402
 from autoskillit.recipe.analysis._analysis import (  # noqa: E402
     RouteEdge,
     _extract_routing_edges,
+)
+from autoskillit.recipe.api._api import (  # noqa: E402
+    format_recipe_list_response,
+    list_all,
+    load_and_validate,
+    validate_from_path,
 )
 from autoskillit.recipe.contracts.contracts import (  # noqa: E402
     OutcomeInvariantEntry,

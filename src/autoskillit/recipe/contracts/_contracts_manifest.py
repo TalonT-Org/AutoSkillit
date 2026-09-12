@@ -20,7 +20,7 @@ from autoskillit.core import (
     pkg_root,
     resolve_skill_name,
 )
-from autoskillit.recipe._api_cache import YamlFileCache
+from autoskillit.recipe.api._api_cache import YamlFileCache
 from autoskillit.recipe.contracts._contracts_types import (
     _CONTEXT_REF_RE,
     _TEMPLATE_REF_RE,

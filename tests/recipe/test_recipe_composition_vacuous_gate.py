@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.recipe._api_orchestration as orch
-from autoskillit.recipe import _api as recipe_api
+import autoskillit.recipe.api._api as recipe_api
+import autoskillit.recipe.api_orchestration._api_orchestration as orch
 from autoskillit.recipe._recipe_composition import _drop_sub_recipe_step, _merge_sub_recipe
 from autoskillit.recipe.schema import Recipe, RecipeStep
 

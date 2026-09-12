@@ -182,7 +182,7 @@ class TestLoadRecipeTools:
         (recipes_dir / "test.yaml").write_text(
             "name: test\ndescription: Test\nsteps:\n  done:\n    action: stop\n    message: Done\n"
         )
-        from autoskillit.recipe import _api_orchestration
+        from autoskillit.recipe.api_orchestration import _api_orchestration
 
         with (
             patch.object(

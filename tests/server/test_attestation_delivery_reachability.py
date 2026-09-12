@@ -420,8 +420,8 @@ async def test_no_delivery_mode_omits_the_attestation_credential(
             assert not envelope.get("delivery_bound_spill")
             block = envelope[RECIPE_EXECUTION_CREDENTIAL_WIRE_KEY]
         case RecipeDeliveryMode.ATTESTED_INLINE:
-            from autoskillit.recipe import _api_cache
-            from autoskillit.recipe._api_cache import LoadCache
+            from autoskillit.recipe.api import _api_cache
+            from autoskillit.recipe.api._api_cache import LoadCache
 
             monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
             # The real non-segmented ``research`` recipe exceeds the ordinary
@@ -475,8 +475,8 @@ async def test_delivery_modes_preserve_one_snapshot_skill_input_shapes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.recipe import _recipe_generation
 
     monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())

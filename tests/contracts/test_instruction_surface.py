@@ -383,7 +383,9 @@ class TestSourceIsolationContract:
 def _anti_fab_prompt_builders() -> list[tuple[str, Callable, dict]]:
     from autoskillit.cli.prompts._prompts_campaign import _build_fleet_campaign_prompt
     from autoskillit.fleet._prompts import _build_food_truck_prompt
-    from autoskillit.recipe._api_orchestration import _build_orchestration_rules
+    from autoskillit.recipe.api_orchestration._api_orchestration_text import (
+        _build_orchestration_rules,
+    )
     from autoskillit.recipe.schema import Recipe, RecipeKind, RecipeStep
     from tests.cli._orchestrator_prompt_helpers import (
         build_fleet_dispatch_prompt as _build_fleet_dispatch_prompt,
@@ -464,11 +466,11 @@ _SKIP_SEMANTICS_MODULES = {
     "_build_food_truck_prompt": "autoskillit.fleet._prompts",
     "_build_orchestrator_prompt": "autoskillit.cli.prompts._prompts_orchestrator",
     "_build_open_kitchen_prompt": "autoskillit.cli.prompts._prompts_kitchen",
-    # Issue #4905: _build_orchestration_rules lives in the text shard, not the
-    # public-driver facade. STEP_SKIP_SEMANTICS_CLAUSE is imported there at
-    # module load time, so monkeypatching the facade module does not reach the
-    # function's lexical scope.
-    "_build_orchestration_rules": "autoskillit.recipe._api_orchestration_text",
+    # _build_orchestration_rules lives in the text shard, not the public-driver
+    # facade. STEP_SKIP_SEMANTICS_CLAUSE is imported there at module load time,
+    # so monkeypatching the facade module does not reach the function's lexical
+    # scope.
+    "_build_orchestration_rules": ("autoskillit.recipe.api_orchestration._api_orchestration_text"),
 }
 
 
@@ -524,9 +526,8 @@ class TestAntiFabricationSurfaceContract:
         prompt_files = sorted(
             [
                 *src_pkg.rglob("_prompts*.py"),
-                src_pkg / "recipe" / "_api_orchestration.py",
-                # Issue #4905: _build_orchestration_rules moved to the text shard.
-                src_pkg / "recipe" / "_api_orchestration_text.py",
+                src_pkg / "recipe" / "api_orchestration" / "_api_orchestration.py",
+                src_pkg / "recipe" / "api_orchestration" / "_api_orchestration_text.py",
             ]
         )
 

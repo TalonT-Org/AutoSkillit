@@ -12,14 +12,14 @@ pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "recipe"
 
 _TARGETS: tuple[str, ...] = (
-    "_api_orchestration.py",
-    "_api_orchestration_types.py",
-    "_api_orchestration_text.py",
-    "_api_orchestration_cache.py",
-    "_api_orchestration_match.py",
-    "_api_orchestration_parse.py",
-    "_api_orchestration_validate.py",
-    "_api_orchestration_assemble.py",
+    "api_orchestration/_api_orchestration.py",
+    "api_orchestration/_api_orchestration_types.py",
+    "api_orchestration/_api_orchestration_text.py",
+    "api_orchestration/_api_orchestration_cache.py",
+    "api_orchestration/_api_orchestration_match.py",
+    "api_orchestration/_api_orchestration_parse.py",
+    "api_orchestration/_api_orchestration_validate.py",
+    "api_orchestration/_api_orchestration_assemble.py",
 )
 _LINE_CEILING = 750
 

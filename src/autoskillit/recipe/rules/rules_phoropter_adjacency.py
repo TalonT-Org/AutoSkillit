@@ -13,7 +13,7 @@ from pathlib import Path
 
 from autoskillit.core import Severity, load_yaml, pkg_root
 from autoskillit.recipe._analysis import ValidationContext
-from autoskillit.recipe._api_cache import YamlFileCache
+from autoskillit.recipe.api._api_cache import YamlFileCache
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 
 _PHOROPTER_PHASES: tuple[str, ...] = ("dial", "apply", "synthesize")

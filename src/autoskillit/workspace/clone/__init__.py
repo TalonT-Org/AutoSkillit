@@ -24,6 +24,7 @@ from typing import Literal
 
 from autoskillit.core import GENERATED_FILES, CloneResult, get_logger, is_protected_branch
 
+from . import _registry as clone_registry
 from ._cleanup import CleanupResult, DefaultWorkspaceManager
 from ._cleanup import _delete_directory_contents as delete_directory_contents
 from ._detect import (
@@ -70,6 +71,7 @@ __all__ = [
     "batch_delete",
     "classify_remote_url",
     "cleanup_candidates",
+    "clone_registry",
     "clone_repo",
     "create_git_worktree",
     "delete_directory_contents",

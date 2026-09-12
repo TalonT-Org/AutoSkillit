@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoskillit.core import ValidatedAddDir
+from autoskillit.core import CmdSpec, ValidatedAddDir
 
 CODEX_SCHEMA_VERSION: int = 2
 CODEX_FIXTURE_MIN_VERSION: str = "0.136.0"
@@ -45,6 +45,23 @@ def codex_skill_add_dirs(
     )
 
 
+def prompt_text(spec: CmdSpec) -> str:
+    """Extract the composed prompt from a CmdSpec, backend-agnostic.
+
+    A Codex app-server skill session carries its fully composed prompt on
+    ``spec.app_server_plan.prompt`` instead of as a trailing ``cmd``
+    positional (the app-server transport has no such positional); every
+    other builder still delivers it via ``cmd``, either after a ``-p`` flag
+    or as the trailing positional.
+    """
+    if spec.app_server_plan is not None:
+        return spec.app_server_plan.prompt
+    cmd = list(spec.cmd)
+    if "-p" in cmd:
+        return cmd[cmd.index("-p") + 1]
+    return cmd[-1]
+
+
 __all__ = [
     "CODEX_FIXTURE_MIN_VERSION",
     "CODEX_SCHEMA_VERSION",
@@ -60,4 +77,5 @@ __all__ = [
     "TURN_FAILED_MODEL_CAPACITY",
     "codex_skill_add_dirs",
     "fixture_path",
+    "prompt_text",
 ]

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.core import CmdSpec, SkillSessionConfig, ValidatedAddDir
+from autoskillit.core import SkillSessionConfig, ValidatedAddDir
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
+from tests.fixtures.codex import prompt_text
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -22,21 +23,6 @@ def _codex_skill_add_dirs(cwd: str) -> tuple[ValidatedAddDir, ...]:
     )
 
 
-def _extract_prompt(spec: CmdSpec) -> str:
-    """Extract the prompt string from a CmdSpec, dispatching by backend command shape.
-
-    A Codex skill session carries its fully composed prompt on
-    ``spec.app_server_plan.prompt`` instead of as a trailing ``cmd`` positional
-    (the app-server transport has no such positional).
-    """
-    if spec.app_server_plan is not None:
-        return spec.app_server_plan.prompt
-    cmd = list(spec.cmd)
-    if "-p" in cmd:
-        return cmd[cmd.index("-p") + 1]
-    return cmd[-1]
-
-
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AUTOSKILLIT_CAMPAIGN_ID", raising=False)
@@ -48,7 +34,7 @@ def test_skill_prompt_uses_backend_sigil(backend):
     """Prompt produced by build_skill_session_cmd must contain the backend's declared sigil."""
     add_dirs = _codex_skill_add_dirs("/tmp") if isinstance(backend, CodexBackend) else ()
     spec = backend.build_skill_session_cmd("/test-skill arg", "/tmp", add_dirs=add_dirs)
-    prompt = _extract_prompt(spec)
+    prompt = prompt_text(spec)
     sigil = backend.capabilities.skill_sigil
     assert f"{sigil}test-skill" in prompt or f"{sigil}autoskillit:test-skill" in prompt
 
@@ -58,7 +44,7 @@ def test_skill_prompt_does_not_contain_wrong_sigil(backend):
     """Prompt must not contain another backend's sigil prefix for the skill name."""
     add_dirs = _codex_skill_add_dirs("/tmp") if isinstance(backend, CodexBackend) else ()
     spec = backend.build_skill_session_cmd("/test-skill arg", "/tmp", add_dirs=add_dirs)
-    prompt = _extract_prompt(spec)
+    prompt = prompt_text(spec)
     wrong_sigils = {"/", "$"} - {backend.capabilities.skill_sigil}
     for wrong in wrong_sigils:
         assert f"Use the {wrong}test-skill skill" not in prompt
@@ -79,7 +65,7 @@ def test_narration_suppression_matches_preamble(backend, skill_cmd, expect_pream
     spec = backend.build_skill_session_cmd(
         skill_cmd, "/tmp", config=SkillSessionConfig(**config_kwargs)
     )
-    prompt = _extract_prompt(spec)
+    prompt = prompt_text(spec)
     if expect_preamble_reference:
         assert "After loading the skill instructions" in prompt
     else:

@@ -33,6 +33,7 @@ from autoskillit.execution.backends._codex_explorer_projection import _generate_
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import prompt_text
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
@@ -90,22 +91,9 @@ def _assert_interactive_intake_digest(backend, spec) -> None:
         assert any("developer_instructions=" in arg and header in arg for arg in spec.cmd)
 
 
-def _headless_prompt_arg(spec) -> str:
-    """The composed prompt text for a headless CmdSpec, wherever the builder placed it.
-
-    Every headless builder still delivers its composed prompt as the final
-    ``cmd`` positional except a Codex app-server skill session, which carries
-    it on ``app_server_plan.prompt`` instead (the app-server transport has no
-    prompt positional in argv).
-    """
-    if spec.app_server_plan is not None:
-        return spec.app_server_plan.prompt
-    return spec.cmd[-1]
-
-
 def _assert_headless_intake_digest(backend, spec) -> None:
     """Assert the intake digest is present in the final prompt arg for Codex, absent for Claude."""
-    prompt = _headless_prompt_arg(spec)
+    prompt = prompt_text(spec)
     if isinstance(backend, ClaudeCodeBackend):
         assert CODEX_INTAKE_DISCIPLINE_DIGEST not in prompt
     else:
@@ -127,7 +115,7 @@ def _assert_interactive_scope_digest(backend, spec) -> None:
 
 def _assert_headless_scope_digest_absent(backend, spec) -> None:
     """Assert the scope digest is absent by default in the final prompt arg for both backends."""
-    assert CODEX_SCOPE_DISCIPLINE_DIGEST not in _headless_prompt_arg(spec)
+    assert CODEX_SCOPE_DISCIPLINE_DIGEST not in prompt_text(spec)
 
 
 class TestFleetInteractive:

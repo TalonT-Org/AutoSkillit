@@ -1,4 +1,4 @@
-"""Structural enforcement of pipeline ordering in recipe/_api.py:load_and_validate.
+"""Structural enforcement of pipeline ordering in the validation orchestration shard.
 
 The pipeline must run semantic rules AFTER _prune_skipped_steps so that pruned
 steps are never seen by semantic rules. This prevents pre-prune semantic
@@ -17,7 +17,7 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-_API_PATH = SRC_ROOT / "recipe" / "_api_orchestration_validate.py"
+_API_PATH = SRC_ROOT / "recipe" / "api_orchestration" / "_api_orchestration_validate.py"
 
 
 def _find_function_node(tree: ast.Module, func_name: str) -> ast.FunctionDef:

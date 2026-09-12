@@ -325,7 +325,7 @@ def test_recipe_lister_callsites_use_protocol_typing() -> None:
     """
     lister_targets = {
         "src/autoskillit/recipe/helpers/_skill_helpers.py",
-        "src/autoskillit/recipe/_api_orchestration.py",
+        "src/autoskillit/recipe/api_orchestration/_api_orchestration.py",
     }
     src_root = Path(__file__).resolve().parents[2]
     missing: list[str] = []

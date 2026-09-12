@@ -2561,7 +2561,7 @@ _TREE_ENUMERATION_ALLOWLIST: list[tuple[Path, str]] = [
         "message wording, not the validation outcome",
     ),
     (
-        SRC_ROOT / "recipe" / "_api_cache.py",
+        SRC_ROOT / "recipe" / "api" / "_api_cache.py",
         "_compute_content_hash is a dev-cache staleness-invalidation hash for "
         "the package's own source tree, not a security/tamper boundary; already "
         "tolerates per-file OSError by explicit design (except OSError: continue)",

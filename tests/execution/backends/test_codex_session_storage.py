@@ -1279,12 +1279,19 @@ def test_completion_publication_runs_after_thread_release_before_view_release(
         attempt=1,
         current_resume_spec=NamedResume("thread-resume"),
     )
-    observed: list[tuple[tuple[str, ...], int, int]] = []
+    observed: list[tuple[str, ...]] = []
 
     def capture_lease_order(view_path: Path, parent_ids: tuple[str, ...]) -> bool:
         assert view_path == lease.view_path
-        assert lease.thread_lease is not None
-        observed.append((parent_ids, lease.thread_lease.fd, lease.view_lease.fd))
+        observed.append(parent_ids)
+        thread_lock = storage._FileLease.acquire(
+            store._thread_lock_path("thread-resume"), timeout=0.0
+        )
+        thread_lock.release()
+        with pytest.raises(TimeoutError):
+            storage._FileLease.acquire(
+                store.locks_root / f"view-{lease.view_id}.lock", timeout=0.0
+            )
         return False
 
     monkeypatch.setattr(store, "_publish_completed_view", capture_lease_order)
@@ -1292,10 +1299,7 @@ def test_completion_publication_runs_after_thread_release_before_view_release(
         handle.record_spawn(os.getpid(), os.getpgrp())
         handle.record_reaped(os.getpid(), os.getpgrp())
 
-    assert len(observed) == 1
-    assert observed[0][0] == ("thread-resume",)
-    assert observed[0][1] == -1
-    assert observed[0][2] >= 0
+    assert observed == [("thread-resume",)]
 
 
 @pytest.mark.parametrize(

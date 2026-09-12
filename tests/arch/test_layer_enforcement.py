@@ -1137,6 +1137,17 @@ _CROSS_PACKAGE_SUBMODULE_EXEMPTIONS: frozenset[tuple[str, str]] = frozenset(
             "server/tools/tools_execution/_fixed_batch_handlers.py",
             "autoskillit.hooks._session_binding",
         ),
+        # REQ-ARCH-001-E2 (issue #4623): execution/child_outcomes.py is the
+        # execution-layer reader for the child-terminal-reason snapshot, whose
+        # canonical write authority is the stdlib-only
+        # hooks/_child_outcome_snapshot submodule. hooks/__init__.py must not
+        # re-export that API at the package level (it would then be reachable
+        # by any consumer, including hooks themselves, defeating the layering
+        # this plan requires), so the reader imports the submodule directly.
+        (
+            "execution/child_outcomes.py",
+            "autoskillit.hooks._child_outcome_snapshot",
+        ),
     }
 )
 

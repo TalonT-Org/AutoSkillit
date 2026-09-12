@@ -28,7 +28,7 @@ from autoskillit.execution.backends._codex_execution_identity import (
     read_codex_rollout_events,
 )
 from autoskillit.execution.session_log import resolve_log_dir
-from autoskillit.hooks import (
+from autoskillit.hooks._child_outcome_snapshot import (
     observe_child,
     project_outcomes,
     read_snapshot,

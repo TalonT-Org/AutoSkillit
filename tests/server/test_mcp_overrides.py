@@ -140,7 +140,6 @@ async def test_open_kitchen_accepts_overrides_param(tmp_path: Path) -> None:
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch.object(tools_kitchen, "__version__", "0.0.0"),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 
@@ -213,7 +212,6 @@ async def test_unknown_override_key_warned(tmp_path: Path) -> None:
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch.object(tools_kitchen, "__version__", "0.0.0"),
         patch.object(tools_kitchen, "_update_hook_config_with_recipe"),
         patch.object(
             tools_kitchen,
@@ -288,7 +286,6 @@ async def test_valid_override_key_no_warning(tmp_path: Path) -> None:
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch.object(tools_kitchen, "__version__", "0.0.0"),
         patch.object(tools_kitchen, "_update_hook_config_with_recipe"),
         patch.object(
             tools_kitchen,
@@ -354,7 +351,6 @@ async def test_unknown_override_key_warned_deferred_recall(tmp_path: Path) -> No
             new_callable=AsyncMock,
             return_value={"content": "test", "valid": True, "suggestions": []},
         ),
-        patch.object(tools_kitchen, "__version__", "0.0.0"),
     ):
         from autoskillit.server.tools.tools_kitchen import open_kitchen as _open_kitchen_tool
 

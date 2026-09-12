@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit import cli
+from tests.cli._doctor_helpers import select_doctor_checks
 
 pytestmark = [pytest.mark.layer("cli"), pytest.mark.small]
 
@@ -31,11 +32,16 @@ kitchen_rules:
 class TestDoctorScriptHealth:
     """Doctor check for script version staleness."""
 
+    def _select_script_version_health(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        """Offer every doctor check but execute only script_version_health, for real."""
+        return select_doctor_checks(monkeypatch, {"script_version_health"})
+
     # DOC1: No .autoskillit/recipes/ -> OK result
     def test_no_scripts_dir_reports_ok(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """doctor reports OK for script_version_health when no scripts directory exists."""
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         # No .autoskillit/recipes/ directory created
@@ -54,6 +60,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         current_version = autoskillit.__version__
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -78,6 +85,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -101,6 +109,7 @@ class TestDoctorScriptHealth:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
     ) -> None:
         """doctor reports WARNING when script YAML has no autoskillit_version field."""
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -146,6 +155,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -167,6 +177,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -188,6 +199,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -209,6 +221,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         current_version = autoskillit.__version__
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"
@@ -230,6 +243,7 @@ class TestDoctorScriptHealth:
         import autoskillit
 
         monkeypatch.setattr(autoskillit, "__version__", "99.0.0")
+        self._select_script_version_health(monkeypatch)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.chdir(tmp_path)
         scripts_dir = tmp_path / ".autoskillit" / "recipes"

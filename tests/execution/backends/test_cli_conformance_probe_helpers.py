@@ -16,11 +16,32 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 def test_collect_generated_child_rollout_associates_parent_and_children(tmp_path: Path) -> None:
     session_root = tmp_path / "sessions"
     session_root.mkdir()
-    parent_events = [{"type": "session_meta", "payload": {"id": "parent-thread"}}]
+    parent_events = [
+        {"type": "session_meta", "payload": {"id": "parent-thread"}},
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "sub_agent_activity",
+                "kind": "started",
+                "agent_thread_id": "child-thread",
+            },
+        },
+    ]
     child_events = [
         {
             "type": "session_meta",
-            "payload": {"id": "child-thread", "forked_from_id": "parent-thread"},
+            "payload": {
+                "id": "child-thread",
+                "parent_thread_id": "parent-thread",
+                "source": {
+                    "subagent": {
+                        "thread_spawn": {
+                            "parent_thread_id": "parent-thread",
+                            "agent_role": "plan-foundation-auditor",
+                        }
+                    }
+                },
+            },
         },
         {"type": "response_item", "payload": {"type": "message"}},
     ]
@@ -47,3 +68,6 @@ def test_collect_generated_child_rollout_associates_parent_and_children(tmp_path
     assert rollout.child_events == child_events
     assert rollout.parent_id == "parent-thread"
     assert rollout.session_ids == {"parent-thread", "child-thread", "unrelated-thread"}
+    spawn = rollout.child_events[0]["payload"]["source"]["subagent"]["thread_spawn"]
+    assert spawn["parent_thread_id"] == "parent-thread"
+    assert spawn["agent_role"] == "plan-foundation-auditor"

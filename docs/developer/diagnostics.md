@@ -174,8 +174,10 @@ the direct join keys:
 `thread_id` remains the Codex rollout/notify and resume identifier; it is not
 the OTLP attribute name. Codex metrics may omit `conversation.id`, so the direct
 join guarantee applies to emitted log records, not every signal. Field
-availability otherwise remains whatever the vendor emitted, and Codex does not
-currently provide a stable specialized-agent identity (#4634).
+availability otherwise remains whatever the vendor emitted. For a specialized
+Codex child, native `session_meta.payload.agent_role` is the stable registered
+agent-definition name; the child `payload.id` and its explicit parent link are
+the structural run identity.
 
 PII scrubbing happens recursively before persistence, including nested OTLP
 attribute lists. Native join and event-name attributes are retained while user,
@@ -223,20 +225,23 @@ conflicting evidence stays on the row for diagnosis).
 Each row carries `child_id`, `launch_alias` (a later-bound backend-native
 session/thread ID merged onto the same row, not a second row), `backend`,
 `parent_session_id`, `role`, `attribution_skill`, `effective_model`,
-`effective_provider`, `terminal_reason`, and the raw evidence that produced
-it: `raw_reason`, `raw_subtype`, `raw_code`, `evidence_source`. `role` and
-`attribution_skill` are populated only for the paths that observe them
-(managed leaves, and Claude native transcripts carrying
-`attributionAgent`/`attributionSkill`); grouping child rows by role or
-provider is a query over these fields, never inferred from naming
-conventions.
+`effective_effort`, `effective_provider`, `terminal_reason`, and the raw
+evidence that produced it: `raw_reason`, `raw_subtype`, `raw_code`,
+`evidence_source`. For Codex, `role` is copied verbatim from the linked child's
+native `agent_role`, while model and effort come from that child's
+`turn_context.payload.model` and `.effort`. Blank historical or undeclared
+roles remain unresolved; task names, paths, instructions, and timestamps never
+reconstruct them.
 
 ### Native vs. managed paths
 
 - **Native** — a `SubagentStart`/`SubagentStop`/parent `PostToolUse` hook
   (Claude) or structural `sub_agent_activity` rollout evidence (Codex)
   confirms the child. A start event inserts a durable `unknown` row
-  immediately, even if a terminal event never arrives.
+  immediately, even if a terminal event never arrives. Codex discovery requires
+  the parent's exact `event_msg` / `sub_agent_activity` / `kind: started` /
+  `agent_thread_id` envelope. Metadata attaches only when the child's sole
+  `session_meta.payload.id` and explicit parent link match those IDs.
 - **Managed** — the executor records each physical provider-attempt
   directly (`ManagedAttemptRecorder` in `execution/child_outcomes.py`) using
   internal `SkillResult` evidence (`cli_subtype`, `api_failure.terminal_reason`,
@@ -253,6 +258,38 @@ by session retention or archival — a session whose own `sessions/` directory
 was evicted, or one with no `sessions.jsonl` row at all (an orphan, or an
 interactive parent), remains directly queryable under
 `child-outcomes/{backend}/{parent_session_id}.json`.
+
+Headless sessions publish through their normal telemetry flush. Managed
+interactive Codex attempts publish after rollout promotion and after releasing
+their lifecycle and thread leases. Normal finalization and crash recovery use
+the same collector. A completed attempt view stays available until publication
+succeeds, including recovery of a view that was already marked complete.
+
+The following query combines canonical snapshots (including interactive
+parents with no retained session row) with retained summary/index projections,
+deduplicates repeated projections by structural identity, and groups named
+roles by backend and definition name:
+
+```bash
+diagnostic_log_root="${XDG_DATA_HOME:-$HOME/.local/share}/autoskillit/logs"
+query_dir=".autoskillit/temp/codex-child-agent-identity-4634"
+mkdir -p "$query_dir"
+{
+  find "$diagnostic_log_root/child-outcomes" -type f -name '*.json' -print0 \
+    | xargs -0 -r jq -c '.children[].outcome'
+  find "$diagnostic_log_root/sessions" -type f -name summary.json -print0 \
+    | xargs -0 -r jq -c '.child_outcomes[]?'
+  jq -c '.child_outcomes[]?' "$diagnostic_log_root/sessions.jsonl"
+} >"$query_dir/all-child-rows.jsonl" 2>"$query_dir/query-errors.txt"
+jq -sc '
+  unique_by([.backend, .parent_session_id, .child_id])
+  | map(select(.role != ""))
+  | group_by([.backend, .role])
+  | map({backend: .[0].backend, role: .[0].role,
+         runs: map({parent_session_id, child_id, effective_model, effective_effort})})
+' "$query_dir/all-child-rows.jsonl" >"$query_dir/role-view.json" 2>&1
+head -c 65536 "$query_dir/role-view.json"
+```
 
 ## Configuration
 

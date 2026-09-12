@@ -569,6 +569,67 @@ def test_collect_codex_observed_children_continues_after_snapshot_write_failure(
     assert [outcome["child_id"] for outcome in outcomes] == ["child-2"]
 
 
+def test_codex_role_view_groups_distinct_runs_by_native_definition_name(tmp_path) -> None:
+    log_root = tmp_path / "logs"
+    rows = []
+    expected_runs = set()
+    for suffix in ("a", "b"):
+        parent_id = f"parent-{suffix}"
+        child_id = f"child-{suffix}"
+        parent_path = tmp_path / f"{parent_id}.jsonl"
+        child_path = tmp_path / f"{child_id}.jsonl"
+        _write_rollout(
+            parent_path,
+            [
+                {"type": "session_meta", "payload": {"id": parent_id}},
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "sub_agent_activity",
+                        "kind": "started",
+                        "agent_thread_id": child_id,
+                    },
+                },
+            ],
+        )
+        _write_rollout(
+            child_path,
+            [
+                {
+                    "type": "session_meta",
+                    "payload": {
+                        "id": child_id,
+                        "parent_thread_id": parent_id,
+                        "agent_role": "plan-foundation-auditor",
+                    },
+                },
+                {
+                    "type": "turn_context",
+                    "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                },
+            ],
+        )
+        assert co.collect_codex_observed_children(
+            parent_rollout_path=parent_path,
+            parent_session_id=parent_id,
+            log_root=log_root,
+            child_rollout_resolver=lambda _child_id, path=child_path: path,
+        )
+        rows.extend(
+            co.collect_child_outcomes(
+                backend="codex", parent_session_id=parent_id, log_root=log_root
+            )
+        )
+        expected_runs.add((parent_id, child_id))
+
+    grouped = {
+        ("codex", "plan-foundation-auditor"): {
+            (row["parent_session_id"], row["child_id"]) for row in rows
+        }
+    }
+    assert grouped == {("codex", "plan-foundation-auditor"): expected_runs}
+
+
 # --- Step 5: managed-attempt recording (module functions + ManagedAttemptRecorder) --------
 
 

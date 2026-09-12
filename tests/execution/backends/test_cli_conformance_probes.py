@@ -160,6 +160,7 @@ from tests.execution.backends._delayed_startup_proxy import (
     classify_attempt,
 )
 from tests.execution.backends._explorer_conformance_assertions import (
+    GeneratedChildEvidence,
     assert_generated_codex_child_delivery,
 )
 from tests.execution.backends._explorer_probe_mcp_server import FORBIDDEN_OPERATIONS
@@ -1492,7 +1493,9 @@ def _run_generated_child_probe(
     )
 
 
-def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
+def _assert_generated_child_probe(
+    output: _GeneratedChildProbeOutput,
+) -> GeneratedChildEvidence:
     assert_generated_child_delivery(
         output.parent_events,
         output.child_events,
@@ -1600,6 +1603,16 @@ def _assert_generated_child_probe(output: _GeneratedChildProbeOutput) -> None:
         expected_native_tree_sitter_status=output.native_tree_sitter_status,
     )
     validate_published_explorer_release_readiness(published_path)
+    return evidence
+
+
+def _assert_repeated_generated_child_probe(
+    outputs: tuple[_GeneratedChildProbeOutput, _GeneratedChildProbeOutput],
+) -> None:
+    evidence = tuple(_assert_generated_child_probe(output) for output in outputs)
+    assert {item.agent_role for item in evidence} == {EXPLORER_PROBE_ROLE}
+    assert len({item.parent_id for item in evidence}) == 2
+    assert len({item.child_id for item in evidence}) == 2
 
 
 @_skip_unless_codex_selection_smoke
@@ -1679,8 +1692,11 @@ def test_generated_codex_child_luna_max_sandbox_conformance(
     _run_probe_with_discrimination(
         "generated_codex_child",
         cli_version,
-        lambda: _run_generated_child_probe(tmp_path / "generated-child", monkeypatch, request),
-        _assert_generated_child_probe,
+        lambda: (
+            _run_generated_child_probe(tmp_path / "generated-child-1", monkeypatch, request),
+            _run_generated_child_probe(tmp_path / "generated-child-2", monkeypatch, request),
+        ),
+        _assert_repeated_generated_child_probe,
         record_success=lambda _version: None,
         record_failure=lambda _kind, _name, _version, _detail: None,
     )

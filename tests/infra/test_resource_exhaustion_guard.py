@@ -181,6 +181,9 @@ _MATRIX_APPLICABLE_SHAPES = [
     s for s in EVALUATION_SHAPE_MATRIX if s.executes and s.consumer != "python"
 ]
 _MATRIX_INERT_SHAPES = [s for s in EVALUATION_SHAPE_MATRIX if not s.executes]
+_MATRIX_PYTHON_SHAPES = [
+    s for s in EVALUATION_SHAPE_MATRIX if s.executes and s.consumer == "python"
+]
 
 
 class TestResourceExhaustionGuardEvaluationShapeMatrix:
@@ -205,6 +208,20 @@ class TestResourceExhaustionGuardEvaluationShapeMatrix:
     @pytest.mark.parametrize("shape", _MATRIX_INERT_SHAPES, ids=lambda s: s.id)
     def test_inert_shape_allows_backgrounded_loop(self, shape) -> None:
         cmd = shape.build("(while :; do :; done) &")
+        assert not _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must allow"
+
+    @pytest.mark.parametrize("shape", _MATRIX_PYTHON_SHAPES, ids=lambda s: s.id)
+    def test_python_consumer_shape_allows_backgrounded_loop(self, shape) -> None:
+        """Asserts the _MATRIX_APPLICABLE_SHAPES exclusion's assumption: a Python
+        argv-list shape's subprocess.run([...]) call never evaluates shell
+        metacharacters, so the loop text is inert here even though it denies
+        via every shell-consumer shape."""
+        cmd = shape.build("(while :; do :; done) &")
+        assert not _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must allow"
+
+    @pytest.mark.parametrize("shape", _MATRIX_PYTHON_SHAPES, ids=lambda s: s.id)
+    def test_python_consumer_shape_allows_kill_jobspec(self, shape) -> None:
+        cmd = shape.build("kill %1")
         assert not _is_denied(_run(cmd, shape="run_cmd")), f"shape {shape.id!r} must allow"
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from autoskillit.core import (
     CONTEXT_ADMISSION_ENCODING_VERSION,
@@ -107,7 +107,7 @@ class _LedgerReadBudget:
         self._max_rows = max_rows
         self._max_bytes = max_bytes
 
-    def consume(self, row: tuple[Any, ...]) -> tuple[Any, ...]:
+    def consume(self, row: tuple[object, ...]) -> tuple[object, ...]:
         self._rows += 1
         self._bytes += sum(
             len(value)
@@ -128,8 +128,8 @@ class _LedgerReadBudget:
 def _read_bounded_rows(
     cursor: sqlite3.Cursor,
     budget: _LedgerReadBudget,
-) -> tuple[tuple[Any, ...], ...]:
-    return tuple(budget.consume(cast(tuple[Any, ...], row)) for row in cursor)
+) -> tuple[tuple[object, ...], ...]:
+    return tuple(budget.consume(cast(tuple[object, ...], row)) for row in cursor)
 
 
 def _preflight_storage_routes(
@@ -145,7 +145,11 @@ def _preflight_storage_routes(
         "SELECT shadow_envelope FROM shadow_decisions",
     )
     for query in queries:
-        for (encoded,) in _read_bounded_rows(connection.execute(query), read_budget):
+        envelope_rows = cast(
+            tuple[tuple[bytes], ...],
+            _read_bounded_rows(connection.execute(query), read_budget),
+        )
+        for (encoded,) in envelope_rows:
             encoded_bytes = bytes(encoded)
             encoding_version, protocol_version, discriminator = _envelope_header(encoded_bytes)
             if encoding_version != CONTEXT_ADMISSION_ENCODING_VERSION:

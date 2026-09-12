@@ -129,7 +129,7 @@ def _decode_stream_key(value: bytes) -> ContextAdmissionStreamKey:
             "invalid-stream-key",
         )
     try:
-        stream_key = ContextAdmissionStreamKey.from_dict(raw)
+        stream_key = cast(ContextAdmissionStreamKey, ContextAdmissionStreamKey.from_dict(raw))
     except ContextAdmissionValidationError as exc:
         raise _LedgerOpenError(
             ContextAdmissionStorageFailureReason.IDENTITY_MISMATCH,

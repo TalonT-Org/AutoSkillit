@@ -1,11 +1,4 @@
-"""Recipe API facade over the canonical cache, listing, and orchestration modules.
-
-Re-exports the public surface (``load_and_validate``, ``list_all``,
-``format_recipe_list_response``, ``validate_from_path``) plus the cache,
-listing, ingredients, and orchestration helpers. Implementation:
-``api/_api_cache.py``, ``api/_api_listing.py``, and
-``api_orchestration/_api_orchestration.py``.
-"""
+"""Recipe API facade for listing, validation, and orchestration."""
 
 from __future__ import annotations
 

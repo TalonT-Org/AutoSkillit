@@ -1,24 +1,7 @@
-"""Public driver and monkeypatch hub for recipe load-and-validate orchestration.
+"""Drive recipe loading and expose collaborators used by sibling shards.
 
-This module exposes :func:`load_and_validate` as the single public entry point
-for the four-phase recipe load pipeline. The implementation shards live in
-sibling modules:
-
-    _api_orchestration_types        — seam-contract dataclasses
-    _api_orchestration_text         — orchestration text builders
-    _api_orchestration_cache        — Phase 1: cache-key derivation
-    _api_orchestration_match        — Phase 2: recipe lookup
-    _api_orchestration_parse        — YAML parse and sub-recipe composition
-    _api_orchestration_validate     — Phase 3: validation pipeline
-    _api_orchestration_assemble     — Phase 4: result assembly and cache write
-
-The module also serves as the monkeypatch hub: it re-exports the names listed
-in ``__all__`` as module-level attributes so existing tests using
-``monkeypatch.setattr(orch, NAME, mock)`` and
-``mock.patch("autoskillit.recipe.api_orchestration._api_orchestration.NAME", ...)``
-continue to
-resolve at call time. The sibling shards access these names through
-``_orch.{name}`` so the patches reach every call site.
+Shards resolve patchable collaborators through this module so tests can replace
+them at call time.
 """
 
 from __future__ import annotations

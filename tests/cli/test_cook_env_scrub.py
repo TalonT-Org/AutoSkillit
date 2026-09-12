@@ -153,6 +153,7 @@ def _capture_cook_spec(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> CmdSpec:
+    from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
     from autoskillit.cli.session._session_cook import cook
     from autoskillit.execution.backends.claude import ClaudeCodeBackend
 
@@ -177,10 +178,7 @@ def _capture_cook_spec(
     monkeypatch.setattr("shutil.which", lambda _cmd: "/usr/bin/claude")
     monkeypatch.setattr(_patch_session__session_onboarding, "is_first_run", lambda _path: False)
     monkeypatch.setattr(_patch_ui__timed_input, "timed_prompt", lambda *_a, **_k: "")
-    monkeypatch.setattr(
-        "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",
-        lambda *_a, **_k: False,
-    )
+    monkeypatch.setattr(InstalledPluginsFile, "contains", lambda *_a, **_k: False)
     monkeypatch.setattr(
         "autoskillit.workspace.DefaultSessionSkillManager", lambda *_a, **_k: mock_mgr
     )

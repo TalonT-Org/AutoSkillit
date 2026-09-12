@@ -803,6 +803,8 @@ class TestDeclaredArtifactAdjudication:
     def test_filesystem_access_failure_is_infrastructure_error(
         self, monkeypatch, tmp_path, error_number: int
     ) -> None:
+        from autoskillit.execution.headless import _headless_adjudication
+
         sr = _base_skill_result(result_text="artifact = report.md")
         warning = Mock()
         original_stat = Path.stat
@@ -813,10 +815,7 @@ class TestDeclaredArtifactAdjudication:
             return original_stat(path, *args, **kwargs)
 
         monkeypatch.setattr(Path, "stat", _raise)
-        monkeypatch.setattr(
-            "autoskillit.execution.headless._headless_adjudication.logger.warning",
-            warning,
-        )
+        monkeypatch.setattr(_headless_adjudication.logger, "warning", warning)
         result = _apply_post_session_adjudication(
             sr, WriteEvidence.none_observed(), None, _artifact_contract(), str(tmp_path)
         )

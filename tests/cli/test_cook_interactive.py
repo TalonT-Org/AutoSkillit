@@ -170,6 +170,8 @@ def _install_harness(
     returncode: int = 0,
     picked_session: str | None = None,
 ) -> dict[str, object]:
+    from autoskillit.cli.install._installed_plugins import InstalledPluginsFile
+
     generated_home = tmp_path / "managed-home"
     skills_dir = generated_home / "skills"
     skills_dir.mkdir(parents=True)
@@ -230,10 +232,7 @@ def _install_harness(
         "autoskillit.workspace.DefaultSessionSkillManager",
         lambda *args, **kwargs: manager,
     )
-    monkeypatch.setattr(
-        "autoskillit.cli.install._installed_plugins.InstalledPluginsFile.contains",
-        lambda self, key: False,
-    )
+    monkeypatch.setattr(InstalledPluginsFile, "contains", lambda self, key: False)
     monkeypatch.setattr(
         _patch_session__session_onboarding,
         "is_first_run",

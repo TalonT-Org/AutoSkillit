@@ -174,18 +174,17 @@ def test_cross_check_warns_on_divergence(
 ) -> None:
     """_cross_check_tokens emits a stderr warning when divergence exceeds 5%."""
     from autoskillit.cli.fleet import _aggregate_totals, _cross_check_tokens
+    from autoskillit.pipeline.tokens import DefaultTokenLog
 
     (tmp_path / "sessions.jsonl").write_text("")
     state = _make_state_with_tokens(input_total=10000)
     state_totals = _aggregate_totals(state)
 
     monkeypatch.setattr("autoskillit.execution.resolve_log_dir", lambda *a: tmp_path)
+    monkeypatch.setattr(DefaultTokenLog, "load_from_log_dir", lambda self, *a, **kw: 1)
     monkeypatch.setattr(
-        "autoskillit.pipeline.tokens.DefaultTokenLog.load_from_log_dir",
-        lambda self, *a, **kw: 1,
-    )
-    monkeypatch.setattr(
-        "autoskillit.pipeline.tokens.DefaultTokenLog.compute_total",
+        DefaultTokenLog,
+        "compute_total",
         lambda self, **kw: {
             "input_tokens": 8000,
             "output_tokens": 0,

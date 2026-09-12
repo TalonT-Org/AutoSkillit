@@ -393,6 +393,7 @@ def test_obligation_clear_maps_non_oserror_to_false(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from autoskillit.core import ArtifactLease
     from autoskillit.workspace import clear_obligation, write_obligation
 
     obligation = write_obligation(
@@ -401,7 +402,8 @@ def test_obligation_clear_maps_non_oserror_to_false(
         originating_phase="upgrade",
     )
     monkeypatch.setattr(
-        "autoskillit.workspace._update_obligation.ArtifactLease.acquire_exclusive",
+        ArtifactLease,
+        "acquire_exclusive",
         MagicMock(side_effect=RuntimeError("lease backend failed")),
     )
 

@@ -30,7 +30,11 @@ from autoskillit.core import (
     strict_walk,
 )
 from autoskillit.execution.backends._codex.app_server_events import (
-    CodexStreamParser as CodexStreamParser,  # re-export: keep one parser authority
+    # Canonical import path for CodexStreamParser is this module
+    # (autoskillit.execution.backends._codex_parse) — the implementation lives in
+    # app_server_events.py only because this file was near its 750-line diff cap.
+    # New consumers should import it from here, not from app_server_events directly.
+    CodexStreamParser as CodexStreamParser,
 )
 from autoskillit.execution.backends._codex.app_server_events import (
     _app_server_to_exec_event,

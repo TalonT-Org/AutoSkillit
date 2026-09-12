@@ -575,7 +575,8 @@ def evaluate(
 
 def _validate_key_shape(
     key: str, rationale: str, limit: int, policy: ComplexityPolicy
-) -> str | None:
+) -> tuple[str, str] | str:
+    """Validate *key*'s shape and return its parsed (path, qualname) on success."""
     if "::" not in key:
         return "malformed key -- expected path::qualname"
     path, qualname = key.split("::", 1)
@@ -587,7 +588,7 @@ def _validate_key_shape(
         return f"rationale must be at least {policy.min_rationale_chars} characters"
     if limit <= policy.max_complexity:
         return f"limit {limit} must exceed MAX_COMPLEXITY={policy.max_complexity}"
-    return None
+    return path, qualname
 
 
 def _validate_entry(
@@ -597,14 +598,18 @@ def _validate_entry(
     policy: ComplexityPolicy,
     source_for: Callable[[str], str | None],
 ) -> str | None:
-    shape_problem = _validate_key_shape(key, rationale, limit, policy)
-    if shape_problem is not None:
-        return shape_problem
-    path, qualname = key.split("::", 1)
+    shape = _validate_key_shape(key, rationale, limit, policy)
+    if isinstance(shape, str):
+        return shape
+    path, qualname = shape
     source = source_for(path)
     if source is None:
         return "stale -- file not found -- remove the entry or fix the key"
-    metrics = _parse_metrics(source, path).get(qualname)
+    try:
+        tree = ast.parse(source, filename=path)
+    except SyntaxError as exc:
+        return f"stale -- {path} does not parse ({exc}) -- remove the entry or fix the key"
+    metrics = function_metrics(tree).get(qualname)
     if metrics is None:
         return "stale -- function not found -- remove the entry or fix the key"
     if metrics.complexity <= policy.max_complexity:

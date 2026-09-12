@@ -22,7 +22,7 @@ hits the upstream repository rather than the user's local clone path.
 
 ## Clone registry
 
-`workspace/clone_registry.py` maintains a shared file-based registry of
+`workspace/clone/_registry.py` maintains a shared file-based registry of
 clones eligible for deferred batch cleanup. The registry is read by
 `batch_cleanup_clones` to delete stale clones in bulk after a recipe finishes.
 The registry uses atomic JSON writes so concurrent recipe runs cannot corrupt

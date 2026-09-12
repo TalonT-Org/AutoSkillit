@@ -125,7 +125,7 @@ upgrades never mutate or delete a root a live process is reading from.
 install lived at one shared, non-versioned path
 (`~/.local/share/uv/tools/autoskillit/`), which had no manifest or lease
 infrastructure at all. `reconcile_install_artifacts()`
-(`workspace/_install_state.py`) preserves that legacy tree because it has no
+(`workspace/_installed/_state.py`) preserves that legacy tree because it has no
 lease or exact-identity metadata from which AutoSkillit can prove that no live
 process still uses it. Retiring the shared root therefore requires explicit
 operator cleanup after its processes have stopped; automated reconciliation

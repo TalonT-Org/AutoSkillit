@@ -30,7 +30,7 @@ so the orchestrator never accidentally pushes to the user's working tree.
 
 ### clone registry
 
-The shared file-based coordination state in `workspace/clone_registry.py` that
+The shared file-based coordination state in `workspace/clone/_registry.py` that
 tracks clones eligible for deferred batch cleanup. Read by
 `batch_cleanup_clones`.
 

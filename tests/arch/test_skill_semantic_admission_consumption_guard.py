@@ -24,7 +24,7 @@ _EXPECTED_CALLERS = Counter(
         (_COMPILE, "cli/session/_session_order.py", "order"): 1,
         (
             _COMPILE,
-            "workspace/session_skill_catalog.py",
+            "workspace/session_skills/_catalog.py",
             "_compile_reachable_profile_skill_catalog",
         ): 1,
         (
@@ -32,9 +32,13 @@ _EXPECTED_CALLERS = Counter(
             "server/tools/tools_execution/_fixed_batch_handlers.py",
             "_resolve_launch_binding",
         ): 1,
-        (_COMPILE, "workspace/session_skill_materialization.py", "materialize_profile_skills"): 1,
-        (_COMPILE, "workspace/session_skill_materialization.py", "_materialize_session"): 3,
-        (_COMPILE, "workspace/session_skill_manager.py", "managed_catalog"): 1,
+        (
+            _COMPILE,
+            "workspace/session_skills/_materialization.py",
+            "materialize_profile_skills",
+        ): 1,
+        (_COMPILE, "workspace/session_skills/_materialization.py", "_materialize_session"): 3,
+        (_COMPILE, "workspace/session_skills/_manager.py", "managed_catalog"): 1,
         (
             _COMPILE,
             "server/tools/_serve_helpers.py",
@@ -50,9 +54,9 @@ _EXPECTED_CALLERS = Counter(
             "workspace/_projected_artifact/_documents.py",
             "project_agent_skill_document",
         ): 1,
-        (_ADAPT, "workspace/session_skill_catalog.py", "compile_session_skill_catalog"): 1,
-        (_ADAPT, "workspace/session_skill_materialization.py", "_materialize_session"): 1,
-        (_ADAPT, "workspace/skill_projection.py", "build_skill_projection_binding"): 1,
+        (_ADAPT, "workspace/session_skills/_catalog.py", "compile_session_skill_catalog"): 1,
+        (_ADAPT, "workspace/session_skills/_materialization.py", "_materialize_session"): 1,
+        (_ADAPT, "workspace/session_skills/_projection.py", "build_skill_projection_binding"): 1,
     }
 )
 

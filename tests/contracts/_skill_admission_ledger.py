@@ -5,7 +5,7 @@ project_root=None and an explicit SkillVisibilitySpec(). It therefore excludes
 project-local overrides, user configuration, and environment-dependent visibility.
 
 The pinned combinations cover the current production list_effective call shapes:
-ORCHESTRATOR/False in workspace/skill_projection.py, cli/session/_session_order.py,
+ORCHESTRATOR/False in workspace/session_skills/_projection.py, cli/session/_session_order.py,
 cli/fleet/_fleet_run.py, cli/prompts/_prompts.py, server/tools/_serve_helpers.py, and
 server/tools/tools_fleet_dispatch/_campaign_state.py; SESSION/False in
 server/_factory.py; and SESSION/True in cli/session/_session_cook.py.

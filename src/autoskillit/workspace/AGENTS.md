@@ -17,30 +17,33 @@ The narrow exception for install-state diagnostics is documented in
 `Path.resolve()`** — resolve follows a final-component symlink, which answers
 "what does this point at?" instead of "where may I write?".
 
-`session_skills.py` is the stable identity-preserving facade for per-session ephemeral
-copies of the bundled skill set so that headless sessions can use a filtered subset
-without polluting the installed package. The canonical owners are
-`session_skill_catalog.py` (catalog compilation, finalized-role reachability, profile
-admission helpers, and the durable unavailability writer), `session_skill_provider.py`
-(`SkillsDirectoryProvider`, ephemeral-root discovery, closure write-dir resolution),
-`session_skill_lifecycle.py` (lock path, `_SessionLease`, persistent-root resolution,
-stateless lease/removal primitives), `session_skill_materialization.py` (the
+`session_skills/` (issue #4989; a package, not a flat file, since #4989's decomposition
+pushed `workspace/`'s top-level file count past its tier limit) is the stable
+identity-preserving facade for per-session ephemeral copies of the bundled skill set
+so that headless sessions can use a filtered subset without polluting the installed
+package. `session_skills/__init__.py` is that facade. It is named `session_skills`,
+not `_session_skills`, deliberately: dozens of external call sites already import
+`autoskillit.workspace.session_skills` directly (not only through the outer
+`autoskillit.workspace` re-export), so the package boundary itself is the long-standing
+public contract, exactly like `workspace.skills` or `workspace.clone` — only the shards
+*inside* it are private. The canonical owners are `_catalog.py` (catalog compilation,
+finalized-role reachability, profile admission helpers, and the durable unavailability
+writer), `_provider.py` (`SkillsDirectoryProvider`, ephemeral-root discovery, closure
+write-dir resolution), `_lifecycle.py` (lock path, `_SessionLease`, persistent-root
+resolution, stateless lease/removal primitives), `_materialization.py` (the
 ordering-sensitive `_materialize_session` transaction, single catalog merge, legacy
-discovery alias, layout validation), and `session_skill_manager.py`
-(`DefaultSessionSkillManager`, `_InitializedSession`, and `_materialize_bound_records`).
-Shards import each other directly and must never import the `session_skills.py`
-facade at runtime; `TYPE_CHECKING`-guarded imports are exempt, and
-`session_skill_provider.py` and `session_skill_materialization.py` may import the
-cross-subsystem `skill_projection` facade. The shards deliberately sit flat in
-`workspace/` rather than under a private `_session_skills/` subpackage — the
-`test_no_external_module_imports_session_skill_shards_directly` AST guard in
-`tests/arch/test_session_skills_projected_artifact_one_way_imports.py` enforces
-the same one-way rule that the leading underscore enforces for
-`_projected_artifact/`, so a flat layout buys no enforcement gap and a
-subpackage move would force path-string churn in the fcntl/mutation
-allowlists (see `tests/_retention_surface.py`,
-`tests/infra/test_plugin_source_ratchets.py`). Each shard *and* both facades are
-capped at 750 lines
+discovery alias, layout validation), and `_manager.py` (`DefaultSessionSkillManager`,
+`_InitializedSession`, and `_materialize_bound_records`). Shards import each other
+directly via absolute dotted paths (`autoskillit.workspace.session_skills._catalog`,
+etc.) and must never import the package's own `session_skills/__init__.py` facade at
+runtime; `TYPE_CHECKING`-guarded imports are exempt. `_projection.py` (formerly the
+workspace-root `skill_projection.py`) relocated into the same package as a distinct
+*gateway* shard: it owns a small local surface and re-exports the rest of its
+`__all__`, identity-equal, from `_projected_artifact`. Only `_provider.py`,
+`_materialization.py`, and `_manager.py` may import `_projection.py` — a private-sibling narrowing that
+replaces the pre-#4989 cross-subsystem-facade framing without loosening the fan-in
+restriction itself. Each shard *and* both facades (`session_skills/__init__.py` and
+`_projected_artifact/materialization.py`) are capped at 750 lines
 (`tests/arch/test_session_skills_projected_artifact_size_ceilings.py`); split further
 rather than growing past it.
 

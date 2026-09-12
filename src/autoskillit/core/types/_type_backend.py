@@ -509,6 +509,17 @@ class CodexAppServerPlan:
     resume_thread_id: str = ""
     runtime_workspace_roots: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if not self.session_home:
+            raise ValueError("session_home must not be blank")
+        if not self.catalog_root:
+            raise ValueError("catalog_root must not be blank")
+        if not self.client_version:
+            raise ValueError("client_version must not be blank")
+        names_from_entries = frozenset(name for name, _ in self.expected_skill_entries)
+        if self.expected_skill_names != names_from_entries:
+            raise ValueError("expected_skill_names must match the names in expected_skill_entries")
+
     def digest_payload(self) -> Mapping[str, object]:
         """Deterministic JSON-safe rendering of this plan for ``adapter_digest``.
 

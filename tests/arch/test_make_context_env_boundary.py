@@ -25,6 +25,53 @@ _FACTORY_PY = (
 )
 
 
+def _private_env_call_name(child: ast.AST) -> str | None:
+    if not isinstance(child, ast.Call):
+        return None
+    env_var_name: str | None = None
+
+    if (
+        isinstance(child.func, ast.Attribute)
+        and child.func.attr == "get"
+        and isinstance(child.func.value, ast.Attribute)
+        and child.func.value.attr == "environ"
+        and isinstance(child.func.value.value, ast.Name)
+        and child.func.value.value.id == "os"
+        and child.args
+        and isinstance(child.args[0], ast.Constant)
+        and isinstance(child.args[0].value, str)
+    ):
+        env_var_name = child.args[0].value
+
+    elif (
+        isinstance(child.func, ast.Attribute)
+        and child.func.attr == "getenv"
+        and isinstance(child.func.value, ast.Name)
+        and child.func.value.id == "os"
+        and child.args
+        and isinstance(child.args[0], ast.Constant)
+        and isinstance(child.args[0].value, str)
+    ):
+        env_var_name = child.args[0].value
+
+    return env_var_name if env_var_name and env_var_name in AUTOSKILLIT_PRIVATE_ENV_VARS else None
+
+
+def _private_env_subscript_name(child: ast.AST) -> str | None:
+    if (
+        isinstance(child, ast.Subscript)
+        and isinstance(child.value, ast.Attribute)
+        and child.value.attr == "environ"
+        and isinstance(child.value.value, ast.Name)
+        and child.value.value.id == "os"
+        and isinstance(child.slice, ast.Constant)
+        and isinstance(child.slice.value, str)
+        and child.slice.value in AUTOSKILLIT_PRIVATE_ENV_VARS
+    ):
+        return child.slice.value
+    return None
+
+
 def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]:
     """Return list of (function_name, env_var_name, lineno) for private env reads."""
     tree = ast.parse(factory_path.read_text())
@@ -33,58 +80,19 @@ def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
-        fn_name = node.name
         for child in ast.walk(node):
-            if not isinstance(child, ast.Call):
-                continue
-            env_var_name: str | None = None
+            env_var_name = _private_env_call_name(child)
+            if env_var_name is not None:
+                violations.append((node.name, env_var_name, child.lineno))
 
-            if (
-                isinstance(child.func, ast.Attribute)
-                and child.func.attr == "get"
-                and isinstance(child.func.value, ast.Attribute)
-                and child.func.value.attr == "environ"
-                and isinstance(child.func.value.value, ast.Name)
-                and child.func.value.value.id == "os"
-                and child.args
-                and isinstance(child.args[0], ast.Constant)
-                and isinstance(child.args[0].value, str)
-            ):
-                env_var_name = child.args[0].value
-
-            elif (
-                isinstance(child.func, ast.Attribute)
-                and child.func.attr == "getenv"
-                and isinstance(child.func.value, ast.Name)
-                and child.func.value.id == "os"
-                and child.args
-                and isinstance(child.args[0], ast.Constant)
-                and isinstance(child.args[0].value, str)
-            ):
-                env_var_name = child.args[0].value
-
-            if env_var_name and env_var_name in AUTOSKILLIT_PRIVATE_ENV_VARS:
-                violations.append((fn_name, env_var_name, child.lineno))
-
-    # Subscript (os.environ["KEY"]) is a distinct AST node from Call — needs separate walk
-
+    # Call findings precede subscript findings, including repeated nested-function scans.
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
-        fn_name = node.name
         for child in ast.walk(node):
-            if not isinstance(child, ast.Subscript):
-                continue
-            if (
-                isinstance(child.value, ast.Attribute)
-                and child.value.attr == "environ"
-                and isinstance(child.value.value, ast.Name)
-                and child.value.value.id == "os"
-                and isinstance(child.slice, ast.Constant)
-                and isinstance(child.slice.value, str)
-                and child.slice.value in AUTOSKILLIT_PRIVATE_ENV_VARS
-            ):
-                violations.append((fn_name, child.slice.value, child.lineno))
+            env_var_name = _private_env_subscript_name(child)
+            if env_var_name is not None:
+                violations.append((node.name, env_var_name, child.lineno))
 
     return violations
 

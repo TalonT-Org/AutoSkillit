@@ -37,6 +37,30 @@ _TOOLS_ROOT = _SRC_ROOT / "server" / "tools"
 _KITCHEN_MODULE_EXEMPTIONS: dict[str, str] = {}
 
 
+def _module_has_kitchen_tagged_tool(tree: ast.AST) -> bool:
+    """Return whether a tool module has a handler tagged for the kitchen."""
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for dec in node.decorator_list:
+            if not isinstance(dec, ast.Call):
+                continue
+            func = dec.func
+            if not (isinstance(func, ast.Attribute) and func.attr == "tool"):
+                continue
+            for kw in dec.keywords:
+                if kw.arg != "tags" or not isinstance(kw.value, ast.Set):
+                    continue
+                tag_values = {
+                    elt.value
+                    for elt in kw.value.elts
+                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                }
+                if any(tag == "kitchen" or tag.startswith("kitchen-") for tag in tag_values):
+                    return True
+    return False
+
+
 def _kitchen_tagged_tool_modules() -> dict[str, Path]:
     """AST-scan server/tools/ for every module exporting an @mcp.tool handler
     whose tags set contains a tag equal to "kitchen" or starting with "kitchen-".
@@ -50,27 +74,7 @@ def _kitchen_tagged_tool_modules() -> dict[str, Path]:
         if py_path.name == "__init__.py":
             continue
         tree = ast.parse(py_path.read_text(encoding="utf-8"), filename=str(py_path))
-        is_kitchen_tagged = False
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            for dec in node.decorator_list:
-                if not isinstance(dec, ast.Call):
-                    continue
-                func = dec.func
-                if not (isinstance(func, ast.Attribute) and func.attr == "tool"):
-                    continue
-                for kw in dec.keywords:
-                    if kw.arg != "tags" or not isinstance(kw.value, ast.Set):
-                        continue
-                    tag_values = {
-                        elt.value
-                        for elt in kw.value.elts
-                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                    }
-                    if any(t == "kitchen" or t.startswith("kitchen-") for t in tag_values):
-                        is_kitchen_tagged = True
-        if is_kitchen_tagged:
+        if _module_has_kitchen_tagged_tool(tree):
             rel = py_path.relative_to(_SRC_ROOT)
             dotted = ".".join(rel.with_suffix("").parts)
             modules[dotted] = py_path

@@ -10,6 +10,26 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
+def _is_bootstrap_kitchen_id(value: ast.expr) -> bool:
+    if not isinstance(value, ast.Call):
+        return False
+    func_name = getattr(value.func, "id", None) or getattr(value.func, "attr", None)
+    return func_name == "resolve_kitchen_id"
+
+
+def _is_stored_kitchen_id(value: ast.expr) -> bool:
+    return (
+        isinstance(value, ast.Attribute)
+        and value.attr == "kitchen_id"
+        and isinstance(value.value, ast.Name)
+        and value.value.id == "state"
+    )
+
+
+def _is_empty_kitchen_id_reset(value: ast.expr) -> bool:
+    return isinstance(value, ast.Constant) and value.value == ""
+
+
 def test_kitchen_id_only_assigned_via_transition_bootstrap():
     """Assignments must mint at bootstrap or consume/reset the stored transition ID.
 
@@ -45,37 +65,22 @@ def test_kitchen_id_only_assigned_via_transition_bootstrap():
                 for target in node.targets:
                     if not (isinstance(target, ast.Attribute) and target.attr == "kitchen_id"):
                         continue
-                    if isinstance(node.value, ast.Call):
-                        # Accept both a bare resolve_kitchen_id() call and the
-                        # pkg.resolve_kitchen_id() attribute form used by
-                        # submodules that self-import their package facade for
-                        # monkeypatch reachability.
-                        func_name = getattr(node.value.func, "id", None) or getattr(
-                            node.value.func, "attr", None
-                        )
-                        if func_name == "resolve_kitchen_id":
-                            canonical_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
-                            continue
-                        rhs = ast.unparse(node.value)
-                        pytest.fail(
-                            f"{file_path_rel}:{node.lineno}: "
-                            f"ctx.kitchen_id assignment uses "
-                            f"{rhs}, not resolve_kitchen_id()"
-                        )
-                    if (
-                        isinstance(node.value, ast.Attribute)
-                        and node.value.attr == "kitchen_id"
-                        and isinstance(node.value.value, ast.Name)
-                        and node.value.value.id == "state"
-                    ):
+                    if _is_bootstrap_kitchen_id(node.value):
+                        canonical_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
+                        continue
+                    if _is_stored_kitchen_id(node.value):
                         stored_assign_linenos.add(f"{file_path_rel}:{node.lineno}")
                         continue
-                    if isinstance(node.value, ast.Constant) and node.value.value == "":
+                    if _is_empty_kitchen_id_reset(node.value):
                         continue
-                    pytest.fail(
-                        f"{file_path_rel}:{node.lineno}: ctx.kitchen_id assignment must mint via "
-                        "resolve_kitchen_id(), consume transition_state.kitchen_id, or reset empty"
+                    message = (
+                        f"ctx.kitchen_id assignment uses {ast.unparse(node.value)}, "
+                        "not resolve_kitchen_id()"
+                        if isinstance(node.value, ast.Call)
+                        else "ctx.kitchen_id assignment must mint via resolve_kitchen_id(), "
+                        "consume transition_state.kitchen_id, or reset empty"
                     )
+                    pytest.fail(f"{file_path_rel}:{node.lineno}: {message}")
 
     assert canonical_assign_linenos, (
         "No ctx.kitchen_id = resolve_kitchen_id() assignments found in scanned files — "

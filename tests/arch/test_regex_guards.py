@@ -52,14 +52,9 @@ EXEMPT_PATTERNS = frozenset(
 )
 
 
-def _extract_re_compile_patterns(filepath: Path) -> list[tuple[str, str, int]]:
-    """Return (variable_name, pattern_string, line_number) for each re.compile call."""
-    source = filepath.read_text()
-    tree = ast.parse(source)
-    results = []
-
+def _assigned_call_names(tree: ast.AST) -> dict[int, str]:
+    """Map assigned calls to their target names from one AST traversal."""
     compile_calls: dict[int, str] = {}
-
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
@@ -68,6 +63,16 @@ def _extract_re_compile_patterns(filepath: Path) -> list[tuple[str, str, int]]:
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and isinstance(node.value, ast.Call):
                 compile_calls[id(node.value)] = node.target.id
+    return compile_calls
+
+
+def _extract_re_compile_patterns(filepath: Path) -> list[tuple[str, str, int]]:
+    """Return (variable_name, pattern_string, line_number) for each re.compile call."""
+    source = filepath.read_text()
+    tree = ast.parse(source)
+    results = []
+
+    compile_calls = _assigned_call_names(tree)
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):

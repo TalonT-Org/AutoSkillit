@@ -120,25 +120,61 @@ def _get_serve_func() -> tuple[ast.FunctionDef, ast.Module]:
     raise AssertionError("serve() not found in app.py")
 
 
+def _transport_launch_locations(statements: list[ast.stmt]) -> list[tuple[int, str]]:
+    """Return direct and try-body anyio.run() statement locations."""
+    locations: list[tuple[int, str]] = []
+    for index, statement in enumerate(statements):
+        if isinstance(statement, ast.Try):
+            for try_statement in statement.body:
+                if (
+                    isinstance(try_statement, ast.Expr)
+                    and isinstance(try_statement.value, ast.Call)
+                    and _get_call_name(try_statement.value) == "anyio.run"
+                ):
+                    locations.append((index, "try-body"))
+        elif (
+            isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Call)
+            and _get_call_name(statement.value) == "anyio.run"
+        ):
+            locations.append((index, "direct"))
+    return locations
+
+
+def _import_source_maps(app_tree: ast.Module) -> tuple[dict[str, Path], dict[str, str]]:
+    """Map app.py import call-site names to source paths and original names."""
+    import_map: dict[str, Path] = {}
+    import_name_map: dict[str, str] = {}
+    for node in ast.walk(app_tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.names:
+            parts = node.module.split(".")
+            rel_parts = parts[1:] if parts and parts[0] == "autoskillit" else parts
+            candidate = SRC.joinpath(*rel_parts).with_suffix(".py")
+            if candidate.exists():
+                for alias in node.names:
+                    name = alias.asname or alias.name
+                    import_map[name] = candidate
+                    import_name_map[name] = alias.name
+    return import_map, import_name_map
+
+
 def test_no_calls_between_initialize_and_anyio_run() -> None:
     """REQ-STARTUP-001: serve() must not call anything between _initialize() and anyio.run()."""
     serve_func, _ = _get_serve_func()
 
     # Find the indices of _initialize(...) and anyio.run(...) in the body
     init_idx = None
-    anyio_idx = None
+    try_body_launches = [
+        index
+        for index, location in _transport_launch_locations(serve_func.body)
+        if location == "try-body"
+    ]
+    anyio_idx = try_body_launches[-1] if try_body_launches else None
     for i, stmt in enumerate(serve_func.body):
         if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
             name = _get_call_name(stmt.value)
             if name == "_initialize":
                 init_idx = i
-        # anyio.run is wrapped in try/except — look for ast.Try containing anyio.run
-        if isinstance(stmt, ast.Try):
-            for try_stmt in stmt.body:
-                if isinstance(try_stmt, ast.Expr) and isinstance(try_stmt.value, ast.Call):
-                    name = _get_call_name(try_stmt.value)
-                    if name == "anyio.run":
-                        anyio_idx = i
 
     assert init_idx is not None, "_initialize() call not found in serve() body"
     assert anyio_idx is not None, "anyio.run() call not found in serve() body"
@@ -166,19 +202,7 @@ def test_no_subprocess_in_serve() -> None:
     """
     serve_func, app_tree = _get_serve_func()
 
-    # Build import mapping: call-site name → source file, plus original function name.
-    import_map: dict[str, Path] = {}
-    import_name_map: dict[str, str] = {}  # call-site name -> original name in source module
-    for node in ast.walk(app_tree):
-        if isinstance(node, ast.ImportFrom) and node.module and node.names:
-            parts = node.module.split(".")
-            rel_parts = parts[1:] if parts and parts[0] == "autoskillit" else parts
-            candidate = SRC.joinpath(*rel_parts).with_suffix(".py")
-            if candidate.exists():
-                for alias in node.names:
-                    name = alias.asname or alias.name
-                    import_map[name] = candidate
-                    import_name_map[name] = alias.name
+    import_map, import_name_map = _import_source_maps(app_tree)
 
     violations: list[str] = []
     for call in _iter_eager_calls(serve_func):
@@ -230,19 +254,8 @@ def test_serve_pre_anyio_no_denylist_calls() -> None:
 
     serve_func, _ = _get_serve_func()
 
-    anyio_idx = None
-    for i, stmt in enumerate(serve_func.body):
-        if isinstance(stmt, ast.Try):
-            for try_stmt in stmt.body:
-                if isinstance(try_stmt, ast.Expr) and isinstance(try_stmt.value, ast.Call):
-                    if _get_call_name(try_stmt.value) == "anyio.run":
-                        anyio_idx = i
-                        break
-        elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-            if _get_call_name(stmt.value) == "anyio.run":
-                anyio_idx = i
-        if anyio_idx is not None:
-            break
+    transport_launches = _transport_launch_locations(serve_func.body)
+    anyio_idx = transport_launches[0][0] if transport_launches else None
     assert anyio_idx is not None, "anyio.run() not found in serve()"
 
     violations: list[str] = []

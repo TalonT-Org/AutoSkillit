@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import re as _re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -44,14 +45,38 @@ def _find_semantic_rule_decorator(
     return None
 
 
+def _call_callee_name(call: ast.Call) -> str | None:
+    if isinstance(call.func, ast.Name):
+        return call.func.id
+    if isinstance(call.func, ast.Attribute):
+        return call.func.attr
+    return None
+
+
+def _severity_keyword_value(keyword: ast.keyword) -> str | None:
+    if keyword.arg != "severity":
+        return None
+    if isinstance(keyword.value, ast.Attribute):
+        return ast.dump(keyword.value)
+    if isinstance(keyword.value, ast.Name):
+        return keyword.value.id
+    return None
+
+
+def _iter_direct_rule_finding_calls(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Iterator[ast.Call]:
+    for node in ast.walk(function):
+        if isinstance(node, ast.Call) and _call_callee_name(node) == "RuleFinding":
+            yield node
+
+
 def _decorator_severity(dec: ast.Call) -> str | None:
     """Extract the ``severity=`` keyword value's string representation."""
-    for kw in dec.keywords:
-        if kw.arg == "severity":
-            if isinstance(kw.value, ast.Attribute):
-                return ast.dump(kw.value)
-            if isinstance(kw.value, ast.Name):
-                return kw.value.id
+    for keyword in dec.keywords:
+        severity = _severity_keyword_value(keyword)
+        if severity is not None:
+            return severity
     return None
 
 
@@ -84,17 +109,9 @@ def test_no_direct_rule_finding_construction_in_rules() -> None:
             is_block = _find_block_rule_decorator(node) is not None
             if not is_rule and not is_block:
                 continue
-            for child in ast.walk(node):
-                if isinstance(child, ast.Call):
-                    func = child.func
-                    name = None
-                    if isinstance(func, ast.Name):
-                        name = func.id
-                    elif isinstance(func, ast.Attribute):
-                        name = func.attr
-                    if name == "RuleFinding":
-                        rel = path.relative_to(_SRC.parent)
-                        violations.append(f"{rel}:{child.lineno} — {node.name}")
+            for child in _iter_direct_rule_finding_calls(node):
+                rel = path.relative_to(_SRC.parent)
+                violations.append(f"{rel}:{child.lineno} — {node.name}")
     assert not violations, (
         "Rule functions must use make_finding()/make_block_finding(), not direct "
         "RuleFinding() construction:\n" + "\n".join(violations)
@@ -120,24 +137,12 @@ def test_rule_findings_match_rule_def_severity() -> None:
             if dec is None:
                 continue
             expected = _decorator_severity(dec)
-            for child in ast.walk(node):
-                if not isinstance(child, ast.Call):
-                    continue
-                func = child.func
-                name = None
-                if isinstance(func, ast.Name):
-                    name = func.id
-                elif isinstance(func, ast.Attribute):
-                    name = func.attr
-                if name != "RuleFinding":
-                    continue
+            for child in _iter_direct_rule_finding_calls(node):
                 actual: str | None = None
-                for kw in child.keywords:
-                    if kw.arg == "severity":
-                        if isinstance(kw.value, ast.Attribute):
-                            actual = ast.dump(kw.value)
-                        elif isinstance(kw.value, ast.Name):
-                            actual = kw.value.id
+                for keyword in child.keywords:
+                    severity = _severity_keyword_value(keyword)
+                    if severity is not None:
+                        actual = severity
                 rel = path.relative_to(_SRC.parent)
                 if actual is None:
                     violations.append(
@@ -160,10 +165,7 @@ _DISPATCH_READY_TEST = (
 _ALLOWLIST_CAP = 4
 
 
-def _collect_allowlist_rule_names() -> set[str]:
-    """Extract all rule-name string values from _KNOWN_NON_CONFORMING_RULES."""
-    tree = ast.parse(_DISPATCH_READY_TEST.read_text())
-    names: set[str] = set()
+def _iter_allowlist_dicts(tree: ast.Module) -> Iterator[ast.Dict]:
     for node in ast.walk(tree):
         if isinstance(node, ast.AnnAssign):
             target = node.target
@@ -173,21 +175,34 @@ def _collect_allowlist_rule_names() -> set[str]:
             value = node.value
         else:
             continue
-        if not isinstance(target, ast.Name) or target.id != "_KNOWN_NON_CONFORMING_RULES":
-            continue
-        if not isinstance(value, ast.Dict):
-            continue
-        for v in value.values:
-            if isinstance(v, ast.Set):
-                for elt in v.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        names.add(elt.value)
-            elif isinstance(v, ast.Dict):
-                for inner_v in v.values:
-                    if isinstance(inner_v, ast.Set):
-                        for elt in inner_v.elts:
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                names.add(elt.value)
+        if (
+            isinstance(target, ast.Name)
+            and target.id == "_KNOWN_NON_CONFORMING_RULES"
+            and isinstance(value, ast.Dict)
+        ):
+            yield value
+
+
+def _iter_allowlist_rule_names(value: ast.Dict) -> Iterator[str]:
+    for entry in value.values:
+        if isinstance(entry, ast.Set):
+            for element in entry.elts:
+                if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                    yield element.value
+        elif isinstance(entry, ast.Dict):
+            for nested_entry in entry.values:
+                if isinstance(nested_entry, ast.Set):
+                    for element in nested_entry.elts:
+                        if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                            yield element.value
+
+
+def _collect_allowlist_rule_names() -> set[str]:
+    """Extract all rule-name string values from _KNOWN_NON_CONFORMING_RULES."""
+    tree = ast.parse(_DISPATCH_READY_TEST.read_text())
+    names: set[str] = set()
+    for value in _iter_allowlist_dicts(tree):
+        names.update(_iter_allowlist_rule_names(value))
     return names
 
 
@@ -213,19 +228,7 @@ def test_known_non_conforming_entries_have_tracking_comments() -> None:
     tree = ast.parse(source)
 
     missing: list[str] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AnnAssign):
-            target = node.target
-            value = node.value
-        elif isinstance(node, ast.Assign):
-            target = node.targets[0] if node.targets else None
-            value = node.value
-        else:
-            continue
-        if not isinstance(target, ast.Name) or target.id != "_KNOWN_NON_CONFORMING_RULES":
-            continue
-        if not isinstance(value, ast.Dict):
-            continue
+    for value in _iter_allowlist_dicts(tree):
         for key in value.keys:
             if isinstance(key, ast.Constant) and isinstance(key.value, str):
                 line = lines[key.lineno - 1]

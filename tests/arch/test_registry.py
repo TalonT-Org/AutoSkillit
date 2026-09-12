@@ -298,6 +298,30 @@ def test_req_arch_rules_have_descriptors() -> None:
     assert "REQ-LAYER-002" in layer_ids
 
 
+def _package_reexports_name_from(parent_mod: object, pkg: str, submod: str, name: str) -> bool:
+    """Return whether a package re-exports ``name`` from its named submodule.
+
+    Source that cannot be inspected is treated as a re-export so the caller
+    continues to fail closed.
+    """
+    try:
+        parent_source = inspect.getsource(parent_mod)
+        tree = ast.parse(parent_source)
+    except (OSError, TypeError, SyntaxError):
+        return True
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        is_relative_from_submod = node.level == 1 and node.module == submod
+        is_absolute_from_submod = node.level == 0 and node.module == f"autoskillit.{pkg}.{submod}"
+        if (is_relative_from_submod or is_absolute_from_submod) and any(
+            (alias.asname or alias.name) == name for alias in node.names
+        ):
+            return True
+    return False
+
+
 def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
     """Every monkeypatch.setattr path must target the namespace production code resolves.
 
@@ -337,34 +361,7 @@ def test_monkeypatch_targets_do_not_bypass_package_reexports() -> None:
                 continue
             if not hasattr(parent_mod, name):
                 continue
-            # Refine: only flag if the parent pkg actually imports 'name' FROM this
-            # exact submodule. If it imports 'name' from a different module (e.g.
-            # autoskillit.migration imports applicable_migrations from .loader, not
-            # .engine), then the patch targets a local binding in 'submod' -- which
-            # is the correct mock target for module-level imports in that submodule.
-            try:
-                parent_source = inspect.getsource(parent_mod)
-                tree = ast.parse(parent_source)
-            except (OSError, TypeError, SyntaxError):
-                # Can't inspect source -- conservatively flag as violation.
-                imports_from_this_submod = True
-            else:
-                imports_from_this_submod = False
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.ImportFrom):
-                        continue
-                    is_relative_from_submod = node.level == 1 and node.module == submod
-                    is_absolute_from_submod = (
-                        node.level == 0 and node.module == f"autoskillit.{pkg}.{submod}"
-                    )
-                    if is_relative_from_submod or is_absolute_from_submod:
-                        for alias in node.names:
-                            if (alias.asname or alias.name) == name:
-                                imports_from_this_submod = True
-                                break
-                    if imports_from_this_submod:
-                        break
-            if imports_from_this_submod:
+            if _package_reexports_name_from(parent_mod, pkg, submod, name):
                 line_no = source[: match.start()].count("\n") + 1
                 violations.append(
                     f"{test_file.name}:{line_no}: patches {full_path!r} "

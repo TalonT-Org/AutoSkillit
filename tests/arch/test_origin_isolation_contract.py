@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -74,38 +75,42 @@ def _is_git_remote_context(node: ast.AST, tree: ast.Module) -> bool:
     return False
 
 
+def _iter_python_origin_trees() -> Iterator[tuple[Path, ast.Module]]:
+    for scan_dir in PYTHON_SCAN_DIRS:
+        if not scan_dir.exists():
+            continue
+        for py_file in sorted(scan_dir.rglob("*.py")):
+            try:
+                tree = ast.parse(py_file.read_text(), filename=str(py_file))
+            except SyntaxError:
+                continue
+            yield py_file, tree
+
+
 class TestNoHardcodedOriginInPython:
     """AST scan: Python files must not pass 'origin' as a remote to git commands."""
 
     def test_no_origin_in_git_commands(self) -> None:
         violations: list[str] = []
 
-        for scan_dir in PYTHON_SCAN_DIRS:
-            if not scan_dir.exists():
-                continue
-            for py_file in sorted(scan_dir.rglob("*.py")):
-                try:
-                    tree = ast.parse(py_file.read_text(), filename=str(py_file))
-                except SyntaxError:
+        for py_file, tree in _iter_python_origin_trees():
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Constant):
+                    continue
+                if not isinstance(node.value, str):
+                    continue
+                if node.value != "origin":
                     continue
 
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.Constant):
-                        continue
-                    if not isinstance(node.value, str):
-                        continue
-                    if node.value != "origin":
-                        continue
+                if not _is_git_remote_context(node, tree):
+                    continue
 
-                    if not _is_git_remote_context(node, tree):
-                        continue
+                fn_name = _find_enclosing_function(node, tree)
+                if (py_file.name, fn_name) in PYTHON_ALLOWLIST:
+                    continue
 
-                    fn_name = _find_enclosing_function(node, tree)
-                    if (py_file.name, fn_name) in PYTHON_ALLOWLIST:
-                        continue
-
-                    rel = py_file.relative_to(SRC_ROOT)
-                    violations.append(f"  {rel}:{node.lineno} in {fn_name}()")
+                rel = py_file.relative_to(SRC_ROOT)
+                violations.append(f"  {rel}:{node.lineno} in {fn_name}()")
 
         assert not violations, (
             "Hardcoded 'origin' in git remote operations violates the clone isolation contract.\n"
@@ -118,29 +123,21 @@ class TestNoHardcodedOriginInPython:
         violations: list[str] = []
         pattern = re.compile(r"refs/remotes/origin")
 
-        for scan_dir in PYTHON_SCAN_DIRS:
-            if not scan_dir.exists():
-                continue
-            for py_file in sorted(scan_dir.rglob("*.py")):
-                try:
-                    tree = ast.parse(py_file.read_text(), filename=str(py_file))
-                except SyntaxError:
+        for py_file, tree in _iter_python_origin_trees():
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Constant):
+                    continue
+                if not isinstance(node.value, str):
+                    continue
+                if not pattern.search(node.value):
                     continue
 
-                for node in ast.walk(tree):
-                    if not isinstance(node, ast.Constant):
-                        continue
-                    if not isinstance(node.value, str):
-                        continue
-                    if not pattern.search(node.value):
-                        continue
+                fn_name = _find_enclosing_function(node, tree)
+                if (py_file.name, fn_name) in PYTHON_ALLOWLIST:
+                    continue
 
-                    fn_name = _find_enclosing_function(node, tree)
-                    if (py_file.name, fn_name) in PYTHON_ALLOWLIST:
-                        continue
-
-                    rel = py_file.relative_to(SRC_ROOT)
-                    violations.append(f"  {rel}:{node.lineno} in {fn_name}()")
+                rel = py_file.relative_to(SRC_ROOT)
+                violations.append(f"  {rel}:{node.lineno} in {fn_name}()")
 
         assert not violations, (
             "Hardcoded 'refs/remotes/origin' bypasses the remote resolver.\n"

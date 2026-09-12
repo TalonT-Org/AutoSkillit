@@ -17,6 +17,36 @@ ANOMALY_DETECTION = SRC / "execution" / "evidence" / "anomaly_detection.py"
 SESSION_LOG = SRC / "execution" / "evidence" / "session_log.py"
 
 
+def _first_drift_call(func_node: ast.FunctionDef) -> ast.Call | None:
+    """Return the first detect_model_drift call in a function's AST walk."""
+    for node in ast.walk(func_node):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "detect_model_drift"
+        ):
+            return node
+    return None
+
+
+def _first_observed_assignment(
+    func_node: ast.FunctionDef, observed_var_name: str
+) -> ast.expr | None:
+    """Return the first supported assignment to the observed-model variable."""
+    for node in ast.walk(func_node):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            rhs = node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target = node.target
+            rhs = node.value
+        else:
+            continue
+        if isinstance(target, ast.Name) and target.id == observed_var_name:
+            return rhs
+    return None
+
+
 def test_detect_model_drift_uses_normalize_model_id():
     """detect_model_drift must normalize both operands — AST enforcement."""
     source = ANOMALY_DETECTION.read_text()
@@ -53,38 +83,17 @@ def test_drift_call_site_uses_independent_observed_source():
             break
     assert flush_func is not None, "flush_session_log not found in session_log.py"
 
-    observed_var_name = None
-    for node in ast.walk(flush_func):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "detect_model_drift"
-        ):
-            assert len(node.args) >= 2, (
-                "detect_model_drift call must have at least 2 positional args"
-            )
-            second_arg = node.args[1]
-            assert isinstance(second_arg, ast.Name), (
-                "second arg to detect_model_drift must be a Name node"
-            )
-            observed_var_name = second_arg.id
-            break
+    drift_call = _first_drift_call(flush_func)
+    assert drift_call is not None, "detect_model_drift call not found in flush_session_log"
+    assert len(drift_call.args) >= 2, (
+        "detect_model_drift call must have at least 2 positional args"
+    )
+    second_arg = drift_call.args[1]
+    assert isinstance(second_arg, ast.Name), "second arg to detect_model_drift must be a Name node"
+    observed_var_name = second_arg.id
 
-    assert observed_var_name is not None, "detect_model_drift call not found in flush_session_log"
-
-    for node in ast.walk(flush_func):
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target = node.targets[0]
-            rhs = node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            target = node.target
-            rhs = node.value
-        else:
-            continue
-
-        if not (isinstance(target, ast.Name) and target.id == observed_var_name):
-            continue
-
+    rhs = _first_observed_assignment(flush_func, observed_var_name)
+    if rhs is not None:
         rhs_dump = ast.dump(rhs)
         assert "_primary_model_identifier" in rhs_dump, (
             f"{observed_var_name} must be assigned from _primary_model_identifier() — "

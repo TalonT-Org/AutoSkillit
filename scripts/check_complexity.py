@@ -341,7 +341,7 @@ def _git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
 
 def _plumbing_text(result: subprocess.CompletedProcess[bytes]) -> str:
     """Decode plumbing output -- paths, revisions -- which is never itself Python source."""
-    return result.stdout.decode("utf-8")
+    return result.stdout.decode("utf-8", errors="replace")
 
 
 def _decode_source(data: bytes) -> str:

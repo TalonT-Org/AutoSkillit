@@ -79,13 +79,11 @@ def _partition_output_redirects_call(
 
 
 def _extract_interpreter_segment_specs_call(
-    segment: Sequence[str],
+    segment: Sequence[str], *, stdin_literals: Sequence[Any] = ()
 ) -> tuple[list[Any], bool]:
-    from _command_classification import (
-        _extract_interpreter_segment_specs,
-    )
+    from _command_classification import _extract_interpreter_segment_specs
 
-    return _extract_interpreter_segment_specs(segment)
+    return _extract_interpreter_segment_specs(segment, stdin_literals=stdin_literals)
 
 
 def _command_position_candidate_spans_call(
@@ -104,16 +102,10 @@ def _extract_process_substitution_occurrences_call(
     return _extract_process_substitution_occurrences(command)
 
 
-def _segment_evaluates_shell_payload_call(tokens: list[str], payload: str) -> bool:
-    from _command_classification import _segment_evaluates_shell_payload
+def _evaluated_payloads_call(command: str) -> list[Any]:
+    from _command_classification import evaluated_payloads
 
-    return _segment_evaluates_shell_payload(tokens, payload)
-
-
-def _extract_shell_command_payloads_call(command: str) -> list[str]:
-    from _command_classification import extract_shell_command_payloads
-
-    return extract_shell_command_payloads(command)
+    return evaluated_payloads(command)
 
 
 class GitHubMutationStatus(StrEnum):
@@ -368,7 +360,9 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                     reasons.append((reason_code, reason))
                 if segment_repeatable and not proven_non_mutating:
                     payload_has_unproven_repeatable_executor = True
-            specs, has_unresolved = _extract_interpreter_segment_specs_call(executable_tokens)
+            specs, has_unresolved = _extract_interpreter_segment_specs_call(
+                executable_tokens, stdin_literals=command_segment.stdin_literals
+            )
             if has_unresolved and _POSSIBLE_GITHUB_EXEC_RE.search(payload):
                 reasons.append(
                     (
@@ -418,16 +412,20 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             )
             if raw_segment[:1] == ["done"]:
                 repeatable_depth = max(repeatable_depth - 1, 0)
-        remaining_contexts = list(nested_contexts)
-        for nested in _extract_shell_command_payloads_call(payload):
-            matching_index = next(
-                (
-                    index
-                    for index, context in enumerate(remaining_contexts)
-                    if _segment_evaluates_shell_payload_call(context[0], nested)
-                ),
-                None,
-            )
+        # Occurrence-identity lookup (rectify #4941 Part A): each evaluated
+        # SHELL payload already carries the index of the segment that owns
+        # it (`consumer_index`, computed from real source structure --
+        # tokenizer binding for a heredoc/herestring/pipe, offset-based
+        # re-tokenization for a `$(...)`/backtick occurrence), so two
+        # payloads owned by the same segment simply share that index rather
+        # than competing for one text-matched context out of a shrinking
+        # pool. PYTHON payloads are handled structurally above via
+        # `_extract_interpreter_segment_specs_call(..., stdin_literals=...)`;
+        # TEXT is never queued as shell.
+        for evaluated in _evaluated_payloads_call(payload):
+            if evaluated.kind != "shell":
+                continue
+            index = evaluated.consumer_index
             context = (
                 (
                     [],
@@ -437,8 +435,8 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
                     outer_count,
                     payload_repeatable,
                 )
-                if matching_index is None
-                else remaining_contexts.pop(matching_index)
+                if index is None or index >= len(nested_contexts)
+                else nested_contexts[index]
             )
             (
                 _raw,
@@ -450,7 +448,7 @@ def analyze_github_mutations(command: str, *, cwd: str = "") -> GitHubMutationAn
             ) = context
             queue.append(
                 (
-                    nested,
+                    evaluated.text,
                     nested_cwd,
                     depth + 1,
                     nested_input_safe,

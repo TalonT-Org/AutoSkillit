@@ -19,6 +19,7 @@ from autoskillit.execution.backends._claude_prompt import (
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -30,6 +31,7 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 )
 def test_skill_session_env_contains_required_vars(backend_factory) -> None:
     """Every backend's build_skill_session_cmd must inject all SKILL_SESSION_REQUIRED_ENV vars."""
+    add_dirs = codex_skill_add_dirs("/tmp") if backend_factory is CodexBackend else ()
     spec = backend_factory().build_skill_session_cmd(
         "/investigate foo",
         cwd="/tmp",
@@ -37,6 +39,7 @@ def test_skill_session_env_contains_required_vars(backend_factory) -> None:
         model=None,
         plugin_binding=None,
         output_format=OutputFormat.STREAM_JSON,
+        add_dirs=add_dirs,
     )
     missing = SKILL_SESSION_REQUIRED_ENV - spec.env.keys()
     assert not missing, f"Missing required skill session env vars: {missing}"
@@ -53,7 +56,12 @@ def test_claude_skill_hardening_stays_backend_local() -> None:
     assert keys.isdisjoint(_HEADLESS_EXCLUSIVE_VARS)
     codex_env = (
         CodexBackend()
-        .build_skill_session_cmd("/investigate foo", cwd="/tmp", completion_marker="%%DONE%%")
+        .build_skill_session_cmd(
+            "/investigate foo",
+            cwd="/tmp",
+            completion_marker="%%DONE%%",
+            add_dirs=codex_skill_add_dirs("/tmp"),
+        )
         .env
     )
     assert keys.isdisjoint(codex_env)

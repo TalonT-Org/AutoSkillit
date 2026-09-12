@@ -46,11 +46,15 @@ class TestBackendCompliance:
     def test_all_backends_build_skill_session_cmd_returns_cmdspec(self):
         from autoskillit.core import CmdSpec, SkillSessionConfig
         from autoskillit.execution.backends import BACKEND_REGISTRY
-        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+        from autoskillit.execution.backends.codex import CodexBackend
+        from tests.fixtures.codex import codex_skill_add_dirs
 
         for cls in BACKEND_REGISTRY.values():
+            add_dirs = codex_skill_add_dirs("/tmp") if cls is CodexBackend else ()
             assert isinstance(
-                cls().build_skill_session_cmd("/test-skill", "/tmp", SkillSessionConfig()),
+                cls().build_skill_session_cmd(
+                    "/test-skill", "/tmp", SkillSessionConfig(add_dirs=add_dirs)
+                ),
                 CmdSpec,
             )
 

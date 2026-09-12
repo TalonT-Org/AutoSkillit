@@ -8,6 +8,7 @@ import pytest
 
 from autoskillit.execution.backends import CodexBackend
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
+from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -20,53 +21,51 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _prompt_text(spec) -> str:
     """Extract the prompt token from a CmdSpec in a backend-agnostic way."""
+    if spec.app_server_plan is not None:
+        return spec.app_server_plan.prompt
     cmd = list(spec.cmd)
     if "-p" in cmd:
         return cmd[cmd.index("-p") + 1]
     return cmd[-1]
 
 
+def _build_skill_session_spec(backend):
+    """Build a skill-session CmdSpec, satisfying CodexBackend's add-dir invariant."""
+    add_dirs = codex_skill_add_dirs("/repo") if isinstance(backend, CodexBackend) else ()
+    return backend.build_skill_session_cmd(
+        "/autoskillit:investigate", "/repo", completion_marker="DONE", add_dirs=add_dirs
+    )
+
+
 class TestBuildSkillSessionCmdSharedBehavior:
     @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
     def test_completion_directive_injected(self, backend) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert "DONE" in _prompt_text(spec)
 
     @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
     def test_cwd_anchor_injected(self, backend) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert "/repo" in _prompt_text(spec)
 
     @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
     def test_headless_env_set(self, backend) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
 
     @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
     def test_session_type_env_set(self, backend) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert spec.env["AUTOSKILLIT_SESSION_TYPE"] == "skill"
 
     @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
     def test_skill_name_extracted(self, backend) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert spec.env["AUTOSKILLIT_SKILL_NAME"] == "investigate"
 
     @pytest.mark.parametrize("backend", [ClaudeCodeBackend(), CodexBackend()])
     def test_agent_backend_present_in_env(self, backend) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert "AUTOSKILLIT_AGENT_BACKEND" in spec.env
 
     @pytest.mark.parametrize(
@@ -81,9 +80,7 @@ class TestBuildSkillSessionCmdSharedBehavior:
         ],
     )
     def test_applicable_guards_env_set(self, backend, expected) -> None:
-        spec = backend.build_skill_session_cmd(
-            "/autoskillit:investigate", "/repo", completion_marker="DONE"
-        )
+        spec = _build_skill_session_spec(backend)
         assert spec.env["AUTOSKILLIT_APPLICABLE_GUARDS"] == expected
 
 

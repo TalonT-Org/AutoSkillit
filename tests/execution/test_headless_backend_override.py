@@ -14,6 +14,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends import CodexBackend
+from tests.fixtures.codex import codex_skill_add_dirs
 
 from .conftest import _backend_authority, _mock_backend
 
@@ -195,17 +196,12 @@ class TestBackendOverrideCommandRouting:
                 completion_marker="%%DONE%%",
                 backend_authority=_backend_authority("codex"),
                 readonly_skill=readonly_skill,
+                add_dirs=codex_skill_add_dirs("/tmp/cwd"),
             )
 
         assert captured_spec is not None
-        sandbox_positions = [
-            index for index, value in enumerate(captured_spec.cmd) if value == "--sandbox"
-        ]
-        if expected_sandbox is None:
-            assert sandbox_positions == []
-            return
-        assert len(sandbox_positions) == 1
-        assert captured_spec.cmd[sandbox_positions[0] + 1] == expected_sandbox
+        assert captured_spec.app_server_plan is not None
+        assert captured_spec.app_server_plan.sandbox == (expected_sandbox or "workspace-write")
 
 
 class TestBackendOverrideEnvPolicy:

@@ -18,12 +18,16 @@ observes. Never re-derives or overrides a reason the hook already classified.
 
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from autoskillit.core import AGENT_BACKEND_CLAUDE_CODE, ChildOutcomeDict, get_logger
 from autoskillit.execution.backends._codex_execution_identity import (
+    codex_parent_thread_id,
+    extract_codex_child_metadata,
     linked_child_thread_ids,
     read_codex_rollout_events,
 )
@@ -101,9 +105,8 @@ def collect_native_children_for_backend(
     if not evidence_session_id:
         return
     try:
-        own_transcript_path = step_backend.session_locator().session_log_path(
-            cwd, evidence_session_id
-        )
+        locator = step_backend.session_locator()
+        own_transcript_path = locator.session_log_path(cwd, evidence_session_id)
         if own_transcript_path is None:
             return
         log_root = resolve_log_dir(diagnostic_log_dir)
@@ -113,6 +116,7 @@ def collect_native_children_for_backend(
                 parent_rollout_path=own_transcript_path,
                 parent_session_id=evidence_session_id,
                 log_root=log_root,
+                child_rollout_resolver=lambda child_id: locator.session_log_path(cwd, child_id),
             )
         else:
             collect_claude_native_children(
@@ -306,7 +310,8 @@ def collect_codex_observed_children(
     parent_rollout_path: Path,
     parent_session_id: str,
     log_root: Path,
-) -> None:
+    child_rollout_resolver: Callable[[str], Path | None],
+) -> bool:
     """Observe every Codex child thread structurally linked in the parent rollout.
 
     Every observed child (planned or not) gets a durable unknown row even if
@@ -321,13 +326,16 @@ def collect_codex_observed_children(
     ``agent_thread_id`` filter (``linked_child_thread_ids``) — defined once,
     not re-derived here.
     """
+    publication_succeeded = True
     try:
         events = read_codex_rollout_events(parent_rollout_path)
+        if codex_parent_thread_id(events) != parent_session_id:
+            return False
     except (OSError, ValueError):
-        return
+        return False
     linked_child_ids = linked_child_thread_ids(events, parent_id=parent_session_id)
     if not linked_child_ids:
-        return
+        return True
     snapshot_path = _safe_resolve_snapshot_path(
         log_root,
         backend="codex",
@@ -335,14 +343,52 @@ def collect_codex_observed_children(
         caller="codex_child_outcome",
     )
     if snapshot_path is None:
-        return
+        return False
     for child_id in linked_child_ids:
-        observe_child(
-            snapshot_path,
-            backend="codex",
-            parent_session_id=parent_session_id,
-            child_id=child_id,
-        )
+        try:
+            observe_child(
+                snapshot_path,
+                backend="codex",
+                parent_session_id=parent_session_id,
+                child_id=child_id,
+            )
+        except Exception:
+            publication_succeeded = False
+            logger.debug("codex_child_observation_failed", exc_info=True)
+            continue
+        try:
+            child_rollout_path = child_rollout_resolver(child_id)
+            if child_rollout_path is None:
+                continue
+            metadata = extract_codex_child_metadata(
+                child_rollout_path,
+                expected_parent_id=parent_session_id,
+                expected_child_id=child_id,
+            )
+        except Exception:
+            logger.debug("codex_child_metadata_unavailable", exc_info=True)
+            continue
+        evidence: dict[str, Any] = {
+            **metadata,
+            "evidence_source": "codex_rollout_metadata",
+            "transcript_locator": str(child_rollout_path),
+        }
+        evidence_digest = hashlib.sha256(
+            json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        try:
+            record_terminal_evidence(
+                snapshot_path,
+                backend="codex",
+                parent_session_id=parent_session_id,
+                child_id=child_id,
+                evidence_key=f"codex:{child_id}:rollout_metadata:{evidence_digest}",
+                evidence=evidence,
+            )
+        except Exception:
+            publication_succeeded = False
+            logger.debug("codex_child_metadata_write_failed", exc_info=True)
+    return publication_succeeded
 
 
 def _resolve_claude_parent_transcript(parent_session_id: str) -> Path | None:

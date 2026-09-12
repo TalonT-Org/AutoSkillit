@@ -18,17 +18,20 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
 
 class _FakeLocator:
-    def __init__(self, path):
+    def __init__(self, path, paths_by_session_id=None):
         self._path = path
+        self._paths_by_session_id = paths_by_session_id
 
     def session_log_path(self, cwd, session_id):
+        if self._paths_by_session_id is not None:
+            return self._paths_by_session_id.get(session_id)
         return self._path
 
 
 class _FakeBackend:
-    def __init__(self, *, name: str, transcript_path):
+    def __init__(self, *, name: str, transcript_path, paths_by_session_id=None):
         self.name = name
-        self._locator = _FakeLocator(transcript_path)
+        self._locator = _FakeLocator(transcript_path, paths_by_session_id)
 
     def session_locator(self):
         return self._locator
@@ -99,6 +102,7 @@ def test_claude_backend_dispatches_to_native_child_collection_with_normalized_ba
 
 def test_codex_backend_dispatches_to_codex_rollout_collection(tmp_path) -> None:
     rollout_path = tmp_path / "rollout.jsonl"
+    child_path = tmp_path / "child.jsonl"
     rollout_path.write_text(
         "\n".join(
             json.dumps(line)
@@ -116,8 +120,32 @@ def test_codex_backend_dispatches_to_codex_rollout_collection(tmp_path) -> None:
         )
         + "\n"
     )
+    child_path.write_text(
+        "\n".join(
+            json.dumps(line)
+            for line in [
+                {
+                    "type": "session_meta",
+                    "payload": {
+                        "id": "child-1",
+                        "parent_thread_id": "parent-1",
+                        "agent_role": "plan-foundation-auditor",
+                    },
+                },
+                {
+                    "type": "turn_context",
+                    "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+                },
+            ]
+        )
+        + "\n"
+    )
     log_dir = tmp_path / "logs"
-    backend = _FakeBackend(name="codex", transcript_path=rollout_path)
+    backend = _FakeBackend(
+        name="codex",
+        transcript_path=rollout_path,
+        paths_by_session_id={"parent-1": rollout_path, "child-1": child_path},
+    )
 
     collect_native_children_for_backend(
         step_backend=backend,
@@ -131,6 +159,8 @@ def test_codex_backend_dispatches_to_codex_rollout_collection(tmp_path) -> None:
     )
     assert len(outcomes) == 1
     assert outcomes[0]["child_id"] == "child-1"
+    assert outcomes[0]["role"] == "plan-foundation-auditor"
+    assert outcomes[0]["effective_effort"] == "medium"
 
 
 def test_collection_failure_never_raises(tmp_path, monkeypatch) -> None:

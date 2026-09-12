@@ -192,6 +192,14 @@ def read_codex_rollout_events(path: Path) -> list[Mapping[str, Any]]:
     return _read_rollout(path)
 
 
+def codex_parent_thread_id(events: list[Mapping[str, Any]]) -> str:
+    """Return the sole native parent thread ID from validated session metadata."""
+    parent_metas = _payloads(events, "session_meta")
+    if len(parent_metas) != 1:
+        raise ValueError("Codex parent rollout must contain exactly one session_meta")
+    return _structural_text("parent", "id", (parent_metas[0],), required=True)
+
+
 def extract_codex_child_metadata(
     child_rollout_path: Path,
     *,
@@ -250,13 +258,8 @@ def extract_codex_execution_identity(
     ``turn_context`` records. A child rollout must link back to the exact parent.
     """
     parent_events = _read_rollout(parent_rollout_path)
-    parent_metas = _payloads(parent_events, "session_meta")
-    if len(parent_metas) != 1:
-        raise ValueError("Codex parent rollout must contain exactly one session_meta")
-    parent_meta = parent_metas[0]
-    parent_id = _meta_text(parent_meta, {}, "id")
-    if not parent_id:
-        raise ValueError("Codex parent session_meta omitted id")
+    parent_id = codex_parent_thread_id(parent_events)
+    parent_meta = _payloads(parent_events, "session_meta")[0]
     if requested.parent_session_id and requested.parent_session_id != parent_id:
         raise ValueError("Codex parent rollout identity disagrees with requested linkage")
     parent_contexts = _payloads(parent_events, "turn_context")

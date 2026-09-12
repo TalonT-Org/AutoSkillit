@@ -195,6 +195,7 @@ def _write_rollout(path, lines: list[dict]) -> None:
 def test_collect_codex_observed_children_finds_started_activity(tmp_path) -> None:
     log_root = tmp_path / "logs"
     rollout_path = tmp_path / "rollout.jsonl"
+    child_path = tmp_path / "child-1.jsonl"
     _write_rollout(
         rollout_path,
         [
@@ -209,15 +210,52 @@ def test_collect_codex_observed_children_finds_started_activity(tmp_path) -> Non
             },
         ],
     )
-    co.collect_codex_observed_children(
-        parent_rollout_path=rollout_path, parent_session_id="parent-1", log_root=log_root
+    _write_rollout(
+        child_path,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-1",
+                    "parent_thread_id": "parent-1",
+                    "agent_role": "plan-foundation-auditor",
+                },
+            },
+            {
+                "type": "turn_context",
+                "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+            },
+        ],
+    )
+    published = co.collect_codex_observed_children(
+        parent_rollout_path=rollout_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda child_id: child_path if child_id == "child-1" else None,
     )
     outcomes = co.collect_child_outcomes(
         backend="codex", parent_session_id="parent-1", log_root=log_root
     )
     assert len(outcomes) == 1
-    assert outcomes[0]["child_id"] == "child-1"
-    assert outcomes[0]["terminal_reason"] == snap.REASON_UNKNOWN
+    assert outcomes[0] == {
+        "child_id": "child-1",
+        "launch_alias": "",
+        "backend": "codex",
+        "parent_session_id": "parent-1",
+        "role": "plan-foundation-auditor",
+        "attribution_skill": "",
+        "effective_model": "gpt-5.6-sol",
+        "effective_effort": "medium",
+        "effective_provider": "",
+        "terminal_reason": snap.REASON_UNKNOWN,
+        "raw_reason": "",
+        "raw_subtype": "",
+        "raw_code": "",
+        "evidence_source": "codex_rollout_metadata",
+        "transcript_locator": str(child_path),
+        "start_confirmed": True,
+    }
+    assert published is True
 
 
 def test_collect_codex_observed_children_ignores_non_started_kinds_for_new_rows(
@@ -241,9 +279,13 @@ def test_collect_codex_observed_children_ignores_non_started_kinds_for_new_rows(
             },
         ],
     )
-    co.collect_codex_observed_children(
-        parent_rollout_path=rollout_path, parent_session_id="parent-1", log_root=log_root
+    published = co.collect_codex_observed_children(
+        parent_rollout_path=rollout_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: None,
     )
+    assert published is True
     assert (
         co.collect_child_outcomes(backend="codex", parent_session_id="parent-1", log_root=log_root)
         == ()
@@ -268,7 +310,10 @@ def test_collect_codex_observed_children_excludes_the_parent_id_itself(tmp_path)
         ],
     )
     co.collect_codex_observed_children(
-        parent_rollout_path=rollout_path, parent_session_id="parent-1", log_root=log_root
+        parent_rollout_path=rollout_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: None,
     )
     assert (
         co.collect_child_outcomes(backend="codex", parent_session_id="parent-1", log_root=log_root)
@@ -278,11 +323,13 @@ def test_collect_codex_observed_children_excludes_the_parent_id_itself(tmp_path)
 
 def test_collect_codex_observed_children_missing_rollout_is_a_no_op(tmp_path) -> None:
     log_root = tmp_path / "logs"
-    co.collect_codex_observed_children(
+    published = co.collect_codex_observed_children(
         parent_rollout_path=tmp_path / "missing.jsonl",
         parent_session_id="parent-1",
         log_root=log_root,
+        child_rollout_resolver=lambda _child_id: None,
     )
+    assert published is False
     assert (
         co.collect_child_outcomes(backend="codex", parent_session_id="parent-1", log_root=log_root)
         == ()
@@ -309,15 +356,217 @@ def test_collect_codex_observed_children_is_idempotent_across_repeated_started_e
         ],
     )
     co.collect_codex_observed_children(
-        parent_rollout_path=rollout_path, parent_session_id="parent-1", log_root=log_root
+        parent_rollout_path=rollout_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: None,
     )
     co.collect_codex_observed_children(
-        parent_rollout_path=rollout_path, parent_session_id="parent-1", log_root=log_root
+        parent_rollout_path=rollout_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: None,
     )
     outcomes = co.collect_child_outcomes(
         backend="codex", parent_session_id="parent-1", log_root=log_root
     )
     assert len(outcomes) == 1
+
+
+def test_collect_codex_observed_children_refines_metadata_as_rollout_appears(
+    tmp_path,
+) -> None:
+    log_root = tmp_path / "logs"
+    parent_path = tmp_path / "parent.jsonl"
+    child_path = tmp_path / "misleading-task-name.jsonl"
+    _write_rollout(
+        parent_path,
+        [
+            {"type": "session_meta", "payload": {"id": "parent-1"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "sub_agent_activity",
+                    "kind": "started",
+                    "agent_thread_id": "child-1",
+                },
+            },
+        ],
+    )
+
+    def resolver(_child_id):
+        return child_path if child_path.exists() else None
+
+    assert co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=resolver,
+    )
+    unresolved = co.collect_child_outcomes(
+        backend="codex", parent_session_id="parent-1", log_root=log_root
+    )[0]
+    assert unresolved["role"] == ""
+
+    _write_rollout(
+        child_path,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-1",
+                    "parent_thread_id": "parent-1",
+                    "agent_role": "plan-foundation-auditor",
+                },
+            },
+            {"type": "turn_context", "payload": {"model": "gpt-5.6-sol"}},
+        ],
+    )
+    assert co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=resolver,
+    )
+    _write_rollout(
+        child_path,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-1",
+                    "parent_thread_id": "parent-1",
+                    "agent_role": "plan-foundation-auditor",
+                },
+            },
+            {
+                "type": "turn_context",
+                "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+            },
+        ],
+    )
+    assert co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=resolver,
+    )
+
+    outcomes = co.collect_child_outcomes(
+        backend="codex", parent_session_id="parent-1", log_root=log_root
+    )
+    assert len(outcomes) == 1
+    assert outcomes[0]["role"] == "plan-foundation-auditor"
+    assert outcomes[0]["effective_model"] == "gpt-5.6-sol"
+    assert outcomes[0]["effective_effort"] == "medium"
+
+
+def test_collect_codex_observed_children_does_not_infer_a_null_native_role(
+    tmp_path,
+) -> None:
+    log_root = tmp_path / "logs"
+    parent_path = tmp_path / "parent.jsonl"
+    child_path = tmp_path / "plan-foundation-auditor-task.jsonl"
+    _write_rollout(
+        parent_path,
+        [
+            {"type": "session_meta", "payload": {"id": "parent-1"}},
+            {
+                "type": "event_msg",
+                "payload": {
+                    "type": "sub_agent_activity",
+                    "kind": "started",
+                    "agent_thread_id": "child-1",
+                },
+            },
+        ],
+    )
+    _write_rollout(
+        child_path,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-1",
+                    "parent_thread_id": "parent-1",
+                    "agent_role": None,
+                    "base_instructions": "role: plan-foundation-auditor",
+                },
+            }
+        ],
+    )
+
+    assert co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: child_path,
+    )
+    outcome = co.collect_child_outcomes(
+        backend="codex", parent_session_id="parent-1", log_root=log_root
+    )[0]
+    assert outcome["role"] == ""
+
+
+def test_collect_codex_observed_children_rejects_parent_rollout_mismatch(tmp_path) -> None:
+    parent_path = tmp_path / "parent.jsonl"
+    _write_rollout(parent_path, [{"type": "session_meta", "payload": {"id": "other"}}])
+
+    assert not co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=tmp_path / "logs",
+        child_rollout_resolver=lambda _child_id: None,
+    )
+    assert (
+        co.collect_child_outcomes(
+            backend="codex", parent_session_id="parent-1", log_root=tmp_path / "logs"
+        )
+        == ()
+    )
+
+
+def test_collect_codex_observed_children_continues_after_snapshot_write_failure(
+    tmp_path, monkeypatch
+) -> None:
+    log_root = tmp_path / "logs"
+    parent_path = tmp_path / "parent.jsonl"
+    _write_rollout(
+        parent_path,
+        [
+            {"type": "session_meta", "payload": {"id": "parent-1"}},
+            *(
+                {
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "sub_agent_activity",
+                        "kind": "started",
+                        "agent_thread_id": child_id,
+                    },
+                }
+                for child_id in ("child-1", "child-2")
+            ),
+        ],
+    )
+    original_observe = co.observe_child
+
+    def fail_first_child(snapshot_path, **kwargs):
+        if kwargs["child_id"] == "child-1":
+            raise OSError("simulated write failure")
+        original_observe(snapshot_path, **kwargs)
+
+    monkeypatch.setattr(co, "observe_child", fail_first_child)
+
+    assert not co.collect_codex_observed_children(
+        parent_rollout_path=parent_path,
+        parent_session_id="parent-1",
+        log_root=log_root,
+        child_rollout_resolver=lambda _child_id: None,
+    )
+    outcomes = co.collect_child_outcomes(
+        backend="codex", parent_session_id="parent-1", log_root=log_root
+    )
+    assert [outcome["child_id"] for outcome in outcomes] == ["child-2"]
 
 
 # --- Step 5: managed-attempt recording (module functions + ManagedAttemptRecorder) --------

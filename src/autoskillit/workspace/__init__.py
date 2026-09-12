@@ -1,31 +1,27 @@
 """workspace/ IL-1 package: directory cleanup, skill resolution, and clone isolation.
 
-Re-exports the full public surface of cleanup.py, skills/__init__.py, and clone.py.
-All sub-modules depend only on autoskillit.core.*.
+Re-exports the full public surface of workspace.clone, workspace._installed,
+workspace._projected_artifact, and skills/__init__.py, plus the still-flat
+skill_capabilities.py/skill_projection.py/session_skills.py modules. All
+sub-modules depend only on autoskillit.core.*.
 """
 
 from autoskillit.core import SkillResolver
-from autoskillit.workspace._clone_detect import (
-    RUNS_DIR,
-    classify_remote_url,
-    detect_branch,
-    detect_source_dir,
-    detect_uncommitted_changes,
-    detect_unpublished_branch,
-)
-from autoskillit.workspace._clone_remote import CloneSourceResolution
-from autoskillit.workspace._install_state import (
-    marketplace_plugin_root,
-    reconcile_install_artifacts,
-    verify_install_state,
-)
-from autoskillit.workspace._installed_artifact import (
+from autoskillit.workspace._installed import (
     InstalledArtifactVerification,
     InstallStateFinding,
     InstallStateLeaseMode,
     InstallStateSpec,
+    PublicationObligation,
+    clear_obligation,
+    marketplace_plugin_root,
+    read_obligation,
+    reconcile_install_artifacts,
+    update_obligation_expected_version,
+    verify_install_state,
     verify_installed_plugin_artifact,
     write_installed_plugin_artifact_manifest_locked,
+    write_obligation,
 )
 from autoskillit.workspace._projected_artifact import (
     PROJECTION_CACHE_KEY_EXCLUSIONS,
@@ -50,35 +46,31 @@ from autoskillit.workspace._projected_artifact._generation_publication import (
     publish_generation,
     publish_install_root_generation,
 )
-from autoskillit.workspace._update_obligation import (
-    PublicationObligation,
-    clear_obligation,
-    read_obligation,
-    update_obligation_expected_version,
-    write_obligation,
-)
-from autoskillit.workspace.cleanup import (
-    CleanupResult,
-    DefaultWorkspaceManager,
-    _delete_directory_contents,
-)
 from autoskillit.workspace.clone import (
+    RUNS_DIR,
+    WORKTREES_DIR,
+    CleanupResult,
+    CloneSourceResolution,
     DefaultCloneManager,
+    DefaultWorkspaceManager,
+    batch_delete,
+    classify_remote_url,
+    cleanup_candidates,
     clone_repo,
+    create_git_worktree,
+    delete_directory_contents,
+    detect_branch,
+    detect_source_dir,
+    detect_uncommitted_changes,
+    detect_unpublished_branch,
+    list_git_worktrees,
     push_to_remote,
+    read_registry,
+    register_clone,
     remove_clone,
-)
-from autoskillit.workspace.clone_registry import (
-    batch_delete as batch_delete,
-)
-from autoskillit.workspace.clone_registry import (
-    cleanup_candidates as cleanup_candidates,
-)
-from autoskillit.workspace.clone_registry import (
-    read_registry as read_registry,
-)
-from autoskillit.workspace.clone_registry import (
-    register_clone as register_clone,
+    remove_git_worktree,
+    remove_worktree_sidecar,
+    write_worktree_sidecar,
 )
 from autoskillit.workspace.session_skills import (
     CompiledSessionSkillCatalog,
@@ -145,16 +137,6 @@ from autoskillit.workspace.skills._format import (
     read_skill_frontmatter,
     validate_skill_frontmatter,
 )
-from autoskillit.workspace.worktree import (
-    WORKTREES_DIR,
-    create_git_worktree,
-    list_git_worktrees,
-    remove_git_worktree,
-    remove_worktree_sidecar,
-    write_worktree_sidecar,
-)
-
-delete_directory_contents = _delete_directory_contents
 
 __all__ = [
     "batch_delete",

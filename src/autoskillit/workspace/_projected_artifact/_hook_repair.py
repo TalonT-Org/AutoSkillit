@@ -29,10 +29,10 @@ from autoskillit.hook_registry import (
     quarantine_hook_payload,
     render_relocatable_hook_command,
 )
-from autoskillit.workspace._installed_artifact import (
+from autoskillit.workspace._installed._artifact import (
     write_installed_plugin_artifact_manifest_locked,
 )
-from autoskillit.workspace._projection_cache import (
+from autoskillit.workspace._installed._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     projected_artifact_lease_path,
     projected_artifact_manifest_path,

@@ -42,11 +42,11 @@ LAUNCH_TOTAL_FUNCTIONS: Mapping[tuple[str, str], frozenset[str]] = {
         "PluginArtifactRetirementEngine.enqueue_retirement",
     ): frozenset({"PluginArtifactValidationError"}),
     (
-        "autoskillit/workspace/_projection_cache.py",
+        "autoskillit/workspace/_installed/_projection_cache.py",
         "ProjectedPluginRetirementOwner.cancel_obsolete_retirements",
     ): frozenset(),
     (
-        "autoskillit/workspace/_projection_cache.py",
+        "autoskillit/workspace/_installed/_projection_cache.py",
         "prune_stale_projections",
     ): frozenset(),
 }
@@ -68,11 +68,11 @@ MUST_CONSUME_TOTAL_RESULTS: frozenset[tuple[str, str]] = frozenset(
             "PluginArtifactRetirementEngine.cancel_obsolete_retirements",
         ),
         (
-            "autoskillit/workspace/_projection_cache.py",
+            "autoskillit/workspace/_installed/_projection_cache.py",
             "ProjectedPluginRetirementOwner.enqueue_retirement",
         ),
         (
-            "autoskillit/workspace/_projection_cache.py",
+            "autoskillit/workspace/_installed/_projection_cache.py",
             "ProjectedPluginRetirementOwner.cancel_obsolete_retirements",
         ),
         (

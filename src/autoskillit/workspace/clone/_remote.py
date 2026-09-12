@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Literal
 
 from autoskillit.core import get_logger
-from autoskillit.workspace._clone_detect import _is_not_file_url
+
+from ._detect import _is_not_file_url
 
 logger = get_logger(__name__)
 

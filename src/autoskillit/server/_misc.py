@@ -72,7 +72,6 @@ from autoskillit.workspace import (
 from autoskillit.workspace import (
     build_skill_projection_binding as build_skill_projection_binding,
 )
-from autoskillit.workspace import clone_registry as clone_registry
 from autoskillit.workspace import (
     compile_session_skill_catalog as compile_session_skill_catalog,
 )
@@ -82,10 +81,15 @@ from autoskillit.workspace import (
 from autoskillit.workspace import (
     resolve_closure_write_dirs as resolve_closure_write_dirs,
 )
+from autoskillit.workspace.clone import _registry
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
     from autoskillit.core import CodingAgentBackend, SkillResult
+
+# Re-exported under its facade-consumer name; a from-import alias here would rename
+# rather than redundantly self-alias, so ruff/mypy would not treat it as intentional.
+clone_registry = _registry
 
 logger = get_logger(__name__)
 

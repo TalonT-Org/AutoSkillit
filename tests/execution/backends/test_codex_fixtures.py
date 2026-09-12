@@ -63,7 +63,7 @@ class TestCodexFixturePackage:
             assert fixture_path(name).is_file()
 
     def test_all_exports_count(self) -> None:
-        assert len(CODEX_ALL) == 14
+        assert len(CODEX_ALL) == 15
 
     def test_large_embedded_payload_is_realistic_jsonl_data(self) -> None:
         path = fixture_path(LARGE_EMBEDDED_PAYLOAD_V1)

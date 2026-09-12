@@ -606,6 +606,7 @@ def test_subprocess_shard_all() -> None:
     from autoskillit.core.types._type_subprocess import __all__
 
     assert set(__all__) == {
+        "LineDriver",
         "ProcessCleanupResult",
         "SubprocessResult",
         "SubprocessRunner",

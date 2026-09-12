@@ -30,7 +30,7 @@ SRC_ROOT = PROJECT_ROOT / "src" / "autoskillit"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from tests.arch._line_budget import count_budget_lines
+from tests.arch._line_budget import count_budget_lines, format_unmeasurable
 from tests.arch._subpackage_isolation_line_limits import (
     _LINE_LIMIT_EXEMPTIONS,
     LineLimitExemption,
@@ -49,11 +49,11 @@ def check_file(path: Path) -> str | None:
     try:
         line_count = count_budget_lines(path)
     except SyntaxError as exc:
-        detail = exc.msg or "syntax error"
-        return (
-            f"{rel}: cannot be measured -- {detail} at line {exc.lineno}; "
-            f"REQ-CNST-010 fails closed on source Python cannot parse"
-        )
+        detail = f"{exc.msg or 'syntax error'} at line {exc.lineno}"
+        return format_unmeasurable(rel, detail)
+    except UnicodeDecodeError as exc:
+        detail = f"{exc.reason} at byte offset {exc.start}"
+        return format_unmeasurable(rel, detail)
     if line_count <= HARD_CAP:
         return None
     exemption: LineLimitExemption | None = _LINE_LIMIT_EXEMPTIONS.get(rel)
@@ -80,8 +80,15 @@ def check_file(path: Path) -> str | None:
             f"{rel}: {line_count} non-import lines exceeds its exemption ceiling "
             f"of {exemption.limit}"
         )
-    if not exemption.predicate():
-        rule_id = exemption.rationale.split(":", 1)[0]
+    rule_id = exemption.rationale.split(":", 1)[0]
+    try:
+        predicate_holds = exemption.predicate()
+    except Exception as exc:  # noqa: BLE001 - fail closed: a raising predicate voids the exemption
+        return (
+            f"{rel}: {line_count} non-import lines -- exemption predicate for {rule_id} "
+            f"raised {exc.__class__.__name__}: {exc}; the justification cannot be verified"
+        )
+    if not predicate_holds:
         return (
             f"{rel}: {line_count} non-import lines -- exemption predicate for {rule_id} "
             f"returned False; the justification no longer holds"

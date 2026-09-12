@@ -97,6 +97,47 @@ def test_false_exemption_predicate_reports_failure(
     assert "returned False" in message
 
 
+def test_raising_exemption_predicate_reports_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    path = _write_module(mod.SRC_ROOT, 751)
+
+    def _raising_predicate() -> bool:
+        raise RuntimeError("cannot verify")
+
+    monkeypatch.setitem(
+        mod._LINE_LIMIT_EXEMPTIONS,
+        "candidate.py",
+        mod.LineLimitExemption(
+            800,
+            "REQ-CNST-010-E3: verifiable rationale",
+            predicate=_raising_predicate,
+        ),
+    )
+
+    message = mod.check_file(path)
+
+    assert message is not None
+    assert "raised RuntimeError: cannot verify" in message
+    assert "cannot be verified" in message
+
+
+def test_undecodable_file_is_reported_as_a_violation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mod = _configured_module(tmp_path, monkeypatch)
+    mod.SRC_ROOT.mkdir(parents=True, exist_ok=True)
+    path = mod.SRC_ROOT / "undecodable.py"
+    path.write_bytes(b"value = '\xff\xfe'\n")
+
+    message = mod.check_file(path)
+
+    assert message is not None
+    assert "undecodable.py" in message
+    assert "cannot be measured" in message
+
+
 def test_verified_exemption_within_limit_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

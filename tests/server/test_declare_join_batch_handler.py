@@ -288,6 +288,7 @@ def test_skill_name_matches_in_both_namespaced_and_bare_form(
 @pytest.mark.parametrize(
     ("candidate_count", "expected_truncated"),
     [(20, False), (21, True)],
+    ids=["within_limit", "exceeds_limit"],
 )
 def test_binding_candidate_enumeration_reports_truncation_boundary(
     tmp_path: Path,

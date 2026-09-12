@@ -36,13 +36,16 @@ class _FakeBackend:
 
 def test_empty_evidence_session_id_is_a_no_op(tmp_path) -> None:
     backend = _FakeBackend(name="claude-code", transcript_path=None)
+    log_dir = tmp_path / "logs"
     collect_native_children_for_backend(
         step_backend=backend,
         cwd=str(tmp_path),
         evidence_session_id="",
-        diagnostic_log_dir=str(tmp_path / "logs"),
+        diagnostic_log_dir=str(log_dir),
     )
-    # No exception, and nothing to assert on — this is a pure no-op guard.
+    assert (
+        collect_child_outcomes(backend="claude_code", parent_session_id="", log_root=log_dir) == ()
+    )
 
 
 def test_unresolvable_transcript_path_is_a_no_op(tmp_path) -> None:

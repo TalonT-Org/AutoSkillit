@@ -42,7 +42,7 @@ from autoskillit.core import (
     observe_path_mode,
     strict_walk,
 )
-from autoskillit.workspace.session_skill_catalog import (
+from autoskillit.workspace.session_skills._catalog import (
     CompiledSessionSkillCatalog,
     _canonical_skill_unavailability_payload,
     _compile_reachable_profile_skill_catalog,
@@ -54,7 +54,7 @@ from autoskillit.workspace.session_skill_catalog import (
     compile_session_skill_catalog,
     write_skill_unavailability_metadata,
 )
-from autoskillit.workspace.skill_projection import (
+from autoskillit.workspace.session_skills._projection import (
     SkillProjectionContext,
     materialize_agent_skill_tree,
 )

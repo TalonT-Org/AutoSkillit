@@ -342,9 +342,10 @@ def test_all_refused_projection_preserves_previous_publication_and_names_details
 
 
 def test_projected_artifact_boundary_is_one_way_and_canonical() -> None:
+    import autoskillit.workspace.skill_projection as skill_projection
+
     import autoskillit.workspace._projected_artifact as projected_artifact
     import autoskillit.workspace._projected_artifact.authority as authority
-    import autoskillit.workspace.skill_projection as skill_projection
 
     assert "autoskillit.workspace.skill_projection" not in inspect.getsource(authority)
     assert (

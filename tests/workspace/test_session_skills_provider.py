@@ -7,10 +7,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pytest
-
 import autoskillit.workspace.session_skill_materialization as session_skill_materialization
 import autoskillit.workspace.session_skill_provider as session_skill_provider
+import pytest
+
 from autoskillit.core import (
     SESSION_ADD_DIR_SUBDIR,
     BackendConventions,

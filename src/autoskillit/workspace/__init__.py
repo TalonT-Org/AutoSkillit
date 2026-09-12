@@ -87,17 +87,7 @@ from autoskillit.workspace.session_skills import (
     resolve_persistent_session_roots,
     write_skill_unavailability_metadata,
 )
-from autoskillit.workspace.skill_capabilities import (
-    RETIRED_SEMANTIC_CAPABILITIES,
-    SkillCapabilityAuthenticityDiagnostic,
-    SkillCapabilityEvidence,
-    SkillCapabilityValidation,
-    classify_skill_capability_evidence,
-    detect_skill_capabilities,
-    validate_skill_capability_authenticity,
-    validate_skill_capability_declarations,
-)
-from autoskillit.workspace.skill_projection import (
+from autoskillit.workspace.session_skills._projection import (
     AgentSkillDocument,
     SkillProjectionBinding,
     SkillProjectionContext,
@@ -112,6 +102,16 @@ from autoskillit.workspace.skill_projection import (
     project_agent_skill_document,
     validate_sanitized_plugin_artifact,
     write_generated_hooks_json,
+)
+from autoskillit.workspace.skill_capabilities import (
+    RETIRED_SEMANTIC_CAPABILITIES,
+    SkillCapabilityAuthenticityDiagnostic,
+    SkillCapabilityEvidence,
+    SkillCapabilityValidation,
+    classify_skill_capability_evidence,
+    detect_skill_capabilities,
+    validate_skill_capability_authenticity,
+    validate_skill_capability_declarations,
 )
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,

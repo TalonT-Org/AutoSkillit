@@ -357,7 +357,10 @@ def _plumbing_stderr(result: subprocess.CompletedProcess[bytes]) -> str:
 def _decode_source(data: bytes) -> str:
     """Decode a Python blob using its own encoding cookie/BOM, like the stdlib tokenizer."""
     encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
-    return data.decode(encoding)
+    try:
+        return data.decode(encoding)
+    except UnicodeDecodeError as exc:
+        raise SyntaxError(f"bad encoding cookie ({encoding}): {exc}") from exc
 
 
 def git_show(repo_root: Path, rev: str, path: str) -> str | None:

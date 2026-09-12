@@ -796,7 +796,13 @@ def _run(repo_root: Path, *, staged: bool, base: str | None) -> int:
 
 
 def main(argv: list[str]) -> int:
-    """Check the candidate against its base and return a shell-compatible status."""
+    """Check the candidate diff against its base revision and enforce the complexity ratchet.
+
+    ``--staged`` compares the index against HEAD; ``--base REF`` compares the working tree
+    against the merge base of HEAD and REF. Returns 0 when clean or (in ``warn`` mode) when
+    only report-and-continue violations were found, 1 when ``fail``-mode violations were
+    found, and 2 for a usage, policy, or git error.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--staged", action="store_true", help="Compare the staged index against HEAD."

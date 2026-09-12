@@ -138,4 +138,4 @@ def refresh_summary_child_outcomes(
             committed["child_outcomes"] = child_outcomes
             atomic_write(summary_path, fast_dumps(committed, sort_keys=True, indent=True) + "\n")
     except (OSError, ValueError):
-        logger.debug("summary_child_outcomes_refresh_failed", exc_info=True)
+        logger.warning("summary_child_outcomes_refresh_failed", path=summary_path, exc_info=True)

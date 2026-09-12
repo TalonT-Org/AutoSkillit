@@ -46,4 +46,8 @@ def test_selection_runs_only_script_version_health_through_real_wrapper(
     assert script_checks[0]["message"] == "No pipeline scripts found"
     assert reached_real_wrapper == ["script_version_health"]
     assert "script_version_health" in offered
-    assert any(name != "script_version_health" for name in offered)
+    assert any(name != "script_version_health" for name in offered), (
+        "expected the doctor registry to offer more than one check; if it has "
+        "shrunk to just script_version_health, this selection-boundary test no "
+        "longer proves anything and needs re-examination, not just a passing run"
+    )

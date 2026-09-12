@@ -11,7 +11,7 @@ from pathlib import Path
 import regex as re
 
 from autoskillit.core import load_yaml
-from autoskillit.recipe._api_cache import YamlFileCache
+from autoskillit.recipe.api._api_cache import YamlFileCache
 from autoskillit.recipe.methodology.methodology_tradition_registry import (
     BUNDLED_METHODOLOGY_TRADITIONS_DIR,
     VenueAppendixDef,

@@ -37,8 +37,8 @@ from autoskillit.core import (
     new_managed_attempt_id,
 )
 from autoskillit.execution.child_outcomes import ManagedAttemptRecorder, normalize_backend_name
+from autoskillit.execution.evidence.session_log import resolve_log_dir
 from autoskillit.execution.session import ManagedHeadlessSessionLineageCASMismatch
-from autoskillit.execution.session_log import resolve_log_dir
 
 logger = get_logger(__name__)
 

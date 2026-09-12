@@ -72,7 +72,7 @@ class TestBuildTestScopeExecutionCascade:
         """anomaly_detection.py change → scope is {execution} only (+ always-run)."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/anomaly_detection.py"},
+            changed_files={"src/autoskillit/execution/evidence/anomaly_detection.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -136,7 +136,7 @@ class TestBuildTestScopeExecutionCascade:
         """ci.py → frozenset({"execution"}) (its MODULE_CASCADE_EXECUTION entry)."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/ci.py"},
+            changed_files={"src/autoskillit/execution/github_ops/ci.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -164,7 +164,7 @@ class TestBuildTestScopeExecutionCascade:
         # Create the specific server test file so it resolves in the result
         (tests_root / "server" / "test_factory_recording.py").write_text("")
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/recording.py"},
+            changed_files={"src/autoskillit/execution/evidence/recording.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -181,7 +181,7 @@ class TestBuildTestScopeExecutionCascade:
         """In AGGRESSIVE mode the execution branch is not taken; maps to {"execution"}."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/anomaly_detection.py"},
+            changed_files={"src/autoskillit/execution/evidence/anomaly_detection.py"},
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
         )
@@ -241,7 +241,7 @@ class TestBuildTestScopeExecutionCascade:
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         (tests_root / "skills" / "test_skill_output_compliance.py").touch()
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/anomaly_detection.py"},
+            changed_files={"src/autoskillit/execution/evidence/anomaly_detection.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -341,7 +341,7 @@ class TestClosureExecutionNarrowCascade:
             },
         )
         result = build_test_scope(
-            changed_files={"src/autoskillit/execution/anomaly_detection.py"},
+            changed_files={"src/autoskillit/execution/evidence/anomaly_detection.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )
@@ -371,7 +371,7 @@ class TestClosureExecutionNarrowCascade:
         )
         result = build_test_scope(
             changed_files={
-                "src/autoskillit/execution/anomaly_detection.py",
+                "src/autoskillit/execution/evidence/anomaly_detection.py",
                 "src/autoskillit/execution/headless.py",
             },
             mode=FilterMode.CONSERVATIVE,
@@ -400,8 +400,8 @@ class TestClosureExecutionNarrowCascade:
         )
         result = build_test_scope(
             changed_files={
-                "src/autoskillit/execution/ci.py",
-                "src/autoskillit/execution/clone_guard.py",
+                "src/autoskillit/execution/github_ops/ci.py",
+                "src/autoskillit/execution/runtime/clone_guard.py",
             },
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,

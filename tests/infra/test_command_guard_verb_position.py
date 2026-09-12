@@ -198,7 +198,8 @@ class TestDetectorSyntheticSelfTests:
 
     def test_accepts_positional_argument_classifier(self) -> None:
         source = (
-            "from autoskillit.hooks._command_classification import command_verb_and_args\n"
+            "from autoskillit.hooks._runtime._command_classification import "
+            "command_verb_and_args\n"
             "def f(cmd):\n"
             "    tokens = cmd.split()\n"
             "    verb, args = command_verb_and_args(tokens)\n"

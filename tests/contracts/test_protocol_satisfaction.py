@@ -284,7 +284,7 @@ def test_session_skill_manager_fakes_return_cleanup_counts(
 
 def test_default_database_reader_satisfies_database_reader():
     from autoskillit.core import DatabaseReader
-    from autoskillit.execution.db import DefaultDatabaseReader
+    from autoskillit.execution.runtime.db import DefaultDatabaseReader
 
     assert isinstance(DefaultDatabaseReader(), DatabaseReader)
 
@@ -341,7 +341,7 @@ def test_default_test_runner_satisfies_test_runner():
     from unittest.mock import MagicMock
 
     from autoskillit.core import TestRunner
-    from autoskillit.execution.testing import DefaultTestRunner
+    from autoskillit.execution.runtime.testing import DefaultTestRunner
 
     mock_config = MagicMock()
     mock_config.test_check.command = ["task", "test-all"]

@@ -11,7 +11,7 @@ VALID_CLAUDE_MODEL_IDS: frozenset[str] = frozenset({"claude-sonnet-5", "claude-o
 
 def test_anomaly_detection_aliases_keys_match_shared() -> None:
     from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
-    from autoskillit.execution.anomaly_detection import _MODEL_SHORT_ALIASES
+    from autoskillit.execution.evidence.anomaly_detection import _MODEL_SHORT_ALIASES
 
     for key in _MODEL_SHORT_ALIASES:
         assert key in CLAUDE_MODEL_ALIASES, (

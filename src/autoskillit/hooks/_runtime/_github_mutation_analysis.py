@@ -16,17 +16,18 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._classification import _github_mutation_cli_analysis as _cli
-    from autoskillit.hooks._classification import _github_mutation_request_analysis as _request
-    from autoskillit.hooks._command_classification import (
+    from _command_classification import (
         ArgvToken,
         _select_executable_argv_tokens,
         _verb_start_index,
     )
+
+    from autoskillit.hooks._classification import _github_mutation_cli_analysis as _cli
+    from autoskillit.hooks._classification import _github_mutation_request_analysis as _request
 else:
-    if __package__ == "autoskillit.hooks":
-        from ._classification import _github_mutation_cli_analysis as _cli
-        from ._classification import _github_mutation_request_analysis as _request
+    if __package__ == "autoskillit.hooks._runtime":
+        from .._classification import _github_mutation_cli_analysis as _cli
+        from .._classification import _github_mutation_request_analysis as _request
     else:
         from _classification import _github_mutation_cli_analysis as _cli
         from _classification import _github_mutation_request_analysis as _request
@@ -56,7 +57,9 @@ def _command_verb_and_args(segment: Sequence[str]) -> tuple[str, list[str]]:
 
 
 def _tokenize_with_redirects(command: str) -> list[Any]:
-    from _command_classification import _tokenize_command_segments_with_redirects
+    from _command_classification import (
+        _tokenize_command_segments_with_redirects,
+    )
 
     return _tokenize_command_segments_with_redirects(command)
 
@@ -75,8 +78,12 @@ def _partition_output_redirects_call(
     return _partition_output_redirects(tokens, cwd=cwd, redirect_syntax=redirect_syntax)
 
 
-def _extract_interpreter_segment_specs_call(segment: Sequence[str]) -> tuple[list[Any], bool]:
-    from _command_classification import _extract_interpreter_segment_specs
+def _extract_interpreter_segment_specs_call(
+    segment: Sequence[str],
+) -> tuple[list[Any], bool]:
+    from _command_classification import (
+        _extract_interpreter_segment_specs,
+    )
 
     return _extract_interpreter_segment_specs(segment)
 

@@ -48,11 +48,11 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: stdlib-only hook module that cannot import resolve_temp_dir().
     # HOOK_DIR_COMPONENTS = (".autoskillit", "temp") mirrors the canonical bridge path
     # defined by _fmt_primitives._HOOK_CONFIG_PATH_COMPONENTS.
-    "hooks/_hook_settings.py": "stdlib-only hook; cannot use resolve_temp_dir()",
+    "hooks/_runtime/_hook_settings.py": "stdlib-only hook; cannot use resolve_temp_dir()",
     # Justification: sidecar path for worktree base branch detection; reads from
     # <project_root>/.autoskillit/temp/worktrees/<wt_name>/base-branch which is
     # written by implement-worktree skills and must match the canonical layout.
-    "execution/testing.py": "sidecar path for worktree base branch detection",
+    "execution/runtime/testing.py": "sidecar path for worktree base branch detection",
     # Justification: reads fleet dispatch state files from the canonical temp dir
     # (<project_root>/.autoskillit/temp/dispatches/) to determine which campaign IDs
     # have active dispatches; owned by the fleet layer after the IL-1→IL-2 refactor.
@@ -80,7 +80,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: docstring for resolve_state_root() explains that callers append
     # .autoskillit/temp/... themselves; stdlib-only hook module, cannot use
     # resolve_temp_dir().
-    "hooks/_hook_payload.py": "docstring example",
+    "hooks/_runtime/_hook_payload.py": "docstring example",
 }
 
 _LITERAL = ".autoskillit/temp"

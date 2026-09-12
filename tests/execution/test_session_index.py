@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.execution.session_index import (
+from autoskillit.execution.evidence.session_index import (
     find_stale_session_archive_references,
     read_session_index_rows,
     read_tolerant_session_index_rows,

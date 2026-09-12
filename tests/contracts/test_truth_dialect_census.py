@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import DeclaredTruthUnsupported, normalize_declared_truth
 from autoskillit.execution.backends._claude.environment import _active_agent_teams
-from autoskillit.hooks import _hook_settings
+from autoskillit.hooks._runtime import _hook_settings
 from autoskillit.recipe._recipe_composition import _is_ingredient_truthy
 from autoskillit.recipe._rule_helpers import _is_failure_sentinel_value
 from autoskillit.recipe.schema import RecipeStep

@@ -17,10 +17,14 @@ if TYPE_CHECKING:
         _github_mutation_kind,
         _is_dynamic_shell_value,
     )
-    from autoskillit.hooks._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
+    from autoskillit.hooks._runtime._command_classification import (
+        ArgvToken,
+        _consume_argv_flag,
+        _FlagArity,
+    )
 else:
     if __package__ == "autoskillit.hooks._classification":
-        from .._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
+        from .._runtime._command_classification import ArgvToken, _consume_argv_flag, _FlagArity
     else:
         from _command_classification import ArgvToken, _consume_argv_flag, _FlagArity
     from ._github_mutation_request_analysis import (

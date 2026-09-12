@@ -25,6 +25,10 @@ from uuid import uuid4
 _HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 if TYPE_CHECKING:
     from autoskillit.hooks._capture_contract import (
@@ -43,7 +47,7 @@ if TYPE_CHECKING:
         decode_lineage_ref_json,
         encode_capture_request,
     )
-    from autoskillit.hooks._policy_event import PolicyEvent, render_provenance_prefix
+    from autoskillit.hooks._runtime._policy_event import PolicyEvent, render_provenance_prefix
 else:
     from _capture_contract import (
         _CAPTURE_ID_RE,

@@ -41,7 +41,7 @@ PROC_OOM_SCORE_FIXTURE = "133"
 
 def test_parse_proc_status_signal_masks():
     """Parse /proc/pid/status fixture for signal mask fields."""
-    from autoskillit.execution.linux_tracing import _parse_proc_status
+    from autoskillit.execution.evidence.linux_tracing import _parse_proc_status
 
     fields = _parse_proc_status(PROC_STATUS_FIXTURE)
     assert fields["sig_pnd"] == "0000000000000000"
@@ -51,7 +51,7 @@ def test_parse_proc_status_signal_masks():
 
 def test_read_proc_snapshot_missing_pid():
     """read_proc_snapshot returns None for nonexistent PID."""
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
+    from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
     result = read_proc_snapshot(999999999)
     assert result is None
@@ -61,7 +61,7 @@ def test_read_proc_snapshot_has_all_fields():
     """read_proc_snapshot of current process returns all expected fields."""
     import os
 
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
+    from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
@@ -90,7 +90,10 @@ async def test_tracing_handle_accumulates_snapshots(tmp_path):
 
     import anyio
 
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     proc = subprocess.Popen(["sleep", "2"])
@@ -116,7 +119,10 @@ async def test_tracing_handle_stop_returns_snapshots(tmp_path):
 
     import anyio
 
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
@@ -134,14 +140,14 @@ async def test_tracing_handle_stop_returns_snapshots(tmp_path):
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only")
 def test_linux_tracing_available_on_linux():
-    from autoskillit.execution.linux_tracing import LINUX_TRACING_AVAILABLE
+    from autoskillit.execution.evidence.linux_tracing import LINUX_TRACING_AVAILABLE
 
     assert LINUX_TRACING_AVAILABLE is True
 
 
 @pytest.mark.skipif(sys.platform == "linux", reason="Non-Linux only")
 def test_linux_tracing_unavailable_on_non_linux():
-    from autoskillit.execution.linux_tracing import LINUX_TRACING_AVAILABLE
+    from autoskillit.execution.evidence.linux_tracing import LINUX_TRACING_AVAILABLE
 
     assert LINUX_TRACING_AVAILABLE is False
 
@@ -150,7 +156,7 @@ def test_noop_on_non_linux(monkeypatch, tmp_path):
     """start_linux_tracing is a no-op when LINUX_TRACING_AVAILABLE is False."""
     import os
 
-    from autoskillit.execution import linux_tracing
+    from autoskillit.execution.evidence import linux_tracing
     from tests._helpers import make_tracing_config
 
     monkeypatch.setattr(linux_tracing, "LINUX_TRACING_AVAILABLE", False)
@@ -166,7 +172,7 @@ async def test_proc_monitor_detects_death():
     """proc_monitor stops when the target PID no longer exists."""
     import subprocess
 
-    from autoskillit.execution.linux_tracing import proc_monitor
+    from autoskillit.execution.evidence.linux_tracing import proc_monitor
 
     proc = subprocess.Popen(["sleep", "0.5"])
     snapshots = []
@@ -181,7 +187,7 @@ async def test_proc_monitor_detects_death():
 @pytest.mark.anyio
 async def test_proc_monitor_stamps_unique_captured_at():
     """Each snapshot from proc_monitor has a distinct captured_at."""
-    from autoskillit.execution.linux_tracing import proc_monitor
+    from autoskillit.execution.evidence.linux_tracing import proc_monitor
 
     snaps = []
     async for snap in proc_monitor(os.getpid(), 0.01):
@@ -197,7 +203,10 @@ async def test_proc_monitor_stamps_unique_captured_at():
 @pytest.mark.anyio
 async def test_start_linux_tracing_creates_trace_file(tmp_path):
     """When tmpfs_path is configured, start_linux_tracing opens a trace file."""
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(enabled=True, proc_interval=0.01, tmpfs_path=str(tmp_path))
@@ -217,7 +226,10 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
     """Each yielded snapshot appears as a JSONL line in the trace file."""
     import subprocess
 
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     proc = subprocess.Popen(["sleep", "2"])
@@ -250,7 +262,7 @@ async def test_streaming_writes_each_snapshot_as_jsonl(tmp_path):
 def test_stop_closes_trace_file(tmp_path):
     """handle.stop() closes the file handle; _trace_file is None after."""
 
-    from autoskillit.execution.linux_tracing import LinuxTracingHandle
+    from autoskillit.execution.evidence.linux_tracing import LinuxTracingHandle
 
     handle = LinuxTracingHandle()
     trace_path = tmp_path / "test_trace.jsonl"
@@ -263,7 +275,7 @@ def test_stop_closes_trace_file(tmp_path):
 
 def test_stop_idempotent(tmp_path):
     """Calling stop() twice does not raise."""
-    from autoskillit.execution.linux_tracing import LinuxTracingHandle
+    from autoskillit.execution.evidence.linux_tracing import LinuxTracingHandle
 
     handle = LinuxTracingHandle()
     trace_path = tmp_path / "test_trace.jsonl"
@@ -277,7 +289,10 @@ def test_stop_idempotent(tmp_path):
 @pytest.mark.anyio
 async def test_streaming_graceful_when_tmpfs_missing(tmp_path):
     """If tmpfs_path does not exist, tracing still works in-memory."""
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(
@@ -302,7 +317,7 @@ def test_proc_snapshot_has_captured_at_field():
     """ProcSnapshot must have a captured_at field populated at creation time."""
     import os
 
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
+    from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
@@ -319,7 +334,10 @@ async def test_proc_monitor_snapshots_have_distinct_timestamps(tmp_path):
 
     import anyio
 
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     config = make_tracing_config(proc_interval=0.05, tmpfs_path=str(tmp_path))
@@ -343,7 +361,7 @@ async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
     """
     import subprocess
 
-    from autoskillit.execution.linux_tracing import proc_monitor
+    from autoskillit.execution.evidence.linux_tracing import proc_monitor
 
     proc = subprocess.Popen(
         [sys.executable, "-c", "while True: pass"],
@@ -367,7 +385,7 @@ async def test_proc_monitor_persists_psutil_process_for_cpu_percent():
 
 def test_parse_net_tcp_established_port_443():
     """_parse_net_tcp counts ESTABLISHED connections to port 443."""
-    from autoskillit.execution.linux_tracing import _parse_net_tcp
+    from autoskillit.execution.evidence.linux_tracing import _parse_net_tcp
 
     fixture = (
         "  sl  local_address rem_address   st tx_queue rx_queue tr...\n"
@@ -379,14 +397,14 @@ def test_parse_net_tcp_established_port_443():
 
 
 def test_parse_net_tcp_empty_returns_empty_dict():
-    from autoskillit.execution.linux_tracing import _parse_net_tcp
+    from autoskillit.execution.evidence.linux_tracing import _parse_net_tcp
 
     assert _parse_net_tcp("") == {}
     assert _parse_net_tcp("  sl  local_address rem_address   st\n") == {}
 
 
 def test_parse_proc_io_extracts_bytes():
-    from autoskillit.execution.linux_tracing import _parse_proc_io
+    from autoskillit.execution.evidence.linux_tracing import _parse_proc_io
 
     fixture = "rchar: 1000\nwchar: 2000\nread_bytes: 4096\nwrite_bytes: 8192\n"
     read_b, write_b = _parse_proc_io(fixture)
@@ -396,7 +414,7 @@ def test_parse_proc_io_extracts_bytes():
 
 def test_read_proc_snapshot_has_network_fields():
     """read_proc_snapshot includes api_connection_established on Linux."""
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
+    from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
@@ -410,7 +428,7 @@ def test_read_proc_snapshot_network_graceful_on_missing_proc_net(monkeypatch):
     """Fields are None, no exception, when /proc/{pid}/net/tcp is unavailable."""
     from pathlib import Path
 
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
+    from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
     original_read_text = Path.read_text
 
@@ -431,7 +449,10 @@ async def test_start_linux_tracing_writes_enrollment_sidecar(tmp_path):
     """start_linux_tracing must write autoskillit_enrollment_{pid}.json immediately."""
     import anyio
 
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))
@@ -509,7 +530,7 @@ def test_proc_snapshot_has_comm_field():
     """
     import os
 
-    from autoskillit.execution.linux_tracing import read_proc_snapshot
+    from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
     snap = read_proc_snapshot(os.getpid())
     assert snap is not None
@@ -533,7 +554,7 @@ def test_start_linux_tracing_requires_trace_target():
     Test 1.5: locks the type contract. Any future caller that passes an int gets
     a hard failure rather than silent wrong-process observation.
     """
-    from autoskillit.execution.linux_tracing import start_linux_tracing
+    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing
 
     # Annotation must reference TraceTarget by name (from __future__ import annotations
     # makes annotations lazy strings; verify the string contains "TraceTarget")
@@ -553,7 +574,10 @@ async def test_stop_unlinks_trace_and_enrollment(tmp_path):
     """stop() must delete both trace JSONL and enrollment sidecar on clean exit."""
     import anyio
 
-    from autoskillit.execution.linux_tracing import start_linux_tracing, trace_target_from_pid
+    from autoskillit.execution.evidence.linux_tracing import (
+        start_linux_tracing,
+        trace_target_from_pid,
+    )
     from tests._helpers import make_tracing_config
 
     cfg = make_tracing_config(enabled=True, proc_interval=0.1, tmpfs_path=str(tmp_path))

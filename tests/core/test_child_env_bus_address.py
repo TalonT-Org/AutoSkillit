@@ -17,7 +17,7 @@ import pytest
 
 from autoskillit.core import build_agent_env, build_maintenance_env
 from autoskillit.execution.backends._codex_cmd_builders import CodexEnvPolicy
-from autoskillit.execution.testing import build_sanitized_env
+from autoskillit.execution.runtime.testing import build_sanitized_env
 from autoskillit.hooks._capture_process import _scrubbed_user_environment
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]

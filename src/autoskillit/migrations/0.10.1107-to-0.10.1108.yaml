@@ -1,0 +1,40 @@
+from_version: "0.10.1107"
+to_version: "0.10.1108"
+description: >
+  execution/ decomposed into execution/{github_ops,evidence,runtime}/
+  sub-packages (#4672).
+changes:
+  - id: execution-commands-relocated
+    description: >
+      autoskillit.execution.commands moved to
+      autoskillit.execution.runtime.commands as part of #4672's decomposition
+      of execution/ into execution/{github_ops,evidence,runtime}/ sub-packages.
+      The single public name ClaudeHeadlessCmd is also re-exported by the
+      execution/ gateway (autoskillit.execution) so most consumers need no
+      change.
+    instruction: |
+      Direct imports of `autoskillit.execution.commands` (the module path
+      that existed prior to this release) must be updated to
+      `autoskillit.execution.runtime.commands`. Indirect consumers that
+      import `from autoskillit.execution import ClaudeHeadlessCmd` (or any
+      other name from the gateway) need no change — the execution/__init__.py
+      gateway re-exports the full public surface at the legacy path.
+
+  - id: execution-decomposition-full-module-list
+    description: >
+      #4672 relocated ~26 other execution/ top-level modules (session log,
+      recording, anomaly detection, linux tracing, CI watcher, GitHub
+      fetcher/PR analysis/diff annotator, remote resolver, database reader,
+      launch resolver, test runner, and their private helpers) into
+      execution/{github_ops,evidence,runtime}/, alongside the
+      execution.commands move documented above. No other move has a known
+      direct-import consumer outside execution/ itself — every one is
+      already re-exported in full by the execution/__init__.py gateway.
+    instruction: |
+      If you import any execution/ submodule directly by its pre-#4672
+      top-level path (e.g. `autoskillit.execution.session_log`,
+      `autoskillit.execution.recording`, `autoskillit.execution.ci`) rather
+      than through `from autoskillit.execution import <name>`, update the
+      import to its new sub-package path. See the AGENTS.md in each of
+      execution/evidence/, execution/github_ops/, and execution/runtime/
+      for the complete moved-module list and new paths.

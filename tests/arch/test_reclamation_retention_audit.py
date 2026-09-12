@@ -387,17 +387,38 @@ def test_injected_reclaimer_is_not_silently_unclassified() -> None:
     assert errors == ["unclassified discovered reclaimers: [('synthetic.py', 'prune_orphans')]"]
 
 
+def test_reclaimer_targets_exist_on_disk() -> None:
+    """REQ-REG-014: every `RECLAIMER_TARGETS` source path must exist on disk.
+
+    Mirrors `tests/arch/test_durable_artifact_writers_guard.py::test_scoped_modules_exist`.
+    A stale or typo'd path in `RECLAIMER_TARGETS` would otherwise silently
+    audit zero files. This guard catches path-key drift between retention
+    declarations and the actual repository layout after decomposition PRs
+    like #4672.
+
+    Note on placement: the audit remediation specified
+    `tests/_retention_surface.py` as the test's home. That file is a data
+    registry whose filename starts with `_` and is therefore skipped by
+    pytest's default `test_*.py` discovery pattern. We place the test in
+    this arch-test module (which already imports `RECLAIMER_TARGETS` from
+    the registry) so it is actually exercised in CI.
+    """
+    repo_root = REPO_ROOT
+    missing = [path for path, _qualified in RECLAIMER_TARGETS if not (repo_root / path).is_file()]
+    assert not missing, f"RECLAIMER_TARGETS references missing files: {missing}"
+
+
 def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     """Canary: target-list completeness survives a coordinated target/row deletion."""
     target = (
-        "src/autoskillit/execution/_session_log_recovery.py",
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
         "recover_crashed_sessions",
     )
     reduced_targets = RECLAIMER_TARGETS - {target}
     reduced_registry = {
         key: decision
         for key, decision in _REAL_REGISTRY.items()
-        if not key.startswith("src/autoskillit/execution/_session_log_recovery.py::")
+        if not key.startswith("src/autoskillit/execution/evidence/_session_log_recovery.py::")
     }
     assert _actual_retention_branches(reduced_targets) == set(reduced_registry)
     errors = _target_partition_errors(
@@ -407,5 +428,6 @@ def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     )
     assert errors == [
         "unclassified discovered reclaimers: "
-        "[('src/autoskillit/execution/_session_log_recovery.py', 'recover_crashed_sessions')]"
+        + "[('src/autoskillit/execution/evidence/_session_log_recovery.py',"
+        + " 'recover_crashed_sessions')]"
     ]

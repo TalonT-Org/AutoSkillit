@@ -1,26 +1,11 @@
 """execution/ IL-1 package: subprocess lifecycle, session parsing, headless runner, testing, DB.
 
-Re-exports the full public surface of the six execution sub-modules.
+Re-exports the full public surface of the ten execution sub-packages.
 All sub-modules depend only on autoskillit.core.* at runtime;
-execution/headless.py has TYPE_CHECKING-only references to pipeline/.
+execution/headless/ has TYPE_CHECKING-only references to pipeline/.
 """
 
 from autoskillit.core import CmdSpec, SkillResult
-from autoskillit.execution._recording_skills import (
-    restore_skill_snapshot,
-    scan_skill_snapshots,
-    snapshot_skill_dir,
-)
-from autoskillit.execution._session_log_recovery import recover_crashed_sessions
-from autoskillit.execution._session_retention import (
-    read_telemetry_clear_marker,
-    write_telemetry_clear_marker,
-)
-from autoskillit.execution.anomaly_detection import (
-    AnomalyKind,
-    AnomalySeverity,
-    detect_anomalies,
-)
 from autoskillit.execution.backends import (
     BACKEND_REGISTRY,
     CODEX_AUTO_COMPACT_LIMIT,
@@ -75,24 +60,46 @@ from autoskillit.execution.child_outcomes import (
     normalize_backend_name,
     reconcile_child_outcome_snapshots,
 )
-from autoskillit.execution.ci import DefaultCIWatcher
-from autoskillit.execution.commands import ClaudeHeadlessCmd
-from autoskillit.execution.db import (
-    DefaultDatabaseReader,
+from autoskillit.execution.evidence._recording_skills import (
+    restore_skill_snapshot,
+    scan_skill_snapshots,
+    snapshot_skill_dir,
 )
-from autoskillit.execution.db import (
-    _execute_readonly_query as execute_readonly_query,
+from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
+from autoskillit.execution.evidence._session_retention import (
+    read_telemetry_clear_marker,
+    write_telemetry_clear_marker,
 )
-from autoskillit.execution.diff_annotator import (
-    DiffMetrics,
-    FilterResult,
-    annotate_diff,
-    compute_diff_metrics,
-    extract_code_region,
-    extract_valid_lines,
-    filter_findings,
-    parse_hunk_ranges,
-    select_review_agents,
+from autoskillit.execution.evidence.anomaly_detection import (
+    AnomalyKind,
+    AnomalySeverity,
+    detect_anomalies,
+)
+from autoskillit.execution.evidence.linux_tracing import (
+    LINUX_TRACING_AVAILABLE,
+    LinuxTracingHandle,
+    ProcSnapshot,
+    read_boot_id,
+    read_starttime_ticks,
+    start_linux_tracing,
+)
+from autoskillit.execution.evidence.recording import (
+    RECORD_SCENARIO_DIR_ENV,
+    RECORD_SCENARIO_ENV,
+    RECORD_SCENARIO_RECIPE_ENV,
+    REPLAY_SCENARIO_DIR_ENV,
+    REPLAY_SCENARIO_ENV,
+    SCENARIO_STEP_NAME_ENV,
+    RecordingSubprocessRunner,
+    ReplayingSubprocessRunner,
+    ScenarioReplayError,
+    build_replay_runner,
+)
+from autoskillit.execution.evidence.session_index import read_session_index_rows
+from autoskillit.execution.evidence.session_log import (
+    flush_session_log,
+    resolve_log_dir,
+    session_index_lock_path,
 )
 from autoskillit.execution.evidence_reader import (
     EvidenceReaderConformanceEvidence,
@@ -103,10 +110,33 @@ from autoskillit.execution.evidence_reader import (
     evidence_reader_provider_environment,
     launch_evidence_reader,
 )
-from autoskillit.execution.github import (
+from autoskillit.execution.github_ops.ci import DefaultCIWatcher
+from autoskillit.execution.github_ops.diff_annotator import (
+    DiffMetrics,
+    FilterResult,
+    annotate_diff,
+    compute_diff_metrics,
+    extract_code_region,
+    extract_valid_lines,
+    filter_findings,
+    parse_hunk_ranges,
+    select_review_agents,
+)
+from autoskillit.execution.github_ops.github import (
     DefaultGitHubFetcher,
     github_headers,
     parse_merge_queue_response,
+)
+from autoskillit.execution.github_ops.pr_analysis import (
+    DOMAIN_PATHS,
+    extract_linked_issues,
+    is_valid_fidelity_finding,
+    partition_files_by_domain,
+)
+from autoskillit.execution.github_ops.remote_resolver import (
+    REMOTE_PRECEDENCE,
+    resolve_remote_name,
+    resolve_remote_repo,
 )
 from autoskillit.execution.github_review import (
     DefaultGitHubReviewGateway,
@@ -121,22 +151,7 @@ from autoskillit.execution.headless import (
     assert_interactive_ordering,
     run_headless_core,
 )
-from autoskillit.execution.launch_resolution import DefaultLaunchResolver
-from autoskillit.execution.linux_tracing import (
-    LINUX_TRACING_AVAILABLE,
-    LinuxTracingHandle,
-    ProcSnapshot,
-    read_boot_id,
-    read_starttime_ticks,
-    start_linux_tracing,
-)
 from autoskillit.execution.merge_queue import DefaultMergeQueueWatcher, fetch_repo_merge_state
-from autoskillit.execution.pr_analysis import (
-    DOMAIN_PATHS,
-    extract_linked_issues,
-    is_valid_fidelity_finding,
-    partition_files_by_domain,
-)
 from autoskillit.execution.process import (
     DEFAULT_TETHER_CEILING_SECONDS,
     INTERACTIVE_TETHER_CEILING_SECONDS,
@@ -180,22 +195,20 @@ from autoskillit.execution.quota import (
     check_and_sleep_if_needed,
     invalidate_cache,
 )
-from autoskillit.execution.recording import (
-    RECORD_SCENARIO_DIR_ENV,
-    RECORD_SCENARIO_ENV,
-    RECORD_SCENARIO_RECIPE_ENV,
-    REPLAY_SCENARIO_DIR_ENV,
-    REPLAY_SCENARIO_ENV,
-    SCENARIO_STEP_NAME_ENV,
-    RecordingSubprocessRunner,
-    ReplayingSubprocessRunner,
-    ScenarioReplayError,
-    build_replay_runner,
+from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
+from autoskillit.execution.runtime.db import (
+    DefaultDatabaseReader,
 )
-from autoskillit.execution.remote_resolver import (
-    REMOTE_PRECEDENCE,
-    resolve_remote_name,
-    resolve_remote_repo,
+from autoskillit.execution.runtime.db import (
+    _execute_readonly_query as execute_readonly_query,
+)
+from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
+from autoskillit.execution.runtime.testing import (
+    DefaultTestRunner,
+    build_sanitized_env,
+    check_test_passed,
+    condense_test_output,
+    parse_pytest_summary,
 )
 from autoskillit.execution.session import (
     ClaudeSessionResult,
@@ -214,19 +227,6 @@ from autoskillit.execution.session import (
     parse_session_result,
     persist_session_state,
     read_session_state,
-)
-from autoskillit.execution.session_index import read_session_index_rows
-from autoskillit.execution.session_log import (
-    flush_session_log,
-    resolve_log_dir,
-    session_index_lock_path,
-)
-from autoskillit.execution.testing import (
-    DefaultTestRunner,
-    build_sanitized_env,
-    check_test_passed,
-    condense_test_output,
-    parse_pytest_summary,
 )
 
 __all__ = [

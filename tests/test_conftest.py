@@ -185,7 +185,7 @@ def test_minimal_ctx_imports_only_l0_l1_composition_packages():
         "autoskillit.pipeline",
         "autoskillit.config",
     )
-    allowed_modules = {"autoskillit.execution.launch_resolution"}
+    allowed_modules = {"autoskillit.execution.runtime.launch_resolution"}
 
     violations = []
     for node in ast.walk(func):
@@ -207,7 +207,7 @@ def test_minimal_ctx_imports_only_l0_l1_composition_packages():
     assert not violations, (
         f"minimal_ctx imports from forbidden modules: {violations}. "
         "Only autoskillit core/config/pipeline packages and the exact "
-        "autoskillit.execution.launch_resolution module are allowed."
+        "autoskillit.execution.runtime.launch_resolution module are allowed."
     )
 
 

@@ -12,7 +12,7 @@ import pytest
 
 from autoskillit.config import AutomationConfig, TokenUsageConfig
 from autoskillit.core.types import ChannelConfirmation
-from autoskillit.execution.github import DefaultGitHubFetcher
+from autoskillit.execution.github_ops.github import DefaultGitHubFetcher
 from autoskillit.pipeline.audit import FailureRecord
 from autoskillit.pipeline.gate import DefaultGateState
 from autoskillit.recipe.schema import RecipeStep

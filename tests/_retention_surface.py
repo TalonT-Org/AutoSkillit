@@ -146,7 +146,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("src/autoskillit/workspace/clone_registry.py", "cleanup_candidates"),
         ("src/autoskillit/workspace/worktree.py", "remove_git_worktree"),
         ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar"),
-        ("src/autoskillit/execution/_session_retention.py", "apply_session_retention"),
+        ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention"),
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"),
         ("src/autoskillit/workspace/_projection_cache.py", "prune_stale_projections"),
         ("src/autoskillit/workspace/_projection_cache.py", "_reconcile_projection_entry"),
@@ -178,7 +178,10 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
             "repair_broken_projection_hooks",
         ),
-        ("src/autoskillit/execution/_session_log_recovery.py", "recover_crashed_sessions"),
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "recover_crashed_sessions",
+        ),
     }
 )
 
@@ -251,10 +254,10 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/workspace/worktree.py", "remove_worktree_sidecar")
     ),
     (
-        "src/autoskillit/execution/_session_retention.py",
+        "src/autoskillit/execution/evidence/_session_retention.py",
         "apply_session_retention",
     ): _convergence_adapters(
-        ("src/autoskillit/execution/_session_retention.py", "apply_session_retention")
+        ("src/autoskillit/execution/evidence/_session_retention.py", "apply_session_retention")
     ),
     ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one"): _convergence_adapters(
         ("src/autoskillit/hooks/_capture/_sweep.py", "sweep_one")
@@ -335,11 +338,11 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         )
     ),
     (
-        "src/autoskillit/execution/_session_log_recovery.py",
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
         "recover_crashed_sessions",
     ): _convergence_adapters(
         (
-            "src/autoskillit/execution/_session_log_recovery.py",
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
             "recover_crashed_sessions",
         )
     ),
@@ -410,7 +413,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "_remove_index",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/execution/session_log.py",
+        "src/autoskillit/execution/evidence/session_log.py",
         "flush_session_log",
     ): _DELEGATED_MUTATION_REASON,
     (
@@ -492,7 +495,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "cleanup_readiness_sentinel",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/execution/_recording_skills.py",
+        "src/autoskillit/execution/evidence/_recording_skills.py",
         "snapshot_skill_dir",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
@@ -512,7 +515,7 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
         "remove_transaction",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
-        "src/autoskillit/hooks/_exploration_request_record.py",
+        "src/autoskillit/hooks/_runtime/_exploration_request_record.py",
         "_cleanup_expired",
     ): _SEPARATE_LIFECYCLE_REASON,
     (
@@ -538,7 +541,7 @@ _CS = (
 )
 _WGW = "src/autoskillit/workspace/worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/worktree.py::remove_worktree_sidecar"
-_SL = "src/autoskillit/execution/_session_retention.py::apply_session_retention"
+_SL = "src/autoskillit/execution/evidence/_session_retention.py::apply_session_retention"
 _SW = "src/autoskillit/hooks/_capture/_sweep.py::sweep_one"
 _PP = "src/autoskillit/workspace/_projection_cache.py::prune_stale_projections"
 _PRE = "src/autoskillit/workspace/_projection_cache.py::_reconcile_projection_entry"
@@ -561,7 +564,7 @@ _HC = (
 _HP = (
     "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::repair_broken_projection_hooks"
 )
-_SR = "src/autoskillit/execution/_session_log_recovery.py::recover_crashed_sessions"
+_SR = "src/autoskillit/execution/evidence/_session_log_recovery.py::recover_crashed_sessions"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_reap --
@@ -1068,51 +1071,54 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "retryable."
     ),
     # -- execution._session_log_recovery::recover_crashed_sessions --
-    # Coordinates include the child-outcome reconciliation pass from issue #4623
-    # and the typed infrastructure-outcome imports from issue #4927.
-    f"{_SR}::L52": _retries_after_input_changes(
+    # Coordinates include the child-outcome reconciliation pass from issue #4623,
+    # the typed infrastructure-outcome imports from issue #4927, and deferring
+    # the #4623 pass's own child_outcomes import to inside the try block (issue
+    # #4672 decomposition — module-level would circularly import back through
+    # the evidence/ gateway that now wraps this file).
+    f"{_SR}::L58": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SR}::L61": _retries_after_input_changes(
+    f"{_SR}::L67": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L63": _resolves_with_contention(
+    f"{_SR}::L69": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SR}::L76": _retries_after_input_changes(
+    f"{_SR}::L82": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SR}::L83": _self_limiting(
+    f"{_SR}::L89": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SR}::L94": _resolves_with_contention(
+    f"{_SR}::L100": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SR}::L105": _self_limiting(
+    f"{_SR}::L111": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SR}::L110": _self_limiting(
+    f"{_SR}::L116": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SR}::L113": _self_limiting(
+    f"{_SR}::L119": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SR}::L118": _retries_after_input_changes(
+    f"{_SR}::L124": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L128": _self_limiting(
+    f"{_SR}::L134": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SR}::L150": _self_limiting(
+    f"{_SR}::L156": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SR}::L156": _retries_after_input_changes(
+    f"{_SR}::L162": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SR}::L196": _retries_after_input_changes(
+    f"{_SR}::L202": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

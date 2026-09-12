@@ -223,7 +223,7 @@ class TestRunHeadlessCoreFlushTelemetry:
     @pytest.fixture
     def captured_flush_calls(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         """Patch ``flush_session_log`` with a list-collecting stub and return the list."""
-        import autoskillit.execution.session_log as sl_mod
+        import autoskillit.execution.evidence.session_log as sl_mod
 
         calls: list[dict[str, Any]] = []
 

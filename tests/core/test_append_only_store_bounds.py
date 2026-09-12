@@ -57,7 +57,7 @@ def test_hook_settings_jsonl_writers_declare_a_bound() -> None:
     """quota_events.jsonl / join_diagnostics.jsonl -- hooks/_hook_settings.py is
     stdlib-only (no autoskillit.* imports), so it duplicates the trim helper rather than
     importing core.runtime.append_and_trim_jsonl; confirm the duplicate still bounds."""
-    from autoskillit.hooks import _hook_settings
+    from autoskillit.hooks._runtime import _hook_settings
 
     assert _hook_settings._MAX_HOOK_LOG_LINES > 0
 

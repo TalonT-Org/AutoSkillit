@@ -15,7 +15,7 @@ pytestmark = [pytest.mark.small]
 _STATE_PATH_HOOKS = (
     pkg_root() / "hooks" / "recipe_confirmed_post_hook.py",
     pkg_root() / "hooks" / "session_start_hook.py",
-    pkg_root() / "hooks" / "_hook_settings.py",
+    pkg_root() / "hooks" / "_runtime" / "_hook_settings.py",
 )
 _CENTRAL_ROOT_RESOLVERS = {
     "_hook_payload.py": {"resolve_state_root"},
@@ -67,7 +67,7 @@ def test_hook_state_consumers_do_not_independently_derive_cwd() -> None:
 def test_only_central_resolvers_may_fall_back_to_process_cwd() -> None:
     """The two allowed cwd fallbacks remain explicit and reviewable."""
     resolver_paths = {
-        pkg_root() / "hooks" / source_name: allowed_functions
+        pkg_root() / "hooks" / "_runtime" / source_name: allowed_functions
         for source_name, allowed_functions in _CENTRAL_ROOT_RESOLVERS.items()
     }
     actual = {

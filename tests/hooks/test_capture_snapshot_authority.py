@@ -510,7 +510,12 @@ def test_package_and_isolated_import_orders_share_authority_modules(
         "assert a is b;"
         for suffix in suffixes
     )
-    code = f"import importlib,sys;sys.path.insert(0,{str(hooks_dir)!r});{checks}"
+    code = (
+        f"import importlib,sys;"
+        f"sys.path.insert(0,{str(hooks_dir)!r});"
+        f"sys.path.insert(0,{str(hooks_dir / '_runtime')!r});"
+        f"{checks}"
+    )
     completed = subprocess.run(
         [sys.executable, "-I", "-c", code],
         env=production_interpreter_env(),

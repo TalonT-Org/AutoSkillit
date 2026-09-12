@@ -244,7 +244,7 @@ async def _watch_process(
         # Deferred import: linux_tracing depends on psutil and reads /proc, which is
         # Linux-only. Importing at module level would fail on non-Linux platforms where
         # LINUX_TRACING_AVAILABLE is False. The bare except below degrades gracefully.
-        from autoskillit.execution.linux_tracing import read_proc_snapshot
+        from autoskillit.execution.evidence.linux_tracing import read_proc_snapshot
 
         snap = read_proc_snapshot(owner.pid)
         if snap is not None:

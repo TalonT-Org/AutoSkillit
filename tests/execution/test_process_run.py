@@ -347,7 +347,7 @@ class TestTracingStopOnException:
         """tracing_handle.stop() is called in except BaseException even when task group raises."""
         import subprocess
 
-        from autoskillit.execution.linux_tracing import LinuxTracingHandle
+        from autoskillit.execution.evidence.linux_tracing import LinuxTracingHandle
         from tests._helpers import make_tracing_config
 
         stop_called: list[bool] = []

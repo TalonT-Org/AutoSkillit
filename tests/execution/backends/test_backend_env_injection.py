@@ -14,7 +14,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.otlp_sink import _build_env
+from autoskillit.execution.evidence.otlp_sink import _build_env
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 

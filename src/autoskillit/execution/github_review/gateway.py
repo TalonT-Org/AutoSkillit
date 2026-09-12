@@ -11,8 +11,8 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from autoskillit.core import GitHubApiLog, ReviewResponseClass
-from autoskillit.execution._github_http import is_secondary_rate_limit
-from autoskillit.execution.github import github_headers, make_tracked_httpx_client
+from autoskillit.execution.github_ops._github_http import is_secondary_rate_limit
+from autoskillit.execution.github_ops.github import github_headers, make_tracked_httpx_client
 
 
 @dataclass(frozen=True, slots=True)

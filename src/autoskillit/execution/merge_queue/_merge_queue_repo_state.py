@@ -15,8 +15,8 @@ from typing import Any, Literal
 import httpx
 
 from autoskillit.core import YAMLError, get_logger, load_yaml
-from autoskillit.execution._github_http import is_secondary_rate_limit
-from autoskillit.execution.github import github_headers
+from autoskillit.execution.github_ops._github_http import is_secondary_rate_limit
+from autoskillit.execution.github_ops.github import github_headers
 
 logger = get_logger(__name__)
 

@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, assert_never, cast
 import httpx
 
 from autoskillit.core import PRState, get_logger
-from autoskillit.execution.github import github_headers, make_tracked_httpx_client
+from autoskillit.execution.github_ops.github import github_headers, make_tracked_httpx_client
 from autoskillit.execution.merge_queue._merge_queue_classifier import (
     _QUERY_FIELD_MAP,  # noqa: F401 — re-export: tests access merge_queue._QUERY_FIELD_MAP
     KNOWN_MQ_MERGE_STATE_STATUSES,  # noqa: F401 — re-export for callers

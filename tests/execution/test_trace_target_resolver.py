@@ -30,7 +30,7 @@ async def test_resolve_trace_target_walks_from_wrapper_to_workload():
 
     Test 1.3: lock in the descendant-walk + basename-match contract.
     """
-    from autoskillit.execution.linux_tracing import resolve_trace_target
+    from autoskillit.execution.evidence.linux_tracing import resolve_trace_target
 
     proc = subprocess.Popen(
         ["script", "-qefc", "python3 -c 'import time; time.sleep(5)'", "/dev/null"],
@@ -61,7 +61,7 @@ async def test_resolve_trace_target_raises_on_miss():
 
     Test 1.4: failure must be loud, not a silent fall-back to wrapper PID.
     """
-    from autoskillit.execution.linux_tracing import (
+    from autoskillit.execution.evidence.linux_tracing import (
         TraceTargetResolutionError,
         resolve_trace_target,
     )

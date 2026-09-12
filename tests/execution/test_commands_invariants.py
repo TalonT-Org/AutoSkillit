@@ -10,7 +10,7 @@ from autoskillit.core import ClaudeFlags, OutputFormat
 from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
 from autoskillit.execution.backends.codex import CodexBackend
-from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 

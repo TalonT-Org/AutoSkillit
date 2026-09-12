@@ -433,3 +433,122 @@ def test_root_module_allowlist() -> None:
         f"{sorted(missing)}. "
         "Remove the file from the allowlist in test_root_module_allowlist()."
     )
+
+
+# ── REQ-GATEWAY-PARITY: gateway re-exports pre-move names ──────────────────────
+
+# Shared with tests/arch/test_subpackage_isolation_facades.py's sibling-set
+# assertions for the same four decompositions — both checks must agree on
+# exactly which modules moved, so the move sets live here once.
+DECOMPOSITION_MOVE_SETS: dict[str, frozenset[str]] = {
+    "execution_github_ops": frozenset(
+        {"_github_http", "ci", "github", "pr_analysis", "diff_annotator", "remote_resolver"}
+    ),
+    "execution_evidence": frozenset(
+        {
+            "session_log",
+            "_session_log_recovery",
+            "_session_retention",
+            "session_index",
+            "anomaly_detection",
+            "linux_tracing",
+            "otlp_sink",
+            "recording",
+            "_recording_skills",
+        }
+    ),
+    "execution_runtime": frozenset(
+        {"launch_resolution", "commands", "clone_guard", "testing", "db"}
+    ),
+    "hooks_runtime": frozenset(
+        {
+            "_hook_constants",
+            "_hook_payload",
+            "_hook_settings",
+            "_hook_utils",
+            "_policy_event",
+            "_command_classification",
+            "_github_mutation_analysis",
+            "_exploration_request_record",
+        }
+    ),
+}
+
+
+def _gateway_pre_move_names(init_path: Path, parent_pkg: str, move_set: set[str]) -> set[str]:
+    """Collect every name the gateway re-exports whose source module is in the move set.
+
+    Parses ``init_path`` with ``ast.parse`` and walks every ``ImportFrom`` node whose
+    ``module`` is an intra-package import under ``parent_pkg`` whose final path segment
+    matches one of the move-set basenames. For each match, every ``alias.name`` from
+    that node contributes to the expected-name set.
+    """
+    import ast
+
+    tree = ast.parse(init_path.read_text(encoding="utf-8"))
+    expected: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if not node.module or not node.module.startswith(f"{parent_pkg}."):
+            continue
+        last = node.module.rsplit(".", 1)[-1]
+        if last not in move_set:
+            continue
+        for alias in node.names:
+            expected.add(alias.asname if alias.asname else alias.name)
+    return expected
+
+
+@pytest.mark.parametrize(
+    ("init_subpath", "parent_pkg", "move_set", "target_pkg"),
+    [
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            DECOMPOSITION_MOVE_SETS["execution_github_ops"],
+            "autoskillit.execution.github_ops",
+            id="execution_github_ops",
+        ),
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            DECOMPOSITION_MOVE_SETS["execution_evidence"],
+            "autoskillit.execution.evidence",
+            id="execution_evidence",
+        ),
+        pytest.param(
+            ("execution", "__init__.py"),
+            "autoskillit.execution",
+            DECOMPOSITION_MOVE_SETS["execution_runtime"],
+            "autoskillit.execution.runtime",
+            id="execution_runtime",
+        ),
+        pytest.param(
+            ("hooks", "__init__.py"),
+            "autoskillit.hooks",
+            DECOMPOSITION_MOVE_SETS["hooks_runtime"],
+            "autoskillit.hooks._runtime",
+            id="hooks_runtime",
+        ),
+    ],
+)
+def test_gateway_reexports_pre_move_names(
+    init_subpath: tuple[str, str],
+    parent_pkg: str,
+    move_set: set[str],
+    target_pkg: str,
+) -> None:
+    """REQ-GATEWAY-PARITY: every name the gateway re-exports from a move-set
+    module must resolve post-move as an attribute of the destination subpackage.
+
+    ``hooks_runtime``: ``_session_binding`` and ``_join_ledger`` are NOT in the
+    move set and are excluded.
+    """
+    import importlib
+
+    init_path = SRC_ROOT.joinpath(*init_subpath)
+    expected = _gateway_pre_move_names(init_path, parent_pkg, move_set)
+    pkg = importlib.import_module(target_pkg)
+    missing = sorted(name for name in expected if not hasattr(pkg, name))
+    assert not missing, f"{target_pkg} gateway missing re-exports: {missing}"

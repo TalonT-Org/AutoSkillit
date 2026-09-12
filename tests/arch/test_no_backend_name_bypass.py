@@ -14,7 +14,7 @@ _EXEMPT_FILES: frozenset[str] = frozenset(
         # Pre-instantiation config guard: explicit override string before backend object
         "server/tools/_auto_overrides.py",
         # Cassette format from filenames; selects api_simulator player (no backend at replay time)
-        "execution/recording.py",
+        "execution/evidence/recording.py",
         # Claude-specific JSONL stdout format; parse_session_result() is Claude-only
         "execution/headless/_headless_result.py",
         # IL-0 module: cannot import BackendCapabilities (IL-1); routes version data by name

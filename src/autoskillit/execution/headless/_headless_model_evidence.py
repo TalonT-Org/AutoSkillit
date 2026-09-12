@@ -11,7 +11,7 @@ import anyio
 from autoskillit.core import ModelIdentity, SubagentModelOutcomeDict, get_logger
 
 if TYPE_CHECKING:
-    from autoskillit.execution.otlp_sink import LocalOtlpSink
+    from autoskillit.execution.evidence.otlp_sink import LocalOtlpSink
 
 logger = get_logger(__name__)
 

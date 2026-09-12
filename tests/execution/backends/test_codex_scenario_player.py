@@ -292,7 +292,10 @@ class TestBuildReplayRunner:
         import atexit
         import weakref
 
-        from autoskillit.execution.recording import ReplayingSubprocessRunner, build_replay_runner
+        from autoskillit.execution.evidence.recording import (
+            ReplayingSubprocessRunner,
+            build_replay_runner,
+        )
 
         scenario_dir = self._write_codex_scenario(tmp_path)
         monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)
@@ -306,7 +309,10 @@ class TestBuildReplayRunner:
         import atexit
         import weakref
 
-        from autoskillit.execution.recording import ReplayingSubprocessRunner, build_replay_runner
+        from autoskillit.execution.evidence.recording import (
+            ReplayingSubprocessRunner,
+            build_replay_runner,
+        )
 
         scenario_dir = self._write_codex_scenario(tmp_path)
         monkeypatch.setattr(weakref.finalize, "_registered_with_atexit", True)

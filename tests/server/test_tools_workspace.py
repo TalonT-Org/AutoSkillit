@@ -441,7 +441,7 @@ class TestTestCheck:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Gate execution must retain its lease fd through the direct runner path."""
-        import autoskillit.execution.testing as testing_module
+        import autoskillit.execution.runtime.testing as testing_module
 
         class ControlledLease:
             inherited_fds = (101, 103)

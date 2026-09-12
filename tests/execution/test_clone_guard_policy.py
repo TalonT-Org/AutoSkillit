@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from autoskillit.execution.clone_guard import build_clone_guard_policy, is_clone_commit_skill
+from autoskillit.execution.runtime.clone_guard import (
+    build_clone_guard_policy,
+    is_clone_commit_skill,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

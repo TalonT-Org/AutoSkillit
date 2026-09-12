@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.hooks._command_classification as command_classification
-import autoskillit.hooks._github_mutation_analysis as github_mutation_analysis
-from autoskillit.hooks._command_classification import (
+import autoskillit.hooks._runtime._command_classification as command_classification
+import autoskillit.hooks._runtime._github_mutation_analysis as github_mutation_analysis
+from autoskillit.hooks._runtime._command_classification import (
     _GIT_GLOBAL_FLAG_SPEC,
     _FlagArity,
     command_verb,
@@ -25,7 +25,7 @@ from autoskillit.hooks._command_classification import (
     is_gh_command,
     tokenize_command_segments,
 )
-from autoskillit.hooks._github_mutation_analysis import (
+from autoskillit.hooks._runtime._github_mutation_analysis import (
     _CURL_FLAG_SPEC,
     _GH_API_FLAG_SPEC,
     _GH_HELP_FLAGS,
@@ -53,7 +53,9 @@ def test_shell_control_words_includes_closing_keywords():
     Pinning the shared primitive directly so boundary expansion is not only
     covered indirectly through compose_pr_body_guard integration tests.
     """
-    from autoskillit.hooks._command_classification import _SHELL_CONTROL_WORDS  # noqa: PLC0415
+    from autoskillit.hooks._runtime._command_classification import (
+        _SHELL_CONTROL_WORDS,  # noqa: PLC0415
+    )
 
     for word in ("esac", "fi", "done"):
         assert word in _SHELL_CONTROL_WORDS, f"_SHELL_CONTROL_WORDS is missing '{word}'"
@@ -296,28 +298,28 @@ class TestTokenizeCommandSegments:
 
 class TestCommandVerbAndArgs:
     def test_returns_verb_and_args(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_strips_env_assignments(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["env", "FOO=bar", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_strips_leading_posix_assignment(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["FOO=bar", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_env_with_value_taking_flag(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(
             ["env", "-u", "FOO", "--chdir", "/tmp", "-S", "x", "pip", "install", "-e", "."]
@@ -326,7 +328,7 @@ class TestCommandVerbAndArgs:
         assert args == ["install", "-e", "."]
 
     def test_env_split_string_consumes_value(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(
             ["env", "--split-string", "FOOBAR", "pip", "install", "-e", "."]
@@ -335,7 +337,7 @@ class TestCommandVerbAndArgs:
         assert args == ["install", "-e", "."]
 
     def test_env_attached_value_flag(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(
             ["env", "--chdir=/tmp", "--unset=FOO", "pip", "install", "-e", "."]
@@ -344,91 +346,91 @@ class TestCommandVerbAndArgs:
         assert args == ["install", "-e", "."]
 
     def test_env_double_dash_terminator(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["env", "--", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_sudo_wrapper(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["sudo", "-u", "root", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_nice_wrapper(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["nice", "-n", "5", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_timeout_wrapper_mandatory_duration(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["timeout", "30", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_stdbuf_wrapper_short_flag(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["stdbuf", "-o0", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_command_wrapper(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["command", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_nohup_wrapper(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["nohup", "pip", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["install", "-e", "."]
 
     def test_double_dash_terminator(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["pip", "--", "install", "-e", "."])
         assert verb == "pip"
         assert args == ["--", "install", "-e", "."]
 
     def test_empty_segment_returns_empty(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args([])
         assert verb == ""
         assert args == []
 
     def test_wrapper_only_returns_empty(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["env"])
         assert verb == ""
         assert args == []
 
     def test_timeout_missing_duration_returns_empty(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["timeout"])
         assert verb == ""
         assert args == []
 
     def test_bare_env_wrapper(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         verb, args = command_verb_and_args(["env"])
         assert verb == ""
         assert args == []
 
     def test_command_verb_delegates_to_command_verb_and_args(self):
-        from autoskillit.hooks._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
 
         seg = ["env", "FOO=bar", "pip", "install", "-e", "."]
         verb_from_helper, _ = command_verb_and_args(seg)
@@ -460,78 +462,106 @@ class TestCommandPositionCandidateSpans:
         tokens: list[str],
         expected: tuple[tuple[int, int], ...],
     ) -> None:
-        from autoskillit.hooks._command_classification import _command_position_candidate_spans
+        from autoskillit.hooks._runtime._command_classification import (
+            _command_position_candidate_spans,
+        )
 
         assert _command_position_candidate_spans(tokens) == expected
 
 
 class TestExtractShellCommandPayloads:
     def test_bash_c_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('bash -c "pip install -e ."') == ["pip install -e ."]
 
     def test_sh_c_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('sh -c "pip install -e ."') == ["pip install -e ."]
 
     def test_zsh_c_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('zsh -c "pip install -e ."') == ["pip install -e ."]
 
     def test_dash_c_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('dash -c "pip install -e ."') == ["pip install -e ."]
 
     def test_eval_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('eval "pip install -e ."') == ["pip install -e ."]
 
     def test_dollar_paren_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         payloads = extract_shell_command_payloads("echo $(pip install -e .)")
         assert payloads == ["pip install -e ."]
 
     def test_backtick_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         payloads = extract_shell_command_payloads("echo `pip install -e .`")
         assert payloads == ["pip install -e ."]
 
     def test_double_quoted_substitution_payload(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         payloads = extract_shell_command_payloads('echo "$(pip install -e .)"')
         assert payloads == ["pip install -e ."]
 
     def test_single_quoted_substitution_inert(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads("echo '$(pip install -e .)'") == []
 
     def test_escaped_substitution_inert(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('echo "\\$(pip install -e .)"') == []
 
     def test_nested_substitution(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         payloads = extract_shell_command_payloads('bash -c "echo $(pip install -e .)"')
         assert "pip install -e ." in payloads
 
     def test_no_payloads_returns_empty_list(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads("echo hi") == []
 
     def test_absolute_bash_path_normalized(self):
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
 
         assert extract_shell_command_payloads('/bin/bash -c "pip install -e ."') == [
             "pip install -e ."
@@ -540,44 +570,58 @@ class TestExtractShellCommandPayloads:
 
 class TestTokenizeShellPayloadSegments:
     def test_bash_c_direct_payload(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments('bash -c "gh pr create --fill"')
         assert result == [["gh", "pr", "create", "--fill"]]
 
     def test_absolute_bash_path(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments('/bin/bash -c "gh pr create --fill"')
         assert result == [["gh", "pr", "create", "--fill"]]
 
     def test_env_prefix_wrapper(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments('env FOO=1 bash -c "gh pr create --fill"')
         assert result == [["gh", "pr", "create", "--fill"]]
 
     def test_sudo_wrapper(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments('sudo /bin/bash -c "gh pr create --fill"')
         assert result == [["gh", "pr", "create", "--fill"]]
 
     def test_nested_bash_c_payload(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments("""bash -c 'bash -c "gh pr create --fill"'""")
         assert ["gh", "pr", "create", "--fill"] in result
 
     def test_operator_separated_commands_inside_payload(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments('bash -c "echo ready && gh pr create --fill"')
         assert ["echo", "ready"] in result
         assert ["gh", "pr", "create", "--fill"] in result
 
     def test_dedupes_repeated_payload_strings(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments(
             """bash -c 'gh pr create' && bash -c "gh pr create --fill\""""
@@ -586,25 +630,33 @@ class TestTokenizeShellPayloadSegments:
         assert flat.count(("gh", "pr", "create")) == 1
 
     def test_malformed_inner_payload_returns_none(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments("bash -c \"echo 'unclosed")
         assert result is None
 
     def test_quoted_close_paren_does_not_truncate_substitution(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         result = tokenize_shell_payload_segments('echo $(echo "a) b" && gh pr create --fill)')
         assert result is not None
         assert ["gh", "pr", "create", "--fill"] in result
 
     def test_no_evaluated_shell_payload_returns_empty_list(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         assert tokenize_shell_payload_segments("gh pr create --fill") == []
 
     def test_process_substitution_traversal_is_opt_in(self):
-        from autoskillit.hooks._command_classification import tokenize_shell_payload_segments
+        from autoskillit.hooks._runtime._command_classification import (
+            tokenize_shell_payload_segments,
+        )
 
         command = "cat <(gh pr view 7 --json number)"
 
@@ -617,7 +669,7 @@ class TestTokenizeShellPayloadSegments:
 
 class TestProcessSubstitutionExtraction:
     def test_active_input_and_output_occurrences_preserve_source_order(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
@@ -641,14 +693,14 @@ class TestProcessSubstitutionExtraction:
         ids=["single-quoted", "double-quoted", "escaped"],
     )
     def test_quoted_and_escaped_process_substitutions_are_inert(self, command: str) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
         assert _extract_process_substitution_occurrences(command) == ()
 
     def test_balanced_parentheses_respect_quoted_close_parens(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
@@ -659,7 +711,7 @@ class TestProcessSubstitutionExtraction:
         assert command[start:end] == f"{kind}{body})"
 
     def test_malformed_process_substitution_retains_its_unbalanced_span(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
 
@@ -673,7 +725,7 @@ class TestProcessSubstitutionExtraction:
         from autoskillit.hooks._classification._interpreters import (
             _extract_process_substitution_occurrences as implementation,
         )
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences as gateway,
         )
 
@@ -683,7 +735,7 @@ class TestProcessSubstitutionExtraction:
 
 class TestExtractInterpreterCommandPayloads:
     def test_shell_string_pip_install(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -694,7 +746,7 @@ class TestExtractInterpreterCommandPayloads:
         assert payloads == ["pip install -e ."]
 
     def test_argv_list_pip(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -705,7 +757,7 @@ class TestExtractInterpreterCommandPayloads:
         assert payloads == [["pip", "install", "-e", "."]]
 
     def test_argv_tuple_pip(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -716,7 +768,7 @@ class TestExtractInterpreterCommandPayloads:
         assert payloads == [["pip", "install", "--editable", "."]]
 
     def test_argv_list_rg_reader(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -727,7 +779,7 @@ class TestExtractInterpreterCommandPayloads:
         assert payloads == [["rg", "pip install -e", "docs/"]]
 
     def test_unresolved_payload_returns_flag(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -736,7 +788,7 @@ class TestExtractInterpreterCommandPayloads:
         assert has_unresolved is True
 
     def test_no_subprocess_returns_empty(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -747,7 +799,7 @@ class TestExtractInterpreterCommandPayloads:
         assert has_unresolved is False
 
     def test_non_python_returns_empty(self):
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             extract_interpreter_command_payloads,
         )
 
@@ -975,7 +1027,7 @@ class TestResolveWriteTarget:
         ],
     )
     def test_resolve_write_target(self, path, cwd, expected):
-        from autoskillit.hooks._command_classification import resolve_write_target
+        from autoskillit.hooks._runtime._command_classification import resolve_write_target
 
         assert resolve_write_target(path, cwd) == expected
 
@@ -1001,7 +1053,7 @@ class TestResolveWriteTarget:
         ],
     )
     def test_resolve_write_target_shell_vars(self, env_setup, path, cwd, expected, monkeypatch):
-        from autoskillit.hooks._command_classification import resolve_write_target
+        from autoskillit.hooks._runtime._command_classification import resolve_write_target
 
         for var in ["TEST_EXPAND_DIR", "REVIEW_OUTPUT_DIR", "NONEXISTENT_VAR", "NONEXISTENT"]:
             monkeypatch.delenv(var, raising=False)
@@ -1051,7 +1103,7 @@ class TestExtractRedirectTargetsCwd:
         ],
     )
     def test_extract_redirect_targets_with_cwd(self, tokens, cwd, expected):
-        from autoskillit.hooks._command_classification import extract_redirect_targets
+        from autoskillit.hooks._runtime._command_classification import extract_redirect_targets
 
         assert extract_redirect_targets(tokens, cwd) == expected
 
@@ -1090,7 +1142,7 @@ class TestExtractRedirectTargetsCwd:
     ],
 )
 def test_strip_heredoc_bodies(command: str, expected_stripped: str) -> None:
-    from autoskillit.hooks._command_classification import strip_heredoc_bodies
+    from autoskillit.hooks._runtime._command_classification import strip_heredoc_bodies
 
     assert strip_heredoc_bodies(command) == expected_stripped
 
@@ -2739,17 +2791,17 @@ class TestSiblingWrappersDelegate:
     """
 
     def test_command_verb_and_args_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import command_verb_and_args
-        from autoskillit.hooks._github_mutation_analysis import _command_verb_and_args
+        from autoskillit.hooks._runtime._command_classification import command_verb_and_args
+        from autoskillit.hooks._runtime._github_mutation_analysis import _command_verb_and_args
 
         seg = ["env", "FOO=bar", "gh", "pr", "view"]
         assert _command_verb_and_args(seg) == command_verb_and_args(list(seg))
 
     def test_tokenize_with_redirects_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _tokenize_command_segments_with_redirects,
         )
-        from autoskillit.hooks._github_mutation_analysis import _tokenize_with_redirects
+        from autoskillit.hooks._runtime._github_mutation_analysis import _tokenize_with_redirects
 
         # _CommandSegment instances from the bare-name-loaded copy and the
         # package-loaded copy do not share class identity, so compare token
@@ -2763,14 +2815,16 @@ class TestSiblingWrappersDelegate:
             assert wrapper_seg.redirect_syntax == direct_seg.redirect_syntax
 
     def test_normalize_executable_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import _normalize_executable
-        from autoskillit.hooks._github_mutation_analysis import _normalize_executable_call
+        from autoskillit.hooks._runtime._command_classification import _normalize_executable
+        from autoskillit.hooks._runtime._github_mutation_analysis import _normalize_executable_call
 
         assert _normalize_executable_call("/usr/bin/gh") == _normalize_executable("/usr/bin/gh")
 
     def test_partition_output_redirects_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import _partition_output_redirects
-        from autoskillit.hooks._github_mutation_analysis import _partition_output_redirects_call
+        from autoskillit.hooks._runtime._command_classification import _partition_output_redirects
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
+            _partition_output_redirects_call,
+        )
 
         tokens = ["gh", "pr", "view", ">", "/tmp/out"]
         assert _partition_output_redirects_call(
@@ -2778,10 +2832,10 @@ class TestSiblingWrappersDelegate:
         ) == _partition_output_redirects(tokens, cwd="/work")
 
     def test_extract_interpreter_segment_specs_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_interpreter_segment_specs,
         )
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _extract_interpreter_segment_specs_call,
         )
 
@@ -2791,8 +2845,10 @@ class TestSiblingWrappersDelegate:
         ) == _extract_interpreter_segment_specs(segment)
 
     def test_command_position_candidate_spans_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import _command_position_candidate_spans
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._command_classification import (
+            _command_position_candidate_spans,
+        )
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _command_position_candidate_spans_call,
         )
 
@@ -2802,10 +2858,10 @@ class TestSiblingWrappersDelegate:
         ) == _command_position_candidate_spans(segment)
 
     def test_process_substitution_occurrences_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _extract_process_substitution_occurrences,
         )
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _extract_process_substitution_occurrences_call,
         )
 
@@ -2815,10 +2871,10 @@ class TestSiblingWrappersDelegate:
         ) == _extract_process_substitution_occurrences(command)
 
     def test_segment_evaluates_shell_payload_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import (
+        from autoskillit.hooks._runtime._command_classification import (
             _segment_evaluates_shell_payload,
         )
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _segment_evaluates_shell_payload_call,
         )
 
@@ -2829,8 +2885,10 @@ class TestSiblingWrappersDelegate:
         ) == _segment_evaluates_shell_payload(tokens, payload)
 
     def test_extract_shell_command_payloads_call_delegates(self) -> None:
-        from autoskillit.hooks._command_classification import extract_shell_command_payloads
-        from autoskillit.hooks._github_mutation_analysis import (
+        from autoskillit.hooks._runtime._command_classification import (
+            extract_shell_command_payloads,
+        )
+        from autoskillit.hooks._runtime._github_mutation_analysis import (
             _extract_shell_command_payloads_call,
         )
 

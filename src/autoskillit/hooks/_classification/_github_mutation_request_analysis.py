@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._runtime._command_classification import (
         ArgvToken,
         _argv_token_after_prefix,
         _argv_token_value_after_key,
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     )
 else:
     if __package__ == "autoskillit.hooks._classification":
-        from .._command_classification import (  # noqa: E402
+        from .._runtime._command_classification import (  # noqa: E402
             ArgvToken,
             _argv_token_after_prefix,
             _argv_token_value_after_key,

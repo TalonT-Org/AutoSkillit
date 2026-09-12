@@ -35,21 +35,32 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-
 # This submodule's own ``__package__`` names its immediate parent package
 # (``autoskillit.hooks._child_outcome_snapshot`` when dotted-installed,
 # ``_child_outcome_snapshot`` when the parent package was bare-imported off a
 # ``sys.path`` entry pointing at ``hooks/`` — see ``child_outcome_hook.py``'s
-# ``_HOOKS_DIR`` bootstrap). A dot in that value means the dotted chain, where
-# stripping the last component reaches ``hooks``; no dot means the bare
-# top-level case, where ``hooks/``'s own siblings resolve by bare name.
+# ``_HOOKS_DIR``/``_RUNTIME_DIR`` bootstrap). A dot in that value means the
+# dotted chain, where stripping the last component reaches ``hooks``; no dot
+# means the bare top-level case, where ``hooks/``'s own siblings (plus
+# ``hooks/_runtime/``, also on sys.path) resolve by bare name.
 # Resolved dynamically via importlib (matching the existing precedent in
-# hooks/_hook_settings.py:read_session_binding) rather than a literal dual
-# ``if __package__: from .. import X else: import X`` branch, which would
-# need a static-analysis suppression comment per branch.
+# hooks/_runtime/_hook_settings.py:read_session_binding) rather than a literal
+# dual ``if __package__: from .. import X else: import X`` branch, which
+# would need a static-analysis suppression comment per branch.
+#
+# ``_hook_settings`` lives one level deeper than this helper's other callers
+# expect: it moved into ``hooks/_runtime/`` while ``_session_binding`` (and
+# this package) stayed at the ``hooks/`` level, per the dual-import contract
+# that keeps _session_binding.py/_join_ledger.py out of the _runtime/ move.
+_RUNTIME_SIBLINGS = frozenset({"_hook_settings"})
+
+
 def _resolve_sibling(name: str) -> object:
     if __package__ and "." in __package__:
-        return importlib.import_module(f"{__package__.rsplit('.', 1)[0]}.{name}")
+        parent = __package__.rsplit(".", 1)[0]
+        if name in _RUNTIME_SIBLINGS:
+            return importlib.import_module(f"{parent}._runtime.{name}")
+        return importlib.import_module(f"{parent}.{name}")
     return importlib.import_module(name)
 
 

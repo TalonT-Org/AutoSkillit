@@ -39,17 +39,20 @@ class TestReexportClosure:
         """Regression: a relative src_root walks up to Path('.'), which is its
         own parent — the ancestor walk must stop at that fixed point instead of
         looping forever (observed live via build_test_scope(tests_root='tests'))."""
-        pkg = tmp_path / "src" / "autoskillit" / "execution"
+        pkg = tmp_path / "src" / "autoskillit" / "execution" / "runtime"
         pkg.mkdir(parents=True)
         (pkg / "testing.py").write_text("x = 1\n")
         (pkg / "__init__.py").write_text("from .testing import x\n")
+        (pkg.parent / "__init__.py").write_text(
+            "from autoskillit.execution.runtime.testing import x\n"
+        )
         monkeypatch.chdir(tmp_path)
 
         outcome: dict[str, set[str]] = {}
 
         def run() -> None:
             outcome["result"] = _expand_reexport_closure(
-                {"src/autoskillit/execution/testing.py"}, Path(".")
+                {"src/autoskillit/execution/runtime/testing.py"}, Path(".")
             )
 
         worker = threading.Thread(target=run, daemon=True)

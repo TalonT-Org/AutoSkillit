@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types._type_constants_env import AUTOSKILLIT_PRIVATE_ENV_VARS
-from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 from tests import _ambient_env_surface as ambient_env_surface
 from tests._ambient_env_surface import (
     AMBIENT_ENV_DISPOSITIONS,

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.hooks._command_classification import _PIP_GLOBAL_FLAG_SPEC, _FlagArity
+from autoskillit.hooks._runtime._command_classification import _PIP_GLOBAL_FLAG_SPEC, _FlagArity
 
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 

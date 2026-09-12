@@ -10,8 +10,8 @@ import pytest
 
 from autoskillit.config import AgentBackendConfig, AutomationConfig
 from autoskillit.core import AUDIT_ADMISSION_AUTHORITY_PATH_ENV_VAR
+from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
 from autoskillit.execution.process import DefaultSubprocessRunner
-from autoskillit.execution.recording import RecordingSubprocessRunner
 from autoskillit.server._factory import make_context
 from tests.server._factory_test_helpers import _runner
 

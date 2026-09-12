@@ -40,7 +40,7 @@ def _write_hook_config(tmp_path: Path, quota_guard: dict) -> None:
 
 @pytest.mark.parametrize("overlay", ([], {"order": []}, {"quota_guard": []}))
 def test_hook_bridge_rejects_invalid_overlay_shapes(tmp_path: Path, overlay: object) -> None:
-    from autoskillit.hooks._hook_settings import read_merged_hook_config
+    from autoskillit.hooks._runtime._hook_settings import read_merged_hook_config
 
     _write_hook_config(tmp_path, {"disabled": False})
     overlay_path = tmp_path / ".autoskillit" / "temp" / ".hook_config_overlay.json"
@@ -205,7 +205,7 @@ def test_disabled_false_blocks_normally(tmp_path, monkeypatch):
 def test_hook_config_quota_guard_keys_match_payload_keys(tmp_path):
     """set(data['quota_guard'].keys()) == QUOTA_GUARD_HOOK_PAYLOAD_KEYS."""
     from autoskillit.config.settings import QuotaGuardConfig
-    from autoskillit.hooks._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
+    from autoskillit.hooks._runtime._hook_settings import QUOTA_GUARD_HOOK_PAYLOAD_KEYS
     from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
     cfg = QuotaGuardConfig()
@@ -221,7 +221,7 @@ def test_hook_config_quota_guard_keys_match_payload_keys(tmp_path):
 def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
     """The server snapshot and stdlib consumer declare the same exact keys."""
     from autoskillit.config import OutputBudgetConfig
-    from autoskillit.hooks._hook_settings import OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS
+    from autoskillit.hooks._runtime._hook_settings import OUTPUT_BUDGET_POLICY_HOOK_PAYLOAD_KEYS
     from autoskillit.server.tools.tools_kitchen import _output_budget_policy_hook_payload
 
     payload = _output_budget_policy_hook_payload(
@@ -242,7 +242,7 @@ def test_output_budget_policy_serializer_matches_stdlib_bridge_keys():
 
 def test_output_budget_policy_overlay_overrides_snapshot(tmp_path):
     """The project overlay is the highest-priority output-budget policy layer."""
-    from autoskillit.hooks._hook_settings import read_merged_hook_config
+    from autoskillit.hooks._runtime._hook_settings import read_merged_hook_config
 
     config_dir = tmp_path / ".autoskillit" / "temp"
     config_dir.mkdir(parents=True)
@@ -279,7 +279,7 @@ def test_write_hook_config_round_trip_via_resolve_quota_settings(tmp_path, monke
     """_write_hook_config round-trip: payload written by _quota_guard_hook_payload
     is correctly read back by resolve_quota_settings()."""
     from autoskillit.config.settings import QuotaGuardConfig
-    from autoskillit.hooks._hook_settings import resolve_quota_settings
+    from autoskillit.hooks._runtime._hook_settings import resolve_quota_settings
     from autoskillit.server.tools.tools_kitchen import _quota_guard_hook_payload
 
     monkeypatch.chdir(tmp_path)

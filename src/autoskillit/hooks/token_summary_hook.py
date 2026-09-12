@@ -13,18 +13,22 @@ from __future__ import annotations
 
 import json
 import os
-import pathlib
 import platform
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 # stdlib-only subprocess hook: import sibling modules by bare name via sys.path
 # (test_hooks_are_stdlib_only). Venv tests use the autoskillit.hooks package path.
-_HOOKS_DIR = str(pathlib.Path(__file__).resolve().parent)
+_HOOKS_DIR = str(Path(__file__).resolve().parent)
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 from _hook_settings import read_merged_hook_config  # type: ignore[import-not-found]  # noqa: E402
 from _hook_utils import STEP_SUFFIX_RE  # type: ignore[import-not-found]  # noqa: E402
@@ -53,15 +57,15 @@ def _canonical(name: str) -> str:
     return STEP_SUFFIX_RE.sub("", name) if name else name
 
 
-def _log_root() -> pathlib.Path:
+def _log_root() -> Path:
     """Return the autoskillit session log root (stdlib-only platform check)."""
     override = os.environ.get("AUTOSKILLIT_LOG_DIR")
     if override:
-        return pathlib.Path(override)
+        return Path(override)
     if platform.system() == "Darwin":
-        return pathlib.Path.home() / "Library/Application Support/autoskillit/logs"
+        return Path.home() / "Library/Application Support/autoskillit/logs"
     xdg = os.environ.get("XDG_DATA_HOME")
-    base = pathlib.Path(xdg) if xdg else pathlib.Path.home() / ".local/share"
+    base = Path(xdg) if xdg else Path.home() / ".local/share"
     return base / "autoskillit/logs"
 
 
@@ -140,12 +144,12 @@ def _fmt_duration(seconds: float) -> str:
     return f"{h}h {m}m"
 
 
-def _read_kitchen_id(base: pathlib.Path | None = None) -> str:
+def _read_kitchen_id(base: Path | None = None) -> str:
     """Read kitchen_id from merged hook config. Returns '' if absent or unset.
 
     Falls back to 'pipeline_id' key for configs written before the rename.
     """
-    root = base if base is not None else pathlib.Path.cwd()
+    root = base if base is not None else Path.cwd()
     try:
         data = read_merged_hook_config(root)
         if not isinstance(data, dict):
@@ -167,7 +171,7 @@ def _extract_order_id(tool_name: str, tool_response_raw: str) -> str:
 
 
 def _load_sessions(
-    log_root: pathlib.Path, kitchen_id: str, *, order_id: str = ""
+    log_root: Path, kitchen_id: str, *, order_id: str = ""
 ) -> dict[str, dict[str, Any]]:
     """Load and aggregate token data from sessions matching kitchen_id or order_id.
 

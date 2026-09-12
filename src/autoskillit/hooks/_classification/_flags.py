@@ -8,7 +8,7 @@ from enum import StrEnum, auto
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._runtime._command_classification import (
         _GIT_ADD_CONTENT_FLAGS,
         _GIT_DIFF_CONTENT_FLAGS,
         _GIT_DIFF_METADATA_FLAGS,
@@ -344,7 +344,7 @@ def command_has_blocked_protected_path_read(
 
 if not TYPE_CHECKING:
     if __package__ == "autoskillit.hooks._classification":
-        from .. import _command_classification as _classification
+        from .._runtime import _command_classification as _classification
     else:
         import _command_classification as _classification
 

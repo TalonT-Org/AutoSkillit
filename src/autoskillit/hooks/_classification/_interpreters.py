@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from autoskillit.hooks._command_classification import (
+    from autoskillit.hooks._runtime._command_classification import (
         _INTERPRETER_RE,
         _LITERAL_OPEN_PATH_RE,
         _LITERAL_PATH_CONSTRUCTOR_RE,
@@ -496,7 +496,7 @@ def extract_interpreter_command_payloads(command: str) -> tuple[list[str | list[
 
 if not TYPE_CHECKING:
     if __package__ == "autoskillit.hooks._classification":
-        from .. import _command_classification as _classification
+        from .._runtime import _command_classification as _classification
     else:
         import _command_classification as _classification
 

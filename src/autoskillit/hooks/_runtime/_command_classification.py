@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     )
 else:
     if __package__:
-        from ._classification import _tokenizer
+        from .._classification import _tokenizer
     else:
         from _classification import _tokenizer
 
@@ -686,7 +686,7 @@ if TYPE_CHECKING:
     )
 else:
     if __package__:
-        from ._classification import _flags, _interpreters
+        from .._classification import _flags, _interpreters
     else:
         from _classification import _flags, _interpreters
 

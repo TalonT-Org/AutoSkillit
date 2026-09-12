@@ -1,4 +1,4 @@
-"""L1 unit tests for execution/github.py."""
+"""L1 unit tests for execution/github_ops/github.py."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from autoskillit.core import GitHubFetcher
-from autoskillit.execution.github import (
+from autoskillit.execution.github_ops.github import (
     DefaultGitHubFetcher,
     _parse_issue_ref,
     parse_merge_queue_response,
@@ -473,7 +473,7 @@ class TestFetchTitle:
 def test_parse_issue_ref_not_defined_in_github_module():
     import inspect
 
-    import autoskillit.execution.github as gh
+    import autoskillit.execution.github_ops.github as gh
 
     src_file = inspect.getfile(gh._parse_issue_ref)
     assert "github.py" not in src_file
@@ -766,7 +766,7 @@ async def test_swap_labels_replaces_atomically(httpx_mock):
     )
     client = DefaultGitHubFetcher(token="tok")
 
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock):
         result = await client.swap_labels(
             "owner", "repo", 42, remove_labels=["in-progress"], add_labels=["staged"]
         )
@@ -795,7 +795,7 @@ async def test_swap_labels_remove_only(httpx_mock):
     )
     client = DefaultGitHubFetcher(token="tok")
 
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock):
         result = await client.swap_labels(
             "owner", "repo", 42, remove_labels=["in-progress"], add_labels=[]
         )
@@ -856,7 +856,9 @@ async def test_mutating_throttle_enforces_delay(httpx_mock):
         json={"number": 2, "html_url": "https://github.com/owner/repo/issues/2"},
     )
     fetcher = DefaultGitHubFetcher(token="test")
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+    with patch(
+        "autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
         await fetcher.create_issue("owner", "repo", "Title 1", "body")
         await fetcher.create_issue("owner", "repo", "Title 2", "body")
 
@@ -883,7 +885,9 @@ async def test_read_methods_bypass_throttle(httpx_mock):
         json=_ISSUE_NO_COMMENTS_JSON,
     )
     fetcher = DefaultGitHubFetcher(token="test")
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+    with patch(
+        "autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock
+    ) as mock_sleep:
         await fetcher.create_issue("owner", "repo", "Title", "body")
         await fetcher.fetch_issue("owner/repo#1", include_comments=False)
 
@@ -905,7 +909,7 @@ async def test_ensure_label_cache_hit(httpx_mock):
         json={"name": "bug", "color": "ededed"},
     )
     fetcher = DefaultGitHubFetcher(token="tok")
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock):
         result1 = await fetcher.ensure_label("owner", "repo", "bug")
         result2 = await fetcher.ensure_label("owner", "repo", "bug")
 
@@ -935,7 +939,7 @@ async def test_ensure_label_cache_different_repos(httpx_mock):
         json={"name": "bug", "color": "ededed"},
     )
     fetcher = DefaultGitHubFetcher(token="tok")
-    with patch("autoskillit.execution.github.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.github.asyncio.sleep", new_callable=AsyncMock):
         result1 = await fetcher.ensure_label("owner", "repo1", "bug")
         result2 = await fetcher.ensure_label("owner", "repo2", "bug")
 
@@ -984,7 +988,9 @@ async def test_throttle_serializes_concurrent_mutating_calls(httpx_mock):
         await _real_sleep(0)  # yield to event loop while lock is held
         events.append("sleep_end")
 
-    with patch("autoskillit.execution.github.asyncio.sleep", side_effect=recording_sleep):
+    with patch(
+        "autoskillit.execution.github_ops.github.asyncio.sleep", side_effect=recording_sleep
+    ):
         await asyncio.gather(
             fetcher.add_labels("owner", "repo", 42, ["bug"]),
             fetcher.create_issue("owner", "repo", "Title", "body"),

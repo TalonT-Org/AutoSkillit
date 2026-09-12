@@ -98,7 +98,7 @@ def test_run_managed_sync_coerces_env_to_dict(
 
 def test_headless_cmd_with_mappingproxy_env() -> None:
     """ClaudeHeadlessCmd must accept MappingProxyType env without error."""
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
 
     env = MappingProxyType({"PATH": "/usr/bin"})
     cmd = ClaudeHeadlessCmd(cmd=("echo", "test"), env=env)

@@ -25,7 +25,7 @@ from autoskillit.core import (
 from autoskillit.execution.backends import ClaudeCodeBackend
 from autoskillit.execution.headless import PostSessionMetrics, _execute_claude_headless
 from autoskillit.execution.headless._managed import _attempt as diagnostics
-from autoskillit.execution.launch_resolution import DefaultLaunchResolver
+from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
 from tests.execution.conftest import _launch_preparation
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -212,7 +212,7 @@ async def test_terminal_epilogue_projects_one_attempt_aware_snapshot_to_all_sink
     """Every terminal class reaches one event/summary/index projection."""
 
     import autoskillit.execution as execution
-    import autoskillit.execution.session_log as session_log
+    import autoskillit.execution.evidence.session_log as session_log
 
     observer = _AttemptObserver()
     log_root = tmp_path / "logs"

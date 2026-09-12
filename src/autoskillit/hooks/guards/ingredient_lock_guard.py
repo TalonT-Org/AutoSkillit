@@ -12,9 +12,15 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 
 # Sibling import bootstrap (same pattern as quota_guard.py)
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
 from _hook_settings import read_merged_hook_config  # noqa: E402
 
 INGREDIENT_LOCK_DENY_TRIGGER: str = "INGREDIENT LOCK ENFORCED"

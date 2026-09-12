@@ -22,11 +22,15 @@ from typing import NamedTuple
 _FLOCK_TIMEOUT_S = 5.0
 _FLOCK_POLL_INTERVAL_S = 0.05
 
+# Stdlib-only in subprocess mode: bare-name import. Requires `hooks/_runtime/` on
+# sys.path (bootstrap responsibility of the calling script). In-venv callers import
+# this module as `autoskillit.hooks._session_binding`, so fall back to a *relative*
+# import there — a relative ImportFrom node has no "autoskillit"-prefixed module name
+# and so does not trip the stdlib-only AST guard (test_hooks_are_stdlib_only).
 if __package__:
-    from . import _hook_payload as _hook_payload_module
+    from ._runtime import _hook_payload as _hook_payload_module  # noqa: E402
 else:
-    import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]
-
+    import _hook_payload as _hook_payload_module  # type: ignore[import-not-found,no-redef]  # noqa: E402
 
 SESSION_BINDING_SCHEMA_VERSION: int = 3
 PROJECTION_MANIFEST_SCHEMA_VERSION: int = 2

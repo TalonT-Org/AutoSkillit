@@ -19,7 +19,7 @@ from autoskillit.core import (
     atomic_write,
     get_logger,
 )
-from autoskillit.execution.session_log import resolve_log_dir
+from autoskillit.execution.evidence.session_log import resolve_log_dir
 
 logger = get_logger(__name__)
 

@@ -42,11 +42,11 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.core import fast_dumps as _fast_dumps
-from autoskillit.execution._session_retention import (
+from autoskillit.execution.evidence._session_retention import (
     apply_session_retention,
     refresh_summary_child_outcomes,
 )
-from autoskillit.execution.anomaly_detection import (
+from autoskillit.execution.evidence.anomaly_detection import (
     api_retry_exhaustion_anomaly,
     detect_anomalies,
     detect_identity_drift,
@@ -54,6 +54,7 @@ from autoskillit.execution.anomaly_detection import (
     detect_outcome_anomalies,
     ndjson_drift_anomaly,
 )
+from autoskillit.execution.evidence.session_index import read_tolerant_session_index_rows
 from autoskillit.execution.session._session_model import _is_parent_assistant_record
 from autoskillit.execution.session._turn_usage import (
     first_parent_message_timestamps as _message_timestamps,
@@ -67,7 +68,6 @@ from autoskillit.execution.session._turn_usage import (
 from autoskillit.execution.session._turn_usage import (
     write_turn_usage_sidecar,
 )
-from autoskillit.execution.session_index import read_tolerant_session_index_rows
 
 logger = get_logger(__name__)
 

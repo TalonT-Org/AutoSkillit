@@ -18,6 +18,10 @@ _HOOKS_DIR = Path(__file__).parent
 _HOOKS_DIR_TEXT = str(_HOOKS_DIR.resolve())
 if _HOOKS_DIR_TEXT not in sys.path:
     sys.path.insert(0, _HOOKS_DIR_TEXT)
+_RUNTIME_DIR = str(Path(_HOOKS_DIR) / "_runtime")
+if _RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, _RUNTIME_DIR)
+
 
 from _hook_settings import (  # noqa: E402
     write_dispatch_diagnostic,

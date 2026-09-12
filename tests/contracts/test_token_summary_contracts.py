@@ -25,7 +25,7 @@ def test_token_usage_file_keys_match_typed_dict():
     If this fails, update TOKEN_USAGE_FILE_KEYS and TokenUsageFileEntry together.
     """
     from autoskillit.core.types import TokenUsageFileEntry
-    from autoskillit.hooks._hook_settings import TOKEN_USAGE_FILE_KEYS
+    from autoskillit.hooks._runtime._hook_settings import TOKEN_USAGE_FILE_KEYS
 
     assert TOKEN_USAGE_FILE_KEYS == set(TokenUsageFileEntry.__annotations__.keys())
 
@@ -39,7 +39,7 @@ def test_hook_load_sessions_reads_only_declared_keys():
     Follows test_config_field_coverage.py pattern. Prevents silent key drift
     when fields are renamed in the TypedDict but not in the hook.
     """
-    from autoskillit.hooks._hook_settings import TOKEN_USAGE_FILE_KEYS
+    from autoskillit.hooks._runtime._hook_settings import TOKEN_USAGE_FILE_KEYS
 
     hook_path = (
         Path(__file__).resolve().parents[2]
@@ -86,7 +86,7 @@ def test_format_functions_use_no_legacy_cache_keys():
     in _format_table, _format_efficiency_table, and _format_model_table after the
     canonical migration (P2-A14-WP1).
     """
-    from autoskillit.hooks._hook_settings import _V1_TOKEN_FIELD_ALIASES
+    from autoskillit.hooks._runtime._hook_settings import _V1_TOKEN_FIELD_ALIASES
 
     hook_path = (
         Path(__file__).resolve().parents[2]
@@ -199,7 +199,7 @@ def test_v1_alias_map_structural_correctness():
     - Every value is a canonical name in TOKEN_USAGE_FILE_KEYS.
     - No key appears in TOKEN_USAGE_FILE_KEYS (old names are excluded).
     """
-    from autoskillit.hooks._hook_settings import (
+    from autoskillit.hooks._runtime._hook_settings import (
         _V1_TOKEN_FIELD_ALIASES,
         TOKEN_USAGE_FILE_KEYS,
     )
@@ -222,7 +222,7 @@ def test_v1_alias_map_structural_correctness():
 
 def test_v1_alias_map_covers_known_legacy_keys():
     """Content-pinning: alias map must contain the exact known v1 -> v2 mappings."""
-    from autoskillit.hooks._hook_settings import _V1_TOKEN_FIELD_ALIASES
+    from autoskillit.hooks._runtime._hook_settings import _V1_TOKEN_FIELD_ALIASES
 
     assert _V1_TOKEN_FIELD_ALIASES == {
         "cache_creation_input_tokens": "cache_write_tokens",

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.types import RetryReason, SkillResult, SubprocessResult, TerminationReason
-from autoskillit.execution.clone_guard import (
+from autoskillit.execution.runtime.clone_guard import (
     build_clone_guard_policy,
     check_and_revert_clone_contamination,
     snapshot_clone_state,

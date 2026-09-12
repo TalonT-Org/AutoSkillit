@@ -18,9 +18,8 @@ from autoskillit.core import (
     read_boot_id,
     read_starttime_ticks,
 )
-from autoskillit.execution.child_outcomes import reconcile_child_outcome_snapshots
-from autoskillit.execution.linux_tracing import read_enrollment
-from autoskillit.execution.session_log import flush_session_log, resolve_log_dir
+from autoskillit.execution.evidence.linux_tracing import read_enrollment
+from autoskillit.execution.evidence.session_log import flush_session_log, resolve_log_dir
 
 logger = get_logger(__name__)
 
@@ -43,6 +42,13 @@ def recover_crashed_sessions(
     A reconciliation failure never blocks trace-file recovery.
     """
     try:
+        # Deferred: autoskillit.execution.child_outcomes imports
+        # autoskillit.execution.evidence.session_log, which would otherwise
+        # make this module-level import a circular import through the
+        # evidence/ gateway (execution.evidence -> _session_log_recovery ->
+        # child_outcomes -> execution.evidence.session_log).
+        from autoskillit.execution.child_outcomes import reconcile_child_outcome_snapshots
+
         reconcile_child_outcome_snapshots(resolve_log_dir(log_dir))
     except Exception:
         logger.debug("child_outcome_snapshot_reconciliation_failed", exc_info=True)

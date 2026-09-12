@@ -7,21 +7,43 @@ import shutil
 from pathlib import Path
 
 _HOOKS_SOURCE = Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks"
-_PROJECTED_HOOK_FILES = (
+_RUNTIME_SOURCE = _HOOKS_SOURCE / "_runtime"
+
+# Flat names live directly under hooks/; stdlib-only runtime siblings live under hooks/_runtime/
+# (post-#4672 decomposition). The dispatcher bootstrap adds both paths to sys.path.
+_PROJECTED_HOOK_FILES_FLAT = (
     "skill_load_post_hook.py",
-    "_hook_payload.py",
-    "_hook_settings.py",
     "_session_binding.py",
 )
+_PROJECTED_HOOK_FILES_RUNTIME = (
+    "_hook_payload.py",
+    "_hook_settings.py",
+)
+_PROJECTED_HOOK_FILES = _PROJECTED_HOOK_FILES_FLAT + _PROJECTED_HOOK_FILES_RUNTIME
+
+_SOURCE_FOR = {name: _HOOKS_SOURCE for name in _PROJECTED_HOOK_FILES_FLAT}
+_SOURCE_FOR.update({name: _RUNTIME_SOURCE for name in _PROJECTED_HOOK_FILES_RUNTIME})
 
 
 def copy_projected_hook(tmp_path: Path, name: str = "join-plugin") -> tuple[Path, Path]:
-    """Copy the stdlib-only hook runtime under a projected plugin root."""
+    """Copy the stdlib-only hook runtime under a projected plugin root.
+
+    After #4672's decomposition, `_hook_payload.py` and `_hook_settings.py`
+    live under `hooks/_runtime/`. The dispatcher bootstrap adds both
+    `hooks/` and `hooks/_runtime/` to sys.path, so the test fixture mirrors
+    that layout here.
+    """
     projection_root = tmp_path / name
     hooks_dir = projection_root / "hooks"
-    hooks_dir.mkdir(parents=True)
+    runtime_dir = hooks_dir / "_runtime"
+    runtime_dir.mkdir(parents=True)
     for filename in _PROJECTED_HOOK_FILES:
-        shutil.copy2(_HOOKS_SOURCE / filename, hooks_dir / filename)
+        dest = (
+            runtime_dir / filename
+            if filename in _PROJECTED_HOOK_FILES_RUNTIME
+            else hooks_dir / filename
+        )
+        shutil.copy2(_SOURCE_FOR[filename] / filename, dest)
     return projection_root, hooks_dir / "skill_load_post_hook.py"
 
 

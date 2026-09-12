@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autoskillit.execution.testing import DefaultTestRunner
+from autoskillit.execution.runtime.testing import DefaultTestRunner
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

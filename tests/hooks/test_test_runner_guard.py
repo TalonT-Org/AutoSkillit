@@ -282,7 +282,7 @@ class TestRegistration:
         canonical EXEMPT_SKILLS_BY_GUARD["test_runner_guard"] which equals the
         HookDef.exempt_skills for the test_runner_guard entry.
         """
-        from autoskillit.hooks._hook_constants import EXEMPT_SKILLS_BY_GUARD
+        from autoskillit.hooks._runtime._hook_constants import EXEMPT_SKILLS_BY_GUARD
         from autoskillit.hooks.guards.test_runner_guard import _EXEMPT_SKILLS  # noqa: PLC0415
 
         matching = [h for h in HOOK_REGISTRY if "guards/test_runner_guard.py" in h.scripts]

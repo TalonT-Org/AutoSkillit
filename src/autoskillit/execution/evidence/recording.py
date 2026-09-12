@@ -26,16 +26,16 @@ from autoskillit.core import (
     fast_dumps,
     get_logger,
 )
-from autoskillit.execution._recording_skills import (
+from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPlayer
+from autoskillit.execution.evidence._recording_skills import (
     _extract_ephemeral_add_dir,
     scan_skill_snapshots,
     snapshot_skill_dir,
     validate_skill_snapshot_members,
 )
-from autoskillit.execution._recording_skills import (
+from autoskillit.execution.evidence._recording_skills import (
     restore_skill_snapshot as _restore_skill_snapshot,
 )
-from autoskillit.execution.backends.codex_scenario_player import CodexScenarioPlayer
 from autoskillit.execution.process import DEFAULT_TETHER_CEILING_SECONDS
 
 if TYPE_CHECKING:

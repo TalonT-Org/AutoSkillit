@@ -1,4 +1,4 @@
-"""L1 unit tests for execution/testing.py — pytest output parsing."""
+"""L1 unit tests for execution/runtime/testing.py — pytest output parsing."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
-from autoskillit.execution.testing import (
+from autoskillit.execution.runtime.testing import (
     DefaultTestRunner,
     _is_progress_line,
     _read_sidecar_base_branch,
@@ -25,7 +25,7 @@ from autoskillit.execution.testing import (
     condense_test_output,
     extract_summary_line,
 )
-from autoskillit.execution.testing import (
+from autoskillit.execution.runtime.testing import (
     parse_pytest_summary as _parse_pytest_summary,
 )
 from tests._helpers import make_test_check_config, make_test_config
@@ -322,84 +322,84 @@ def test_parse_pytest_summary_only_matches_equals_delimited_lines():
 
 
 def test_check_test_passed_true_on_zero_rc_clean_output():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(0, "= 50 passed in 1s =") is True
 
 
 def test_check_test_passed_false_on_nonzero_rc():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(1, "= 50 passed in 1s =") is False
 
 
 def test_check_test_passed_false_on_zero_rc_with_failed_in_output():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(0, "= 2 failed, 48 passed =") is False
 
 
 def test_check_test_passed_false_on_zero_rc_with_error_in_output():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(0, "= 1 error =") is False
 
 
 def test_check_test_passed_true_for_xfailed_skipped():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(0, "= 97 passed, 3 xfailed, 1 skipped =") is True
 
 
 def test_check_test_passed_true_when_no_summary_empty_output():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     # Non-pytest runner: rc=0, no output — trust exit code
     assert check_test_passed(0, "") is True
 
 
 def test_check_test_passed_true_when_no_summary_log_only():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     # Non-pytest runner: rc=0, non-pytest stdout — trust exit code
     assert check_test_passed(0, "collected 100 items\nsome log output\n") is True
 
 
 def test_check_test_passed_false_bare_q_failures():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(0, "3 failed, 97 passed in 2.31s") is False
 
 
 def test_check_test_passed_true_bare_q_clean():
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     assert check_test_passed(0, "100 passed in 1.50s") is True
 
 
 def test_check_test_passed_true_when_no_summary_stderr_only() -> None:
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     # Non-pytest runner: rc=0, empty stdout, stderr pass signal → PASS
     assert check_test_passed(0, "", "test result: ok. 42 passed; 0 failed\n") is True
 
 
 def test_check_test_passed_true_when_non_pytest_stdout() -> None:
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     # Non-pytest runner: rc=0, stdout-only non-pytest output → PASS
     assert check_test_passed(0, "All tests passed.\n", "") is True
 
 
 def test_check_test_passed_false_when_nonzero_rc_no_output() -> None:
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     # Non-zero rc still fails regardless of output
     assert check_test_passed(1, "", "") is False
 
 
 def test_check_test_passed_parses_pytest_summary_in_stderr() -> None:
-    from autoskillit.execution.testing import check_test_passed
+    from autoskillit.execution.runtime.testing import check_test_passed
 
     # Pytest summary found in stderr — parse it
     assert check_test_passed(0, "", "= 5 passed in 1.2s =\n") is True
@@ -408,7 +408,7 @@ def test_check_test_passed_parses_pytest_summary_in_stderr() -> None:
 @pytest.mark.anyio
 async def test_default_test_runner_returns_test_result_with_stderr(tmp_path: Path) -> None:
     from autoskillit.core import TestResult
-    from autoskillit.execution.testing import DefaultTestRunner
+    from autoskillit.execution.runtime.testing import DefaultTestRunner
     from tests.conftest import _make_result
     from tests.fakes import MockSubprocessRunner
 
@@ -915,7 +915,7 @@ async def test_multi_command_second_fails(tmp_path: Path) -> None:
 async def test_multi_command_timeout_ceiling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import autoskillit.execution.testing as testing_mod
+    import autoskillit.execution.runtime.testing as testing_mod
     from tests.conftest import _make_result
     from tests.fakes import MockSubprocessRunner
 
@@ -950,7 +950,7 @@ async def test_multi_command_timeout_between_commands_reports_outer_timeout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Expiry between commands preserves evidence and names the outer timeout."""
-    import autoskillit.execution.testing as testing_mod
+    import autoskillit.execution.runtime.testing as testing_mod
     from tests.conftest import _make_result
     from tests.fakes import MockSubprocessRunner
 

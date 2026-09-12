@@ -11,7 +11,7 @@ import pytest
 
 from autoskillit.core import PluginLoadMode, SkillExecutionRole
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.hooks._hook_settings import DIAGNOSTIC_KEYS
+from autoskillit.hooks._runtime._hook_settings import DIAGNOSTIC_KEYS
 from autoskillit.hooks._session_binding import (
     SESSION_BINDING_SCHEMA_VERSION,
     LoadedSkillEntry,

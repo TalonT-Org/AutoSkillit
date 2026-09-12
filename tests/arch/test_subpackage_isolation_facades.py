@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from tests.arch._helpers import SRC_ROOT
+from tests.contracts.test_package_gateways import DECOMPOSITION_MOVE_SETS
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
@@ -197,6 +198,34 @@ def test_ops_decomposition_has_expected_siblings() -> None:
         "_process_orphans",
         "_sessions",
     }
+
+
+def test_execution_github_ops_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "execution" / "github_ops"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_github_ops"
+    ] | {"__init__"}
+
+
+def test_execution_evidence_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "execution" / "evidence"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_evidence"
+    ] | {"__init__"}
+
+
+def test_execution_runtime_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "execution" / "runtime"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "execution_runtime"
+    ] | {"__init__"}
+
+
+def test_hooks_runtime_decomposition_has_expected_siblings() -> None:
+    pkg = SRC_ROOT / "hooks" / "_runtime"
+    assert {p.name.removesuffix(".py") for p in pkg.glob("*.py")} == DECOMPOSITION_MOVE_SETS[
+        "hooks_runtime"
+    ] | {"__init__"}
 
 
 @pytest.mark.parametrize(

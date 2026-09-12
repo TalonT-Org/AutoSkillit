@@ -1,4 +1,4 @@
-"""Behavioral tests for execution/diff_annotator.py."""
+"""Behavioral tests for execution/github_ops/diff_annotator.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from autoskillit.execution.diff_annotator import (
+from autoskillit.execution.github_ops.diff_annotator import (
     DiffMetrics,
     annotate_diff,
     compute_diff_metrics,
@@ -531,7 +531,7 @@ class TestExtractCodeRegion:
     )
 
     def test_basic_extraction(self):
-        from autoskillit.execution.diff_annotator import extract_code_region
+        from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 42)
         assert "[L42]" in region
@@ -539,19 +539,19 @@ class TestExtractCodeRegion:
         assert "[L38]" in region
 
     def test_file_not_in_diff(self):
-        from autoskillit.execution.diff_annotator import extract_code_region
+        from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         region = extract_code_region(self.ANNOTATED_DIFF, "src/missing.py", 10)
         assert region == ""
 
     def test_line_outside_window(self):
-        from autoskillit.execution.diff_annotator import extract_code_region
+        from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 500)
         assert region == ""
 
     def test_multiple_files(self):
-        from autoskillit.execution.diff_annotator import extract_code_region
+        from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         app_region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 42)
         test_region = extract_code_region(self.ANNOTATED_DIFF, "tests/test_app.py", 2)
@@ -561,7 +561,7 @@ class TestExtractCodeRegion:
         assert "src/app.py" not in test_region
 
     def test_custom_context_lines(self):
-        from autoskillit.execution.diff_annotator import extract_code_region
+        from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         region = extract_code_region(self.ANNOTATED_DIFF, "src/app.py", 42, context_lines=2)
         assert "[L42]" in region
@@ -570,7 +570,7 @@ class TestExtractCodeRegion:
         assert "[L38]" not in region
 
     def test_empty_annotated_diff(self):
-        from autoskillit.execution.diff_annotator import extract_code_region
+        from autoskillit.execution.github_ops.diff_annotator import extract_code_region
 
         assert extract_code_region("", "src/app.py", 42) == ""
 

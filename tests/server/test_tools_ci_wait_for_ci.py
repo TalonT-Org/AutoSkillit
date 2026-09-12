@@ -286,7 +286,7 @@ async def test_wait_for_ci_watcher_exception_returns_structured_json(tool_ctx_ki
     tool_ctx_kitchen_open.ci_watcher = watcher
 
     with patch(
-        "autoskillit.execution.remote_resolver.asyncio.create_subprocess_exec",
+        "autoskillit.execution.github_ops.remote_resolver.asyncio.create_subprocess_exec",
         new_callable=AsyncMock,
     ) as mock_proc:
         proc_inst = AsyncMock()

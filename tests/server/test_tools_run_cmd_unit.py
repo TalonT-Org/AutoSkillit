@@ -75,7 +75,7 @@ class TestRunCmdRecording:
         self, tool_ctx_kitchen_open
     ):
         """run_cmd with step_name passes SCENARIO_STEP_NAME in env kwarg to ctx.runner."""
-        from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+        from autoskillit.execution.evidence.recording import SCENARIO_STEP_NAME_ENV
 
         tool_ctx_kitchen_open.runner.push(_make_result(0, "ok", ""))
         await run_cmd(cmd="echo hi", cwd="/tmp", step_name="setup")
@@ -87,7 +87,7 @@ class TestRunCmdRecording:
         self, tool_ctx_kitchen_open, monkeypatch
     ):
         """run_cmd with step_name must not strip PATH/HOME from the child env."""
-        from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+        from autoskillit.execution.evidence.recording import SCENARIO_STEP_NAME_ENV
 
         monkeypatch.setenv("PATH", "/usr/bin:/usr/local/bin")
         monkeypatch.setenv("HOME", "/home/testuser")
@@ -117,7 +117,7 @@ class TestRunCmdRecording:
     async def test_run_cmd_without_step_name_omits_scenario_step_name(self, tool_ctx_kitchen_open):
         """run_cmd without step_name still builds a sanitized env dict (never None),
         omitting SCENARIO_STEP_NAME since no step_name was given."""
-        from autoskillit.execution.recording import SCENARIO_STEP_NAME_ENV
+        from autoskillit.execution.evidence.recording import SCENARIO_STEP_NAME_ENV
 
         tool_ctx_kitchen_open.runner.push(_make_result(0, "", ""))
         await run_cmd(cmd="echo hi", cwd="/tmp")
@@ -133,7 +133,7 @@ class TestRunCmdRecording:
         """End-to-end: run_cmd step_name → RecordingSubprocessRunner.record_non_session_step()."""
         from unittest.mock import Mock
 
-        from autoskillit.execution.recording import RecordingSubprocessRunner
+        from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
         from tests.conftest import _make_result as _mr
         from tests.fakes import MockSubprocessRunner
 
@@ -156,7 +156,7 @@ class TestRunCmdRecording:
         """run_cmd without step_name does not call record_non_session_step."""
         from unittest.mock import Mock
 
-        from autoskillit.execution.recording import RecordingSubprocessRunner
+        from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
         from tests.conftest import _make_result as _mr
         from tests.fakes import MockSubprocessRunner
 

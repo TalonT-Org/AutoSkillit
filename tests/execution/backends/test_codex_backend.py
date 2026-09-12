@@ -659,7 +659,7 @@ class TestCodexResumeCmd:
     def test_resume_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
         from autoskillit.execution.backends._backend_cmd_builder_base import SHARED_BASELINE_ENV
-        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+        from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
@@ -675,7 +675,7 @@ class TestCodexResumeCmd:
 class TestCodexHeadlessCmdEnv:
     def test_headless_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
-        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+        from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_headless_cmd("do stuff")
@@ -898,7 +898,7 @@ class TestCodexBuildSkillSessionCmd:
 
     def test_skill_session_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
-        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+        from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_skill_session_cmd(**self.BASE)
@@ -1571,7 +1571,7 @@ class TestCodexBuildFoodTruckCmd:
 
     def test_food_truck_cmd_uses_filtered_base_env(self, monkeypatch) -> None:
         from autoskillit.core import CODEX_MCP_ENV_FORWARD_VARS
-        from autoskillit.execution.commands import _HEADLESS_EXCLUSIVE_VARS
+        from autoskillit.execution.runtime.commands import _HEADLESS_EXCLUSIVE_VARS
 
         monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
         spec = CodexBackend().build_food_truck_cmd(**self.BASE)

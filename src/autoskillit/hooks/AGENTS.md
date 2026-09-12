@@ -1,9 +1,11 @@
 # hooks/
 
 Claude Code `PreToolUse`/`PostToolUse`/`SessionStart` scripts.
-Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS.md).
+Sub-packages: guards/ (see guards/AGENTS.md), formatters/ (see formatters/AGENTS.md),
+_runtime/ (see _runtime/AGENTS.md).
 
-The package initializer remains import-free.
+The package initializer performs explicit deferred `HOOK_REGISTRY` population to break an
+import cycle (see the top-of-file comment in `hooks/__init__.py`); it is not import-free.
 
 The `_capture` primitives remain stdlib-only and importable in standalone mode when the
 hooks directory alone is supplied on `sys.path`.

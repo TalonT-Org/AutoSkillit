@@ -1,4 +1,4 @@
-"""L1 unit tests for execution/ci.py — CIWatcher service."""
+"""L1 unit tests for execution/github_ops/ci.py — CIWatcher service."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from autoskillit.core import CIRunScope, CIWatcher
-from autoskillit.execution.ci import (
+from autoskillit.execution.github_ops.ci import (
     DefaultCIWatcher,
     _jittered_sleep,
 )
@@ -209,7 +209,7 @@ async def test_wait_returns_no_runs_when_fetch_returns_empty():
     )
     watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait(
             "feature-x",
             repo="owner/repo",
@@ -242,7 +242,7 @@ async def test_polls_active_run_until_completion():
     )
     watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
 
     assert result["run_id"] == 555
@@ -255,7 +255,7 @@ async def test_no_runs_at_all_returns_no_runs():
     watcher._fetch_completed_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
     watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=1)
 
     assert result["run_id"] is None
@@ -271,7 +271,7 @@ async def test_no_runs_includes_diagnostic_fields():
     watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
     watcher._fetch_failed_jobs = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait(
             "feature-branch",
             repo="owner/repo",
@@ -300,7 +300,7 @@ async def test_timeout_exceeded():
         return_value=_run(run_id=666, status="in_progress", conclusion=None)
     )
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=1)
 
     assert result["run_id"] == 666
@@ -334,7 +334,7 @@ async def test_exponential_backoff_with_jitter():
     sleep_durations: list[float] = []
     mock_sleep = AsyncMock(side_effect=lambda d: sleep_durations.append(d))
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", mock_sleep):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", mock_sleep):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=600)
 
     assert result["conclusion"] == "success"
@@ -485,7 +485,7 @@ class TestCIVocabularyContract:
 
     def test_failed_conclusions_constant_exists(self):
         """FAILED_CONCLUSIONS must be exported as a module-level constant."""
-        from autoskillit.execution import ci
+        from autoskillit.execution.github_ops import ci
 
         assert hasattr(ci, "FAILED_CONCLUSIONS")
         assert isinstance(ci.FAILED_CONCLUSIONS, frozenset)
@@ -493,7 +493,7 @@ class TestCIVocabularyContract:
 
     def test_known_ci_conclusions_constant_exists(self):
         """KNOWN_CI_CONCLUSIONS must be exported and cover all values ci.py tests for."""
-        from autoskillit.execution import ci
+        from autoskillit.execution.github_ops import ci
 
         assert hasattr(ci, "KNOWN_CI_CONCLUSIONS")
         assert isinstance(ci.KNOWN_CI_CONCLUSIONS, frozenset)
@@ -501,7 +501,7 @@ class TestCIVocabularyContract:
 
     def test_failed_conclusions_subset_of_known(self):
         """FAILED_CONCLUSIONS must be a subset of KNOWN_CI_CONCLUSIONS."""
-        from autoskillit.execution.ci import FAILED_CONCLUSIONS, KNOWN_CI_CONCLUSIONS
+        from autoskillit.execution.github_ops.ci import FAILED_CONCLUSIONS, KNOWN_CI_CONCLUSIONS
 
         assert FAILED_CONCLUSIONS.issubset(KNOWN_CI_CONCLUSIONS), (
             f"FAILED_CONCLUSIONS contains values not in KNOWN_CI_CONCLUSIONS: "
@@ -599,7 +599,7 @@ async def test_phase2_recheck_uses_anchored_cutoff():
     watcher._fetch_completed_runs = mock_fetch_completed  # type: ignore[method-assign]
     watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait(
             "main", repo="owner/repo", timeout_seconds=60, lookback_seconds=120
         )
@@ -624,7 +624,7 @@ async def test_phase2_recheck_finds_late_completing_run():
     watcher._fetch_active_runs = AsyncMock(return_value=[])  # type: ignore[method-assign]
     watcher._fetch_failed_jobs = AsyncMock(return_value=["build"])  # type: ignore[method-assign]
 
-    with patch("autoskillit.execution.ci.asyncio.sleep", new_callable=AsyncMock):
+    with patch("autoskillit.execution.github_ops.ci.asyncio.sleep", new_callable=AsyncMock):
         result = await watcher.wait("main", repo="owner/repo", timeout_seconds=60)
 
     assert result["run_id"] == 77

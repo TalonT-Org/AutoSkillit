@@ -12,7 +12,7 @@ from autoskillit.execution.quota import (
     _write_cache,
 )
 from autoskillit.execution.quota._quota_observed import record_observed_rate_limit
-from autoskillit.hooks._hook_settings import QuotaHookSettings
+from autoskillit.hooks._runtime._hook_settings import QuotaHookSettings
 from autoskillit.hooks.guards.quota_guard import quota_guard_decision
 from autoskillit.hooks.quota_post_hook import quota_post_decision
 from autoskillit.quota_constraints import quota_scope

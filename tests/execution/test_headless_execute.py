@@ -77,11 +77,11 @@ def _conflicting_sink_env(sink_env: dict[str, str]) -> dict[str, str]:
 async def test_execute_overlays_sink_endpoint_and_always_closes_it(
     minimal_ctx, tmp_path: Path, monkeypatch, close_raises: bool
 ) -> None:
+    import autoskillit.execution.evidence.session_log as _session_log
     import autoskillit.execution.headless._headless_execute as _execute_module
-    import autoskillit.execution.session_log as _session_log
     from autoskillit.core import ModelIdentity, SessionTelemetry
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _launch_preparation, _mock_backend
     from tests.fakes import MockSubprocessRunner
 
@@ -161,8 +161,8 @@ async def test_sink_close_failure_does_not_replace_runner_crash(
 ) -> None:
     import autoskillit.execution as _execution
     import autoskillit.execution.headless._headless_execute as _execute_module
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _launch_preparation, _mock_backend
 
     events: list[str] = []
@@ -215,8 +215,8 @@ async def test_sink_close_failure_does_not_replace_propagated_infrastructure_fau
 ) -> None:
     import autoskillit.execution.headless._headless_execute as _execute_module
     from autoskillit.core import InfrastructureFaultError, RetryReason, SkillResult
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _launch_preparation, _mock_backend
     from tests.fakes import MockSubprocessRunner
 
@@ -285,8 +285,8 @@ async def test_sink_close_failure_does_not_replace_deferred_cancellation(
 
     import autoskillit.execution as _execution
     import autoskillit.execution.headless._headless_execute as _execute_module
-    from autoskillit.execution.commands import ClaudeHeadlessCmd
     from autoskillit.execution.headless import _execute_claude_headless
+    from autoskillit.execution.runtime.commands import ClaudeHeadlessCmd
     from tests.execution.conftest import _launch_preparation, _mock_backend
 
     events: list[str] = []

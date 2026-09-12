@@ -24,6 +24,9 @@ import pytest
 _HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks")
 if _HOOKS_SRC not in sys.path:
     sys.path.insert(0, _HOOKS_SRC)
+_HOOKS_RUNTIME_SRC = str(Path(_HOOKS_SRC) / "_runtime")
+if _HOOKS_RUNTIME_SRC not in sys.path:
+    sys.path.insert(0, _HOOKS_RUNTIME_SRC)
 
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,

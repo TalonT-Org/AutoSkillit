@@ -118,7 +118,7 @@ from autoskillit.execution.process._termination import (
 if TYPE_CHECKING:
     from autoskillit.config import LinuxTracingConfig
     from autoskillit.core import InspectorCallback, LineDriver, StreamParser
-    from autoskillit.execution.linux_tracing import TraceTarget
+    from autoskillit.execution.evidence.linux_tracing import TraceTarget
 
 logger = get_logger(__name__)
 
@@ -336,7 +336,7 @@ async def run_managed_async(
             _observed_pid: int = root_pid
             _tracked_comm: str | None = None
             if linux_tracing_config is not None:
-                from autoskillit.execution.linux_tracing import (
+                from autoskillit.execution.evidence.linux_tracing import (
                     LINUX_TRACING_AVAILABLE,
                     resolve_trace_target,
                     trace_target_from_pid,
@@ -367,7 +367,7 @@ async def run_managed_async(
                     _workload_pid = _target.pid
                     _workload_ticks = _target.starttime_ticks
                 else:
-                    from autoskillit.execution.linux_tracing import (
+                    from autoskillit.execution.evidence.linux_tracing import (
                         TraceTargetResolutionError,
                         resolve_trace_target,
                     )
@@ -522,7 +522,7 @@ async def run_managed_async(
                     )
                 tracing_handle = None
                 if linux_tracing_config is not None and _target is not None:
-                    from autoskillit.execution.linux_tracing import start_linux_tracing
+                    from autoskillit.execution.evidence.linux_tracing import start_linux_tracing
 
                     tracing_handle = start_linux_tracing(
                         target=_target,

@@ -13,7 +13,7 @@ class TestSessionLogRecoveryModuleExists:
     """Symbols moved to _session_log_recovery are importable from there."""
 
     def test__recover_crashed_sessions_importable(self):
-        from autoskillit.execution._session_log_recovery import recover_crashed_sessions
+        from autoskillit.execution.evidence._session_log_recovery import recover_crashed_sessions
 
         assert callable(recover_crashed_sessions)
 
@@ -24,7 +24,7 @@ class TestExecutionGatewayPreserved:
     def test_flush_session_log_importable(self):
         from autoskillit.execution import flush_session_log
 
-        assert flush_session_log is not None
+        assert callable(flush_session_log)
 
     def test_recover_crashed_sessions_importable(self):
         from autoskillit.execution import recover_crashed_sessions

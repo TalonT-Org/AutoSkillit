@@ -8,7 +8,7 @@ import pytest
 import structlog
 
 from autoskillit.core import PreLaunchReadiness
-from autoskillit.execution.recording import RecordingSubprocessRunner
+from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
 

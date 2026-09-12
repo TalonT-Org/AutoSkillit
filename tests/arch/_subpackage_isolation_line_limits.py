@@ -27,12 +27,6 @@ class LineLimitExemption:
 
 
 _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
-    "hooks/_capture/_runner.py": LineLimitExemption(
-        1050,
-        "REQ-CNST-010-E31: #4511 requires a dedicated setup failure boundary before "
-        "the command-body handler because the latter assumes an initialized artifact; "
-        "keeping both stages in the runner preserves one owner for capture settlement",
-    ),
     "core/types/_type_constants.py": LineLimitExemption(
         1050,
         "REQ-CNST-010-E29: #4597 Phase 3 added a RETIRED_INSTALL_ARTIFACT_SHAPES entry "
@@ -88,27 +82,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "added the SNAPSHOT_INTEGRITY reason and degraded-delivery envelope fields, "
         "which must stay co-located with the rest of the envelope schema they extend "
         "(issue #4479).",
-    ),
-    "hooks/_command_classification.py": LineLimitExemption(
-        1600,
-        "REQ-CNST-010-E10: shared command-classification primitive consumed by all "
-        "command-inspecting guards — tokenization, shell-payload extraction, "
-        "interpreter-write detection, protected-path reads, and recursive payload "
-        "segmentation; the stdlib-only hook boundary and shared parser prevent "
-        "policy drift across guard processes. Cap reduced to 1300 by #4665's "
-        "decomposition of GitHub mutation cardinality/route authority into the "
-        "_github_mutation_analysis.py sibling under E26. Bumped to 1600 for Issue "
-        "#4655's rectify: ArgvToken threads quote provenance through the tokenizer "
-        "(_tokenize_command_segments_with_redirects, _partition_output_redirect_"
-        "indices/_select_executable_argv_tokens, _verb_start_index), and the CLI-"
-        "agnostic _FlagArity/_consume_argv_flag/_consume_str_flag spec-table engine "
-        "(plus _GIT_GLOBAL_FLAG_SPEC and _PIP_GLOBAL_FLAG_SPEC, and "
-        "extract_git_subcommand_and_flags's fail-closed unrecognized-global-flag fix) "
-        "-- these are shared, CLI-agnostic primitives every command-inspecting guard "
-        "consumes (git, curl, pip, and gh's own spec table in "
-        "_github_mutation_analysis.py, which imports this engine rather than "
-        "duplicating it), so they stay adjacent to the tokenizer they extend rather "
-        "than the gh-specific consumer module the split already separated them from.",
     ),
     "hooks/guards/git_ops_guard.py": LineLimitExemption(
         1050,

@@ -13,8 +13,8 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-ANOMALY_DETECTION = SRC / "execution" / "anomaly_detection.py"
-SESSION_LOG = SRC / "execution" / "session_log.py"
+ANOMALY_DETECTION = SRC / "execution" / "evidence" / "anomaly_detection.py"
+SESSION_LOG = SRC / "execution" / "evidence" / "session_log.py"
 
 
 def test_detect_model_drift_uses_normalize_model_id():

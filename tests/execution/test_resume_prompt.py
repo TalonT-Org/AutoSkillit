@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core.types._type_checkpoint import SessionCheckpoint
 from autoskillit.core.types._type_enums import OutputFormat
-from autoskillit.execution.commands import _build_resume_context
+from autoskillit.execution.runtime.commands import _build_resume_context
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

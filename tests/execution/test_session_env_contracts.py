@@ -74,12 +74,16 @@ def test_claude_skill_hardening_stays_backend_local() -> None:
 )
 def test_food_truck_env_contains_required_vars(backend_factory) -> None:
     """Every backend's build_food_truck_cmd must inject all ORCHESTRATOR_SESSION_REQUIRED_ENV."""
+    managed_skill_catalog = (
+        codex_skill_add_dirs("/tmp")[0] if backend_factory is CodexBackend else None
+    )
     with plugin_binding(Path("/plugins")) as binding:
         spec = backend_factory().build_food_truck_cmd(
             orchestrator_prompt="run the pipeline",
             plugin_binding=binding,
             cwd="/tmp",
             completion_marker="%%DONE%%",
+            managed_skill_catalog=managed_skill_catalog,
         )
     missing = ORCHESTRATOR_SESSION_REQUIRED_ENV - spec.env.keys()
     assert not missing, f"Missing required food truck env vars: {missing}"

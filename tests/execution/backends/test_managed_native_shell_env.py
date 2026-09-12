@@ -112,6 +112,7 @@ def test_codex_managed_food_truck_env_overrides_hostile_extras() -> None:
         native_shell_capture_decision=decision,
         managed_lineage_ref=lineage_ref,
         managed_attempt_id=_ATTEMPT_ID,
+        managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
     )
 
     _assert_authoritative_managed_env(spec.env)
@@ -150,6 +151,7 @@ def test_codex_unmanaged_builders_do_not_inject_managed_env() -> None:
             cwd="/tmp/project",
             completion_marker="DONE",
             env_extras=hostile_env,
+            managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
         ),
         backend.build_resume_cmd(
             resume_session_id="thread-1",
@@ -200,6 +202,7 @@ def test_codex_ambient_protected_controls_do_not_reach_any_builder(
             plugin_binding=None,
             cwd="/tmp/project",
             completion_marker="DONE",
+            managed_skill_catalog=_CODEX_SKILL_ADD_DIRS[0],
         ),
         backend.build_resume_cmd(
             resume_session_id="thread-1",

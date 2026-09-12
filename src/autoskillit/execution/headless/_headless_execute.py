@@ -161,12 +161,8 @@ async def _execute_claude_headless(
 ) -> SkillResult:
     """Shared subprocess execution for headless Claude sessions.
 
-    Acquires and retains one exact plugin binding for each physical provider
-    attempt, builds that attempt's CmdSpec, and holds ownership until the
-    subprocess has been reaped. When the caller passes ``retained_binding``
-    (a binding it already acquired and owns for the complete logical
-    dispatch), every physical attempt — main, retry, and nudge — reuses that
-    same artifact identity instead of acquiring its own.
+    Acquires one plugin binding per attempt (or reuses ``retained_binding`` when
+    the caller owns one), builds that attempt's CmdSpec, and holds it until reaped.
     """
     campaign_id = campaign_id or os.environ.get(CAMPAIGN_ID_ENV_VAR, "")
     dispatch_id = dispatch_id or os.environ.get(DISPATCH_ID_ENV_VAR, "")

@@ -255,7 +255,18 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             backend=backend,
             session_kind=ManagedHeadlessSessionKind.FOOD_TRUCK,
         )
-        managed_catalog_requested = capability_preparation is not None
+        # A managed generated-home catalog is only meaningful for backends that
+        # cannot already serve skills from an explicit plugin directory (Codex).
+        # Backends with plugin_install_capable=True (Claude) get their skill
+        # content from capability_preparation.finalize()'s existing projection
+        # into that plugin dir, as before Part D — materializing a *second*,
+        # separate ephemeral catalog for them would duplicate bundled skills
+        # already served via --plugin-dir and fail session-layout validation.
+        managed_catalog_requested = (
+            capability_preparation is not None
+            and backend.capabilities.skill_injection_capable
+            and not backend.capabilities.plugin_install_capable
+        )
         plugin_load_mode = _headless_plugin_load_mode(
             backend,
             requires_generated_home=managed_catalog_requested,

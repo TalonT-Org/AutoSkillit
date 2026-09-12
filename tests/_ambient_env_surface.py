@@ -880,27 +880,29 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/_claude/session_commands.py:290": (
+    "execution/backends/_claude/session_commands.py:292": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:354": (
+    "execution/backends/_codex/headless_commands.py:72": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
-        "Codex generic-prompt launch."
+        "Codex generic-prompt launch (Part D: moved off codex.py's exec-transport builder into"
+        "this app-server mixin; CODEX_HOME is separately re-read from ambient os.environ just"
+        "above, since it is also one of the reserved keys this same filter blocks from callers)."
     ),
-    "execution/backends/_codex/session_commands.py:265": (
+    "execution/backends/_codex/session_commands.py:264": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:413": (
+    "execution/backends/_codex/session_commands.py:422": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:533": (
+    "execution/backends/_codex/session_commands.py:561": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:606": (
+    "execution/backends/_codex/session_commands.py:649": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),

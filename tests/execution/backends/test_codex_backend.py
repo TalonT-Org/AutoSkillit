@@ -399,8 +399,8 @@ class TestCodexBackendCommands:
         assert "resume" not in spec.cmd
         assert "sess-123" not in spec.cmd
         assert spec.app_server_plan.resume_thread_id == "sess-123"
-        assert spec.app_server_plan.prompt == "continue"
-        assert OUTPUT_DISCIPLINE_DIGEST in spec.app_server_plan.developer_instructions
+        assert spec.app_server_plan.prompt.endswith("continue")
+        assert OUTPUT_DISCIPLINE_DIGEST in spec.app_server_plan.prompt
 
     def test_resume_cmd_prepends_discipline_digests(self) -> None:
         from autoskillit.core import CODEX_INTAKE_DISCIPLINE_DIGEST, OUTPUT_DISCIPLINE_DIGEST
@@ -408,10 +408,11 @@ class TestCodexBackendCommands:
         spec = CodexBackend().build_resume_cmd(
             resume_session_id="sess-123", prompt="continue working"
         )
-        instructions = spec.app_server_plan.developer_instructions
-        assert instructions.startswith(OUTPUT_DISCIPLINE_DIGEST)
-        assert CODEX_INTAKE_DISCIPLINE_DIGEST in instructions
-        assert spec.app_server_plan.prompt == "continue working"
+        prompt = spec.app_server_plan.prompt
+        assert prompt.startswith(OUTPUT_DISCIPLINE_DIGEST)
+        assert CODEX_INTAKE_DISCIPLINE_DIGEST in prompt
+        assert prompt.endswith("continue working")
+        assert spec.app_server_plan.developer_instructions is None
 
     def test_build_resume_cmd_empty_id_raises(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -633,15 +634,23 @@ class TestCodexHeadlessCmd:
         assert spec.app_server_plan.expected_skill_names == frozenset()
         assert spec.app_server_plan.expected_skill_entries == ()
 
-    def test_empty_home_sentinel_when_no_finalized_codex_home(self, monkeypatch) -> None:
-        monkeypatch.delenv("CODEX_HOME", raising=False)
+    def test_empty_home_sentinel_when_no_finalized_codex_home(self) -> None:
+        # The central `_scrub_ambient_env` autouse fixture already scrubs
+        # CODEX_HOME from every test's environment; no explicit delenv needed.
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert spec.app_server_plan.session_home == ""
 
     def test_explicit_home_resolved_from_finalized_env(self, monkeypatch) -> None:
+        """CODEX_HOME is one of _HEADLESS_EXCLUSIVE_VARS (stripped from the base env
+        this builder assembles for the child, to block host leakage) and one of the
+        reserved keys _merge_caller_env_extras always blocks from caller extras — so
+        an explicit ambient home is read directly off this process's own environment
+        and re-injected as the child's reserved home keys."""
         monkeypatch.setenv("CODEX_HOME", "/tmp/explicit-codex-home")
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert spec.app_server_plan.session_home == "/tmp/explicit-codex-home"
+        assert spec.env["CODEX_HOME"] == "/tmp/explicit-codex-home"
+        assert spec.env["CODEX_SQLITE_HOME"] == "/tmp/explicit-codex-home"
 
 
 class TestCodexResumeCmd:
@@ -656,20 +665,20 @@ class TestCodexResumeCmd:
             "features.image_generation=false",
         )
 
-    def test_resume_thread_id_and_prompt_carried_on_plan(self) -> None:
+    def test_resume_thread_id_carried_on_plan(self) -> None:
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
         assert spec.app_server_plan is not None
         assert spec.app_server_plan.resume_thread_id == "abc123"
-        assert spec.app_server_plan.prompt == "continue"
 
-    def test_discipline_suffix_carried_as_developer_instructions(self) -> None:
+    def test_discipline_suffix_prepended_to_plan_prompt(self) -> None:
+        """Mirrors build_skill_session_cmd's own composition: the discipline suffix
+        is prepended into the plan's prompt field, not a separate channel."""
         from autoskillit.core import OUTPUT_DISCIPLINE_DIGEST
 
         spec = CodexBackend().build_resume_cmd(resume_session_id="abc123", prompt="continue")
-        assert spec.app_server_plan.developer_instructions is not None
-        assert spec.app_server_plan.developer_instructions.startswith(OUTPUT_DISCIPLINE_DIGEST)
-        # the prompt itself is no longer concatenated with the discipline suffix
-        assert spec.app_server_plan.prompt == "continue"
+        assert spec.app_server_plan.developer_instructions is None
+        assert spec.app_server_plan.prompt.startswith(OUTPUT_DISCIPLINE_DIGEST)
+        assert spec.app_server_plan.prompt.endswith("continue")
 
     def test_empty_session_id_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="non-empty"):
@@ -712,10 +721,9 @@ class TestCodexResumeCmd:
         assert spec.app_server_plan.catalog_root == ""
         assert spec.app_server_plan.expected_skill_names == frozenset()
 
-    def test_no_plugin_projection_selected_as_codex_home(self, monkeypatch) -> None:
+    def test_no_plugin_projection_selected_as_codex_home(self) -> None:
         """Part D removed CODEX_HOME-from-plugin-binding selection for resume; a
         non-managed resume preserves the selected native/explicit home only."""
-        monkeypatch.delenv("CODEX_HOME", raising=False)
         binding = plugin_binding(Path("/some-plugin-dir"))
         spec = CodexBackend().build_resume_cmd(
             resume_session_id="abc123", prompt="continue", plugin_binding=binding
@@ -1474,6 +1482,11 @@ class TestCodexDynaconfBackendEnv:
         "plugin_binding": plugin_binding(Path("/pkg")),
         "cwd": "/work",
         "completion_marker": "%%DONE%%",
+        "managed_skill_catalog": ValidatedAddDir(
+            path="/work/add-dir",
+            session_home="/work",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        ),
     }
 
     def test_skill_session_has_dynaconf_backend(self) -> None:

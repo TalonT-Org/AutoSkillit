@@ -682,18 +682,24 @@ class CodexSessionCommandMixin(BackendCmdBuilderBase):
         else:
             catalog_root = ""
             expected_entries = ()
+        # Mirrors build_skill_session_cmd's own prompt composition: discipline
+        # digests are prepended into the prompt itself, not carried on a
+        # separate developer_instructions channel.
+        composed_prompt = (
+            f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
+        )
         app_server_plan = CodexAppServerPlan(
             session_home=session_home or "",
             catalog_root=catalog_root,
             expected_skill_names=frozenset(name for name, _ in expected_entries),
             expected_skill_entries=expected_entries,
             cwd=str(project_root) if project_root is not None else "",
-            prompt=prompt,
+            prompt=composed_prompt,
             model=None,
             sandbox="read-only",
             approval_policy="never",
             bypass_hook_trust=bypass_hook_trust,
-            developer_instructions=codex_discipline_suffix(include_scope=include_scope_discipline),
+            developer_instructions=None,
             config_overrides={"bypass_hook_trust": bypass_hook_trust},
             client_version=AUTOSKILLIT_INSTALLED_VERSION,
             resume_thread_id=resume_session_id,

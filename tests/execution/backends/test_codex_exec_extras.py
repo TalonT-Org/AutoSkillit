@@ -14,7 +14,8 @@ from autoskillit.core import (
     MCP_CLIENT_BACKEND_ENV_VAR,
     SESSION_TYPE_SKILL,
 )
-from autoskillit.execution.backends.codex import CodexBackend, _codex_exec_extras
+from autoskillit.execution.backends._codex_cmd_builders import _codex_exec_extras
+from autoskillit.execution.backends.codex import CodexBackend
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 

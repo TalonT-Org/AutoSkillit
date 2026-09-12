@@ -15,6 +15,7 @@ from pathlib import Path
 
 from autoskillit.core import (
     AUTOSKILLIT_INSTALLED_VERSION,
+    CODEX_RESERVED_HOME_ENV_VARS,
     CmdSpec,
     CodexAppServerPlan,
 )
@@ -57,9 +58,19 @@ class CodexHeadlessCommandMixin(CodexSessionCommandMixin):
         """
         headless_extras = _codex_exec_extras(session_type="")
         _merge_caller_env_extras(headless_extras, env_extras)
+        # CODEX_HOME is one of _HEADLESS_EXCLUSIVE_VARS (stripped below from the
+        # subprocess's own base env to block host leakage) and one of the
+        # reserved keys _merge_caller_env_extras always blocks from caller
+        # extras — so the only way an explicit ambient home reaches the child
+        # at all is to read it directly off this process's environment here
+        # and re-inject it ourselves, exactly like every other builder injects
+        # a bound managed session_home into its own reserved keys.
+        session_home = os.environ.get(_CODEX_HOME_ENV_VAR, "")
+        if session_home:
+            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+                headless_extras[reserved_key] = session_home
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         env = self.env_policy().build_env(filtered_base, extras=headless_extras)
-        session_home = env.get(_CODEX_HOME_ENV_VAR, "")
         cmd = _codex_app_server_base(extra_overrides=self._otlp_overrides(headless_extras))
         bypass_hook_trust = _should_bypass_hook_trust(
             self.capabilities.hook_trust_policy, automated_session=True

@@ -1,10 +1,7 @@
 """Codex ordinary-headless command construction.
 
-Split out of ``codex.py`` along the ``CodexSessionCommandMixin`` boundary
-(Part D, #4945) purely to stay under the file-length hard cap — ``codex.py``
-was at 720/750 lines before ``build_headless_cmd``'s exec-to-app-server
-conversion; this mixin owns that one builder so the cap has real headroom
-rather than an exemption.
+Split out of ``codex.py`` along the ``CodexSessionCommandMixin`` boundary to
+stay under the file-length hard cap; owns the ``build_headless_cmd`` builder.
 """
 
 from __future__ import annotations

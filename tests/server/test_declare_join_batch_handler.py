@@ -285,11 +285,142 @@ def test_skill_name_matches_in_both_namespaced_and_bare_form(
     assert "declares count=1; received 2 assignments" in str(cardinality_violation["error"])
 
 
-@pytest.mark.parametrize("case", ["single_candidate", "typed_mismatch", "ambiguous"])
+@pytest.mark.parametrize(
+    ("candidate_count", "expected_truncated"),
+    [(20, False), (21, True)],
+)
+def test_binding_candidate_enumeration_reports_truncation_boundary(
+    tmp_path: Path,
+    candidate_count: int,
+    expected_truncated: bool,
+) -> None:
+    channel_dir = tmp_path / "channel"
+    channel_dir.mkdir()
+    expected_paths = [
+        channel_dir / f"skill_guard_candidate-{index:02d}.flag" for index in range(candidate_count)
+    ]
+    for path in reversed(expected_paths):
+        path.write_text("{}", encoding="utf-8")
+
+    paths, truncated = declare_module.enumerate_binding_paths(channel_dir)
+
+    assert paths == tuple(expected_paths[:20])
+    assert truncated is expected_truncated
+
+
+def test_binding_candidate_enumeration_oserror_preserves_generic_refusal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_root = tmp_path / "state-root"
+    state_root.mkdir()
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    requested_path = resolve_binding_path(str(state_root), "requested")
+    channel_dir = requested_path.parent
+    channel_dir.mkdir(parents=True)
+    diagnostics: list[dict[str, object]] = []
+    monkeypatch.setattr(declare_module, "_emit_join_diagnostic", diagnostics.append)
+
+    def raising_stub(_path: Path, _pattern: str) -> None:
+        raise OSError("candidate enumeration failed")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(Path, "glob", raising_stub)
+        assert declare_module.enumerate_binding_paths(channel_dir) == ((), False)
+
+        result = declare_module._declare_join_batch_handler(
+            "rectify", ["assignment"], "requested", tmp_path
+        )
+
+        assert result == {
+            "success": False,
+            "error": "declare_join_batch requires a valid session binding",
+        }
+        assert diagnostics == []
+
+
+@pytest.mark.parametrize(
+    ("candidate_count", "recorded_session_id", "expected_status"),
+    [
+        (20, "recorded", "wrong_session_id"),
+        (21, "recorded", "ambiguous_session_bindings"),
+        (21, "requested", None),
+    ],
+)
+def test_handler_limits_binding_reads_and_respects_scan_completeness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    candidate_count: int,
+    recorded_session_id: str,
+    expected_status: str | None,
+) -> None:
+    state_root = tmp_path / "state-root"
+    state_root.mkdir()
+    monkeypatch.setenv("AUTOSKILLIT_STATE_ROOT", str(state_root))
+    candidate_paths = [
+        _write_session_binding(
+            state_root,
+            f"candidate-{index:02d}",
+            _binding(recorded_session_id),
+        )
+        for index in reversed(range(candidate_count))
+    ]
+    candidate_paths.sort()
+    requested_path = resolve_binding_path(str(state_root), "requested")
+    diagnostics: list[dict[str, object]] = []
+    read_paths: list[Path] = []
+    real_read_binding = declare_module.read_binding
+
+    def recording_read_binding(path: Path) -> SessionBinding | None:
+        read_paths.append(path)
+        return real_read_binding(path)
+
+    monkeypatch.setattr(declare_module, "_emit_join_diagnostic", diagnostics.append)
+    monkeypatch.setattr(declare_module, "read_binding", recording_read_binding)
+
+    result = declare_module._declare_join_batch_handler(
+        "rectify", ["assignment"], "requested", tmp_path
+    )
+
+    assert result["success"] is False
+    assert read_paths == [requested_path, *candidate_paths[:20]]
+    if expected_status is None:
+        assert result == {
+            "success": False,
+            "error": "declare_join_batch requires a valid session binding",
+        }
+        assert diagnostics == []
+    else:
+        assert diagnostics == [
+            {
+                "gate": "declare_join_batch",
+                "session_id": "requested",
+                "status": expected_status,
+            }
+        ]
+        if expected_status == "wrong_session_id":
+            assert result["error"] == (
+                "declare_join_batch session mismatch: requested 'requested', recorded 'recorded'"
+            )
+        else:
+            assert "requested 'requested'" in str(result["error"])
+            assert "incomplete" in str(result["error"])
+            assert "recorded 'recorded'" not in str(result["error"])
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_status"),
+    [
+        ("single_candidate", "wrong_session_id"),
+        ("typed_mismatch", "wrong_session_id"),
+        ("ambiguous", "ambiguous_session_bindings"),
+    ],
+)
 def test_wrong_session_id_is_reported_as_such(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     case: str,
+    expected_status: str,
 ) -> None:
     state_root = tmp_path / "state-root"
     state_root.mkdir()
@@ -317,10 +448,7 @@ def test_wrong_session_id_is_reported_as_such(
         assert "recorded" in str(result["error"])
     assert diagnostics
     assert set(diagnostics[-1]) <= DIAGNOSTIC_KEYS
-    assert diagnostics[-1]["status"] in {
-        "wrong_session_id",
-        "ambiguous_session_bindings",
-    }
+    assert diagnostics[-1]["status"] == expected_status
 
 
 def test_malformed_requested_binding_is_not_reported_as_wrong_session(

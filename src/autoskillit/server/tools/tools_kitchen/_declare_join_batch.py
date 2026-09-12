@@ -187,8 +187,13 @@ def _session_mismatch_error(requested_session_id: str, recorded_session_id: str)
 
 
 def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | None:
+    """Report ambiguity from multiple foreign IDs or an incomplete candidate scan.
+
+    Return ``None`` when no foreign session ID is observed.
+    """
     recorded_session_ids: set[str] = set()
-    for candidate_path in enumerate_binding_paths(channel_dir):
+    candidate_paths, truncated = enumerate_binding_paths(channel_dir)
+    for candidate_path in candidate_paths:
         try:
             candidate = read_binding(candidate_path)
         except SessionBindingError:
@@ -198,7 +203,8 @@ def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | 
     if not recorded_session_ids:
         return None
 
-    status = "wrong_session_id" if len(recorded_session_ids) == 1 else "ambiguous_session_bindings"
+    single_recorded_session = len(recorded_session_ids) == 1 and not truncated
+    status = "wrong_session_id" if single_recorded_session else "ambiguous_session_bindings"
     _emit_join_diagnostic(
         {
             "gate": "declare_join_batch",
@@ -206,9 +212,15 @@ def _wrong_session_error(channel_dir: Path, requested_session_id: str) -> str | 
             "status": status,
         }
     )
-    if len(recorded_session_ids) == 1:
+    if single_recorded_session:
         recorded_session_id = next(iter(recorded_session_ids))
         return _session_mismatch_error(requested_session_id, recorded_session_id)
+    if truncated:
+        return (
+            "declare_join_batch session mismatch: "
+            f"requested {requested_session_id!r}, but the binding candidate scan is "
+            "incomplete; additional recorded sessions may exist"
+        )
     return (
         "declare_join_batch session mismatch: "
         f"requested {requested_session_id!r}, but multiple recorded bindings are ambiguous"

@@ -38,7 +38,9 @@ def _ledger_modules() -> dict[Path, ast.Module]:
 
 
 def _is_ledger_class_reference(node: ast.AST) -> bool:
-    return isinstance(node, ast.Name) and node.id == "DefaultContextAdmissionLedger"
+    return (isinstance(node, ast.Name) and node.id == "DefaultContextAdmissionLedger") or (
+        isinstance(node, ast.Attribute) and node.attr == "DefaultContextAdmissionLedger"
+    )
 
 
 class _ModuleLevelRebindingVisitor(ast.NodeVisitor):
@@ -99,6 +101,21 @@ def _is_not_implemented_raise(node: ast.stmt) -> bool:
         and isinstance(node.exc.func, ast.Name)
         and node.exc.func.id == "NotImplementedError"
     )
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "DefaultContextAdmissionLedger",
+        "ledger_module.DefaultContextAdmissionLedger",
+    ],
+)
+def test_ledger_class_reference_recognizes_direct_and_qualified_names(
+    expression: str,
+) -> None:
+    node = ast.parse(expression, mode="eval").body
+
+    assert _is_ledger_class_reference(node)
 
 
 def _is_not_implemented_placeholder(function: _FunctionNode) -> bool:

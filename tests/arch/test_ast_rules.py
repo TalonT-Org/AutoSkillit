@@ -896,7 +896,8 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
     # entry and reports as alive under an exact-PID-existence check alone.
     allowed_files = {
         SRC_ROOT / "core" / "runtime" / "_linux_proc.py",  # defines the shared primitive
-        SRC_ROOT / "core" / "_active_kitchens.py",  # cross-boot stored_create_time needs psutil
+        # cross-boot stored_create_time needs psutil
+        SRC_ROOT / "core" / "plugins" / "_active_kitchens.py",
         SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",  # /proc unreadable fallback
         SRC_ROOT
         / "execution"

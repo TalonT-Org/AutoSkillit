@@ -51,7 +51,7 @@ def test_kitchen_identity_samples_process_incarnation_once(monkeypatch, tmp_path
         def create_time(self) -> float:
             return 123.5
 
-    monkeypatch.setattr("autoskillit.core._active_kitchens.psutil.Process", Process)
+    monkeypatch.setattr("autoskillit.core.plugins._active_kitchens.psutil.Process", Process)
 
     identity = sample_kitchen_process_identity("kitchen", 42, tmp_path)
 
@@ -90,7 +90,7 @@ def test_kitchen_identity_rejects_nonpositive_sampled_create_time(
         def create_time(self) -> float:
             return 0.0
 
-    monkeypatch.setattr("autoskillit.core._active_kitchens.psutil.Process", Process)
+    monkeypatch.setattr("autoskillit.core.plugins._active_kitchens.psutil.Process", Process)
 
     with pytest.raises(ValueError, match="create_time"):
         sample_kitchen_process_identity("kitchen", 42, tmp_path)
@@ -125,7 +125,7 @@ def test_pid_alive_no_such_process_with_create_time_reports_dead(
 ) -> None:
     """A PID that vanished between os.kill and psutil.Process must be reported dead
     when the caller supplied a stored_create_time (identity check possible)."""
-    from autoskillit.core import _active_kitchens
+    from autoskillit.core.plugins import _active_kitchens
 
     monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
@@ -142,7 +142,7 @@ def test_pid_alive_no_such_process_without_create_time_reports_dead(
 ) -> None:
     """NoSuchProcess is definitive even without stored_create_time — the process
     is gone regardless of whether we have a stored identity to compare against."""
-    from autoskillit.core import _active_kitchens
+    from autoskillit.core.plugins import _active_kitchens
 
     monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
@@ -159,7 +159,7 @@ def test_pid_alive_access_denied_with_create_time_assumes_alive(
 ) -> None:
     """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive
     even when the caller has a stored_create_time to compare against."""
-    from autoskillit.core import _active_kitchens
+    from autoskillit.core.plugins import _active_kitchens
 
     monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
@@ -175,7 +175,7 @@ def test_pid_alive_access_denied_without_create_time_assumes_alive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A foreign-user PID (psutil.AccessDenied) is unverifiable — must report alive."""
-    from autoskillit.core import _active_kitchens
+    from autoskillit.core.plugins import _active_kitchens
 
     monkeypatch.setattr(_active_kitchens.os, "kill", lambda *_a, **_kw: None)
 
@@ -283,7 +283,7 @@ def test_scoped_kitchen_lookup_canonicalizes_project_path(monkeypatch, tmp_path:
     project_link.symlink_to(project, target_is_directory=True)
     register_active_kitchen(KitchenProcessIdentity("kitchen", 42, 123.5, str(project)))
     monkeypatch.setattr(
-        "autoskillit.core._active_kitchens.kitchen_entry_alive", lambda _entry: True
+        "autoskillit.core.plugins._active_kitchens.kitchen_entry_alive", lambda _entry: True
     )
 
     assert any_kitchen_open(str(project_link)) is True

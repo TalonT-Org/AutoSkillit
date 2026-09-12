@@ -505,7 +505,7 @@ def test_projection_reclaim_io_failure_stays_queued_for_retry(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    import autoskillit.core._plugin_artifact_retirement as plugin_artifact_retirement
+    import autoskillit.core.plugins._plugin_artifact_retirement as plugin_artifact_retirement
     from autoskillit.workspace import ProjectedPluginRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)

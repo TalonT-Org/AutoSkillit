@@ -143,17 +143,21 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Orphan-staging sweep removes only private staging directories that were "
         "never promoted to a published generation (crash-before-flip debris).",
     ),
-    ("core/_plugin_artifact_retirement.py", "try_reclaim", "record.manifest_path.unlink"): (
+    (
+        "core/plugins/_plugin_artifact_retirement.py",
+        "try_reclaim",
+        "record.manifest_path.unlink",
+    ): (
         1,
         "The shared retirement engine revalidates the owner-specific exact queued "
         "incarnation before deleting its canonical manifest.",
     ),
-    ("core/_plugin_artifact_retirement.py", "try_reclaim", "os.rename"): (
+    ("core/plugins/_plugin_artifact_retirement.py", "try_reclaim", "os.rename"): (
         1,
         "The shared retirement engine moves an exact incarnation to its private "
         "retry-staging path while holding the owner-specific exclusive lease.",
     ),
-    ("core/_plugin_artifact_retirement.py", "try_reclaim", "shutil.rmtree"): (
+    ("core/plugins/_plugin_artifact_retirement.py", "try_reclaim", "shutil.rmtree"): (
         1,
         "The shared retirement engine holds the owner-specific exclusive lease and "
         "revalidates exact identity before removing an artifact tree.",
@@ -483,7 +487,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
 
 STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
     (
-        "core/_retiring_cache.py",
+        "core/plugins/_retiring_cache.py",
         "_write_retiring_cache_unlocked",
         "write_versioned_json:strict=True",
     ): (

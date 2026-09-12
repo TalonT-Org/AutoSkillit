@@ -82,7 +82,7 @@ def test_retiring_cache_lock_closes_handle_on_control_flow_exception(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._retiring_cache as retiring_cache
+    import autoskillit.core.plugins._retiring_cache as retiring_cache
 
     lock_path = tmp_path / "retiring_cache.lock"
     handle = lock_path.open("w")
@@ -490,7 +490,7 @@ def test_install_root_selector_is_never_absent_during_flip(home: Path) -> None:
 def test_referenced_install_root_is_never_reclaimed(home: Path) -> None:
     """T-C8: a held shared lease defers reclaim regardless of grace or supersession.
 
-    The same gate as ``core/_plugin_artifact_retirement.py``'s ``try_reclaim`` — exercised
+    The same gate as ``core/plugins/_plugin_artifact_retirement.py``'s ``try_reclaim`` — exercised
     here specifically for the ``INSTALL_ROOT_GENERATION`` routing kind, which
     ``prune_stale_generations``/``GenerationArtifactRetirementOwner`` must
     honor identically to the plugin-generation kind they were built for.

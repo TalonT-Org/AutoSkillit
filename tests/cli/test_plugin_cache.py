@@ -156,7 +156,7 @@ def test_installed_reclaim_io_failure_stays_queued_for_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.core._plugin_artifact_retirement as plugin_artifact_retirement
+    import autoskillit.core.plugins._plugin_artifact_retirement as plugin_artifact_retirement
     from autoskillit.cli.install._plugin_artifact import InstalledPluginArtifactRetirementOwner
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)

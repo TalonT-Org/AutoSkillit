@@ -18,12 +18,12 @@ from typing import Any, Literal
 
 import psutil
 
-from .._active_kitchens import (
+from ..io.io import atomic_write
+from ..plugins._active_kitchens import (
     ActiveKitchensState,
     kitchen_entry_alive,
     read_active_kitchens_registry,
 )
-from ..io.io import atomic_write
 from ..runtime.artifact_lease import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     ArtifactLease,

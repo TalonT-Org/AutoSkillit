@@ -1,16 +1,3 @@
-from ._active_kitchens import (
-    ActiveKitchensReadResult as ActiveKitchensReadResult,
-)
-from ._active_kitchens import ActiveKitchensState as ActiveKitchensState
-from ._active_kitchens import KitchenProcessIdentity as KitchenProcessIdentity
-from ._active_kitchens import any_kitchen_open as any_kitchen_open
-from ._active_kitchens import kitchen_entry_alive as kitchen_entry_alive
-from ._active_kitchens import read_active_kitchens_registry as read_active_kitchens_registry
-from ._active_kitchens import register_active_kitchen as register_active_kitchen
-from ._active_kitchens import (
-    sample_kitchen_process_identity as sample_kitchen_process_identity,
-)
-from ._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
 from ._capacity import MIN_FREE_BYTES_THRESHOLD as MIN_FREE_BYTES_THRESHOLD
 from ._capacity import SpaceProbe as SpaceProbe
 from ._capacity import default_space_probe as default_space_probe
@@ -26,23 +13,12 @@ from ._install_binding import resolve_install_binding as resolve_install_binding
 from ._managed_worker_capacity import DefaultManagedWorkerCapacity as DefaultManagedWorkerCapacity
 from ._managed_worker_capacity import ManagedWorkerCapacityError as ManagedWorkerCapacityError
 from ._managed_worker_capacity import ManagedWorkerPermit as ManagedWorkerPermit
-from ._plugin_artifact_retirement import (
-    PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,
-)
 from ._release_identity import AdvanceVerdict as AdvanceVerdict
 from ._release_identity import ReleaseChannel as ReleaseChannel
 from ._release_identity import ReleaseIdentity as ReleaseIdentity
 from ._release_identity import advance_verdict as advance_verdict
 from ._release_identity import update_available as update_available
 from ._release_identity import version_advanced as version_advanced
-from ._retiring_cache import _InstallLock as _InstallLock
-from ._retiring_cache import append_retiring_record as append_retiring_record
-from ._retiring_cache import due_retiring_records as due_retiring_records
-from ._retiring_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
-from ._retiring_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
-from ._retiring_cache import read_retiring_cache as read_retiring_cache
-from ._retiring_cache import remove_retiring_records as remove_retiring_records
-from ._retiring_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from .audit.audit_cycle_verifier import ArtifactByteReader as ArtifactByteReader
 from .audit.audit_cycle_verifier import AuditCycleVerificationError as AuditCycleVerificationError
 from .audit.audit_cycle_verifier import AuditCycleVerifier as AuditCycleVerifier
@@ -216,6 +192,21 @@ from .pipeline.pipeline_tracker import release_tracker_lease as release_tracker_
 from .pipeline.pipeline_tracker import retain_tracker_lease as retain_tracker_lease
 from .pipeline.pipeline_tracker import tracker_lease_path as tracker_lease_path
 from .pipeline.pipeline_tracker import try_retire_tracker as try_retire_tracker
+from .plugins._active_kitchens import (
+    ActiveKitchensReadResult as ActiveKitchensReadResult,
+)
+from .plugins._active_kitchens import ActiveKitchensState as ActiveKitchensState
+from .plugins._active_kitchens import KitchenProcessIdentity as KitchenProcessIdentity
+from .plugins._active_kitchens import any_kitchen_open as any_kitchen_open
+from .plugins._active_kitchens import kitchen_entry_alive as kitchen_entry_alive
+from .plugins._active_kitchens import (
+    read_active_kitchens_registry as read_active_kitchens_registry,
+)
+from .plugins._active_kitchens import register_active_kitchen as register_active_kitchen
+from .plugins._active_kitchens import (
+    sample_kitchen_process_identity as sample_kitchen_process_identity,
+)
+from .plugins._active_kitchens import unregister_active_kitchen as unregister_active_kitchen
 from .plugins._plugin_artifact_identity import (
     INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS as INSTALLED_PLUGIN_ARTIFACT_MANIFEST_FIELDS,
 )
@@ -267,6 +258,9 @@ from .plugins._plugin_artifact_identity import (
 from .plugins._plugin_artifact_identity import (
     resolve_current_generation_for_plugin as resolve_current_generation_for_plugin,
 )
+from .plugins._plugin_artifact_retirement import (
+    PluginArtifactRetirementEngine as PluginArtifactRetirementEngine,
+)
 from .plugins._plugin_ids import _AUTOSKILLIT_INSTALL_ROOT_KEY as _AUTOSKILLIT_INSTALL_ROOT_KEY
 from .plugins._plugin_ids import _AUTOSKILLIT_PLUGIN_KEY as _AUTOSKILLIT_PLUGIN_KEY
 from .plugins._plugin_ids import DIRECT_INSTALL_CACHE_SUBDIR as DIRECT_INSTALL_CACHE_SUBDIR
@@ -281,6 +275,14 @@ from .plugins._plugin_ids import (
 from .plugins._plugin_ids import project_agent_tool_name as project_agent_tool_name
 from .plugins._plugin_ids import registered_install_paths as registered_install_paths
 from .plugins._plugin_ids import validate_agent_tool_canonical as validate_agent_tool_canonical
+from .plugins._retiring_cache import _InstallLock as _InstallLock
+from .plugins._retiring_cache import append_retiring_record as append_retiring_record
+from .plugins._retiring_cache import due_retiring_records as due_retiring_records
+from .plugins._retiring_cache import is_reclaimable_artifact_path as is_reclaimable_artifact_path
+from .plugins._retiring_cache import migrate_retiring_cache_v1 as migrate_retiring_cache_v1
+from .plugins._retiring_cache import read_retiring_cache as read_retiring_cache
+from .plugins._retiring_cache import remove_retiring_records as remove_retiring_records
+from .plugins._retiring_cache import repair_corrupt_retiring_cache as repair_corrupt_retiring_cache
 from .plugins.agent_definition import (
     AGENT_DEFINITION_DIGEST_DOMAIN as AGENT_DEFINITION_DIGEST_DOMAIN,
 )

@@ -45,6 +45,12 @@ _SHIM_FILENAMES: frozenset[str] = frozenset(
         "_plugin_artifact_identity.py",
         "_plugin_ids.py",
         "agent_definition.py",
+        # The three plugin-cache lifecycle shards #4741 split out of the
+        # monolithic _plugin_cache.py, co-located with the facade that already
+        # treats them as siblings and re-exports their symbols.
+        "_active_kitchens.py",
+        "_plugin_artifact_retirement.py",
+        "_retiring_cache.py",
         # Phase B: core/pipeline/ sub-package
         "pipeline_tracker.py",
         "tool_sequence_analysis.py",
@@ -106,13 +112,13 @@ _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
 )
 
 FILE_COUNT_LIMITS: dict[str, int] = {
-    "core": 13,  # 13 files + __init__ + buffer (was 21 before 8 files moved to sub-packages)
+    "core": 10,  # 10 files + __init__ + buffer (was 21 before 11 files moved to sub-packages)
     "core/install": 4,  # 2 files + __init__ + buffer
     "core/claude_env": 4,  # 3 files + __init__ + buffer
     "core/io": 9,  # 8 files + __init__ + buffer (yaml_io.py split from io.py for 750-line cap)
     "core/git": 5,  # 4 files + __init__ + buffer
     "core/audit": 5,  # 4 files + __init__ + buffer
-    "core/plugins": 5,  # 4 files + __init__ + buffer
+    "core/plugins": 10,  # 7 files + __init__ + buffer
     "core/pipeline": 5,  # 4 files + __init__ + buffer
     "core/context_admission": 9,  # 8 files + __init__
     # _type_truth replaces the retired _type_tradition_manifest shard.

@@ -41,8 +41,8 @@ pytestmark = [pytest.mark.layer("fleet"), pytest.mark.medium, pytest.mark.featur
 
 _FCNTL_ALLOWED_RELATIVE_PATHS: frozenset[str] = frozenset(
     {
-        "core/_retiring_cache.py",
-        "core/_active_kitchens.py",
+        "core/plugins/_retiring_cache.py",
+        "core/plugins/_active_kitchens.py",
         "core/runtime/artifact_lease.py",
         "core/runtime/session_registry.py",  # session registry mutation transaction lock
         "cli/session/pty/_exec.py",

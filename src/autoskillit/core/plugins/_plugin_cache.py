@@ -12,7 +12,8 @@ importers continue to bind to ``autoskillit.core._plugin_cache``.
 
 from __future__ import annotations
 
-from .._active_kitchens import (  # noqa: F401 — re-exported
+from ..io import write_versioned_json  # noqa: F401 — re-exported for tests/server/_helpers.py
+from ._active_kitchens import (  # noqa: F401 — re-exported
     ActiveKitchensReadResult,
     ActiveKitchensState,
     KitchenProcessIdentity,
@@ -30,10 +31,10 @@ from .._active_kitchens import (  # noqa: F401 — re-exported
     sample_kitchen_process_identity,
     unregister_active_kitchen,
 )
-from .._plugin_artifact_retirement import (  # noqa: F401 — re-exported
+from ._plugin_artifact_retirement import (  # noqa: F401 — re-exported
     PluginArtifactRetirementEngine,
 )
-from .._retiring_cache import (  # noqa: F401 — re-exported
+from ._retiring_cache import (  # noqa: F401 — re-exported
     _RETIRING_CACHE_SCHEMA_VERSION,
     _classify_legacy_path,
     _install_lock_path,
@@ -58,4 +59,3 @@ from .._retiring_cache import (  # noqa: F401 — re-exported
     remove_retiring_records,
     repair_corrupt_retiring_cache,
 )
-from ..io import write_versioned_json  # noqa: F401 — re-exported for tests/server/_helpers.py

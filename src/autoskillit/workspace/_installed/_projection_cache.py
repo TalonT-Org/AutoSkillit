@@ -1,13 +1,8 @@
 """When a plugin projection goes stale, and how it's retired.
 
-Split out of ``skill_projection`` because staleness is its own concern: the
-projection cache key used to cover only skill names and digests, so a release
-that changed ``recipes/``, ``agents/``, or ``hooks/`` without touching a skill
-produced an identical key and the previous release's assets were silently
-reused. The asset inventory and the key record that closes that gap live in
-the sibling ``_projection_assets.py``, reached only by direct import (never
-through ``_installed/__init__.py``'s facade) -- this module re-imports their
-public surface so every existing consumer keeps resolving unchanged.
+Reached only by direct import, never through ``_installed/__init__.py``'s
+facade. Re-imports the public surface of the sibling ``_projection_assets.py``
+so every existing consumer keeps resolving unchanged.
 """
 
 from __future__ import annotations

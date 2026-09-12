@@ -1,11 +1,8 @@
 """What gets copied into a plugin projection, and the key that covers it.
 
-Split out of ``_projection_cache.py``: the asset inventory and the cache-key
-record are a self-contained "what defines a projection's identity" concern
-that needs none of that module's retirement/reconciliation machinery.
-Reached only by direct submodule import (never through ``_installed/__init__.py``'s
-facade), matching how ``_shared_asset_store.py`` already reaches this same file's
-``per_file_asset_digest`` today.
+Reached only by direct submodule import, never through ``_installed/__init__.py``'s
+facade — matching how ``_shared_asset_store.py`` reaches this module's
+``per_file_asset_digest``.
 """
 
 from __future__ import annotations

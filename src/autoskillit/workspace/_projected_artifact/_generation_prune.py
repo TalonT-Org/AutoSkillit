@@ -1,12 +1,9 @@
 """Stale-generation reconciliation for the generation store.
 
-Split out of ``_generation_publication.py``: given one candidate path, decide
-and durably record its retirement disposition. Publication (staging, the
-selector flip, and the four facade-exported entry points) has zero call-graph
-overlap with this state machine beyond the single ``_is_selected_generation``
-predicate, which moves here too so the cross-file dependency stays one-way
-(publication -> prune, never the reverse; ``GenerationArtifactRetirementOwner``
-is reached only as a ``TYPE_CHECKING`` annotation, never a runtime value).
+Given one candidate path, decides and durably records its retirement
+disposition. The dependency on ``_generation_publication.py`` stays one-way
+(publication -> prune, never the reverse); ``GenerationArtifactRetirementOwner``
+is reached only as a ``TYPE_CHECKING`` annotation, never a runtime value.
 
 Co-located in ``workspace/_projected_artifact/`` per its AGENTS.md.
 """

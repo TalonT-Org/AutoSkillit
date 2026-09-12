@@ -326,7 +326,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 None
             )
             if managed_catalog_requested:
-                assert capability_preparation is not None
+                capability_preparation = cast(SkillProjectionPreparation, capability_preparation)
                 session_skill_manager = self._ctx.session_skill_manager
                 if session_skill_manager is None:
                     raise RuntimeError(

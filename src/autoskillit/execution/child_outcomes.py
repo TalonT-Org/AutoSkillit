@@ -366,12 +366,17 @@ def reconcile_child_outcome_snapshots(log_root: Path) -> int:
         for snapshot_file in snapshot_files:
             parent_session_id = snapshot_file.stem
             if backend == "claude_code":
-                parent_transcript = _resolve_claude_parent_transcript(parent_session_id)
-                if parent_transcript is not None:
-                    collect_claude_native_children(
-                        parent_session_id=parent_session_id,
-                        parent_transcript_path=parent_transcript,
-                        log_root=log_root,
+                try:
+                    parent_transcript = _resolve_claude_parent_transcript(parent_session_id)
+                    if parent_transcript is not None:
+                        collect_claude_native_children(
+                            parent_session_id=parent_session_id,
+                            parent_transcript_path=parent_transcript,
+                            log_root=log_root,
+                        )
+                except Exception:
+                    logger.debug(
+                        "child_outcome_snapshot_reconcile_transcript_failed", exc_info=True
                     )
             try:
                 reconcile_ended_children(

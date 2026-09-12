@@ -111,18 +111,27 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
         self.manifest["reaped_ns"] = time.time_ns()
         self.store._write_manifest(self)
 
-    def _release_leases(self, failures: list[BaseException]) -> None:
+    def _release_thread_lease(self, failures: list[BaseException]) -> bool:
+        released = True
         if self.thread_lease is not None:
             try:
                 self.thread_lease.release()
             except BaseException as release_error:
                 logger.error("codex_thread_lease_release_failed", exc_info=True)
                 failures.append(release_error)
+                released = False
+        return released
+
+    def _release_view_lease(self, failures: list[BaseException]) -> None:
         try:
             self.view_lease.release()
         except BaseException as release_error:
             logger.error("codex_view_lease_release_failed", exc_info=True)
             failures.append(release_error)
+
+    def _release_leases(self, failures: list[BaseException]) -> None:
+        self._release_thread_lease(failures)
+        self._release_view_lease(failures)
 
     def __exit__(
         self,
@@ -134,8 +143,11 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
             return None
         self._closed = True
         failures: list[BaseException] = []
+        parent_session_ids: tuple[str, ...] = ()
+        cleanup_succeeded = False
         try:
-            self.store._exit_attempt(self)
+            parent_session_ids = self.store._exit_attempt(self)
+            cleanup_succeeded = True
         except BaseException as cleanup_error:
             logger.error(
                 "codex_attempt_exit_failed",
@@ -143,8 +155,15 @@ class CodexSessionAttemptLease(AbstractContextManager[SessionAttemptHandle]):
                 error_type=type(cleanup_error).__name__,
             )
             failures.append(cleanup_error)
+        thread_released = self._release_thread_lease(failures)
+        try:
+            if cleanup_succeeded and thread_released and parent_session_ids:
+                self.store._publish_completed_view(self.view_path, parent_session_ids)
+        except BaseException as publication_cleanup_error:
+            logger.error("codex_attempt_publication_cleanup_failed", exc_info=True)
+            failures.append(publication_cleanup_error)
         finally:
-            self._release_leases(failures)
+            self._release_view_lease(failures)
         if exc is not None:
             if failures:
                 raise BaseExceptionGroup(

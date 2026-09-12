@@ -6,6 +6,9 @@ import pytest
 
 from autoskillit.core import ChildExecutionIdentity, ExecutionIdentity
 from autoskillit.execution.backends import extract_codex_execution_identity
+from autoskillit.execution.backends._codex_execution_identity import (
+    extract_codex_child_metadata,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -118,6 +121,159 @@ def test_extracts_effective_identity_only_from_linked_rollouts(tmp_path) -> None
     assert observed.parent_session_id == "parent-id"
     assert observed.children[0].session_id == "child-id"
     assert observed.cli_version == "0.146.0"
+
+
+def test_extracts_observed_child_metadata_without_a_requested_plan(tmp_path) -> None:
+    child = tmp_path / "child.jsonl"
+    _write_rollout(
+        child,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-thread-id",
+                    "session_id": "root-session-id",
+                    "source": {
+                        "subagent": {
+                            "thread_spawn": {
+                                "parent_thread_id": "parent-thread-id",
+                                "agent_role": "plan-foundation-auditor",
+                            }
+                        }
+                    },
+                },
+            },
+            {
+                "type": "turn_context",
+                "payload": {"model": "gpt-5.6-sol", "effort": "medium"},
+            },
+        ],
+    )
+
+    metadata = extract_codex_child_metadata(
+        child,
+        expected_parent_id="parent-thread-id",
+        expected_child_id="child-thread-id",
+    )
+
+    assert metadata == {
+        "backend": "codex",
+        "parent_session_id": "parent-thread-id",
+        "child_id": "child-thread-id",
+        "role": "plan-foundation-auditor",
+        "effective_model": "gpt-5.6-sol",
+        "effective_effort": "medium",
+    }
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected_child_id", "match"),
+    [
+        pytest.param(
+            {"id": "child-id", "parent_thread_id": "other-parent"},
+            "child-id",
+            "not linked",
+            id="wrong-parent",
+        ),
+        pytest.param(
+            {
+                "id": "child-id",
+                "forked_from_id": "parent-id",
+                "parent_thread_id": "other-parent",
+            },
+            "child-id",
+            "conflicting parent linkage",
+            id="contradictory-parent-links",
+        ),
+        pytest.param(
+            {"id": "different-child", "parent_thread_id": "parent-id"},
+            "child-id",
+            "invalid child id",
+            id="wrong-child",
+        ),
+        pytest.param(
+            {
+                "id": "child-id",
+                "parent_thread_id": "parent-id",
+                "agent_role": "role-a",
+                "source": {
+                    "subagent": {
+                        "thread_spawn": {
+                            "parent_thread_id": "parent-id",
+                            "agent_role": "role-b",
+                        }
+                    }
+                },
+            },
+            "child-id",
+            "conflicting agent_role",
+            id="contradictory-role",
+        ),
+    ],
+)
+def test_observed_child_metadata_rejects_structural_mismatches(
+    tmp_path, payload, expected_child_id, match
+) -> None:
+    child = tmp_path / "child.jsonl"
+    _write_rollout(child, [{"type": "session_meta", "payload": payload}])
+
+    with pytest.raises(ValueError, match=match):
+        extract_codex_child_metadata(
+            child,
+            expected_parent_id="parent-id",
+            expected_child_id=expected_child_id,
+        )
+
+
+def test_observed_child_metadata_keeps_role_when_native_settings_conflict(tmp_path) -> None:
+    child = tmp_path / "child.jsonl"
+    _write_rollout(
+        child,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-id",
+                    "parent_thread_id": "parent-id",
+                    "agent_role": "plan-foundation-auditor",
+                },
+            },
+            {"type": "turn_context", "payload": {"model": "model-a", "effort": "high"}},
+            {"type": "turn_context", "payload": {"model": "model-b", "effort": "low"}},
+        ],
+    )
+
+    metadata = extract_codex_child_metadata(
+        child, expected_parent_id="parent-id", expected_child_id="child-id"
+    )
+
+    assert metadata["role"] == "plan-foundation-auditor"
+    assert "effective_model" not in metadata
+    assert "effective_effort" not in metadata
+    assert metadata["metadata_conflicts"] == ["effective_model", "effective_effort"]
+
+
+def test_observed_child_metadata_treats_null_role_as_unresolved(tmp_path) -> None:
+    child = tmp_path / "child.jsonl"
+    _write_rollout(
+        child,
+        [
+            {
+                "type": "session_meta",
+                "payload": {
+                    "id": "child-id",
+                    "parent_thread_id": "parent-id",
+                    "agent_role": None,
+                },
+            }
+        ],
+    )
+
+    metadata = extract_codex_child_metadata(
+        child, expected_parent_id="parent-id", expected_child_id="child-id"
+    )
+
+    assert "role" not in metadata
 
 
 @pytest.mark.parametrize(

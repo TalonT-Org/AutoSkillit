@@ -21,6 +21,7 @@ import pytest
 from autoskillit.core import CliSubtype, InfraExitCategory
 from autoskillit.hooks import _child_outcome_snapshot as snap
 from autoskillit.hooks import _session_binding
+from autoskillit.hooks._child_outcome_snapshot import _snapshot as snapshot_impl
 from tests.conftest import production_interpreter_env
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -382,6 +383,77 @@ def test_duplicate_evidence_key_is_a_true_no_op(tmp_path) -> None:
         evidence={"api_terminal_reason": "api_error", "evidence_source": "different-content"},
     )
     assert reason == snap.REASON_COMPLETED
+
+
+def test_duplicate_metadata_evidence_can_clear_and_restore_native_settings(
+    tmp_path, monkeypatch
+) -> None:
+    snapshot_path = snap.resolve_snapshot_path(
+        tmp_path, backend="codex", parent_session_id="parent-1"
+    )
+    writes: list[dict] = []
+    original_write = snapshot_impl._write_document
+
+    def tracking_write(path: Path, document: dict) -> None:
+        writes.append(json.loads(json.dumps(document)))
+        original_write(path, document)
+
+    monkeypatch.setattr(snapshot_impl, "_write_document", tracking_write)
+    resolved = {
+        "role": "plan-foundation-auditor",
+        "effective_model": "gpt-5.6-sol",
+        "effective_effort": "medium",
+    }
+    conflict = {
+        **resolved,
+        "metadata_conflicts": ["effective_model", "effective_effort"],
+    }
+    common = {
+        "snapshot_path": snapshot_path,
+        "backend": "codex",
+        "parent_session_id": "parent-1",
+        "child_id": "child-1",
+    }
+
+    snap.record_terminal_evidence(
+        **common, evidence_key="codex:child-1:metadata:resolved", evidence=resolved
+    )
+    first = snap.read_snapshot(snapshot_path)
+    snap.record_terminal_evidence(
+        **common, evidence_key="codex:child-1:metadata:conflict", evidence=conflict
+    )
+    conflicted = snap.read_snapshot(snapshot_path)
+    snap.record_terminal_evidence(
+        **common, evidence_key="codex:child-1:metadata:conflict", evidence=conflict
+    )
+    snap.record_terminal_evidence(
+        **common, evidence_key="codex:child-1:metadata:resolved", evidence=resolved
+    )
+    restored = snap.read_snapshot(snapshot_path)
+    snap.record_terminal_evidence(
+        **common, evidence_key="codex:child-1:metadata:resolved", evidence=resolved
+    )
+
+    conflicted_outcome = conflicted["children"]["child-1"]["outcome"]
+    assert conflicted_outcome["effective_model"] == ""
+    assert conflicted_outcome["effective_effort"] == ""
+    assert conflicted_outcome["role"] == "plan-foundation-auditor"
+    restored_entry = restored["children"]["child-1"]
+    restored_outcome = restored_entry["outcome"]
+    assert restored_outcome["effective_model"] == "gpt-5.6-sol"
+    assert restored_outcome["effective_effort"] == "medium"
+    assert (
+        restored_outcome["terminal_reason"]
+        == first["children"]["child-1"]["outcome"]["terminal_reason"]
+    )
+    assert restored_outcome["raw_reason"] == ""
+    assert restored_outcome["raw_subtype"] == ""
+    assert restored_entry["evidence_keys"] == [
+        "codex:child-1:metadata:resolved",
+        "codex:child-1:metadata:conflict",
+    ]
+    assert len(restored["children"]) == 1
+    assert len(writes) == 3
 
 
 def test_rejected_reservation_that_never_confirms_leaves_no_row(tmp_path) -> None:

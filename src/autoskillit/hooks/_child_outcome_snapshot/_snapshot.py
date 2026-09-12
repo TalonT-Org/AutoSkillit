@@ -133,6 +133,7 @@ class ChildOutcomeWireDict(TypedDict):
     role: str
     attribution_skill: str
     effective_model: str
+    effective_effort: str
     effective_provider: str
     terminal_reason: str
     raw_reason: str
@@ -158,6 +159,7 @@ def _empty_outcome(
         role="",
         attribution_skill="",
         effective_model="",
+        effective_effort="",
         effective_provider="",
         terminal_reason=REASON_UNKNOWN,
         raw_reason="",
@@ -242,6 +244,7 @@ def project_outcomes(snapshot: Mapping[str, Any]) -> tuple[ChildOutcomeWireDict,
                 role=str(outcome.get("role", "")),
                 attribution_skill=str(outcome.get("attribution_skill", "")),
                 effective_model=str(outcome.get("effective_model", "")),
+                effective_effort=str(outcome.get("effective_effort", "")),
                 effective_provider=str(outcome.get("effective_provider", "")),
                 terminal_reason=str(outcome.get("terminal_reason", REASON_UNKNOWN)),
                 raw_reason=str(outcome.get("raw_reason", "")),
@@ -314,14 +317,7 @@ def _merge_evidence_into_outcome(
     new_reason = classify_evidence(evidence)
     new_raw_reason, new_raw_subtype, new_raw_code = _raw_evidence_fields(evidence)
 
-    updated = dict(outcome)
-    for key in ("role", "attribution_skill", "effective_model", "effective_provider"):
-        value = evidence.get(key)
-        if isinstance(value, str) and value and not updated.get(key):
-            updated[key] = value
-    locator = evidence.get("transcript_locator")
-    if isinstance(locator, str) and locator and not updated.get("transcript_locator"):
-        updated["transcript_locator"] = locator
+    updated = dict(_merge_metadata_into_outcome(outcome, evidence))
 
     current_reason = outcome["terminal_reason"]
     if new_reason == REASON_UNKNOWN:
@@ -354,6 +350,35 @@ def _merge_evidence_into_outcome(
         updated["evidence_source"] = (
             f"{outcome['evidence_source']} | conflict:{evidence.get('evidence_source', '')}"
         )
+    return cast(ChildOutcomeWireDict, updated)
+
+
+def _merge_metadata_into_outcome(
+    outcome: ChildOutcomeWireDict, evidence: Mapping[str, Any]
+) -> ChildOutcomeWireDict:
+    """Reconcile independently observed metadata without changing terminal evidence."""
+    updated = dict(outcome)
+    for key in ("role", "attribution_skill", "effective_provider"):
+        value = evidence.get(key)
+        if isinstance(value, str) and value and not updated.get(key):
+            updated[key] = value
+    locator = evidence.get("transcript_locator")
+    if isinstance(locator, str) and locator and not updated.get("transcript_locator"):
+        updated["transcript_locator"] = locator
+
+    conflicts = evidence.get("metadata_conflicts")
+    conflict_fields = (
+        {item for item in conflicts if isinstance(item, str)}
+        if isinstance(conflicts, (list, tuple))
+        else set()
+    )
+    for key in ("effective_model", "effective_effort"):
+        if key in conflict_fields:
+            updated[key] = ""
+            continue
+        value = evidence.get(key)
+        if isinstance(value, str) and value:
+            updated[key] = value
     return cast(ChildOutcomeWireDict, updated)
 
 
@@ -432,8 +457,10 @@ def record_terminal_evidence(
 ) -> str:
     """Merge one child-bound terminal evidence record. Returns the resulting reason.
 
-    Idempotent by ``evidence_key`` (backend/child/evidence-source/event-or-tool-use-id):
-    re-applying an already-present key is a no-op. A start row is created on
+    Terminal evidence is idempotent by ``evidence_key``
+    (backend/child/evidence-source/event-or-tool-use-id). Current metadata is
+    reconciled before a known key returns so a repeated observation can restore
+    a value that explicit conflict evidence cleared. A start row is created on
     demand if this is the first evidence seen for ``child_id`` (an evidence
     record on its own still confirms the child exists).
     """
@@ -455,10 +482,14 @@ def record_terminal_evidence(
             },
         )
         applied_keys: list[str] = entry["evidence_keys"]
-        if evidence_key in applied_keys:
-            return str(entry["outcome"]["terminal_reason"])
-
         outcome = cast(ChildOutcomeWireDict, dict(entry["outcome"]))
+        if evidence_key in applied_keys:
+            merged_metadata = _merge_metadata_into_outcome(outcome, evidence)
+            if merged_metadata != outcome:
+                entry["outcome"] = dict(merged_metadata)
+                _write_document(snapshot_path, document)
+            return merged_metadata["terminal_reason"]
+
         outcome["start_confirmed"] = True
         if launch_alias and not outcome.get("launch_alias"):
             outcome["launch_alias"] = launch_alias

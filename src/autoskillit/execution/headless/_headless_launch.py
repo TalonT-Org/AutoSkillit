@@ -267,11 +267,13 @@ async def _attempt_contract_nudge(
 
     ``retained_binding`` mirrors ``_run_headless_attempt``: reuse the caller's binding.
     """
-    if backend is None or not backend.capabilities.session_resume_capable:
-        return None
-    if result_parser is None:
-        return None
-    if launch_resolver is None or launch_preparation is None:
+    if (
+        backend is None
+        or not backend.capabilities.session_resume_capable
+        or result_parser is None
+        or launch_resolver is None
+        or launch_preparation is None
+    ):
         return None
 
     if retry_reason == RetryReason.EARLY_STOP:

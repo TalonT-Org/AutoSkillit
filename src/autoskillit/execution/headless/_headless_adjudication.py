@@ -259,7 +259,10 @@ def _apply_post_session_adjudication(
                 retry_reason=RetryReason.ZERO_WRITES,
             )
 
-    if skill_contract is not None and skill_contract.outcome_invariants:
+    if skill_contract is None:
+        return sr
+
+    if skill_contract.outcome_invariants:
         violated, detail = evaluate_outcome_invariants(fields, skill_contract.outcome_invariants)
         if violated:
             logger.warning("outcome_invariant_violated", detail=detail)
@@ -272,29 +275,28 @@ def _apply_post_session_adjudication(
                 outcome_fields=None,
             )
 
-    if skill_contract is not None:
-        for output in skill_contract.outputs:
-            value = fields.get(output.name)
-            if output.type != "file_path" or value is None:
-                continue
-            failure = _validate_declared_artifact(cwd, output.name, cast(str, value))
-            if failure is not None:
-                subtype, detail = failure
-                retry_reason = (
-                    RetryReason.CONTRACT_RECOVERY
-                    if subtype == "artifact_contract_violation"
-                    else RetryReason.RESUME
-                )
-                return dataclasses.replace(
-                    sr,
-                    success=False,
-                    is_error=True,
-                    subtype=subtype,
-                    needs_retry=True,
-                    retry_reason=retry_reason,
-                    result=detail,
-                    outcome_fields=None,
-                )
+    for output in skill_contract.outputs:
+        value = fields.get(output.name)
+        if output.type != "file_path" or value is None:
+            continue
+        failure = _validate_declared_artifact(cwd, output.name, cast(str, value))
+        if failure is not None:
+            subtype, detail = failure
+            retry_reason = (
+                RetryReason.CONTRACT_RECOVERY
+                if subtype == "artifact_contract_violation"
+                else RetryReason.RESUME
+            )
+            return dataclasses.replace(
+                sr,
+                success=False,
+                is_error=True,
+                subtype=subtype,
+                needs_retry=True,
+                retry_reason=retry_reason,
+                result=detail,
+                outcome_fields=None,
+            )
 
     return sr
 
@@ -347,11 +349,10 @@ _EVIDENCE_RECOVERABLE_SUBTYPES: frozenset[str] = frozenset({"adjudicated_failure
 class _StallOutcomeSpec:
     """Distinguishes the STALE and IDLE_STALL branches of _attempt_stall_recovery.
 
-    The retry-policy dispatch and failure-result construction for each branch
-    stay in _headless_result.py so each keeps its own visible call to
-    _apply_infra_retry_policy -- see
-    tests/arch/test_infra_exit_retry_policy_exhaustive.py, which counts exactly
-    three such call sites in that module.
+    Retry-policy dispatch and failure-result construction share a helper in
+    _headless_result.py. The source-inspection guard in
+    tests/arch/test_infra_exit_retry_policy_exhaustive.py follows both specs
+    through that helper and checks the normal-result policy call separately.
     """
 
     recovered_subtype: str

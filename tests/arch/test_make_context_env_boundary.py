@@ -85,7 +85,6 @@ def _extract_private_env_reads(factory_path: Path) -> list[tuple[str, str, int]]
             if env_var_name is not None:
                 violations.append((node.name, env_var_name, child.lineno))
 
-    # Call findings precede subscript findings, including repeated nested-function scans.
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue

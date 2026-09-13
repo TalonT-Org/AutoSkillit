@@ -145,7 +145,7 @@ ORCHESTRATOR_FACING_INSTRUCTION_SURFACES: Mapping[str, OrchestratorSurfaceDef] =
             name="recipe_orchestration_rules",
             extraction_mode=InstructionExtractionMode.GENERATED_OUTPUT,
             delivery_channel="recipe delivery (orchestration_rules section, every recipe load)",
-            producer_module="autoskillit.recipe._api_orchestration_text",
+            producer_module="autoskillit.recipe.api_orchestration._api_orchestration_text",
             producer_symbol="_build_orchestration_rules",
         ),
         "parameter_forwarding_rules": OrchestratorSurfaceDef(

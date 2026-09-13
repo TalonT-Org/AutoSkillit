@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from autoskillit.core import YAMLError
-from autoskillit.recipe._api_orchestration import (
+from autoskillit.recipe.api_orchestration._api_orchestration import (
     _assemble_load_result,
     _LoadPipelineInputs,
     _resolve_cache_inputs,
@@ -156,7 +156,7 @@ def test_validation_result_field_list_matches_spec() -> None:
 
 
 def test_resolve_cache_inputs_returns_load_pipeline_inputs(tmp_path: Path) -> None:
-    import autoskillit.recipe._api_cache as cache_mod
+    import autoskillit.recipe.api._api_cache as cache_mod
 
     cache_mod._LOAD_CACHE.clear()
 
@@ -279,7 +279,7 @@ def test_run_validation_pipeline_returns_validation_result_on_valid_yaml(tmp_pat
 
 def test_run_validation_pipeline_yaml_error_caught(tmp_path: Path, monkeypatch) -> None:
     """YAMLError inside ``load_recipe_dict_with_declarations`` is caught + suggestion."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     recipe_path = _setup_recipe(tmp_path, "bad-yaml")
     recipe_info = _make_recipe_info(recipe_path)
@@ -301,7 +301,7 @@ def test_run_validation_pipeline_yaml_error_caught(tmp_path: Path, monkeypatch) 
 
 def test_run_validation_pipeline_value_error_caught(tmp_path: Path, monkeypatch) -> None:
     """ValueError inside ``load_recipe_dict_with_declarations`` is caught + suggestion."""
-    import autoskillit.recipe._api_orchestration as orch
+    import autoskillit.recipe.api_orchestration._api_orchestration as orch
 
     recipe_path = _setup_recipe(tmp_path, "malformed")
     recipe_info = _make_recipe_info(recipe_path)
@@ -381,9 +381,9 @@ def test_validation_pipeline_uses_orch_module_for_monkeypatch_targets(
     captured calls list. If the validate shard bypasses the orchestrator
     attribute lookup, the patched function never runs and the test fails.
     """
-    from autoskillit.recipe import _api_orchestration as _orch
-    from autoskillit.recipe._api_cache import _LOAD_CACHE
-    from autoskillit.recipe._api_orchestration import load_and_validate
+    from autoskillit.recipe.api._api_cache import _LOAD_CACHE
+    from autoskillit.recipe.api_orchestration import _api_orchestration as _orch
+    from autoskillit.recipe.api_orchestration._api_orchestration import load_and_validate
 
     # Clear the load cache so the patched run_semantic_rules is exercised.
     _LOAD_CACHE.clear()

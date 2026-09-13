@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from autoskillit.core import BackendCapabilities, LoadResult
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
-import autoskillit.recipe._api as _api
+import autoskillit.recipe.api._api as _api
 from autoskillit.recipe.contracts.contracts import StaleItem, load_bundled_manifest
 from autoskillit.recipe.contracts.staleness_cache import (
     StalenessEntry,

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from autoskillit.pipeline.gate import DefaultGateState
-from autoskillit.recipe import _api_listing
+from autoskillit.recipe.api import _api_listing
 from autoskillit.server.tools.tools_recipe import list_recipes
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]

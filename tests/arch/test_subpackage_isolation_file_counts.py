@@ -108,6 +108,19 @@ _RECIPE_SHIM_FILENAMES: frozenset[str] = frozenset(
         "methodology_tradition_router.py",
         "methodology_venue_appendix.py",
         "experiment_type_registry.py",
+        # Phase E: recipe/api/ and recipe/api_orchestration/ sub-packages.
+        # These root-level files preserve the pre-extraction import paths.
+        "_api.py",
+        "_api_cache.py",
+        "_api_listing.py",
+        "_api_orchestration.py",
+        "_api_orchestration_assemble.py",
+        "_api_orchestration_cache.py",
+        "_api_orchestration_match.py",
+        "_api_orchestration_parse.py",
+        "_api_orchestration_text.py",
+        "_api_orchestration_types.py",
+        "_api_orchestration_validate.py",
     }
 )
 
@@ -125,7 +138,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "core/types": 76,
     "core/runtime": 11,
     "config": 20,
-    "recipe": 23,  # 23 files + __init__ + buffer (was 52 before 29 files moved to sub-packages)
+    "recipe": 12,  # 12 real files after excluding registered forwarding shims
     "recipe/analysis": 6,  # 5 moved files + __init__
     "recipe/helpers": 7,  # 6 moved files + __init__
     "recipe/ingredients": 5,  # 3 moved files + 1 file extracted to fit 750-line cap + __init__
@@ -416,11 +429,9 @@ def test_no_subpackage_exceeds_10_files() -> None:
             dirs_to_check.append(nested_dir)
     for sub_dir in dirs_to_check:
         rel_key = str(sub_dir.relative_to(SRC_ROOT))
-        # Pick the correct shim registry based on package.
-        # Match both the top-level package (``recipe``) and any sub-package
-        # (``recipe/analysis``). The top-level package's rel_key has no
-        # trailing slash; the sub-package paths do.
-        if rel_key == "recipe" or rel_key.startswith("recipe/"):
+        # Recipe forwarding shims are root-only. Canonical nested modules may
+        # share their basenames and must count toward the default ceiling.
+        if rel_key == "recipe":
             shim_set = _RECIPE_SHIM_FILENAMES
         elif rel_key == "core" or rel_key.startswith("core/"):
             shim_set = _SHIM_FILENAMES

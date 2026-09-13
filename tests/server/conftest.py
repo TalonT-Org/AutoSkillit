@@ -471,8 +471,8 @@ async def tool_ctx_ready_recipe(
     ``test_attestation_delivery_reachability.py`` and ``test_recipe_segment_delivery.py``
     are source-compatible.
     """
-    from autoskillit.recipe import _api_cache
-    from autoskillit.recipe._api_cache import LoadCache
+    from autoskillit.recipe.api import _api_cache
+    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
     from tests.server._helpers import (
         _credit_initialization_sections,

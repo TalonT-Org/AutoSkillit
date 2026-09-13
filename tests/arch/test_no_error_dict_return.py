@@ -15,7 +15,7 @@ import pytest
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "autoskillit"
-RECIPE_API = SRC / "recipe" / "_api_orchestration.py"
+RECIPE_API = SRC / "recipe" / "api_orchestration" / "_api_orchestration.py"
 
 
 def _find_function_node(
@@ -38,7 +38,9 @@ def test_load_and_validate_has_no_error_dict_return():
     """No return statement in load_and_validate may contain a dict literal with 'error' key."""
     tree = ast.parse(RECIPE_API.read_text())
     func = _find_function_node(tree, "load_and_validate")
-    assert func is not None, "load_and_validate function not found in recipe/_api.py"
+    assert func is not None, (
+        "load_and_validate function not found in recipe/api_orchestration/_api_orchestration.py"
+    )
 
     violations: list[int] = []
     for node in ast.walk(func):

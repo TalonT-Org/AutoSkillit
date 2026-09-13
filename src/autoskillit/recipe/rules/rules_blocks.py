@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from autoskillit.core import Severity, load_yaml, pkg_root
-from autoskillit.recipe._api_cache import YamlFileCache
+from autoskillit.recipe.api._api_cache import YamlFileCache
 from autoskillit.recipe.registry import BlockContext, RuleFinding, block_rule, make_block_finding
 
 _BUDGETS_CACHE = YamlFileCache()

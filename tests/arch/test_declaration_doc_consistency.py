@@ -32,7 +32,7 @@ def _production_texts() -> dict[Path, str]:
     paths = list((root / "docs").rglob("*.md")) + [
         root / "src/autoskillit/cli/prompts/_prompts_orchestrator.py",
         root / "src/autoskillit/cli/prompts/_prompts_kitchen.py",
-        root / "src/autoskillit/recipe/_api_orchestration.py",
+        root / "src/autoskillit/recipe/api_orchestration/_api_orchestration.py",
         root / "src/autoskillit/server/tools/tools_recipe.py",
         root / "src/autoskillit/skills/sous-chef/SKILL.md",
     ]

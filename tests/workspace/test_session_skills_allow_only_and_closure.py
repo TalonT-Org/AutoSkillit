@@ -12,7 +12,7 @@ from autoskillit.workspace.session_skills import (
 from autoskillit.workspace.session_skills import (
     _parse_write_paths as _parse_structured_write_paths,
 )
-from autoskillit.workspace.skill_format import parse_frontmatter_content
+from autoskillit.workspace.skills._format import parse_frontmatter_content
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -253,8 +253,8 @@ class TestEffectiveInvocationClosurePolicy:
     ) -> None:
         """T13: resolve_invocation's pack-expansion path calls
         _list_effective_unfiltered directly and must unpack its
-        (skills, exclusions) pair correctly — pins the skills.py:900 call
-        path across the 2.2 signature change. An unrelated invalid
+        (skills, exclusions) pair correctly — pins the call path in
+        skills/__init__.py. An unrelated invalid
         project-local skill in the same scan must not break pack-member
         enumeration."""
         from autoskillit.core import SkillExecutionRole

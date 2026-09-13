@@ -6,7 +6,7 @@ import pytest
 
 from autoskillit.core import load_yaml, pkg_root
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
-from autoskillit.workspace.skill_format import parse_frontmatter_content
+from autoskillit.workspace.skills._format import parse_frontmatter_content
 from tests._helpers import IMPLEMENTED_FAMILIES
 
 SKILLS_DIR = pkg_root() / "skills_extended"

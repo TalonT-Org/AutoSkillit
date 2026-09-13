@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.io import load_yaml
-from autoskillit.workspace.skill_format import read_skill_frontmatter
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 
 SKILL_MD = (
     Path(__file__).parents[2] / "src/autoskillit/skills_extended/open-integration-pr/SKILL.md"

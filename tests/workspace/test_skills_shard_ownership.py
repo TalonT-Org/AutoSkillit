@@ -18,12 +18,12 @@ shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
    ``_X_facade`` alias (e.g. ``import autoskillit.workspace.skill_capabilities
    as _capabilities_facade`` in ``skill_capability_authenticity.py`` L13;
    ``import autoskillit.workspace.skills as _skills_facade`` in
-   ``skills_frontmatter.py`` L20). The alias preserves identity-equal
+   ``skills/_frontmatter.py``). The alias preserves identity-equal
    re-export with the facade's ``__all__`` so patches propagate without
    rebinding.
 
 2. **Exception — function-local deferred import** (only
-   ``skills_frontmatter.py`` L91, L189-191 with ``# noqa: PLC0415``). Use
+   ``skills/_frontmatter.py`` with ``# noqa: PLC0415``). Use
    when the call site is inside a hot loop and the facade symbol cannot be
    imported at module scope without a cycle. The inline ``# noqa`` rationale
    is mandatory. Reach for this only when (1) is structurally impossible.
@@ -76,7 +76,7 @@ _FACADE_RETAINED_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "skills_records",
+        "_records",
         (
             "EffectiveSkillCatalog",
             "EffectiveSkillInvocation",
@@ -90,7 +90,7 @@ _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "skills_overrides",
+        "_overrides",
         (
             "ProjectLocalOverride",
             "_OVERRIDE_SEARCH_DIRS",
@@ -100,7 +100,7 @@ _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "skills_exploration",
+        "_exploration",
         (
             "replace_exploration_vector_bodies",
             "_bind_exploration_vector_markers",
@@ -109,11 +109,11 @@ _SKILLS_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "skills_visibility",
+        "_visibility",
         (),
     ),
     (
-        "skills_frontmatter",
+        "_frontmatter",
         (),
     ),
 )
@@ -149,6 +149,35 @@ _SKILL_CAPABILITY_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
+_SKILLS_FACADE_EXPORTS = (
+    "DefaultSkillResolver",
+    "EffectiveSkillCatalog",
+    "EffectiveSkillInvocation",
+    "ProjectLocalOverride",
+    "SkillCatalogEntry",
+    "SkillExclusion",
+    "SkillInfo",
+    "SkillInvalidity",
+    "_INTERNAL_SKILLS",
+    "_LIST_ALL_CACHE",
+    "_LIST_ALL_CACHE_KEY",
+    "_OVERRIDE_SEARCH_DIRS",
+    "_bind_exploration_vector_markers",
+    "_load_exploration_sidecar",
+    "_parse_exploration_sidecar",
+    "_project_skill_path",
+    "_scan_directory",
+    "bundled_skills_dir",
+    "bundled_skills_extended_dir",
+    "compute_skill_closure",
+    "detect_project_local_overrides",
+    "invalidity_hints",
+    "override_names",
+    "replace_exploration_vector_bodies",
+    "render_skill_invalidities",
+    "validate_skill_tier_roles",
+)
+
 
 def _facade_public_surface() -> tuple[str, ...]:
     skills = import_module("autoskillit.workspace.skills")
@@ -162,7 +191,7 @@ def _workspace_shard_stems() -> tuple[set[str], set[str]]:
     pkg_init_file = workspace_init.__file__
     assert pkg_init_file is not None
     pkg_root = Path(pkg_init_file).parent
-    skills_stems = {p.stem for p in pkg_root.glob("skills_*.py")} - {"skills"}
+    skills_stems = {p.stem for p in (pkg_root / "skills").glob("_*.py") if p.name != "__init__.py"}
     capability_stems = set()
     for p in pkg_root.glob("skill_capability_*.py"):
         if p.stem != "skill_capabilities":
@@ -171,13 +200,34 @@ def _workspace_shard_stems() -> tuple[set[str], set[str]]:
     return skills_stems, capability_stems
 
 
+def _shard_module_path(stem: str) -> str:
+    if stem.startswith("_"):
+        return f"autoskillit.workspace.skills.{stem}"
+    return f"autoskillit.workspace.{stem}"
+
+
+def test_skills_facade_exports_are_unchanged() -> None:
+    skills = import_module("autoskillit.workspace.skills")
+    assert tuple(skills.__all__) == _SKILLS_FACADE_EXPORTS
+    assert hasattr(skills, "_skill_info_from_frontmatter")
+
+
+def test_skill_helpers_are_discoverable_without_owning_facade_exports() -> None:
+    skills = import_module("autoskillit.workspace.skills")
+    for stem in ("_format", "_resources"):
+        module = import_module(_shard_module_path(stem))
+        assert module.__all__
+        assert set(module.__all__).isdisjoint(skills.__all__)
+
+
 def test_every_shard_module_is_in_ownership_table() -> None:
     skills_stems, capability_stems = _workspace_shard_stems()
     table_skills = {stem for stem, _ in _SKILLS_SHARD_OWNERS}
     table_capabilities = {stem for stem, _ in _SKILL_CAPABILITY_SHARD_OWNERS}
-    assert skills_stems == table_skills, (
-        f"skills shard stems out of sync: disk has {sorted(skills_stems - table_skills)}, "
-        f"table has {sorted(table_skills - skills_stems)}"
+    expected_skills = table_skills | {"_format", "_resources"}
+    assert skills_stems == expected_skills, (
+        f"skills shard stems out of sync: disk has {sorted(skills_stems - expected_skills)}, "
+        f"table has {sorted(expected_skills - skills_stems)}"
     )
     assert capability_stems == table_capabilities, (
         f"capability shard stems out of sync: disk has "
@@ -213,7 +263,7 @@ def test_each_shard_declares_only_owned_names(
 ) -> None:
     """Each shard's __all__ (or named exports) must be a subset of its owned names."""
     # The shard may or may not have an __all__; we verify it is a subset of owned.
-    module = import_module(f"autoskillit.workspace.{shard_stem}")
+    module = import_module(_shard_module_path(shard_stem))
     declared = set(getattr(module, "__all__", ()))
     assert declared <= set(owned_names), (
         f"shard {shard_stem} declares names outside its ownership: {declared - set(owned_names)}"
@@ -243,7 +293,7 @@ def test_facade_reexport_is_passthrough(
     owned_names: tuple[str, ...],
 ) -> None:
     """The facade must re-export each shard symbol with identity equality."""
-    shard = import_module(f"autoskillit.workspace.{shard_stem}")
+    shard = import_module(_shard_module_path(shard_stem))
     skills = import_module("autoskillit.workspace.skills")
     capabilities = import_module("autoskillit.workspace.skill_capabilities")
     for name in owned_names:

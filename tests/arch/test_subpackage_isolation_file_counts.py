@@ -159,11 +159,38 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "execution/github_review": 15,
     "execution/headless": 15,
     "execution/session": 20,
-    "workspace": 32,
+    "workspace": 24,
     "hooks": 27,  # +1 _capture_spawn.py extracted from _capture_process.py (#4732)
     "hooks/guards": 41,
     "smoke_utils": 11,
 }
+
+
+def test_workspace_skills_package_has_only_the_eight_moved_modules() -> None:
+    skills_dir = SRC_ROOT / "workspace" / "skills"
+    assert {path.name for path in skills_dir.glob("*.py")} == {
+        "__init__.py",
+        "_records.py",
+        "_overrides.py",
+        "_exploration.py",
+        "_visibility.py",
+        "_frontmatter.py",
+        "_format.py",
+        "_resources.py",
+    }
+    assert not any(
+        (SRC_ROOT / "workspace" / name).exists()
+        for name in (
+            "skills.py",
+            "skills_records.py",
+            "skills_overrides.py",
+            "skills_exploration.py",
+            "skills_visibility.py",
+            "skills_frontmatter.py",
+            "skill_format.py",
+            "skill_resources.py",
+        )
+    )
 
 
 def test_server_file_count_under_limit() -> None:

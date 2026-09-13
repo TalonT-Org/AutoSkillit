@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core.paths import pkg_root
-from autoskillit.workspace.skill_format import read_skill_frontmatter
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 from tests.arch._helpers import _strip_doc_fenced_blocks, _strip_frontmatter
 
 pytestmark = [pytest.mark.small]

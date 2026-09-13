@@ -18,13 +18,15 @@ pytestmark = [pytest.mark.small]
 
 
 _SKILLS_TARGETS: tuple[str, ...] = (
-    "workspace/skills.py",
+    "workspace/skills/__init__.py",
     "workspace/skill_capabilities.py",
-    "workspace/skills_records.py",
-    "workspace/skills_overrides.py",
-    "workspace/skills_exploration.py",
-    "workspace/skills_visibility.py",
-    "workspace/skills_frontmatter.py",
+    "workspace/skills/_records.py",
+    "workspace/skills/_overrides.py",
+    "workspace/skills/_exploration.py",
+    "workspace/skills/_visibility.py",
+    "workspace/skills/_frontmatter.py",
+    "workspace/skills/_format.py",
+    "workspace/skills/_resources.py",
     "workspace/skill_capability_cache.py",
     "workspace/skill_capability_scanner.py",
     "workspace/skill_capability_authenticity.py",

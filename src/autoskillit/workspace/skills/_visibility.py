@@ -18,7 +18,8 @@ from autoskillit.core import (
     SkillVisibilitySpec,
     is_feature_enabled,
 )
-from autoskillit.workspace.skills_records import SkillInfo
+
+from ._records import SkillInfo
 
 
 def _effective_disabled_categories(

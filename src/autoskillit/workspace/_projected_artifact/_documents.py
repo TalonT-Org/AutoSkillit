@@ -46,11 +46,11 @@ from autoskillit.core import (
     normalize_parent_sandbox_mode,
     temp_dir_display_str,
 )
-from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills import (
     render_skill_invalidities,
     replace_exploration_vector_bodies,
 )
+from autoskillit.workspace.skills._resources import load_skill_resource
 
 _SKILL_NAMESPACE_REF_RE = re.compile(r"/autoskillit:([a-z][a-z0-9-]*)")
 

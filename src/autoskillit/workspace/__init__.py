@@ -1,6 +1,6 @@
 """workspace/ IL-1 package: directory cleanup, skill resolution, and clone isolation.
 
-Re-exports the full public surface of cleanup.py, skills.py, and clone.py.
+Re-exports the full public surface of cleanup.py, skills/__init__.py, and clone.py.
 All sub-modules depend only on autoskillit.core.*.
 """
 
@@ -104,13 +104,6 @@ from autoskillit.workspace.skill_capabilities import (
     validate_skill_capability_authenticity,
     validate_skill_capability_declarations,
 )
-from autoskillit.workspace.skill_format import (
-    SkillFrontmatterParseError,
-    SkillFrontmatterParseResult,
-    parse_frontmatter_content,
-    read_skill_frontmatter,
-    validate_skill_frontmatter,
-)
 from autoskillit.workspace.skill_projection import (
     AgentSkillDocument,
     SkillProjectionBinding,
@@ -144,6 +137,13 @@ from autoskillit.workspace.skills import (
     render_skill_invalidities,
     replace_exploration_vector_bodies,
     validate_skill_tier_roles,
+)
+from autoskillit.workspace.skills._format import (
+    SkillFrontmatterParseError,
+    SkillFrontmatterParseResult,
+    parse_frontmatter_content,
+    read_skill_frontmatter,
+    validate_skill_frontmatter,
 )
 from autoskillit.workspace.worktree import (
     WORKTREES_DIR,

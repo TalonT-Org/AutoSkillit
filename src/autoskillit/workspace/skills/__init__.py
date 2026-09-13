@@ -23,21 +23,22 @@ from autoskillit.core import (
     pkg_root,
     validate_skill_capability_roles,
 )
-from autoskillit.workspace.skills_exploration import (
+
+from ._exploration import (
     _bind_exploration_vector_markers,
     _load_exploration_sidecar,
     _parse_exploration_sidecar,
     replace_exploration_vector_bodies,
 )
-from autoskillit.workspace.skills_frontmatter import _skill_info_from_frontmatter
-from autoskillit.workspace.skills_overrides import (
+from ._frontmatter import _skill_info_from_frontmatter
+from ._overrides import (
     _OVERRIDE_SEARCH_DIRS,
     ProjectLocalOverride,
     _project_skill_path,
     detect_project_local_overrides,
     override_names,
 )
-from autoskillit.workspace.skills_records import (
+from ._records import (
     EffectiveSkillCatalog,
     EffectiveSkillInvocation,
     SkillCatalogEntry,
@@ -49,7 +50,7 @@ from autoskillit.workspace.skills_records import (
     logger,
     render_skill_invalidities,
 )
-from autoskillit.workspace.skills_visibility import (
+from ._visibility import (
     _skill_is_visible,
     _visibility_policy,
 )

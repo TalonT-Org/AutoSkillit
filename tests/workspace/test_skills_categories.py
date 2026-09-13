@@ -24,7 +24,7 @@ class TestSkillCategories:
     # T6 — structured frontmatter categories and SkillInfo.categories
 
     def test_read_skill_categories_returns_frozenset_for_github_skill(self, tmp_path) -> None:
-        from autoskillit.workspace.skill_format import read_skill_frontmatter
+        from autoskillit.workspace.skills._format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: open-pr\ncategories: [github]\n---\n# content")
@@ -32,7 +32,7 @@ class TestSkillCategories:
         assert result == frozenset({"github"})
 
     def test_read_skill_categories_returns_empty_when_no_categories_key(self, tmp_path) -> None:
-        from autoskillit.workspace.skill_format import read_skill_frontmatter
+        from autoskillit.workspace.skills._format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: investigate\ndescription: foo\n---\n# content")
@@ -40,7 +40,7 @@ class TestSkillCategories:
         assert result == frozenset()
 
     def test_read_skill_categories_returns_empty_when_no_frontmatter(self, tmp_path) -> None:
-        from autoskillit.workspace.skill_format import read_skill_frontmatter
+        from autoskillit.workspace.skills._format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("# No frontmatter here")
@@ -48,7 +48,7 @@ class TestSkillCategories:
         assert result == frozenset()
 
     def test_read_skill_categories_multiple_categories(self, tmp_path) -> None:
-        from autoskillit.workspace.skill_format import read_skill_frontmatter
+        from autoskillit.workspace.skills._format import read_skill_frontmatter
 
         skill_md = tmp_path / "SKILL.md"
         skill_md.write_text("---\nname: foo\ncategories: [github, audit]\n---\n# body")

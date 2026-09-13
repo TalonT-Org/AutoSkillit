@@ -326,7 +326,7 @@ class TestWorkspacePlannerCascadeNarrowing:
         (recipe_dir / "test_unrelated.py").touch()
 
         result = build_test_scope(
-            changed_files={"src/autoskillit/workspace/skills.py"},
+            changed_files={"src/autoskillit/workspace/skills/__init__.py"},
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
         )

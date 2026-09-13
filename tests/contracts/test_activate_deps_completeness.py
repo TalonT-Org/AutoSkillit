@@ -20,13 +20,13 @@ from autoskillit.workspace.session_skills import (
     _parse_write_paths,
     compute_skill_closure,
 )
-from autoskillit.workspace.skill_format import (
-    parse_frontmatter_content,
-    read_skill_frontmatter,
-)
 from autoskillit.workspace.skills import (
     bundled_skills_dir,
     bundled_skills_extended_dir,
+)
+from autoskillit.workspace.skills._format import (
+    parse_frontmatter_content,
+    read_skill_frontmatter,
 )
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]

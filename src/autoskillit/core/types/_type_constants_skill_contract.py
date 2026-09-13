@@ -41,7 +41,7 @@ class SkillContractRemediationDef(NamedTuple):
 
 # Append-only, exactly like RETIRED_INSTALL_ARTIFACT_SHAPES: every member of
 # SkillInvalidityKind must have an entry here, enforced by a guard test in
-# tests/contracts/. The resolver (workspace/skills.py) renders `hint` into
+# tests/contracts/. The resolver (workspace/skills/__init__.py) renders `hint` into
 # SkillExclusion records, composition-root warnings, and doctor findings;
 # migration/adapters_skill.py's SkillMigrationAdapter renders every DETERMINISTIC
 # entry into an actual frontmatter rewrite.

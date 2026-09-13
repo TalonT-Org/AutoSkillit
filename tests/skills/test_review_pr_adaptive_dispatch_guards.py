@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from autoskillit.workspace.skill_format import read_skill_frontmatter
+from autoskillit.workspace.skills._format import read_skill_frontmatter
 
 pytestmark = [pytest.mark.layer("skills"), pytest.mark.medium]
 

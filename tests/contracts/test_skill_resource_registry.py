@@ -9,8 +9,8 @@ import pytest
 
 from autoskillit.core import RETIRED_SKILL_RESOURCE_IDS, SkillContractError, pkg_root
 from autoskillit.workspace._projection_cache import iter_public_plugin_asset_files
-from autoskillit.workspace.skill_resources import load_skill_resource
 from autoskillit.workspace.skills import DefaultSkillResolver
+from autoskillit.workspace.skills._resources import load_skill_resource
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -50,7 +50,7 @@ def test_duplicate_discovered_resource_ids_are_rejected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Duplicate frontmatter ids cannot silently pick one resource file."""
-    import autoskillit.workspace.skill_resources as resource_module
+    import autoskillit.workspace.skills._resources as resource_module
 
     resource_dir = tmp_path / "skill_resources"
     resource_dir.mkdir()

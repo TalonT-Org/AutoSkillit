@@ -4,7 +4,7 @@ Defines ``SkillInfo``, ``SkillCatalogEntry``, ``SkillExclusion``,
 ``EffectiveSkillCatalog``, ``EffectiveSkillInvocation``, the diagnostic helpers
 (``invalidity_hints``, ``render_skill_invalidities``), and the transitive-closure
 BFS over a captured catalog. ``SkillInfo.__post_init__`` parses frontmatter via
-``skill_format`` so each record still embeds the canonical parsed contract.
+``_format`` so each record still embeds the canonical parsed contract.
 """
 
 from __future__ import annotations
@@ -31,7 +31,8 @@ from autoskillit.core import (
     get_logger,
     validate_skill_capability_roles,
 )
-from autoskillit.workspace.skill_format import (
+
+from ._format import (
     SkillFrontmatterParseResult,
     parse_frontmatter_content,
 )

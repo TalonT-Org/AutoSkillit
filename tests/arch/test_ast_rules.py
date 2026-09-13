@@ -63,6 +63,62 @@ from tests.arch._rules import (
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
+def _enum_comparison_members(compare: ast.Compare, enum_name: str) -> list[str]:
+    members = []
+    for comparator in compare.comparators:
+        operands = comparator.elts if isinstance(comparator, ast.Tuple) else (comparator,)
+        for operand in operands:
+            if (
+                isinstance(operand, ast.Attribute)
+                and isinstance(operand.value, ast.Name)
+                and operand.value.id == enum_name
+            ):
+                members.append(operand.attr)
+    return members
+
+
+def _enum_dispatch_shape(
+    function: ast.FunctionDef | ast.AsyncFunctionDef, enum_name: str
+) -> tuple[set[str], bool]:
+    values: set[str] = set()
+    has_match = False
+    has_assert_never = False
+    for child in ast.walk(function):
+        if isinstance(child, ast.Compare):
+            values.update(_enum_comparison_members(child, enum_name))
+        if hasattr(ast, "Match") and isinstance(child, ast.Match):
+            has_match = True
+        if (
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Name)
+            and child.func.id == "assert_never"
+        ):
+            has_assert_never = True
+    return values, has_match and has_assert_never
+
+
+def _check_enum_dispatch_exhaustive(
+    src_dir: Path,
+    enum_name: str,
+    function_types: tuple[type[ast.FunctionDef] | type[ast.AsyncFunctionDef], ...],
+    exempt_functions: set[str] | frozenset[str],
+) -> list[str]:
+    violations = []
+    for py_file in src_dir.rglob("*.py"):
+        tree = ast.parse(py_file.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, function_types) or node.name in exempt_functions:
+                continue
+            values, exhaustive = _enum_dispatch_shape(node, enum_name)
+            if len(values) >= 2 and not exhaustive:
+                violations.append(
+                    f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
+                    f"{node.name}() dispatches on {values} via if/elif -- "
+                    f"use match/case + assert_never"
+                )
+    return violations
+
+
 def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
     """
     ARCH-007: Detect functions that dispatch over TerminationReason via if/elif
@@ -76,56 +132,9 @@ def _check_termination_dispatch_exhaustive(src_dir: Path) -> list[str]:
 
     Returns a list of violation strings for failing tests.
     """
-    violations = []
-    for py_file in src_dir.rglob("*.py"):
-        tree = ast.parse(py_file.read_text())
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.FunctionDef):
-                continue
-            if node.name in _DISPATCH_TABLE_EXEMPT_FUNCTIONS:
-                continue
-            # Collect all TerminationReason.VALUE names compared with == or in
-            tr_values: set[str] = set()
-            has_assert_never = False
-            has_match = False
-            for child in ast.walk(node):
-                # Detect: termination == TerminationReason.SOME_VALUE
-                # and: termination in (TerminationReason.X, TerminationReason.Y)
-                if isinstance(child, ast.Compare):
-                    for comparator in child.comparators:
-                        if (
-                            isinstance(comparator, ast.Attribute)
-                            and isinstance(comparator.value, ast.Name)
-                            and comparator.value.id == "TerminationReason"
-                        ):
-                            tr_values.add(comparator.attr)
-                        elif isinstance(comparator, ast.Tuple):
-                            # Handle: termination in (TerminationReason.X, TerminationReason.Y)
-                            for elt in comparator.elts:
-                                if (
-                                    isinstance(elt, ast.Attribute)
-                                    and isinstance(elt.value, ast.Name)
-                                    and elt.value.id == "TerminationReason"
-                                ):
-                                    tr_values.add(elt.attr)
-                # Detect match statements (Python 3.10+: ast.Match)
-                if hasattr(ast, "Match") and isinstance(child, ast.Match):
-                    has_match = True
-                # Detect assert_never calls
-                if (
-                    isinstance(child, ast.Call)
-                    and isinstance(child.func, ast.Name)
-                    and child.func.id == "assert_never"
-                ):
-                    has_assert_never = True
-            # Dispatch table = >=2 distinct TerminationReason values checked
-            if len(tr_values) >= 2 and not (has_match and has_assert_never):
-                violations.append(
-                    f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
-                    f"{node.name}() dispatches on {tr_values} via if/elif -- "
-                    f"use match/case + assert_never"
-                )
-    return violations
+    return _check_enum_dispatch_exhaustive(
+        src_dir, "TerminationReason", (ast.FunctionDef,), _DISPATCH_TABLE_EXEMPT_FUNCTIONS
+    )
 
 
 def _find_enclosing_function(node: ast.AST, tree: ast.AST) -> str | None:
@@ -424,47 +433,9 @@ def _check_channel_confirmation_dispatch_exhaustive(src_dir: Path) -> list[str]:
 
     Returns a list of violation strings for failing tests.
     """
-    violations = []
-    for py_file in src_dir.rglob("*.py"):
-        tree = ast.parse(py_file.read_text())
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            cc_values: set[str] = set()
-            has_assert_never = False
-            has_match = False
-            for child in ast.walk(node):
-                if isinstance(child, ast.Compare):
-                    for comparator in child.comparators:
-                        if (
-                            isinstance(comparator, ast.Attribute)
-                            and isinstance(comparator.value, ast.Name)
-                            and comparator.value.id == "ChannelConfirmation"
-                        ):
-                            cc_values.add(comparator.attr)
-                        elif isinstance(comparator, ast.Tuple):
-                            for elt in comparator.elts:
-                                if (
-                                    isinstance(elt, ast.Attribute)
-                                    and isinstance(elt.value, ast.Name)
-                                    and elt.value.id == "ChannelConfirmation"
-                                ):
-                                    cc_values.add(elt.attr)
-                if hasattr(ast, "Match") and isinstance(child, ast.Match):
-                    has_match = True
-                if (
-                    isinstance(child, ast.Call)
-                    and isinstance(child.func, ast.Name)
-                    and child.func.id == "assert_never"
-                ):
-                    has_assert_never = True
-            if len(cc_values) >= 2 and not (has_match and has_assert_never):
-                violations.append(
-                    f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
-                    f"{node.name}() dispatches on {cc_values} via if/elif -- "
-                    f"use match/case + assert_never"
-                )
-    return violations
+    return _check_enum_dispatch_exhaustive(
+        src_dir, "ChannelConfirmation", (ast.FunctionDef, ast.AsyncFunctionDef), set()
+    )
 
 
 def test_arch007_channel_confirmation_dispatch_uses_match_case() -> None:
@@ -889,6 +860,75 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
     )
 
 
+def _is_psutil_pid_exists_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) -> bool:
+    if isinstance(node.func, ast.Attribute) and node.func.attr == "pid_exists":
+        if (
+            isinstance(node.func.value, ast.Name)
+            and aliases.get(node.func.value.id, (None,))[0] == "psutil"
+        ):
+            return True
+    elif isinstance(node.func, ast.Name) and aliases.get(node.func.id, (None,)) == (
+        "psutil",
+        "pid_exists",
+    ):
+        return True
+    return False
+
+
+def _is_os_kill_probe_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) -> bool:
+    if (
+        len(node.args) != 2
+        or not isinstance(node.args[1], ast.Constant)
+        or node.args[1].value != 0
+    ):
+        return False
+    if isinstance(node.func, ast.Attribute) and node.func.attr == "kill":
+        if (
+            isinstance(node.func.value, ast.Name)
+            and aliases.get(node.func.value.id, (None,))[0] == "os"
+        ):
+            return True
+    elif isinstance(node.func, ast.Name) and aliases.get(node.func.id, (None,)) == (
+        "os",
+        "kill",
+    ):
+        return True
+    return False
+
+
+def _is_psutil_is_running_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) -> bool:
+    if not (isinstance(node.func, ast.Attribute) and node.func.attr == "is_running"):
+        return False
+    receiver = node.func.value
+    if not isinstance(receiver, ast.Call):
+        return False
+    if isinstance(receiver.func, ast.Attribute) and receiver.func.attr == "Process":
+        # `psutil.Process(pid).is_running()` form
+        if (
+            isinstance(receiver.func.value, ast.Name)
+            and aliases.get(receiver.func.value.id, (None,))[0] == "psutil"
+        ):
+            return True
+    elif isinstance(receiver.func, ast.Name):
+        # `from psutil import Process; Process(pid).is_running()` form
+        _proc_alias = aliases.get(receiver.func.id)
+        if _proc_alias is not None and _proc_alias[0] == "psutil" and _proc_alias[1] == "Process":
+            return True
+    return False
+
+
+def _zombie_blind_liveness_message(
+    call: ast.Call, aliases: dict[str, tuple[str, str | None]]
+) -> str | None:
+    if _is_psutil_pid_exists_call(call, aliases):
+        return "direct call to psutil.pid_exists() outside allowed files"
+    if _is_os_kill_probe_call(call, aliases):
+        return "direct call to os.kill(pid, 0) outside allowed files"
+    if _is_psutil_is_running_call(call, aliases):
+        return "direct call to psutil.Process(pid).is_running() outside allowed files"
+    return None
+
+
 def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
     """No src file may call psutil.pid_exists(), bare os.kill(pid, 0), or
     psutil.Process(pid).is_running() outside the shared zombie-aware primitive."""
@@ -908,68 +948,6 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
     }
     violations: list[str] = []
 
-    def _is_psutil_pid_exists_call(
-        node: ast.Call, aliases: dict[str, tuple[str, str | None]]
-    ) -> bool:
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "pid_exists":
-            if (
-                isinstance(node.func.value, ast.Name)
-                and aliases.get(node.func.value.id, (None,))[0] == "psutil"
-            ):
-                return True
-        elif isinstance(node.func, ast.Name) and aliases.get(node.func.id, (None,)) == (
-            "psutil",
-            "pid_exists",
-        ):
-            return True
-        return False
-
-    def _is_os_kill_probe_call(node: ast.Call, aliases: dict[str, tuple[str, str | None]]) -> bool:
-        if (
-            len(node.args) != 2
-            or not isinstance(node.args[1], ast.Constant)
-            or node.args[1].value != 0
-        ):
-            return False
-        if isinstance(node.func, ast.Attribute) and node.func.attr == "kill":
-            if (
-                isinstance(node.func.value, ast.Name)
-                and aliases.get(node.func.value.id, (None,))[0] == "os"
-            ):
-                return True
-        elif isinstance(node.func, ast.Name) and aliases.get(node.func.id, (None,)) == (
-            "os",
-            "kill",
-        ):
-            return True
-        return False
-
-    def _is_psutil_is_running_call(
-        node: ast.Call, aliases: dict[str, tuple[str, str | None]]
-    ) -> bool:
-        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "is_running"):
-            return False
-        receiver = node.func.value
-        if not isinstance(receiver, ast.Call):
-            return False
-        if isinstance(receiver.func, ast.Attribute) and receiver.func.attr == "Process":
-            # `psutil.Process(pid).is_running()` form
-            if (
-                isinstance(receiver.func.value, ast.Name)
-                and aliases.get(receiver.func.value.id, (None,))[0] == "psutil"
-            ):
-                return True
-        elif isinstance(receiver.func, ast.Name):
-            # `from psutil import Process; Process(pid).is_running()` form
-            _proc_alias = aliases.get(receiver.func.id)
-            if (
-                _proc_alias is not None
-                and _proc_alias[0] == "psutil"
-                and _proc_alias[1] == "Process"
-            ):
-                return True
-        return False
-
     for py_file in sorted(SRC_ROOT.rglob("*.py")):
         if py_file in allowed_files:
             continue
@@ -982,20 +960,10 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            if _is_psutil_pid_exists_call(node, aliases):
+            message = _zombie_blind_liveness_message(node, aliases)
+            if message is not None:
                 violations.append(
-                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
-                    f"direct call to psutil.pid_exists() outside allowed files"
-                )
-            elif _is_os_kill_probe_call(node, aliases):
-                violations.append(
-                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
-                    f"direct call to os.kill(pid, 0) outside allowed files"
-                )
-            elif _is_psutil_is_running_call(node, aliases):
-                violations.append(
-                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: "
-                    f"direct call to psutil.Process(pid).is_running() outside allowed files"
+                    f"  {py_file.relative_to(SRC_ROOT.parent.parent)}:{node.lineno}: {message}"
                 )
 
     assert not violations, (
@@ -1394,6 +1362,92 @@ def _comprehension_local_taint(
     return frozenset(local)
 
 
+def _enumeration_return_statements(stmts: list[ast.stmt]) -> list[ast.Return]:
+    returns: list[ast.Return] = []
+    for stmt in stmts:
+        if isinstance(stmt, ast.Return):
+            returns.append(stmt)
+        elif isinstance(stmt, (ast.If, ast.For, ast.While)):
+            for child_stmts in (stmt.body, stmt.orelse):
+                returns.extend(_enumeration_return_statements(child_stmts))
+        elif isinstance(stmt, ast.With):
+            returns.extend(_enumeration_return_statements(stmt.body))
+        elif isinstance(stmt, ast.Try):
+            returns.extend(_enumeration_return_statements(stmt.body))
+            for handler in stmt.handlers:
+                returns.extend(_enumeration_return_statements(handler.body))
+            returns.extend(_enumeration_return_statements(stmt.orelse))
+            returns.extend(_enumeration_return_statements(stmt.finalbody))
+    return returns
+
+
+def _is_enumeration_derived(
+    expr: ast.expr | None,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+) -> bool:
+    if expr is None:
+        return False
+    if _enumeration_source(expr, aliases, tainted):
+        return True
+    if isinstance(expr, ast.Call):
+        return (
+            isinstance(expr.func, ast.Name)
+            and expr.func.id == "DiscoveryResult"
+            and any(_is_enumeration_derived(arg, aliases, tainted) for arg in expr.args)
+        )
+    return _mentions_tainted_name(expr, tainted)
+
+
+def _collect_enumeration_taint(
+    stmts: list[ast.stmt],
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+) -> None:
+    for stmt in stmts:
+        if isinstance(stmt, ast.For):
+            if _is_enumeration_derived(stmt.iter, aliases, tainted):
+                tainted.update(_target_names(stmt.target))
+            _collect_enumeration_taint(stmt.body, aliases, tainted)
+            _collect_enumeration_taint(stmt.orelse, aliases, tainted)
+        elif isinstance(stmt, ast.Assign):
+            if _is_enumeration_derived(stmt.value, aliases, tainted):
+                for target in stmt.targets:
+                    tainted.update(_target_names(target))
+        elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            call = stmt.value
+            if (
+                isinstance(call.func, ast.Attribute)
+                and call.func.attr == "append"
+                and call.args
+                and _is_enumeration_derived(call.args[0], aliases, tainted)
+            ):
+                receiver = _root_name(call.func.value)
+                if receiver is not None:
+                    tainted.add(receiver)
+        elif isinstance(stmt, ast.If):
+            _collect_enumeration_taint(stmt.body, aliases, tainted)
+            _collect_enumeration_taint(stmt.orelse, aliases, tainted)
+        elif isinstance(stmt, ast.Try):
+            _collect_enumeration_taint(stmt.body, aliases, tainted)
+            for handler in stmt.handlers:
+                _collect_enumeration_taint(handler.body, aliases, tainted)
+            _collect_enumeration_taint(stmt.orelse, aliases, tainted)
+            _collect_enumeration_taint(stmt.finalbody, aliases, tainted)
+
+
+def _function_returns_only_enumeration(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    aliases: dict[str, tuple[str, str | None]],
+) -> bool:
+    tainted: set[str] = set()
+    _collect_enumeration_taint(function.body, aliases, tainted)
+    returns = _enumeration_return_statements(function.body)
+    return bool(returns) and all(
+        _is_enumeration_derived(return_node.value, aliases, tainted) for return_node in returns
+    )
+
+
 def _enumeration_producing_functions(
     tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
 ) -> frozenset[str]:
@@ -1402,247 +1456,517 @@ def _enumeration_producing_functions(
     This is deliberately one hop only: return values can seed a caller's local
     taint, but argument taint is not propagated into another function.
     """
-
-    def statement_returns(stmts: list[ast.stmt]) -> list[ast.Return]:
-        returns: list[ast.Return] = []
-        for stmt in stmts:
-            if isinstance(stmt, ast.Return):
-                returns.append(stmt)
-            elif isinstance(stmt, (ast.If, ast.For, ast.While)):
-                children = [stmt.body, stmt.orelse]
-                for child_stmts in children:
-                    returns.extend(statement_returns(child_stmts))
-            elif isinstance(stmt, ast.With):
-                returns.extend(statement_returns(stmt.body))
-            elif isinstance(stmt, ast.Try):
-                returns.extend(statement_returns(stmt.body))
-                for handler in stmt.handlers:
-                    returns.extend(statement_returns(handler.body))
-                returns.extend(statement_returns(stmt.orelse))
-                returns.extend(statement_returns(stmt.finalbody))
-        return returns
-
-    def produces(function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-        tainted: set[str] = set()
-
-        def derived(expr: ast.expr | None) -> bool:
-            if expr is None:
-                return False
-            if _enumeration_source(expr, aliases, tainted):
-                return True
-            if isinstance(expr, ast.Call):
-                return (
-                    isinstance(expr.func, ast.Name)
-                    and expr.func.id == "DiscoveryResult"
-                    and any(derived(arg) for arg in expr.args)
-                )
-            return _mentions_tainted_name(expr, tainted)
-
-        def visit(stmts: list[ast.stmt]) -> None:
-            for stmt in stmts:
-                if isinstance(stmt, ast.For):
-                    if derived(stmt.iter):
-                        tainted.update(_target_names(stmt.target))
-                    visit(stmt.body)
-                    visit(stmt.orelse)
-                elif isinstance(stmt, ast.Assign):
-                    if derived(stmt.value):
-                        for target in stmt.targets:
-                            tainted.update(_target_names(target))
-                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-                    call = stmt.value
-                    if (
-                        isinstance(call.func, ast.Attribute)
-                        and call.func.attr == "append"
-                        and call.args
-                        and derived(call.args[0])
-                    ):
-                        receiver = _root_name(call.func.value)
-                        if receiver is not None:
-                            tainted.add(receiver)
-                elif isinstance(stmt, ast.If):
-                    visit(stmt.body)
-                    visit(stmt.orelse)
-                elif isinstance(stmt, ast.Try):
-                    visit(stmt.body)
-                    for handler in stmt.handlers:
-                        visit(handler.body)
-                    visit(stmt.orelse)
-                    visit(stmt.finalbody)
-
-        visit(function.body)
-        returns = statement_returns(function.body)
-        return bool(returns) and all(derived(return_node.value) for return_node in returns)
-
     return frozenset(
         node.name
         for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and produces(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and _function_returns_only_enumeration(node, aliases)
+    )
+
+
+def _is_enumeration_source_or_producer(
+    expr: ast.expr,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    producers: frozenset[str],
+) -> bool:
+    return _enumeration_source(expr, aliases, tainted) or (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id in producers
+    )
+
+
+def _report_enumeration_stat_call(
+    node: ast.Call,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    local_tainted: frozenset[str],
+    guarded: bool,
+    function_name: str,
+    violations: list[tuple[int, str, str, str]],
+) -> bool:
+    if _is_funnel_call(node, aliases):
+        return True
+    subject = _guarded_call_subject(node, aliases)
+    if subject is not None:
+        if (subject in tainted or subject in local_tainted) and not guarded:
+            sink = _dotted_name(node.func, aliases) or "stat/read"
+            violations.append(
+                (
+                    node.lineno,
+                    function_name,
+                    _ENUMERATION_READ_STAT_KIND,
+                    f"unguarded {sink.rsplit('.', 1)[-1]} on enumeration-derived name {subject!r}",
+                )
+            )
+        return True
+    enumeration_subject = _enumeration_sink_subject(node)
+    if enumeration_subject is None:
+        return False
+    if (enumeration_subject in tainted or enumeration_subject in local_tainted) and not guarded:
+        violations.append(
+            (
+                node.lineno,
+                function_name,
+                _ENUMERATION_READ_STAT_KIND,
+                f"unguarded {node.func.attr} on enumeration-derived name {enumeration_subject!r}",
+            )
+        )
+    return True
+
+
+def _report_enumeration_sort_key_calls(
+    node: ast.Call,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    producers: frozenset[str],
+    guarded: bool,
+    function_name: str,
+    violations: list[tuple[int, str, str, str]],
+) -> None:
+    if (
+        not isinstance(node.func, ast.Name)
+        or node.func.id not in {"sorted", "min", "max"}
+        or not node.args
+        or not _is_enumeration_source_or_producer(node.args[0], aliases, tainted, producers)
+    ):
+        return
+    for keyword in node.keywords:
+        if keyword.arg != "key" or not isinstance(keyword.value, ast.Lambda):
+            continue
+        lambda_node = keyword.value
+        if len(lambda_node.args.args) != 1:
+            continue
+        parameter = lambda_node.args.args[0].arg
+        for sub in ast.walk(lambda_node.body):
+            if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
+                continue
+            if _guarded_call_subject(sub, aliases) == parameter and not guarded:
+                violations.append(
+                    (
+                        sub.lineno,
+                        function_name,
+                        _ENUMERATION_SORT_KEY_KIND,
+                        "unguarded stat in sorted/min/max key= lambda over an enumeration call",
+                    )
+                )
+
+
+def _scan_enumeration_stat_expr(
+    expr: ast.expr | None,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    producers: frozenset[str],
+    guarded: bool,
+    local_tainted: frozenset[str],
+    function_name: str,
+    violations: list[tuple[int, str, str, str]],
+) -> None:
+    if expr is None:
+        return
+    for node in ast.walk(expr):
+        if not isinstance(node, ast.Call):
+            continue
+        if _report_enumeration_stat_call(
+            node,
+            aliases,
+            tainted,
+            local_tainted,
+            guarded,
+            function_name,
+            violations,
+        ):
+            continue
+        _report_enumeration_sort_key_calls(
+            node, aliases, tainted, producers, guarded, function_name, violations
+        )
+
+
+def _update_enumeration_stat_taint(
+    stmt: ast.Assign | ast.Expr,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    producers: frozenset[str],
+) -> None:
+    if isinstance(stmt, ast.Assign):
+        if _mentions_tainted_name(stmt.value, tainted) or _is_enumeration_source_or_producer(
+            stmt.value, aliases, tainted, producers
+        ):
+            for target in stmt.targets:
+                tainted.update(_target_names(target))
+        return
+    if not isinstance(stmt.value, ast.Call):
+        return
+    call = stmt.value
+    if (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "append"
+        and call.args
+        and (
+            _mentions_tainted_name(call.args[0], tainted)
+            or _is_enumeration_source_or_producer(call.args[0], aliases, tainted, producers)
+        )
+    ):
+        receiver = _root_name(call.func.value)
+        if receiver is not None:
+            tainted.add(receiver)
+
+
+def _scan_enumeration_stat_statements(
+    stmts: list[ast.stmt],
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    producers: frozenset[str],
+    guarded: bool,
+    function_name: str,
+    violations: list[tuple[int, str, str, str]],
+) -> None:
+    for stmt in stmts:
+        if isinstance(stmt, ast.For):
+            if _is_enumeration_source_or_producer(stmt.iter, aliases, tainted, producers):
+                tainted.update(_target_names(stmt.target))
+            _scan_enumeration_stat_expr(
+                stmt.iter,
+                aliases,
+                tainted,
+                producers,
+                guarded,
+                _comprehension_local_taint(stmt.iter, aliases, tainted),
+                function_name,
+                violations,
+            )
+            _scan_enumeration_stat_statements(
+                stmt.body, aliases, tainted, producers, guarded, function_name, violations
+            )
+            _scan_enumeration_stat_statements(
+                stmt.orelse, aliases, tainted, producers, guarded, function_name, violations
+            )
+        elif isinstance(stmt, ast.Assign):
+            _scan_enumeration_stat_expr(
+                stmt.value,
+                aliases,
+                tainted,
+                producers,
+                guarded,
+                _comprehension_local_taint(stmt.value, aliases, tainted),
+                function_name,
+                violations,
+            )
+            _update_enumeration_stat_taint(stmt, aliases, tainted, producers)
+        elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+            _update_enumeration_stat_taint(stmt, aliases, tainted, producers)
+            _scan_enumeration_stat_expr(
+                stmt.value,
+                aliases,
+                tainted,
+                producers,
+                guarded,
+                _comprehension_local_taint(stmt.value, aliases, tainted),
+                function_name,
+                violations,
+            )
+        elif isinstance(stmt, ast.Try):
+            body_guarded = guarded or _try_recovers_vanish(stmt)
+            _scan_enumeration_stat_statements(
+                stmt.body, aliases, tainted, producers, body_guarded, function_name, violations
+            )
+            for handler in stmt.handlers:
+                _scan_enumeration_stat_statements(
+                    handler.body, aliases, tainted, producers, guarded, function_name, violations
+                )
+            _scan_enumeration_stat_statements(
+                stmt.orelse, aliases, tainted, producers, guarded, function_name, violations
+            )
+            _scan_enumeration_stat_statements(
+                stmt.finalbody, aliases, tainted, producers, guarded, function_name, violations
+            )
+        elif isinstance(stmt, (ast.If, ast.While)):
+            _scan_enumeration_stat_expr(
+                stmt.test,
+                aliases,
+                tainted,
+                producers,
+                guarded,
+                _comprehension_local_taint(stmt.test, aliases, tainted),
+                function_name,
+                violations,
+            )
+            _scan_enumeration_stat_statements(
+                stmt.body, aliases, tainted, producers, guarded, function_name, violations
+            )
+            _scan_enumeration_stat_statements(
+                stmt.orelse, aliases, tainted, producers, guarded, function_name, violations
+            )
+        elif isinstance(stmt, ast.With):
+            for item in stmt.items:
+                _scan_enumeration_stat_expr(
+                    item.context_expr,
+                    aliases,
+                    tainted,
+                    producers,
+                    guarded,
+                    _comprehension_local_taint(item.context_expr, aliases, tainted),
+                    function_name,
+                    violations,
+                )
+            _scan_enumeration_stat_statements(
+                stmt.body, aliases, tainted, producers, guarded, function_name, violations
+            )
+        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        else:
+            for child in ast.iter_child_nodes(stmt):
+                if isinstance(child, ast.expr):
+                    _scan_enumeration_stat_expr(
+                        child,
+                        aliases,
+                        tainted,
+                        producers,
+                        guarded,
+                        _comprehension_local_taint(child, aliases, tainted),
+                        function_name,
+                        violations,
+                    )
+
+
+def _scan_enumeration_stat_function(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    aliases: dict[str, tuple[str, str | None]],
+    producers: frozenset[str],
+    violations: list[tuple[int, str, str, str]],
+) -> None:
+    tainted: set[str] = set()
+    _scan_enumeration_stat_statements(
+        func.body, aliases, tainted, producers, False, func.name, violations
     )
 
 
 def _find_enumeration_stat_violations(
     tree: ast.AST, aliases: dict[str, tuple[str, str | None]]
 ) -> list[tuple[int, str, str, str]]:
-    """Scan every function in `tree` for an unguarded stat/read on an
-    enumeration-derived path. Each function gets its own taint set; a single
-    same-module return-value summary can seed that set, but argument taint is
-    intentionally not propagated. Nested defs are analyzed separately."""
+    """Scan every function in `tree` for unguarded enumeration-derived stat/reads."""
     violations: list[tuple[int, str, str, str]] = []
     enumeration_producers = _enumeration_producing_functions(tree, aliases)
-
-    def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        tainted: set[str] = set()
-
-        def enumeration_source(expr: ast.expr) -> bool:
-            return _enumeration_source(expr, aliases, tainted) or (
-                isinstance(expr, ast.Call)
-                and isinstance(expr.func, ast.Name)
-                and expr.func.id in enumeration_producers
-            )
-
-        def check_expr(
-            expr: ast.expr | None, guarded: bool, local_tainted: frozenset[str] = frozenset()
-        ) -> None:
-            if expr is None:
-                return
-            for node in ast.walk(expr):
-                if not isinstance(node, ast.Call):
-                    continue
-                if _is_funnel_call(node, aliases):
-                    continue
-                subject = _guarded_call_subject(node, aliases)
-                if subject is not None:
-                    if (subject in tainted or subject in local_tainted) and not guarded:
-                        sink = _dotted_name(node.func, aliases) or "stat/read"
-                        violations.append(
-                            (
-                                node.lineno,
-                                func_node.name,
-                                _ENUMERATION_READ_STAT_KIND,
-                                f"unguarded {sink.rsplit('.', 1)[-1]} on "
-                                f"enumeration-derived name {subject!r}",
-                            )
-                        )
-                    continue
-                enumeration_subject = _enumeration_sink_subject(node)
-                if (
-                    enumeration_subject is not None
-                    and (enumeration_subject in tainted or enumeration_subject in local_tainted)
-                    and not guarded
-                ):
-                    violations.append(
-                        (
-                            node.lineno,
-                            func_node.name,
-                            _ENUMERATION_READ_STAT_KIND,
-                            f"unguarded {node.func.attr} on enumeration-derived "
-                            f"name {enumeration_subject!r}",
-                        )
-                    )
-                    continue
-                if (
-                    isinstance(node.func, ast.Name)
-                    and node.func.id in {"sorted", "min", "max"}
-                    and node.args
-                    and enumeration_source(node.args[0])
-                ):
-                    for kw in node.keywords:
-                        if kw.arg != "key" or not isinstance(kw.value, ast.Lambda):
-                            continue
-                        lam = kw.value
-                        if len(lam.args.args) != 1:
-                            continue
-                        param = lam.args.args[0].arg
-                        for sub in ast.walk(lam.body):
-                            if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
-                                continue
-                            inner_subject = _guarded_call_subject(sub, aliases)
-                            if inner_subject == param and not guarded:
-                                violations.append(
-                                    (
-                                        sub.lineno,
-                                        func_node.name,
-                                        _ENUMERATION_SORT_KEY_KIND,
-                                        "unguarded stat in sorted/min/max key= lambda over "
-                                        "an enumeration call",
-                                    )
-                                )
-
-        def visit_stmts(stmts: list[ast.stmt], guarded: bool) -> None:
-            for stmt in stmts:
-                if isinstance(stmt, ast.For):
-                    if enumeration_source(stmt.iter):
-                        tainted.update(_target_names(stmt.target))
-                    check_expr(
-                        stmt.iter, guarded, _comprehension_local_taint(stmt.iter, aliases, tainted)
-                    )
-                    visit_stmts(stmt.body, guarded)
-                    visit_stmts(stmt.orelse, guarded)
-                elif isinstance(stmt, ast.Assign):
-                    check_expr(
-                        stmt.value,
-                        guarded,
-                        _comprehension_local_taint(stmt.value, aliases, tainted),
-                    )
-                    if _mentions_tainted_name(stmt.value, tainted) or enumeration_source(
-                        stmt.value
-                    ):
-                        for target in stmt.targets:
-                            tainted.update(_target_names(target))
-                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-                    call = stmt.value
-                    if (
-                        isinstance(call.func, ast.Attribute)
-                        and call.func.attr == "append"
-                        and call.args
-                        and (
-                            _mentions_tainted_name(call.args[0], tainted)
-                            or enumeration_source(call.args[0])
-                        )
-                    ):
-                        receiver = _root_name(call.func.value)
-                        if receiver is not None:
-                            tainted.add(receiver)
-                    check_expr(call, guarded, _comprehension_local_taint(call, aliases, tainted))
-                elif isinstance(stmt, ast.Try):
-                    # Enumeration reads use the narrower runtime-derived predicate;
-                    # _handler_covers_oserror remains for the broad-swallow rule.
-                    body_guarded = guarded or _try_recovers_vanish(stmt)
-                    visit_stmts(stmt.body, body_guarded)
-                    for handler in stmt.handlers:
-                        visit_stmts(handler.body, guarded)
-                    visit_stmts(stmt.orelse, guarded)
-                    visit_stmts(stmt.finalbody, guarded)
-                elif isinstance(stmt, (ast.If, ast.While)):
-                    check_expr(
-                        stmt.test, guarded, _comprehension_local_taint(stmt.test, aliases, tainted)
-                    )
-                    visit_stmts(stmt.body, guarded)
-                    visit_stmts(stmt.orelse, guarded)
-                elif isinstance(stmt, ast.With):
-                    for item in stmt.items:
-                        check_expr(
-                            item.context_expr,
-                            guarded,
-                            _comprehension_local_taint(item.context_expr, aliases, tainted),
-                        )
-                    visit_stmts(stmt.body, guarded)
-                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    continue
-                else:
-                    for child in ast.iter_child_nodes(stmt):
-                        if isinstance(child, ast.expr):
-                            check_expr(
-                                child, guarded, _comprehension_local_taint(child, aliases, tainted)
-                            )
-
-        visit_stmts(func_node.body, False)
-
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            scan_function(node)
+            _scan_enumeration_stat_function(node, aliases, enumeration_producers, violations)
     return violations
+
+
+def _report_broad_swallow_call(
+    node: ast.Call,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    local_tainted: frozenset[str],
+    function_name: str,
+    violations: list[tuple[int, str, str]],
+) -> bool:
+    if _is_funnel_call(node, aliases):
+        return True
+    subject = _guarded_call_subject(node, aliases)
+    if subject is None:
+        return False
+    if subject in tainted or subject in local_tainted:
+        sink = _dotted_name(node.func, aliases) or "stat/read"
+        violations.append(
+            (
+                node.lineno,
+                function_name,
+                f"broad handler discards exception from {sink.rsplit('.', 1)[-1]} on {subject!r}",
+            )
+        )
+    return True
+
+
+def _report_broad_swallow_sort_key_calls(
+    node: ast.Call,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    function_name: str,
+    violations: list[tuple[int, str, str]],
+) -> None:
+    if (
+        not isinstance(node.func, ast.Name)
+        or node.func.id not in {"sorted", "min", "max"}
+        or not node.args
+        or not _enumeration_source(node.args[0], aliases, tainted)
+    ):
+        return
+    for keyword in node.keywords:
+        if keyword.arg != "key" or not isinstance(keyword.value, ast.Lambda):
+            continue
+        lambda_node = keyword.value
+        if len(lambda_node.args.args) != 1:
+            continue
+        parameter = lambda_node.args.args[0].arg
+        for sub in ast.walk(lambda_node.body):
+            if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
+                continue
+            if _guarded_call_subject(sub, aliases) == parameter:
+                violations.append(
+                    (
+                        sub.lineno,
+                        function_name,
+                        "broad handler discards exception from sorted/min/max key function",
+                    )
+                )
+
+
+def _scan_broad_swallow_expr(
+    expr: ast.expr | None,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    handler_mode: str,
+    local_tainted: frozenset[str],
+    function_name: str,
+    violations: list[tuple[int, str, str]],
+) -> None:
+    if expr is None or handler_mode != "destructive-broad":
+        return
+    for node in ast.walk(expr):
+        if not isinstance(node, ast.Call):
+            continue
+        if _report_broad_swallow_call(
+            node, aliases, tainted, local_tainted, function_name, violations
+        ):
+            continue
+        _report_broad_swallow_sort_key_calls(node, aliases, tainted, function_name, violations)
+
+
+def _broad_swallow_handler_mode(stmt: ast.Try, inherited: str) -> str:
+    for handler in stmt.handlers:
+        if not _handler_covers_oserror(handler):
+            continue
+        if not _handler_is_broad(handler):
+            return "narrow"
+        return "destructive-broad" if _handler_discards_exception(handler) else "preserving-broad"
+    return inherited
+
+
+def _update_broad_swallow_taint(
+    stmt: ast.Assign,
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+) -> None:
+    if len(stmt.targets) != 1 or not isinstance(stmt.targets[0], ast.Name):
+        return
+    if _mentions_tainted_name(stmt.value, tainted) or _enumeration_source(
+        stmt.value, aliases, tainted
+    ):
+        tainted.add(stmt.targets[0].id)
+
+
+def _scan_broad_swallow_statements(
+    stmts: list[ast.stmt],
+    aliases: dict[str, tuple[str, str | None]],
+    tainted: set[str],
+    handler_mode: str,
+    function_name: str,
+    violations: list[tuple[int, str, str]],
+) -> None:
+    for stmt in stmts:
+        if isinstance(stmt, ast.For):
+            if _enumeration_source(stmt.iter, aliases, tainted):
+                tainted.update(_target_names(stmt.target))
+            _scan_broad_swallow_expr(
+                stmt.iter,
+                aliases,
+                tainted,
+                handler_mode,
+                _comprehension_local_taint(stmt.iter, aliases, tainted),
+                function_name,
+                violations,
+            )
+            _scan_broad_swallow_statements(
+                stmt.body, aliases, tainted, handler_mode, function_name, violations
+            )
+            _scan_broad_swallow_statements(
+                stmt.orelse, aliases, tainted, handler_mode, function_name, violations
+            )
+        elif isinstance(stmt, ast.Assign):
+            _scan_broad_swallow_expr(
+                stmt.value,
+                aliases,
+                tainted,
+                handler_mode,
+                _comprehension_local_taint(stmt.value, aliases, tainted),
+                function_name,
+                violations,
+            )
+            _update_broad_swallow_taint(stmt, aliases, tainted)
+        elif isinstance(stmt, ast.Try):
+            _scan_broad_swallow_statements(
+                stmt.body,
+                aliases,
+                tainted,
+                _broad_swallow_handler_mode(stmt, handler_mode),
+                function_name,
+                violations,
+            )
+            for handler in stmt.handlers:
+                _scan_broad_swallow_statements(
+                    handler.body, aliases, tainted, handler_mode, function_name, violations
+                )
+            _scan_broad_swallow_statements(
+                stmt.orelse, aliases, tainted, handler_mode, function_name, violations
+            )
+            _scan_broad_swallow_statements(
+                stmt.finalbody, aliases, tainted, handler_mode, function_name, violations
+            )
+        elif isinstance(stmt, (ast.If, ast.While)):
+            _scan_broad_swallow_expr(
+                stmt.test,
+                aliases,
+                tainted,
+                handler_mode,
+                _comprehension_local_taint(stmt.test, aliases, tainted),
+                function_name,
+                violations,
+            )
+            _scan_broad_swallow_statements(
+                stmt.body, aliases, tainted, handler_mode, function_name, violations
+            )
+            _scan_broad_swallow_statements(
+                stmt.orelse, aliases, tainted, handler_mode, function_name, violations
+            )
+        elif isinstance(stmt, ast.With):
+            for item in stmt.items:
+                _scan_broad_swallow_expr(
+                    item.context_expr,
+                    aliases,
+                    tainted,
+                    handler_mode,
+                    _comprehension_local_taint(item.context_expr, aliases, tainted),
+                    function_name,
+                    violations,
+                )
+            _scan_broad_swallow_statements(
+                stmt.body, aliases, tainted, handler_mode, function_name, violations
+            )
+        elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        else:
+            for child in ast.iter_child_nodes(stmt):
+                if isinstance(child, ast.expr):
+                    _scan_broad_swallow_expr(
+                        child,
+                        aliases,
+                        tainted,
+                        handler_mode,
+                        _comprehension_local_taint(child, aliases, tainted),
+                        function_name,
+                        violations,
+                    )
+
+
+def _scan_broad_swallow_function(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    aliases: dict[str, tuple[str, str | None]],
+    violations: list[tuple[int, str, str]],
+) -> None:
+    tainted: set[str] = set()
+    _scan_broad_swallow_statements(func.body, aliases, tainted, "none", func.name, violations)
 
 
 def _find_broad_swallow_violations(
@@ -1650,133 +1974,9 @@ def _find_broad_swallow_violations(
 ) -> list[tuple[int, str, str]]:
     """Find enumeration reads whose nearest OSError handler broadly discards evidence."""
     violations: list[tuple[int, str, str]] = []
-
-    def scan_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        tainted: set[str] = set()
-
-        def check_expr(
-            expr: ast.expr | None,
-            handler_mode: str,
-            local_tainted: frozenset[str] = frozenset(),
-        ) -> None:
-            if expr is None or handler_mode != "destructive-broad":
-                return
-            for node in ast.walk(expr):
-                if not isinstance(node, ast.Call) or _is_funnel_call(node, aliases):
-                    continue
-                subject = _guarded_call_subject(node, aliases)
-                if subject is not None:
-                    if subject in tainted or subject in local_tainted:
-                        sink = _dotted_name(node.func, aliases) or "stat/read"
-                        violations.append(
-                            (
-                                node.lineno,
-                                func_node.name,
-                                f"broad handler discards exception from "
-                                f"{sink.rsplit('.', 1)[-1]} on {subject!r}",
-                            )
-                        )
-                    continue
-                if (
-                    isinstance(node.func, ast.Name)
-                    and node.func.id in {"sorted", "min", "max"}
-                    and node.args
-                    and _enumeration_source(node.args[0], aliases, tainted)
-                ):
-                    for keyword in node.keywords:
-                        if keyword.arg != "key" or not isinstance(keyword.value, ast.Lambda):
-                            continue
-                        lambda_node = keyword.value
-                        if len(lambda_node.args.args) != 1:
-                            continue
-                        parameter = lambda_node.args.args[0].arg
-                        for sub in ast.walk(lambda_node.body):
-                            if not isinstance(sub, ast.Call) or _is_funnel_call(sub, aliases):
-                                continue
-                            if _guarded_call_subject(sub, aliases) == parameter:
-                                violations.append(
-                                    (
-                                        sub.lineno,
-                                        func_node.name,
-                                        "broad handler discards exception from sorted/min/max "
-                                        "key function",
-                                    )
-                                )
-
-        def handler_mode_for_try(stmt: ast.Try, inherited: str) -> str:
-            for handler in stmt.handlers:
-                if not _handler_covers_oserror(handler):
-                    continue
-                if not _handler_is_broad(handler):
-                    return "narrow"
-                return (
-                    "destructive-broad"
-                    if _handler_discards_exception(handler)
-                    else "preserving-broad"
-                )
-            return inherited
-
-        def visit_stmts(stmts: list[ast.stmt], handler_mode: str) -> None:
-            for stmt in stmts:
-                if isinstance(stmt, ast.For):
-                    if _enumeration_source(stmt.iter, aliases, tainted):
-                        tainted.update(_target_names(stmt.target))
-                    check_expr(
-                        stmt.iter,
-                        handler_mode,
-                        _comprehension_local_taint(stmt.iter, aliases, tainted),
-                    )
-                    visit_stmts(stmt.body, handler_mode)
-                    visit_stmts(stmt.orelse, handler_mode)
-                elif isinstance(stmt, ast.Assign):
-                    check_expr(
-                        stmt.value,
-                        handler_mode,
-                        _comprehension_local_taint(stmt.value, aliases, tainted),
-                    )
-                    if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-                        if _mentions_tainted_name(stmt.value, tainted) or _enumeration_source(
-                            stmt.value, aliases, tainted
-                        ):
-                            tainted.add(stmt.targets[0].id)
-                elif isinstance(stmt, ast.Try):
-                    visit_stmts(stmt.body, handler_mode_for_try(stmt, handler_mode))
-                    for handler in stmt.handlers:
-                        visit_stmts(handler.body, handler_mode)
-                    visit_stmts(stmt.orelse, handler_mode)
-                    visit_stmts(stmt.finalbody, handler_mode)
-                elif isinstance(stmt, (ast.If, ast.While)):
-                    check_expr(
-                        stmt.test,
-                        handler_mode,
-                        _comprehension_local_taint(stmt.test, aliases, tainted),
-                    )
-                    visit_stmts(stmt.body, handler_mode)
-                    visit_stmts(stmt.orelse, handler_mode)
-                elif isinstance(stmt, ast.With):
-                    for item in stmt.items:
-                        check_expr(
-                            item.context_expr,
-                            handler_mode,
-                            _comprehension_local_taint(item.context_expr, aliases, tainted),
-                        )
-                    visit_stmts(stmt.body, handler_mode)
-                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    continue
-                else:
-                    for child in ast.iter_child_nodes(stmt):
-                        if isinstance(child, ast.expr):
-                            check_expr(
-                                child,
-                                handler_mode,
-                                _comprehension_local_taint(child, aliases, tainted),
-                            )
-
-        visit_stmts(func_node.body, "none")
-
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            scan_function(node)
+            _scan_broad_swallow_function(node, aliases, violations)
     return violations
 
 
@@ -2917,18 +3117,17 @@ def test_fcntl_import_allowlist() -> None:
             tree = ast.parse(py_file.read_text())
         except SyntaxError:
             continue
+        rel = py_file.relative_to(SRC_ROOT)
+        if str(rel) in FCNTL_ALLOWED_MODULES:
+            continue
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name == "fcntl":
-                        rel = py_file.relative_to(SRC_ROOT)
-                        if str(rel) not in FCNTL_ALLOWED_MODULES:
-                            violations.append(f"  {rel}:{node.lineno}: imports fcntl")
+                        violations.append(f"  {rel}:{node.lineno}: imports fcntl")
             elif isinstance(node, ast.ImportFrom):
                 if node.module == "fcntl":
-                    rel = py_file.relative_to(SRC_ROOT)
-                    if str(rel) not in FCNTL_ALLOWED_MODULES:
-                        violations.append(f"  {rel}:{node.lineno}: from fcntl import ...")
+                    violations.append(f"  {rel}:{node.lineno}: from fcntl import ...")
 
     assert not violations, (
         "Unauthorized fcntl imports found — all fcntl usage must go through "
@@ -3149,6 +3348,35 @@ def _is_live_metadata_version_call(node: ast.expr) -> bool:
     return isinstance(value, ast.Attribute) and value.attr == "metadata"
 
 
+def _live_metadata_version_bindings(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> set[str]:
+    live_vars: set[str] = set()
+    for stmt in ast.walk(func):
+        if isinstance(stmt, ast.Assign) and _is_live_metadata_version_call(stmt.value):
+            for target in stmt.targets:
+                if isinstance(target, ast.Name):
+                    live_vars.add(target.id)
+        elif (
+            isinstance(stmt, ast.AnnAssign)
+            and stmt.value is not None
+            and isinstance(stmt.target, ast.Name)
+            and _is_live_metadata_version_call(stmt.value)
+        ):
+            live_vars.add(stmt.target.id)
+    return live_vars
+
+
+def _is_frozen_live_version_comparison(compare: ast.Compare, live_vars: set[str]) -> bool:
+    operands = [compare.left, *compare.comparators]
+    frozen_hit = any(_is_frozen_version_ref(o) for o in operands)
+    live_hit = any(
+        _is_live_metadata_version_call(o) or (isinstance(o, ast.Name) and o.id in live_vars)
+        for o in operands
+    )
+    return frozen_hit and live_hit
+
+
 def _check_frozen_vs_live_version_compare(src_dir: Path) -> list[str]:
     """
     ARCH-012: Detect a frozen version reference compared against a live
@@ -3178,30 +3406,11 @@ def _check_frozen_vs_live_version_compare(src_dir: Path) -> list[str]:
         for func in ast.walk(tree):
             if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            live_vars: set[str] = set()
-            for stmt in ast.walk(func):
-                if isinstance(stmt, ast.Assign) and _is_live_metadata_version_call(stmt.value):
-                    for target in stmt.targets:
-                        if isinstance(target, ast.Name):
-                            live_vars.add(target.id)
-                elif (
-                    isinstance(stmt, ast.AnnAssign)
-                    and stmt.value is not None
-                    and isinstance(stmt.target, ast.Name)
-                    and _is_live_metadata_version_call(stmt.value)
-                ):
-                    live_vars.add(stmt.target.id)
+            live_vars = _live_metadata_version_bindings(func)
             for node in ast.walk(func):
                 if not isinstance(node, ast.Compare):
                     continue
-                operands = [node.left, *node.comparators]
-                frozen_hit = any(_is_frozen_version_ref(o) for o in operands)
-                live_hit = any(
-                    _is_live_metadata_version_call(o)
-                    or (isinstance(o, ast.Name) and o.id in live_vars)
-                    for o in operands
-                )
-                if frozen_hit and live_hit:
+                if _is_frozen_live_version_comparison(node, live_vars):
                     violations.append(
                         f"{py_file.relative_to(src_dir.parent.parent)}:{node.lineno}: "
                         f"frozen version reference compared against a live "

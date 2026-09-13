@@ -110,6 +110,51 @@ def _relative_import(module_name: str, level: int, imported: str | None) -> str:
     return ".".join((*base, *(imported.split(".") if imported else ())))
 
 
+def _module_assignment_bindings(statement: ast.stmt) -> dict[str, ast.expr]:
+    if isinstance(statement, ast.Assign):
+        targets = statement.targets
+    elif isinstance(statement, ast.AnnAssign):
+        targets = [statement.target]
+    else:
+        return {}
+    value = statement.value
+    if value is None:
+        return {}
+    return {target.id: value for target in targets if isinstance(target, ast.Name)}
+
+
+def _module_import_bindings(module_name: str, statement: ast.stmt) -> dict[str, str]:
+    if isinstance(statement, ast.Import):
+        return {
+            alias.asname or alias.name.split(".")[0]: (
+                alias.name if alias.asname else alias.name.split(".")[0]
+            )
+            for alias in statement.names
+        }
+    if not isinstance(statement, ast.ImportFrom):
+        return {}
+    imported_from = _relative_import(module_name, statement.level, statement.module)
+    return {
+        alias.asname or alias.name: f"{imported_from}.{alias.name}"
+        for alias in statement.names
+        if alias.name != "*"
+    }
+
+
+def _module_from_source(relative_path: str, source: str) -> _Module:
+    module_name = _module_name(relative_path)
+    tree = ast.parse(source, filename=relative_path)
+    assignments: dict[str, ast.expr] = {}
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    imports: dict[str, str] = {}
+    for statement in tree.body:
+        assignments.update(_module_assignment_bindings(statement))
+        imports.update(_module_import_bindings(module_name, statement))
+        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions[statement.name] = statement
+    return _Module(relative_path, module_name, tree, assignments, functions, imports)
+
+
 class _ModuleIndex:
     """Small AST resolver for collection-time test constants and aliases."""
 
@@ -118,40 +163,8 @@ class _ModuleIndex:
         self._symbol_cache: dict[tuple[str, str], _Resolution] = {}
         self._resolving: set[tuple[str, str]] = set()
         for relative_path, source in sources.items():
-            module_name = _module_name(relative_path)
-            tree = ast.parse(source, filename=relative_path)
-            assignments: dict[str, ast.expr] = {}
-            functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
-            imports: dict[str, str] = {}
-            for statement in tree.body:
-                if isinstance(statement, (ast.Assign, ast.AnnAssign)):
-                    value = statement.value
-                    targets = (
-                        statement.targets
-                        if isinstance(statement, ast.Assign)
-                        else [statement.target]
-                    )
-                    if value is not None:
-                        for target in targets:
-                            if isinstance(target, ast.Name):
-                                assignments[target.id] = value
-                elif isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    functions[statement.name] = statement
-                elif isinstance(statement, ast.Import):
-                    for alias in statement.names:
-                        imports[alias.asname or alias.name.split(".")[0]] = (
-                            alias.name if alias.asname else alias.name.split(".")[0]
-                        )
-                elif isinstance(statement, ast.ImportFrom):
-                    imported_from = _relative_import(
-                        module_name, statement.level, statement.module
-                    )
-                    for alias in statement.names:
-                        if alias.name != "*":
-                            imports[alias.asname or alias.name] = f"{imported_from}.{alias.name}"
-            self.modules[module_name] = _Module(
-                relative_path, module_name, tree, assignments, functions, imports
-            )
+            module = _module_from_source(relative_path, source)
+            self.modules[module.name] = module
 
     def reference(self, module: _Module, expression: ast.expr) -> str | None:
         if isinstance(expression, ast.Name):
@@ -160,6 +173,64 @@ class _ModuleIndex:
             base = self.reference(module, expression.value)
             return f"{base}.{expression.attr}" if base else None
         return None
+
+    def _resolve_call(self, module: _Module, expression: ast.Call) -> _Resolution:
+        reference = self.reference(module, expression.func)
+        if reference in _GIT_SOURCES | _LIVE_SOURCES:
+            return _Resolution(frozenset({reference}))
+        if reference in _RECIPE_ROOT_FACTORIES:
+            return _Resolution(recipe_root=True)
+
+        receiver = (
+            self.resolve(module, expression.func.value)
+            if isinstance(expression.func, ast.Attribute)
+            else _Resolution()
+        )
+        arguments = [self.resolve(module, argument) for argument in expression.args]
+        arguments.extend(self.resolve(module, keyword.value) for keyword in expression.keywords)
+        if (
+            isinstance(expression.func, ast.Attribute)
+            and expression.func.attr in _LIVE_SCAN_METHODS
+        ):
+            if any(item.recipe_root for item in (receiver, *arguments)):
+                return _merge(
+                    receiver,
+                    *arguments,
+                    _Resolution(frozenset({expression.func.attr})),
+                )
+        if reference:
+            resolved_function = self._resolve_reference(reference)
+            if resolved_function.sources or resolved_function.recipe_root:
+                return _merge(receiver, *arguments, resolved_function)
+        return _merge(receiver, *arguments)
+
+    def _resolve_comprehension(
+        self,
+        module: _Module,
+        expression: ast.ListComp | ast.SetComp | ast.GeneratorExp | ast.DictComp,
+    ) -> _Resolution:
+        values: list[ast.expr]
+        if isinstance(expression, ast.DictComp):
+            values = [expression.key, expression.value]
+        else:
+            values = [expression.elt]
+        for generator in expression.generators:
+            values.append(generator.iter)
+            values.extend(generator.ifs)
+        return _merge(*(self.resolve(module, value) for value in values))
+
+    def _resolve_binop(self, module: _Module, expression: ast.BinOp) -> _Resolution:
+        resolved = _merge(
+            self.resolve(module, expression.left), self.resolve(module, expression.right)
+        )
+        literals = {
+            node.value
+            for node in ast.walk(expression)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        return _Resolution(
+            resolved.sources, resolved.recipe_root or {".autoskillit", "recipes"} <= literals
+        )
 
     def resolve(self, module: _Module, expression: ast.expr) -> _Resolution:
         if isinstance(expression, ast.Name):
@@ -170,65 +241,16 @@ class _ModuleIndex:
         if isinstance(expression, ast.Attribute):
             return self.resolve(module, expression.value)
         if isinstance(expression, ast.Call):
-            reference = self.reference(module, expression.func)
-            if reference in _GIT_SOURCES | _LIVE_SOURCES:
-                return _Resolution(frozenset({reference}))
-            if reference in _RECIPE_ROOT_FACTORIES:
-                return _Resolution(recipe_root=True)
-
-            receiver = (
-                self.resolve(module, expression.func.value)
-                if isinstance(expression.func, ast.Attribute)
-                else _Resolution()
-            )
-            arguments = [self.resolve(module, arg) for arg in expression.args]
-            arguments.extend(
-                self.resolve(module, keyword.value) for keyword in expression.keywords
-            )
-            if (
-                isinstance(expression.func, ast.Attribute)
-                and expression.func.attr in _LIVE_SCAN_METHODS
-            ):
-                if any(item.recipe_root for item in (receiver, *arguments)):
-                    return _merge(
-                        receiver,
-                        *arguments,
-                        _Resolution(frozenset({expression.func.attr})),
-                    )
-            if reference:
-                resolved_function = self._resolve_reference(reference)
-                if resolved_function.sources or resolved_function.recipe_root:
-                    return _merge(receiver, *arguments, resolved_function)
-            return _merge(receiver, *arguments)
+            return self._resolve_call(module, expression)
         if isinstance(expression, (ast.List, ast.Tuple, ast.Set)):
             return _merge(*(self.resolve(module, element) for element in expression.elts))
         if isinstance(expression, ast.Dict):
             values = [*expression.keys, *expression.values]
             return _merge(*(self.resolve(module, value) for value in values if value is not None))
-        if isinstance(expression, (ast.ListComp, ast.SetComp, ast.GeneratorExp)):
-            values: list[ast.expr] = [expression.elt]
-            for generator in expression.generators:
-                values.append(generator.iter)
-                values.extend(generator.ifs)
-            return _merge(*(self.resolve(module, value) for value in values))
-        if isinstance(expression, ast.DictComp):
-            values = [expression.key, expression.value]
-            for generator in expression.generators:
-                values.append(generator.iter)
-                values.extend(generator.ifs)
-            return _merge(*(self.resolve(module, value) for value in values))
+        if isinstance(expression, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            return self._resolve_comprehension(module, expression)
         if isinstance(expression, ast.BinOp):
-            resolved = _merge(
-                self.resolve(module, expression.left), self.resolve(module, expression.right)
-            )
-            literals = {
-                node.value
-                for node in ast.walk(expression)
-                if isinstance(node, ast.Constant) and isinstance(node.value, str)
-            }
-            return _Resolution(
-                resolved.sources, resolved.recipe_root or {".autoskillit", "recipes"} <= literals
-            )
+            return self._resolve_binop(module, expression)
         if isinstance(expression, ast.Subscript):
             return _merge(
                 self.resolve(module, expression.value), self.resolve(module, expression.slice)

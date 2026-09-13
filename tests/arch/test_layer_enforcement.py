@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -177,6 +178,28 @@ def _type_checking_lines(tree: ast.AST) -> set[int]:
     return lines
 
 
+def _iter_deferred_autoskillit_imports(
+    tree: ast.Module,
+) -> Iterator[tuple[ast.Import | ast.ImportFrom, list[str]]]:
+    """Yield each runtime deferred import with its AutoSkillit package stems."""
+    type_checking_lines = _type_checking_lines(tree)
+    for node in _collect_deferred_imports(tree):
+        if node.lineno in type_checking_lines:
+            continue
+        stems: list[str] = []
+        if isinstance(node, ast.ImportFrom) and node.module:
+            parts = node.module.split(".")
+            if parts[0] == "autoskillit" and len(parts) > 1:
+                stems.append(parts[1])
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[0] == "autoskillit" and len(parts) > 1:
+                    stems.append(parts[1])
+        if stems:
+            yield node, stems
+
+
 def _has_call_to(stmt: ast.stmt, func_name: str) -> bool:
     """Return True if stmt (recursively) contains a call to func_name."""
     for node in ast.walk(stmt):
@@ -195,6 +218,43 @@ def _has_await_or_return(stmt: ast.stmt) -> bool:
         if isinstance(node, (ast.Await, ast.Return)):
             return True
     return False
+
+
+def _tool_guard_order_violation(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+    required_guard: str,
+    early_guard_calls: set[str],
+) -> str | None:
+    require_idx: int | None = None
+    action_idx: int | None = None
+    for index, statement in enumerate(function.body):
+        if require_idx is None and _has_call_to(statement, required_guard):
+            require_idx = index
+        if (
+            action_idx is None
+            and _has_await_or_return(statement)
+            and not any(_has_call_to(statement, guard) for guard in early_guard_calls)
+        ):
+            action_idx = index
+    if require_idx is None:
+        return f"{function.name}: {required_guard}() never called"
+    if action_idx is not None and require_idx > action_idx:
+        return (
+            f"{function.name}: {required_guard}() called at stmt {require_idx} "
+            f"but await/return found at stmt {action_idx} first"
+        )
+    return None
+
+
+def _decorator_functional_tags(decorator: ast.expr, base_tags: frozenset[str]) -> frozenset[str]:
+    tags: set[str] = set()
+    if isinstance(decorator, ast.Call):
+        for keyword in decorator.keywords:
+            if keyword.arg == "tags" and isinstance(keyword.value, ast.Set):
+                for element in keyword.value.elts:
+                    if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                        tags.add(element.value)
+    return frozenset(tags - base_tags)
 
 
 # ── MCP tool registry tests ───────────────────────────────────────────────────
@@ -248,38 +308,36 @@ def test_gated_tools_call_require_enabled_first() -> None:
                     continue
                 if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
                     continue
-
-                # Find the statement index of first _require_enabled() call
-                # and first await/return in the function body.
-                require_idx: int | None = None
-                action_idx: int | None = None
-
-                for i, stmt in enumerate(node.body):
-                    if require_idx is None and _has_call_to(stmt, "_require_enabled"):
-                        require_idx = i
-                    # Tier-aware guard calls may precede _require_enabled —
-                    # they are valid early-exit guards, not tool logic.
-                    if (
-                        action_idx is None
-                        and _has_await_or_return(stmt)
-                        and not _has_call_to(stmt, "_require_orchestrator_or_higher")
-                        and not _has_call_to(stmt, "_require_orchestrator_exact")
-                        and not _has_call_to(stmt, "_require_fleet")
-                    ):
-                        action_idx = i
-
-                if require_idx is None:
-                    violations.append(f"{node.name}: _require_enabled() never called")
-                elif action_idx is not None and require_idx > action_idx:
-                    violations.append(
-                        f"{node.name}: _require_enabled() called at stmt {require_idx} "
-                        f"but await/return found at stmt {action_idx} first"
-                    )
+                violation = _tool_guard_order_violation(
+                    node,
+                    "_require_enabled",
+                    {
+                        "_require_orchestrator_or_higher",
+                        "_require_orchestrator_exact",
+                        "_require_fleet",
+                    },
+                )
+                if violation is not None:
+                    violations.append(violation)
 
     assert not violations, (
         "Gated tools must call _require_enabled() before any await/return:\n"
         + "\n".join(f"  {v}" for v in violations)
     )
+
+
+def _required_async_function(path: Path, name: str, missing_message: str) -> ast.AsyncFunctionDef:
+    tree = ast.parse(path.read_text())
+    function = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == name
+        ),
+        None,
+    )
+    assert function is not None, missing_message
+    return function
 
 
 def test_backend_compat_precedes_dispatch() -> None:
@@ -296,13 +354,11 @@ def test_backend_compat_precedes_dispatch() -> None:
     """
     pkg_dir = SRC_ROOT / "server" / "tools" / "tools_execution"
 
-    prepare_tree = ast.parse((pkg_dir / "_run_skill_prepare.py").read_text())
-    prepare_node: ast.AsyncFunctionDef | None = None
-    for node in ast.walk(prepare_tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_prepare_dispatch_backend":
-            prepare_node = node
-            break
-    assert prepare_node is not None, "_prepare_dispatch_backend not found in _run_skill_prepare.py"
+    prepare_node = _required_async_function(
+        pkg_dir / "_run_skill_prepare.py",
+        "_prepare_dispatch_backend",
+        "_prepare_dispatch_backend not found in _run_skill_prepare.py",
+    )
     assert any(
         isinstance(n, ast.Call)
         and isinstance(n.func, ast.Attribute)
@@ -310,17 +366,10 @@ def test_backend_compat_precedes_dispatch() -> None:
         for n in ast.walk(prepare_node)
     ), "_check_backend_compat call not found in _prepare_dispatch_backend"
 
-    finalize_tree = ast.parse((pkg_dir / "_run_skill_finalize.py").read_text())
-    finalize_node: ast.AsyncFunctionDef | None = None
-    for node in ast.walk(finalize_tree):
-        if (
-            isinstance(node, ast.AsyncFunctionDef)
-            and node.name == "_execute_and_finalize_run_skill"
-        ):
-            finalize_node = node
-            break
-    assert finalize_node is not None, (
-        "_execute_and_finalize_run_skill not found in _run_skill_finalize.py"
+    finalize_node = _required_async_function(
+        pkg_dir / "_run_skill_finalize.py",
+        "_execute_and_finalize_run_skill",
+        "_execute_and_finalize_run_skill not found in _run_skill_finalize.py",
     )
     assert any(
         isinstance(n, ast.Call)
@@ -331,13 +380,11 @@ def test_backend_compat_precedes_dispatch() -> None:
         for n in ast.walk(finalize_node)
     ), "executor.run() call not found in _execute_and_finalize_run_skill"
 
-    dispatch_tree = ast.parse((pkg_dir / "_run_skill_dispatch.py").read_text())
-    run_skill_node: ast.AsyncFunctionDef | None = None
-    for node in ast.walk(dispatch_tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "run_skill":
-            run_skill_node = node
-            break
-    assert run_skill_node is not None, "run_skill not found in _run_skill_dispatch.py"
+    run_skill_node = _required_async_function(
+        pkg_dir / "_run_skill_dispatch.py",
+        "run_skill",
+        "run_skill not found in _run_skill_dispatch.py",
+    )
 
     prepare_call_lineno: int | None = None
     finalize_call_lineno: int | None = None
@@ -418,121 +465,197 @@ def test_run_skill_public_finalizers_remain_outside_child_resource_owner() -> No
     )
 
 
+class _CurrentScopeCallCollector(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.calls: list[ast.Call] = []
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.calls.append(node)
+        self.generic_visit(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        return
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        return
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        return
+
+
+def _scan_backend_compat_expression(
+    node: ast.AST | None,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool:
+    if node is None:
+        return compat_seen
+    collector = _CurrentScopeCallCollector()
+    collector.visit(node)
+    for call in collector.calls:
+        call_func = call.func
+        is_executor_run = (
+            isinstance(call_func, ast.Attribute)
+            and call_func.attr == "run"
+            and isinstance(call_func.value, ast.Attribute)
+            and call_func.value.attr == "executor"
+        )
+        is_compat = isinstance(call_func, ast.Name) and call_func.id in compat_calls
+        if is_executor_run and not compat_seen:
+            violations.append(call.lineno)
+        if is_compat:
+            compat_seen = True
+    return compat_seen
+
+
+def _merge_backend_compat_paths(*states: bool | None) -> bool | None:
+    reachable = [state for state in states if state is not None]
+    return all(reachable) if reachable else None
+
+
+def _scan_backend_compat_block(
+    statements: list[ast.stmt],
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    state: bool | None = compat_seen
+    for statement in statements:
+        if state is None:
+            break
+        state = _scan_backend_compat_statement(statement, state, compat_calls, violations)
+    return state
+
+
+def _scan_backend_compat_if(
+    statement: ast.If,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    branch_state = _scan_backend_compat_expression(
+        statement.test, compat_seen, compat_calls, violations
+    )
+    body_state = _scan_backend_compat_block(statement.body, branch_state, compat_calls, violations)
+    else_state = (
+        _scan_backend_compat_block(statement.orelse, branch_state, compat_calls, violations)
+        if statement.orelse
+        else branch_state
+    )
+    return _merge_backend_compat_paths(body_state, else_state)
+
+
+def _scan_backend_compat_loop(
+    statement: ast.For | ast.AsyncFor | ast.While,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    expression = statement.test if isinstance(statement, ast.While) else statement.iter
+    loop_state = _scan_backend_compat_expression(expression, compat_seen, compat_calls, violations)
+    body_state = _scan_backend_compat_block(statement.body, loop_state, compat_calls, violations)
+    after_loop = _merge_backend_compat_paths(loop_state, body_state)
+    if statement.orelse and after_loop is not None:
+        return _scan_backend_compat_block(statement.orelse, after_loop, compat_calls, violations)
+    return after_loop
+
+
+def _scan_backend_compat_with(
+    statement: ast.With | ast.AsyncWith,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    body_state = compat_seen
+    for item in statement.items:
+        body_state = _scan_backend_compat_expression(
+            item.context_expr, body_state, compat_calls, violations
+        )
+        body_state = _scan_backend_compat_expression(
+            item.optional_vars, body_state, compat_calls, violations
+        )
+    return _scan_backend_compat_block(statement.body, body_state, compat_calls, violations)
+
+
+def _scan_backend_compat_try(
+    statement: ast.Try | ast.TryStar,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    body_state = _scan_backend_compat_block(statement.body, compat_seen, compat_calls, violations)
+    if statement.orelse and body_state is not None:
+        body_state = _scan_backend_compat_block(
+            statement.orelse, body_state, compat_calls, violations
+        )
+    handler_states = [
+        _scan_backend_compat_block(handler.body, compat_seen, compat_calls, violations)
+        for handler in statement.handlers
+    ]
+    merged = _merge_backend_compat_paths(body_state, *handler_states)
+    if not statement.finalbody:
+        return merged
+    final_entry = merged if merged is not None else compat_seen
+    final_state = _scan_backend_compat_block(
+        statement.finalbody, final_entry, compat_calls, violations
+    )
+    return final_state if merged is not None else None
+
+
+def _scan_backend_compat_match(
+    statement: ast.Match,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    match_state = _scan_backend_compat_expression(
+        statement.subject, compat_seen, compat_calls, violations
+    )
+    case_states = [
+        _scan_backend_compat_block(case.body, match_state, compat_calls, violations)
+        for case in statement.cases
+    ]
+    return _merge_backend_compat_paths(match_state, *case_states)
+
+
+def _scan_backend_compat_statement(
+    statement: ast.stmt,
+    compat_seen: bool,
+    compat_calls: set[str],
+    violations: list[int],
+) -> bool | None:
+    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return compat_seen
+    if isinstance(statement, ast.If):
+        return _scan_backend_compat_if(statement, compat_seen, compat_calls, violations)
+    if isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
+        return _scan_backend_compat_loop(statement, compat_seen, compat_calls, violations)
+    if isinstance(statement, (ast.With, ast.AsyncWith)):
+        return _scan_backend_compat_with(statement, compat_seen, compat_calls, violations)
+    if isinstance(statement, (ast.Try, ast.TryStar)):
+        return _scan_backend_compat_try(statement, compat_seen, compat_calls, violations)
+    if isinstance(statement, ast.Match):
+        return _scan_backend_compat_match(statement, compat_seen, compat_calls, violations)
+    if isinstance(statement, (ast.Return, ast.Raise)):
+        value = statement.value if isinstance(statement, ast.Return) else statement.exc
+        _scan_backend_compat_expression(value, compat_seen, compat_calls, violations)
+        return None
+    if isinstance(statement, (ast.Break, ast.Continue)):
+        return None
+    return _scan_backend_compat_expression(statement, compat_seen, compat_calls, violations)
+
+
 def _backend_compat_dominance_violations(
     func_node: ast.FunctionDef | ast.AsyncFunctionDef,
     compat_calls: set[str],
 ) -> list[int]:
     """Return executor.run lines not dominated by a compat call in this scope."""
     violations: list[int] = []
-
-    class _CurrentScopeCalls(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.calls: list[ast.Call] = []
-
-        def visit_Call(self, node: ast.Call) -> None:
-            self.calls.append(node)
-            self.generic_visit(node)
-
-        def visit_Lambda(self, node: ast.Lambda) -> None:
-            return
-
-        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            return
-
-        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-            return
-
-        def visit_ClassDef(self, node: ast.ClassDef) -> None:
-            return
-
-    def scan_expression(node: ast.AST | None, compat_seen: bool) -> bool:
-        if node is None:
-            return compat_seen
-        visitor = _CurrentScopeCalls()
-        visitor.visit(node)
-        for call in visitor.calls:
-            call_func = call.func
-            is_executor_run = (
-                isinstance(call_func, ast.Attribute)
-                and call_func.attr == "run"
-                and isinstance(call_func.value, ast.Attribute)
-                and call_func.value.attr == "executor"
-            )
-            is_compat = isinstance(call_func, ast.Name) and call_func.id in compat_calls
-            if is_executor_run and not compat_seen:
-                violations.append(call.lineno)
-            if is_compat:
-                compat_seen = True
-        return compat_seen
-
-    def merge_paths(*states: bool | None) -> bool | None:
-        reachable = [state for state in states if state is not None]
-        return all(reachable) if reachable else None
-
-    def scan_block(statements: list[ast.stmt], compat_seen: bool) -> bool | None:
-        state: bool | None = compat_seen
-        for statement in statements:
-            if state is None:
-                break
-            state = scan_statement(statement, state)
-        return state
-
-    def scan_statement(statement: ast.stmt, compat_seen: bool) -> bool | None:
-        if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            return compat_seen
-        if isinstance(statement, ast.If):
-            branch_state = scan_expression(statement.test, compat_seen)
-            body_state = scan_block(statement.body, branch_state)
-            else_state = (
-                scan_block(statement.orelse, branch_state) if statement.orelse else branch_state
-            )
-            return merge_paths(body_state, else_state)
-        if isinstance(statement, (ast.For, ast.AsyncFor)):
-            loop_state = scan_expression(statement.iter, compat_seen)
-            body_state = scan_block(statement.body, loop_state)
-            after_loop = merge_paths(loop_state, body_state)
-            if statement.orelse and after_loop is not None:
-                return scan_block(statement.orelse, after_loop)
-            return after_loop
-        if isinstance(statement, ast.While):
-            loop_state = scan_expression(statement.test, compat_seen)
-            body_state = scan_block(statement.body, loop_state)
-            after_loop = merge_paths(loop_state, body_state)
-            if statement.orelse and after_loop is not None:
-                return scan_block(statement.orelse, after_loop)
-            return after_loop
-        if isinstance(statement, (ast.With, ast.AsyncWith)):
-            body_state = compat_seen
-            for item in statement.items:
-                body_state = scan_expression(item.context_expr, body_state)
-                body_state = scan_expression(item.optional_vars, body_state)
-            return scan_block(statement.body, body_state)
-        if isinstance(statement, (ast.Try, ast.TryStar)):
-            body_state = scan_block(statement.body, compat_seen)
-            if statement.orelse and body_state is not None:
-                body_state = scan_block(statement.orelse, body_state)
-            handler_states = [
-                scan_block(handler.body, compat_seen) for handler in statement.handlers
-            ]
-            merged = merge_paths(body_state, *handler_states)
-            if statement.finalbody:
-                final_entry = merged if merged is not None else compat_seen
-                final_state = scan_block(statement.finalbody, final_entry)
-                return final_state if merged is not None else None
-            return merged
-        if isinstance(statement, ast.Match):
-            match_state = scan_expression(statement.subject, compat_seen)
-            case_states = [scan_block(case.body, match_state) for case in statement.cases]
-            return merge_paths(match_state, *case_states)
-        if isinstance(statement, (ast.Return, ast.Raise)):
-            value = statement.value if isinstance(statement, ast.Return) else statement.exc
-            scan_expression(value, compat_seen)
-            return None
-        if isinstance(statement, (ast.Break, ast.Continue)):
-            return None
-        return scan_expression(statement, compat_seen)
-
-    scan_block(func_node.body, False)
+    _scan_backend_compat_block(func_node.body, False, compat_calls, violations)
     return violations
 
 
@@ -585,13 +708,6 @@ def test_fleet_tools_call_require_fleet() -> None:
     from autoskillit.core.types._type_constants_registries import FLEET_TOOLS
 
     FLEET_GUARD_EXEMPT = {"batch_cleanup_clones"}
-    GUARD_FUNCS = {
-        "_require_enabled",
-        "_require_fleet",
-        "_require_orchestrator_or_higher",
-        "_require_orchestrator_exact",
-    }
-
     server_dir = SRC_ROOT / "server"
     violations: list[str] = []
 
@@ -604,27 +720,18 @@ def test_fleet_tools_call_require_fleet() -> None:
                     continue
                 if not any(_is_mcp_tool_decorator(d) for d in node.decorator_list):
                     continue
-
-                require_idx: int | None = None
-                action_idx: int | None = None
-
-                for i, stmt in enumerate(node.body):
-                    if require_idx is None and _has_call_to(stmt, "_require_fleet"):
-                        require_idx = i
-                    if (
-                        action_idx is None
-                        and _has_await_or_return(stmt)
-                        and not any(_has_call_to(stmt, g) for g in GUARD_FUNCS)
-                    ):
-                        action_idx = i
-
-                if require_idx is None:
-                    violations.append(f"{node.name}: _require_fleet() never called")
-                elif action_idx is not None and require_idx > action_idx:
-                    violations.append(
-                        f"{node.name}: _require_fleet() called at stmt {require_idx} "
-                        f"but await/return found at stmt {action_idx} first"
-                    )
+                violation = _tool_guard_order_violation(
+                    node,
+                    "_require_fleet",
+                    {
+                        "_require_enabled",
+                        "_require_fleet",
+                        "_require_orchestrator_or_higher",
+                        "_require_orchestrator_exact",
+                    },
+                )
+                if violation is not None:
+                    violations.append(violation)
 
     assert not violations, (
         "Fleet tools must call _require_fleet() before any non-guard await/return:\n"
@@ -754,23 +861,7 @@ def test_il2_no_deferred_upward_imports(pkg_name: str) -> None:
     for py_file in pkg_dir.rglob("*.py"):
         source = py_file.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(py_file))
-        deferred_nodes = _collect_deferred_imports(tree)
-        tc_lines = _type_checking_lines(tree)
-
-        for node in deferred_nodes:
-            if node.lineno in tc_lines:
-                continue
-            stems_to_check: list[str] = []
-            if isinstance(node, ast.ImportFrom) and node.module:
-                parts = node.module.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    stems_to_check = [parts[1]]
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    parts = alias.name.split(".")
-                    if parts[0] == "autoskillit" and len(parts) > 1:
-                        stems_to_check.append(parts[1])
-
+        for node, stems_to_check in _iter_deferred_autoskillit_imports(tree):
             for imported_stem in stems_to_check:
                 if imported_stem not in SUBPACKAGE_LAYERS:
                     continue
@@ -799,25 +890,9 @@ def test_il3_unnecessary_deferred_imports() -> None:
     for py_file in sorted(server_dir.rglob("*.py")):
         source = py_file.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(py_file))
-        deferred_nodes = _collect_deferred_imports(tree)
-        tc_lines = _type_checking_lines(tree)
         source_lines = source.splitlines()
 
-        for node in deferred_nodes:
-            if node.lineno in tc_lines:
-                continue
-
-            stems: list[str] = []
-            if isinstance(node, ast.ImportFrom) and node.module:
-                parts = node.module.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    stems = [parts[1]]
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    parts = alias.name.split(".")
-                    if parts[0] == "autoskillit" and len(parts) > 1:
-                        stems.append(parts[1])
-
+        for node, stems in _iter_deferred_autoskillit_imports(tree):
             for imported_stem in stems:
                 if imported_stem not in SUBPACKAGE_LAYERS:
                     continue
@@ -851,28 +926,9 @@ def test_il3_deferred_autoskillit_imports_tagged() -> None:
     for py_file in sorted(server_dir.rglob("*.py")):
         source = py_file.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(py_file))
-        deferred_nodes = _collect_deferred_imports(tree)
-        tc_lines = _type_checking_lines(tree)
         source_lines = source.splitlines()
 
-        for node in deferred_nodes:
-            if node.lineno in tc_lines:
-                continue
-
-            is_autoskillit = False
-            if isinstance(node, ast.ImportFrom) and node.module:
-                parts = node.module.split(".")
-                if parts[0] == "autoskillit" and len(parts) > 1:
-                    is_autoskillit = True
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    parts = alias.name.split(".")
-                    if parts[0] == "autoskillit" and len(parts) > 1:
-                        is_autoskillit = True
-
-            if not is_autoskillit:
-                continue
-
+        for node, _ in _iter_deferred_autoskillit_imports(tree):
             line_text = source_lines[node.lineno - 1]
             if "# circular-break" not in line_text:
                 violations.append(
@@ -1629,14 +1685,7 @@ def test_tool_subset_tags_match_decorators() -> None:
             for dec in node.decorator_list:
                 if not _is_mcp_tool_decorator(dec):
                     continue
-                tags: set[str] = set()
-                if isinstance(dec, ast.Call):
-                    for kw in dec.keywords:
-                        if kw.arg == "tags" and isinstance(kw.value, ast.Set):
-                            for elt in kw.value.elts:
-                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                    tags.add(elt.value)
-                decorator_tags[node.name] = frozenset(tags - BASE_TAGS)
+                decorator_tags[node.name] = _decorator_functional_tags(dec, BASE_TAGS)
 
     mismatches: list[str] = []
     for tool_name, functional in decorator_tags.items():

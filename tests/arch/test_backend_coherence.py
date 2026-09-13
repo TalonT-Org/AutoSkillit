@@ -37,22 +37,15 @@ def test_all_experimental_features_with_infrastructure_swap_have_alignment_guard
     source = inspect.getsource(_factory.make_context)
     tree = ast.parse(source)
 
-    backend_assignments: list[ast.Assign] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "backend":
-                    backend_assignments.append(node)
-
     swapped_features: set[str] = set()
     for if_node in ast.walk(tree):
         if not isinstance(if_node, ast.If):
             continue
-        for assign in backend_assignments:
-            if any(_node_contains(child, assign) for child in if_node.body):
-                feat = _extract_feature_name(if_node.test)
-                if feat:
-                    swapped_features.add(feat)
+        if not _body_assigns_backend(if_node.body):
+            continue
+        feat = _extract_feature_name(if_node.test)
+        if feat:
+            swapped_features.add(feat)
 
     for feat_name in swapped_features:
         if feat_name in FEATURE_REGISTRY:
@@ -63,12 +56,16 @@ def test_all_experimental_features_with_infrastructure_swap_have_alignment_guard
             )
 
 
-def _node_contains(parent: ast.AST, target: ast.AST) -> bool:
-    if parent is target:
-        return True
-    for child in ast.walk(parent):
-        if child is target:
-            return True
+def _body_assigns_backend(statements: list[ast.stmt]) -> bool:
+    """Return whether an if-body descendant assigns a Name target ``backend``."""
+    for statement in statements:
+        for node in ast.walk(statement):
+            if not isinstance(node, ast.Assign):
+                continue
+            if any(
+                isinstance(target, ast.Name) and target.id == "backend" for target in node.targets
+            ):
+                return True
     return False
 
 

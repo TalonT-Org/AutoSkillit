@@ -25,13 +25,10 @@ def _capacity_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
         if isinstance(node, ast.Assign) and isinstance(node.value, ast.Attribute):
             if node.value.attr not in {*_CAPACITY_FUNCTIONS, "CompactedFrameSizer"}:
                 continue
-            for target in node.targets:
-                if not isinstance(target, ast.Name):
-                    continue
-                if node.value.attr == "CompactedFrameSizer":
-                    sizer_aliases.add(target.id)
-                else:
-                    function_aliases.add(target.id)
+            aliases = (
+                sizer_aliases if node.value.attr == "CompactedFrameSizer" else function_aliases
+            )
+            aliases.update(target.id for target in node.targets if isinstance(target, ast.Name))
     return function_aliases, sizer_aliases
 
 

@@ -9,6 +9,7 @@ import ast
 import re
 import warnings
 from collections import defaultdict
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -123,14 +124,7 @@ def _build_core_reexport_map() -> dict[str, str]:
 _AUTOSKILLIT_DUNDER_STEMS: frozenset[str] = frozenset({"__init__", "__main__"})
 
 
-def _build_package_reverse_graph() -> dict[str, set[str]]:
-    """
-    REQ-GUARD-001 (package level).
-
-    Scans all src files for `from autoskillit.{pkg}[.anything] import ...`.
-    Returns {source_pkg: set[consuming_pkg]}.
-    """
-    graph: defaultdict[str, set[str]] = defaultdict(set)
+def _iter_owned_source_trees(graph_kind: str) -> Iterator[tuple[str, ast.Module]]:
     for filepath in _all_src_files():
         consumer_pkg = _file_to_package(str(filepath))
         if consumer_pkg is None:
@@ -139,10 +133,23 @@ def _build_package_reverse_graph() -> dict[str, set[str]]:
             tree = ast.parse(filepath.read_text(encoding="utf-8"))
         except SyntaxError as exc:
             warnings.warn(
-                f"SyntaxError parsing {filepath}: {exc} — skipping file in package reverse graph",
-                stacklevel=2,
+                f"SyntaxError parsing {filepath}: {exc} — skipping file "
+                f"in {graph_kind} reverse graph",
+                stacklevel=3,
             )
             continue
+        yield consumer_pkg, tree
+
+
+def _build_package_reverse_graph() -> dict[str, set[str]]:
+    """
+    REQ-GUARD-001 (package level).
+
+    Scans all src files for `from autoskillit.{pkg}[.anything] import ...`.
+    Returns {source_pkg: set[consuming_pkg]}.
+    """
+    graph: defaultdict[str, set[str]] = defaultdict(set)
+    for consumer_pkg, tree in _iter_owned_source_trees("package"):
         for node in ast.walk(tree):
             if not (isinstance(node, ast.ImportFrom) and node.module):
                 continue
@@ -169,18 +176,7 @@ def _build_pkg_module_reverse_graph(
     at level=0) are invisible to this function; callers must handle them separately.
     """
     graph: defaultdict[str, set[str]] = defaultdict(set)
-    for filepath in _all_src_files():
-        consumer_pkg = _file_to_package(str(filepath))
-        if consumer_pkg is None:
-            continue
-        try:
-            tree = ast.parse(filepath.read_text(encoding="utf-8"))
-        except SyntaxError as exc:
-            warnings.warn(
-                f"SyntaxError parsing {filepath}: {exc} — skipping file in module reverse graph",
-                stacklevel=2,
-            )
-            continue
+    for consumer_pkg, tree in _iter_owned_source_trees("module"):
         for node in ast.walk(tree):
             if not (isinstance(node, ast.ImportFrom) and node.module):
                 continue
@@ -231,6 +227,25 @@ def _build_server_cross_layer_requirements() -> dict[str, set[str]]:
     return requirements
 
 
+def _recipe_absolute_import_stems(tree: ast.Module, recipe_dir: Path) -> Iterator[str]:
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.ImportFrom) and node.level == 0 and node.module):
+            continue
+        if node.module == "autoskillit.recipe":
+            for alias in node.names:
+                stem = alias.name
+                if (recipe_dir / f"{stem}.py").exists():
+                    yield stem
+        elif node.module.startswith("autoskillit.recipe."):
+            parts = node.module.split(".")
+            subpkg_path = recipe_dir / "/".join(parts[2:])
+            if subpkg_path.is_dir():
+                for alias in node.names:
+                    name = alias.name
+                    if (subpkg_path / f"{name}.py").exists():
+                        yield name
+
+
 def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
     """REQ-GUARD-001 (module level, recipe). Returns {stem: set[consuming_pkg]}."""
     graph = _build_pkg_module_reverse_graph("recipe", _build_reexport_map("recipe"))
@@ -245,22 +260,8 @@ def _build_recipe_module_reverse_graph() -> dict[str, set[str]]:
                 stacklevel=2,
             )
             return graph
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.ImportFrom) and node.level == 0 and node.module):
-                continue
-            if node.module == "autoskillit.recipe":
-                for alias in node.names:
-                    stem = alias.name
-                    if (recipe_init.parent / f"{stem}.py").exists():
-                        graph.setdefault(stem, set()).add("recipe")
-            elif node.module.startswith("autoskillit.recipe."):
-                parts = node.module.split(".")
-                subpkg_path = recipe_init.parent / "/".join(parts[2:])
-                if subpkg_path.is_dir():
-                    for alias in node.names:
-                        name = alias.name
-                        if (subpkg_path / f"{name}.py").exists():
-                            graph.setdefault(name, set()).add("recipe")
+        for stem in _recipe_absolute_import_stems(tree, recipe_init.parent):
+            graph.setdefault(stem, set()).add("recipe")
     return graph
 
 
@@ -699,6 +700,21 @@ class TestLayerCascadeConservativeGuard:
         )
 
 
+def _imported_autoskillit_packages(tree: ast.Module) -> set[str]:
+    packages = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            modules = (node.module,)
+        elif isinstance(node, ast.Import):
+            modules = tuple(alias.name for alias in node.names)
+        else:
+            continue
+        for module in modules:
+            if module.startswith("autoskillit."):
+                packages.add(module.split(".")[1])
+    return packages
+
+
 class TestFileLevelCascadeDriftGuard:
     """REQ-GUARD-005: File-level cascade entries must cover all test-file importers."""
 
@@ -725,19 +741,7 @@ class TestFileLevelCascadeDriftGuard:
                     tree = ast.parse(test_file.read_text(encoding="utf-8"))
                 except SyntaxError:
                     continue
-                imported_pkgs: set[str] = set()
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.ImportFrom) and node.module:
-                        if node.module.startswith("autoskillit."):
-                            parts = node.module.split(".")
-                            if len(parts) >= 2:
-                                imported_pkgs.add(parts[1])
-                    elif isinstance(node, ast.Import):
-                        for alias in node.names:
-                            if alias.name.startswith("autoskillit."):
-                                parts = alias.name.split(".")
-                                if len(parts) >= 2:
-                                    imported_pkgs.add(parts[1])
+                imported_pkgs = _imported_autoskillit_packages(tree)
 
                 fname = test_file.name
                 for pkg, declared_files in pkg_map.items():
@@ -821,19 +825,7 @@ class TestFileLevelCascadeImportGuard:
                     tree = ast.parse(test_file.read_text(encoding="utf-8"))
                 except SyntaxError:
                     continue
-                imported_pkgs: set[str] = set()
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.ImportFrom) and node.module:
-                        if node.module.startswith("autoskillit."):
-                            parts = node.module.split(".")
-                            if len(parts) >= 2:
-                                imported_pkgs.add(parts[1])
-                    elif isinstance(node, ast.Import):
-                        for alias in node.names:
-                            if alias.name.startswith("autoskillit."):
-                                parts = alias.name.split(".")
-                                if len(parts) >= 2:
-                                    imported_pkgs.add(parts[1])
+                imported_pkgs = _imported_autoskillit_packages(tree)
                 if pkg not in imported_pkgs:
                     violations.append(f"{pkg!r} -> {entry}")
 

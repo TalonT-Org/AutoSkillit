@@ -8,6 +8,7 @@ uses tag strings present in ALL_VISIBILITY_TAGS ∪ CATEGORY_TAGS.
 from __future__ import annotations
 
 import ast
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,37 @@ def _iter_tool_modules(tools_dir: Path) -> list[Path]:
                     continue
                 paths.append(submodule)
     return paths
+
+
+def _iter_tool_decorators(
+    tools_dir: Path,
+) -> Iterator[tuple[Path, ast.FunctionDef | ast.AsyncFunctionDef, ast.Call]]:
+    for path in sorted(_iter_tool_modules(tools_dir)):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for decorator in node.decorator_list:
+                if (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "tool"
+                ):
+                    yield path, node, decorator
+
+
+def _iter_literal_string_tag_values(tag_set: ast.Set) -> Iterator[str]:
+    for element in tag_set.elts:
+        if isinstance(element, ast.Constant) and isinstance(element.value, str):
+            yield element.value
+
+
+def _is_pytest_fixture_decorator(decorator: ast.expr) -> bool:
+    return (
+        isinstance(decorator, ast.Call)
+        and isinstance(decorator.func, ast.Attribute)
+        and decorator.func.attr == "fixture"
+    ) or (isinstance(decorator, ast.Attribute) and decorator.attr == "fixture")
 
 
 def test_all_visibility_tags_constant_exists():
@@ -104,13 +136,7 @@ class _ConfTestVisitor(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         is_fixture = any(
-            (
-                isinstance(d, ast.Call)
-                and isinstance(d.func, ast.Attribute)
-                and d.func.attr == "fixture"
-            )
-            or (isinstance(d, ast.Attribute) and d.attr == "fixture")
-            for d in node.decorator_list
+            _is_pytest_fixture_decorator(decorator) for decorator in node.decorator_list
         )
         if not is_fixture:
             self.generic_visit(node)
@@ -195,6 +221,52 @@ def test_root_conftest_has_transforms_cleanup():
     )
 
 
+def _class_fixture_literal_disable_violations(
+    fixture: ast.FunctionDef | ast.AsyncFunctionDef,
+    source_path: Path,
+    class_name: str,
+) -> list[str]:
+    violations: list[str] = []
+    for child in ast.walk(fixture):
+        if not (
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Attribute)
+            and child.func.attr == "disable"
+        ):
+            continue
+        for keyword in child.keywords:
+            if keyword.arg == "tags" and isinstance(keyword.value, ast.Set):
+                tag_vals = {
+                    element.value
+                    for element in keyword.value.elts
+                    if isinstance(element, ast.Constant)
+                }
+                if tag_vals:
+                    relative_path = source_path.relative_to(_TESTS_ROOT)
+                    violations.append(
+                        f"{relative_path}:{child.lineno} "
+                        f"class={class_name} "
+                        f"hardcoded={sorted(tag_vals)}"
+                    )
+    return violations
+
+
+def _inline_transform_clear_lines(
+    function: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[int]:
+    return [
+        child.lineno
+        for child in ast.walk(function)
+        if (
+            isinstance(child, ast.Call)
+            and isinstance(child.func, ast.Attribute)
+            and child.func.attr == "clear"
+            and isinstance(child.func.value, ast.Attribute)
+            and child.func.value.attr == "_transforms"
+        )
+    ]
+
+
 def test_class_level_fixtures_use_canonical_tags():
     """Class-level _reset_mcp_visibility fixtures must use ALL_VISIBILITY_TAGS."""
     violations = []
@@ -213,27 +285,7 @@ def test_class_level_fixtures_use_canonical_tags():
                     continue
                 if item.name != "_reset_mcp_visibility":
                     continue
-
-                for child in ast.walk(item):
-                    if (
-                        isinstance(child, ast.Call)
-                        and isinstance(child.func, ast.Attribute)
-                        and child.func.attr == "disable"
-                    ):
-                        for kw in child.keywords:
-                            if kw.arg == "tags" and isinstance(kw.value, ast.Set):
-                                tag_vals = {
-                                    elt.value
-                                    for elt in kw.value.elts
-                                    if isinstance(elt, ast.Constant)
-                                }
-                                if tag_vals:
-                                    rel = path.relative_to(_TESTS_ROOT)
-                                    violations.append(
-                                        f"{rel}:{child.lineno} "
-                                        f"class={node.name} "
-                                        f"hardcoded={sorted(tag_vals)}"
-                                    )
+                violations.extend(_class_fixture_literal_disable_violations(item, path, node.name))
 
     assert not violations, (
         "Class-level _reset_mcp_visibility fixtures with hardcoded tag sets "
@@ -258,27 +310,12 @@ def test_inline_transforms_clear_has_finally_guard():
                 continue
 
             is_fixture = any(
-                (
-                    isinstance(d, ast.Call)
-                    and isinstance(d.func, ast.Attribute)
-                    and d.func.attr == "fixture"
-                )
-                or (isinstance(d, ast.Attribute) and d.attr == "fixture")
-                for d in node.decorator_list
+                _is_pytest_fixture_decorator(decorator) for decorator in node.decorator_list
             )
             if is_fixture:
                 continue
 
-            clear_calls = []
-            for child in ast.walk(node):
-                if (
-                    isinstance(child, ast.Call)
-                    and isinstance(child.func, ast.Attribute)
-                    and child.func.attr == "clear"
-                    and isinstance(child.func.value, ast.Attribute)
-                    and child.func.value.attr == "_transforms"
-                ):
-                    clear_calls.append(child.lineno)
+            clear_calls = _inline_transform_clear_lines(node)
 
             if len(clear_calls) < 1:
                 continue
@@ -320,18 +357,90 @@ def test_session_type_visibility_uses_known_tags():
             if kw.arg != "tags":
                 continue
             if isinstance(kw.value, ast.Set):
-                for elt in kw.value.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                        if elt.value not in allowed:
-                            literal_tag_violations.append(
-                                f"line {node.lineno}: {elt.value!r} not in "
-                                f"ALL_VISIBILITY_TAGS ∪ CATEGORY_TAGS"
-                            )
+                for tag in _iter_literal_string_tag_values(kw.value):
+                    if tag not in allowed:
+                        literal_tag_violations.append(
+                            f"line {node.lineno}: {tag!r} not in "
+                            f"ALL_VISIBILITY_TAGS ∪ CATEGORY_TAGS"
+                        )
 
     assert not literal_tag_violations, (
         "Tag string literals in _session_type.py not in canonical sets:\n"
         + "\n".join(f"  {v}" for v in literal_tag_violations)
     )
+
+
+def _canonical_startup_visibility_loop_variable(node: ast.For) -> str | None:
+    iterable = node.iter
+    uses_all_visibility_tags = (
+        isinstance(iterable, ast.Name) and iterable.id == "ALL_VISIBILITY_TAGS"
+    ) or (
+        isinstance(iterable, ast.Call)
+        and isinstance(iterable.func, ast.Name)
+        and iterable.func.id == "sorted"
+        and len(iterable.args) == 1
+        and isinstance(iterable.args[0], ast.Name)
+        and iterable.args[0].id == "ALL_VISIBILITY_TAGS"
+    )
+    if not uses_all_visibility_tags or not isinstance(node.target, ast.Name):
+        return None
+    return node.target.id
+
+
+def _is_loop_variable_disable_call(
+    call: ast.Call, keyword: ast.keyword, loop_variable: str
+) -> bool:
+    return (
+        isinstance(call.func, ast.Attribute)
+        and call.func.attr == "disable"
+        and keyword.arg == "tags"
+        and isinstance(keyword.value, ast.Set)
+        and len(keyword.value.elts) == 1
+        and isinstance(keyword.value.elts[0], ast.Name)
+        and keyword.value.elts[0].id == loop_variable
+    )
+
+
+def _canonical_startup_loop_disable_count(tree: ast.Module) -> int:
+    count = 0
+    for node in tree.body:
+        if not isinstance(node, ast.For):
+            continue
+        loop_variable = _canonical_startup_visibility_loop_variable(node)
+        if loop_variable is None:
+            continue
+        for statement in node.body:
+            if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+                continue
+            for keyword in statement.value.keywords:
+                if _is_loop_variable_disable_call(statement.value, keyword, loop_variable):
+                    count += 1
+    return count
+
+
+def _standalone_literal_disable_diagnostics(tree: ast.Module) -> list[str]:
+    diagnostics: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, ast.Expr):
+            continue
+        call = node.value
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "disable"
+        ):
+            continue
+        for keyword in call.keywords:
+            if keyword.arg != "tags" or not isinstance(keyword.value, ast.Set):
+                continue
+            tag_vals = {
+                element.value
+                for element in keyword.value.elts
+                if isinstance(element, ast.Constant) and isinstance(element.value, str)
+            }
+            if tag_vals:
+                diagnostics.append(f"line {node.lineno}: mcp.disable(tags={sorted(tag_vals)})")
+    return diagnostics
 
 
 def test_startup_disables_all_visibility_tags():
@@ -346,71 +455,8 @@ def test_startup_disables_all_visibility_tags():
     source = server_init.read_text()
     tree = ast.parse(source, filename=str(server_init))
 
-    canonical_loop_count = 0
-    standalone_literal_disables = []
-
-    for node in tree.body:
-        if isinstance(node, ast.For):
-            iter_node = node.iter
-            uses_all_visibility_tags = (
-                isinstance(iter_node, ast.Name) and iter_node.id == "ALL_VISIBILITY_TAGS"
-            ) or (
-                isinstance(iter_node, ast.Call)
-                and isinstance(iter_node.func, ast.Name)
-                and iter_node.func.id == "sorted"
-                and len(iter_node.args) == 1
-                and isinstance(iter_node.args[0], ast.Name)
-                and iter_node.args[0].id == "ALL_VISIBILITY_TAGS"
-            )
-            if not uses_all_visibility_tags:
-                continue
-
-            loop_var = node.target.id if isinstance(node.target, ast.Name) else None
-            if loop_var is None:
-                continue
-
-            for stmt in node.body:
-                if not isinstance(stmt, ast.Expr):
-                    continue
-                call = stmt.value
-                if not (
-                    isinstance(call, ast.Call)
-                    and isinstance(call.func, ast.Attribute)
-                    and call.func.attr == "disable"
-                ):
-                    continue
-                for kw in call.keywords:
-                    if kw.arg != "tags":
-                        continue
-                    if (
-                        isinstance(kw.value, ast.Set)
-                        and len(kw.value.elts) == 1
-                        and isinstance(kw.value.elts[0], ast.Name)
-                        and kw.value.elts[0].id == loop_var
-                    ):
-                        canonical_loop_count += 1
-
-        elif isinstance(node, ast.Expr):
-            call = node.value
-            if not (
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Attribute)
-                and call.func.attr == "disable"
-            ):
-                continue
-            for kw in call.keywords:
-                if kw.arg != "tags":
-                    continue
-                if isinstance(kw.value, ast.Set):
-                    tag_vals = {
-                        elt.value
-                        for elt in kw.value.elts
-                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                    }
-                    if tag_vals:
-                        standalone_literal_disables.append(
-                            f"line {node.lineno}: mcp.disable(tags={sorted(tag_vals)})"
-                        )
+    canonical_loop_count = _canonical_startup_loop_disable_count(tree)
+    standalone_literal_disables = _standalone_literal_disable_diagnostics(tree)
 
     assert canonical_loop_count == 1, (
         "server/__init__.py must have exactly one top-level for-loop over ALL_VISIBILITY_TAGS "
@@ -431,44 +477,19 @@ def test_tool_decorators_enforce_tag_partition():
     tools_dir = _SRC_ROOT / "server" / "tools"
     violations = []
 
-    for path in sorted(_iter_tool_modules(tools_dir)):
-        source = path.read_text()
-        tree = ast.parse(source, filename=str(path))
-
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-
-            func_name = node.name
-
-            for decorator in node.decorator_list:
-                if not (
-                    isinstance(decorator, ast.Call)
-                    and isinstance(decorator.func, ast.Attribute)
-                    and decorator.func.attr == "tool"
-                ):
-                    continue
-
-                tags_value = None
-                for kw in decorator.keywords:
-                    if kw.arg == "tags":
-                        tags_value = kw.value
-                        break
-
-                if tags_value is None or not isinstance(tags_value, ast.Set):
-                    continue
-
-                tag_set = {
-                    elt.value
-                    for elt in tags_value.elts
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                }
-
-                has_kitchen = "kitchen" in tag_set
-                has_fleet_subset = bool({"fleet", "fleet-dispatch"} & tag_set)
-
-                if has_kitchen and has_fleet_subset:
-                    violations.append(f"{path.name}:{node.lineno} {func_name} → {sorted(tag_set)}")
+    for path, node, decorator in _iter_tool_decorators(tools_dir):
+        tags_value = None
+        for keyword in decorator.keywords:
+            if keyword.arg == "tags":
+                tags_value = keyword.value
+                break
+        if tags_value is None or not isinstance(tags_value, ast.Set):
+            continue
+        tag_set = set(_iter_literal_string_tag_values(tags_value))
+        has_kitchen = "kitchen" in tag_set
+        has_fleet_subset = bool({"fleet", "fleet-dispatch"} & tag_set)
+        if has_kitchen and has_fleet_subset:
+            violations.append(f"{path.name}:{node.lineno} {node.name} → {sorted(tag_set)}")
 
     assert not violations, (
         "Tag partition violations (kitchen + fleet/fleet-dispatch on same tool):\n"
@@ -481,28 +502,13 @@ def test_tool_tags_are_literal_sets():
     tools_dir = _SRC_ROOT / "server" / "tools"
     non_literals = []
 
-    for path in sorted(_iter_tool_modules(tools_dir)):
-        source = path.read_text()
-        tree = ast.parse(source, filename=str(path))
-
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-
-            for decorator in node.decorator_list:
-                if not (
-                    isinstance(decorator, ast.Call)
-                    and isinstance(decorator.func, ast.Attribute)
-                    and decorator.func.attr == "tool"
-                ):
-                    continue
-
-                for kw in decorator.keywords:
-                    if kw.arg == "tags" and not isinstance(kw.value, ast.Set):
-                        non_literals.append(
-                            f"{path.name}:{node.lineno} {node.name}"
-                            f" → tags is {type(kw.value).__name__}, not Set"
-                        )
+    for path, node, decorator in _iter_tool_decorators(tools_dir):
+        for keyword in decorator.keywords:
+            if keyword.arg == "tags" and not isinstance(keyword.value, ast.Set):
+                non_literals.append(
+                    f"{path.name}:{node.lineno} {node.name}"
+                    f" → tags is {type(keyword.value).__name__}, not Set"
+                )
 
     assert not non_literals, (
         "Non-literal tags values in @mcp.tool() decorators (use set literals):\n"
@@ -520,39 +526,15 @@ def test_fleet_tools_carry_required_subset_tag():
     tools_dir = _SRC_ROOT / "server" / "tools"
     name_to_tags: dict[str, set[str]] = {}
 
-    for path in sorted(_iter_tool_modules(tools_dir)):
-        source = path.read_text()
-        tree = ast.parse(source, filename=str(path))
-
-        for node in ast.walk(tree):
-            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-
-            func_name = node.name
-
-            for decorator in node.decorator_list:
-                if not (
-                    isinstance(decorator, ast.Call)
-                    and isinstance(decorator.func, ast.Attribute)
-                    and decorator.func.attr == "tool"
-                ):
-                    continue
-
-                tags_value = None
-                for kw in decorator.keywords:
-                    if kw.arg == "tags":
-                        tags_value = kw.value
-                        break
-
-                if tags_value is None or not isinstance(tags_value, ast.Set):
-                    continue
-
-                tag_set = {
-                    elt.value
-                    for elt in tags_value.elts
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
-                }
-                name_to_tags[func_name] = tag_set
+    for _path, node, decorator in _iter_tool_decorators(tools_dir):
+        tags_value = None
+        for keyword in decorator.keywords:
+            if keyword.arg == "tags":
+                tags_value = keyword.value
+                break
+        if tags_value is None or not isinstance(tags_value, ast.Set):
+            continue
+        name_to_tags[node.name] = set(_iter_literal_string_tag_values(tags_value))
 
     missing_fleet = []
     for tool in FLEET_TOOLS:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 import pytest
 
@@ -9,20 +10,7 @@ from tests.arch._helpers import SRC_ROOT
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 
-def test_tool_context_service_fields_use_protocol_types() -> None:
-    """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
-
-    Exempt fields:
-    - plugin_authority: PluginArtifactAuthority (lifetime-owning authority)
-    - config: AutomationConfig dataclass (configuration container, not a service interface)
-    - recipe_initialization_state: lifecycle value union, not a service interface
-    - kitchen_open_state: immutable lifecycle value, protected by KitchenTransitionLock
-    """
-    AUTOSKILLIT_ROOT = SRC_ROOT
-
-    # Collect Protocol class names from core/types.py and its sub-modules via AST.
-    # After the types.py split, Protocol definitions live in the _type_protocols_*.py
-    # shards and SubprocessRunner lives in _type_subprocess.py; types.py is a thin re-export hub.
+def _explicit_core_protocol_names() -> set[str]:
     core_protocols: set[str] = set()
     for types_filename in (
         "core/types/__init__.py",
@@ -43,20 +31,51 @@ def test_tool_context_service_fields_use_protocol_types() -> None:
         "core/types/_type_native_shell_capture.py",
         "core/types/_type_exploration.py",
     ):
-        types_path = AUTOSKILLIT_ROOT / types_filename
+        types_path = SRC_ROOT / types_filename
         if not types_path.exists():
             continue
         types_tree = ast.parse(types_path.read_text())
         for node in ast.walk(types_tree):
-            if isinstance(node, ast.ClassDef):
-                for base in node.bases:
-                    base_str = ast.unparse(base)
-                    if "Protocol" in base_str:
-                        core_protocols.add(node.name)
-                        break
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for base in node.bases:
+                if "Protocol" in ast.unparse(base):
+                    core_protocols.add(node.name)
+                    break
+    return core_protocols
+
+
+def _make_context_assigned_fields(factory_path: Path) -> set[str]:
+    tree = ast.parse(factory_path.read_text())
+    assigned_fields: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name == "make_context"):
+            continue
+        for statement in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+            if isinstance(statement, ast.Call) and "ToolContext" in ast.unparse(statement.func):
+                for keyword in statement.keywords:
+                    if keyword.arg:
+                        assigned_fields.add(keyword.arg)
+            if isinstance(statement, ast.Assign):
+                for target in statement.targets:
+                    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                        assigned_fields.add(target.attr)
+    return assigned_fields
+
+
+def test_tool_context_service_fields_use_protocol_types() -> None:
+    """REQ-ARCH-002: Every non-exempt ToolContext field must use a Protocol from core/types.py.
+
+    Exempt fields:
+    - plugin_authority: PluginArtifactAuthority (lifetime-owning authority)
+    - config: AutomationConfig dataclass (configuration container, not a service interface)
+    - recipe_initialization_state: lifecycle value union, not a service interface
+    - kitchen_open_state: immutable lifecycle value, protected by KitchenTransitionLock
+    """
+    core_protocols = _explicit_core_protocol_names()
 
     # Collect ToolContext field annotations via AST
-    context_path = AUTOSKILLIT_ROOT / "pipeline" / "context.py"
+    context_path = SRC_ROOT / "pipeline" / "context.py"
     context_tree = ast.parse(context_path.read_text())
 
     EXEMPT = {
@@ -137,28 +156,8 @@ def test_make_context_wires_all_optional_toolcontext_fields() -> None:
         name for name, f in ToolContext.__dataclass_fields__.items() if f.default is None
     }
 
-    # Parse server/_factory.py via AST
     factory_path = SRC_ROOT / "server" / "_factory.py"
-    tree = ast.parse(factory_path.read_text())
-
-    # Find make_context() function body
-    assigned_fields: set[str] = set()
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.FunctionDef) and node.name == "make_context"):
-            continue
-        for stmt in ast.walk(ast.Module(body=node.body, type_ignores=[])):
-            # Capture keyword args in ToolContext(...) constructor call
-            if isinstance(stmt, ast.Call):
-                func_str = ast.unparse(stmt.func)
-                if "ToolContext" in func_str:
-                    for kw in stmt.keywords:
-                        if kw.arg:
-                            assigned_fields.add(kw.arg)
-            # Capture post-construction assignments: ctx.field_name = ...
-            if isinstance(stmt, ast.Assign):
-                for target in stmt.targets:
-                    if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
-                        assigned_fields.add(target.attr)
+    assigned_fields = _make_context_assigned_fields(factory_path)
 
     unwired = optional_field_names - assigned_fields
     assert not unwired, (

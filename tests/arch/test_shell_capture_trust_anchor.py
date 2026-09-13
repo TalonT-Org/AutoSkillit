@@ -255,8 +255,8 @@ def _imports_symbol(tree: ast.Module, module: str, symbol: str) -> bool:
     )
 
 
-def _capture_path_redirections(source: str) -> list[str]:
-    tree = ast.parse(source)
+def _capture_path_aliases(tree: ast.Module) -> set[str]:
+    """Return names that directly or transitively denote capture paths."""
     capture_path_names = {
         node.id
         for node in ast.walk(tree)
@@ -282,6 +282,12 @@ def _capture_path_redirections(source: str) -> list[str]:
             ):
                 capture_path_names.add(name)
                 changed = True
+    return capture_path_names
+
+
+def _capture_path_redirections(source: str) -> list[str]:
+    tree = ast.parse(source)
+    capture_path_names = _capture_path_aliases(tree)
 
     violations: list[str] = []
     for node in ast.walk(tree):

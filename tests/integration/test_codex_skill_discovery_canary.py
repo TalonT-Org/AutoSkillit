@@ -3,24 +3,19 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import subprocess
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from packaging.version import Version
 
 from autoskillit.core import (
     CmdSpec,
     ManagedSessionHome,
     OutputFormat,
     SkillExecutionRole,
-    normalize_codex_cli_version,
     pkg_root,
 )
 
@@ -32,7 +27,6 @@ from autoskillit.execution.backends._codex_discovery import (
     CODEX_SKILL_DISCOVERY_CONTRACT,
     attest_catalog_discovery,
     parse_skills_instructions,
-    probe_codex_version,
 )
 from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.process import run_managed_async
@@ -44,77 +38,19 @@ from autoskillit.workspace import (
     compile_session_skill_catalog,
 )
 from tests.execution.backends._live_codex_parent import CODEX_LIVE_PROCESS_ENV_ALLOWLIST
+from tests.integration._codex_canary_helpers import SelectedCodex as _SelectedCodex
+from tests.integration._codex_canary_helpers import select_canary_codex
 
 pytestmark = [pytest.mark.large, pytest.mark.canary]
 
 _CANARY_ENV = "AUTOSKILLIT_CODEX_DISCOVERY_CANARY"
-_BINARY_ENV = "AUTOSKILLIT_CODEX_CANARY_BINARY"
-_EXPECTED_VERSION_ENV = "AUTOSKILLIT_CODEX_CANARY_EXPECTED_VERSION"
 _PROBE_TIMEOUT_SECONDS = 30
 _APP_SERVER_TIMEOUT_SECONDS = 60
 _OUTPUT_CAP = 64 * 1024
 
 
-@dataclass(frozen=True, slots=True)
-class _SelectedCodex:
-    binary: Path
-    raw_version: str
-    normalized_version: str
-
-
 def _selected_codex() -> _SelectedCodex:
-    if os.environ.get(_CANARY_ENV) != "1":
-        pytest.skip(f"set {_CANARY_ENV}=1 to run the Codex discovery canary")
-    if os.name != "posix":
-        pytest.skip("Codex discovery canary requires POSIX managed-home symlinks")
-
-    requested = os.environ.get(_BINARY_ENV, "")
-    if requested:
-        binary = Path(requested)
-        if not binary.is_absolute():
-            pytest.fail(f"{_BINARY_ENV} must be an absolute executable path: {requested!r}")
-    else:
-        resolved = shutil.which("codex")
-        if resolved is None:
-            pytest.fail("Codex discovery canary requested but the Codex CLI is not present")
-        binary = Path(resolved).resolve()
-
-    if not binary.is_file() or not os.access(binary, os.X_OK):
-        pytest.fail(
-            f"Codex discovery canary requested with a missing or non-executable binary: {binary}"
-        )
-
-    raw_version, normalized_version, errors = probe_codex_version(
-        executable=str(binary),
-        env=os.environ,
-        cwd=str(Path.cwd()),
-        timeout_seconds=_PROBE_TIMEOUT_SECONDS,
-    )
-    if errors:
-        pytest.fail("; ".join(errors))
-    assert raw_version
-    assert normalized_version
-
-    minimum_version = CodexBackend().capabilities.min_version
-    if Version(normalized_version) < Version(minimum_version):
-        pytest.fail(
-            "Codex discovery canary requested with an unsupported version: "
-            f"raw={raw_version!r}; normalized={normalized_version!r}; "
-            f"minimum={minimum_version!r}"
-        )
-    expected = os.environ.get(_EXPECTED_VERSION_ENV, "")
-    if expected:
-        try:
-            expected_normalized = normalize_codex_cli_version(expected)
-        except ValueError as exc:
-            pytest.fail(f"{_EXPECTED_VERSION_ENV} is not a normalized Codex version: {exc}")
-        if normalized_version != expected_normalized:
-            pytest.fail(
-                "Codex discovery canary selected the wrong Codex version: "
-                f"raw={raw_version!r}; normalized={normalized_version!r}; "
-                f"expected={expected_normalized!r}"
-            )
-    return _SelectedCodex(binary, raw_version, normalized_version)
+    return select_canary_codex(canary_env=_CANARY_ENV)
 
 
 @pytest.fixture
@@ -417,23 +353,18 @@ class _RegisteredRootsProbeDriver:
         self.failure = diagnostic
 
 
-async def _run_registered_roots_probe(
+async def _run_registered_roots_probe_for_spec(
     *,
-    backend: CodexBackend,
+    spec: CmdSpec,
     managed: ManagedSessionHome,
     project: Path,
     binary: Path,
-    skill_command: str,
 ) -> _RegisteredRootsProbeDriver:
-    spec = backend.build_skill_session_cmd(
-        skill_command=skill_command,
-        cwd=str(project),
-        completion_marker="%%DONE%%",
-        model=None,
-        plugin_binding=None,
-        output_format=OutputFormat.JSON,
-        add_dirs=(managed.skills_dir,),
-    )
+    """Drive the registered-roots probe over any already-built app-server
+    ``CmdSpec`` -- shared by every launch path (skill-session, food-truck,
+    resume) that produces a ``CodexAppServerPlan``, since the probe only
+    exercises ``initialize`` + ``skills/extraRoots/set`` + ``skills/list``
+    and never depends on which builder produced the plan."""
     assert spec.app_server_plan is not None
     plan = spec.app_server_plan
     assert Path(spec.env["CODEX_HOME"]) == managed.generated_home
@@ -455,6 +386,28 @@ async def _run_registered_roots_probe(
     assert driver.failure is None, driver.failure
     assert driver.finished, "app-server handshake never completed"
     return driver
+
+
+async def _run_registered_roots_probe(
+    *,
+    backend: CodexBackend,
+    managed: ManagedSessionHome,
+    project: Path,
+    binary: Path,
+    skill_command: str,
+) -> _RegisteredRootsProbeDriver:
+    spec = backend.build_skill_session_cmd(
+        skill_command=skill_command,
+        cwd=str(project),
+        completion_marker="%%DONE%%",
+        model=None,
+        plugin_binding=None,
+        output_format=OutputFormat.JSON,
+        add_dirs=(managed.skills_dir,),
+    )
+    return await _run_registered_roots_probe_for_spec(
+        spec=spec, managed=managed, project=project, binary=binary
+    )
 
 
 def _isolated_child_env(spec_env: Mapping[str, str], generated_home: Path) -> dict[str, str]:
@@ -743,6 +696,70 @@ async def test_installed_app_server_registers_the_session_catalog(
             legacy_root=str(legacy_root),
             registered_names=sorted(driver.first_rows),
             cleared_names=sorted(driver.second_names),
+        )
+        assert diagnostic.is_file()
+
+
+async def test_installed_food_truck_app_server_registers_the_session_catalog(
+    tmp_path: Path,
+    selected_codex: _SelectedCodex,
+) -> None:
+    """The same registered-roots property proven above by
+    ``test_installed_app_server_registers_the_session_catalog`` for the
+    skill-session launch path holds for the food-truck orchestrator launch
+    path (``build_food_truck_cmd``) too: both builders bind the same
+    managed catalog into a ``CodexAppServerPlan`` over the identical
+    ``_codex_app_server_base`` transport, so a catalog root registered via
+    ``skills/extraRoots/set`` is discoverable and clearing it makes those
+    names disappear again — again with no dependency on the legacy
+    ``skills`` alias."""
+    source_home = _profile_source(tmp_path, ("registered-roots-food-truck-probe",))
+    project, backend, managed_session = _managed_catalog(
+        tmp_path=tmp_path,
+        source_home=source_home,
+        session_id="app-server-roots-food-truck",
+        bundled_names=frozenset({"registered-roots-food-truck-probe"}),
+    )
+
+    with managed_session as managed:
+        catalog = Path(managed.skills_dir.path) / "skills"
+        expected_entries = _expected_entries(catalog)
+
+        legacy_root = managed.generated_home / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath
+        assert legacy_root.is_symlink()
+        legacy_root.unlink()
+        assert catalog.is_dir()
+
+        spec = backend.build_food_truck_cmd(
+            orchestrator_prompt="registered-roots food-truck probe",
+            plugin_binding=None,
+            cwd=str(project),
+            completion_marker="%%DONE%%",
+            managed_skill_catalog=managed.skills_dir,
+        )
+        driver = await _run_registered_roots_probe_for_spec(
+            spec=spec,
+            managed=managed,
+            project=project,
+            binary=selected_codex.binary,
+        )
+
+        expected_names = {name for name, _ in expected_entries}
+        assert expected_names <= set(driver.first_rows)
+        for name, relative_path in expected_entries:
+            expected_path = str(Path(driver.catalog_root) / relative_path)
+            assert driver.first_rows[name] == expected_path
+
+        assert not (expected_names & driver.second_names)
+
+        diagnostic = _write_diagnostics(
+            project,
+            selected_codex,
+            catalog=str(catalog),
+            legacy_root=str(legacy_root),
+            registered_names=sorted(driver.first_rows),
+            cleared_names=sorted(driver.second_names),
+            launch_path="food_truck",
         )
         assert diagnostic.is_file()
 

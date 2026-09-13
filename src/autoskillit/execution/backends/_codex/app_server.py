@@ -188,6 +188,7 @@ class CodexAppServerDriver:
                     "approvalPolicy": self._plan.approval_policy,
                     "developerInstructions": self._plan.developer_instructions,
                     "config": self._thread_config(),
+                    "runtimeWorkspaceRoots": list(self._plan.runtime_workspace_roots),
                 },
             }
         return {
@@ -201,6 +202,7 @@ class CodexAppServerDriver:
                 "developerInstructions": self._plan.developer_instructions,
                 "config": self._thread_config(),
                 "ephemeral": False,
+                "runtimeWorkspaceRoots": list(self._plan.runtime_workspace_roots),
             },
         }
 
@@ -266,7 +268,10 @@ class CodexAppServerDriver:
 
     def _accept_initialize(self, result: Mapping[str, Any]) -> tuple[str, ...]:
         codex_home = result.get("codexHome")
-        if codex_home != self._plan.session_home:
+        # The explicit empty-home sentinel (admitted by CodexAppServerPlan.__post_init__
+        # for ordinary no-catalog launches) has no home to compare against — the server's
+        # own native home is accepted as-is.
+        if self._plan.session_home and codex_home != self._plan.session_home:
             self._fail(
                 f"initialize codexHome {codex_home!r} does not match session home "
                 f"{self._plan.session_home!r}"
@@ -289,6 +294,14 @@ class CodexAppServerDriver:
                 f"codex app-server build {version} is below the supported minimum {min_version}"
             )
             return ()
+        if not self._plan.catalog_root:
+            # No managed catalog: skip skills/extraRoots/set + skills/list entirely and
+            # go straight to the thread request.
+            self._phase = _Phase.AWAITING_THREAD_RESPONSE
+            return (
+                _encode(self._initialized_notification()),
+                _encode(self._thread_request()),
+            )
         self._phase = _Phase.AWAITING_EXTRA_ROOTS_SET
         return (
             _encode(self._initialized_notification()),

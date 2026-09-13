@@ -126,8 +126,11 @@ class TestFoodTruckBackendOverridePrelaunch:
         self,
         tool_ctx,
         monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
     ) -> None:
-        from autoskillit.core import SubprocessResult, TerminationReason
+        from contextlib import contextmanager
+
+        from autoskillit.core import SubprocessResult, TerminationReason, ValidatedAddDir
         from tests.fakes import MockSubprocessRunner
 
         executor = tool_ctx.executor
@@ -136,6 +139,51 @@ class TestFoodTruckBackendOverridePrelaunch:
         backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
         prelaunch = Mock(return_value=PreLaunchReadiness((), {}))
         monkeypatch.setattr(type(backend), "ensure_pre_launch", prelaunch)
+
+        # execute_dispatch always attaches capability_preparation, so this real
+        # CodexBackend now also routes through managed_catalog(); fake the session
+        # skill manager to keep this test scoped to the prelaunch gate.
+        managed_home_dir = tmp_path / "managed-home"
+        managed_home_dir.mkdir()
+        managed_skill_dir = tmp_path / "managed-skills" / "test-skill"
+        managed_skill_dir.mkdir(parents=True)
+
+        class _FakeManagedHome:
+            # build_food_truck_cmd rejects an empty session_home/skill catalog, so
+            # this fake needs real, existing directories, not bare paths.
+            skills_dir = ValidatedAddDir(
+                path=str(managed_skill_dir.parent),
+                session_home=str(managed_home_dir),
+                skill_entries=(("test-skill", str(managed_skill_dir)),),
+            )
+            pass_fds: tuple[int, ...] = ()
+
+        class _FakeSessionSkillManager:
+            @contextmanager
+            def managed_catalog(self, session_id, catalog, projection_context):
+                yield _FakeManagedHome()
+
+        tool_ctx.session_skill_manager = _FakeSessionSkillManager()
+
+        # session_attempt_context owns real rollout/lease bookkeeping that needs a
+        # staged rollout on disk; replace it with a no-op for this unit test.
+        @contextmanager
+        def _fake_session_attempt_context(self, **kwargs):
+            class _FakeHandle:
+                pass_fds: tuple[int, ...] = ()
+
+                def record_spawn(self, *args, **kwargs):
+                    pass
+
+                def record_reaped(self, *args, **kwargs):
+                    pass
+
+            yield _FakeHandle()
+
+        monkeypatch.setattr(
+            type(backend), "session_attempt_context", _fake_session_attempt_context
+        )
+
         runner = MockSubprocessRunner()
         runner.set_default(
             SubprocessResult(

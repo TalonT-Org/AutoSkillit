@@ -229,6 +229,7 @@ def test_default_session_skill_manager_satisfies_managed_session_protocol(tmp_pa
     manager = DefaultSessionSkillManager(lambda _name: None, ephemeral_root=tmp_path)
     assert isinstance(manager, SessionSkillManager)
     assert callable(manager.managed_session)
+    assert callable(manager.managed_catalog)
 
 
 def test_session_skill_manager_managed_session_is_context_manager_boundary():
@@ -238,6 +239,22 @@ def test_session_skill_manager_managed_session_is_context_manager_boundary():
     from autoskillit.core import ManagedSessionHome, SessionSkillManager
 
     hints = typing.get_type_hints(SessionSkillManager.managed_session)
+    assert hints["return"] == AbstractContextManager[ManagedSessionHome]
+
+
+def test_session_skill_manager_managed_catalog_is_context_manager_boundary():
+    """managed_catalog exposes the same managed_session materialization transaction
+
+    to callers holding a raw effective catalog rather than an already-compiled one
+    (Part D, #4945) — it must return the same ManagedSessionHome context manager
+    boundary as managed_session.
+    """
+    import typing
+    from contextlib import AbstractContextManager
+
+    from autoskillit.core import ManagedSessionHome, SessionSkillManager
+
+    hints = typing.get_type_hints(SessionSkillManager.managed_catalog)
     assert hints["return"] == AbstractContextManager[ManagedSessionHome]
 
 

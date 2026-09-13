@@ -242,6 +242,9 @@ def _food_truck_launch_spec_builder(
     orchestrator_prompt: str,
     cwd: str,
     capability_preparation: SkillProjectionPreparation | None,
+    projection_binding: PluginLaunchBinding | None = None,
+    managed_skill_catalog: ValidatedAddDir | None = None,
+    managed_home_fds: tuple[int, ...] = (),
     completion_marker: str,
     resume_session_id: str | None,
     resume_checkpoint: SessionCheckpoint | None,
@@ -260,29 +263,35 @@ def _food_truck_launch_spec_builder(
     managed_lineage_ref: ManagedHeadlessSessionLineageRef | None,
     force_inactive_agent_teams: bool = False,
 ) -> _BuildSpec:
-    """Bind food-truck inputs while finalizing semantic capability per binding."""
+    """Bind food-truck inputs while finalizing semantic capability per binding.
+
+    ``projection_binding`` projects semantic capability content and is
+    independent of the per-attempt ``plugin_binding``: a ``GENERATED_HOME``
+    launch carries no launch-level binding even though capability projection
+    still needs one to project from.
+    """
 
     def build(
-        plugin_binding: PluginLaunchBinding | None,
+        attempt_plugin_binding: PluginLaunchBinding | None,
         provider_extras: Mapping[str, str] | None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
         attempt_cwd = cwd
         if capability_preparation is not None:
-            if plugin_binding is None:
+            if projection_binding is None:
                 raise RuntimeError("semantic food-truck dispatch requires a plugin launch binding")
             capability_contract = capability_preparation.finalize(
                 backend=backend,
-                binding=plugin_binding,
+                binding=projection_binding,
             )
             attempt_cwd = validated_dispatch_cwd(
                 capability_contract,
                 resolved_command=orchestrator_prompt,
                 cwd=cwd,
             )
-        return backend.build_food_truck_cmd(
+        spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
-            plugin_binding=plugin_binding,
+            plugin_binding=attempt_plugin_binding,
             cwd=attempt_cwd,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,
@@ -304,7 +313,14 @@ def _food_truck_launch_spec_builder(
             managed_attempt_id=managed_attempt_id,
             force_inactive_agent_teams=force_inactive_agent_teams,
             project_root=attempt_cwd,
+            managed_skill_catalog=managed_skill_catalog,
         )
+        if managed_home_fds:
+            spec = dataclasses.replace(
+                spec,
+                inherited_fds=(*spec.inherited_fds, *managed_home_fds),
+            )
+        return spec
 
     return build
 

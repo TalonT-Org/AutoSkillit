@@ -390,6 +390,22 @@ class SessionSkillManager(Protocol):
         projection_context: SkillProjectionContextAuthority,
     ) -> AbstractContextManager[ManagedSessionHome]: ...
 
+    def managed_catalog(
+        self,
+        session_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> AbstractContextManager[ManagedSessionHome]:
+        """Compile a raw catalog for the projection's backend, then own its home.
+
+        Exposes the existing ``managed_session`` materialization transaction
+        to callers that hold an unfiltered effective catalog rather than an
+        already-compiled one — orchestrator-capable managed launches (e.g.
+        Codex food trucks) that must adapt semantics for one selected
+        backend before entering the managed-home transaction.
+        """
+        ...
+
     def materialize_invocation(
         self,
         session_id: str,

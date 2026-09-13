@@ -6,7 +6,6 @@ import errno
 import json
 import os
 import random
-import shutil
 import statistics
 import subprocess
 import sys
@@ -25,42 +24,43 @@ from tests.execution._process_group_helpers import (
     _cleanup_owned_process_group,
     _cleanup_process_identities,
 )
+from tests.integration._codex_canary_helpers import SelectedCodex, select_canary_codex
 
 try:
     import fcntl
 except ImportError:  # pragma: no cover - exercised only on unsupported platforms
     fcntl = None  # type: ignore[assignment]
 
-pytestmark = [pytest.mark.large]
+pytestmark = [pytest.mark.large, pytest.mark.canary]
 
 _CANARY_ENV = "AUTOSKILLIT_CODEX_STARTUP_CANARY"
+# Exact build this file's rollout/inode/lease-schema assertions are pinned to;
+# see _skip_unless_schema_pinned for why a compatible-but-different build skips
+# those assertions instead of silently passing.
 _SUPPORTED_VERSION = "codex-cli 0.147.0"
 _OUTPUT_CAP = 64 * 1024
 _INSTALLED_CODEX_HOME = Path.home() / ".codex"
 
 
-def _installed_supported_codex() -> str:
+def _installed_supported_codex() -> SelectedCodex:
     if os.environ.get(_CANARY_ENV) != "1":
         pytest.skip(f"set {_CANARY_ENV}=1 to run the installed-Codex canary")
     if os.name != "posix" or sys.platform not in {"linux", "darwin"} or fcntl is None:
         pytest.skip("installed-Codex canary requires a supported POSIX PTY/lease platform")
-    binary = shutil.which("codex")
-    if binary is None:
-        pytest.fail("installed-Codex canary requested but the Codex CLI is not present")
-    result = subprocess.run(
-        [binary, "--version"],
-        capture_output=True,
-        text=True,
-        timeout=10,
-        check=False,
-    )
-    version = result.stdout.strip()
-    if result.returncode != 0 or version != _SUPPORTED_VERSION:
-        pytest.fail(
-            "installed-Codex canary requested with unsupported version: "
-            f"{version or 'unknown'}; expected {_SUPPORTED_VERSION}"
+    return select_canary_codex(canary_env=_CANARY_ENV)
+
+
+def _skip_unless_schema_pinned(selected: SelectedCodex) -> None:
+    """Skip this test's exact rollout/inode/lease-schema assertions when the
+    selected binary satisfies the broader transport minimum but is not
+    precisely `_SUPPORTED_VERSION` -- the only build these assertions have
+    been verified against."""
+    if selected.raw_version != _SUPPORTED_VERSION:
+        pytest.skip(
+            "installed-Codex startup canary's rollout/inode/lease-schema assertions are "
+            f"pinned to {_SUPPORTED_VERSION!r}; selected {selected.raw_version!r} clears the "
+            "broader transport minimum but does not match this exact schema pin"
         )
-    return binary
 
 
 def _prepare_home(path: Path) -> None:
@@ -289,7 +289,9 @@ def _stage_history_profile(source_root: Path, generated_home: Path) -> list[Path
 def test_installed_codex_preserves_staged_rollout_inode_and_inherited_lease(
     tmp_path: Path,
 ) -> None:
-    binary = _installed_supported_codex()
+    selected = _installed_supported_codex()
+    _skip_unless_schema_pinned(selected)
+    binary = str(selected.binary)
     project = tmp_path / "project"
     project.mkdir()
     subprocess.run(
@@ -391,7 +393,9 @@ def test_installed_codex_preserves_staged_rollout_inode_and_inherited_lease(
 def test_installed_codex_startup_profile_matrix_is_bounded_and_retained(
     tmp_path: Path,
 ) -> None:
-    binary = _installed_supported_codex()
+    selected = _installed_supported_codex()
+    _skip_unless_schema_pinned(selected)
+    binary = str(selected.binary)
     project = tmp_path / "project"
     project.mkdir()
     subprocess.run(

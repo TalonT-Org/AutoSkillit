@@ -880,27 +880,29 @@ FORWARDING_SITES: dict[str, str] = {
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code skill-session launch."
     ),
-    "execution/backends/_claude/session_commands.py:290": (
+    "execution/backends/_claude/session_commands.py:292": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_agent_env layers extras back in for a"
         "headless Claude Code food-truck orchestrator-session launch."
     ),
-    "execution/backends/codex.py:354": (
+    "execution/backends/_codex/headless_commands.py:62": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
-        "Codex generic-prompt launch."
+        "Codex generic-prompt launch; CODEX_HOME is separately re-read from ambient os.environ"
+        "just above, since it is also one of the reserved keys this same filter blocks from"
+        "callers."
     ),
     "execution/backends/_codex/session_commands.py:265": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex skill-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:413": (
+    "execution/backends/_codex/session_commands.py:423": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex food-truck orchestrator-session launch."
     ),
-    "execution/backends/_codex/session_commands.py:533": (
+    "execution/backends/_codex/session_commands.py:562": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before extras merge for a Codex interactive-session"
         "launch base env."
     ),
-    "execution/backends/_codex/session_commands.py:606": (
+    "execution/backends/_codex/session_commands.py:650": (
         "Excludes _HEADLESS_EXCLUSIVE_VARS before build_env layers extras back in for a headless"
         "Codex resume-session launch."
     ),
@@ -1930,6 +1932,15 @@ AMBIENT_ENV_DISPOSITIONS: dict[str, AmbientEnvDisposition] = {
         justification=(
             "Codex CLI recursion-guard variable in the AUTOSKILLIT_PRIVATE_ENV_VARS baseline"
             "(CODEX_RESERVED_HOME_ENV_VARS); must not leak between sessions."
+        ),
+    ),
+    "CODEX_HOME_ENV_VAR": AmbientEnvDisposition(
+        var="CODEX_HOME_ENV_VAR",
+        disposition="scrub",
+        owner="codex",
+        justification=(
+            "R4 predicate-(b) false positive: the __all__ export name of the CODEX_HOME"
+            "env-var-name constant; never set as a real OS environment variable itself."
         ),
     ),
     "CODEX_INTAKE_DISCIPLINE_DIGEST": AmbientEnvDisposition(

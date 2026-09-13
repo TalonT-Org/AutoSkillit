@@ -229,11 +229,13 @@ class ClaudeSessionCommandMixin(BackendCmdBuilderBase):
         managed_attempt_id: str | None = None,
         force_inactive_agent_teams: bool = False,
         project_root: Path | str | None = None,
+        managed_skill_catalog: ValidatedAddDir | None = None,
     ) -> CmdSpec:
         del (
             native_shell_capture_decision,
             managed_lineage_ref,
             managed_attempt_id,
+            managed_skill_catalog,
         )
         if resume_session_id:
             effective_prompt = _compose_resume_prompt(

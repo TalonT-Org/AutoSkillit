@@ -121,7 +121,7 @@ def test_hook_trust_policy_has_a_real_production_consumer() -> None:
     backend_class = next(
         node
         for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "CodexSessionCommandMixin"
+        if isinstance(node, ast.ClassDef) and node.name == "CodexCommandMixin"
     )
     interactive_builder = next(
         node

@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from autoskillit.core import CapabilityNotSupportedError
+from autoskillit.core import CapabilityNotSupportedError, ValidatedAddDir
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.execution.backends.codex import CodexBackend
 from tests.execution.backends._plugin_binding import plugin_binding
@@ -21,6 +21,12 @@ CAPABILITY_METHOD_MAP: dict[str, tuple[str, dict]] = {
             "plugin_binding": plugin_binding(Path("/tmp")),
             "cwd": "/tmp",
             "completion_marker": "%%X%%",
+            # Ignored by backends other than Codex, which requires it.
+            "managed_skill_catalog": ValidatedAddDir(
+                path="/tmp/add-dir",
+                session_home="/tmp",
+                skill_entries=(("x", "x/SKILL.md"),),
+            ),
         },
     ),
     "inspector_capable": (

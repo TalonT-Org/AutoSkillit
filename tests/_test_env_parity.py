@@ -112,6 +112,15 @@ TEST_HARNESS_ENV_OVERRIDES: dict[str, HarnessEnvOverride] = {
         ),
         parity_fixture=None,
     ),
+    "AUTOSKILLIT_CODEX_STARTUP_CANARY": HarnessEnvOverride(
+        var="AUTOSKILLIT_CODEX_STARTUP_CANARY",
+        value="1",
+        justification=(
+            "Enables the explicitly selected installed-Codex startup/session-lease "
+            "canary; ordinary test tasks leave this real-loader gate disabled."
+        ),
+        parity_fixture=None,
+    ),
     "UV_PYTHON_INSTALL_DIR": HarnessEnvOverride(
         var="UV_PYTHON_INSTALL_DIR",
         value="{{.UV_CACHE_ROOT}}/python",

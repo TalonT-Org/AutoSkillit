@@ -1,4 +1,4 @@
-"""Cross-builder invariant matrix: parametrized tests across all four Codex exec builders."""
+"""Cross-builder invariant matrix: parametrized tests across all four Codex builders."""
 
 from __future__ import annotations
 
@@ -53,6 +53,11 @@ def _build_food_truck():
             cwd="/work",
             completion_marker="%%DONE%%",
             env_extras=OTLP_EXTRAS,
+            managed_skill_catalog=ValidatedAddDir(
+                path="/work/add-dir",
+                session_home="/work",
+                skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+            ),
         )
 
 
@@ -65,11 +70,6 @@ def _build_resume():
 ALL_BUILDERS = [_build_headless, _build_skill_session, _build_food_truck, _build_resume]
 BUILDER_IDS = ["headless", "skill_session", "food_truck", "resume"]
 
-# build_skill_session_cmd moved to the app-server transport in Part C; the
-# other three builders keep their exec invariants until Part D.
-EXEC_BUILDERS = [_build_headless, _build_food_truck, _build_resume]
-EXEC_BUILDER_IDS = ["headless", "food_truck", "resume"]
-
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,15 +77,12 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(var, raising=False)
 
 
-@pytest.mark.parametrize("builder", EXEC_BUILDERS, ids=EXEC_BUILDER_IDS)
-def test_all_exec_builders_start_with_codex_exec(builder) -> None:
+@pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
+def test_all_builders_start_with_codex_app_server(builder) -> None:
+    """All four builders moved to the app-server transport (skill_session in Part C;
+    headless/food_truck/resume in Part D) — none speaks exec-style argv any more.
+    """
     spec = builder()
-    assert spec.cmd[0] == "codex"
-    assert spec.cmd[1] == "exec"
-
-
-def test_skill_session_builder_starts_with_codex_app_server() -> None:
-    spec = _build_skill_session()
     assert spec.cmd[0] == "codex"
     assert spec.cmd[1] == "app-server"
     assert "--listen" in spec.cmd
@@ -98,31 +95,14 @@ def test_skill_session_builder_starts_with_codex_app_server() -> None:
     assert spec.app_server_plan.prompt not in spec.cmd
 
 
-@pytest.mark.parametrize(
-    ("builder", "expected_cli_sandbox"),
-    [
-        (_build_headless, True),
-        (_build_skill_session, False),
-        (_build_food_truck, True),
-        (_build_resume, True),
-    ],
-    ids=BUILDER_IDS,
-)
-def test_exec_builders_apply_cli_sandbox_only_for_fixed_policy(
-    builder, expected_cli_sandbox
-) -> None:
-    spec = builder()
-    assert ("--sandbox" in spec.cmd) is expected_cli_sandbox
-
-
 @pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
-def test_all_exec_builders_have_image_generation_disabled(builder) -> None:
+def test_all_builders_have_image_generation_disabled(builder) -> None:
     spec = builder()
     assert _IMAGE_GENERATION_DISABLED in spec.cmd
 
 
 @pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
-def test_all_exec_builders_apply_native_otlp_overrides(builder) -> None:
+def test_all_builders_apply_native_otlp_overrides(builder) -> None:
     spec = builder()
     assert any(value.startswith("otel.exporter=") for value in spec.cmd)
     assert any(value.startswith("otel.metrics_exporter=") for value in spec.cmd)
@@ -153,9 +133,7 @@ _REINJECTED_BY_BUILDER: dict[str, set[str]] = {
 @pytest.mark.parametrize(
     ("builder", "builder_id"), list(zip(ALL_BUILDERS, BUILDER_IDS)), ids=BUILDER_IDS
 )
-def test_all_exec_builders_filter_headless_exclusive_vars(
-    builder, builder_id, monkeypatch
-) -> None:
+def test_all_builders_filter_headless_exclusive_vars(builder, builder_id, monkeypatch) -> None:
     monkeypatch.setenv("AUTOSKILLIT_SESSION_TYPE", "leaked")
     spec = builder()
     reinjected = _REINJECTED_BY_BUILDER[builder_id]
@@ -166,14 +144,14 @@ def test_all_exec_builders_filter_headless_exclusive_vars(
 
 
 @pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
-def test_all_exec_builders_have_autoskillit_headless(builder) -> None:
+def test_all_builders_have_autoskillit_headless(builder) -> None:
     spec = builder()
     assert "AUTOSKILLIT_HEADLESS" in spec.env
     assert spec.env["AUTOSKILLIT_HEADLESS"] == "1"
 
 
 @pytest.mark.parametrize("builder", ALL_BUILDERS, ids=BUILDER_IDS)
-def test_all_exec_builders_have_backend_env_vars(builder) -> None:
+def test_all_builders_have_backend_env_vars(builder) -> None:
     spec = builder()
     assert AGENT_BACKEND_DYNACONF_ENV_VAR in spec.env
     assert MCP_CLIENT_BACKEND_ENV_VAR in spec.env

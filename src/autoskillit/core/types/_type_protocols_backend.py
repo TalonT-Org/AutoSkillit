@@ -245,6 +245,7 @@ class CodingAgentBackend(Protocol):
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
         session_home: str | None = None,
+        managed_skill_catalog: ValidatedAddDir | None = None,
         env_extras: Mapping[str, str] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
@@ -292,6 +293,7 @@ class CodingAgentBackend(Protocol):
         managed_attempt_id: str | None = None,
         force_inactive_agent_teams: bool = False,
         project_root: Path | str | None = None,
+        managed_skill_catalog: ValidatedAddDir | None = None,
     ) -> CmdSpec: ...
 
     def build_interactive_cmd(

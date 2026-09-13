@@ -407,6 +407,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         output_format: OutputFormat = OutputFormat.JSON,
         plugin_binding: PluginLaunchBinding | None = None,
         session_home: str | None = None,
+        managed_skill_catalog: ValidatedAddDir | None = None,
         env_extras: Mapping[str, str] | None = None,
         native_shell_capture_decision: NativeShellCaptureDecision | None = None,
         managed_lineage_ref: ManagedHeadlessSessionLineageRef | None = None,
@@ -423,6 +424,7 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
             managed_attempt_id,
             include_scope_discipline,
             session_home,
+            managed_skill_catalog,
         )
         cmd: list[str] = [
             "claude",

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from autoskillit.core import (
     SESSION_TYPE_ENV_VAR,
+    BackendCapabilities,
     CmdSpec,
     CodingAgentBackend,
     ExecutionIdentity,
@@ -375,18 +376,34 @@ def should_flush(
     )
 
 
+def _managed_catalog_capable(capabilities: BackendCapabilities) -> bool:
+    """Whether this backend's food-truck launches need a managed generated-home catalog.
+
+    True only for backends that can inject skills but cannot already serve them from an
+    explicit plugin directory (e.g. Codex) -- backends with plugin_install_capable=True
+    (e.g. Claude) get skill content from their plugin-dir projection instead.
+    """
+    return capabilities.skill_injection_capable and not capabilities.plugin_install_capable
+
+
 def _headless_plugin_load_mode(
     backend: CodingAgentBackend,
     *,
     add_dirs: Sequence[ValidatedAddDir] = (),
+    requires_generated_home: bool = False,
 ) -> PluginLoadMode:
-    """Resolve how this concrete backend launch obtains its skill tree."""
+    """Resolve how this concrete backend launch obtains its skill tree.
+
+    ``requires_generated_home`` selects a generated home ahead of the
+    add-dirs that will materialize into it (e.g. a food-truck managed
+    catalog, built only after this mode selects ``GENERATED_HOME``).
+    """
     capabilities = backend.capabilities
     if not capabilities.skill_injection_capable:
         return PluginLoadMode.NONE
-    if capabilities.plugin_install_capable:
+    if not _managed_catalog_capable(capabilities):
         return PluginLoadMode.EXPLICIT_PLUGIN_DIR
-    if add_dirs:
+    if add_dirs or requires_generated_home:
         return PluginLoadMode.GENERATED_HOME
     return PluginLoadMode.PROJECTED_HOME
 

@@ -34,6 +34,7 @@ _EXPECTED_CALLERS = Counter(
         ): 1,
         (_COMPILE, "workspace/session_skill_materialization.py", "materialize_profile_skills"): 1,
         (_COMPILE, "workspace/session_skill_materialization.py", "_materialize_session"): 3,
+        (_COMPILE, "workspace/session_skill_manager.py", "managed_catalog"): 1,
         (
             _COMPILE,
             "server/tools/_serve_helpers.py",

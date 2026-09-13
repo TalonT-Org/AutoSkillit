@@ -1,4 +1,4 @@
-"""Codex CLI smoke test: gated E2E validation of codex exec NDJSON output.
+"""Codex CLI smoke test: gated E2E validation of Codex app-server output parsing.
 
 Gated E2E tests run only when CODEX_SMOKE_TEST=1 and one of: CODEX_API_KEY env var,
 OPENAI_API_KEY env var, or ~/.codex/auth.json (CLI-managed auth) are set
@@ -9,20 +9,21 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from pathlib import Path
 from typing import NamedTuple
 
+import anyio
 import pytest
 
-from autoskillit.core import BackendEventKind, SessionEvent
-from autoskillit.core.types import Severity
+from autoskillit.core import BackendEventKind, SessionEvent, ValidatedAddDir
+from autoskillit.core.types import Severity, SubprocessResult
 from autoskillit.execution.backends import CompositeSessionLocator
 from autoskillit.execution.backends.codex import (
     CodexBackend,
     CodexResultParser,
     CodexStreamParser,
 )
+from autoskillit.execution.process import run_managed_async
 from autoskillit.recipe._api import load_and_validate
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.execution.conftest import _flush
@@ -38,7 +39,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class _CodexSessionData(NamedTuple):
-    result: subprocess.CompletedProcess
+    result: SubprocessResult
     events: list[SessionEvent]
     thread_id: str
 
@@ -61,29 +62,28 @@ class TestCodexSmokeExecution:
 
     Run via ``task test-smoke-codex`` which sets CODEX_SMOKE_TEST=1 and
     requires one of: CODEX_API_KEY, OPENAI_API_KEY, or ~/.codex/auth.json.
-    Executes ``codex exec --json`` with a trivial prompt and validates
-    NDJSON output parsing.
+
+    Validates app-server JSON-RPC output parses through the same
+    ``CodexStreamParser``/``CodexResultParser`` path as the retired
+    ``codex exec --json`` transport (bridged by ``_app_server_to_exec_event``).
     """
 
-    def test_codex_exec_ndjson_parseable(self) -> None:
-        result = subprocess.run(
-            [
-                "codex",
-                "exec",
-                "--json",
-                "--sandbox",
-                "workspace-write",
-                "Respond with exactly: hello",
-            ],
-            capture_output=True,
-            text=True,
+    @pytest.mark.anyio
+    async def test_codex_exec_ndjson_parseable(self) -> None:
+        backend = CodexBackend()
+        spec = backend.build_headless_cmd("Respond with exactly: hello")
+        result = await run_managed_async(
+            list(spec.cmd),
+            cwd=Path.cwd(),
+            env=spec.env,
             timeout=int(os.environ.get("CODEX_SMOKE_TIMEOUT", "30")),
+            line_driver=backend.line_driver(spec),
         )
         assert result.returncode == 0, (
-            f"codex exec failed with rc={result.returncode}: {result.stderr}"
+            f"codex app-server failed with rc={result.returncode}: {result.stderr}"
         )
 
-        # Parse individual NDJSON lines with CodexStreamParser
+        # Parse individual JSON-RPC lines with CodexStreamParser
         parser = CodexStreamParser()
         events: list[SessionEvent] = []
         for line in result.stdout.splitlines():
@@ -122,19 +122,36 @@ class TestCodexSmokeInteractiveCmdBuild:
 @_skip_unless_codex_smoke
 @pytest.mark.smoke
 class TestCodexSmokeFoodTruckCmdBuild:
-    """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec."""
+    """Verify CodexBackend.build_food_truck_cmd produces a valid CmdSpec.
+
+    Part D moved food-truck launches to the app-server transport: sandbox no
+    longer lives on argv (it flows through CodexAppServerPlan.sandbox / the
+    JSON-RPC thread config instead — see
+    tests/execution/backends/test_codex_backend.py::TestCodexBuildFoodTruckCmd::
+    test_no_sandbox_flag_sandbox_is_read_only_in_plan for the source-verified
+    pattern this mirrors), and building now requires a real managed skill
+    catalog (raises ValueError without one).
+    """
 
     def test_food_truck_cmd_has_required_flags(self) -> None:
+        catalog = ValidatedAddDir(
+            path="/tmp/add-dir",
+            session_home="/tmp",
+            skill_entries=(("test-skill", "test-skill/SKILL.md"),),
+        )
         with plugin_binding(Path("/tmp/fake-plugin")) as binding:
             cmd = CodexBackend().build_food_truck_cmd(
                 orchestrator_prompt="test",
                 plugin_binding=binding,
                 cwd="/tmp",
                 completion_marker="DONE",
+                managed_skill_catalog=catalog,
             )
-        assert "--json" in cmd.cmd
-        assert "--sandbox" in cmd.cmd
-        assert cmd.cmd[cmd.cmd.index("--sandbox") + 1] == "read-only"
+        assert cmd.cmd[:4] == ("codex", "app-server", "--listen", "stdio://")
+        assert "--json" not in cmd.cmd
+        assert "--sandbox" not in cmd.cmd
+        assert cmd.app_server_plan is not None
+        assert cmd.app_server_plan.sandbox == "read-only"
 
 
 @_skip_unless_codex_smoke
@@ -144,42 +161,38 @@ class TestCodexSmokeRecipeComposition:
 
     Tests 1-2 are pure recipe validation (no codex CLI needed, but gated
     with the class for organizational grouping).
-    Tests 3-5 use a shared single codex exec invocation.
+    Tests 3-5 use a shared single Codex app-server invocation.
     """
 
     @pytest.fixture(scope="class")
     def codex_session(self, tmp_path_factory):
-        """Single codex exec invocation shared across smoke tests."""
-        proc = subprocess.run(
-            [
-                "codex",
-                "exec",
-                "--json",
-                "--sandbox",
-                "workspace-write",
-                "Respond with exactly: hello",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=int(os.environ.get("CODEX_SMOKE_TIMEOUT", "30")),
+        """Single Codex app-server invocation shared across smoke tests.
+
+        Driven synchronously via ``anyio.run`` (rather than an async fixture)
+        because this repo's ``anyio_backend`` fixture is function-scoped, and
+        this fixture must span every test method in the class.
+        """
+        backend = CodexBackend()
+        spec = backend.build_headless_cmd("Respond with exactly: hello")
+        proc = anyio.run(
+            lambda: run_managed_async(
+                list(spec.cmd),
+                cwd=Path.cwd(),
+                env=spec.env,
+                timeout=int(os.environ.get("CODEX_SMOKE_TIMEOUT", "30")),
+                line_driver=backend.line_driver(spec),
+            )
         )
         parser = CodexStreamParser()
         events: list[SessionEvent] = []
         thread_id = ""
         for line in proc.stdout.splitlines():
             evt = parser.parse_line(line)
-            if evt is not None:
-                events.append(evt)
-            if thread_id:
+            if evt is None:
                 continue
-            try:
-                obj = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if obj.get("type") == "thread.started":
-                thread_id = obj.get("thread_id", "")
-            elif obj.get("type") == "session_meta":
-                thread_id = obj.get("payload", {}).get("id", "")
+            events.append(evt)
+            if not thread_id and evt.kind == BackendEventKind.SESSION_META and evt.session_id:
+                thread_id = evt.session_id
 
         tmp_dir = tmp_path_factory.mktemp("codex_smoke")
         rollout = tmp_dir / "codex-sessions" / "rollout.jsonl"
@@ -220,7 +233,7 @@ class TestCodexSmokeRecipeComposition:
     def test_reduced_codex_smoke_pipeline_no_refusals(self, codex_session) -> None:
         session_data, _rollout = codex_session
         assert session_data.result.returncode == 0, (
-            f"codex exec failed with rc={session_data.result.returncode}: "
+            f"codex app-server failed with rc={session_data.result.returncode}: "
             f"{session_data.result.stderr}"
         )
         completion_events = [
@@ -230,13 +243,9 @@ class TestCodexSmokeRecipeComposition:
             f"Expected at least one COMPLETION event, got kinds: "
             f"{[e.kind for e in session_data.events]}"
         )
-        for line in session_data.result.stdout.splitlines():
-            try:
-                obj = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if obj.get("type") == "turn.failed":
-                error = obj.get("error", {})
+        for event in session_data.events:
+            if event.backend_data is not None and event.backend_data.record_type == "turn.failed":
+                error = event.backend_data.raw.get("error", {})
                 pytest.fail(
                     f"Capability-gated refusal detected: "
                     f"{error.get('code', 'unknown')}: {error.get('message', '')}"

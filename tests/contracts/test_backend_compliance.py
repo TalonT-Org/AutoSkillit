@@ -61,16 +61,21 @@ class TestBackendCompliance:
     def test_all_backends_build_food_truck_cmd_returns_cmdspec(self):
         from autoskillit.core import CmdSpec
         from autoskillit.execution.backends import BACKEND_REGISTRY
-        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+        from autoskillit.execution.backends.codex import CodexBackend
         from tests.execution.backends._plugin_binding import plugin_binding
+        from tests.fixtures.codex import codex_skill_add_dirs
 
         for cls in BACKEND_REGISTRY.values():
+            managed_skill_catalog = (
+                codex_skill_add_dirs("/tmp")[0] if cls is CodexBackend else None
+            )
             with plugin_binding(Path("/tmp")) as binding:
                 result = cls().build_food_truck_cmd(
                     orchestrator_prompt="test",
                     plugin_binding=binding,
                     cwd="/tmp",
                     completion_marker="%%TEST%%",
+                    managed_skill_catalog=managed_skill_catalog,
                 )
             assert isinstance(result, CmdSpec)
 

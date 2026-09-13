@@ -73,6 +73,7 @@ def test_codex_forward_vars_subset_of_codex_cmd_env() -> None:
             cwd="/work",
             completion_marker="%%DONE%%",
             env_extras={LAUNCH_ID_ENV_VAR: launch_id},
+            managed_skill_catalog=add_dirs[0],
         )
     assert skill_spec.env[LAUNCH_ID_ENV_VAR] == launch_id
     assert food_truck_spec.env[LAUNCH_ID_ENV_VAR] == launch_id

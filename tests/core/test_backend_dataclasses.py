@@ -131,8 +131,8 @@ def test_cmd_spec_preserves_app_server_plan():
     plan = CodexAppServerPlan(
         session_home="/tmp/session",
         catalog_root="/tmp/session/add-dir/skills",
-        expected_skill_names=frozenset(),
-        expected_skill_entries=(),
+        expected_skill_names=frozenset({"foo"}),
+        expected_skill_entries=(("foo", "foo/SKILL.md"),),
         cwd="/tmp/session",
         prompt="p",
         model=None,
@@ -145,6 +145,177 @@ def test_cmd_spec_preserves_app_server_plan():
     )
 
     assert CmdSpec(cmd=(), env={}, app_server_plan=plan).app_server_plan == plan
+
+
+def test_codex_app_server_plan_admits_empty_home_and_catalog_sentinel():
+    """CodexAppServerPlan.__post_init__ admits the explicit no-catalog/empty-home
+
+    state used by ordinary headless launches without a managed catalog
+    (Part D, #4945) — session_home and catalog_root may both be blank, as
+    long as expected_skill_names/expected_skill_entries are also empty.
+    """
+    from autoskillit.core import CodexAppServerPlan
+
+    plan = CodexAppServerPlan(
+        session_home="",
+        catalog_root="",
+        expected_skill_names=frozenset(),
+        expected_skill_entries=(),
+        cwd="/tmp/session",
+        prompt="p",
+        model=None,
+        sandbox="workspace-write",
+        approval_policy="never",
+        bypass_hook_trust=True,
+        developer_instructions=None,
+        config_overrides={},
+        client_version="0.10.1109",
+    )
+    assert plan.session_home == ""
+    assert plan.catalog_root == ""
+
+
+def test_codex_app_server_plan_nonempty_catalog_root_requires_nonempty_entries():
+    from autoskillit.core import CodexAppServerPlan
+
+    with pytest.raises(ValueError, match="nonempty expected skill names and entries"):
+        CodexAppServerPlan(
+            session_home="/tmp/session",
+            catalog_root="/tmp/session/add-dir/skills",
+            expected_skill_names=frozenset(),
+            expected_skill_entries=(),
+            cwd="/tmp/session",
+            prompt="p",
+            model=None,
+            sandbox="workspace-write",
+            approval_policy="never",
+            bypass_hook_trust=True,
+            developer_instructions=None,
+            config_overrides={},
+            client_version="0.10.1109",
+        )
+
+
+def test_codex_app_server_plan_empty_catalog_root_requires_empty_entries():
+    from autoskillit.core import CodexAppServerPlan
+
+    with pytest.raises(ValueError, match="empty expected skill names and entries"):
+        CodexAppServerPlan(
+            session_home="",
+            catalog_root="",
+            expected_skill_names=frozenset({"foo"}),
+            expected_skill_entries=(("foo", "foo/SKILL.md"),),
+            cwd="/tmp/session",
+            prompt="p",
+            model=None,
+            sandbox="workspace-write",
+            approval_policy="never",
+            bypass_hook_trust=True,
+            developer_instructions=None,
+            config_overrides={},
+            client_version="0.10.1109",
+        )
+
+
+def test_codex_app_server_plan_client_version_still_required():
+    from autoskillit.core import CodexAppServerPlan
+
+    with pytest.raises(ValueError, match="client_version must not be blank"):
+        CodexAppServerPlan(
+            session_home="",
+            catalog_root="",
+            expected_skill_names=frozenset(),
+            expected_skill_entries=(),
+            cwd="/tmp/session",
+            prompt="p",
+            model=None,
+            sandbox="workspace-write",
+            approval_policy="never",
+            bypass_hook_trust=True,
+            developer_instructions=None,
+            config_overrides={},
+            client_version="",
+        )
+
+
+def test_codex_app_server_plan_rejects_relative_runtime_workspace_roots():
+    from autoskillit.core import CodexAppServerPlan
+
+    with pytest.raises(ValueError, match="runtime_workspace_roots entries must be absolute"):
+        CodexAppServerPlan(
+            session_home="",
+            catalog_root="",
+            expected_skill_names=frozenset(),
+            expected_skill_entries=(),
+            cwd="/tmp/session",
+            prompt="p",
+            model=None,
+            sandbox="workspace-write",
+            approval_policy="never",
+            bypass_hook_trust=True,
+            developer_instructions=None,
+            config_overrides={},
+            client_version="0.10.1109",
+            runtime_workspace_roots=("relative/path",),
+        )
+
+
+def test_codex_app_server_plan_accepts_absolute_runtime_workspace_roots():
+    from autoskillit.core import CodexAppServerPlan
+
+    plan = CodexAppServerPlan(
+        session_home="",
+        catalog_root="",
+        expected_skill_names=frozenset(),
+        expected_skill_entries=(),
+        cwd="/tmp/session",
+        prompt="p",
+        model=None,
+        sandbox="workspace-write",
+        approval_policy="never",
+        bypass_hook_trust=True,
+        developer_instructions=None,
+        config_overrides={},
+        client_version="0.10.1109",
+        runtime_workspace_roots=("/tmp/extra-root",),
+    )
+    assert plan.runtime_workspace_roots == ("/tmp/extra-root",)
+
+
+def test_codex_app_server_plan_digest_distinguishes_runtime_workspace_roots():
+    """adapter_digest is computed over digest_payload() (_managed/_launch_adapter.py);
+    a plan that changes only its runtime workspace roots must render a different
+    payload, or a regression that drops the field from digest_payload() (or
+    neutralizes it behind a lossy transform) would go undetected."""
+    from autoskillit.core import CodexAppServerPlan
+
+    def _plan(runtime_workspace_roots: tuple[str, ...]) -> CodexAppServerPlan:
+        return CodexAppServerPlan(
+            session_home="",
+            catalog_root="",
+            expected_skill_names=frozenset(),
+            expected_skill_entries=(),
+            cwd="/tmp/session",
+            prompt="p",
+            model=None,
+            sandbox="workspace-write",
+            approval_policy="never",
+            bypass_hook_trust=True,
+            developer_instructions=None,
+            config_overrides={},
+            client_version="0.10.1109",
+            runtime_workspace_roots=runtime_workspace_roots,
+        )
+
+    plan_a = _plan(("/tmp/extra-root-a",))
+    plan_b = _plan(("/tmp/extra-root-b",))
+    payload_a, payload_b = plan_a.digest_payload(), plan_b.digest_payload()
+    assert payload_a["runtime_workspace_roots"] != payload_b["runtime_workspace_roots"]
+    assert payload_a != payload_b
+
+    # Corollary regression guard: identical runtime_workspace_roots (including
+    # the empty default) must not spuriously distinguish otherwise-identical plans.
+    assert _plan(()).digest_payload() == _plan(()).digest_payload()
 
 
 def test_cmd_spec_normalizes_inherited_fds():

@@ -25,7 +25,7 @@ from ._type_native_shell_capture import (
 )
 from ._type_plugin_source import PluginLaunchBinding
 from ._type_protocols_backend import CodingAgentBackend
-from ._type_protocols_workspace import PluginArtifactAuthority
+from ._type_protocols_workspace import PluginArtifactAuthority, SkillProjectionContextAuthority
 from ._type_results import (
     ClosureAuthoritySpec,
     InputSpec,
@@ -232,6 +232,22 @@ class SkillProjectionPreparation(Protocol):
         backend: CodingAgentBackend,
         binding: PluginLaunchBinding,
     ) -> SkillProjectionBinding: ...
+
+    def materialization_context(
+        self,
+        *,
+        backend: CodingAgentBackend,
+        binding: PluginLaunchBinding,
+    ) -> SkillProjectionContextAuthority:
+        """Bind this preparation's catalog to one exact plugin launch binding.
+
+        The shared step underlying ``finalize``: derives projection
+        substitutions from the reader-owned launch artifact without also
+        projecting agent-visible documents. Callers that need a managed
+        session home (rather than a finalized skill projection) use this
+        directly to obtain a ``SessionSkillManager``-compatible context.
+        """
+        ...
 
 
 @runtime_checkable

@@ -61,6 +61,7 @@ def test_food_truck_cmd_injects_write_guard_tool_names() -> None:
             plugin_binding=plugin_binding(Path("/plugins")),
             cwd="/repo",
             completion_marker="DONE",
+            managed_skill_catalog=codex_skill_add_dirs("/repo")[0],
         )
         assert "AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES" in spec.env, (
             f"{name}: AUTOSKILLIT_WRITE_GUARD_TOOL_NAMES missing from build_food_truck_cmd env"
@@ -235,6 +236,7 @@ def test_all_codex_builders_forward_audit_authority_or_empty_sentinel(
                 cwd="/clone",
                 completion_marker="DONE",
                 env_extras=env_extras,
+                managed_skill_catalog=codex_skill_add_dirs("/clone")[0],
             )
         if builder_name == "headless":
             return backend.build_headless_cmd("test prompt", env_extras=env_extras)

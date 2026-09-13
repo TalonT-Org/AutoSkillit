@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,6 +24,7 @@ from autoskillit.core import (
     SkillContractView,
     SkillResult,
     StreamParser,
+    ValidatedAddDir,
     get_logger,
     plugin_launch_binding_scope,
 )
@@ -124,13 +125,23 @@ async def _run_headless_attempt(
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     managed_attempt_id: str | None = None,
     attempt: int = 1,
+    retained_binding: PluginLaunchBinding | None = None,
 ) -> tuple[SubprocessResult, CmdSpec]:
-    """Build and execute one provider attempt under one owned plugin binding."""
-    with _plugin_launch_binding(
-        authority=plugin_authority,
-        backend=backend,
-        load_mode=plugin_load_mode,
-    ) as binding:
+    """Build and execute one provider attempt under one owned plugin binding.
+
+    ``retained_binding``, when set, is the caller's already-owned binding for
+    the complete logical dispatch; reuse it instead of acquiring a fresh one.
+    """
+    binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
+        nullcontext(retained_binding)
+        if retained_binding is not None
+        else _plugin_launch_binding(
+            authority=plugin_authority,
+            backend=backend,
+            load_mode=plugin_load_mode,
+        )
+    )
+    with binding_scope as binding:
         plugin_identity = _binding_identity(binding)
         artifact_paths = tuple(
             [*launch_preparation.artifact_paths]
@@ -239,6 +250,7 @@ async def _attempt_contract_nudge(
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
     session_env: Mapping[str, str] | None = None,
+    managed_skill_catalog: ValidatedAddDir | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     launch_resolver: LaunchResolver | None = None,
     launch_preparation: LaunchPreparation | None = None,
@@ -249,8 +261,12 @@ async def _attempt_contract_nudge(
     natural_exit_grace_seconds: float,
     attempt: int = 2,
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
+    retained_binding: PluginLaunchBinding | None = None,
 ) -> SkillResult | None:
-    """Resume once to recover omitted structured tokens or the completion marker."""
+    """Resume once to recover omitted structured tokens or the completion marker.
+
+    ``retained_binding`` mirrors ``_run_headless_attempt``: reuse the caller's binding.
+    """
     if backend is None or not backend.capabilities.session_resume_capable:
         return None
     if result_parser is None:
@@ -302,15 +318,24 @@ async def _attempt_contract_nudge(
         patterns_to_check = list(expected_output_patterns)
 
     effective_extras = dict(provider_extras or {})
-    if plugin_load_mode.consumes_artifact and plugin_authority is None:
+    if (
+        plugin_load_mode.consumes_artifact
+        and plugin_authority is None
+        and retained_binding is None
+    ):
         logger.warning("nudge_skip_missing_plugin_authority")
         return None
-    try:
-        with _plugin_launch_binding(
+    nudge_binding_scope: AbstractContextManager[PluginLaunchBinding | None] = (
+        nullcontext(retained_binding)
+        if retained_binding is not None
+        else _plugin_launch_binding(
             authority=plugin_authority,
             backend=backend,
             load_mode=plugin_load_mode,
-        ) as binding:
+        )
+    )
+    try:
+        with nudge_binding_scope as binding:
             managed_attempt_id = (
                 managed_lineage_observer.allocate_attempt()
                 if managed_lineage_observer is not None
@@ -327,6 +352,7 @@ async def _attempt_contract_nudge(
                     prompt=prompt,
                     output_format=OutputFormat.JSON,
                     plugin_binding=plugin_binding,
+                    managed_skill_catalog=managed_skill_catalog,
                     env_extras=extras,
                     native_shell_capture_decision=(
                         managed_lineage_observer.decision
@@ -414,6 +440,7 @@ async def _attempt_contract_nudge(
                     on_process_reaped=handle.record_reaped if handle is not None else None,
                     ceiling_seconds=ceiling_seconds,
                     natural_exit_grace_seconds=natural_exit_grace_seconds,
+                    line_driver=backend.line_driver(spec),
                 )
                 nudge_end_ts = datetime.now(UTC).isoformat()
     except OSError:

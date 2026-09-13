@@ -52,6 +52,10 @@ def test_skill_projection_preparation_runtime_protocol(tmp_path):
             del backend, binding
             return object()
 
+        def materialization_context(self, *, backend, binding):
+            del backend, binding
+            return object()
+
     assert isinstance(_Preparation(), SkillProjectionPreparation)
 
 
@@ -71,6 +75,29 @@ def test_headless_skill_dispatch_preparation_finalize_contract():
         "backend": CodingAgentBackend,
         "binding": PluginLaunchBinding,
         "return": SkillProjectionBinding,
+    }
+
+
+def test_headless_skill_dispatch_preparation_materialization_context_contract():
+    import inspect
+    from typing import get_type_hints
+
+    from autoskillit.core import (
+        CodingAgentBackend,
+        PluginLaunchBinding,
+        SkillProjectionContextAuthority,
+    )
+    from autoskillit.core.types._type_protocols_execution import (
+        SkillProjectionPreparation,
+    )
+
+    signature = inspect.signature(SkillProjectionPreparation.materialization_context)
+    assert signature.parameters["backend"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["binding"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert get_type_hints(SkillProjectionPreparation.materialization_context) == {
+        "backend": CodingAgentBackend,
+        "binding": PluginLaunchBinding,
+        "return": SkillProjectionContextAuthority,
     }
 
 
@@ -134,6 +161,36 @@ def test_session_skill_manager_managed_session_signature():
     assert typing.get_type_hints(SessionSkillManager.managed_session) == {
         "session_id": str,
         "compilation": CompiledSessionSkillCatalogAuthority,
+        "projection_context": SkillProjectionContextAuthority,
+        "return": AbstractContextManager[ManagedSessionHome],
+    }
+
+
+def test_session_skill_manager_managed_catalog_signature():
+    import inspect
+    import typing
+    from contextlib import AbstractContextManager
+
+    from autoskillit.core import (
+        EffectiveSkillCatalogAuthority,
+        ManagedSessionHome,
+        SessionSkillManager,
+        SkillProjectionContextAuthority,
+    )
+
+    signature = inspect.signature(SessionSkillManager.managed_catalog)
+    assert tuple(signature.parameters) == (
+        "self",
+        "session_id",
+        "catalog",
+        "projection_context",
+    )
+    for name in ("session_id", "catalog", "projection_context"):
+        assert signature.parameters[name].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        assert signature.parameters[name].default is inspect.Parameter.empty
+    assert typing.get_type_hints(SessionSkillManager.managed_catalog) == {
+        "session_id": str,
+        "catalog": EffectiveSkillCatalogAuthority,
         "projection_context": SkillProjectionContextAuthority,
         "return": AbstractContextManager[ManagedSessionHome],
     }

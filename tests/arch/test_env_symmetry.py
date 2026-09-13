@@ -61,6 +61,7 @@ def test_skill_and_food_truck_share_required_env_vars() -> None:
                 plugin_binding=binding,
                 cwd="/repo",
                 completion_marker="DONE",
+                managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
         for var in _REQUIRED_IN_BOTH:
             assert var in skill_spec.env, f"{name}: {var} missing from build_skill_session_cmd env"
@@ -113,6 +114,7 @@ def test_agent_backend_env_var_in_food_truck(monkeypatch: pytest.MonkeyPatch) ->
                 plugin_binding=binding,
                 cwd="/repo",
                 completion_marker="DONE",
+                managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
         assert "AUTOSKILLIT_AGENT_BACKEND" in food_truck_spec.env, (
             f"{name}: AUTOSKILLIT_AGENT_BACKEND missing from build_food_truck_cmd env"
@@ -150,6 +152,7 @@ def test_dynaconf_backend_env_var_in_food_truck_cmd() -> None:
                 plugin_binding=binding,
                 cwd="/repo",
                 completion_marker="DONE",
+                managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
         assert "AUTOSKILLIT_AGENT_BACKEND__BACKEND" in food_truck_spec.env, (
             f"{name}: AUTOSKILLIT_AGENT_BACKEND__BACKEND missing from build_food_truck_cmd env"
@@ -179,6 +182,7 @@ def test_dynaconf_and_flat_backend_values_match() -> None:
                 plugin_binding=binding,
                 cwd="/repo",
                 completion_marker="DONE",
+                managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
         assert (
             food_truck_spec.env["AUTOSKILLIT_AGENT_BACKEND__BACKEND"]
@@ -209,6 +213,7 @@ def _call_builder(backend: object, builder_name: str) -> object:
                 plugin_binding=binding,
                 cwd="/repo",
                 completion_marker="DONE",
+                managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
     if builder_name == "build_interactive_cmd":
         return backend.build_interactive_cmd()

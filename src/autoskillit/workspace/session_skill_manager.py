@@ -14,10 +14,11 @@ another state object or protocol.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import time
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +44,7 @@ from autoskillit.core import (
 )
 from autoskillit.workspace.session_skill_catalog import (
     _canonical_skill_unavailability_payload,
+    compile_session_skill_catalog,
 )
 from autoskillit.workspace.session_skill_lifecycle import (
     _SESSION_LEASES_SUBDIR,
@@ -57,6 +59,7 @@ from autoskillit.workspace.session_skill_materialization import (
     _restore_session,
 )
 from autoskillit.workspace.session_skill_provider import SkillsDirectoryProvider
+from autoskillit.workspace.skill_projection import SkillProjectionContext
 from autoskillit.workspace.skills import render_skill_invalidities
 
 logger = get_logger(__name__)
@@ -331,6 +334,35 @@ class DefaultSessionSkillManager:
         failures = [] if body_failure is None else [body_failure]
         failures.extend(self._cleanup_owned(session_id, initialized))
         _raise_failures("Managed session body and cleanup failed", failures)
+
+    def managed_catalog(
+        self,
+        session_id: str,
+        catalog: EffectiveSkillCatalogAuthority,
+        projection_context: SkillProjectionContextAuthority,
+    ) -> AbstractContextManager[ManagedSessionHome]:
+        """Compile a raw catalog for the bound backend, then own its managed home."""
+        backend = projection_context.backend
+        if backend is None:
+            raise SkillContractError(
+                "managed catalog materialization requires an effective backend"
+            )
+        if projection_context.catalog != catalog:
+            raise SkillContractError(
+                "materialization projection must bind the exact effective catalog"
+            )
+        compilation = compile_session_skill_catalog(
+            catalog,
+            backend,
+            adaptation_context=projection_context.adaptation_context,
+        )
+        if not isinstance(projection_context, SkillProjectionContext):
+            raise SkillContractError(
+                f"managed catalog materialization requires a SkillProjectionContext, "
+                f"got {type(projection_context).__name__}"
+            )
+        compiled_context = dataclasses.replace(projection_context, catalog=compilation.catalog)
+        return self.managed_session(session_id, compilation, compiled_context)
 
     @staticmethod
     def _validate_session_id(session_id: str) -> None:

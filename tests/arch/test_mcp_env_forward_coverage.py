@@ -53,6 +53,7 @@ def test_mcp_env_forward_vars_in_food_truck_cmd() -> None:
                 plugin_binding=binding,
                 cwd="/repo",
                 completion_marker="DONE",
+                managed_skill_catalog=_SKILL_SESSION_ADD_DIRS[0],
             )
         for var in backend.capabilities.mcp_env_forward_vars:
             assert var in spec.env, f"{name}: {var} missing from build_food_truck_cmd env"

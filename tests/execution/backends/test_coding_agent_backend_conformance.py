@@ -208,10 +208,24 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert isinstance(result, tuple)
 
     def test_line_driver_is_none_without_app_server_plan(self) -> None:
-        """CmdSpec.app_server_plan — no backend hands back a driver without one."""
+        """CmdSpec.app_server_plan — a backend hands back a driver only when its
+        CmdSpec carries a plan; Codex's build_cmd always carries one (Part D moved
+        even the no-catalog headless builder to app-server transport)."""
         spec = self.backend.build_cmd(skill_command="do stuff", cwd="/tmp")
-        assert spec.app_server_plan is None
-        assert self.backend.line_driver(spec) is None
+        if self.backend.name == "codex":
+            assert spec.app_server_plan is not None
+            assert self.backend.line_driver(spec) is not None
+        elif self.backend.name == "claude-code":
+            assert spec.app_server_plan is None
+            assert self.backend.line_driver(spec) is None
+        else:
+            # Intentional sentinel: when a new backend is added to BACKEND_REGISTRY,
+            # add an elif branch above with explicit app_server_plan/line_driver
+            # coverage rather than removing this guard.
+            pytest.fail(
+                f"test_line_driver_is_none_without_app_server_plan has no coverage"
+                f" for backend {self.backend.name!r}"
+            )
 
     # --- Group 2: Sub-protocol Factories ---
 
@@ -359,21 +373,29 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def test_build_food_truck_cmd_when_capable(self) -> None:
         """BackendCapabilities.food_truck_capable — build_food_truck_cmd returns valid CmdSpec."""
         self._require_capability("food_truck_capable")
+        managed_skill_catalog = (
+            codex_skill_add_dirs("/tmp")[0] if isinstance(self.backend, CodexBackend) else None
+        )
         result = self.backend.build_food_truck_cmd(
             orchestrator_prompt="x",
             plugin_binding=plugin_binding(Path("/tmp")),
             cwd="/tmp",
             completion_marker="%%X%%",
+            managed_skill_catalog=managed_skill_catalog,
         )
         assert isinstance(result, CmdSpec)
 
     def test_food_truck_cmd_carries_plugin_binding_descriptors(self) -> None:
         self._require_capability("food_truck_capable")
+        managed_skill_catalog = (
+            codex_skill_add_dirs("/tmp")[0] if isinstance(self.backend, CodexBackend) else None
+        )
         result = self.backend.build_food_truck_cmd(
             orchestrator_prompt="x",
             plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
             cwd="/tmp",
             completion_marker="%%X%%",
+            managed_skill_catalog=managed_skill_catalog,
         )
         assert result.inherited_fds == (9, 3)
 
@@ -422,14 +444,26 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             )
 
     def test_build_resume_cmd_includes_session_id(self) -> None:
-        """BackendCapabilities.session_resume_capable — embeds the session ID in cmd tuple."""
+        """BackendCapabilities.session_resume_capable — embeds the session ID.
+
+        A Codex app-server transport carries the resume session id on
+        ``spec.app_server_plan.resume_thread_id`` rather than as a positional
+        in ``spec.cmd`` (the app-server invocation has no such positional);
+        every other backend still delivers it via ``cmd``.
+        """
         self._require_capability("session_resume_capable")
         result = self.backend.build_resume_cmd(
             resume_session_id="test-session-id", prompt="test prompt"
         )
-        assert "test-session-id" in result.cmd, (
-            f"'test-session-id' not found in result.cmd for {self.backend.name!r}"
-        )
+        if result.app_server_plan is not None:
+            assert result.app_server_plan.resume_thread_id == "test-session-id", (
+                f"'test-session-id' not found in result.app_server_plan.resume_thread_id"
+                f" for {self.backend.name!r}"
+            )
+        else:
+            assert "test-session-id" in result.cmd, (
+                f"'test-session-id' not found in result.cmd for {self.backend.name!r}"
+            )
 
     def test_setup_session_dir_and_locator_round_trip(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

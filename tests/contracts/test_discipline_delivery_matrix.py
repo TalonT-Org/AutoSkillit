@@ -47,12 +47,16 @@ def _assert_interactive_primary_channel(backend, spec) -> None:
 
 
 def _build_orchestrator_spec(backend):
+    kwargs: dict[str, object] = {}
+    if isinstance(backend, CodexBackend):
+        kwargs["managed_skill_catalog"] = codex_skill_add_dirs("/tmp")[0]
     with plugin_binding(Path("/tmp")) as binding:
         return backend.build_food_truck_cmd(
             orchestrator_prompt="Run the pipeline",
             plugin_binding=binding,
             cwd="/tmp",
             completion_marker="%%DONE%%",
+            **kwargs,
         )
 
 
@@ -211,8 +215,9 @@ class TestOrchestratorHeadless:
     )
     def test_orchestrator_prompt_non_empty(self, backend) -> None:
         spec = _build_orchestrator_spec(backend)
-        assert any("Run the pipeline" in arg for arg in spec.cmd)
-        assert any("%%DONE%%" in arg for arg in spec.cmd)
+        prompt = prompt_text(spec)
+        assert "Run the pipeline" in prompt
+        assert "%%DONE%%" in prompt
 
     @pytest.mark.parametrize(
         "backend",
@@ -325,9 +330,8 @@ class TestResumeDelivery:
             resume_session_id="abc123",
             prompt="CALLER PROMPT MARKER",
         )
-        assert spec.cmd[-1].index(CODEX_INTAKE_DISCIPLINE_DIGEST) < spec.cmd[-1].index(
-            "CALLER PROMPT MARKER"
-        )
+        prompt = prompt_text(spec)
+        assert prompt.index(CODEX_INTAKE_DISCIPLINE_DIGEST) < prompt.index("CALLER PROMPT MARKER")
 
     @pytest.mark.parametrize(
         "backend",
@@ -348,7 +352,7 @@ class TestResumeDelivery:
             prompt="CALLER PROMPT MARKER",
             include_scope_discipline=True,
         )
-        assert CODEX_SCOPE_DISCIPLINE_DIGEST in spec.cmd[-1]
+        assert CODEX_SCOPE_DISCIPLINE_DIGEST in prompt_text(spec)
 
 
 class TestAgentTomlDelivery:

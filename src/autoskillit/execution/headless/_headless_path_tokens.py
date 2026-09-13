@@ -86,22 +86,17 @@ def _build_path_token_registry() -> tuple[
     dict[str, frozenset[str]], frozenset[str], frozenset[str]
 ]:
     """Single-load derivation of (per-skill, output, recoverable) registries."""
-    empty: tuple[dict[str, frozenset[str]], frozenset[str], frozenset[str]] = (
-        {},
-        frozenset(),
-        frozenset(),
-    )
     try:
         manifest = load_yaml(pkg_root() / "recipe" / "skill_contracts.yaml")
     except FileNotFoundError:
         logger.debug("skill_contracts.yaml not found; path-token registries will be empty")
-        return empty
+        return {}, frozenset(), frozenset()
     except Exception:
         logger.warning("Failed to derive path-token registries from contracts YAML", exc_info=True)
-        return empty
+        return {}, frozenset(), frozenset()
     if not isinstance(manifest, dict) or not isinstance(manifest.get("skills"), dict):
         logger.debug("skill_contracts.yaml is empty or non-dict; registries will be empty")
-        return empty
+        return {}, frozenset(), frozenset()
     by_skill: dict[str, frozenset[str]] = {}
     output_tokens: set[str] = set()
     recoverable_tokens: set[str] = set()

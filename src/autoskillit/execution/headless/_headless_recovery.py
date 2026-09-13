@@ -317,18 +317,11 @@ def _infer_enum_token_from_write_contract(
     write_call_count: int,
     file_changes: Sequence[str] = (),
 ) -> ClaudeSessionResult | None:
-    """Deterministically synthesize an enum-typed output token from write-contract evidence.
+    """Infer a missing enum token from a write contract and emitted companion path.
 
-    Unlike ``_synthesize_from_write_artifacts`` (which fabricates a token the agent never
-    produced and is therefore gated to UNMONITORED-only), this derives the token from
-    evidence the agent DID observably produce: an emitted companion path-token line
-    (in a confirmed channel) whose extracted path exists on disk, combined with the
-    contract's own declared write-expected-when implication. Runs for all channels.
-
-    Fires only when: (1) ``_parse_single_enum_binding`` finds a sound single binding;
-    (2) an expected pattern for that same token remains unsatisfied; (3) write evidence
-    exists; (4) a companion output typed ``file_path*``/``directory_path`` has a token
-    line present in ``session.result`` whose path(s) exist on disk.
+    Unlike ``_synthesize_from_write_artifacts``, this uses observed evidence and
+    applies to all channels. Require one sound enum binding, write evidence, an
+    unsatisfied expected token, and emitted file/directory paths that exist.
     """
     binding = _parse_single_enum_binding(skill_contract)
     if binding is None:

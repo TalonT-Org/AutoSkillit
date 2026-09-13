@@ -263,10 +263,7 @@ async def _attempt_contract_nudge(
     ceiling_seconds: float = DEFAULT_TETHER_CEILING_SECONDS,
     retained_binding: PluginLaunchBinding | None = None,
 ) -> SkillResult | None:
-    """Resume once to recover omitted structured tokens or the completion marker.
-
-    ``retained_binding`` mirrors ``_run_headless_attempt``: reuse the caller's binding.
-    """
+    """Resume once for missing structured tokens/marker, reusing the retained binding."""
     if (
         backend is None
         or not backend.capabilities.session_resume_capable

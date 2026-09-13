@@ -12,6 +12,7 @@ import inspect
 import re
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -298,7 +299,7 @@ def test_req_arch_rules_have_descriptors() -> None:
     assert "REQ-LAYER-002" in layer_ids
 
 
-def _package_reexports_name_from(parent_mod: object, pkg: str, submod: str, name: str) -> bool:
+def _package_reexports_name_from(parent_mod: ModuleType, pkg: str, submod: str, name: str) -> bool:
     """Return whether a package re-exports ``name`` from its named submodule.
 
     Source that cannot be inspected is treated as a re-export so the caller

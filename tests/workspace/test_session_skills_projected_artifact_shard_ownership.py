@@ -341,7 +341,13 @@ def test_shard_ownership_is_well_formed() -> None:
         "every owned name must appear in exactly one shard"
     )
     facade_surface = set(_facade_public_surface())
-    owned_set = set(all_owned)
+    # _projection's gateway-tracked names (its local definitions plus its
+    # autoskillit.core reexports) are part of the facade's public surface now
+    # that session_skills/__init__.py re-exports them, but are intentionally
+    # excluded from the generic per-shard tables above — see the module
+    # docstring on why the `__all__ <= owned_names` invariant doesn't hold
+    # for a gateway shard that legitimately re-exports names it doesn't own.
+    owned_set = set(all_owned) | _PROJECTION_LOCAL_NAMES | _PROJECTION_CORE_REEXPORTS
     missing = facade_surface - owned_set
     assert not missing, (
         f"every facade-public symbol must be owned by exactly one shard; "
@@ -589,9 +595,10 @@ def test_projection_core_reexports_remain_identity_equal_to_core() -> None:
 def test_workspace_projection_reexports_remain_identity_equal_to_projection_module() -> None:
     """autoskillit.workspace's projection-related exports stay identity-equal to _projection.
 
-    workspace/__init__.py imports these fourteen names from
-    workspace.session_skills._projection — the reexport must not introduce a
-    wrapper or copy anywhere along that chain.
+    workspace/__init__.py sources these fourteen names via the
+    session_skills and _projected_artifact facades rather than reaching into
+    session_skills._projection directly — the reexport chain must not
+    introduce a wrapper or copy anywhere along the way.
     """
     workspace = import_module("autoskillit.workspace")
     projection = import_module("autoskillit.workspace.session_skills._projection")

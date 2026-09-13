@@ -29,6 +29,15 @@ from ._manager import (
 from ._materialization import (
     materialize_profile_skills,
 )
+from ._projection import (
+    SkillProjectionBinding,
+    SkillProjectionPreparation,
+    SkillProjectionRefusal,
+    build_skill_projection_binding,
+    finalize_skill_projection_binding,
+    prepare_catalog_skill_projection,
+    prepare_skill_projection,
+)
 from ._provider import (
     SkillsDirectoryProvider,
     _parse_write_paths,
@@ -40,12 +49,19 @@ from ._provider import (
 __all__ = [
     "CompiledSessionSkillCatalog",
     "DefaultSessionSkillManager",
+    "SkillProjectionBinding",
+    "SkillProjectionPreparation",
+    "SkillProjectionRefusal",
     "SkillsDirectoryProvider",
     "SkillUnavailableMetadata",
+    "build_skill_projection_binding",
     "compile_session_skill_catalog",
     "compute_skill_closure",
     "default_skill_resolver",
+    "finalize_skill_projection_binding",
     "materialize_profile_skills",
+    "prepare_catalog_skill_projection",
+    "prepare_skill_projection",
     "resolve_closure_write_dirs",
     "resolve_ephemeral_root",
     "resolve_persistent_session_root",

@@ -27,8 +27,9 @@ and from ``autoskillit.core``, and a small local surface
 (``SkillProjectionPreparation``, ``build_skill_projection_binding``,
 ``finalize_skill_projection_binding``, ``prepare_catalog_skill_projection``,
 ``prepare_skill_projection``) is defined here. Only ``_provider``,
-``_materialization``, and ``_manager`` may import it directly; no other
-module, inside or outside this package, may.
+``_materialization``, ``_manager``, and this package's own ``__init__.py``
+facade may import it directly; no other module, inside or outside this
+package, may.
 """
 
 from __future__ import annotations

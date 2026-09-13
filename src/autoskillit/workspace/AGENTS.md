@@ -39,9 +39,10 @@ etc.) and must never import the package's own `session_skills/__init__.py` facad
 runtime; `TYPE_CHECKING`-guarded imports are exempt. `_projection.py` is a distinct
 *gateway* shard in the same package: it owns a small local surface and re-exports the
 rest of its `__all__`, identity-equal, from `_projected_artifact` and from
-`autoskillit.core`. Only `_provider.py`, `_materialization.py`, and `_manager.py` may
-import `_projection.py` — a private-sibling narrowing of the fan-in restriction. Each
-shard *and* both facades (`session_skills/__init__.py` and
+`autoskillit.core`. Only `_provider.py`, `_materialization.py`, `_manager.py`, and
+the package's own `session_skills/__init__.py` facade may import `_projection.py`
+directly — a private-sibling narrowing of the fan-in restriction. Each shard *and*
+both facades (`session_skills/__init__.py` and
 `_projected_artifact/materialization.py`) are capped at 750 lines
 (`tests/arch/test_session_skills_projected_artifact_size_ceilings.py`); split further
 rather than growing past it.

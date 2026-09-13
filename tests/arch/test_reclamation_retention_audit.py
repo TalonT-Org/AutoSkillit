@@ -418,7 +418,7 @@ def test_removing_target_and_its_decision_rows_is_caught_by_discovery() -> None:
     reduced_registry = {
         key: decision
         for key, decision in _REAL_REGISTRY.items()
-        if not key.startswith("src/autoskillit/execution/evidence/_session_log_recovery.py::")
+        if not key.startswith(f"{target[0]}::{target[1]}::")
     }
     assert _actual_retention_branches(reduced_targets) == set(reduced_registry)
     errors = _target_partition_errors(

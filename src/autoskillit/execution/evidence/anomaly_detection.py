@@ -160,6 +160,152 @@ def ndjson_drift_anomaly(unknown_event_count: int, unknown_item_count: int) -> d
     )
 
 
+def _oom_anomalies(
+    snapshot: dict[str, object],
+    previous_snapshot: dict[str, object] | None,
+    seq: int,
+    pid: int,
+) -> list[dict[str, object]]:
+    """Return OOM spike and critical-threshold records for one snapshot."""
+    records: list[dict[str, object]] = []
+    oom_score = snapshot.get("oom_score", -1)
+    if previous_snapshot is not None:
+        prev_oom = previous_snapshot.get("oom_score", -1)
+        if isinstance(oom_score, int) and isinstance(prev_oom, int):
+            delta = oom_score - prev_oom
+            if delta > 200:
+                records.append(
+                    _anomaly(
+                        AnomalyKind.OOM_SPIKE,
+                        AnomalySeverity.WARNING,
+                        {"from": prev_oom, "to": oom_score, "delta": delta},
+                        snapshot,
+                        seq,
+                        pid,
+                    )
+                )
+
+    if isinstance(oom_score, int) and oom_score >= 800:
+        records.append(
+            _anomaly(
+                AnomalyKind.OOM_CRITICAL,
+                AnomalySeverity.CRITICAL,
+                {"oom_score": oom_score},
+                snapshot,
+                seq,
+                pid,
+            )
+        )
+
+    return records
+
+
+def _consecutive_process_state_anomalies(
+    snapshot: dict[str, object],
+    seq: int,
+    pid: int,
+    consecutive_zombie: int,
+    consecutive_d_state: int,
+    consecutive_high_cpu: int,
+) -> tuple[list[dict[str, object]], int, int, int]:
+    """Return process-state records and updated consecutive-state counters."""
+    records: list[dict[str, object]] = []
+    state = snapshot.get("state", "")
+    if state == "zombie":
+        consecutive_zombie += 1
+        if consecutive_zombie == 1:
+            records.append(
+                _anomaly(
+                    AnomalyKind.ZOMBIE_DETECTED,
+                    AnomalySeverity.WARNING,
+                    {"state": state},
+                    snapshot,
+                    seq,
+                    pid,
+                )
+            )
+        if consecutive_zombie == 3:
+            records.append(
+                _anomaly(
+                    AnomalyKind.ZOMBIE_PERSISTENT,
+                    AnomalySeverity.CRITICAL,
+                    {"consecutive_count": consecutive_zombie},
+                    snapshot,
+                    seq,
+                    pid,
+                )
+            )
+    else:
+        consecutive_zombie = 0
+
+    wchan = snapshot.get("wchan", "")
+    if state == "disk-sleep" and isinstance(wchan, str) and wchan not in BENIGN_WCHANS:
+        consecutive_d_state += 1
+        if consecutive_d_state >= 2:
+            records.append(
+                _anomaly(
+                    AnomalyKind.D_STATE_SUSTAINED,
+                    AnomalySeverity.WARNING,
+                    {
+                        "state": state,
+                        "wchan": wchan,
+                        "consecutive_count": consecutive_d_state,
+                    },
+                    snapshot,
+                    seq,
+                    pid,
+                )
+            )
+    else:
+        consecutive_d_state = 0
+
+    cpu_percent = snapshot.get("cpu_percent", 0.0)
+    if isinstance(cpu_percent, (int, float)) and cpu_percent >= 90.0:
+        consecutive_high_cpu += 1
+        if consecutive_high_cpu >= 2:
+            records.append(
+                _anomaly(
+                    AnomalyKind.HIGH_CPU_SUSTAINED,
+                    AnomalySeverity.WARNING,
+                    {
+                        "cpu_percent": float(cpu_percent),
+                        "consecutive_count": consecutive_high_cpu,
+                    },
+                    snapshot,
+                    seq,
+                    pid,
+                )
+            )
+    else:
+        consecutive_high_cpu = 0
+    return records, consecutive_zombie, consecutive_d_state, consecutive_high_cpu
+
+
+def _signal_transition_anomalies(
+    snapshot: dict[str, object],
+    seq: int,
+    pid: int,
+    previous_sig_pnd: str | None,
+) -> tuple[list[dict[str, object]], str | None]:
+    """Return signal-transition records and the next pending-signal value."""
+    records: list[dict[str, object]] = []
+    sig_pnd = snapshot.get("sig_pnd", "")
+    all_zeros = "0000000000000000"
+    if isinstance(sig_pnd, str) and isinstance(previous_sig_pnd, str):
+        if previous_sig_pnd == all_zeros and sig_pnd != all_zeros:
+            records.append(
+                _anomaly(
+                    AnomalyKind.SIGNALS_PENDING,
+                    AnomalySeverity.WARNING,
+                    {"from": previous_sig_pnd, "to": sig_pnd},
+                    snapshot,
+                    seq,
+                    pid,
+                )
+            )
+    return records, str(sig_pnd) if sig_pnd else previous_sig_pnd
+
+
 def detect_anomalies(
     snapshots: list[dict[str, object]],
     pid: int,
@@ -178,138 +324,32 @@ def detect_anomalies(
     consecutive_high_cpu = 0
     prev_sig_pnd: str | None = None
     initial_rss: int | None = None
+    previous_snapshot: dict[str, object] | None = None
 
     for seq, snap in enumerate(snapshots):
-        oom_score = snap.get("oom_score", -1)
-        state = snap.get("state", "")
-        sig_pnd = snap.get("sig_pnd", "")
-        vm_rss_kb = snap.get("vm_rss_kb", 0)
-        fd_count = snap.get("fd_count", 0)
-        fd_soft_limit = snap.get("fd_soft_limit", 0)
-
-        # OOM spike: delta > 200 between consecutive snapshots
-        if seq > 0:
-            prev_oom = snapshots[seq - 1].get("oom_score", -1)
-            if isinstance(oom_score, int) and isinstance(prev_oom, int):
-                delta = oom_score - prev_oom
-                if delta > 200:
-                    anomalies.append(
-                        _anomaly(
-                            AnomalyKind.OOM_SPIKE,
-                            AnomalySeverity.WARNING,
-                            {"from": prev_oom, "to": oom_score, "delta": delta},
-                            snap,
-                            seq,
-                            pid,
-                        )
-                    )
-
-        # OOM critical: oom_score >= 800
-        if isinstance(oom_score, int) and oom_score >= 800:
-            anomalies.append(
-                _anomaly(
-                    AnomalyKind.OOM_CRITICAL,
-                    AnomalySeverity.CRITICAL,
-                    {"oom_score": oom_score},
-                    snap,
-                    seq,
-                    pid,
-                )
+        anomalies.extend(_oom_anomalies(snap, previous_snapshot, seq, pid))
+        process_state_records, consecutive_zombie, consecutive_d_state, consecutive_high_cpu = (
+            _consecutive_process_state_anomalies(
+                snap,
+                seq,
+                pid,
+                consecutive_zombie,
+                consecutive_d_state,
+                consecutive_high_cpu,
             )
-
-        # Zombie detection
-        if state == "zombie":
-            consecutive_zombie += 1
-            if consecutive_zombie == 1:
-                anomalies.append(
-                    _anomaly(
-                        AnomalyKind.ZOMBIE_DETECTED,
-                        AnomalySeverity.WARNING,
-                        {"state": state},
-                        snap,
-                        seq,
-                        pid,
-                    )
-                )
-            if consecutive_zombie == 3:
-                anomalies.append(
-                    _anomaly(
-                        AnomalyKind.ZOMBIE_PERSISTENT,
-                        AnomalySeverity.CRITICAL,
-                        {"consecutive_count": consecutive_zombie},
-                        snap,
-                        seq,
-                        pid,
-                    )
-                )
-        else:
-            consecutive_zombie = 0
-
-        # D-state sustained: process stuck in uninterruptible sleep
-        wchan = snap.get("wchan", "")
-        if state == "disk-sleep" and isinstance(wchan, str) and wchan not in BENIGN_WCHANS:
-            consecutive_d_state += 1
-            if consecutive_d_state >= 2:
-                anomalies.append(
-                    _anomaly(
-                        AnomalyKind.D_STATE_SUSTAINED,
-                        AnomalySeverity.WARNING,
-                        {
-                            "state": state,
-                            "wchan": wchan,
-                            "consecutive_count": consecutive_d_state,
-                        },
-                        snap,
-                        seq,
-                        pid,
-                    )
-                )
-        else:
-            consecutive_d_state = 0
-
-        # High-CPU sustained: process burning CPU >= 90% (suspected infinite loop)
-        cpu_percent = snap.get("cpu_percent", 0.0)
-        if isinstance(cpu_percent, (int, float)) and cpu_percent >= 90.0:
-            consecutive_high_cpu += 1
-            if consecutive_high_cpu >= 2:
-                anomalies.append(
-                    _anomaly(
-                        AnomalyKind.HIGH_CPU_SUSTAINED,
-                        AnomalySeverity.WARNING,
-                        {
-                            "cpu_percent": float(cpu_percent),
-                            "consecutive_count": consecutive_high_cpu,
-                        },
-                        snap,
-                        seq,
-                        pid,
-                    )
-                )
-        else:
-            consecutive_high_cpu = 0
-
-        # Signals pending: transition from all-zeros to non-zero
-        _all_zeros = "0000000000000000"
-        if isinstance(sig_pnd, str) and isinstance(prev_sig_pnd, str):
-            if prev_sig_pnd == _all_zeros and sig_pnd != _all_zeros:
-                anomalies.append(
-                    _anomaly(
-                        AnomalyKind.SIGNALS_PENDING,
-                        AnomalySeverity.WARNING,
-                        {"from": prev_sig_pnd, "to": sig_pnd},
-                        snap,
-                        seq,
-                        pid,
-                    )
-                )
-        prev_sig_pnd = str(sig_pnd) if sig_pnd else prev_sig_pnd
+        )
+        anomalies.extend(process_state_records)
+        signal_records, prev_sig_pnd = _signal_transition_anomalies(snap, seq, pid, prev_sig_pnd)
+        anomalies.extend(signal_records)
 
         # RSS growth tracking
+        vm_rss_kb = snap.get("vm_rss_kb", 0)
         if isinstance(vm_rss_kb, int) and vm_rss_kb > 0:
             if initial_rss is None:
                 initial_rss = vm_rss_kb
 
-        # FD high ratio: fd_count / fd_soft_limit > 0.80
+        fd_count = snap.get("fd_count", 0)
+        fd_soft_limit = snap.get("fd_soft_limit", 0)
         if isinstance(fd_count, int) and isinstance(fd_soft_limit, int) and fd_soft_limit > 0:
             ratio = fd_count / fd_soft_limit
             if ratio > 0.80:
@@ -327,6 +367,7 @@ def detect_anomalies(
                         pid,
                     )
                 )
+        previous_snapshot = snap
 
     # RSS growth: dual-threshold to avoid startup-artifact false positives
     if initial_rss is not None and initial_rss > 0 and len(snapshots) >= 5:

@@ -27,6 +27,34 @@ _GATED_PATTERN = re.compile(r"disable-model-invocation\s*:\s*true", re.IGNORECAS
 _FRONTMATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", re.DOTALL)
 
 
+def _assert_agent_safe_skill_frontmatter(skill_md: Path) -> None:
+    """Reject SKILL.md frontmatter that restores machine-only authority."""
+    try:
+        content = skill_md.read_text(encoding="utf-8")
+    except VANISHED_ERRORS:
+        return
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"agent-safe SKILL.md is unreadable: {skill_md}") from exc
+    match = _FRONTMATTER_PATTERN.match(content)
+    if match is None:
+        if content.startswith("---"):
+            raise ValueError(f"agent-safe SKILL.md has malformed frontmatter: {skill_md}")
+        return
+    try:
+        frontmatter = load_yaml(match.group(1))
+    except Exception as exc:
+        raise ValueError(f"agent-safe SKILL.md has invalid YAML: {skill_md}") from exc
+    if frontmatter is None:
+        frontmatter = {}
+    if not isinstance(frontmatter, Mapping):
+        raise ValueError(f"agent-safe SKILL.md frontmatter must be a mapping: {skill_md}")
+    leaked = sorted(MACHINE_ONLY_SKILL_FRONTMATTER_KEYS & frontmatter.keys())
+    if leaked:
+        raise ValueError(
+            f"agent-safe SKILL.md contains machine-only fields {leaked!r}: {skill_md}"
+        )
+
+
 def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
     """Reject snapshots that could restore machine-only authority to an agent."""
     for skill_entry in scan_observed(skills_dir):
@@ -56,31 +84,7 @@ def _assert_agent_safe_skill_tree(skills_dir: Path) -> None:
             raise ValueError(
                 f"agent-safe skill directory must contain only SKILL.md: {skill_entry.path}"
             )
-        skill_md = children[0].path
-        try:
-            content = skill_md.read_text(encoding="utf-8")
-        except VANISHED_ERRORS:
-            continue
-        except (OSError, UnicodeDecodeError) as exc:
-            raise ValueError(f"agent-safe SKILL.md is unreadable: {skill_md}") from exc
-        match = _FRONTMATTER_PATTERN.match(content)
-        if match is None:
-            if content.startswith("---"):
-                raise ValueError(f"agent-safe SKILL.md has malformed frontmatter: {skill_md}")
-            continue
-        try:
-            frontmatter = load_yaml(match.group(1))
-        except Exception as exc:
-            raise ValueError(f"agent-safe SKILL.md has invalid YAML: {skill_md}") from exc
-        if frontmatter is None:
-            frontmatter = {}
-        if not isinstance(frontmatter, Mapping):
-            raise ValueError(f"agent-safe SKILL.md frontmatter must be a mapping: {skill_md}")
-        leaked = sorted(MACHINE_ONLY_SKILL_FRONTMATTER_KEYS & frontmatter.keys())
-        if leaked:
-            raise ValueError(
-                f"agent-safe SKILL.md contains machine-only fields {leaked!r}: {skill_md}"
-            )
+        _assert_agent_safe_skill_frontmatter(children[0].path)
 
 
 def validate_skill_snapshot_members(

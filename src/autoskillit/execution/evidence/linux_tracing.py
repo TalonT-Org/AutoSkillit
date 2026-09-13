@@ -386,6 +386,21 @@ def _parse_proc_io(content: str) -> tuple[int | None, int | None]:
     return read_b, write_b
 
 
+def _read_api_connection_states(pid: int) -> dict[str, int] | None:
+    try:
+        tcp_content = Path(f"/proc/{pid}/net/tcp").read_text()
+        states = _parse_net_tcp(tcp_content)
+        try:
+            tcp6_content = Path(f"/proc/{pid}/net/tcp6").read_text()
+            for state, count in _parse_net_tcp(tcp6_content).items():
+                states[state] = states.get(state, 0) + count
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
+        return states if states else {}
+    except (FileNotFoundError, PermissionError, OSError, ValueError):
+        return None
+
+
 def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> ProcSnapshot | None:
     """Read a complete snapshot for pid. Returns None if process gone.
 
@@ -434,19 +449,7 @@ def read_proc_snapshot(pid: int, *, process: psutil.Process | None = None) -> Pr
         wchan = ""
 
     # Best-effort: /proc/{pid}/net/tcp and tcp6 (Linux network namespace for this PID)
-    _api_conn_states: dict[str, int] | None = None
-    try:
-        _tcp_content = Path(f"/proc/{pid}/net/tcp").read_text()
-        _states = _parse_net_tcp(_tcp_content)
-        try:
-            _tcp6_content = Path(f"/proc/{pid}/net/tcp6").read_text()
-            for k, v in _parse_net_tcp(_tcp6_content).items():
-                _states[k] = _states.get(k, 0) + v
-        except (FileNotFoundError, PermissionError, OSError):
-            pass
-        _api_conn_states = _states if _states else {}
-    except (FileNotFoundError, PermissionError, OSError, ValueError):
-        pass
+    _api_conn_states = _read_api_connection_states(pid)
 
     _api_conns_established: int | None = None
     if _api_conn_states is not None:
@@ -546,6 +549,27 @@ class LinuxTracingHandle:
         return list(self._snapshots)
 
 
+async def _run_tracing_monitor(
+    pid: int,
+    config: LinuxTracingConfig,
+    scope: anyio.CancelScope,
+    handle: LinuxTracingHandle,
+) -> None:
+    with scope:
+        async for snap in proc_monitor(pid, config.proc_interval):
+            handle._snapshots.append(snap)
+            if handle._trace_file is not None:
+                try:
+                    handle._trace_file.write(_fast_dumps(asdict(snap)) + "\n")
+                except OSError:
+                    # Close broken file; degrade to in-memory only
+                    try:
+                        handle._trace_file.close()
+                    except OSError:
+                        pass
+                    handle._trace_file = None
+
+
 def start_linux_tracing(
     target: TraceTarget,
     config: LinuxTracingConfig,
@@ -610,22 +634,7 @@ def start_linux_tracing(
             logger.warning("Failed to write enrollment sidecar for pid %d: %s", pid, e)
             handle._enrollment_path = None
 
-    async def _run_monitor() -> None:
-        with scope:
-            async for snap in proc_monitor(pid, config.proc_interval):
-                handle._snapshots.append(snap)
-                if handle._trace_file is not None:
-                    try:
-                        handle._trace_file.write(_fast_dumps(asdict(snap)) + "\n")
-                    except OSError:
-                        # Close broken file; degrade to in-memory only
-                        try:
-                            handle._trace_file.close()
-                        except OSError:
-                            pass
-                        handle._trace_file = None
-
     handle._monitor_cancel_scope = scope
-    tg.start_soon(_run_monitor)
+    tg.start_soon(_run_tracing_monitor, pid, config, scope, handle)
 
     return handle

@@ -180,6 +180,18 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ),
         (
             "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "_eligible_enrolled_trace",
+        ),
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "_decode_enrolled_trace",
+        ),
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "_finalize_crashed_trace",
+        ),
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
             "recover_crashed_sessions",
         ),
     }
@@ -335,6 +347,33 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         (
             "src/autoskillit/workspace/_projected_artifact/_hook_repair.py",
             "repair_broken_projection_hooks",
+        )
+    ),
+    (
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "_eligible_enrolled_trace",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "_eligible_enrolled_trace",
+        )
+    ),
+    (
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "_decode_enrolled_trace",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "_decode_enrolled_trace",
+        )
+    ),
+    (
+        "src/autoskillit/execution/evidence/_session_log_recovery.py",
+        "_finalize_crashed_trace",
+    ): _convergence_adapters(
+        (
+            "src/autoskillit/execution/evidence/_session_log_recovery.py",
+            "_finalize_crashed_trace",
         )
     ),
     (
@@ -565,6 +604,9 @@ _HP = (
     "src/autoskillit/workspace/_projected_artifact/_hook_repair.py::repair_broken_projection_hooks"
 )
 _SR = "src/autoskillit/execution/evidence/_session_log_recovery.py::recover_crashed_sessions"
+_SRE = "src/autoskillit/execution/evidence/_session_log_recovery.py::_eligible_enrolled_trace"
+_SRD = "src/autoskillit/execution/evidence/_session_log_recovery.py::_decode_enrolled_trace"
+_SRF = "src/autoskillit/execution/evidence/_session_log_recovery.py::_finalize_crashed_trace"
 
 AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # -- scripts.pytest_tmp_lifecycle::_reap --
@@ -1070,55 +1112,55 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "A transient projection hook read, write, or rollback failure leaves the candidate "
         "retryable."
     ),
-    # -- execution._session_log_recovery::recover_crashed_sessions --
+    # -- execution._session_log_recovery crash-recovery helpers --
     # Coordinates include the child-outcome reconciliation pass from issue #4623,
     # the typed infrastructure-outcome imports from issue #4927, and deferring
     # the #4623 pass's own child_outcomes import to inside the try block (issue
     # #4672 decomposition — module-level would circularly import back through
     # the evidence/ gateway that now wraps this file).
-    f"{_SR}::L58": _retries_after_input_changes(
+    f"{_SR}::L211": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SR}::L67": _retries_after_input_changes(
+    f"{_SRE}::L42": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L69": _resolves_with_contention(
+    f"{_SRE}::L44": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SR}::L82": _retries_after_input_changes(
+    f"{_SRE}::L55": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SR}::L89": _self_limiting(
+    f"{_SRE}::L60": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SR}::L100": _resolves_with_contention(
+    f"{_SRE}::L69": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SR}::L111": _self_limiting(
+    f"{_SRD}::L84": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SR}::L116": _self_limiting(
+    f"{_SRD}::L89": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SR}::L119": _self_limiting(
+    f"{_SRD}::L92": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SR}::L124": _retries_after_input_changes(
+    f"{_SRD}::L97": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SR}::L134": _self_limiting(
+    f"{_SRD}::L106": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SR}::L156": _self_limiting(
+    f"{_SRD}::L118": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SR}::L162": _retries_after_input_changes(
+    f"{_SRF}::L136": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SR}::L202": _retries_after_input_changes(
+    f"{_SRF}::L176": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

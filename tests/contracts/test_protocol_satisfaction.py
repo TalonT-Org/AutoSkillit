@@ -217,7 +217,7 @@ def test_default_timing_log_satisfies_timing_store_with_order_id():
 
 def test_default_workspace_manager_satisfies_workspace_manager():
     from autoskillit.core import WorkspaceManager
-    from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+    from autoskillit.workspace.clone._cleanup import DefaultWorkspaceManager
 
     assert isinstance(DefaultWorkspaceManager(), WorkspaceManager)
 

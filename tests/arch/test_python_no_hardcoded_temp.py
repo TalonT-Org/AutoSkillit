@@ -44,7 +44,7 @@ _TEMP_PATH_WHITELIST: dict[str, str] = {
     # Justification: docstring example referencing the canonical default path.
     "hooks/guards/skill_cmd_guard.py": "docstring example",
     # Justification: docstring referencing the canonical default path.
-    "workspace/worktree.py": "docstring example",
+    "workspace/clone/_worktree.py": "docstring example",
     # Justification: docstring referencing the canonical default path.
     "server/tools/tools_clone.py": "docstring example",
     # Justification: stdlib-only hook module that cannot import resolve_temp_dir().

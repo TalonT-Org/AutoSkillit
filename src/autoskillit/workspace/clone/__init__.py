@@ -23,7 +23,11 @@ from pathlib import Path
 from typing import Literal
 
 from autoskillit.core import GENERATED_FILES, CloneResult, get_logger, is_protected_branch
-from autoskillit.workspace._clone_detect import (
+
+from . import _registry as clone_registry
+from ._cleanup import CleanupResult, DefaultWorkspaceManager
+from ._cleanup import _delete_directory_contents as delete_directory_contents
+from ._detect import (
     RUNS_DIR,
     classify_remote_url,
     detect_branch,
@@ -31,12 +35,59 @@ from autoskillit.workspace._clone_detect import (
     detect_uncommitted_changes,
     detect_unpublished_branch,
 )
-from autoskillit.workspace._clone_remote import (
+from ._registry import (
+    CloneRegistry,
+    CloneStatus,
+    batch_delete,
+    cleanup_candidates,
+    read_registry,
+    register_clone,
+)
+from ._remote import (
+    CloneSourceResolution,
     _ensure_origin_isolated,
     _probe_clone_source_url,
 )
+from ._worktree import (
+    WORKTREES_DIR,
+    create_git_worktree,
+    list_git_worktrees,
+    remove_git_worktree,
+    remove_worktree_sidecar,
+    write_worktree_sidecar,
+)
 
 logger = get_logger(__name__)
+
+__all__ = [
+    "CleanupResult",
+    "CloneRegistry",
+    "CloneSourceResolution",
+    "CloneStatus",
+    "DefaultCloneManager",
+    "DefaultWorkspaceManager",
+    "RUNS_DIR",
+    "WORKTREES_DIR",
+    "batch_delete",
+    "classify_remote_url",
+    "cleanup_candidates",
+    "clone_registry",
+    "clone_repo",
+    "create_git_worktree",
+    "delete_directory_contents",
+    "detect_branch",
+    "detect_source_dir",
+    "detect_uncommitted_changes",
+    "detect_unpublished_branch",
+    "list_git_worktrees",
+    "push_to_remote",
+    "read_registry",
+    "register_clone",
+    "remove_clone",
+    "remove_git_worktree",
+    "remove_worktree_sidecar",
+    "write_worktree_sidecar",
+]
 
 _IDENTITY_CONFIG_SOURCE_URL = "autoskillit.repositoryIdentity.sourceUrl"
 _IDENTITY_CONFIG_SOURCE_REMOTE = "autoskillit.repositoryIdentity.sourceRemote"

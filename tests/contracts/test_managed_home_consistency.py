@@ -22,10 +22,10 @@ from autoskillit.core import (
     managed_home_for,
     read_retiring_cache,
 )
+from autoskillit.workspace._installed._projection_cache import ProjectedPluginRetirementOwner
 from autoskillit.workspace._projected_artifact._generation_publication import (
     GenerationArtifactRetirementOwner,
 )
-from autoskillit.workspace._projection_cache import ProjectedPluginRetirementOwner
 
 pytestmark = pytest.mark.medium
 

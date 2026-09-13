@@ -24,7 +24,7 @@ from autoskillit.workspace import (
     ProjectedPluginRetirementOwner,
     project_default_plugin_authority,
 )
-from autoskillit.workspace._projection_cache import projected_artifact_manifest_path
+from autoskillit.workspace._installed._projection_cache import projected_artifact_manifest_path
 from tests._helpers import _flush_structlog_proxy_caches
 from tests.cli.test_installed_plugin_selector_integration import (
     _activate_production_selector,
@@ -184,7 +184,7 @@ def test_launch_binding_survives_an_unreadable_stale_projection_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.workspace._projection_cache as projection_cache
+    import autoskillit.workspace._installed._projection_cache as projection_cache
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     authority = _authority(tmp_path)

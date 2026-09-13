@@ -30,7 +30,7 @@ from autoskillit.workspace import (
     ProjectionCacheKey,
     public_plugin_asset_digest,
 )
-from autoskillit.workspace._projection_cache import _PUBLIC_PLUGIN_ASSET_NAMES
+from autoskillit.workspace._installed._projection_assets import _PUBLIC_PLUGIN_ASSET_NAMES
 
 pytestmark = [pytest.mark.layer("contracts"), pytest.mark.medium]
 
@@ -310,7 +310,9 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
-        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from autoskillit.workspace._installed._projection_cache import (
+            read_projected_plugin_identity,
+        )
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -359,7 +361,9 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
-        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from autoskillit.workspace._installed._projection_cache import (
+            read_projected_plugin_identity,
+        )
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -392,7 +396,9 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
         from autoskillit.core import PluginArtifactValidationError, PluginLoadMode
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import project_default_plugin_authority
-        from autoskillit.workspace._projection_cache import read_projected_plugin_identity
+        from autoskillit.workspace._installed._projection_cache import (
+            read_projected_plugin_identity,
+        )
         from tests.contracts._projection_helpers import session_catalog
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -489,7 +495,7 @@ class TestOrphanedProjectionRetirementIsLeaseGated:
     ) -> None:
         from unittest.mock import Mock
 
-        import autoskillit.workspace._projection_cache as projection_cache
+        import autoskillit.workspace._installed._projection_cache as projection_cache
         from autoskillit.core import PluginLoadMode, managed_home
         from autoskillit.execution.backends.claude import ClaudeCodeBackend
         from autoskillit.workspace import (

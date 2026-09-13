@@ -8,14 +8,14 @@ import pytest
 
 from autoskillit.core import write_versioned_json
 from autoskillit.workspace import DefaultSkillResolver
+from autoskillit.workspace._installed._projection_cache import (
+    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+)
 from autoskillit.workspace._projected_artifact.materialization import (
     SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION,
     AgentSkillDocument,
     _projection_skills_manifest,
     validate_sanitized_plugin_artifact,
-)
-from autoskillit.workspace._projection_cache import (
-    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
 )
 from tests._helpers import inject_vanishing_subtree_on_descent
 

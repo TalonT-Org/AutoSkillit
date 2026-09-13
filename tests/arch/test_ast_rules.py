@@ -620,6 +620,7 @@ def test_init_files_are_pure_facades() -> None:
             Path("execution/backends/__init__.py"),
             # The public skills package retains the existing resolver facade body.
             Path("workspace/skills/__init__.py"),
+            Path("workspace/clone/__init__.py"),
         }
     )
 

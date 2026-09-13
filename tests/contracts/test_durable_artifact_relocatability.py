@@ -233,7 +233,7 @@ class TestNonMachineLocalWritersAreRelocatable:
 
     def test_plugin_cache_repair_output_is_relocatable(self, tmp_path: Path) -> None:
         from autoskillit.core import _AUTOSKILLIT_PLUGIN_KEY, installed_plugin_semantic_key
-        from autoskillit.workspace._installed_artifact import (
+        from autoskillit.workspace._installed._artifact import (
             write_installed_plugin_artifact_manifest_locked,
         )
         from autoskillit.workspace._projected_artifact._hook_repair import (
@@ -280,13 +280,13 @@ class TestNonMachineLocalWritersAreRelocatable:
         _assert_relocatable((hooks_dir / "hooks.json").read_text())
 
     def test_projection_repair_outputs_are_relocatable(self, tmp_path: Path) -> None:
+        from autoskillit.workspace._installed._projection_cache import (
+            projected_artifact_manifest_path,
+            projected_plugin_artifact_digest,
+        )
         from autoskillit.workspace._projected_artifact._hook_repair import (
             PluginHookRepairStatus,
             repair_broken_projection_hooks,
-        )
-        from autoskillit.workspace._projection_cache import (
-            projected_artifact_manifest_path,
-            projected_plugin_artifact_digest,
         )
 
         projections_root = tmp_path / "projections"

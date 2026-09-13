@@ -29,7 +29,7 @@ def test_codex_hooks_require_an_exact_installed_artifact(
         installed_plugin_semantic_key,
     )
     from autoskillit.hook_registry import HOOKS_DIR
-    from autoskillit.workspace._installed_artifact import (
+    from autoskillit.workspace._installed._artifact import (
         write_installed_plugin_artifact_manifest_locked,
     )
 

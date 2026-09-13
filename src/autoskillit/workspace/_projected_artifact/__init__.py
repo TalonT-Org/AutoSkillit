@@ -2,7 +2,7 @@
 
 from autoskillit.core import StaleGeneratorError
 
-from .._projection_cache import (
+from .._installed._projection_cache import (
     PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     PROJECTION_CACHE_KEY_EXCLUSIONS,
     ProjectedPluginRetirementOwner,

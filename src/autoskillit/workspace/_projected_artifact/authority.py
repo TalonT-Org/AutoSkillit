@@ -47,6 +47,17 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.workspace._installed._projection_cache import (
+    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    ProjectedPluginRetirementOwner,
+    ProjectionCacheKey,
+    projected_artifact_lease_path,
+    projected_artifact_manifest_path,
+    projected_plugin_artifact_digest,
+    prune_stale_projections,
+    public_plugin_asset_digest,
+    read_projected_plugin_identity,
+)
 from autoskillit.workspace._projected_artifact._authority_types import (
     _ProjectedArtifactPlan,
     _StagedProjectedArtifact,
@@ -73,17 +84,6 @@ from autoskillit.workspace._projected_artifact._publication import (
 )
 from autoskillit.workspace._projected_artifact._validation import (
     validate_sanitized_plugin_artifact,
-)
-from autoskillit.workspace._projection_cache import (
-    PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
-    ProjectedPluginRetirementOwner,
-    ProjectionCacheKey,
-    projected_artifact_lease_path,
-    projected_artifact_manifest_path,
-    projected_plugin_artifact_digest,
-    prune_stale_projections,
-    public_plugin_asset_digest,
-    read_projected_plugin_identity,
 )
 from autoskillit.workspace.skills import (
     EffectiveSkillCatalog,

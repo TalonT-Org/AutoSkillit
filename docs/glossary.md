@@ -23,14 +23,14 @@ Distinguished from project-local recipes that live under
 
 ### clone-based isolation
 
-The pipeline isolation strategy implemented in `workspace/clone.py`. Each
+The pipeline isolation strategy implemented in `workspace/clone/__init__.py`. Each
 recipe run starts by cloning the source repository into
 `autoskillit-runs/<run>-<timestamp>/`; the clone's `origin` remote is rewritten
 so the orchestrator never accidentally pushes to the user's working tree.
 
 ### clone registry
 
-The shared file-based coordination state in `workspace/clone_registry.py` that
+The shared file-based coordination state in `workspace/clone/_registry.py` that
 tracks clones eligible for deferred batch cleanup. Read by
 `batch_cleanup_clones`.
 

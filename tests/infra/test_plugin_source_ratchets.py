@@ -33,11 +33,11 @@ REGISTRY_READ_ALLOWLIST: dict[str, str] = {
         "Defines registered_install_paths(), the stdlib evidence parser. Its output "
         "cannot authorize a source, launch path, or managed artifact root."
     ),
-    "workspace/_install_state.py": (
+    "workspace/_installed/_state.py": (
         "Builds the current diagnostic obligation and compares exact retirement "
         "records with live registration evidence; trusted inputs derive every root."
     ),
-    "workspace/_installed_artifact.py": (
+    "workspace/_installed/_artifact.py": (
         "The shared verifier rereads registry paths under the exact artifact lease only "
         "as obligation evidence; trusted home/plugin/version inputs derive its root."
     ),
@@ -162,28 +162,32 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "The shared retirement engine holds the owner-specific exclusive lease and "
         "revalidates exact identity before removing an artifact tree.",
     ),
-    ("workspace/_install_state.py", "reconcile_install_artifacts", "artifact.unlink"): (
+    ("workspace/_installed/_state.py", "reconcile_install_artifacts", "artifact.unlink"): (
         1,
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a file or symlink.",
     ),
-    ("workspace/_install_state.py", "reconcile_install_artifacts", "shutil.rmtree"): (
+    ("workspace/_installed/_state.py", "reconcile_install_artifacts", "shutil.rmtree"): (
         1,
         "The retired-shape registry identifies the exact obsolete install artifact "
         "before reconciliation removes a directory tree.",
     ),
-    ("workspace/_shared_asset_store.py", "_populate_store_entry", "os.replace"): (
+    ("workspace/_installed/_shared_asset_store.py", "_populate_store_entry", "os.replace"): (
         1,
         "The bounded per-entry lease is held while publishing a freshly hardlinked "
         "staging path to its final content-addressed store entry name (S3-1).",
     ),
-    ("workspace/_shared_asset_store.py", "_populate_store_entry", "staging.unlink"): (
+    (
+        "workspace/_installed/_shared_asset_store.py",
+        "_populate_store_entry",
+        "staging.unlink",
+    ): (
         1,
         "The bounded per-entry lease is held while removing this call's own private "
         "staging hardlink after a failed populate attempt (S3-1).",
     ),
     (
-        "workspace/_update_obligation.py",
+        "workspace/_installed/_update_obligation.py",
         "clear_obligation",
         "_obligation_path(home).unlink",
     ): (
@@ -495,7 +499,7 @@ STRICT_PLUGIN_WRITE_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Every retirement-v2 migration and mutation surfaces file and parent fsync failures.",
     ),
     (
-        "workspace/_installed_artifact.py",
+        "workspace/_installed/_artifact.py",
         "write_installed_plugin_artifact_manifest_locked",
         "write_versioned_json:strict=True",
     ): (

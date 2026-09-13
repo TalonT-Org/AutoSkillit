@@ -20,7 +20,9 @@ _SHARED_READ_SIDE_VALIDATORS = {
     "read_installed_plugin_artifact_identity": (
         "src/autoskillit/core/plugins/_plugin_artifact_identity.py"
     ),
-    "read_projected_plugin_identity": ("src/autoskillit/workspace/_projection_cache.py"),
+    "read_projected_plugin_identity": (
+        "src/autoskillit/workspace/_installed/_projection_cache.py"
+    ),
 }
 
 

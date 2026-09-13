@@ -23,7 +23,7 @@ from autoskillit.pipeline.context_admission_ledger import (
 from autoskillit.recipe.repository import DefaultRecipeRepository
 from autoskillit.server._factory import make_context
 from autoskillit.workspace import DefaultCloneManager, SkillResolver
-from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+from autoskillit.workspace.clone._cleanup import DefaultWorkspaceManager
 from tests.server._factory_test_helpers import (
     _install_shared_explorer_authority,
     _runner,

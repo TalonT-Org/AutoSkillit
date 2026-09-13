@@ -299,7 +299,7 @@ class RetiredArtifactShape(NamedTuple):
 #
 # Append-only, exactly like RETIRED_SKILL_NAMES / RETIRED_AGENT_NAMES: adding an
 # entry here is the *forcing function* that makes an artifact-shape change
-# mergeable. The reconciler in workspace/_install_state.py consumes this at
+# mergeable. The reconciler in workspace/_installed/_state.py consumes this at
 # runtime — it must handle every entry, and nothing outside it.
 RETIRED_INSTALL_ARTIFACT_SHAPES: Mapping[str, RetiredArtifactShape] = MappingProxyType(
     {

@@ -620,6 +620,10 @@ def test_init_files_are_pure_facades() -> None:
             Path("execution/backends/__init__.py"),
             # The public skills package retains the existing resolver facade body.
             Path("workspace/skills/__init__.py"),
+            # classify_skill_capability_evidence stays in the facade so tests can
+            # monkeypatch.setattr the cache/scanner facade-globals it reads at call
+            # time (#5018 D1) — moving it into a shard would silently break that seam.
+            Path("workspace/skill_capabilities/__init__.py"),
         }
     )
 

@@ -51,8 +51,15 @@ async def test_async_kill_returns_same_fail_closed_evidence() -> None:
     assert result.complete is False
 
 
-def test_snapshot_child_disappearance_preserves_complete_root_evidence(
+@pytest.mark.parametrize(
+    ("disappearing_pid", "expected_identities", "complete"),
+    [(202, ((101, 123.0),), True), (101, (), False)],
+)
+def test_snapshot_disappearance_preserves_observation_evidence(
     monkeypatch: pytest.MonkeyPatch,
+    disappearing_pid: int,
+    expected_identities: tuple[tuple[int, float], ...],
+    complete: bool,
 ) -> None:
     class FakeProcess:
         def __init__(self, pid: int) -> None:
@@ -60,10 +67,11 @@ def test_snapshot_child_disappearance_preserves_complete_root_evidence(
 
         def children(self, *, recursive: bool) -> list[FakeProcess]:
             assert recursive is True
+            assert self.pid != disappearing_pid
             return [FakeProcess(202)]
 
         def create_time(self) -> float:
-            if self.pid == 202:
+            if self.pid == disappearing_pid:
                 raise psutil.NoSuchProcess(pid=self.pid)
             return 123.0
 
@@ -71,9 +79,9 @@ def test_snapshot_child_disappearance_preserves_complete_root_evidence(
 
     snapshot = _process_kill._snapshot_process_tree(101)
 
-    assert snapshot.process_identities == ((101, 123.0),)
+    assert snapshot.process_identities == expected_identities
     assert snapshot.access_denied_pids == ()
-    assert snapshot.observation_complete is True
+    assert snapshot.observation_complete is complete
 
 
 def test_identity_denial_excludes_unverified_target_from_signals(

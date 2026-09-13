@@ -85,60 +85,101 @@ def _identity(proc: psutil.Process) -> tuple[int, float]:
     return proc.pid, proc.create_time()
 
 
-def _snapshot_process_tree(pid: int) -> ProcessObservationSnapshot:
-    """Capture a root and recursive descendants without signaling or waiting."""
-    identities: set[tuple[int, float]] = set()
-    denied: set[int] = set()
-    complete = True
-    try:
-        root = psutil.Process(pid)
-    except (psutil.Error, OSError) as exc:
-        if _is_disappearance(exc):
-            return ProcessObservationSnapshot(observation_complete=False)
-        if _is_denial(exc):
-            return ProcessObservationSnapshot(
-                access_denied_pids=(pid,), observation_complete=False
-            )
-        logger.warning("process_root_observation_failed", pid=pid, exc_info=True)
-        return ProcessObservationSnapshot(observation_complete=False)
+def _incomplete_observation(
+    pid: int, exc: BaseException, event: str
+) -> ProcessObservationSnapshot:
+    if _is_denial(exc):
+        return ProcessObservationSnapshot(access_denied_pids=(pid,), observation_complete=False)
+    if not _is_disappearance(exc):
+        logger.warning(event, pid=pid, exc_info=True)
+    return ProcessObservationSnapshot(observation_complete=False)
 
-    try:
-        identities.add(_identity(root))
-    except (psutil.Error, OSError) as exc:
-        if _is_disappearance(exc):
-            return ProcessObservationSnapshot(observation_complete=False)
-        if _is_denial(exc):
-            denied.add(pid)
-        else:
-            logger.warning("process_root_identity_failed", pid=pid, exc_info=True)
-        complete = False
 
+def _snapshot_descendants(root: psutil.Process) -> ProcessObservationSnapshot:
+    """Capture stable descendant identities without treating their exit as a failure."""
     try:
         children = root.children(recursive=True)
     except (psutil.Error, OSError) as exc:
-        children = []
-        if _is_denial(exc):
-            denied.add(pid)
-        elif not _is_disappearance(exc):
-            logger.warning("process_descendant_observation_failed", pid=pid, exc_info=True)
-        complete = False
-
+        return _incomplete_observation(root.pid, exc, "process_descendant_observation_failed")
+    identities: set[tuple[int, float]] = set()
+    denied: set[int] = set()
+    complete = True
     for child in children:
         try:
             identities.add(_identity(child))
         except (psutil.Error, OSError) as exc:
             if _is_disappearance(exc):
                 continue
+            complete = False
             if _is_denial(exc):
                 denied.add(child.pid)
             else:
                 logger.warning("process_identity_observation_failed", pid=child.pid, exc_info=True)
-            complete = False
     return ProcessObservationSnapshot(
         process_identities=tuple(sorted(identities)),
         access_denied_pids=tuple(sorted(denied)),
         observation_complete=complete,
     )
+
+
+def _snapshot_process_tree(pid: int) -> ProcessObservationSnapshot:
+    """Capture a root and recursive descendants without signaling or waiting."""
+    try:
+        root = psutil.Process(pid)
+    except (psutil.Error, OSError) as exc:
+        return _incomplete_observation(pid, exc, "process_root_observation_failed")
+    try:
+        root_evidence = ProcessObservationSnapshot(process_identities=(_identity(root),))
+    except (psutil.Error, OSError) as exc:
+        if _is_disappearance(exc):
+            return ProcessObservationSnapshot(observation_complete=False)
+        root_evidence = _incomplete_observation(pid, exc, "process_root_identity_failed")
+    return root_evidence.merge(_snapshot_descendants(root))
+
+
+def _signal_processes(
+    processes: Sequence[psutil.Process], signum: signal.Signals, stage: str
+) -> tuple[set[int], bool]:
+    denied: set[int] = set()
+    complete = True
+    for proc in processes:
+        try:
+            proc.send_signal(signum)
+        except (psutil.Error, OSError) as exc:
+            if _is_disappearance(exc):
+                continue
+            complete = False
+            if _is_denial(exc):
+                denied.add(proc.pid)
+            else:
+                logger.warning(f"process_{stage}_failed", pid=proc.pid, exc_info=True)
+    return denied, complete
+
+
+def _wait_for_processes(
+    processes: Sequence[psutil.Process],
+    timeout: float,
+    stage: str,
+    pid: int,
+) -> tuple[list[psutil.Process], set[int], bool]:
+    denied: set[int] = set()
+    if timeout == 0:
+        return list(processes), denied, True
+    try:
+        _, alive = psutil.wait_procs(processes, timeout=timeout)
+        return alive, denied, True
+    except psutil.TimeoutExpired as exc:
+        if stage == "term":
+            logger.debug("process_term_wait_timed_out", pid=getattr(exc, "pid", pid))
+        return list(processes), denied, True
+    except (psutil.Error, OSError) as exc:
+        if _is_disappearance(exc):
+            return [], denied, True
+        if _is_denial(exc):
+            denied.add(getattr(exc, "pid", pid))
+        else:
+            logger.warning(f"process_{stage}_wait_failed", pid=pid, exc_info=True)
+        return list(processes), denied, False
 
 
 def kill_process_tree(
@@ -228,72 +269,18 @@ def kill_process_tree(
                 logger.warning("process_identity_capture_failed", pid=proc.pid, exc_info=True)
             complete = False
 
-    for proc in signal_targets:
-        try:
-            proc.send_signal(signal.SIGTERM)
-        except (psutil.Error, OSError) as exc:
-            if _is_disappearance(exc):
-                continue
-            if _is_denial(exc):
-                denied.add(proc.pid)
-            else:
-                logger.warning("process_term_failed", pid=proc.pid, exc_info=True)
-            complete = False
-
-    term_wait = remaining_wait(timeout)
-    if term_wait == 0:
-        alive_after_term = list(signal_targets)
-    else:
-        try:
-            _, alive_after_term = psutil.wait_procs(signal_targets, timeout=term_wait)
-        except psutil.TimeoutExpired as exc:
-            alive_after_term = list(signal_targets)
-            logger.debug("process_term_wait_timed_out", pid=getattr(exc, "pid", pid))
-        except (psutil.Error, OSError) as exc:
-            if _is_disappearance(exc):
-                alive_after_term = []
-            else:
-                alive_after_term = list(signal_targets)
-            if _is_denial(exc):
-                denied_pid = getattr(exc, "pid", pid)
-                denied.add(denied_pid)
-                complete = False
-            elif not _is_disappearance(exc):
-                logger.warning("process_term_wait_failed", pid=pid, exc_info=True)
-                complete = False
-
-    for proc in alive_after_term:
-        try:
-            proc.send_signal(signal.SIGKILL)
-        except (psutil.Error, OSError) as exc:
-            if _is_disappearance(exc):
-                continue
-            if _is_denial(exc):
-                denied.add(proc.pid)
-            else:
-                logger.warning("process_kill_failed", pid=proc.pid, exc_info=True)
-            complete = False
-
-    kill_wait = remaining_wait(_FINAL_WAIT_SECONDS)
-    if kill_wait == 0:
-        alive_after_kill = list(alive_after_term)
-    else:
-        try:
-            _, alive_after_kill = psutil.wait_procs(alive_after_term, timeout=kill_wait)
-        except psutil.TimeoutExpired:
-            alive_after_kill = list(alive_after_term)
-        except (psutil.Error, OSError) as exc:
-            if _is_disappearance(exc):
-                alive_after_kill = []
-            else:
-                alive_after_kill = list(alive_after_term)
-            if _is_denial(exc):
-                denied_pid = getattr(exc, "pid", pid)
-                denied.add(denied_pid)
-                complete = False
-            elif not _is_disappearance(exc):
-                logger.warning("process_kill_wait_failed", pid=pid, exc_info=True)
-                complete = False
+    term_denied, term_complete = _signal_processes(signal_targets, signal.SIGTERM, "term")
+    alive_after_term, term_wait_denied, term_wait_complete = _wait_for_processes(
+        signal_targets, remaining_wait(timeout), "term", pid
+    )
+    denied.update(term_denied, term_wait_denied)
+    complete &= term_complete and term_wait_complete
+    kill_denied, kill_complete = _signal_processes(alive_after_term, signal.SIGKILL, "kill")
+    alive_after_kill, kill_wait_denied, kill_wait_complete = _wait_for_processes(
+        alive_after_term, remaining_wait(_FINAL_WAIT_SECONDS), "kill", pid
+    )
+    denied.update(kill_denied, kill_wait_denied)
+    complete &= kill_complete and kill_wait_complete
     survivor_pids = tuple(sorted(proc.pid for proc in alive_after_kill))
     observed_pids = {observed_pid for observed_pid, _ in identities}
     terminated_pids = tuple(sorted(observed_pids - set(survivor_pids)))
@@ -381,6 +368,14 @@ class OwnedProcessGroup:
         """Carry earlier pre-poll evidence into final settlement."""
         self._snapshot = self._snapshot.merge(snapshot)
 
+    def _record_incomplete(self, denied_pid: int | None = None) -> None:
+        self._snapshot = self._snapshot.merge(
+            ProcessObservationSnapshot(
+                access_denied_pids=() if denied_pid is None else (denied_pid,),
+                observation_complete=False,
+            )
+        )
+
     def observe_exit(self) -> int | None:
         """Observe leader exit without reaping when WNOWAIT is available."""
         if self._observed_returncode is not None:
@@ -400,16 +395,10 @@ class OwnedProcessGroup:
             except ChildProcessError:
                 self._group_authority = False
                 self._reaped = True
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(observation_complete=False)
-                )
+                self._record_incomplete()
                 return self.process.returncode
             except PermissionError:
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(
-                        access_denied_pids=(self.pid,), observation_complete=False
-                    )
-                )
+                self._record_incomplete(self.pid)
                 return None
             if status is None:
                 return None
@@ -435,20 +424,14 @@ class OwnedProcessGroup:
             or self.pid <= 0
             or self.pgid != self.pid
         ):
-            self._snapshot = self._snapshot.merge(
-                ProcessObservationSnapshot(observation_complete=False)
-            )
+            self._record_incomplete()
             return False
         try:
             valid = os.getpgid(self.pid) == self.pgid
         except OSError as exc:
             valid = False
             if _is_denial(exc):
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(
-                        access_denied_pids=(self.pid,), observation_complete=False
-                    )
-                )
+                self._record_incomplete(self.pid)
                 return False
             if not _is_disappearance(exc):
                 logger.warning(
@@ -458,9 +441,7 @@ class OwnedProcessGroup:
                     exc_info=True,
                 )
         if not valid:
-            self._snapshot = self._snapshot.merge(
-                ProcessObservationSnapshot(observation_complete=False)
-            )
+            self._record_incomplete()
         return valid
 
     def _signal_group(self, signum: signal.Signals) -> None:
@@ -472,16 +453,10 @@ class OwnedProcessGroup:
             return
         except OSError as exc:
             if _is_denial(exc):
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(
-                        access_denied_pids=(self.pgid,), observation_complete=False
-                    )
-                )
+                self._record_incomplete(self.pgid)
             elif not _is_disappearance(exc):
                 logger.warning("owned_group_signal_failed", pgid=self.pgid, exc_info=True)
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(observation_complete=False)
-                )
+                self._record_incomplete()
 
     def _identity_is_alive(self, identity: tuple[int, float]) -> bool:
         """Return whether the identified PID is still a live, non-zombie process."""
@@ -493,16 +468,10 @@ class OwnedProcessGroup:
             if _is_disappearance(exc):
                 return False
             if _is_denial(exc):
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(
-                        access_denied_pids=(pid,), observation_complete=False
-                    )
-                )
+                self._record_incomplete(pid)
             else:
                 logger.warning("owned_group_identity_revalidation_failed", pid=pid, exc_info=True)
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(observation_complete=False)
-                )
+                self._record_incomplete()
             return True
 
     def _scan_group(self) -> tuple[tuple[int, float], ...]:
@@ -564,6 +533,15 @@ class OwnedProcessGroup:
         self._observed_returncode = returncode
         return returncode
 
+    def _signal_direct_leader(self, signum: signal.Signals) -> None:
+        signal_leader = self.process.terminate if signum == signal.SIGTERM else self.process.kill
+        try:
+            signal_leader()
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            self._record_incomplete(self.pid)
+
     def cleanup(
         self, timeout: float = 2.0, *, escalate: bool = False
     ) -> tuple[int | None, ProcessCleanupResult]:
@@ -583,28 +561,10 @@ class OwnedProcessGroup:
 
         returncode = self.observe_exit()
         if returncode is None:
-            try:
-                self.process.terminate()
-            except ProcessLookupError:
-                pass
-            except PermissionError:
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(
-                        access_denied_pids=(self.pid,), observation_complete=False
-                    )
-                )
+            self._signal_direct_leader(signal.SIGTERM)
         returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS if escalated else timeout)
         if returncode is None:
-            try:
-                self.process.kill()
-            except ProcessLookupError:
-                pass
-            except PermissionError:
-                self._snapshot = self._snapshot.merge(
-                    ProcessObservationSnapshot(
-                        access_denied_pids=(self.pid,), observation_complete=False
-                    )
-                )
+            self._signal_direct_leader(signal.SIGKILL)
             returncode = self._bounded_direct_reap(_FINAL_WAIT_SECONDS)
 
         surviving_identities = tuple(

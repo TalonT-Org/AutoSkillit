@@ -196,8 +196,8 @@ def _scoped_source_files() -> list[Path]:
     files = list((HOOKS_ROOT / "_classification").glob("*.py"))
     files += list((HOOKS_ROOT / "guards").glob("*.py"))
     files += [
-        HOOKS_ROOT / "_command_classification.py",
-        HOOKS_ROOT / "_github_mutation_analysis.py",
+        HOOKS_ROOT / "_runtime" / "_command_classification.py",
+        HOOKS_ROOT / "_runtime" / "_github_mutation_analysis.py",
     ]
     return sorted(set(files))
 

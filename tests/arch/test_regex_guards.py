@@ -359,7 +359,7 @@ def test_shell_ops_and_wrapped_command_no_longer_in_facade() -> None:
     interpreter_invokes, so the raw-scan primitives _SHELL_OPS and
     has_interpreter_wrapped_command are dead and must no longer be defined.
     """
-    source = (SRC_ROOT / "hooks" / "_command_classification.py").read_text()
+    source = (SRC_ROOT / "hooks" / "_runtime" / "_command_classification.py").read_text()
     assert "_SHELL_OPS" not in source
     classification_source = (
         SRC_ROOT / "hooks" / "_classification" / "_interpreters.py"

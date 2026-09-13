@@ -272,7 +272,7 @@ def _food_truck_launch_spec_builder(
     """
 
     def build(
-        plugin_binding: PluginLaunchBinding | None,
+        attempt_plugin_binding: PluginLaunchBinding | None,
         provider_extras: Mapping[str, str] | None,
         managed_attempt_id: str | None = None,
     ) -> CmdSpec:
@@ -291,7 +291,7 @@ def _food_truck_launch_spec_builder(
             )
         spec = backend.build_food_truck_cmd(
             orchestrator_prompt=orchestrator_prompt,
-            plugin_binding=plugin_binding,
+            plugin_binding=attempt_plugin_binding,
             cwd=attempt_cwd,
             completion_marker=completion_marker,
             resume_session_id=resume_session_id,

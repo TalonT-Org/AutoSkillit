@@ -17,7 +17,7 @@ from tests.arch._line_budget import count_budget_lines
 pytestmark = [pytest.mark.small]
 
 
-_SKILLS_TARGETS: tuple[str, ...] = (
+_WORKSPACE_SHARD_TARGETS: tuple[str, ...] = (
     "workspace/skills/__init__.py",
     "workspace/skills/_records.py",
     "workspace/skills/_overrides.py",
@@ -34,7 +34,7 @@ _SKILLS_TARGETS: tuple[str, ...] = (
 )
 
 
-@pytest.mark.parametrize("rel_path", _SKILLS_TARGETS)
+@pytest.mark.parametrize("rel_path", _WORKSPACE_SHARD_TARGETS)
 def test_skill_module_under_warning_zone(rel_path: str) -> None:
     """Every decomposed module must stay under the 750-line warning zone."""
     target = SRC_ROOT / rel_path

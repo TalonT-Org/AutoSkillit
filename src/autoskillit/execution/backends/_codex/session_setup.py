@@ -44,7 +44,7 @@ def setup_codex_session_dir(
 ) -> frozenset[str]:
     """Project the pre-launch config snapshot, link auth, and register agent TOMLs.
 
-    Pure-function form of ``CodexSessionCommandMixin.setup_session_dir`` — takes the
+    Pure-function form of ``CodexCommandMixin.setup_session_dir`` — takes the
     resolved ``source_codex_home`` explicitly instead of reading it off ``self``, so
     it carries no dependency on the mixin's instance state.
     """

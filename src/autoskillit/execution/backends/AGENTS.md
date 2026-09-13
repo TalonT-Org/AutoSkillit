@@ -27,11 +27,11 @@ synchronization, hook update, snapshot, and native validation.
 ## Codex's two transports
 
 Codex speaks two distinct wire formats. `codex exec` argv is used only by
-`build_interactive_cmd` (the TUI, via `CodexSessionCommandMixin` in
+`build_interactive_cmd` (the TUI, via `CodexCommandMixin` in
 `_codex/session_commands.py`). Every headless/food-truck/resume/skill-session
 builder instead emits `codex app-server --listen stdio://` JSON-RPC
-(`CodexHeadlessCommandMixin` in `_codex/headless_commands.py`, mixed into
-`CodexSessionCommandMixin`), driven at runtime by `CodexAppServerDriver`
+(`CodexOrdinaryHeadlessCommandMixin` in `_codex/headless_commands.py`, mixed into
+`CodexCommandMixin`), driven at runtime by `CodexAppServerDriver`
 (`_codex/app_server.py`), which implements the `LineDriver` protocol. When
 adding a Codex builder, mix in whichever of these two boundaries matches its
 transport rather than hand-rolling either argv or JSON-RPC construction.

@@ -45,7 +45,9 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import FlagVocabulary
 from autoskillit.execution.backends._codex.app_server import CodexAppServerDriver
-from autoskillit.execution.backends._codex.headless_commands import CodexHeadlessCommandMixin
+from autoskillit.execution.backends._codex.headless_commands import (
+    CodexOrdinaryHeadlessCommandMixin,
+)
 from autoskillit.execution.backends._codex_cmd_builders import (
     CODEX_ENV_PREFIX_DENYLIST,
     NON_VARIADIC_CODEX_FLAGS,
@@ -134,7 +136,7 @@ def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
 
 
 @dataclass(frozen=True, slots=True)
-class CodexBackend(CodexHeadlessCommandMixin):
+class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     source_codex_home: Path | None = None
 
     def __post_init__(self) -> None:

@@ -88,7 +88,7 @@ def _codex_home_from_plugin_binding(
     return str(plugin_binding.plugin_dir)
 
 
-class CodexSessionCommandMixin(BackendCmdBuilderBase):
+class CodexCommandMixin(BackendCmdBuilderBase):
     source_codex_home: Path | None
 
     @property

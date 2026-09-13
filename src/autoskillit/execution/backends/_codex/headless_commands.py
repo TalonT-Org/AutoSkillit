@@ -1,6 +1,6 @@
 """Codex ordinary-headless command construction.
 
-Split out of ``codex.py`` along the ``CodexSessionCommandMixin`` boundary to
+Split out of ``codex.py`` along the ``CodexCommandMixin`` boundary to
 stay under the file-length hard cap; owns the ``build_headless_cmd`` builder.
 """
 
@@ -19,7 +19,7 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._backend_cmd_builder_base import _merge_caller_env_extras
 from autoskillit.execution.backends._claude_prompt import _HEADLESS_EXCLUSIVE_VARS
-from autoskillit.execution.backends._codex.session_commands import CodexSessionCommandMixin
+from autoskillit.execution.backends._codex.session_commands import CodexCommandMixin
 from autoskillit.execution.backends._codex_cmd_builders import (
     _codex_app_server_base,
     _codex_exec_extras,
@@ -27,7 +27,7 @@ from autoskillit.execution.backends._codex_cmd_builders import (
 )
 
 
-class CodexHeadlessCommandMixin(CodexSessionCommandMixin):
+class CodexOrdinaryHeadlessCommandMixin(CodexCommandMixin):
     """Ordinary (no managed catalog) Codex headless command construction."""
 
     def build_headless_cmd(
@@ -96,4 +96,4 @@ class CodexHeadlessCommandMixin(CodexSessionCommandMixin):
         )
 
 
-__all__ = ["CodexHeadlessCommandMixin"]
+__all__ = ["CodexOrdinaryHeadlessCommandMixin"]

@@ -280,6 +280,26 @@ def check_test_passed(returncode: int, stdout: str, stderr: str = "") -> bool:
     return True
 
 
+def _read_filter_stats(sidecar: Path) -> tuple[str | None, int | None, int | None, str | None]:
+    if sidecar.is_file() and sidecar.stat().st_size > 0:
+        try:
+            raw = json.loads(sidecar.read_text())
+            if isinstance(raw, dict):
+                fm = raw.get("filter_mode")
+                ts = raw.get("tests_selected")
+                td = raw.get("tests_deselected")
+                fr = raw.get("full_run_reason")
+                return (
+                    fm if isinstance(fm, str) else None,
+                    ts if isinstance(ts, int) else None,
+                    td if isinstance(td, int) else None,
+                    fr if isinstance(fr, str) else None,
+                )
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.debug("filter stats sidecar read error: %s", exc)
+    return None, None, None, None
+
+
 class DefaultTestRunner:
     """Concrete TestRunner that runs the configured test command via subprocess."""
 
@@ -412,21 +432,12 @@ class DefaultTestRunner:
 
             elapsed = time.monotonic() - start
 
-            sidecar = Path(sidecar_path)
-            if sidecar.is_file() and sidecar.stat().st_size > 0:
-                try:
-                    raw = json.loads(sidecar.read_text())
-                    if isinstance(raw, dict):
-                        fm = raw.get("filter_mode")
-                        ts = raw.get("tests_selected")
-                        td = raw.get("tests_deselected")
-                        fr = raw.get("full_run_reason")
-                        stat_filter_mode = fm if isinstance(fm, str) else None
-                        stat_tests_selected = ts if isinstance(ts, int) else None
-                        stat_tests_deselected = td if isinstance(td, int) else None
-                        stat_full_run_reason = fr if isinstance(fr, str) else None
-                except (json.JSONDecodeError, OSError) as exc:
-                    logger.debug("filter stats sidecar read error: %s", exc)
+            (
+                stat_filter_mode,
+                stat_tests_selected,
+                stat_tests_deselected,
+                stat_full_run_reason,
+            ) = _read_filter_stats(Path(sidecar_path))
         finally:
             if lease is not None:
                 lease.close()

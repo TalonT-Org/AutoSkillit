@@ -253,6 +253,25 @@ class DefaultCIWatcher:
             j["name"] for j in data.get("jobs", []) if j.get("conclusion") in FAILED_CONCLUSIONS
         ]
 
+    async def _completed_run_result(
+        self,
+        client: httpx.AsyncClient,
+        headers: dict[str, str],
+        owner_repo: str,
+        run_id: int,
+        conclusion: str | None,
+    ) -> dict[str, Any]:
+        failed_jobs = (
+            await self._fetch_failed_jobs(client, headers, owner_repo, run_id)
+            if conclusion in FAILED_CONCLUSIONS
+            else []
+        )
+        return {
+            "run_id": run_id,
+            "conclusion": conclusion,
+            "failed_jobs": failed_jobs,
+        }
+
     async def wait(
         self,
         branch: str,
@@ -331,24 +350,13 @@ class DefaultCIWatcher:
                         run = valid_completed[0]
                         run_id = run["id"]
                         conclusion = run.get("conclusion", "unknown")
-                        failed_jobs = (
-                            await self._fetch_failed_jobs(
-                                client,
-                                headers,
-                                owner_repo,
-                                run_id,
-                            )
-                            if conclusion in FAILED_CONCLUSIONS
-                            else []
+                        completed_result = await self._completed_run_result(
+                            client, headers, owner_repo, run_id, conclusion
                         )
                         logger.info(
                             "ci_watcher_lookback_hit", run_id=run_id, conclusion=conclusion
                         )
-                        return {
-                            "run_id": run_id,
-                            "conclusion": conclusion,
-                            "failed_jobs": failed_jobs,
-                        }
+                        return completed_result
 
                 # Phase 2: Poll for active runs
                 logger.info("ci_watcher_polling", branch=branch, repo=owner_repo)
@@ -384,21 +392,9 @@ class DefaultCIWatcher:
                             run = valid_completed[0]
                             run_id = run["id"]
                             conclusion = run.get("conclusion", "unknown")
-                            failed_jobs = (
-                                await self._fetch_failed_jobs(
-                                    client,
-                                    headers,
-                                    owner_repo,
-                                    run_id,
-                                )
-                                if conclusion in FAILED_CONCLUSIONS
-                                else []
+                            return await self._completed_run_result(
+                                client, headers, owner_repo, run_id, conclusion
                             )
-                            return {
-                                "run_id": run_id,
-                                "conclusion": conclusion,
-                                "failed_jobs": failed_jobs,
-                            }
 
                     sleep_duration = _jittered_sleep(attempt)
                     remaining = deadline - time.monotonic()
@@ -444,22 +440,11 @@ class DefaultCIWatcher:
                     )
                     if run_data.get("status") == "completed":
                         conclusion = run_data.get("conclusion", "unknown")
-                        failed_jobs = (
-                            await self._fetch_failed_jobs(
-                                client,
-                                headers,
-                                owner_repo,
-                                run_id,
-                            )
-                            if conclusion in FAILED_CONCLUSIONS
-                            else []
+                        completed_result = await self._completed_run_result(
+                            client, headers, owner_repo, run_id, conclusion
                         )
                         logger.info("ci_watcher_completed", run_id=run_id, conclusion=conclusion)
-                        return {
-                            "run_id": run_id,
-                            "conclusion": conclusion,
-                            "failed_jobs": failed_jobs,
-                        }
+                        return completed_result
 
                     sleep_duration = _jittered_sleep(attempt)
                     remaining = deadline - time.monotonic()

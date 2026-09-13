@@ -114,14 +114,25 @@ class DefaultLaunchResolver:
 
         projection_binding = request.skill_projection_binding
         if projection_binding is not None:
-            if projection_binding.backend != selected_backend:
-                raise LaunchContractError(
-                    "skill projection backend drifted from selected backend authority"
-                )
-            if projection_binding.cwd != request.cwd:
-                raise LaunchContractError("skill projection cwd drifted from launch request")
-            if projection_binding.projection_digest != request.semantic_plan.projection_digest:
-                raise LaunchContractError("skill projection digest drifted from semantic plan")
+            for actual, expected, message in (
+                (
+                    projection_binding.backend,
+                    selected_backend,
+                    "skill projection backend drifted from selected backend authority",
+                ),
+                (
+                    projection_binding.cwd,
+                    request.cwd,
+                    "skill projection cwd drifted from launch request",
+                ),
+                (
+                    projection_binding.projection_digest,
+                    request.semantic_plan.projection_digest,
+                    "skill projection digest drifted from semantic plan",
+                ),
+            ):
+                if actual != expected:
+                    raise LaunchContractError(message)
             semantic_digest = sha256(
                 json.dumps(
                     dict(projection_binding.semantic_digests),

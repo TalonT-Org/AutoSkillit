@@ -159,13 +159,13 @@ def _classify_pr_state(state: PRFetchState, *, ever_enrolled: bool) -> Classific
     if state["merged"]:
         return ClassificationResult(PRState.MERGED, "PR merged")
 
-    if state["state"] == "CLOSED":
-        if state["checks_state"] in {"FAILURE", "ERROR"}:
-            return ClassificationResult(PRState.EJECTED_CI_FAILURE, "PR closed after CI failure")
-        return ClassificationResult(PRState.EJECTED, "PR closed while not merged")
-
+    closed = state["state"] == "CLOSED"
     if state["checks_state"] in {"FAILURE", "ERROR"}:
-        return ClassificationResult(PRState.EJECTED_CI_FAILURE, "checks terminal failure")
+        reason = "PR closed after CI failure" if closed else "checks terminal failure"
+        return ClassificationResult(PRState.EJECTED_CI_FAILURE, reason)
+
+    if closed:
+        return ClassificationResult(PRState.EJECTED, "PR closed while not merged")
 
     if _is_positive_stall(state):
         return ClassificationResult(PRState.STALLED, "stall signals present")

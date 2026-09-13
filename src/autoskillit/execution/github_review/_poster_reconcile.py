@@ -85,6 +85,25 @@ async def preflight_new_operation(
     return scope_material, authenticated_login, pr_author_login
 
 
+async def reconcile_latest_attempt(
+    poster: DefaultGitHubReviewPoster,
+    *,
+    request: GitHubReviewRequest,
+    operation_key: str,
+    findings: tuple[_poster_support.CanonicalFinding, ...],
+) -> GitHubReviewPostResult | None:
+    attempts = poster.ledger.load_attempts(operation_key)
+    if not attempts:
+        return None
+    return await reconcile_existing(
+        poster,
+        request=request,
+        operation_key=operation_key,
+        findings=findings,
+        attempt=attempts[-1],
+    )
+
+
 async def reconcile_existing(
     poster: DefaultGitHubReviewPoster,
     *,

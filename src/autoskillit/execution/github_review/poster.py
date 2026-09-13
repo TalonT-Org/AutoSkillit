@@ -102,15 +102,14 @@ class DefaultGitHubReviewPoster:
                     state=ReviewOperationState.TERMINAL,
                     error="review operation identity conflicts with persisted intent",
                 )
-            attempts = self.ledger.load_attempts(operation_key)
-            if attempts:
-                return await _poster_reconcile.reconcile_existing(
-                    self,
-                    request=request,
-                    operation_key=operation_key,
-                    findings=findings,
-                    attempt=attempts[-1],
-                )
+            reconciled = await _poster_reconcile.reconcile_latest_attempt(
+                self,
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+            )
+            if reconciled is not None:
+                return reconciled
             if operation.state is not ReviewOperationState.PREPARED:
                 return replace(
                     base,
@@ -138,25 +137,23 @@ class DefaultGitHubReviewPoster:
             findings=persisted_findings,
         )
         if state is not ReviewOperationState.PREPARED:
-            attempts = self.ledger.load_attempts(operation_key)
-            if attempts:
-                return await _poster_reconcile.reconcile_existing(
-                    self,
-                    request=request,
-                    operation_key=operation_key,
-                    findings=findings,
-                    attempt=attempts[-1],
-                )
+            reconciled = await _poster_reconcile.reconcile_latest_attempt(
+                self,
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+            )
+            if reconciled is not None:
+                return reconciled
         if not self.ledger.claim_operation(operation_key):
-            attempts = self.ledger.load_attempts(operation_key)
-            if attempts:
-                return await _poster_reconcile.reconcile_existing(
-                    self,
-                    request=request,
-                    operation_key=operation_key,
-                    findings=findings,
-                    attempt=attempts[-1],
-                )
+            reconciled = await _poster_reconcile.reconcile_latest_attempt(
+                self,
+                request=request,
+                operation_key=operation_key,
+                findings=findings,
+            )
+            if reconciled is not None:
+                return reconciled
             return replace(
                 base,
                 state=ReviewOperationState.AMBIGUOUS,
@@ -263,75 +260,27 @@ class DefaultGitHubReviewPoster:
             payload,
         )
         response_class = response.response_class
-        if response.succeeded:
-            self.ledger.complete_attempt(
-                operation_key=operation_key,
-                attempt_number=attempt_number,
-                state=ReviewOperationState.COMMITTED_PENDING_VERIFICATION,
-                response_class=response_class,
-                status_code=response.status_code,
-                error=None,
-            )
-            reconciliation = await self._reconcile_payload(
-                request=request,
-                operation_key=operation_key,
-                payload=payload,
-                findings=findings,
-                authenticated_login=authenticated_login,
-            )
-            if reconciliation.review_id is not None:
-                result = self._finalize(
-                    request=request,
-                    operation_key=operation_key,
-                    findings=findings,
-                    omitted=omitted,
-                    effective_event=effective_event,
-                    attempt_digest=attempt_digest,
-                    response_class=response_class,
-                    state=ReviewOperationState.SUCCEEDED,
-                    reconciliation=reconciliation,
-                    executed_mutations=attempt_number,
-                )
-                _poster_retry.release_slot(
-                    self,
-                    scope_id,
-                    slot,
-                    operation_key,
-                    keep_in_flight=False,
-                )
-                return result
-            self.ledger.set_operation_state(
-                operation_key,
-                ReviewOperationState.COMMITTED_PENDING_VERIFICATION,
-            )
-            _poster_retry.release_slot(
-                self,
-                scope_id,
-                slot,
-                operation_key,
-                keep_in_flight=True,
-            )
-            return _poster_support.nonfinal_result(
-                request,
-                ReviewOperationState.COMMITTED_PENDING_VERIFICATION,
-                response_class,
-                reconciliation.error or "created review could not be verified",
-                operation_key=operation_key,
-                reconciliation=reconciliation.result,
-                executed_mutations=attempt_number,
-            )
-
-        if response_class in {
+        mutation_succeeded = response.succeeded
+        if mutation_succeeded or response_class in {
             ReviewResponseClass.TRANSPORT_ERROR,
             ReviewResponseClass.SERVER_ERROR,
         }:
+            attempt_state = (
+                ReviewOperationState.COMMITTED_PENDING_VERIFICATION
+                if mutation_succeeded
+                else ReviewOperationState.AMBIGUOUS
+            )
             self.ledger.complete_attempt(
                 operation_key=operation_key,
                 attempt_number=attempt_number,
-                state=ReviewOperationState.AMBIGUOUS,
+                state=attempt_state,
                 response_class=response_class,
                 status_code=response.status_code,
-                error=response.error or github_error_message(response.data),
+                error=(
+                    None
+                    if mutation_succeeded
+                    else response.error or github_error_message(response.data)
+                ),
             )
             reconciliation = await self._reconcile_payload(
                 request=request,
@@ -349,7 +298,11 @@ class DefaultGitHubReviewPoster:
                     effective_event=effective_event,
                     attempt_digest=attempt_digest,
                     response_class=response_class,
-                    state=ReviewOperationState.RECONCILED,
+                    state=(
+                        ReviewOperationState.SUCCEEDED
+                        if mutation_succeeded
+                        else ReviewOperationState.RECONCILED
+                    ),
                     reconciliation=reconciliation,
                     executed_mutations=attempt_number,
                 )
@@ -361,6 +314,11 @@ class DefaultGitHubReviewPoster:
                     keep_in_flight=False,
                 )
                 return result
+            if mutation_succeeded:
+                self.ledger.set_operation_state(
+                    operation_key,
+                    ReviewOperationState.COMMITTED_PENDING_VERIFICATION,
+                )
             _poster_retry.release_slot(
                 self,
                 scope_id,
@@ -370,9 +328,14 @@ class DefaultGitHubReviewPoster:
             )
             return _poster_support.nonfinal_result(
                 request,
-                ReviewOperationState.AMBIGUOUS,
+                attempt_state,
                 response_class,
-                reconciliation.error or response.error or "review mutation outcome is ambiguous",
+                reconciliation.error
+                or (
+                    "created review could not be verified"
+                    if mutation_succeeded
+                    else response.error or "review mutation outcome is ambiguous"
+                ),
                 operation_key=operation_key,
                 reconciliation=reconciliation.result,
                 executed_mutations=attempt_number,

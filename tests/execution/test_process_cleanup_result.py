@@ -51,6 +51,31 @@ async def test_async_kill_returns_same_fail_closed_evidence() -> None:
     assert result.complete is False
 
 
+def test_snapshot_child_disappearance_preserves_complete_root_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeProcess:
+        def __init__(self, pid: int) -> None:
+            self.pid = pid
+
+        def children(self, *, recursive: bool) -> list[FakeProcess]:
+            assert recursive is True
+            return [FakeProcess(202)]
+
+        def create_time(self) -> float:
+            if self.pid == 202:
+                raise psutil.NoSuchProcess(pid=self.pid)
+            return 123.0
+
+    monkeypatch.setattr(_process_kill.psutil, "Process", FakeProcess)
+
+    snapshot = _process_kill._snapshot_process_tree(101)
+
+    assert snapshot.process_identities == ((101, 123.0),)
+    assert snapshot.access_denied_pids == ()
+    assert snapshot.observation_complete is True
+
+
 def test_identity_denial_excludes_unverified_target_from_signals(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

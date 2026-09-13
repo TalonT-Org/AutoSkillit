@@ -791,65 +791,65 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "evidence about the candidate's liveness; retried up to max_retry_seconds."
     ),
     # -- workspace._installed._projection_cache::prune_stale_projections --
-    f"{_PP}::L801": _retries_after_input_changes(
+    f"{_PP}::L626": _retries_after_input_changes(
         "The managed-home boundary does not contain the projection owner root, so mutation "
         "is refused before enumeration."
     ),
-    f"{_PP}::L804": _self_limiting(
+    f"{_PP}::L629": _self_limiting(
         "The projections root does not exist; there is nothing here to prune."
     ),
-    f"{_PP}::L813": _retries_after_input_changes(
+    f"{_PP}::L638": _retries_after_input_changes(
         "An operational failure inspecting the projection root defers reconciliation "
         "without risking launch availability."
     ),
     # -- workspace._installed._projection_cache::_reconcile_projection_entry --
-    f"{_PRE}::L592": _retries_after_input_changes(
+    f"{_PRE}::L417": _retries_after_input_changes(
         "A foreign user-writable cache entry is classified as deferred rather than "
         "aborting launch."
     ),
-    f"{_PRE}::L595": _retries_after_input_changes(
+    f"{_PRE}::L420": _retries_after_input_changes(
         "The caller-selected active projection is intentionally excluded from stale "
         "reconciliation."
     ),
-    f"{_PRE}::L597": _self_limiting(
+    f"{_PRE}::L422": _self_limiting(
         "A deterministic residue staging entry delegates to its original-key locked "
         "resume transition."
     ),
-    f"{_PRE}::L605": _retries_after_input_changes(
+    f"{_PRE}::L430": _retries_after_input_changes(
         "A recognized non-projection namespace belongs to another lifecycle owner and "
         "remains untouched."
     ),
-    f"{_PRE}::L607": _retries_after_input_changes(
+    f"{_PRE}::L432": _retries_after_input_changes(
         "A projection outside the exact scanned root fails the direct-child ownership guard."
     ),
-    f"{_PRE}::L615": RetentionDecision(
+    f"{_PRE}::L440": RetentionDecision(
         Revocability.REVOCABLE,
         "Lease contention means another process currently holds an exclusive lock on this "
         "candidate, a directly observed live reference.",
     ),
-    f"{_PRE}::L617": _retries_after_input_changes(
+    f"{_PRE}::L442": _retries_after_input_changes(
         "Lease acquisition failed operationally, so reconciliation defers without "
         "claiming deletion authority."
     ),
-    f"{_PRE}::L623": _self_limiting(
+    f"{_PRE}::L448": _self_limiting(
         "A permanently invalid projection delegates to the terminal quarantine transition "
         "under the held lease and lock."
     ),
-    f"{_PRE}::L630": _retries_after_input_changes(
+    f"{_PRE}::L455": _retries_after_input_changes(
         "Identity resolution was unavailable for this candidate; an inspection failure, "
         "not evidence of liveness."
     ),
-    f"{_PRE}::L633": _retries_after_input_changes(
+    f"{_PRE}::L458": _retries_after_input_changes(
         "The retirement queue could not be read to record this candidate; an infrastructure "
         "failure, not liveness evidence."
     ),
-    f"{_PRE}::L635": _self_limiting(
+    f"{_PRE}::L460": _self_limiting(
         "A new exact retirement record was durably created; this reports successful disposition."
     ),
-    f"{_PRE}::L636": _self_limiting(
+    f"{_PRE}::L461": _self_limiting(
         "The exact retirement record already exists, so no duplicate durable mutation is needed."
     ),
-    f"{_PRE}::L638": _retries_after_input_changes(
+    f"{_PRE}::L463": _retries_after_input_changes(
         "Install-lock or reconciliation I/O failed operationally and leaves the candidate "
         "retryable."
     ),
@@ -995,22 +995,22 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "defers every candidate without making a retention decision."
     ),
     # -- workspace._installed._state::_enqueue_legacy_installed_plugin_versions --
-    f"{_IL}::L417": _self_limiting(
+    f"{_IL}::L418": _self_limiting(
         "The running legacy version without a selected generation remains outside retirement."
     ),
-    f"{_IL}::L420": _self_limiting(
+    f"{_IL}::L421": _self_limiting(
         "A durable rejected-legacy marker already records this invalid candidate's terminal "
         "disposition."
     ),
-    f"{_IL}::L444": _self_limiting(
+    f"{_IL}::L445": _self_limiting(
         "Another reconciler created the same durable rejection marker, completing this "
         "candidate's disposition."
     ),
-    f"{_IL}::L450": _self_limiting(
+    f"{_IL}::L451": _self_limiting(
         "Writing the rejected-legacy marker durably records this invalid candidate for quiet "
         "later passes."
     ),
-    f"{_IL}::L452": _resolves_with_contention(
+    f"{_IL}::L453": _resolves_with_contention(
         "A shared lease is currently contended, so the legacy candidate waits for its holder."
     ),
     # -- workspace._projected_artifact._hook_repair::repair_broken_plugin_cache_hooks --

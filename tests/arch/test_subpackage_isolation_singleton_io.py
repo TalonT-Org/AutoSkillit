@@ -45,7 +45,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_update_checks_fetch",  # cli/_update_checks_fetch.py: _HTTP_TIMEOUT constant
         "_terminal",  # cli/_terminal.py: _BASE_RESET = "".join(...) derived from _RESET_SPEC
         "_reconcile",  # hooks/_capture/_reconcile.py: immutable owner budget contracts
-        "skill_capability_cache",  # bounded weighted-LRU cache singleton bound once at import time
         "_capture_store",  # cli/ops/_capture_store.py: RECLAIM_BUDGET = SweepBudgetSpec(...)
         "hook_registry",  # hook_registry.py: HOOK_REGISTRY_HASH = compute_registry_hash(...)
         "_fleet",  # cli/_fleet.py: fleet_app = App(name="fleet", ...)
@@ -102,7 +101,6 @@ SINGLETON_ALLOWED_MODULES: frozenset[str] = frozenset(
         "_step_context",  # core/pipeline/_step_context.py: ctx vars
         "_api_cache",  # recipe/_api_cache.py: _LOAD_CACHE = LoadCache()
         "_contracts_manifest",  # recipe/_contracts_manifest.py: _MANIFEST_CACHE = YamlFileCache()
-        "skill_capabilities",  # workspace/skill_capabilities.py: bounded evidence cache
         "methodology_venue_appendix",  # recipe/methodology_venue_appendix.py: _ML_SUB_AREA_CACHE
         "rules_blocks",  # recipe/rules/rules_blocks.py: _BUDGETS_CACHE = YamlFileCache()
         "rules_phoropter_adjacency",  # recipe/rules/rules_phoropter_adjacency.py: _PREFIXES_CACHE
@@ -173,6 +171,13 @@ _SINGLETON_SAFE_ASSIGNMENTS: frozenset[tuple[str, str]] = frozenset(
         # branches of _attempt_stall_recovery -- immutable config, not shared state.
         ("src/autoskillit/execution/headless/_headless_adjudication.py", "_STALE_SPEC"),
         ("src/autoskillit/execution/headless/_headless_adjudication.py", "_IDLE_STALL_SPEC"),
+        # Bounded weighted-LRU evidence cache singleton, bound once at import time.
+        # Path-scoped rather than stem-scoped: `_cache` is a generic shard name and a
+        # stem allowance would exempt any future `_cache.py` anywhere under src/.
+        (
+            "src/autoskillit/workspace/skill_capabilities/_cache.py",
+            "_SKILL_CAPABILITY_EVIDENCE_CACHE",
+        ),
     }
 )
 
@@ -311,6 +316,22 @@ def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -
     }
     unrelated = tmp_path / "_types.py"
     unrelated.write_text("TRANSITION_RESCUE_BUDGET = SweepBudgetSpec()\n")
+
+    with pytest.raises(AssertionError, match="Singleton locality violations"):
+        test_singleton_definition_locality(unrelated)
+
+
+def test_skill_capability_cache_singleton_is_path_and_assignment_scoped(tmp_path: Path) -> None:
+    assert "_cache" not in SINGLETON_ALLOWED_MODULES
+    assert "skill_capability_cache" not in SINGLETON_ALLOWED_MODULES
+    assert "skill_capabilities" not in SINGLETON_ALLOWED_MODULES
+    assert {
+        target
+        for path, target in _SINGLETON_SAFE_ASSIGNMENTS
+        if path == "src/autoskillit/workspace/skill_capabilities/_cache.py"
+    } == {"_SKILL_CAPABILITY_EVIDENCE_CACHE"}
+    unrelated = tmp_path / "_cache.py"
+    unrelated.write_text("_SKILL_CAPABILITY_EVIDENCE_CACHE = _SkillCapabilityEvidenceCache()\n")
 
     with pytest.raises(AssertionError, match="Singleton locality violations"):
         test_singleton_definition_locality(unrelated)

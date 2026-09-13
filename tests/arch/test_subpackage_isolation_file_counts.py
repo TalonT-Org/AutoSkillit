@@ -159,7 +159,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "execution/github_review": 15,
     "execution/headless": 15,
     "execution/session": 20,
-    "workspace": 24,
+    "workspace": 19,  # #5018 moved 5 skill-capability modules into skill_capabilities/
     "hooks": 27,  # +1 _capture_spawn.py extracted from _capture_process.py (#4732)
     "hooks/guards": 41,
     "smoke_utils": 11,
@@ -189,6 +189,27 @@ def test_workspace_skills_package_has_only_the_eight_moved_modules() -> None:
             "skills_frontmatter.py",
             "skill_format.py",
             "skill_resources.py",
+        )
+    )
+
+
+def test_workspace_skill_capabilities_package_has_only_the_five_moved_modules() -> None:
+    capabilities_dir = SRC_ROOT / "workspace" / "skill_capabilities"
+    assert {path.name for path in capabilities_dir.glob("*.py")} == {
+        "__init__.py",
+        "_authenticity.py",
+        "_cache.py",
+        "_scanner.py",
+        "_semantic_plan.py",
+    }
+    assert not any(
+        (SRC_ROOT / "workspace" / name).exists()
+        for name in (
+            "skill_capabilities.py",
+            "skill_capability_authenticity.py",
+            "skill_capability_cache.py",
+            "skill_capability_scanner.py",
+            "skill_semantic_plan.py",
         )
     )
 

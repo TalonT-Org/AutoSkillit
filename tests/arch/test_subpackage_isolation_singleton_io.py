@@ -312,7 +312,8 @@ def test_capture_types_singleton_is_path_and_assignment_scoped(tmp_path: Path) -
     unrelated = tmp_path / "_types.py"
     unrelated.write_text("TRANSITION_RESCUE_BUDGET = SweepBudgetSpec()\n")
 
-    assert _singleton_locality_violations(unrelated)
+    with pytest.raises(AssertionError, match="Singleton locality violations"):
+        test_singleton_definition_locality(unrelated)
 
 
 @pytest.mark.parametrize(

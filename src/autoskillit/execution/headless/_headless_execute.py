@@ -95,13 +95,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _followup_cancellation(
-    exc: BaseException, phase: Literal["nudge", "clone_guard"]
-) -> tuple[SkillResult, None, BaseException]:
-    logger.warning(f"headless_{phase}_cancelled", exc_info=True)
-    return SkillResult.cancelled(), None, exc
-
-
 async def _execute_claude_headless(
     build_spec: Callable[
         [PluginLaunchBinding | None, Mapping[str, str] | None, str | None],
@@ -491,9 +484,11 @@ async def _execute_claude_headless(
                 except InfrastructureFaultError:
                     raise
                 except BaseException as exc:
-                    skill_result, result, followup_cancel = _followup_cancellation(exc, "nudge")
+                    logger.warning("headless_nudge_cancelled", exc_info=True)
+                    skill_result = SkillResult.cancelled()
+                    result = None
                     recorder.record_exception_outcome(skill_result, "nudge_cancelled")
-                    defer_cancellation(followup_cancel)
+                    defer_cancellation(exc)
                     break
                 if nudge_success is not None:
                     skill_result = nudge_success
@@ -515,11 +510,11 @@ async def _execute_claude_headless(
                 except InfrastructureFaultError:
                     raise
                 except BaseException as exc:
-                    skill_result, result, followup_cancel = _followup_cancellation(
-                        exc, "clone_guard"
-                    )
+                    logger.warning("headless_clone_guard_cancelled", exc_info=True)
+                    skill_result = SkillResult.cancelled()
+                    result = None
                     recorder.record_exception_outcome(skill_result, "clone_guard_cancelled")
-                    defer_cancellation(followup_cancel)
+                    defer_cancellation(exc)
                     break
 
             # skill_result is final now (post nudge/clone-guard); record before retry decides.

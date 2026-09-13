@@ -59,7 +59,13 @@ TEST_ALLOWLIST: dict[tuple[str, int], str] = {
 # The managed fixed-batch route and its stdlib-only join shards add three net
 # standalone-import suppressions; hook subprocesses resolve sibling modules
 # through their runtime path bootstrap.
-TYPE_IGNORE_BUDGET = 159
+# Bumped from 159 to 160 (issue #5027). test_runner_guard.py's migration onto
+# the evaluated-segment authority adds one legitimate new bare-name
+# `from _command_classification import (all_evaluated_segments,
+# command_verb_and_args)  # type: ignore[import-not-found]` suppression,
+# following the same stdlib-only standalone-import pattern already used by
+# every other guard in this package.
+TYPE_IGNORE_BUDGET = 160
 
 
 def _scan_pyright_ignores(root: Path) -> set[tuple[str, int]]:

@@ -141,6 +141,15 @@ POLICY_RELAXATION_APPROVALS: tuple[PolicyRelaxationApproval, ...] = (
         issue=4623,
         approved_by="Trecek",
     ),
+    PolicyRelaxationApproval(
+        path="tests/arch/test_pyright_suppression_allowlist.py",
+        symbol="TYPE_IGNORE_BUDGET",
+        key=None,
+        before="159",
+        after="160",
+        issue=5027,
+        approved_by="Trecek",
+    ),
 )
 
 POLICY_AUTHORITY_PATHS = (

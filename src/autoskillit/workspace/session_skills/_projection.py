@@ -21,15 +21,14 @@ location is contract-relevant.** Containment checks therefore use
 final-component symlink and turns "where may I write?" into "what does this
 currently point at?", which is a different and wrong question.
 
-Issue #4989 relocated this module from ``workspace/skill_projection.py`` into
-``workspace/session_skills/_projection.py``. It remains a *gateway* rather
-than a session-skill shard proper: most of its ``__all__`` is re-exported,
-identity-equal, from ``_projected_artifact``, and a small local surface
+This module is a *gateway* rather than a session-skill shard proper: most of
+its ``__all__`` is re-exported, identity-equal, from ``_projected_artifact``
+and from ``autoskillit.core``, and a small local surface
 (``SkillProjectionPreparation``, ``build_skill_projection_binding``,
 ``finalize_skill_projection_binding``, ``prepare_catalog_skill_projection``,
-``prepare_skill_projection``) is defined here. Only ``_provider`` and
-``_materialization`` may import it directly; no other module, inside or
-outside this package, may.
+``prepare_skill_projection``) is defined here. Only ``_provider``,
+``_materialization``, and ``_manager`` may import it directly; no other
+module, inside or outside this package, may.
 """
 
 from __future__ import annotations

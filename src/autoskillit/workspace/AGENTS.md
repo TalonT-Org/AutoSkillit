@@ -17,8 +17,8 @@ The narrow exception for install-state diagnostics is documented in
 `Path.resolve()`** — resolve follows a final-component symlink, which answers
 "what does this point at?" instead of "where may I write?".
 
-`session_skills/` (issue #4989; a package, not a flat file, since #4989's decomposition
-pushed `workspace/`'s top-level file count past its tier limit) is the stable
+`session_skills/` (a package, not a flat file, because `workspace/`'s top-level file
+count is bounded by its tier limit) is the stable
 identity-preserving facade for per-session ephemeral copies of the bundled skill set
 so that headless sessions can use a filtered subset without polluting the installed
 package. `session_skills/__init__.py` is that facade. It is named `session_skills`,
@@ -36,13 +36,12 @@ discovery alias, layout validation), and `_manager.py` (`DefaultSessionSkillMana
 `_InitializedSession`, and `_materialize_bound_records`). Shards import each other
 directly via absolute dotted paths (`autoskillit.workspace.session_skills._catalog`,
 etc.) and must never import the package's own `session_skills/__init__.py` facade at
-runtime; `TYPE_CHECKING`-guarded imports are exempt. `_projection.py` (formerly the
-workspace-root `skill_projection.py`) relocated into the same package as a distinct
-*gateway* shard: it owns a small local surface and re-exports the rest of its
-`__all__`, identity-equal, from `_projected_artifact`. Only `_provider.py`,
-`_materialization.py`, and `_manager.py` may import `_projection.py` — a private-sibling narrowing that
-replaces the pre-#4989 cross-subsystem-facade framing without loosening the fan-in
-restriction itself. Each shard *and* both facades (`session_skills/__init__.py` and
+runtime; `TYPE_CHECKING`-guarded imports are exempt. `_projection.py` is a distinct
+*gateway* shard in the same package: it owns a small local surface and re-exports the
+rest of its `__all__`, identity-equal, from `_projected_artifact` and from
+`autoskillit.core`. Only `_provider.py`, `_materialization.py`, and `_manager.py` may
+import `_projection.py` — a private-sibling narrowing of the fan-in restriction. Each
+shard *and* both facades (`session_skills/__init__.py` and
 `_projected_artifact/materialization.py`) are capped at 750 lines
 (`tests/arch/test_session_skills_projected_artifact_size_ceilings.py`); split further
 rather than growing past it.

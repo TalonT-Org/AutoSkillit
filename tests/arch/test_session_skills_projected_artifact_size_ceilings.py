@@ -20,8 +20,7 @@ _SIZE_CEILING_FILES: tuple[tuple[str, int], ...] = (
     # Both original facade files (now identity-preserving compatibility surfaces)
     ("workspace/session_skills/__init__.py", _LINE_CEILING),
     ("workspace/_projected_artifact/materialization.py", _LINE_CEILING),
-    # Five session-skill shards, plus the _projection gateway shard, all
-    # relocated into workspace/session_skills/ (#4989)
+    # Five session-skill shards, plus the _projection gateway shard
     ("workspace/session_skills/_catalog.py", _LINE_CEILING),
     ("workspace/session_skills/_provider.py", _LINE_CEILING),
     ("workspace/session_skills/_lifecycle.py", _LINE_CEILING),

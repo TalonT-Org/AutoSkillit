@@ -46,9 +46,9 @@ shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
    structurally impossible (cycle that cannot be broken without rearranging
    call sites). Use ``# noqa: PLC0415`` with an inline rationale.
 
-3. **Intra-package sibling narrowing** — ``_provider`` and ``_materialization``
-   may import the sibling ``_projection`` gateway shard directly; no other
-   session-skill shard may. Shards may NOT import from their own facade
+3. **Intra-package sibling narrowing** — ``_provider``, ``_materialization``, and
+   ``_manager`` may import the sibling ``_projection`` gateway shard directly; no
+   other session-skill shard may. Shards may NOT import from their own facade
    (``workspace.session_skills`` for session shards,
    ``_projected_artifact.materialization`` for projection shards).
 

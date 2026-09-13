@@ -18,8 +18,8 @@ Within ``autoskillit.workspace``, additional rules apply:
    ``_projected_artifact.materialization`` facade; they reach siblings via
    module-scope alias imports.
 
-3. The ``_provider``/``_materialization`` session shards ARE allowed to
-   import the sibling ``_projection`` gateway shard directly. ``_projection``
+3. The ``_provider``/``_materialization``/``_manager`` session shards ARE allowed
+   to import the sibling ``_projection`` gateway shard directly. ``_projection``
    is a private sibling inside the same package, not an external facade, so
    no other module (inside or outside the package) may import it.
 
@@ -71,7 +71,7 @@ _SESSION_SKILL_SHARDS: frozenset[str] = frozenset(
 # _projection is a gateway shard within the same package: subject to the same
 # own-facade prohibition as the five shards above (rule 1), but tracked
 # separately from _SESSION_SKILL_SHARDS because its permitted-caller rule
-# (rule 3) is asymmetric — only _provider/_materialization may import it. A
+# (rule 3) is asymmetric — only _provider/_materialization/_manager may import it. A
 # one-element frozenset (rather than a bare str) so it composes uniformly
 # with _SESSION_SKILL_SHARDS via set union.
 _PROJECTION_SHARD: frozenset[str] = frozenset({"autoskillit.workspace.session_skills._projection"})
@@ -255,8 +255,8 @@ def test_no_session_skill_shard_imports_its_own_facade() -> None:
     )
 
 
-def test_provider_and_materialization_may_use_projection_gateway() -> None:
-    """Only _provider/_materialization may import the _projection gateway shard.
+def test_provider_materialization_manager_may_use_projection_gateway() -> None:
+    """Only _provider/_materialization/_manager may import the _projection gateway shard.
 
     Confirms the private-sibling allowance. If this test fires, either a
     shard that should not import _projection has started to, or the
@@ -265,6 +265,7 @@ def test_provider_and_materialization_may_use_projection_gateway() -> None:
     allowed_callers = {
         "autoskillit.workspace.session_skills._provider",
         "autoskillit.workspace.session_skills._materialization",
+        "autoskillit.workspace.session_skills._manager",
     }
     violations: list[str] = []
     for shard_module in sorted(_SESSION_SKILL_SHARDS | _PROJECTED_ARTIFACT_SHARDS):
@@ -276,7 +277,7 @@ def test_provider_and_materialization_may_use_projection_gateway() -> None:
             if module in _PROJECTION_SHARD and shard_module not in allowed_callers:
                 violations.append(
                     f"{shard_module}:{import_from.lineno} imports the _projection "
-                    f"gateway shard; only _provider/_materialization may use it"
+                    f"gateway shard; only _provider/_materialization/_manager may use it"
                 )
     assert not violations, _import_violation_message(
         violations, "_projection gateway shard must only be consumed by allowed shards"

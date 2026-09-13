@@ -129,11 +129,7 @@ def test_source_map_drops_retired_isolation_facade() -> None:
 
 
 def test_source_map_drops_retired_skill_capability_source_paths() -> None:
-    """#5018 moved five workspace modules into workspace/skill_capabilities/.
-
-    The committed coverage oracle keys on source path, so the retired flat paths
-    must not linger once `task coverage-audit` regenerates it.
-    """
+    """#5018: retired skill_capability source paths must not linger in the coverage oracle."""
     data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
     source_map = data["map"]
     retired = (

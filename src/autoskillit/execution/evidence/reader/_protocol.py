@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from autoskillit.core import DIRECT_PREFIX, AgentDef, canonical_reader_tools_to_bare
 from autoskillit.execution.backends._codex_parse import CodexStreamParser
-from autoskillit.execution.evidence._reader_contract import (
+from autoskillit.execution.evidence.reader._contract import (
     _RESULT_KEYS,
     CITATION_LOCATION_KEYS,
     EvidenceCitation,

@@ -46,6 +46,7 @@ from autoskillit.execution.headless._headless_helpers import (
 from autoskillit.execution.headless._headless_outcome import validated_dispatch_cwd
 from autoskillit.execution.headless._managed._attempt import (
     _headless_plugin_load_mode,
+    _managed_catalog_capable,
     _ManagedLineageObserver,
 )
 from autoskillit.execution.headless._managed._executor import _DefaultHeadlessExecutorBase
@@ -259,10 +260,8 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
         # serve skills from an explicit plugin directory; backends that can
         # (plugin_install_capable) already get skills via --plugin-dir, so a
         # second ephemeral catalog would duplicate content and fail validation.
-        managed_catalog_requested = (
-            capability_preparation is not None
-            and backend.capabilities.skill_injection_capable
-            and not backend.capabilities.plugin_install_capable
+        managed_catalog_requested = capability_preparation is not None and (
+            _managed_catalog_capable(backend.capabilities)
         )
         plugin_load_mode = _headless_plugin_load_mode(
             backend,

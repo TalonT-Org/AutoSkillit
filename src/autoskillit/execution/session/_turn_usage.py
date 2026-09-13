@@ -7,7 +7,7 @@ import os
 import tempfile
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from autoskillit.core import TurnTokenEntry, fast_dumps, fsync_directory, get_logger
 
@@ -177,16 +177,22 @@ def merge_turn_usage(*groups: Iterable[TurnTokenEntry]) -> list[TurnTokenEntry]:
             prior_model = current["model"]
             if row["model"] is not None:
                 current["model"] = row["model"]
-            if row["input_tokens"] is not None:
-                current["input_tokens"] = row["input_tokens"]
-            if row["output_tokens"] is not None:
-                current["output_tokens"] = row["output_tokens"]
-            if row["cache_read_tokens"] is not None:
-                current["cache_read_tokens"] = row["cache_read_tokens"]
-            if row["cache_creation_tokens"] is not None:
-                current["cache_creation_tokens"] = row["cache_creation_tokens"]
-            if row["context_window_tokens"] is not None:
-                current["context_window_tokens"] = row["context_window_tokens"]
+            field: Literal[
+                "input_tokens",
+                "output_tokens",
+                "cache_read_tokens",
+                "cache_creation_tokens",
+                "context_window_tokens",
+            ]
+            for field in (
+                "input_tokens",
+                "output_tokens",
+                "cache_read_tokens",
+                "cache_creation_tokens",
+                "context_window_tokens",
+            ):
+                if row[field] is not None:
+                    current[field] = row[field]
             if (
                 row["model"] is not None
                 and row["model"] != prior_model

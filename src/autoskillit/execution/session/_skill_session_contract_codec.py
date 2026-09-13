@@ -128,20 +128,18 @@ def _validate_contract(contract: SkillSessionContract) -> None:
     closure = set(contract.closure)
     if len(closure) != len(contract.closure) or contract.root_name not in closure:
         raise SkillContractError("Skill session contract closure is invalid")
-    if set(contract.source_refs) != closure:
-        raise SkillContractError("source_refs keys must exactly match closure")
-    if set(contract.member_roles) != closure:
-        raise SkillContractError("member_roles keys must exactly match closure")
-    if set(contract.member_capabilities) != closure:
-        raise SkillContractError("member_capabilities keys must exactly match closure")
-    if set(contract.member_activate_deps) != closure:
-        raise SkillContractError("member_activate_deps keys must exactly match closure")
-    if set(contract.canonical_contents) != closure:
-        raise SkillContractError("canonical_contents keys must exactly match closure")
-    if set(contract.exploration_vectors) != closure:
-        raise SkillContractError("exploration_vectors keys must exactly match closure")
-    if set(contract.exploration_sidecar_digests) != closure:
-        raise SkillContractError("exploration_sidecar_digests keys must exactly match closure")
+    closure_mappings = (
+        ("source_refs", contract.source_refs),
+        ("member_roles", contract.member_roles),
+        ("member_capabilities", contract.member_capabilities),
+        ("member_activate_deps", contract.member_activate_deps),
+        ("canonical_contents", contract.canonical_contents),
+        ("exploration_vectors", contract.exploration_vectors),
+        ("exploration_sidecar_digests", contract.exploration_sidecar_digests),
+    )
+    for field_name, values in closure_mappings:
+        if set(values) != closure:
+            raise SkillContractError(f"{field_name} keys must exactly match closure")
     for name in contract.closure:
         source_ref = contract.source_refs[name]
         if not isinstance(source_ref, SkillSourceRef):
@@ -451,6 +449,72 @@ def _contract_to_dict(contract: SkillSessionContract) -> dict[str, Any]:
     }
 
 
+def _decode_exploration_contract_fields(
+    *,
+    exploration_vectors_raw: Mapping[object, list[object]],
+    resolved_exploration_profile_raw: str | None,
+    active_applicabilities_raw: list[str],
+) -> tuple[
+    RepositoryProfileId | None,
+    str | None,
+    frozenset[ExplorationVectorApplicabilityId],
+    tuple[str, ...] | None,
+    dict[str, tuple[ExplorationVectorDef, ...]],
+    dict[str, tuple[tuple[int, Mapping[str, object]], ...]],
+]:
+    opaque_resolved_exploration_profile: str | None = None
+    if resolved_exploration_profile_raw is None:
+        resolved_exploration_profile = None
+    else:
+        try:
+            resolved_exploration_profile = _persisted_enum(
+                RepositoryProfileId, resolved_exploration_profile_raw
+            )
+        except _UnsupportedPersistedExplorationEnum:
+            resolved_exploration_profile = None
+            opaque_resolved_exploration_profile = resolved_exploration_profile_raw
+    active_exploration_applicabilities: set[ExplorationVectorApplicabilityId] = set()
+    has_opaque_active_applicability = False
+    for item in active_applicabilities_raw:
+        try:
+            active_exploration_applicabilities.add(
+                _persisted_enum(ExplorationVectorApplicabilityId, item)
+            )
+        except _UnsupportedPersistedExplorationEnum:
+            has_opaque_active_applicability = True
+    exploration_vectors: dict[str, tuple[ExplorationVectorDef, ...]] = {}
+    opaque_exploration_vectors: dict[str, tuple[tuple[int, Mapping[str, object]], ...]] = {}
+    for name, vectors in exploration_vectors_raw.items():
+        parsed_vectors: list[ExplorationVectorDef] = []
+        opaque_vectors: list[tuple[int, Mapping[str, object]]] = []
+        for index, vector_raw in enumerate(vectors):
+            if not isinstance(vector_raw, dict):
+                raise ValueError("serialized exploration vector must be an object")
+            try:
+                vector = _exploration_vector_from_dict(vector_raw)
+            except _UnsupportedPersistedExplorationEnum:
+                opaque_vectors.append((index, deepcopy(vector_raw)))
+                continue
+            if (
+                opaque_resolved_exploration_profile is not None
+                and vector.profile is RepositoryProfileId.AUTO
+            ):
+                opaque_vectors.append((index, deepcopy(vector_raw)))
+                continue
+            parsed_vectors.append(vector)
+        exploration_vectors[str(name)] = tuple(parsed_vectors)
+        if opaque_vectors:
+            opaque_exploration_vectors[str(name)] = tuple(opaque_vectors)
+    return (
+        resolved_exploration_profile,
+        opaque_resolved_exploration_profile,
+        frozenset(active_exploration_applicabilities),
+        tuple(active_applicabilities_raw) if has_opaque_active_applicability else None,
+        exploration_vectors,
+        opaque_exploration_vectors,
+    )
+
+
 def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
     observed_schema_version = data.get("schema_version")
     if (
@@ -514,49 +578,18 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             not isinstance(item, str) for item in active_applicabilities_raw
         ):
             raise ValueError("active_exploration_applicabilities must be a list of text")
-        opaque_resolved_exploration_profile: str | None = None
-        if resolved_exploration_profile_raw is None:
-            resolved_exploration_profile = None
-        else:
-            try:
-                resolved_exploration_profile = _persisted_enum(
-                    RepositoryProfileId, resolved_exploration_profile_raw
-                )
-            except _UnsupportedPersistedExplorationEnum:
-                resolved_exploration_profile = None
-                opaque_resolved_exploration_profile = resolved_exploration_profile_raw
-        active_exploration_applicabilities: set[ExplorationVectorApplicabilityId] = set()
-        has_opaque_active_applicability = False
-        for item in active_applicabilities_raw:
-            try:
-                active_exploration_applicabilities.add(
-                    _persisted_enum(ExplorationVectorApplicabilityId, item)
-                )
-            except _UnsupportedPersistedExplorationEnum:
-                has_opaque_active_applicability = True
-        exploration_vectors: dict[str, tuple[ExplorationVectorDef, ...]] = {}
-        opaque_exploration_vectors: dict[str, tuple[tuple[int, Mapping[str, object]], ...]] = {}
-        for name, vectors in exploration_vectors_raw.items():
-            parsed_vectors: list[ExplorationVectorDef] = []
-            opaque_vectors: list[tuple[int, Mapping[str, object]]] = []
-            for index, vector_raw in enumerate(vectors):
-                if not isinstance(vector_raw, dict):
-                    raise ValueError("serialized exploration vector must be an object")
-                try:
-                    vector = _exploration_vector_from_dict(vector_raw)
-                except _UnsupportedPersistedExplorationEnum:
-                    opaque_vectors.append((index, deepcopy(vector_raw)))
-                    continue
-                if (
-                    opaque_resolved_exploration_profile is not None
-                    and vector.profile is RepositoryProfileId.AUTO
-                ):
-                    opaque_vectors.append((index, deepcopy(vector_raw)))
-                    continue
-                parsed_vectors.append(vector)
-            exploration_vectors[str(name)] = tuple(parsed_vectors)
-            if opaque_vectors:
-                opaque_exploration_vectors[str(name)] = tuple(opaque_vectors)
+        (
+            resolved_exploration_profile,
+            opaque_resolved_exploration_profile,
+            active_exploration_applicabilities,
+            raw_active_exploration_applicabilities,
+            exploration_vectors,
+            opaque_exploration_vectors,
+        ) = _decode_exploration_contract_fields(
+            exploration_vectors_raw=exploration_vectors_raw,
+            resolved_exploration_profile_raw=resolved_exploration_profile_raw,
+            active_applicabilities_raw=active_applicabilities_raw,
+        )
         return SkillSessionContract(
             root_name=str(data["root_name"]),
             execution_role=SkillExecutionRole(str(data["execution_role"])),
@@ -601,10 +634,8 @@ def _contract_from_dict(data: Mapping[str, Any]) -> SkillSessionContract:
             },
             resolved_exploration_profile=resolved_exploration_profile,
             opaque_resolved_exploration_profile=opaque_resolved_exploration_profile,
-            active_exploration_applicabilities=frozenset(active_exploration_applicabilities),
-            raw_active_exploration_applicabilities=(
-                tuple(active_applicabilities_raw) if has_opaque_active_applicability else None
-            ),
+            active_exploration_applicabilities=active_exploration_applicabilities,
+            raw_active_exploration_applicabilities=raw_active_exploration_applicabilities,
             expected_output_patterns=tuple(
                 str(pattern) for pattern in data.get("expected_output_patterns", [])
             ),

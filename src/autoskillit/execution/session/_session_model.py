@@ -99,7 +99,7 @@ class ClaudeSessionResult:
                     if block_type == ClaudeContentBlockType.TEXT:
                         parts.append(b.get("text", ""))
                 self.result = "\n".join(parts)
-            elif not isinstance(self.result, str):
+            else:
                 self.result = "" if self.result is None else str(self.result)
         if not isinstance(self.errors, list):
             self.errors = [] if self.errors is None else [str(self.errors)]
@@ -243,15 +243,10 @@ def _is_parent_assistant_record(obj: dict[str, Any]) -> bool:
     return not (isinstance(message, dict) and message.get("model") == "<synthetic>")
 
 
-def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTokenEntry]]:
-    """Extract token usage from Claude CLI NDJSON output.
-
-    Takes raw stdout (not ClaudeSessionResult) — called during parse_session_result
-    construction before the object exists. Returns aggregates and deduplicated rows.
-    """
-    if not stdout.strip():
-        return None, []
-
+def _collect_token_usage_evidence(
+    stdout: str,
+) -> tuple[dict[str, int] | None, list[TurnTokenEntry], dict[str, set[int]]]:
+    """Collect result totals, assistant rows, and model windows from NDJSON stdout."""
     result_usage: dict[str, int] | None = None
     candidate_rows: list[TurnTokenEntry] = []
     model_windows: dict[str, set[int]] = {}
@@ -310,6 +305,19 @@ def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTo
                     if window is not None:
                         model_windows.setdefault(model, set()).add(window)
 
+    return result_usage, candidate_rows, model_windows
+
+
+def extract_token_usage(stdout: str) -> tuple[dict[str, Any] | None, list[TurnTokenEntry]]:
+    """Extract token usage from Claude CLI NDJSON output.
+
+    Takes raw stdout (not ClaudeSessionResult) — called during parse_session_result
+    construction before the object exists. Returns aggregates and deduplicated rows.
+    """
+    if not stdout.strip():
+        return None, []
+
+    result_usage, candidate_rows, model_windows = _collect_token_usage_evidence(stdout)
     raw_rows = merge_turn_usage(candidate_rows)
     if not raw_rows and result_usage is None:
         return None, []

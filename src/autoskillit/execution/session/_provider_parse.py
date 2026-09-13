@@ -83,109 +83,104 @@ def _parse_provider_records(stdout: str) -> _ProviderParseAccumulator:
             continue
         try:
             obj = json.loads(line)
-            if not isinstance(obj, dict):
-                continue
-            record_type = obj.get("type")
-            if record_type is None:
-                raw_error = _provider_field(obj, "error")
-                if isinstance(raw_error, str):
-                    acc.provider_error_code = raw_error
-                continue
-            if not isinstance(record_type, str) or record_type not in _HANDLED_RECORD_TYPES:
-                continue
-            if record_type == "system" and obj.get("subtype") == "api_retry":
-                acc.api_retry_count += 1
-                acc.api_retry_last_error = str(_provider_field(obj, "error") or "")
-                raw_status = obj.get("error_status")
-                acc.api_retry_last_status = raw_status if isinstance(raw_status, int) else None
-                attempt = obj.get("attempt", 0)
-                max_retries = obj.get("max_retries", 0)
-                if (
-                    isinstance(attempt, int)
-                    and isinstance(max_retries, int)
-                    and attempt >= max_retries
-                    and max_retries > 0
-                ):
-                    acc.api_retry_exhausted = True
-                continue
-            if record_type == "rate_limit_event":
-                info = _provider_field(obj, "rate_limit_info") or obj
-                if isinstance(info, Mapping):
-                    raw_limit_status = _provider_field(info, "status")
-                    if isinstance(raw_limit_status, str):
-                        # "rejected" is the most restrictive observation; keep it
-                        # sticky so a later "allowed" record does not erase the
-                        # rejection (rate_limit_resets_at_epoch is already sticky
-                        # via max() — keep status / type consistent with it).
-                        if acc.rate_limit_status != "rejected" or raw_limit_status == "rejected":
-                            acc.rate_limit_status = raw_limit_status
-                        if raw_limit_status == "rejected":
-                            acc.api_retry_exhausted = True
-                    raw_limit_type = _provider_field(info, "rateLimitType", "rate_limit_type")
-                    if isinstance(raw_limit_type, str) and not acc.rate_limit_type:
-                        # First non-empty type wins; clearing on a later record
-                        # would erase provider-side evidence.
-                        acc.rate_limit_type = raw_limit_type
-                    raw_resets_at = _provider_field(info, "resetsAt", "resets_at")
-                    if isinstance(raw_resets_at, int):
-                        # Preserve the most restrictive reset observed across
-                        # multiple rate_limit_event records; a later event with
-                        # an earlier reset would otherwise overwrite the
-                        # longest-known block.
-                        acc.rate_limit_resets_at_epoch = (
-                            raw_resets_at
-                            if acc.rate_limit_resets_at_epoch is None
-                            else max(acc.rate_limit_resets_at_epoch, raw_resets_at)
-                        )
-                continue
-            if record_type == "result":
-                acc.result_obj = obj
-                raw_status = _provider_field(obj, "api_error_status")
-                if isinstance(raw_status, int):
-                    acc.api_error_status = raw_status
-                raw_terminal_reason = _provider_field(obj, "terminal_reason", "terminalReason")
-                if isinstance(raw_terminal_reason, str):
-                    acc.terminal_reason = raw_terminal_reason
-            elif record_type == "assistant" and not obj.get("subagent_type"):
-                raw_api_error_message_seen = _provider_field(
-                    obj, "is_api_error_message", "isApiErrorMessage"
-                )
-                if isinstance(raw_api_error_message_seen, bool) and raw_api_error_message_seen:
-                    # Latch: once we see an API-error-message flag, retain it
-                    # even if a later assistant record reports false.
-                    acc.api_error_message_seen = True
-                _capture_assistant_record(obj, acc)
-            elif record_type == "user" and not obj.get("subagent_type"):
-                content = obj.get("message", {}).get("content", [])
-                if isinstance(content, list):
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                            and block.get("is_error") is True
-                        ):
-                            tool_use_id = block.get("tool_use_id", "")
-                            if tool_use_id:
-                                acc.denied_tool_use_ids.add(tool_use_id)
         except json.JSONDecodeError:
             continue
+        if isinstance(obj, dict):
+            _accumulate_provider_record(obj, acc)
 
     if acc.result_obj is None:
         try:
             fallback = json.loads(stdout)
             if isinstance(fallback, dict) and fallback.get("type") == "result":
-                acc.result_obj = fallback
-                raw_status = _provider_field(fallback, "api_error_status")
-                if isinstance(raw_status, int):
-                    acc.api_error_status = raw_status
-                raw_terminal_reason = _provider_field(
-                    fallback, "terminal_reason", "terminalReason"
-                )
-                if isinstance(raw_terminal_reason, str):
-                    acc.terminal_reason = raw_terminal_reason
+                _accumulate_provider_record(fallback, acc)
         except json.JSONDecodeError:
             pass
     return acc
+
+
+def _accumulate_provider_record(obj: dict[str, Any], acc: _ProviderParseAccumulator) -> None:
+    """Retain provider evidence from one decoded stdout record."""
+    record_type = obj.get("type")
+    if record_type is None:
+        raw_error = _provider_field(obj, "error")
+        if isinstance(raw_error, str):
+            acc.provider_error_code = raw_error
+        return
+    if not isinstance(record_type, str) or record_type not in _HANDLED_RECORD_TYPES:
+        return
+    if record_type == "system" and obj.get("subtype") == "api_retry":
+        acc.api_retry_count += 1
+        acc.api_retry_last_error = str(_provider_field(obj, "error") or "")
+        raw_status = obj.get("error_status")
+        acc.api_retry_last_status = raw_status if isinstance(raw_status, int) else None
+        attempt = obj.get("attempt", 0)
+        max_retries = obj.get("max_retries", 0)
+        if (
+            isinstance(attempt, int)
+            and isinstance(max_retries, int)
+            and attempt >= max_retries
+            and max_retries > 0
+        ):
+            acc.api_retry_exhausted = True
+        return
+    if record_type == "rate_limit_event":
+        info = _provider_field(obj, "rate_limit_info") or obj
+        if isinstance(info, Mapping):
+            raw_limit_status = _provider_field(info, "status")
+            if isinstance(raw_limit_status, str):
+                # "rejected" is the most restrictive observation; keep it
+                # sticky so a later "allowed" record does not erase the
+                # rejection (rate_limit_resets_at_epoch is already sticky
+                # via max() — keep status / type consistent with it).
+                if acc.rate_limit_status != "rejected" or raw_limit_status == "rejected":
+                    acc.rate_limit_status = raw_limit_status
+                if raw_limit_status == "rejected":
+                    acc.api_retry_exhausted = True
+            raw_limit_type = _provider_field(info, "rateLimitType", "rate_limit_type")
+            if isinstance(raw_limit_type, str) and not acc.rate_limit_type:
+                # First non-empty type wins; clearing on a later record would
+                # erase provider-side evidence.
+                acc.rate_limit_type = raw_limit_type
+            raw_resets_at = _provider_field(info, "resetsAt", "resets_at")
+            if isinstance(raw_resets_at, int):
+                # Preserve the most restrictive reset observed across multiple
+                # rate_limit_event records; a later event with an earlier reset
+                # would otherwise overwrite the longest-known block.
+                acc.rate_limit_resets_at_epoch = (
+                    raw_resets_at
+                    if acc.rate_limit_resets_at_epoch is None
+                    else max(acc.rate_limit_resets_at_epoch, raw_resets_at)
+                )
+        return
+    if record_type == "result":
+        acc.result_obj = obj
+        raw_status = _provider_field(obj, "api_error_status")
+        if isinstance(raw_status, int):
+            acc.api_error_status = raw_status
+        raw_terminal_reason = _provider_field(obj, "terminal_reason", "terminalReason")
+        if isinstance(raw_terminal_reason, str):
+            acc.terminal_reason = raw_terminal_reason
+    elif record_type == "assistant" and not obj.get("subagent_type"):
+        raw_api_error_message_seen = _provider_field(
+            obj, "is_api_error_message", "isApiErrorMessage"
+        )
+        if isinstance(raw_api_error_message_seen, bool) and raw_api_error_message_seen:
+            # Latch: once we see an API-error-message flag, retain it even if a
+            # later assistant record reports false.
+            acc.api_error_message_seen = True
+        _capture_assistant_record(obj, acc)
+    elif record_type == "user" and not obj.get("subagent_type"):
+        content = obj.get("message", {}).get("content", [])
+        if isinstance(content, list):
+            for block in content:
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "tool_result"
+                    and block.get("is_error") is True
+                ):
+                    tool_use_id = block.get("tool_use_id", "")
+                    if tool_use_id:
+                        acc.denied_tool_use_ids.add(tool_use_id)
 
 
 def _capture_assistant_record(obj: dict[str, Any], acc: _ProviderParseAccumulator) -> None:
@@ -213,6 +208,23 @@ def _capture_assistant_record(obj: dict[str, Any], acc: _ProviderParseAccumulato
             acc.stop_reasons.append(str(stop_reason))
         return
 
+    text_parts, turn_has_thinking, turn_has_tool_use = _capture_assistant_content_blocks(
+        content, acc
+    )
+    text = "\n".join(text_parts).strip()
+    if text:
+        acc.assistant_messages.append(text)
+    if turn_has_thinking and not text_parts and not turn_has_tool_use:
+        acc.has_thinking_only_turn = True
+    stop_reason = message.get("stop_reason", "")
+    if stop_reason:
+        acc.stop_reasons.append(str(stop_reason))
+
+
+def _capture_assistant_content_blocks(
+    content: list[Any], acc: _ProviderParseAccumulator
+) -> tuple[list[str], bool, bool]:
+    """Capture text, tool-use, and thinking facts from typed assistant blocks."""
     text_parts: list[str] = []
     turn_has_thinking = False
     turn_has_tool_use = False
@@ -236,14 +248,7 @@ def _capture_assistant_record(obj: dict[str, Any], acc: _ProviderParseAccumulato
                 acc.seen_block_types.add(raw_type)
             case _ as unreachable:
                 assert_never(unreachable)
-    text = "\n".join(text_parts).strip()
-    if text:
-        acc.assistant_messages.append(text)
-    if turn_has_thinking and not text_parts and not turn_has_tool_use:
-        acc.has_thinking_only_turn = True
-    stop_reason = message.get("stop_reason", "")
-    if stop_reason:
-        acc.stop_reasons.append(str(stop_reason))
+    return text_parts, turn_has_thinking, turn_has_tool_use
 
 
 def _capture_tool_use(block: dict[str, Any], acc: _ProviderParseAccumulator) -> None:

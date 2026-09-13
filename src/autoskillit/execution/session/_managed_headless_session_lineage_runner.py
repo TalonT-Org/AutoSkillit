@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
+from contextlib import ExitStack
 from pathlib import Path
 
 from autoskillit.core import (
@@ -33,21 +34,22 @@ def _read_runner_markers(
 ) -> tuple[NativeShellCaptureObservation, ...]:
     directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
     nofollow = getattr(os, "O_NOFOLLOW", 0)
-    root_fd = os.open(root, directory_flags | nofollow)
-    observations_fd = -1
-    launch_fd = -1
-    try:
+    with ExitStack() as descriptors:
+        root_fd = os.open(root, directory_flags | nofollow)
+        descriptors.callback(os.close, root_fd)
         try:
             observations_fd = os.open(
                 _RUNNER_OBSERVATIONS_DIR,
                 directory_flags | nofollow,
                 dir_fd=root_fd,
             )
+            descriptors.callback(os.close, observations_fd)
             launch_fd = os.open(
                 reference.launch_id,
                 directory_flags | nofollow,
                 dir_fd=observations_fd,
             )
+            descriptors.callback(os.close, launch_fd)
         except FileNotFoundError:
             return ()
         parsed: list[NativeShellCaptureObservation] = []
@@ -98,12 +100,6 @@ def _read_runner_markers(
                 continue
             parsed.append(observation)
         return tuple(dict.fromkeys(parsed))
-    finally:
-        if launch_fd >= 0:
-            os.close(launch_fd)
-        if observations_fd >= 0:
-            os.close(observations_fd)
-        os.close(root_fd)
 
 
 def _settle_runner_observation(

@@ -334,6 +334,15 @@ class DefaultSkillSessionContractStore:
         contract = _contract_from_dict(contract_data)
         _validate_contract(contract)
 
+        self._validate_snapshot_integrity(entry, manifest, contract)
+        return contract
+
+    def _validate_snapshot_integrity(
+        self,
+        entry: Path,
+        manifest: Mapping[str, Any],
+        contract: SkillSessionContract,
+    ) -> None:
         snapshot_paths_raw = manifest.get("snapshot_paths")
         if not isinstance(snapshot_paths_raw, dict):
             raise ValueError("Skill session contract manifest is missing snapshot paths")
@@ -373,7 +382,6 @@ class DefaultSkillSessionContractStore:
                     actual_files.add(Path(tree_entry.relative_path))
         if actual_files != declared_files:
             raise ValueError("Skill session projected snapshot file set mismatch")
-        return contract
 
 
 def delete_skill_session_contracts(

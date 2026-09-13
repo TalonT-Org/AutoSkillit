@@ -26,6 +26,28 @@ class CaptureReadError(OSError):
     """Raised when a capture file cannot be read after execution."""
 
 
+def _allocate_stream_file(
+    stream: str,
+    directory: str | None,
+    paths_to_clean: list[Path],
+    *,
+    cleanup_streams: bool,
+    previous_stream: IO[bytes] | None = None,
+) -> IO[bytes]:
+    try:
+        stream_file = tempfile.NamedTemporaryFile(
+            mode="w+b", prefix=f"proc_{stream}_", suffix=".tmp", delete=False, dir=directory
+        )
+    except OSError as exc:
+        if previous_stream is not None:
+            previous_stream.close()
+            Path(previous_stream.name).unlink(missing_ok=True)
+        raise CaptureSetupError(f"Cannot create {stream} temp file in {directory}: {exc}") from exc
+    if cleanup_streams:
+        paths_to_clean.append(Path(stream_file.name))
+    return stream_file
+
+
 @contextmanager
 def create_temp_io(
     input_data: str | None = None,
@@ -62,33 +84,17 @@ def create_temp_io(
                 ) from exc
 
         _dir = str(capture_dir) if capture_dir is not None else None
-        try:
-            stdout_file = tempfile.NamedTemporaryFile(
-                mode="w+b",
-                prefix="proc_stdout_",
-                suffix=".tmp",
-                delete=False,
-                dir=_dir,
-            )
-        except OSError as exc:
-            raise CaptureSetupError(f"Cannot create stdout temp file in {_dir}: {exc}") from exc
-        if not keep_streams and capture_dir is None:
-            paths_to_clean.append(Path(stdout_file.name))
-
-        try:
-            stderr_file = tempfile.NamedTemporaryFile(
-                mode="w+b",
-                prefix="proc_stderr_",
-                suffix=".tmp",
-                delete=False,
-                dir=_dir,
-            )
-        except OSError as exc:
-            stdout_file.close()
-            Path(stdout_file.name).unlink(missing_ok=True)
-            raise CaptureSetupError(f"Cannot create stderr temp file in {_dir}: {exc}") from exc
-        if not keep_streams and capture_dir is None:
-            paths_to_clean.append(Path(stderr_file.name))
+        cleanup_streams = not keep_streams and capture_dir is None
+        stdout_file = _allocate_stream_file(
+            "stdout", _dir, paths_to_clean, cleanup_streams=cleanup_streams
+        )
+        stderr_file = _allocate_stream_file(
+            "stderr",
+            _dir,
+            paths_to_clean,
+            cleanup_streams=cleanup_streams,
+            previous_stream=stdout_file,
+        )
 
         if input_data is not None:
             stdin_file = tempfile.NamedTemporaryFile(
@@ -115,6 +121,32 @@ def create_temp_io(
                 p.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def _write_driver_lines(stdin_pipe: IO[bytes], lines: tuple[str, ...]) -> None:
+    if not lines:
+        return
+    for outgoing in lines:
+        stdin_pipe.write(outgoing.encode("utf-8") + b"\n")
+    stdin_pipe.flush()
+
+
+def _exchange_driver_frame(
+    frame: bytes, driver: LineDriver, stdin_pipe: IO[bytes]
+) -> tuple[bool, str | None]:
+    decoded_line = frame.decode("utf-8", errors="replace")
+    try:
+        outgoing = driver.on_line(decoded_line)
+    except Exception as exc:  # noqa: BLE001 — a driver bug is a driver failure
+        logger.warning("line_driver_on_line_failed", exc_info=True)
+        return False, f"line driver raised in on_line: {exc}"
+    try:
+        _write_driver_lines(stdin_pipe, outgoing)
+    except OSError as exc:
+        return False, f"stdin pipe write failed: {exc}"
+    if driver.failure is not None:
+        return False, driver.failure
+    return driver.finished, None
 
 
 def drive_process_io(
@@ -180,13 +212,6 @@ def drive_process_io(
             except OSError:
                 pass
 
-    def _write_lines(lines: tuple[str, ...]) -> None:
-        if not lines:
-            return
-        for outgoing in lines:
-            stdin_pipe.write(outgoing.encode("utf-8") + b"\n")
-        stdin_pipe.flush()
-
     def _fail(diagnostic: str) -> None:
         nonlocal failure_reported, decoding_done
         decoding_done = True
@@ -198,7 +223,7 @@ def drive_process_io(
 
     try:
         try:
-            _write_lines(driver.initial_lines())
+            _write_driver_lines(stdin_pipe, driver.initial_lines())
         except Exception as exc:  # noqa: BLE001 — any driver/pipe fault here is a failure
             logger.warning("line_driver_initial_lines_failed", exc_info=True)
             _fail(f"line driver failed building the initial request: {exc}")
@@ -243,22 +268,11 @@ def drive_process_io(
                     break
                 frame = bytes(buffer[:newline_index])
                 del buffer[: newline_index + 1]
-                decoded_line = frame.decode("utf-8", errors="replace")
-                try:
-                    outgoing = driver.on_line(decoded_line)
-                except Exception as exc:  # noqa: BLE001 — a driver bug is a driver failure
-                    logger.warning("line_driver_on_line_failed", exc_info=True)
-                    _fail(f"line driver raised in on_line: {exc}")
+                finished, failure = _exchange_driver_frame(frame, driver, stdin_pipe)
+                if failure is not None:
+                    _fail(failure)
                     break
-                try:
-                    _write_lines(outgoing)
-                except OSError as exc:
-                    _fail(f"stdin pipe write failed: {exc}")
-                    break
-                if driver.failure is not None:
-                    _fail(driver.failure)
-                    break
-                if driver.finished:
+                if finished:
                     decoding_done = True
                     _close_stdin()
     finally:

@@ -79,6 +79,12 @@ def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
     callers_monitor = _functions_calling_predicate(
         _PROCESS_MONITOR, "_has_active_execution_marker"
     )
+    if watcher == "_session_log_monitor":
+        assert watcher in _functions_calling_predicate(
+            _PROCESS_MONITOR, "_stale_suppression_reason"
+        )
+        assert "_stale_suppression_reason" in callers_monitor
+        return
     all_callers = callers_race | callers_monitor
     assert watcher in all_callers, (
         f"{watcher} does not call _has_active_execution_marker. "
@@ -114,6 +120,10 @@ def test_kill_executor_checks_child_liveness(executor: str) -> None:
         f"{executor} does not call _has_active_child_processes. "
         f"Functions that do: {sorted(callers)}"
     )
+    assert executor in _functions_calling_predicate(
+        _PROCESS_TERMINATION, "_drain_before_escalation"
+    )
+    assert "_drain_before_escalation" in callers
 
 
 def test_completion_marker_watchers_do_not_trigger_lifecycle_completion_directly() -> None:
@@ -128,9 +138,53 @@ def test_completion_marker_watchers_do_not_trigger_lifecycle_completion_directly
     assert not _calls_trigger_set(ast.Module(body=heartbeat_lifecycle_branch.body))
 
     session_log = _function(_PROCESS_RACE, "_watch_session_log")
+    assert any(
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "acc"
+        and call.func.attr == "deposit_session_log_result"
+        and any(
+            isinstance(argument, ast.Name) and argument.id == "monitor_result"
+            for argument in call.args
+        )
+        for call in ast.walk(session_log)
+    )
+
+    deposition = _function(_PROCESS_RACE, "deposit_session_log_result")
+    assert isinstance(deposition, ast.FunctionDef)
+    for destination, source in (
+        ("channel_b_status", "status"),
+        ("channel_b_session_id", "session_id"),
+        ("channel_b_orphaned_tool_result", "orphaned_tool_result"),
+        ("channel_b_cursor", "cursor"),
+    ):
+        assert any(
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "self"
+                and target.attr == destination
+                for target in node.targets
+            )
+            and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "monitor_result"
+            and node.value.attr == source
+            for node in ast.walk(deposition)
+        )
+    assert any(
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "channel_b_ready"
+        and call.func.attr == "set"
+        for call in ast.walk(deposition)
+    )
     completion_branch = next(
         node
-        for node in session_log.body
+        for node in deposition.body
         if isinstance(node, ast.If)
         and isinstance(node.test, ast.Compare)
         and any(
@@ -138,7 +192,21 @@ def test_completion_marker_watchers_do_not_trigger_lifecycle_completion_directly
             for comparator in node.test.comparators
         )
     )
+    assert isinstance(completion_branch.test, ast.Compare)
+    assert isinstance(completion_branch.test.left, ast.Attribute)
+    assert isinstance(completion_branch.test.left.value, ast.Name)
+    assert completion_branch.test.left.value.id == "monitor_result"
+    assert completion_branch.test.left.attr == "status"
     assert not _calls_trigger_set(ast.Module(body=completion_branch.body))
+    assert any(
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Attribute)
+        and call.func.value.attr == "completion_candidate_event"
+        and call.func.attr == "set"
+        for call in ast.walk(ast.Module(body=completion_branch.body))
+    )
+    assert _calls_trigger_set(ast.Module(body=completion_branch.orelse))
 
 
 def test_completion_eligibility_and_final_fold_consume_both_cursors() -> None:
@@ -180,4 +248,8 @@ def test_timeout_watchers_consume_shared_pending_task_predicate(
 
     arguments = [*function.args.args, *function.args.kwonlyargs]
     assert any(argument.arg == "has_pending_tasks" for argument in arguments)
-    assert watcher in _functions_calling_predicate(source_path, "has_pending_tasks")
+    predicate_owner = watcher
+    if watcher == "_session_log_monitor":
+        assert watcher in _functions_calling_predicate(source_path, "_stale_suppression_reason")
+        predicate_owner = "_stale_suppression_reason"
+    assert predicate_owner in _functions_calling_predicate(source_path, "has_pending_tasks")

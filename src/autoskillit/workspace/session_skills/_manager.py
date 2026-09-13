@@ -42,24 +42,24 @@ from autoskillit.core import (
     scan_observed,
     validate_skill_capability_roles,
 )
-from autoskillit.workspace.session_skill_catalog import (
+from autoskillit.workspace.session_skills._catalog import (
     _canonical_skill_unavailability_payload,
     compile_session_skill_catalog,
 )
-from autoskillit.workspace.session_skill_lifecycle import (
+from autoskillit.workspace.session_skills._lifecycle import (
     _SESSION_LEASES_SUBDIR,
     _raise_failures,
     _remove_and_verify,
     _SessionLease,
 )
-from autoskillit.workspace.session_skill_materialization import (
+from autoskillit.workspace.session_skills._materialization import (
     _ExplorerBindingEnv,
     _ExplorerBindingEnvFactory,
     _materialize_session,
     _restore_session,
 )
-from autoskillit.workspace.session_skill_provider import SkillsDirectoryProvider
-from autoskillit.workspace.skill_projection import SkillProjectionContext
+from autoskillit.workspace.session_skills._projection import SkillProjectionContext
+from autoskillit.workspace.session_skills._provider import SkillsDirectoryProvider
 from autoskillit.workspace.skills import render_skill_invalidities
 
 logger = get_logger(__name__)

@@ -159,7 +159,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "execution/github_review": 15,
     "execution/headless": 15,
     "execution/session": 20,
-    "workspace": 13,
+    "workspace": 6,  # was 13; 7 files moved into session_skills/ (#4989)
     "hooks": 27,  # +1 _capture_spawn.py extracted from _capture_process.py (#4732)
     "hooks/guards": 41,
     "smoke_utils": 11,
@@ -443,6 +443,69 @@ def test_no_subpackage_exceeds_10_files() -> None:
             violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
     assert not violations, "Sub-packages exceeding 10 Python files:\n" + "\n".join(
         f"  {v}" for v in violations
+    )
+
+
+# ── session_skills package shape ─────────────────────────────────────────────
+# The session-skill cluster (facade + five shards + the projection gateway
+# shard) lives entirely under workspace/session_skills/, a default
+# (non-underscored) nested package. This proves no flat file at workspace/
+# top level carries any of the pre-package names.
+
+_SESSION_SKILLS_RETIRED_FLAT_NAMES = frozenset(
+    {
+        "session_skills.py",
+        "session_skill_catalog.py",
+        "session_skill_lifecycle.py",
+        "session_skill_manager.py",
+        "session_skill_materialization.py",
+        "session_skill_provider.py",
+        "skill_projection.py",
+    }
+)
+
+
+def test_session_skills_package_shape() -> None:
+    """workspace/session_skills/ contains exactly the expected files.
+
+    No flat file at ``workspace/`` top level may carry any of the retired
+    names, and the workspace/ ceiling reflects the files moved out of it. The
+    expected file set is derived from ``_SESSION_SKILL_SHARD_OWNERS`` (the
+    canonical shard registry in
+    tests/workspace/test_session_skills_projected_artifact_shard_ownership.py)
+    rather than duplicated here as a second literal.
+    """
+    from tests.workspace.test_session_skills_projected_artifact_shard_ownership import (
+        _SESSION_SKILL_SHARD_OWNERS,
+    )
+
+    package_dir = SRC_ROOT / "workspace" / "session_skills"
+    assert package_dir.is_dir(), f"{package_dir} must exist as a package directory"
+
+    expected_files = {"__init__.py", "_projection.py"} | {
+        f"{stem}.py" for stem, _ in _SESSION_SKILL_SHARD_OWNERS
+    }
+    actual_files = {p.name for p in package_dir.glob("*.py")}
+    assert actual_files == expected_files, (
+        f"workspace/session_skills/ contains {sorted(actual_files)}, "
+        f"expected exactly {sorted(expected_files)}"
+    )
+
+    workspace_dir = SRC_ROOT / "workspace"
+    flat_survivors = {
+        name for name in _SESSION_SKILLS_RETIRED_FLAT_NAMES if (workspace_dir / name).is_file()
+    }
+    assert not flat_survivors, (
+        f"retired flat session-skill files still present at workspace/ top level: "
+        f"{sorted(flat_survivors)}"
+    )
+
+    workspace_py_files = {p.name for p in workspace_dir.glob("*.py")}
+    assert FILE_COUNT_LIMITS["workspace"] == len(workspace_py_files), (
+        f"workspace/ file-count ceiling ({FILE_COUNT_LIMITS['workspace']}) must match "
+        f"its actual top-level file count ({len(workspace_py_files)}); update "
+        f"FILE_COUNT_LIMITS['workspace'] (with a rationale comment) if this fails "
+        f"after a legitimate file addition or removal"
     )
 
 

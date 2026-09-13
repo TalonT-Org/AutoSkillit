@@ -204,13 +204,13 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "Rollback removes only a newly-created external manifest while holding the "
         "incarnation's exclusive artifact lease.",
     ),
-    ("workspace/session_skill_lifecycle.py", "_remove_and_verify", "shutil.rmtree"): (
+    ("workspace/session_skills/_lifecycle.py", "_remove_and_verify", "shutil.rmtree"): (
         1,
         "Generated session homes are ephemeral lease-owned artifacts, and cleanup "
         "refuses symlinks before recursively removing the exact requested home.",
     ),
     (
-        "workspace/session_skill_materialization.py",
+        "workspace/session_skills/_materialization.py",
         "_remove_profile_staging",
         "shutil.rmtree",
     ): (
@@ -219,7 +219,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "the enclosing generated-home transaction owns rollback on failure.",
     ),
     (
-        "workspace/session_skill_materialization.py",
+        "workspace/session_skills/_materialization.py",
         "_merge_profile_projection",
         "shutil.rmtree",
     ): (
@@ -228,7 +228,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "inside the owned catalog after preflighting every ORCHESTRATOR collision.",
     ),
     (
-        "workspace/session_skill_materialization.py",
+        "workspace/session_skills/_materialization.py",
         "_merge_profile_projection",
         "source.rename",
     ): (
@@ -236,7 +236,7 @@ PLUGIN_MUTATION_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         "An admitted profile entry moves from private staging into the owned catalog "
         "only after the complete collision preflight succeeds.",
     ),
-    ("workspace/session_skill_provider.py", "resolve_ephemeral_root", "probe.unlink"): (
+    ("workspace/session_skills/_provider.py", "resolve_ephemeral_root", "probe.unlink"): (
         1,
         "The writable-root probe removes only the sentinel file it created in the "
         "candidate ephemeral session-artifact directory.",
@@ -483,7 +483,7 @@ PASS_FDS_ALLOWLIST: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         "The test gate forwards its exclusive worktree lease to the managed process tree.",
     ),
-    ("workspace/session_skill_manager.py", "managed_session", "(lease_fd,)"): (
+    ("workspace/session_skills/_manager.py", "managed_session", "(lease_fd,)"): (
         1,
         "The generated-home helper forwards its independent session-storage lease.",
     ),
@@ -667,13 +667,13 @@ def _scan_plugin_mutation_trees(
         # it out; it references no plugin-lifecycle symbol of its own, so it is named
         # explicitly to keep its staged session-root swaps under the ratchet.
         is_codex_projection_module = rel == "execution/backends/_codex_explorer_projection.py"
-        # These two shards were scanned as part of session_skills.py until the
-        # decomposition split them out; neither references a plugin-lifecycle symbol
-        # of its own, so they are named explicitly to keep their generated-home
+        # These two shards were scanned as part of the flat session_skills.py until
+        # the decomposition split them out; neither references a plugin-lifecycle
+        # symbol of its own, so they are named explicitly to keep their generated-home
         # entry removal and ephemeral-root probe cleanup under the ratchet.
         is_session_skill_mutation_module = rel in {
-            "workspace/session_skill_materialization.py",
-            "workspace/session_skill_provider.py",
+            "workspace/session_skills/_materialization.py",
+            "workspace/session_skills/_provider.py",
         }
         in_plugin_pkg = any(rel.startswith(f"{pkg}/") for pkg in _PLUGIN_LIFECYCLE_PACKAGES)
         if (

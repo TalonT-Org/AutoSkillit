@@ -47,7 +47,7 @@ _SCOPED_MODULES: tuple[str, ...] = (
     "workspace/_projected_artifact/materialization.py",
     "workspace/_projected_artifact/_publication.py",
     "workspace/_projected_artifact/_hook_repair.py",
-    "workspace/session_skill_catalog.py",
+    "workspace/session_skills/_catalog.py",
     "cli/_hooks.py",
     "execution/backends/_codex_hooks.py",
     "execution/backends/_codex_config.py",
@@ -265,7 +265,7 @@ def test_skill_unavailability_metadata_writer_is_registered() -> None:
         entry
         for entry in DURABLE_ARTIFACT_WRITERS
         if entry.writer
-        == "autoskillit.workspace.session_skill_catalog:write_skill_unavailability_metadata"
+        == "autoskillit.workspace.session_skills._catalog:write_skill_unavailability_metadata"
     )
 
     assert writer.artifact == "add-dir/skill-unavailability.json"

@@ -28,7 +28,7 @@ from autoskillit.core import (
     SkillResolver,
     pkg_root,
 )
-from autoskillit.workspace.skill_projection import (
+from autoskillit.workspace.session_skills._projection import (
     SkillProjectionContext,
     project_agent_skill_document,
 )

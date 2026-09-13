@@ -20,6 +20,16 @@ location is contract-relevant.** Containment checks therefore use
 ``destination_location()``, never ``Path.resolve()`` — resolving follows a
 final-component symlink and turns "where may I write?" into "what does this
 currently point at?", which is a different and wrong question.
+
+This module is a *gateway* rather than a session-skill shard proper: most of
+its ``__all__`` is re-exported, identity-equal, from ``_projected_artifact``
+and from ``autoskillit.core``, and a small local surface
+(``SkillProjectionPreparation``, ``build_skill_projection_binding``,
+``finalize_skill_projection_binding``, ``prepare_catalog_skill_projection``,
+``prepare_skill_projection``) is defined here. Only ``_provider``,
+``_materialization``, ``_manager``, and this package's own ``__init__.py``
+facade may import it directly; no other module, inside or outside this
+package, may.
 """
 
 from __future__ import annotations
@@ -44,7 +54,8 @@ from autoskillit.core import (
     SkillVisibilitySpec,
     temp_dir_display_str,
 )
-from autoskillit.workspace._projected_artifact import (
+
+from .._projected_artifact import (
     AgentSkillDocument,
     ProjectedPluginArtifactAuthority,
     ProjectedPluginRetirementOwner,
@@ -57,7 +68,7 @@ from autoskillit.workspace._projected_artifact import (
     validate_sanitized_plugin_artifact,
     write_generated_hooks_json,
 )
-from autoskillit.workspace._projected_artifact.materialization import _default_base_branch
+from .._projected_artifact.materialization import _default_base_branch
 
 __all__ = [
     "AgentSkillDocument",

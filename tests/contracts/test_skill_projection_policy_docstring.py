@@ -1,4 +1,4 @@
-"""The skill_projection module policy docstring must state an accurate invariant (T-B11).
+"""The _projection module policy docstring must state an accurate invariant (T-B11).
 
 A docstring that states a false invariant is a defect: it licenses the
 assumption at every call site. Before B-7, ``workspace/skill_projection.py``'s
@@ -19,10 +19,10 @@ pytestmark = [pytest.mark.layer("contracts"), pytest.mark.small]
 
 
 def test_skill_projection_policy_docstring_is_accurate() -> None:
-    import autoskillit.workspace.skill_projection as skill_projection
+    import autoskillit.workspace.session_skills._projection as skill_projection
 
     doc = skill_projection.__doc__ or ""
-    assert doc, "skill_projection.py must have a module docstring"
+    assert doc, "session_skills/_projection.py must have a module docstring"
     assert "cannot be stale" not in doc, (
         "module docstring still claims the projection source cannot be stale"
     )

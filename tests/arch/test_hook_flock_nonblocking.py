@@ -214,7 +214,7 @@ _EXPECTED_ACQUISITIONS = (
     ),
     ("workspace/clone/_registry.py", "__enter__", "acquire_flock_with_timeout"),
     (
-        "workspace/session_skill_lifecycle.py",
+        "workspace/session_skills/_lifecycle.py",
         "acquire",
         "ArtifactLease.acquire_exclusive",
     ),

@@ -123,9 +123,9 @@ def test_prepare_skill_projection_authenticates_project_root_not_managed_add_dir
     # pin here: an invalid real project-root override no longer poisons
     # composition. It falls through to the valid bundled `process-issues`
     # twin (recorded as a catalog exclusion) instead of raising —
-    # `skill_projection.py:239` is one of the five crash sites the plan
-    # names as needing no individual guard, since post-2.2 they simply
-    # never see an invalid candidate reach them.
+    # the corresponding crash site is one of five the plan names as needing
+    # no individual guard, since post-2.2 they simply never see an invalid
+    # candidate reach them.
     project_override.write_text(
         "---\nname: process-issues\ndescription: invalid user override\n"
         "semantic_version: 0\nsemantic_requirements: {}\n---\n"

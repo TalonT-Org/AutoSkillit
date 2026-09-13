@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.workspace.session_skill_lifecycle as session_skill_lifecycle
-import autoskillit.workspace.session_skill_manager as session_skill_manager
-import autoskillit.workspace.session_skill_materialization as session_skill_materialization
+import autoskillit.workspace.session_skills._lifecycle as session_skill_lifecycle
+import autoskillit.workspace.session_skills._manager as session_skill_manager
+import autoskillit.workspace.session_skills._materialization as session_skill_materialization
 from tests.workspace._helpers import (
     _BodyFailure,
     _DeletionFailure,

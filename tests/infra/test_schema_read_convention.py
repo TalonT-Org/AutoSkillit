@@ -114,7 +114,7 @@ _READ_SIDE_EXCEPTIONS: dict[str, str] = {
     "src/autoskillit/execution/evidence/session_log.py": (
         "token_usage.json readers use dual-key fallback, not version-gated reading"
     ),
-    "src/autoskillit/workspace/session_skill_catalog.py": (
+    "src/autoskillit/workspace/session_skills/_catalog.py": (
         "Per-session consumer metadata is written once and never read by AutoSkillit"
     ),
     "src/autoskillit/workspace/_projected_artifact/_publication.py": (

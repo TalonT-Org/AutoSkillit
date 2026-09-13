@@ -123,7 +123,7 @@ def test_validate_session_exists_false_for_unknown(make_session_skill_manager) -
 
 def test_cleanup_stale_emits_log_event(make_session_skill_manager, monkeypatch) -> None:
     """cleanup_stale emits a structured log event when removing stale dirs."""
-    import autoskillit.workspace.session_skill_manager as skills_mod
+    import autoskillit.workspace.session_skills._manager as skills_mod
 
     mgr = make_session_skill_manager()
     session_dir = mgr.ephemeral_root / "sess-stale"
@@ -245,7 +245,7 @@ def test_cleanup_stale_continues_when_the_post_lease_observation_finds_the_candi
     monkeypatch: pytest.MonkeyPatch,
     vanished_error: type[OSError],
 ) -> None:
-    import autoskillit.workspace.session_skill_manager as skills_mod
+    import autoskillit.workspace.session_skills._manager as skills_mod
 
     mgr = make_session_skill_manager(codex_root=None)
     root = mgr.ephemeral_root
@@ -283,7 +283,7 @@ def test_cleanup_stale_post_lease_removal_survives_an_intermediate_component_rep
     make_session_skill_manager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.workspace.session_skill_manager as skills_mod
+    import autoskillit.workspace.session_skills._manager as skills_mod
 
     mgr = make_session_skill_manager(codex_root=None)
     stale = mgr.ephemeral_root / "stale"
@@ -309,7 +309,7 @@ def test_cleanup_stale_removes_remaining_candidates_when_one_removal_fails(
     make_session_skill_manager,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.workspace.session_skill_manager as skills_mod
+    import autoskillit.workspace.session_skills._manager as skills_mod
 
     mgr = make_session_skill_manager(codex_root=None)
     first = mgr.ephemeral_root / "first"

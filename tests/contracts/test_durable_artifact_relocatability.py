@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.workspace.session_skill_catalog as _patch_workspace_session_skill_catalog
+import autoskillit.workspace.session_skills._catalog as _patch_workspace_session_skill_catalog
 from autoskillit.core.types._type_constants_durable_writers import (
     DURABLE_ARTIFACT_WRITERS,
     DurableArtifactWriterDef,

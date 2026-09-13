@@ -140,7 +140,7 @@ RECLAIMER_TARGETS: frozenset[ReclaimerTarget] = frozenset(
         ("scripts/pytest_tmp_lifecycle.py", "_safe_candidates"),
         ("src/autoskillit/fleet/_dispatch_reaper.py", "reap_stale_dispatches"),
         (
-            "src/autoskillit/workspace/session_skill_manager.py",
+            "src/autoskillit/workspace/session_skills/_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         ),
         ("src/autoskillit/workspace/clone/_registry.py", "cleanup_candidates"),
@@ -239,11 +239,11 @@ RECLAIMER_CONVERGENCE_CASES: Mapping[
         ("src/autoskillit/fleet/_dispatch_reaper.py", "reap_stale_dispatches")
     ),
     (
-        "src/autoskillit/workspace/session_skill_manager.py",
+        "src/autoskillit/workspace/session_skills/_manager.py",
         "DefaultSessionSkillManager.cleanup_stale",
     ): _convergence_adapters(
         (
-            "src/autoskillit/workspace/session_skill_manager.py",
+            "src/autoskillit/workspace/session_skills/_manager.py",
             "DefaultSessionSkillManager.cleanup_stale",
         )
     ),
@@ -459,15 +459,15 @@ ACKNOWLEDGED_NON_RECLAIMERS: dict[ReclaimerTarget, str] = {
     ): _DELEGATED_MUTATION_REASON,
     ("src/autoskillit/workspace/clone/__init__.py", "remove_clone"): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/session_skill_lifecycle.py",
+        "src/autoskillit/workspace/session_skills/_lifecycle.py",
         "_remove_and_verify",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/session_skill_materialization.py",
+        "src/autoskillit/workspace/session_skills/_materialization.py",
         "_remove_profile_staging",
     ): _DELEGATED_MUTATION_REASON,
     (
-        "src/autoskillit/workspace/session_skill_materialization.py",
+        "src/autoskillit/workspace/session_skills/_materialization.py",
         "_merge_profile_projection",
     ): _DELEGATED_MUTATION_REASON,
     # Commands and composition boundaries.
@@ -546,7 +546,8 @@ _R = "scripts/pytest_tmp_lifecycle.py::_reap"
 _S = "scripts/pytest_tmp_lifecycle.py::_safe_candidates"
 _D = "src/autoskillit/fleet/_dispatch_reaper.py::reap_stale_dispatches"
 _CS = (
-    "src/autoskillit/workspace/session_skill_manager.py::DefaultSessionSkillManager.cleanup_stale"
+    "src/autoskillit/workspace/session_skills/_manager.py"
+    "::DefaultSessionSkillManager.cleanup_stale"
 )
 _WGW = "src/autoskillit/workspace/clone/_worktree.py::remove_git_worktree"
 _WWS = "src/autoskillit/workspace/clone/_worktree.py::remove_worktree_sidecar"
@@ -697,7 +698,7 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
         "still be alive -- the dispatch record is deliberately left RUNNING for a retry, "
         "an observed-liveness result standing in for a direct /proc reference check.",
     ),
-    # -- workspace.session_skill_manager::cleanup_stale --
+    # -- workspace.session_skills._manager::cleanup_stale --
     f"{_CS}::L626": _self_limiting(
         "The candidate root vanished or was replaced before its scan; nothing there to reclaim."
     ),

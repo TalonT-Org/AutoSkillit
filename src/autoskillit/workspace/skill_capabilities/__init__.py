@@ -6,8 +6,8 @@ declaration-vs-evidence authenticity check, and the semantic-plan parser
 behind one entry point; readers should import from this module rather than
 from the individual shards.
 
-The 13 underscore-prefixed names re-exported from
-``skill_capability_cache`` below (the cache singletons and weight helpers)
+The 12 underscore-prefixed names re-exported from
+``._cache`` below (the cache singletons and weight helpers)
 are **not** part of the public surface — they appear in this module only
 so existing tests can monkeypatch.setattr them via the facade. The
 public surface is the ``__all__`` list; everything else is internal
@@ -18,14 +18,14 @@ facade-global cache singleton at call time.
 
 from __future__ import annotations
 
-from autoskillit.workspace.skill_capability_authenticity import (
+from ._authenticity import (
     SkillCapabilityAuthenticityDiagnostic,
     SkillCapabilityValidation,
     detect_skill_capabilities,
     validate_skill_capability_authenticity,
     validate_skill_capability_declarations,
 )
-from autoskillit.workspace.skill_capability_cache import (  # noqa: F401  # re-exported so tests can monkeypatch.setattr on the facade
+from ._cache import (  # noqa: F401  # re-exported so tests can monkeypatch.setattr on the facade
     _SKILL_CAPABILITY_EVIDENCE_CACHE,
     _SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_BYTES,
     _SKILL_CAPABILITY_EVIDENCE_CACHE_MAX_ENTRIES,
@@ -39,7 +39,7 @@ from autoskillit.workspace.skill_capability_cache import (  # noqa: F401  # re-e
     _SkillCapabilityEvidenceCacheEntry,
     _SkillCapabilityEvidenceCacheInfo,
 )
-from autoskillit.workspace.skill_capability_scanner import (
+from ._scanner import (
     CapabilityActor,
     CapabilityDirection,
     CapabilitySourceClassification,
@@ -47,7 +47,7 @@ from autoskillit.workspace.skill_capability_scanner import (
     _normalize_skill_capability_name,
     _scan_skill_capability_evidence_uncached,
 )
-from autoskillit.workspace.skill_semantic_plan import (
+from ._semantic_plan import (
     RETIRED_SEMANTIC_CAPABILITIES,
     parse_skill_semantic_plan,
 )

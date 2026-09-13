@@ -446,23 +446,11 @@ def test_no_subpackage_exceeds_10_files() -> None:
     )
 
 
-# ── Issue #4989: session_skills package shape ────────────────────────────────
-# The seven-file session-skill cluster (facade + five shards + skill_projection)
-# moved from flat files at workspace/ top level into workspace/session_skills/,
-# a default (non-underscored) nested package. This locks the exact resulting
-# file set in place and proves no flat file with any of the old names survives.
-
-_SESSION_SKILLS_PACKAGE_FILES = frozenset(
-    {
-        "__init__.py",
-        "_catalog.py",
-        "_lifecycle.py",
-        "_manager.py",
-        "_materialization.py",
-        "_provider.py",
-        "_projection.py",
-    }
-)
+# ── session_skills package shape ─────────────────────────────────────────────
+# The session-skill cluster (facade + five shards + the projection gateway
+# shard) lives entirely under workspace/session_skills/, a default
+# (non-underscored) nested package. This proves no flat file at workspace/
+# top level carries any of the pre-package names.
 
 _SESSION_SKILLS_RETIRED_FLAT_NAMES = frozenset(
     {
@@ -478,18 +466,29 @@ _SESSION_SKILLS_RETIRED_FLAT_NAMES = frozenset(
 
 
 def test_session_skills_package_shape() -> None:
-    """Issue #4989: workspace/session_skills/ contains exactly the seven expected files.
+    """workspace/session_skills/ contains exactly the expected files.
 
-    No flat file at ``workspace/`` top level may carry any of the seven retired
-    names, and the workspace/ ceiling reflects the seven files moved out of it.
+    No flat file at ``workspace/`` top level may carry any of the retired
+    names, and the workspace/ ceiling reflects the files moved out of it. The
+    expected file set is derived from ``_SESSION_SKILL_SHARD_OWNERS`` (the
+    canonical shard registry in
+    tests/workspace/test_session_skills_projected_artifact_shard_ownership.py)
+    rather than duplicated here as a second literal.
     """
+    from tests.workspace.test_session_skills_projected_artifact_shard_ownership import (
+        _SESSION_SKILL_SHARD_OWNERS,
+    )
+
     package_dir = SRC_ROOT / "workspace" / "session_skills"
     assert package_dir.is_dir(), f"{package_dir} must exist as a package directory"
 
+    expected_files = {"__init__.py", "_projection.py"} | {
+        f"{stem}.py" for stem, _ in _SESSION_SKILL_SHARD_OWNERS
+    }
     actual_files = {p.name for p in package_dir.glob("*.py")}
-    assert actual_files == _SESSION_SKILLS_PACKAGE_FILES, (
+    assert actual_files == expected_files, (
         f"workspace/session_skills/ contains {sorted(actual_files)}, "
-        f"expected exactly {sorted(_SESSION_SKILLS_PACKAGE_FILES)}"
+        f"expected exactly {sorted(expected_files)}"
     )
 
     workspace_dir = SRC_ROOT / "workspace"
@@ -501,9 +500,12 @@ def test_session_skills_package_shape() -> None:
         f"{sorted(flat_survivors)}"
     )
 
-    assert FILE_COUNT_LIMITS["workspace"] == 6, (
-        "workspace/ file-count ceiling must reflect the seven-file move into "
-        "session_skills/ (13 - 7 = 6)"
+    workspace_py_files = {p.name for p in workspace_dir.glob("*.py")}
+    assert FILE_COUNT_LIMITS["workspace"] == len(workspace_py_files), (
+        f"workspace/ file-count ceiling ({FILE_COUNT_LIMITS['workspace']}) must match "
+        f"its actual top-level file count ({len(workspace_py_files)}); update "
+        f"FILE_COUNT_LIMITS['workspace'] (with a rationale comment) if this fails "
+        f"after a legitimate file addition or removal"
     )
 
 

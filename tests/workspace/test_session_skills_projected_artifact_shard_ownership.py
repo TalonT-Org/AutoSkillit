@@ -22,16 +22,16 @@ The session-skill facade (``session_skills/__init__.py``) and the
 projected-artifact facade (``_projected_artifact/materialization.py``) become
 identity-preserving compatibility surfaces over those shards.
 
-``autoskillit.workspace.session_skills._projection`` (issue #4989; formerly
-the flat, workspace-root ``skill_projection.py``) is a distinct *gateway*
+``autoskillit.workspace.session_skills._projection`` is a distinct *gateway*
 shard rather than a session-skill shard proper: it owns a small local surface
 (``SkillProjectionPreparation``, ``build_skill_projection_binding``,
 ``finalize_skill_projection_binding``, ``prepare_catalog_skill_projection``,
 ``prepare_skill_projection``) and re-exports the rest of its ``__all__``,
-identity-equal, from ``_projected_artifact``. It is tracked by dedicated
-gateway tests below rather than by the per-shard ownership tables, since the
-generic ``__all__ <= owned_names`` invariant does not hold for a module that
-legitimately re-exports names it does not own.
+identity-equal, from ``_projected_artifact`` and ``autoskillit.core``. It is
+tracked by dedicated gateway tests below rather than by the per-shard
+ownership tables, since the generic ``__all__ <= owned_names`` invariant
+does not hold for a module that legitimately re-exports names it does not
+own.
 
 Import convention for shards that need to reach a symbol defined in another
 shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
@@ -48,13 +48,9 @@ shard (so ``monkeypatch.setattr`` on the producer's facade takes effect):
 
 3. **Intra-package sibling narrowing** — ``_provider`` and ``_materialization``
    may import the sibling ``_projection`` gateway shard directly; no other
-   session-skill shard may. This mirrors the pre-#4989 fan-in restriction to
-   the (then cross-subsystem) ``skill_projection`` facade — the restriction
-   itself is unchanged, only its framing: ``_projection`` is now a private
-   sibling inside the same package rather than an external facade. Shards
-   may NOT import from their own facade (``workspace.session_skills`` for
-   session shards, ``_projected_artifact.materialization`` for projection
-   shards).
+   session-skill shard may. Shards may NOT import from their own facade
+   (``workspace.session_skills`` for session shards,
+   ``_projected_artifact.materialization`` for projection shards).
 
 Pick (1) by default; reach for (2) only when (1) is structurally impossible.
 Never mix the two in the same shard without an inline justification.
@@ -108,17 +104,6 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "_provider",
-        (
-            "SkillsDirectoryProvider",
-            "_CANDIDATE_ROOTS",
-            "_parse_write_paths",
-            "default_skill_resolver",
-            "resolve_closure_write_dirs",
-            "resolve_ephemeral_root",
-        ),
-    ),
-    (
         "_lifecycle",
         (
             "_SESSION_LEASES_SUBDIR",
@@ -127,6 +112,14 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "_remove_and_verify",
             "resolve_persistent_session_root",
             "resolve_persistent_session_roots",
+        ),
+    ),
+    (
+        "_manager",
+        (
+            "DefaultSessionSkillManager",
+            "_InitializedSession",
+            "_materialize_bound_records",
         ),
     ),
     (
@@ -145,11 +138,14 @@ _SESSION_SKILL_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "_manager",
+        "_provider",
         (
-            "DefaultSessionSkillManager",
-            "_InitializedSession",
-            "_materialize_bound_records",
+            "SkillsDirectoryProvider",
+            "_CANDIDATE_ROOTS",
+            "_parse_write_paths",
+            "default_skill_resolver",
+            "resolve_closure_write_dirs",
+            "resolve_ephemeral_root",
         ),
     ),
 )
@@ -192,12 +188,11 @@ _PROJECTED_ARTIFACT_SHARD_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
-# _projection.py (formerly workspace/skill_projection.py) is a gateway shard:
-# these five names are the only ones it defines locally. The rest of its
-# __all__ is re-exported, identity-equal, from `_projected_artifact` (see
-# _PROJECTION_PROJECTED_ARTIFACT_REEXPORTS below) or from `autoskillit.core`
-# dataclasses (SkillProjectionBinding, SkillProjectionRefusal) — neither of
-# those two categories is ownership-tracked here; the local set is.
+# _projection.py is a gateway shard: these five names are the only ones it
+# defines locally. The rest of its __all__ is re-exported, identity-equal,
+# from `_projected_artifact` (see _PROJECTION_PROJECTED_ARTIFACT_REEXPORTS
+# below) or from `autoskillit.core` dataclasses (see
+# _PROJECTION_CORE_REEXPORTS below); the local set is what this table tracks.
 _PROJECTION_LOCAL_NAMES: frozenset[str] = frozenset(
     {
         "SkillProjectionPreparation",
@@ -225,9 +220,16 @@ _PROJECTION_PROJECTED_ARTIFACT_REEXPORTS: frozenset[str] = frozenset(
     }
 )
 
+# Names _projection.py re-exports, identity-equal, from `autoskillit.core`.
+_PROJECTION_CORE_REEXPORTS: frozenset[str] = frozenset(
+    {
+        "SkillProjectionBinding",
+        "SkillProjectionRefusal",
+    }
+)
+
 # The fourteen names autoskillit.workspace (the outer package facade) imports
-# from workspace.session_skills._projection after the relocation (previously
-# from the flat workspace.skill_projection module).
+# from workspace.session_skills._projection.
 _WORKSPACE_PROJECTION_REEXPORTS: frozenset[str] = frozenset(
     {
         "AgentSkillDocument",
@@ -564,13 +566,32 @@ def test_projection_reexports_remain_identity_equal_to_projected_artifact() -> N
         )
 
 
+def test_projection_core_reexports_remain_identity_equal_to_core() -> None:
+    """_projection's autoskillit.core reexports stay identity-equal to their source.
+
+    _projection re-exports these dataclasses from the cross-subsystem
+    ``autoskillit.core`` package rather than owning them. A gateway must
+    never introduce a copy — patches to the core original must still be
+    visible through _projection.
+    """
+    projection = import_module("autoskillit.workspace.session_skills._projection")
+    core = import_module("autoskillit.core")
+    for name in sorted(_PROJECTION_CORE_REEXPORTS):
+        assert hasattr(core, name), (
+            f"{name!r} must remain part of autoskillit.core's public surface"
+        )
+        assert getattr(projection, name) is getattr(core, name), (
+            f"_projection.{name} must be identity-equal to "
+            f"autoskillit.core.{name} (gateway reexport, not a copy)"
+        )
+
+
 def test_workspace_projection_reexports_remain_identity_equal_to_projection_module() -> None:
     """autoskillit.workspace's projection-related exports stay identity-equal to _projection.
 
     workspace/__init__.py imports these fourteen names from
-    workspace.session_skills._projection after the relocation (previously from
-    the flat workspace.skill_projection module) — the move must not introduce
-    a wrapper or copy anywhere along that reexport chain.
+    workspace.session_skills._projection — the reexport must not introduce a
+    wrapper or copy anywhere along that chain.
     """
     workspace = import_module("autoskillit.workspace")
     projection = import_module("autoskillit.workspace.session_skills._projection")

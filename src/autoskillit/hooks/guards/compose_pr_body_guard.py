@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
 
@@ -26,18 +25,15 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _SHELL_CONTROL_WORDS,
-    _SHELL_OPS,
+    _command_position_candidate_spans,
+    command_verb_and_args,
+    extract_shell_command_payloads,
+    tokenize_command_segments,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     parse_hook_command,
     resolve_state_root,
 )
-
-# Tokens that mark the boundary of a fresh command — either a shell operator
-# (already in _SHELL_OPS) or a shell control word like `do`/`then` that
-# introduces a new command inside a compound construct (loops, conditionals).
-_GH_COMMAND_BOUNDARY: frozenset[str] = _SHELL_OPS | _SHELL_CONTROL_WORDS
 
 COMPOSE_PR_BODY_DENY_TRIGGER: str = "PR body provenance validation failed"
 
@@ -65,29 +61,36 @@ _DEPTH_INCREASE: frozenset[str] = frozenset({"while", "for", "until", "if", "cas
 _DEPTH_DECREASE: frozenset[str] = frozenset({"done", "fi", "esac"})
 
 
-def _collect_depth0_assignments(tokens: list[str], before_index: int) -> dict[str, str]:
-    """Collect simple variable assignments at nesting depth 0 before *before_index*.
+def _collect_depth0_assignments(
+    segments: list[list[str]], before_segment_index: int
+) -> dict[str, str]:
+    """Collect simple variable assignments at nesting depth 0 before *before_segment_index*.
 
-    Only assignments with safe values (no command substitution, backticks, or
-    shell operators in the value) are included. Simple $VAR references in values
-    are left as-is for downstream resolution.
+    *segments* is one evaluated payload's own ordered segment list (rectify
+    #4941 Part B) -- never a flattened mix of an outer command and a nested
+    `bash -c`/heredoc/pipe body's segments, so a $VAR lookup for one payload
+    can never resolve from a sibling payload's assignment. Only assignments
+    with safe values (no command substitution, backticks, or shell operators
+    in the value) are included. Simple $VAR references in values are left
+    as-is for downstream resolution. Depth tracks loop/conditional bodies
+    (while/for/until/if/case ... done/fi/esac) across segment boundaries the
+    same way the token-level walk this replaces did.
     """
     assignments: dict[str, str] = {}
     depth = 0
-    for i, tok in enumerate(tokens):
-        if i >= before_index:
-            break
-        if tok in _DEPTH_INCREASE:
-            depth += 1
-        elif tok in _DEPTH_DECREASE:
-            if depth > 0:
-                depth -= 1
-        elif depth == 0:
-            m = _SIMPLE_ASSIGN_RE.match(tok)
-            if m:
-                name, value = m.group(1), m.group(2)
-                if not _UNSAFE_ASSIGN_VALUE_RE.search(value):
-                    assignments[name] = value
+    for segment in segments[:before_segment_index]:
+        for tok in segment:
+            if tok in _DEPTH_INCREASE:
+                depth += 1
+            elif tok in _DEPTH_DECREASE:
+                if depth > 0:
+                    depth -= 1
+            elif depth == 0:
+                m = _SIMPLE_ASSIGN_RE.match(tok)
+                if m:
+                    name, value = m.group(1), m.group(2)
+                    if not _UNSAFE_ASSIGN_VALUE_RE.search(value):
+                        assignments[name] = value
     return assignments
 
 
@@ -118,17 +121,20 @@ def _resolve_nested_vars(value: str, assignments: dict[str, str]) -> str | None:
     return "".join(result_parts)
 
 
-def _resolve_variable_body_path(raw_token: str, tokens: list[str], gh_index: int) -> str | None:
-    """Resolve a $VAR or ${VAR} body-file token from depth-0 assignments before *gh_index*.
+def _resolve_variable_body_path(
+    raw_token: str, segments: list[list[str]], gh_segment_index: int
+) -> str | None:
+    """Resolve a $VAR or ${VAR} body-file token from depth-0 assignments in the
 
-    Returns the resolved path string, or None if resolution fails (fail-open).
+    same payload's segments before *gh_segment_index*. Returns the resolved
+    path string, or None if resolution fails (fail-open).
     """
     m = _VAR_REF_RE.match(raw_token)
     if not m:
         return None
     var_name = m.group(1)
 
-    assignments = _collect_depth0_assignments(tokens, gh_index)
+    assignments = _collect_depth0_assignments(segments, gh_segment_index)
     if var_name not in assignments:
         return None
 
@@ -138,77 +144,85 @@ def _resolve_variable_body_path(raw_token: str, tokens: list[str], gh_index: int
     return _resolve_nested_vars(raw_value, assignments)
 
 
-def _preprocess_newlines(cmd: str) -> str:
-    """Replace bare (unquoted) newlines with ' ; ' to preserve command boundaries.
+def _iter_evaluated_payload_segments(command: str) -> list[list[list[str]]] | None:
+    """Return each evaluated payload's own ordered segment list.
 
-    In shell a bare newline terminates a command just like ';'. shlex.split()
-    collapses newlines to whitespace, so a later command's --body-file can
-    bleed into an earlier gh pr create that has none. Replacing unquoted
-    newlines before tokenisation inserts a proper ';' separator.
+    The outer command is always the first entry. Each recursively
+    discovered SHELL payload (a `bash -c`/`eval` argument, or a
+    heredoc/herestring/pipe body bound to a shell consumer) is tokenized
+    independently and appended as its own entry -- an inert heredoc body
+    (bound to a non-executing consumer like `cat`) is never a SHELL payload
+    and so is never visited here, closing the false positive where the
+    old newline-rewriting pre-pass corrupted an inert body's own newlines
+    into command boundaries and scanned its prose as real commands.
+    Returns `None` when the outer command cannot be tokenized (fail-open,
+    matching the historic `shlex.ValueError -> None` contract).
     """
-    result: list[str] = []
-    in_single = False
-    in_double = False
-    i = 0
-    while i < len(cmd):
-        c = cmd[i]
-        if c == "\\" and not in_single and i + 1 < len(cmd):
-            result.append(c)
-            result.append(cmd[i + 1])
-            i += 2
+    outer_segments = tokenize_command_segments(command)
+    if not outer_segments and command.strip():
+        return None
+
+    payload_segment_lists: list[list[list[str]]] = [outer_segments]
+    seen: set[str] = {command}
+    queue: list[str] = list(extract_shell_command_payloads(command))
+    while queue:
+        payload = queue.pop(0)
+        if payload in seen:
             continue
-        if c == "'" and not in_double:
-            in_single = not in_single
-        elif c == '"' and not in_single:
-            in_double = not in_double
-        elif c in {"\n", ";"} and not in_single and not in_double:
-            result.append(" ; ")
-            i += 1
-            continue
-        result.append(c)
-        i += 1
-    return "".join(result)
+        seen.add(payload)
+        payload_segment_lists.append(tokenize_command_segments(payload))
+        queue.extend(extract_shell_command_payloads(payload))
+    return payload_segment_lists
+
+
+def _body_path_from_gh_create_segment(
+    segment: list[str], segments: list[list[str]], segment_index: int
+) -> str | None:
+    """Return the --body-file value of one `gh pr create` segment occurrence."""
+    _verb, args = command_verb_and_args(segment)
+    for j, t in enumerate(args[2:], start=2):
+        if t == "--body-file" and j + 1 < len(args):
+            raw = args[j + 1]
+            return (
+                _resolve_variable_body_path(raw, segments, segment_index)
+                if raw.startswith("$")
+                else raw
+            )
+        if t.startswith("--body-file="):
+            raw = t.split("=", 1)[1]
+            return (
+                _resolve_variable_body_path(raw, segments, segment_index)
+                if raw.startswith("$")
+                else raw
+            )
+    return None
 
 
 def _extract_create_body_paths(cmd: str) -> list[str | None] | None:
-    try:
-        tokens = shlex.split(_preprocess_newlines(cmd))
-    except ValueError:
+    """Return each `gh pr create --body-file` occurrence's value, or None.
+
+    Reads *cmd* via `_iter_evaluated_payload_segments` (rectify #4941 Part B)
+    rather than a private newline-rewrite + flat `shlex.split` pass: each
+    evaluated payload is tokenized independently, so a $VAR lookup for one
+    payload's occurrence is resolved only from that same payload's own
+    assignments -- never a sibling payload's, even one that runs earlier in
+    the outer command. `None` propagates when the outer command cannot be
+    tokenized (fail-open, unchanged contract).
+    """
+    payload_segment_lists = _iter_evaluated_payload_segments(cmd)
+    if payload_segment_lists is None:
         return None
 
     body_paths: list[str | None] = []
-    for i, tok in enumerate(tokens):
-        if tok != "gh":
-            continue
-        if i != 0 and tokens[i - 1] not in _GH_COMMAND_BOUNDARY:
-            continue
-        if i + 2 >= len(tokens) or tokens[i + 1] != "pr" or tokens[i + 2] != "create":
-            continue
-        body_path: str | None = None
-        start = i + 3
-        for j in range(start, len(tokens)):
-            t = tokens[j]
-            if t in _GH_COMMAND_BOUNDARY:
-                break
-            if (
-                t == "--body-file"
-                and j + 1 < len(tokens)
-                and tokens[j + 1] not in _GH_COMMAND_BOUNDARY
-            ):
-                raw = tokens[j + 1]
-                if raw.startswith("$"):
-                    body_path = _resolve_variable_body_path(raw, tokens, i)
-                else:
-                    body_path = raw
-                break
-            if t.startswith("--body-file="):
-                raw = t.split("=", 1)[1]
-                if raw.startswith("$"):
-                    body_path = _resolve_variable_body_path(raw, tokens, i)
-                else:
-                    body_path = raw
-                break
-        body_paths.append(body_path)
+    for segments in payload_segment_lists:
+        for segment_index, segment in enumerate(segments):
+            for start, end in _command_position_candidate_spans(segment):
+                verb, args = command_verb_and_args(segment[start:end])
+                if verb != "gh" or args[:2] != ["pr", "create"]:
+                    continue
+                body_paths.append(
+                    _body_path_from_gh_create_segment(segment[start:end], segments, segment_index)
+                )
     return body_paths
 
 

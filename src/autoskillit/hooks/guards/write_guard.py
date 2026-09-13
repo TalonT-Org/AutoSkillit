@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import sys
 from pathlib import Path
 
@@ -45,13 +44,12 @@ from _command_classification import (  # type: ignore[import-not-found]  # noqa:
     _REDIRECT_OP_ONLY_RE,
     _REDIRECT_TOKEN_RE,
     _FlagArity,
+    all_evaluated_segments,
     command_verb,
     extract_interpreter_write_paths,
     extract_redirect_targets,
     is_gh_command,
     resolve_write_target,
-    strip_heredoc_bodies,
-    tokenize_command_segments,
 )
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     extract_apply_patch_text,
@@ -193,10 +191,24 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
     cwd) is preferred for resolving relative targets when non-empty; falls
     back to the ``AUTOSKILLIT_CWD`` env var otherwise.
 
+    Reads *command* through `all_evaluated_segments` (rectify #4941 Part B):
+    outer segments, every recursively tokenized SHELL payload (a heredoc,
+    herestring, pipe, or `bash -c`/`eval` body), and every literal-argv or
+    executing-string Python subprocess spec are all classified and scanned
+    for redirects independently, per evaluated segment, rather than
+    flattening the whole command into one private token stream -- so
+    `bash <<'EOF'\nrm -rf src/\nEOF` and `bash -c 'echo x > /outside/f'` are
+    seen the same way a direct invocation is. `None` (unparseable) returns
+    `None`, the guard's documented authority-failure result -- no private
+    raw-command fallback.
+
     Returns an empty list when a write command is detected but no path can be reliably
     extracted — callers treat this as fail-open (ambiguous = allow).
     """
-    segments = tokenize_command_segments(command)
+    segments = all_evaluated_segments(command)
+    if segments is None:
+        return None
+
     cwd = execution_cwd
     if not cwd:
         cwd = os.environ.get("AUTOSKILLIT_CWD", "")
@@ -212,15 +224,11 @@ def _extract_bash_write_targets(command: str, execution_cwd: str = "") -> list[s
             found_any_write = True
             all_targets.extend(result)
 
-    try:
-        flat_tokens = shlex.split(strip_heredoc_bodies(command))
-    except (ValueError, TypeError, AttributeError):
-        flat_tokens = []
-    redirect_paths = extract_redirect_targets(flat_tokens, cwd)
-    for path in redirect_paths:
-        found_any_write = True
-        if path not in _PSEUDO_DEVICE_PATHS:
-            all_targets.append(path)
+        redirect_paths = extract_redirect_targets(segment, cwd)
+        for path in redirect_paths:
+            found_any_write = True
+            if path not in _PSEUDO_DEVICE_PATHS:
+                all_targets.append(path)
 
     if not found_any_write:
         return None

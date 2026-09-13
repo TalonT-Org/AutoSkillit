@@ -174,6 +174,13 @@ def test_multiple_mutations_are_denied(
             'python3 -c "import os; '
             f"os.system('curl -X POST https://api.github.com{_REVIEW_ROUTE}')\""
         ),
+        f"bash <<'EOF'\ngh api --method POST {_REVIEW_ROUTE}\nEOF",
+        f"cat <<'EOF' | bash\ngh api --method POST {_REVIEW_ROUTE}\nEOF",
+        f"bash <<< 'gh api --method POST {_REVIEW_ROUTE}'",
+        (
+            "python3 - <<'EOF'\nimport subprocess\n"
+            f"subprocess.run(['gh','api','--method','POST','{_REVIEW_ROUTE}'])\nEOF"
+        ),
     ],
     ids=[
         "loop",
@@ -184,6 +191,10 @@ def test_multiple_mutations_are_denied(
         "xargs",
         "python-subprocess",
         "python-os-system",
+        "nested-bash-heredoc",
+        "cat-pipe-bash",
+        "bash-herestring",
+        "python-dash-heredoc",
     ],
 )
 @pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
@@ -193,6 +204,75 @@ def test_wrappers_and_repeatable_shell_constructs_cannot_bypass_guard(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_cat_written_markdown_with_fenced_review_command_is_allowed(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """rectify #4941 Part A: a quoted-delimiter `cat` heredoc is inert -- a
+    fenced `gh pr review ... --approve` example, plus a `$(gh api ...)` line,
+    is prose that the outer shell never expands and `cat` never executes."""
+    command = (
+        "cat > runbook.md <<'EOF'\n"
+        "```\n"
+        "gh pr review 1 --approve\n"
+        "```\n"
+        f"$(gh api --method POST {_REVIEW_ROUTE})\n"
+        "EOF"
+    )
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_unquoted_cat_heredoc_substitution_is_still_classified(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The correction to the issue/investigation: an UNQUOTED heredoc
+    delimiter still lets the outer shell expand `$(...)` in the body before
+    `cat` ever sees it, even though `cat` itself never executes anything."""
+    command = f"cat <<EOF\n$(gh api --method POST {_REVIEW_ROUTE})\nEOF"
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_inert_heredoc_repeatable_prose_is_allowed(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """rectify #4941 Part B: an inert (cat-consumed) heredoc body's own
+    `for ... do ... done` prose mentioning `gh` verbs must not trip the
+    repeatable-shell-construct or unresolved-shell-payload fallback
+    heuristics -- previously a false positive from scanning the raw text."""
+    command = (
+        "cat > runbook.md <<'EOF'\n"
+        f"for r in $(gh api --method POST {_REVIEW_ROUTE}); do "
+        "gh pr review 1 --approve; done\n"
+        "EOF"
+    )
+    assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) is None
+
+
+@pytest.mark.parametrize("event_factory", [_bash_event, _run_cmd_event], ids=["bash", "run-cmd"])
+def test_shell_delivered_repeatable_construct_still_denies(
+    event_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The same repeatable construct, delivered through a SHELL-consumed
+    heredoc, still denies -- the loop genuinely executes."""
+    command = (
+        "bash <<'EOF'\n"
+        f"for r in $(gh api --method POST {_REVIEW_ROUTE}); do "
+        "gh pr review 1 --approve; done\n"
+        "EOF"
+    )
     assert _decision(event_factory(command, cwd=str(tmp_path)), monkeypatch) == "deny"
 
 

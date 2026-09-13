@@ -18,15 +18,18 @@ _SHELL_OPERATORS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
 # immediately by an operator (no separating whitespace) does not appear to
 # contain that operator in its raw_span.
 _SHELL_OPERATOR_CHARS: str = ";|&"
+# Named groups are a non-semantic addition over the original unnamed pattern
+# (`open`/`q`/`delim`/`rest` decompose the old group 1; `body` names the old
+# unnamed `.*?`; `term` decomposes the old group 3/`\2` backreference). The
+# matched spans are byte-identical to before -- strip_heredoc_bodies's output
+# is parity-locked against core/git/bash_write_targets.py and must not change.
 _HEREDOC_BODY_RE = re.compile(
-    r"(<<-?\s*['\"]?(\w+)['\"]?[^\n]*)\n.*?\n\t*(\2)(?=[ \t]*(?:\n|$))",
+    r"(?P<open><<-?\s*(?P<q>['\"]?)(?P<delim>\w+)['\"]?(?P<rest>[^\n]*))"
+    r"\n(?P<body>.*?)\n\t*(?P<term>(?P=delim))(?=[ \t]*(?:\n|$))",
     re.DOTALL,
 )
 
-# After strip_heredoc_bodies() a heredoc collapses to "<<WORD ...\nWORD".
-# This removes the marker and terminator, keeping the rest of the opening
-# line (real redirects), so segments carry only executable tokens.
-_HEREDOC_MARKER_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?([^\n]*)\n\t*\1(?=[ \t]*(?:\n|$))")
+_HEREDOC_PLACEHOLDER_RE = re.compile(r"__AUTOSKILLIT_HEREDOC_(\d+)__")
 
 
 def strip_heredoc_bodies(command: str) -> str:
@@ -35,7 +38,30 @@ def strip_heredoc_bodies(command: str) -> str:
     The opening line (containing << and any real redirects) is kept intact.
     Only the body lines between the opening and terminator are removed.
     """
-    return _HEREDOC_BODY_RE.sub(r"\1\n\3", command)
+    return _HEREDOC_BODY_RE.sub(r"\g<open>\n\g<term>", command)
+
+
+@dataclass(frozen=True, slots=True)
+class StdinLiteral:
+    """A heredoc or herestring body bound to the segment that consumes it.
+
+    `kind` is `"heredoc"` or `"herestring"`. `outer_expansion` is True when
+    the outer shell performs command/parameter substitution on the body
+    before the consumer ever sees it -- true for an unquoted heredoc
+    delimiter (`<<EOF`) or an unquoted/double-quoted herestring word, false
+    when any character of the delimiter/word is quoted (`<<'EOF'`,
+    `<<"EOF"`, `<<\\EOF`, a single-quoted herestring). This is independent
+    of whether the *consumer* (the command the literal is piped/redirected
+    into) itself executes the body as code -- see `StdinConsumer` in
+    `_interpreters.py`. `source_span` is the literal's exact occurrence span
+    in the original command string; `None` only for a value constructed
+    directly by a test or caller rather than captured from source text.
+    """
+
+    text: str
+    kind: str
+    outer_expansion: bool
+    source_span: tuple[int, int] | None = None
 
 
 def _normalize_newlines_for_tokenize(command: str) -> str:
@@ -100,6 +126,35 @@ class _CommandSegment:
     tokens: list[str]
     redirect_syntax: list[bool]
     argv_tokens: list[ArgvToken]
+    stdin_literals: tuple[StdinLiteral, ...] = ()
+    piped_from_previous: bool = False
+
+
+def _capture_heredocs(command: str) -> tuple[str, list[StdinLiteral]]:
+    """Replace each heredoc with a placeholder, returning its bound literal.
+
+    The placeholder precedes the opening line's remainder (`rest` — real
+    redirects, a pipe, `&&`, ...) so it stays in the segment that owns the
+    `<<` operator even when that remainder starts a new segment once
+    tokenized. `command[span]` for the returned literal's `source_span` is
+    exactly the heredoc body, matching what `strip_heredoc_bodies` removes
+    (both are driven by the same `_HEREDOC_BODY_RE` match).
+    """
+    literals: list[StdinLiteral] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        index = len(literals)
+        literals.append(
+            StdinLiteral(
+                text=match.group("body"),
+                kind="heredoc",
+                outer_expansion=match.group("q") == "",
+                source_span=match.span("body"),
+            )
+        )
+        return f" __AUTOSKILLIT_HEREDOC_{index}__{match.group('rest')}"
+
+    return (_HEREDOC_BODY_RE.sub(_replace, command), literals)
 
 
 def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
@@ -175,7 +230,7 @@ def _mark_unquoted_output_redirects(command: str) -> tuple[str, dict[str, str]]:
 def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegment]:
     """Tokenize commands while retaining which redirect-shaped tokens are syntax."""
     try:
-        stripped = _HEREDOC_MARKER_RE.sub(r"\2", strip_heredoc_bodies(command))
+        stripped, literals = _capture_heredocs(command)
         marked, redirects = _mark_unquoted_output_redirects(
             _normalize_newlines_for_tokenize(stripped)
         )
@@ -222,24 +277,91 @@ def _tokenize_command_segments_with_redirects(command: str) -> list[_CommandSegm
     current_tokens: list[str] = []
     current_redirect_syntax: list[bool] = []
     current_argv_tokens: list[ArgvToken] = []
-    for token, quoted, raw_span in zip(tokens, fully_single_quoted, raw_spans, strict=True):
+    current_stdin_literals: list[StdinLiteral] = []
+    piped_from_previous = False
+    index = 0
+    total = len(tokens)
+    while index < total:
+        token = tokens[index]
+        quoted = fully_single_quoted[index]
+        raw_span = raw_spans[index]
+
+        placeholder = _HEREDOC_PLACEHOLDER_RE.fullmatch(token)
+        if placeholder is not None:
+            current_stdin_literals.append(literals[int(placeholder.group(1))])
+            index += 1
+            continue
+
+        if token == "<<<":
+            # Standalone herestring operator: the next token is the value.
+            # `outer_expansion` mirrors ArgvToken.fully_single_quoted -- only
+            # a whole single-quoted word is inert to outer-shell expansion.
+            if index + 1 < total:
+                current_stdin_literals.append(
+                    StdinLiteral(
+                        text=tokens[index + 1],
+                        kind="herestring",
+                        outer_expansion=not fully_single_quoted[index + 1],
+                    )
+                )
+                index += 2
+            else:
+                index += 1
+            continue
+
+        if len(token) > 3 and token.startswith("<<<"):
+            # Fused herestring (no space before the word, e.g. `<<<'text'`):
+            # shlex hands back one token whose text starts with `<<<`.
+            # Provenance is re-derived past the known prefix the same way
+            # `_argv_token_after_prefix` narrows a quoted suffix at the
+            # ArgvToken layer -- this module cannot import that helper
+            # (`_flags` sits above `_tokenizer` in the import order).
+            body = token[3:]
+            value_raw_span = raw_span[3:].rstrip()
+            current_stdin_literals.append(
+                StdinLiteral(
+                    text=body,
+                    kind="herestring",
+                    outer_expansion=value_raw_span != f"'{body}'",
+                )
+            )
+            index += 1
+            continue
+
         if token in _SHELL_OPERATORS:
             if current_tokens:
                 segments.append(
-                    _CommandSegment(current_tokens, current_redirect_syntax, current_argv_tokens)
+                    _CommandSegment(
+                        current_tokens,
+                        current_redirect_syntax,
+                        current_argv_tokens,
+                        tuple(current_stdin_literals),
+                        piped_from_previous,
+                    )
                 )
-                current_tokens = []
-                current_redirect_syntax = []
-                current_argv_tokens = []
-        else:
-            redirect = redirects.get(token)
-            restored = redirect if redirect is not None else token
-            current_tokens.append(restored)
-            current_redirect_syntax.append(redirect is not None)
-            current_argv_tokens.append(ArgvToken(restored, quoted, raw_span))
+            piped_from_previous = token == "|"
+            current_tokens = []
+            current_redirect_syntax = []
+            current_argv_tokens = []
+            current_stdin_literals = []
+            index += 1
+            continue
+
+        redirect = redirects.get(token)
+        restored = redirect if redirect is not None else token
+        current_tokens.append(restored)
+        current_redirect_syntax.append(redirect is not None)
+        current_argv_tokens.append(ArgvToken(restored, quoted, raw_span))
+        index += 1
     if current_tokens:
         segments.append(
-            _CommandSegment(current_tokens, current_redirect_syntax, current_argv_tokens)
+            _CommandSegment(
+                current_tokens,
+                current_redirect_syntax,
+                current_argv_tokens,
+                tuple(current_stdin_literals),
+                piped_from_previous,
+            )
         )
     return segments
 

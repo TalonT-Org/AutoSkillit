@@ -2,7 +2,9 @@
 
 Each of this rectify's CLI flag-arity spec tables (_GH_API_FLAG_SPEC and
 _CURL_FLAG_SPEC in hooks/_github_mutation_analysis.py; _GIT_GLOBAL_FLAG_SPEC
-and _PIP_GLOBAL_FLAG_SPEC in hooks/_command_classification.py) must have a
+and _PIP_GLOBAL_FLAG_SPEC in hooks/_command_classification.py;
+_SHELL_INVOCATION_FLAG_SPEC and _PYTHON_INVOCATION_FLAG_SPEC in
+hooks/_classification/_interpreters.py, rectify #4941 Part A) must have a
 corresponding test parametrized directly from the table's own keys (e.g.
 `@pytest.mark.parametrize("flag", sorted(_GH_API_FLAG_SPEC))`), not a
 hand-maintained flag list a future table update could silently drift out of
@@ -36,6 +38,8 @@ _SPEC_TABLE_TEST_FILES: dict[str, tuple[str, ...]] = {
     "_GIT_GLOBAL_FLAG_SPEC": ("hooks/test_command_classification.py",),
     "_GIT_FETCH_FLAG_SPEC": ("infra/test_git_ops_guard.py",),
     "_PIP_GLOBAL_FLAG_SPEC": ("infra/test_unsafe_install_guard.py",),
+    "_SHELL_INVOCATION_FLAG_SPEC": ("hooks/test_command_classification.py",),
+    "_PYTHON_INVOCATION_FLAG_SPEC": ("hooks/test_command_classification.py",),
 }
 
 

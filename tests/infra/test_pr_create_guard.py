@@ -16,6 +16,8 @@ import unittest.mock
 
 import pytest
 
+from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
+
 pytestmark = [pytest.mark.layer("infra"), pytest.mark.small]
 
 _TOOL_NAME = "mcp__autoskillit__local__autoskillit__run_cmd"
@@ -472,6 +474,39 @@ class TestNestedShellStructuredDetection:
             tmpdir=tmp_path,
         )
         assert out.strip() == "", "Malformed inner payload must fail open"
+
+
+class TestPrCreateGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape."""
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_executing_shape_denies_gh_pr_create(self, shape, tmp_path) -> None:
+        out = _run_guard(
+            shape.build("gh pr create --title x --body y"), kitchen_open=True, tmpdir=tmp_path
+        )
+        assert _is_denied(out), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize(
+        "shape",
+        [
+            s
+            for s in EVALUATION_SHAPE_MATRIX
+            # "gh-body-file-stdin-heredoc" is itself a `gh pr create
+            # --body-file -` invocation on its opening line, independent of
+            # whatever inner text it wraps -- the guard correctly denies it
+            # regardless of body content, so it is excluded here rather than
+            # inheriting a blanket "inert shape must allow" expectation.
+            if not s.executes and s.id != "gh-body-file-stdin-heredoc"
+        ],
+        ids=lambda s: s.id,
+    )
+    def test_inert_shape_allows_gh_pr_create(self, shape, tmp_path) -> None:
+        out = _run_guard(
+            shape.build("gh pr create --title x --body y"), kitchen_open=True, tmpdir=tmp_path
+        )
+        assert out.strip() == "", f"shape {shape.id!r} must allow"
 
 
 class TestNestedShellDenyRegressions:

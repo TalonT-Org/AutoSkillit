@@ -19,15 +19,9 @@ from pathlib import Path
 
 import pytest
 
-# Mirror the standalone hook process import mode: guards place the hooks directory
-# on sys.path and import sibling support modules without package initialization.
-_HOOKS_SRC = str(Path(__file__).resolve().parents[2] / "src" / "autoskillit" / "hooks")
-if _HOOKS_SRC not in sys.path:
-    sys.path.insert(0, _HOOKS_SRC)
-_HOOKS_RUNTIME_SRC = str(Path(_HOOKS_SRC) / "_runtime")
-if _HOOKS_RUNTIME_SRC not in sys.path:
-    sys.path.insert(0, _HOOKS_RUNTIME_SRC)
-
+# The sys.path bootstrap for bare-name hook-sibling imports (e.g.
+# _hook_payload below) is centralized in tests/conftest.py -- it must run
+# before this module's own top-level imports, which a fixture cannot do.
 from _hook_payload import (  # type: ignore[import-not-found]  # noqa: E402
     normalize_payload_cwd,
     resolve_kitchen_state_dir,

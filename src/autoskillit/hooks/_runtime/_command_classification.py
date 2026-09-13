@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from autoskillit.hooks._classification._tokenizer import (  # noqa: F401
         ArgvToken,
+        StdinLiteral,
         _CommandSegment,
         _normalize_newlines_for_tokenize,
         _tokenize_command_segments_with_redirects,
@@ -32,6 +33,7 @@ else:
         from _classification import _tokenizer
 
     ArgvToken = _tokenizer.ArgvToken
+    StdinLiteral = _tokenizer.StdinLiteral
     _CommandSegment = _tokenizer._CommandSegment
     _normalize_newlines_for_tokenize = _tokenizer._normalize_newlines_for_tokenize
     _tokenize_command_segments_with_redirects = (
@@ -69,8 +71,6 @@ _INTERPRETER_RE = re.compile(
 
 _INTERPRETER_LINE_RE = re.compile(r"(?:python3?|perl|ruby|node)\s+(?:-[ce]\s|.*<<)")
 
-_NESTED_SHELL_RE = re.compile(r"(?:^|&&|\|\||;)\s*(?:bash|sh|zsh|dash)\s+-c\s+")
-
 _WRITE_APIS_RE = re.compile(
     r"\.write_text\s*\(|\.write_bytes\s*\("
     r"|open\s*\([^)]*['\"][wWaAxX]\+?[bB]?['\"]"
@@ -94,12 +94,6 @@ _WRITE_CALL_SITE_RE = re.compile(
 )
 
 
-# Boundary-adjacency operator set for guards that scan raw shlex.split token
-# streams (pr_create, git_ops, planner_gh_discovery, artifact_download,
-# compose_pr_body): `!` and `(` may precede a fresh command verb there but
-# are not split tokens for the segment lexer above.
-_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "!", "|", "("})
-
 # Command wrappers whose only effect is to invoke the next command with
 # adjusted environment/priority. The verb is the token after the wrapper.
 # 'xargs' is intentionally excluded: it dispatches a downstream reader and
@@ -111,24 +105,6 @@ _WRAPPERS_WITH_DURATION: frozenset[str] = frozenset({"timeout"})
 # Wrappers that take a single short flag as their first non-wrapper token
 # (e.g. 'stdbuf -o0', 'stdbuf -i0', 'stdbuf -e0').
 _WRAPPERS_WITH_SHORT_FLAG: frozenset[str] = frozenset({"stdbuf"})
-
-# Shell control words that mark the start of a new command in compound
-# shell constructs (loops, conditionals, case statements). When a `gh` token
-# is preceded by one of these, treat it as the verb of a fresh command — even
-# though shlex does not treat them as operators. Keep this set narrow: only
-# words that legitimately precede a command in real shell scripts.
-_SHELL_CONTROL_WORDS: frozenset[str] = frozenset(
-    {
-        "do",
-        "done",
-        "then",
-        "else",
-        "elif",
-        "esac",
-        "fi",
-        "in",
-    }
-)
 
 # env option arity tables.
 _ENV_NO_VALUE_FLAGS: frozenset[str] = frozenset(
@@ -209,56 +185,11 @@ _TRAILING_SHELL_CLOSERS = frozenset({")", "`", "}", "'", '"', ";", "&", "|"})
 _SHELL_VAR_RE = re.compile(r"\$\{[A-Za-z_]|\$[A-Za-z_]")
 
 
-_PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS: frozenset[str] = frozenset({"add", "diff", "status"})
-
-_GIT_ADD_CONTENT_FLAGS: frozenset[str] = frozenset(
-    {
-        "-p",
-        "--patch",
-        "-e",
-        "--edit",
-        "-i",
-        "--interactive",
-        "--pathspec-from-file",
-        # Content-staging flags: -A/--all stages all changes (incl. content);
-        # --force/--no-ignore-removal/--no-all are the no-restriction variants.
-        # Without these, `git add -A -- src/.../foo.yaml` is classified as
-        # metadata but actually stages content for indirect read via
-        # `git diff --staged`.
-        "-A",
-        "--all",
-        "--force",
-        "--no-ignore-removal",
-        "--no-all",
-    }
-)
-_GIT_STATUS_CONTENT_FLAGS: frozenset[str] = frozenset({"-v", "--verbose"})
-_GIT_DIFF_CONTENT_FLAGS: frozenset[str] = frozenset(
-    {
-        "-p",
-        "--patch",
-        "--patch-with-stat",
-        "--patch-with-raw",
-        "--binary",
-        "--text",
-        "--word-diff",
-        "--color-words",
-    }
-)
-_GIT_DIFF_METADATA_FLAGS: frozenset[str] = frozenset(
-    {
-        "--name-only",
-        "--name-status",
-        "--stat",
-        "--shortstat",
-        "--numstat",
-        "--summary",
-    }
-)
-_SHELL_SUBSTITUTION_RE = re.compile(r"\$\(|`|[<>]\(")
-_SHELL_STATE_VAR_RE = re.compile(r"\$(?:_|[A-Za-z][A-Za-z0-9_]*|\{[^}]+\})")
-_PROTECTED_READ_SHELL_OPS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&"})
-_WC_FLAG_RE = re.compile(r"-l+|--lines$")
+# _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS, the git add/status/diff content-vs-
+# metadata flag sets, _SHELL_SUBSTITUTION_RE, _SHELL_STATE_VAR_RE, and
+# _WC_FLAG_RE moved to _flags.py (their sole consumer) to keep this facade
+# under REQ-CNST-010's line cap; re-exported below through the existing
+# block B bootstrap.
 
 
 class SearchPattern(Protocol):
@@ -526,6 +457,9 @@ def _verb_start_index(segment: list[str]) -> int | None:
         if token in {"while", "until", "if", "do", "then", "elif", "else"}:
             start += 1
             continue
+        if token == "!":  # POSIX pipeline negation: `! git push` resolves to `git`.
+            start += 1
+            continue
         if _is_posix_assignment(token):
             start += 1
             continue
@@ -656,33 +590,52 @@ def extract_git_subcommand_and_flags(
 
 
 if TYPE_CHECKING:
+    from autoskillit.hooks._classification import _interpreters  # noqa: F401
     from autoskillit.hooks._classification._flags import (  # noqa: F401
+        _GIT_ADD_CONTENT_FLAGS,
+        _GIT_DIFF_CONTENT_FLAGS,
+        _GIT_DIFF_METADATA_FLAGS,
         _GIT_GLOBAL_FLAG_SPEC,
         _GIT_GLOBAL_FLAGS,
         _GIT_GLOBAL_FLAGS_WITH_VALUE,
+        _GIT_STATUS_CONTENT_FLAGS,
         _PIP_GLOBAL_FLAG_SPEC,
+        _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS,
+        _SHELL_STATE_VAR_RE,
+        _SHELL_SUBSTITUTION_RE,
+        _WC_FLAG_RE,
         _argv_token_after_prefix,
         _argv_token_value_after_key,
         _consume_argv_flag,
         _consume_str_flag,
         _FlagArity,
-        _tokenize_protected_read_segments,
         command_has_blocked_protected_path_read,
         is_allowed_protected_path_metadata_command,
     )
     from autoskillit.hooks._classification._interpreters import (  # noqa: F401
-        _extract_interpreter_command_specs,
+        _PYTHON_INVOCATION_FLAG_SPEC,
+        _SHELL_INVOCATION_FLAG_SPEC,
+        EvaluatedPayload,
+        StdinConsumer,
         _extract_interpreter_segment_specs,
         _extract_process_substitution_occurrences,
         _normalize_executable,
-        _segment_evaluates_shell_payload,
+        evaluated_payloads,
         extract_interpreter_command_payloads,
         extract_interpreter_write_paths,
         extract_shell_command_payloads,
-        has_interpreter_wrapped_command,
         has_interpreter_write,
-        has_nested_shell,
+        stdin_consumer,
         tokenize_shell_payload_segments,
+    )
+    from autoskillit.hooks._classification._interpreters import (
+        all_evaluated_segments as _all_evaluated_segments_impl,
+    )
+    from autoskillit.hooks._classification._interpreters import (
+        interpreter_invokes as _interpreter_invokes_impl,
+    )
+    from autoskillit.hooks._classification._interpreters import (
+        live_command_text as _live_command_text_impl,
     )
 else:
     if __package__:
@@ -690,29 +643,60 @@ else:
     else:
         from _classification import _flags, _interpreters
 
+    _GIT_ADD_CONTENT_FLAGS = _flags._GIT_ADD_CONTENT_FLAGS
+    _GIT_DIFF_CONTENT_FLAGS = _flags._GIT_DIFF_CONTENT_FLAGS
+    _GIT_DIFF_METADATA_FLAGS = _flags._GIT_DIFF_METADATA_FLAGS
     _GIT_GLOBAL_FLAG_SPEC = _flags._GIT_GLOBAL_FLAG_SPEC
     _GIT_GLOBAL_FLAGS = _flags._GIT_GLOBAL_FLAGS
     _GIT_GLOBAL_FLAGS_WITH_VALUE = _flags._GIT_GLOBAL_FLAGS_WITH_VALUE
+    _GIT_STATUS_CONTENT_FLAGS = _flags._GIT_STATUS_CONTENT_FLAGS
     _PIP_GLOBAL_FLAG_SPEC = _flags._PIP_GLOBAL_FLAG_SPEC
+    _PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS = _flags._PROTECTED_PATH_METADATA_GIT_SUBCOMMANDS
+    _SHELL_STATE_VAR_RE = _flags._SHELL_STATE_VAR_RE
+    _SHELL_SUBSTITUTION_RE = _flags._SHELL_SUBSTITUTION_RE
+    _WC_FLAG_RE = _flags._WC_FLAG_RE
     _argv_token_after_prefix = _flags._argv_token_after_prefix
     _argv_token_value_after_key = _flags._argv_token_value_after_key
     _consume_argv_flag = _flags._consume_argv_flag
     _consume_str_flag = _flags._consume_str_flag
     _FlagArity = _flags._FlagArity
-    _tokenize_protected_read_segments = _flags._tokenize_protected_read_segments
     command_has_blocked_protected_path_read = _flags.command_has_blocked_protected_path_read
     is_allowed_protected_path_metadata_command = _flags.is_allowed_protected_path_metadata_command
-    _extract_interpreter_command_specs = _interpreters._extract_interpreter_command_specs
     _extract_interpreter_segment_specs = _interpreters._extract_interpreter_segment_specs
     _extract_process_substitution_occurrences = (
         _interpreters._extract_process_substitution_occurrences
     )
     _normalize_executable = _interpreters._normalize_executable
-    _segment_evaluates_shell_payload = _interpreters._segment_evaluates_shell_payload
+    EvaluatedPayload = _interpreters.EvaluatedPayload
+    StdinConsumer = _interpreters.StdinConsumer
+    evaluated_payloads = _interpreters.evaluated_payloads
     extract_interpreter_command_payloads = _interpreters.extract_interpreter_command_payloads
     extract_interpreter_write_paths = _interpreters.extract_interpreter_write_paths
     extract_shell_command_payloads = _interpreters.extract_shell_command_payloads
-    has_interpreter_wrapped_command = _interpreters.has_interpreter_wrapped_command
     has_interpreter_write = _interpreters.has_interpreter_write
-    has_nested_shell = _interpreters.has_nested_shell
+    stdin_consumer = _interpreters.stdin_consumer
     tokenize_shell_payload_segments = _interpreters.tokenize_shell_payload_segments
+    _all_evaluated_segments_impl = _interpreters.all_evaluated_segments
+    _interpreter_invokes_impl = _interpreters.interpreter_invokes
+    _live_command_text_impl = _interpreters.live_command_text
+    _SHELL_INVOCATION_FLAG_SPEC = _interpreters._SHELL_INVOCATION_FLAG_SPEC
+    _PYTHON_INVOCATION_FLAG_SPEC = _interpreters._PYTHON_INVOCATION_FLAG_SPEC
+
+
+def all_evaluated_segments(
+    command: str, *, include_process_substitutions: bool = False
+) -> list[list[str]] | None:
+    """Return every segment that will actually execute, across every consumer."""
+    return _all_evaluated_segments_impl(
+        command, include_process_substitutions=include_process_substitutions
+    )
+
+
+def live_command_text(command: str) -> str:
+    """Return an occurrence-aware live-text projection of *command*."""
+    return _live_command_text_impl(command)
+
+
+def interpreter_invokes(command: str, *, target: Sequence[str]) -> bool:
+    """Return True when a PYTHON-consumer payload resolves to invoking *target*."""
+    return _interpreter_invokes_impl(command, target=target)

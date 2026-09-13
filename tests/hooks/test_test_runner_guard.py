@@ -13,6 +13,7 @@ from contextlib import redirect_stdout
 import pytest
 
 from autoskillit.hook_registry import HOOK_REGISTRY, NEW_SUBDIR_BASENAMES
+from tests._evaluation_shape_matrix import EVALUATION_SHAPE_MATRIX
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.small]
 
@@ -215,6 +216,39 @@ class TestAllowPatterns:
         event = _build_event("cat pytestmark_example.py")
         output = _run_hook(event, monkeypatch, headless=True)
         assert output == ""
+
+
+# ---------------------------------------------------------------------------
+# Evaluation-shape matrix (rectify #4941 Part B)
+# ---------------------------------------------------------------------------
+
+
+class TestTestRunnerGuardEvaluationShapeMatrix:
+    """Deny family proven through every semantically executing EVALUATION_SHAPE_MATRIX shape."""
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if s.executes], ids=lambda s: s.id
+    )
+    def test_executing_shape_denies_pytest(self, shape, monkeypatch) -> None:
+        event = _build_event(shape.build("pytest tests/"))
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output), f"shape {shape.id!r} must deny"
+
+    @pytest.mark.parametrize(
+        "shape", [s for s in EVALUATION_SHAPE_MATRIX if not s.executes], ids=lambda s: s.id
+    )
+    def test_inert_shape_allows_pytest(self, shape, monkeypatch) -> None:
+        event = _build_event(shape.build("pytest tests/"))
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert output == "", f"shape {shape.id!r} must allow"
+
+    def test_denies_sudo_pytest(self, monkeypatch) -> None:
+        """Rectify #4941 Part B: command_verb_and_args now skips a sudo
+        wrapper to resolve the verb -- previously invisible to the guard's
+        first-token check."""
+        event = _build_event("sudo pytest tests/")
+        output = _run_hook(event, monkeypatch, headless=True)
+        assert _is_denied(output)
 
 
 # ---------------------------------------------------------------------------

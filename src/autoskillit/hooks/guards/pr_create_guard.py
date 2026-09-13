@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import sys
 from pathlib import Path
 
@@ -24,10 +23,10 @@ if _RUNTIME_DIR not in sys.path:
 
 
 from _command_classification import (  # type: ignore[import-not-found]  # noqa: E402
-    _SHELL_OPS,
+    _command_position_candidate_spans,
+    all_evaluated_segments,
     command_verb_and_args,
-    has_interpreter_wrapped_command,
-    tokenize_shell_payload_segments,
+    interpreter_invokes,
 )
 from _hook_constants import (  # type: ignore[import-not-found]  # noqa: E402
     DENY_REASON_BY_GUARD,
@@ -52,31 +51,23 @@ _EXEMPT_SESSION_TYPES: frozenset[str] = EXEMPT_SESSION_TYPES_BY_GUARD["pr_create
 def _is_gh_pr_create(cmd: str) -> bool:
     """Return True only when `gh pr create` appears as an actual subcommand.
 
-    Tokenises with shlex to avoid false positives from quoted arguments
-    (e.g. ``echo 'do not gh pr create'`` must not match). A `gh` token is
-    considered a subcommand start when it is at position 0 or immediately
-    follows a shell separator token (&&, ||, ;, |, !, ().
+    Reads *cmd* exclusively through `all_evaluated_segments` (rectify #4941
+    Part B), the single authority for "what will actually execute, and as
+    what argv": a direct invocation, one delivered via `bash -c`/`eval`, one
+    fed through a heredoc/herestring/pipe to a shell, and a literal-argv
+    `subprocess.run(["gh", "pr", "create", ...])` are all seen the same way,
+    at every command-position candidate span. `interpreter_invokes` closes
+    the remaining gap: a string spec resolved to shell text
+    (`os.system(...)`, `subprocess.run(..., shell=True)`).
     """
-    try:
-        tokens = shlex.split(cmd)
-    except ValueError:
-        # Unclosed quotes — shlex cannot parse; fail-open (no block).
-        return False
-    for i, token in enumerate(tokens):
-        if token == "gh" and i + 2 < len(tokens):
-            if tokens[i + 1] == "pr" and tokens[i + 2] == "create":
-                if i == 0 or tokens[i - 1] in _SHELL_OPS:
+    segments = all_evaluated_segments(cmd)
+    if segments is not None:
+        for segment in segments:
+            for start, end in _command_position_candidate_spans(segment):
+                verb, args = command_verb_and_args(segment[start:end])
+                if verb == "gh" and args[:2] == ["pr", "create"]:
                     return True
-    if has_interpreter_wrapped_command(cmd, target_commands=["gh pr create"]):
-        return True
-    segments = tokenize_shell_payload_segments(cmd)
-    if segments is None:
-        return False
-    for segment in segments:
-        verb, args = command_verb_and_args(segment)
-        if verb == "gh" and args[:2] == ["pr", "create"]:
-            return True
-    return False
+    return interpreter_invokes(cmd, target=("gh", "pr", "create"))
 
 
 def main() -> None:

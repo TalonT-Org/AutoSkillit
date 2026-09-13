@@ -342,7 +342,7 @@ def test_capability_cache_monkeypatch_surface_is_reexported() -> None:
     assert "_normalize_skill_capability_name" not in facade.__all__
 
 
-def test_frontmatter_deferred_imports_resolve_through_the_facade() -> None:
+def test_capability_shard_deferred_imports_resolve_through_the_facade() -> None:
     facade = import_module(_CAPABILITIES_PACKAGE)
     semantic_plan = import_module(_shard_module_path(_CAPABILITIES_PACKAGE, "_semantic_plan"))
     authenticity = import_module(_shard_module_path(_CAPABILITIES_PACKAGE, "_authenticity"))

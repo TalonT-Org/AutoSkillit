@@ -1,4 +1,4 @@
-"""Tests for autoskillit.workspace.clone_registry module."""
+"""Tests for autoskillit.workspace.clone._registry module."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import autoskillit.workspace.clone_registry as _patch_workspace_clone_registry
-from autoskillit.workspace.clone_registry import (
+import autoskillit.workspace.clone._registry as _patch_workspace_clone_registry
+from autoskillit.workspace.clone._registry import (
     batch_delete,
     cleanup_candidates,
     read_registry,

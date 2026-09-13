@@ -9,11 +9,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autoskillit.workspace._clone_remote import (
+from autoskillit.workspace.clone import clone_repo
+from autoskillit.workspace.clone._remote import (
     _probe_clone_source_url,
     _probe_single_remote,
 )
-from autoskillit.workspace.clone import clone_repo
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
 
@@ -159,7 +159,7 @@ class TestProbeSingleRemote:
 
     def test_probe_single_remote_returns_timeout_reason_on_timeout(self, tmp_path: Path) -> None:
         with patch(
-            "autoskillit.workspace._clone_remote.subprocess.run",
+            "autoskillit.workspace.clone._remote.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd=["git"], timeout=30),
         ):
             resolution = _probe_single_remote(tmp_path, "origin")
@@ -172,7 +172,7 @@ class TestProbeSingleRemote:
         mock_result.returncode = 1
         mock_result.stdout = ""
         mock_result.stderr = "fatal: not a git repository"
-        with patch("autoskillit.workspace._clone_remote.subprocess.run", return_value=mock_result):
+        with patch("autoskillit.workspace.clone._remote.subprocess.run", return_value=mock_result):
             resolution = _probe_single_remote(tmp_path, "origin")
         assert resolution.reason == "error"
         assert resolution.url == ""

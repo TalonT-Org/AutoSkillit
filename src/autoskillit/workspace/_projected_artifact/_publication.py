@@ -32,16 +32,16 @@ from autoskillit.core import (
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
+from autoskillit.workspace._installed._projection_cache import is_projected_asset
+from autoskillit.workspace._installed._shared_asset_store import (
+    link_or_copy_asset,
+    resolve_shared_asset_store_root,
+)
 from autoskillit.workspace._projected_artifact._documents import (
     AgentSkillDocument,
     SkillContractRecord,
     SkillProjectionContext,
     project_agent_skill_document,
-)
-from autoskillit.workspace._projection_cache import is_projected_asset
-from autoskillit.workspace._shared_asset_store import (
-    link_or_copy_asset,
-    resolve_shared_asset_store_root,
 )
 
 SANITIZED_PLUGIN_MANIFEST_SCHEMA_VERSION = 1

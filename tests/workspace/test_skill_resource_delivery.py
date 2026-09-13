@@ -28,7 +28,7 @@ from autoskillit.workspace import (
     project_agent_skill_document,
     project_direct_install_authority,
 )
-from autoskillit.workspace._projection_cache import public_plugin_asset_digest
+from autoskillit.workspace._installed._projection_cache import public_plugin_asset_digest
 from autoskillit.workspace.skills import (
     DefaultSkillResolver,
     SkillInfo,

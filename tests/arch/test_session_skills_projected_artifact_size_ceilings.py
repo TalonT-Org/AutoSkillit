@@ -18,14 +18,15 @@ _LINE_CEILING = 750
 
 _SIZE_CEILING_FILES: tuple[tuple[str, int], ...] = (
     # Both original facade files (now identity-preserving compatibility surfaces)
-    ("workspace/session_skills.py", _LINE_CEILING),
+    ("workspace/session_skills/__init__.py", _LINE_CEILING),
     ("workspace/_projected_artifact/materialization.py", _LINE_CEILING),
-    # Five new session-skill shards
-    ("workspace/session_skill_catalog.py", _LINE_CEILING),
-    ("workspace/session_skill_provider.py", _LINE_CEILING),
-    ("workspace/session_skill_lifecycle.py", _LINE_CEILING),
-    ("workspace/session_skill_materialization.py", _LINE_CEILING),
-    ("workspace/session_skill_manager.py", _LINE_CEILING),
+    # Five session-skill shards, plus the _projection gateway shard
+    ("workspace/session_skills/_catalog.py", _LINE_CEILING),
+    ("workspace/session_skills/_provider.py", _LINE_CEILING),
+    ("workspace/session_skills/_lifecycle.py", _LINE_CEILING),
+    ("workspace/session_skills/_materialization.py", _LINE_CEILING),
+    ("workspace/session_skills/_manager.py", _LINE_CEILING),
+    ("workspace/session_skills/_projection.py", _LINE_CEILING),
     # Three new projected-artifact shards
     ("workspace/_projected_artifact/_documents.py", _LINE_CEILING),
     ("workspace/_projected_artifact/_publication.py", _LINE_CEILING),

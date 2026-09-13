@@ -15,12 +15,12 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import SkillContractError
-from autoskillit.workspace._projected_artifact.materialization import (
-    _copy_non_skill_plugin_assets,
-)
-from autoskillit.workspace._shared_asset_store import (
+from autoskillit.workspace._installed._shared_asset_store import (
     link_or_copy_asset,
     resolve_shared_asset_store_root,
+)
+from autoskillit.workspace._projected_artifact.materialization import (
+    _copy_non_skill_plugin_assets,
 )
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.medium]
@@ -206,7 +206,7 @@ def test_resolve_shared_asset_store_root_returns_none_on_device_mismatch(
 ) -> None:
     """A device mismatch must return None (skip linking wholesale), never attempt-and-
     catch EXDEV once per file."""
-    import autoskillit.workspace._shared_asset_store as store_module
+    import autoskillit.workspace._installed._shared_asset_store as store_module
 
     real_stat = os.stat
     calls = {"n": 0}

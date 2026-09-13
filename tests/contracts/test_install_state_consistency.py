@@ -184,7 +184,7 @@ class TestVerifyInstallState:
         inside this module is ``_record_matches_current_installed_artifact``,
         reached while cross-referencing a still-registered retiring record.
         """
-        from autoskillit.workspace import _install_state
+        from autoskillit.workspace._installed import _state as _install_state
 
         _queue_registered_retirement(home)
 
@@ -222,7 +222,7 @@ class TestVerifyInstallState:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from autoskillit.workspace import _install_state
+        from autoskillit.workspace._installed import _state as _install_state
 
         _queue_registered_retirement(home)
 
@@ -314,7 +314,7 @@ class TestVerifyInstallState:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import autoskillit.workspace._install_state as install_state
+        import autoskillit.workspace._installed._state as install_state
         from autoskillit import __version__
         from autoskillit.core import ArtifactLease
 
@@ -379,7 +379,7 @@ class TestVerifyInstallState:
         home: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        import autoskillit.workspace._install_state as install_state
+        import autoskillit.workspace._installed._state as install_state
 
         fresh_version = "9.8.7-fresh"
         real_version = install_state.importlib.metadata.version
@@ -602,7 +602,7 @@ class TestDoctorReportsTheBrokenState:
         of the version string; the check must compare against a live
         ``importlib.metadata.version()`` read, never a stale cached one.
         """
-        import autoskillit.workspace._install_state as install_state
+        import autoskillit.workspace._installed._state as install_state
         from autoskillit.cli.doctor._doctor_mcp import _check_install_state_consistency
 
         fresh_version = "9.8.7-fresh"
@@ -655,14 +655,14 @@ class TestRetiredArtifactShapeRegistry:
 
     def test_reconciler_handles_every_retired_shape(self, home: Path) -> None:
         """Coverage half: an entry the reconciler cannot handle fails the build."""
-        from autoskillit.workspace._install_state import _has_retired_shape
+        from autoskillit.workspace._installed._state import _has_retired_shape
 
         for key, retired in RETIRED_INSTALL_ARTIFACT_SHAPES.items():
             # Raises ValueError on an unknown shape rather than silently skipping.
             _has_retired_shape(home / key, retired.shape)
 
     def test_retirement_engine_handlers_match_registry_dispositions(self) -> None:
-        from autoskillit.workspace._install_state import _RETIRE_VIA_ENGINE_HANDLERS
+        from autoskillit.workspace._installed._state import _RETIRE_VIA_ENGINE_HANDLERS
 
         expected = {
             key
@@ -674,7 +674,7 @@ class TestRetiredArtifactShapeRegistry:
 
     def test_reconciler_rejects_a_shape_it_does_not_know(self, home: Path) -> None:
         """Meta-test: the coverage half actually has teeth."""
-        from autoskillit.workspace._install_state import _has_retired_shape
+        from autoskillit.workspace._installed._state import _has_retired_shape
 
         with pytest.raises(ValueError, match="unknown retired artifact shape"):
             _has_retired_shape(home / "whatever", "hardlink")
@@ -744,7 +744,12 @@ class TestRetiredArtifactShapeRegistry:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from autoskillit.core import read_retiring_cache
-        from autoskillit.workspace import _install_state, reconcile_install_artifacts
+        from autoskillit.workspace._installed import (
+            _state as _install_state,
+        )
+        from autoskillit.workspace._installed import (
+            reconcile_install_artifacts,
+        )
 
         legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
         legacy_version.mkdir(parents=True)
@@ -765,7 +770,7 @@ class TestRetiredArtifactShapeRegistry:
             count_identity_reads,
         )
         target = (
-            "src/autoskillit/workspace/_install_state.py",
+            "src/autoskillit/workspace/_installed/_state.py",
             "_enqueue_legacy_installed_plugin_versions",
         )
         run_adapter, observe_adapter = RECLAIMER_CONVERGENCE_CASES[target]
@@ -793,7 +798,12 @@ class TestRetiredArtifactShapeRegistry:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from autoskillit.core import PluginArtifactUnavailableError
-        from autoskillit.workspace import _install_state, reconcile_install_artifacts
+        from autoskillit.workspace._installed import (
+            _state as _install_state,
+        )
+        from autoskillit.workspace._installed import (
+            reconcile_install_artifacts,
+        )
 
         legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
         legacy_version.mkdir(parents=True)
@@ -821,7 +831,12 @@ class TestRetiredArtifactShapeRegistry:
             ARTIFACT_LEASE_TIMEOUT_SECONDS,
             ArtifactLeaseContention,
         )
-        from autoskillit.workspace import _install_state, reconcile_install_artifacts
+        from autoskillit.workspace._installed import (
+            _state as _install_state,
+        )
+        from autoskillit.workspace._installed import (
+            reconcile_install_artifacts,
+        )
 
         legacy_version = home / ".claude/plugins/cache/autoskillit-local/autoskillit/1.2.3"
         legacy_version.mkdir(parents=True)

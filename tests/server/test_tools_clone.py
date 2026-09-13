@@ -17,7 +17,7 @@ from autoskillit.server.tools.tools_clone import (
     register_clone_status,
     remove_clone,
 )
-from autoskillit.workspace import clone_registry
+from autoskillit.workspace.clone import _registry as clone_registry
 from tests.server._pipeline_test_helpers import _seed_acknowledged_receipt
 from tests.server._recipe_segment_test_helpers import install_prepared_recipe_segment
 

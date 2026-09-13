@@ -22,9 +22,10 @@ SRC_ROOT = Path(__file__).resolve().parent.parent / "src" / "autoskillit"
 AMBIENT_HOME_MODULES: Mapping[str, frozenset[str]] = {
     "core/plugins/_active_kitchens.py": frozenset(),
     "cli/install/_plugin_artifact.py": frozenset(),
-    "workspace/_install_state.py": frozenset({"_home"}),
+    "workspace/_installed/_state.py": frozenset({"_home"}),
     "workspace/_projected_artifact/authority.py": frozenset(),
     "workspace/_projected_artifact/_generation_publication.py": frozenset(),
+    "workspace/_projected_artifact/_generation_prune.py": frozenset(),
     "workspace/_projected_artifact/_hook_repair.py": frozenset({"repair_broken_projection_hooks"}),
 }
 

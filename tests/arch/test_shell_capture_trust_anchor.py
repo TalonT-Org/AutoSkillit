@@ -31,17 +31,17 @@ _PROJECT_TEMP_CLEANUP_DEBT = {
         "reason": "atomic temp writes still use mkdir/mkstemp/os.replace by pathname",
         "tracking_issue": "#4319",
     },
-    "workspace/worktree.py": {
+    "workspace/clone/_worktree.py": {
         "owner": "workspace worktree lifecycle",
         "reason": "worktree sidecars are still removed with pathname-based rmtree",
         "tracking_issue": "#4319",
     },
-    "workspace/clone_registry.py": {
+    "workspace/clone/_registry.py": {
         "owner": "workspace clone registry",
         "reason": "registry-provided clone paths still reach removal callbacks",
         "tracking_issue": "#4319",
     },
-    "workspace/clone.py": {
+    "workspace/clone/__init__.py": {
         "owner": "workspace clone lifecycle",
         "reason": "clone cleanup still uses pathname-based unlink/rmtree",
         "tracking_issue": "#4319",

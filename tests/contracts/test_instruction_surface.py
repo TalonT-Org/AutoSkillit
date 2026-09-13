@@ -343,7 +343,7 @@ class TestSourceIsolationContract:
         )
 
     def test_workspace_clone_module_has_source_isolation(self):
-        """workspace/clone.py module docstring must carry the SOURCE ISOLATION note."""
+        """workspace/clone/__init__.py module docstring must carry the SOURCE ISOLATION note."""
         import autoskillit.workspace.clone as clone_mod
 
         doc = clone_mod.__doc__ or ""

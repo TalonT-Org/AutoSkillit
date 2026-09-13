@@ -926,7 +926,7 @@ class TestPerformMergeSidecarCleanup:
 
     @pytest.mark.anyio
     async def test_uses_remove_git_worktree_from_workspace(self, tmp_path):
-        """perform_merge delegates worktree removal to workspace.worktree.remove_git_worktree."""
+        """perform_merge delegates worktree removal to workspace.clone.remove_git_worktree."""
         from autoskillit.server.git import perform_merge
 
         wt = tmp_path / "worktrees" / "impl-test"

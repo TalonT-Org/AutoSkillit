@@ -1,4 +1,4 @@
-"""L1 unit tests for workspace/cleanup.py — CleanupResult and directory deletion."""
+"""L1 unit tests for workspace/clone/_cleanup.py — CleanupResult and directory deletion."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from autoskillit.workspace import CleanupResult, _delete_directory_contents
+from autoskillit.workspace import CleanupResult
+from autoskillit.workspace.clone._cleanup import _delete_directory_contents
 
 pytestmark = [pytest.mark.layer("workspace"), pytest.mark.small]
 
@@ -66,7 +67,9 @@ class TestDeleteDirectoryContents:
                 raise PermissionError("Permission denied")
             real_rmtree(path, *args, **kwargs)
 
-        with patch("autoskillit.workspace.cleanup.shutil.rmtree", side_effect=selective_rmtree):
+        with patch(
+            "autoskillit.workspace.clone._cleanup.shutil.rmtree", side_effect=selective_rmtree
+        ):
             result = _delete_directory_contents(target)
 
         assert "dir_a" in result.deleted
@@ -131,7 +134,7 @@ class TestDeleteDirectoryContents:
 class TestDefaultWorkspaceManager:
     def test_delete_contents_delegates_to_implementation(self, tmp_path):
         """DefaultWorkspaceManager.delete_contents delegates to _delete_directory_contents."""
-        from autoskillit.workspace.cleanup import DefaultWorkspaceManager
+        from autoskillit.workspace.clone._cleanup import DefaultWorkspaceManager
 
         target = tmp_path / "testdir"
         target.mkdir()

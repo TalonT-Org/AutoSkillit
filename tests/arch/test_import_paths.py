@@ -344,7 +344,7 @@ def test_req_imp_009_session_skills_no_config_settings_import() -> None:
     from config/__init__.py. Importing from config.settings bypasses the canonical public
     surface (P14-4).
     """
-    path = SRC / "workspace" / "session_skills.py"
+    path = SRC / "workspace" / "session_skills" / "__init__.py"
     for mod, in_tc in _parse_imports(path):
         if in_tc and mod == "autoskillit.config.settings":
             pytest.fail(

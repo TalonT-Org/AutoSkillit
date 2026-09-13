@@ -60,7 +60,8 @@ from autoskillit.core import (  # IL-005: core only — never cli.InstalledPlugi
     registered_install_paths,
     resolve_current_generation,
 )
-from autoskillit.workspace._installed_artifact import (
+
+from ._artifact import (
     _INSTALLED_PLUGIN_ARTIFACT_UNREADABLE_CHECK,
     InstallStateFinding,
     InstallStateLeaseMode,

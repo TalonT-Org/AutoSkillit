@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from autoskillit.core import RETIRED_SKILL_RESOURCE_IDS, SkillContractError, pkg_root
-from autoskillit.workspace._projection_cache import iter_public_plugin_asset_files
+from autoskillit.workspace._installed._projection_cache import iter_public_plugin_asset_files
 from autoskillit.workspace.skills import DefaultSkillResolver
 from autoskillit.workspace.skills._resources import load_skill_resource
 

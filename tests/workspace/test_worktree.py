@@ -207,7 +207,7 @@ class TestRemoveGitWorktree:
         wt.mkdir(parents=True)
         runner = AsyncMock(return_value=MagicMock(returncode=1, stdout="", stderr="error"))
         with patch(
-            "autoskillit.workspace.worktree.shutil.rmtree",
+            "autoskillit.workspace.clone._worktree.shutil.rmtree",
             side_effect=OSError("permission denied"),
         ):
             result = await remove_git_worktree(wt, tmp_path, runner)

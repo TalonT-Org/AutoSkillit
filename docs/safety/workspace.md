@@ -6,7 +6,7 @@ guard prevents broken CLI installations after cleanup.
 
 ## Clone-based isolation
 
-`workspace/clone.py:clone_repo` creates a fresh clone of the source repository
+`workspace/clone/__init__.py:clone_repo` creates a fresh clone of the source repository
 into `autoskillit-runs/<run>-<timestamp>/` and rewrites the clone's `origin`
 remote so the orchestrator can never accidentally push to the user's working
 tree. The orchestrator runs every subsequent step against the clone, never
@@ -22,7 +22,7 @@ hits the upstream repository rather than the user's local clone path.
 
 ## Clone registry
 
-`workspace/clone_registry.py` maintains a shared file-based registry of
+`workspace/clone/_registry.py` maintains a shared file-based registry of
 clones eligible for deferred batch cleanup. The registry is read by
 `batch_cleanup_clones` to delete stale clones in bulk after a recipe finishes.
 The registry uses atomic JSON writes so concurrent recipe runs cannot corrupt

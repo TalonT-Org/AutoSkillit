@@ -70,7 +70,7 @@ def test_projection_manifest_schema_version_hook_copy_is_pinned_to_core() -> Non
     from autoskillit.hooks._session_binding import (  # noqa: PLC0415
         PROJECTION_MANIFEST_SCHEMA_VERSION,
     )
-    from autoskillit.workspace._projection_cache import (  # noqa: PLC0415
+    from autoskillit.workspace._installed._projection_cache import (  # noqa: PLC0415
         PROJECTION_ARTIFACT_MANIFEST_SCHEMA_VERSION,
     )
 

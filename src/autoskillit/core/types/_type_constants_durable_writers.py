@@ -283,7 +283,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection=None,
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.workspace.session_skill_catalog:write_skill_unavailability_metadata",
+        writer="autoskillit.workspace.session_skills._catalog:write_skill_unavailability_metadata",
         artifact="add-dir/skill-unavailability.json",
         machine_local=False,
         detection=None,

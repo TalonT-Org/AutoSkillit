@@ -9,7 +9,7 @@ import pytest
 from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.backends import BACKEND_REGISTRY
 from autoskillit.hook_registry import HOOKS_DIR
-from autoskillit.workspace.session_skill_materialization import _create_inert_rollout_paths
+from autoskillit.workspace.session_skills._materialization import _create_inert_rollout_paths
 
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.medium]
 

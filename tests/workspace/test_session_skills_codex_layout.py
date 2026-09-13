@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import autoskillit.workspace.session_skill_materialization as session_skill_materialization
+import autoskillit.workspace.session_skills._materialization as session_skill_materialization
 from autoskillit.core import (
     ClaudeDirectoryConventions,
     ManagedSessionHome,

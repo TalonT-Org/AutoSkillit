@@ -27,7 +27,7 @@ capacity backstop, mirroring `execution/session_log.py`'s `_MAX_SESSIONS` co-ret
 `session_provenance.jsonl`, `reaper_events.jsonl`, and the `run_skill` cleanup-failure sink —
 `hooks/_hook_settings.py` duplicates the trim logic inline instead of importing it, since that
 module must stay free of all `autoskillit.*` imports), and `SESSION_STALE_SECONDS` (the one
-TTL/stat-field shared by `workspace/session_skills.py`'s `cleanup_stale` and
+TTL/stat-field shared by `workspace/session_skills/_manager.py`'s `cleanup_stale` and
 `scripts/pytest_tmp_lifecycle.py`'s `sweep-sessions` subcommand for the same root).
 
 `core/_capacity.py` (root-level, not nested under `runtime/`) owns `SpaceProbe`/

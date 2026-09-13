@@ -29,7 +29,7 @@ from autoskillit.workspace import (
     InstallStateSpec,
     verify_installed_plugin_artifact,
 )
-from autoskillit.workspace._installed_artifact import _complete_tree_digest
+from autoskillit.workspace._installed._artifact import _complete_tree_digest
 from tests.fixtures.plugin_artifact_state import (
     INVALID_PLUGIN_ARTIFACT_STATE_KINDS,
     PLUGIN_ARTIFACT_STATE_EXPECTATIONS,
@@ -275,7 +275,7 @@ def test_successful_standalone_verification_rereads_registry_under_shared_lease(
     home: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import autoskillit.workspace._installed_artifact as installed_artifact
+    import autoskillit.workspace._installed._artifact as installed_artifact
 
     state = build_plugin_artifact_state(
         home,
@@ -559,7 +559,7 @@ def test_complete_tree_digest_classifies_tree_vanished_as_unavailable_not_valida
     def _raise(*_args: object, **_kwargs: object) -> str:
         raise vanished_error
 
-    import autoskillit.workspace._installed_artifact as installed_artifact_module
+    import autoskillit.workspace._installed._artifact as installed_artifact_module
 
     original = installed_artifact_module.directory_tree_digest
     installed_artifact_module.directory_tree_digest = _raise
@@ -578,7 +578,7 @@ def test_complete_tree_digest_still_classifies_plain_value_error_as_validation(
     unexpected symlink — must still classify as the durable/invalid outcome,
     proving the Related Issue 1 fix did not widen Unavailable to swallow
     real validation failures."""
-    import autoskillit.workspace._installed_artifact as installed_artifact_module
+    import autoskillit.workspace._installed._artifact as installed_artifact_module
 
     def _raise(*_args: object, **_kwargs: object) -> str:
         raise ValueError("artifact contains a symlink")

@@ -15,7 +15,7 @@ Four sections cover:
 
 1. **Lifecycle Mapping** — per-method mapping of `CodingAgentBackend` protocol
    methods to ACP session methods for `ClaudeCodeBackend` and `CodexBackend`.
-2. **Recovery Ladder** — mapping of the 16 `RetryReason` enum values to ACP
+2. **Recovery Ladder** — mapping of the 19 `RetryReason` enum values to ACP
    session rungs (`session/resume`, `session/load`, `session/new`) and
    terminal/wait-and-retry handling, plus the contract-nudge mechanism.
 3. **Capabilities Translation** — field-by-field categorization of all 47
@@ -210,6 +210,7 @@ specific infra-classification signals (e.g. API errors → `RESUME`, rate limits
 | `CANCELLED` | (terminal) | N/A | Transport teardown; no recovery. |
 | `OUTCOME_INVARIANT` | `session/new` | `on_failure` | Skill-emitted outcome fields violated their declared relationship. |
 | `ASYNC_OBLIGATION` | `session/new` | `on_failure` | Backend-owned work or a wakeup remained unresolved, the bounded completion drain expired, or lifecycle evidence was unavailable. Start fresh; never poll or resume the prior session. |
+| `CONTEXT_EXHAUSTED` | (terminal) | N/A | Correlated Codex automatic-compaction veto. Start an explicit new session, or compact manually and deliberately resume. |
 | `NONE` | (no retry) | N/A | Success — no recovery needed. |
 
 ### 2.2 ACP rung semantics

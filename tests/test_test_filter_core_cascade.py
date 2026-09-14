@@ -304,7 +304,7 @@ class TestModuleCascadeCore:
 
     def test_type_backend_cascade(self) -> None:
         assert MODULE_CASCADE_CORE["_type_backend"] == frozenset(
-            {"core", "execution", "cli", "migration", "recipe", "server", "workspace"}
+            {"core", "config", "execution", "cli", "migration", "recipe", "server", "workspace"}
         )
 
     def test_type_recipe_delivery_cascade(self) -> None:
@@ -789,7 +789,7 @@ class TestBuildTestScopeCoreCascade:
             )
 
     def test_type_backend_narrow_cascade(self, tmp_path: Path) -> None:
-        """_type_backend routes every direct package consumer, including migration."""
+        """_type_backend routes every direct package consumer, including config."""
         tests_root = self._make_tests_root(tmp_path, self.ALL_DIRS)
         result = build_test_scope(
             changed_files={"src/autoskillit/core/types/_type_backend.py"},
@@ -799,10 +799,11 @@ class TestBuildTestScopeCoreCascade:
         assert result is not None
         dir_names = {p.name for p in result}
         assert "core" in dir_names
+        assert "config" in dir_names
         assert "execution" in dir_names
         assert "workspace" in dir_names
         assert "migration" in dir_names
-        for excluded in ["config", "pipeline", "fleet"]:
+        for excluded in ["pipeline", "fleet"]:
             assert excluded not in dir_names, f"narrow cascade should not include {excluded}"
 
     def test_type_capture_narrow_cascade(self, tmp_path: Path) -> None:

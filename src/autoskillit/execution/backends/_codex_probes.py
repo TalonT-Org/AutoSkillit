@@ -341,8 +341,8 @@ def _validate_mcp_probe(
     return []
 
 
-def _validate_global_codex_home(
-    source_codex_home: Path,
+def _validate_generated_codex_home(
+    generated_home: Path,
     *,
     config_path: Path,
     executable: ExecutableLaunchBinding | None = None,
@@ -351,7 +351,7 @@ def _validate_global_codex_home(
         config_bytes = config_path.read_bytes()
     except OSError as exc:
         return [f"Failed to read final Codex config: {type(exc).__name__}: {exc}"]
-    sqlite_override = f"sqlite_home={_format_toml_value(str(source_codex_home))}"
+    sqlite_override = f"sqlite_home={_format_toml_value(str(generated_home))}"
     command = (
         str(executable.path) if executable is not None else "codex",
         CodexFlags.CONFIG_OVERRIDE,
@@ -365,9 +365,9 @@ def _validate_global_codex_home(
         cwd = str(executable.cwd)
     else:
         env = dict(os.environ)
-        cwd = str(source_codex_home)
+        cwd = str(generated_home)
     for key in CODEX_RESERVED_HOME_ENV_VARS:
-        env[key] = str(source_codex_home)
+        env[key] = str(generated_home)
     return _validate_mcp_probe(
         command,
         env=env,

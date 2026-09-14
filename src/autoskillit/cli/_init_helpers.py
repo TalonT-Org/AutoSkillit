@@ -559,13 +559,19 @@ def _register_all(
             _cfg = AutomationConfig()
 
     if backend.capabilities.mcp_config_capable:
-        readiness = backend.ensure_pre_launch()
-        if readiness.errors:
-            raise RuntimeError(
-                "Backend pre-launch configuration failed: " + "; ".join(readiness.errors)
-            )
         plugin_ok = None
-        codex_status = "ok"
+        from autoskillit.execution import (  # noqa: PLC0415
+            ensure_codex_mcp_registered,
+            sync_hooks_to_codex_config,
+        )
+
+        try:
+            codex_registered = ensure_codex_mcp_registered()
+            sync_hooks_to_codex_config()
+            codex_status = "registered" if codex_registered else "ok"
+        except Exception:
+            codex_status = "failed"
+            logger.warning("Codex native integration registration failed", exc_info=True)
     else:
         settings_path = _claude_settings_path(scope, cwd=project_dir)
         _evict_stale_autoskillit_hooks(settings_path)

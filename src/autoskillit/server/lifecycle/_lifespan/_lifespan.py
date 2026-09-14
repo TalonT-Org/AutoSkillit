@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio as _asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from autoskillit.core import (
     get_logger,
@@ -50,9 +50,6 @@ from autoskillit.server.lifecycle._lifespan._startup_checks import (
     run_startup_join_guard_coverage_check,
 )
 from autoskillit.server.lifecycle._state import deferred_initialize
-
-if TYPE_CHECKING:
-    from autoskillit.core import CodingAgentBackend
 
 logger = get_logger(__name__)
 
@@ -108,21 +105,6 @@ async def _run_lifespan_session_boot(ctx: Any) -> None:
         await boot_fn(ctx)
 
 
-async def _run_backend_mcp_registration_async(backend: CodingAgentBackend) -> None:
-    """Offload backend-owned MCP configuration to an executor — fail-open."""
-
-    def _run_prelaunch() -> None:
-        readiness = backend.ensure_pre_launch()
-        if readiness.errors:
-            raise RuntimeError("; ".join(readiness.errors))
-
-    try:
-        loop = _asyncio.get_running_loop()
-        await loop.run_in_executor(None, _run_prelaunch)
-    except Exception:
-        logger.warning("backend_mcp_registration_failed", exc_info=True)
-
-
 @asynccontextmanager
 async def _autoskillit_lifespan(server: Any) -> Any:
     """Server lifecycle: write readiness sentinel, yield, then finalize recording.
@@ -167,18 +149,6 @@ async def _autoskillit_lifespan(server: Any) -> Any:
         bg_tasks.append(create_background_task(_run_deferred_init(event), label="deferred_init"))
         bg_tasks.append(create_background_task(_cleanup_stale_loop(), label="cleanup_stale"))
         _boot_ctx = _lifespan_pkg._get_ctx_or_none()
-
-        if (
-            _boot_ctx is not None
-            and _boot_ctx.backend is not None
-            and _boot_ctx.backend.capabilities.mcp_config_capable
-        ):
-            bg_tasks.append(
-                create_background_task(
-                    _lifespan_pkg._run_backend_mcp_registration_async(_boot_ctx.backend),
-                    label="backend_mcp_registration",
-                )
-            )
 
         if _boot_ctx is not None:
             await _run_lifespan_session_boot(_boot_ctx)

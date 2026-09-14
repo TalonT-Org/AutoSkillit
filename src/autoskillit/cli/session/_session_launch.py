@@ -161,7 +161,10 @@ def prepare_interactive_launch(
         cwd=project_dir,
         explicit_path_env=explicit_path_env,
     )
-    readiness = backend.ensure_pre_launch(executable=provisional)
+    readiness = backend.ensure_pre_launch(
+        session_dir=generated_home,
+        executable=provisional,
+    )
     if readiness.errors:
         raise ValueError("\n".join(readiness.errors))
 

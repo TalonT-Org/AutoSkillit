@@ -3,7 +3,6 @@ from __future__ import annotations
 from autoskillit.core import CodexRuntimeSpec, CodingAgentBackend
 
 from ._codex_config import (
-    CODEX_AUTO_COMPACT_LIMIT,
     CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     CODEX_MCP_REQUIRED_KEYS,
@@ -130,7 +129,6 @@ __all__ = [
     "CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST",
     "SUPPORTED_CODEX_RECIPE_EVIDENCE_REGISTRY",
     "CODEX_LIMITS_LAST_VERIFIED_VERSION",
-    "CODEX_AUTO_COMPACT_LIMIT",
     "NON_VARIADIC_CODEX_FLAGS",
     "NullProtectedHostAttestationProvider",
     "ProtectedHostAttestationProvider",

@@ -46,7 +46,6 @@ from autoskillit.hook_registry import (  # noqa: F401  (mock.patch reachability)
 from autoskillit.pipeline import create_background_task  # noqa: F401  (mock.patch reachability)
 from autoskillit.server.lifecycle._lifespan._lifespan import (
     _autoskillit_lifespan,
-    _run_backend_mcp_registration_async,
     _run_deferred_init,
     _run_drift_check_async,
     _run_hook_health_check_async,
@@ -93,7 +92,6 @@ __all__ = [
     "_pre_reveal_kitchen",
     "_reap_self_excluded_codex_and_daemon_orphans",
     "_retain_context_tracker_authority",
-    "_run_backend_mcp_registration_async",
     "_run_deferred_init",
     "_run_drift_check_async",
     "_run_hook_health_check_async",

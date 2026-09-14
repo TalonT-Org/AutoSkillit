@@ -6,7 +6,9 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from autoskillit.core import CodexRuntimeSpec, atomic_write
 from autoskillit.execution.backends._codex_config import (
+    _apply_codex_runtime_spec_unlocked,
     _ensure_codex_mcp_registered_unlocked,
 )
 from autoskillit.execution.backends._codex_config_lock import CodexConfigLock
@@ -24,28 +26,49 @@ def _staged_error(stage: str, exc: Exception) -> RuntimeError:
 def codex_prelaunch_transaction(
     *,
     source_codex_home: Path,
+    destination_home: Path,
+    runtime_spec: CodexRuntimeSpec,
     hook_config_format: str = "",
     plugin_dir: Path | None = None,
 ) -> Iterator[Path]:
-    """Synchronize the source config and hold its lock across caller work.
+    """Provision a generated-home config from read-only native preferences.
 
-    The yielded path names the exact config protected by the transaction.
-    Callers may snapshot or validate those bytes before leaving the context;
-    unique generated-home mutations happen only after this context exits.
+    The source config is read once without locking or mutation. The destination
+    config is then locked for all wrapper-owned configuration and hook writes.
     """
-    resolved_home = Path(source_codex_home).expanduser().resolve(strict=False)
-    config_path = resolved_home / "config.toml"
+    source_config_path = Path(source_codex_home).expanduser().resolve(strict=False) / "config.toml"
+    try:
+        source_bytes = source_config_path.read_bytes()
+    except FileNotFoundError:
+        source_bytes = b""
+    except OSError as exc:
+        raise _staged_error("source-config read", exc) from exc
+
+    config_path = Path(destination_home).expanduser().resolve(strict=False) / "config.toml"
+    try:
+        atomic_write(config_path, source_bytes)
+    except Exception as exc:
+        raise _staged_error("destination snapshot", exc) from exc
+
     with CodexConfigLock(config_path):
         try:
             _ensure_codex_mcp_registered_unlocked(config_path=config_path)
         except Exception as exc:
-            raise _staged_error("source-config sync", exc) from exc
+            raise _staged_error("runtime MCP sync", exc) from exc
+        try:
+            _apply_codex_runtime_spec_unlocked(
+                config_path=config_path,
+                runtime_spec=runtime_spec,
+            )
+        except Exception as exc:
+            raise _staged_error("runtime tuning", exc) from exc
         try:
             _sync_hooks_to_codex_config_unlocked(
                 config_path=config_path,
                 hook_config_format=hook_config_format,
                 plugin_dir=plugin_dir,
+                include_runtime_only=True,
             )
         except Exception as exc:
-            raise _staged_error("hook update", exc) from exc
+            raise _staged_error("runtime hook update", exc) from exc
         yield config_path

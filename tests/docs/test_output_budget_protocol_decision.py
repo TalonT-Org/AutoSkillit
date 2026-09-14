@@ -61,7 +61,6 @@ def test_decision_names_all_four_layers(decision_text: str, required: str) -> No
         f"(({RECIPE_RESPONSE_MAX_UTF8_BYTES:_} + 3) // 4) + 8_000",
         "authoritative_attested_recipe_result_token_limit = 56_750",
         "CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750",
-        "CODEX_AUTO_COMPACT_LIMIT = 999_999_999",
         "inline_max_chars = 5_000",
         f"response_max_bytes = {RECIPE_RESPONSE_DEFAULT_BYTES:_}",
         f"MAX_MCP_OUTPUT_TOKENS = {CLAUDE_INJECTED_CLIENT_RESULT_TOKENS:_}",

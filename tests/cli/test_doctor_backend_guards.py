@@ -191,8 +191,6 @@ class TestCheckMcpServerRegisteredCodexBackend:
             Severity,
         )
         from autoskillit.execution import (
-            CODEX_AUTO_COMPACT_LIMIT,
-            CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
             CODEX_MCP_STARTUP_TIMEOUT_SEC,
             CODEX_MCP_TOOL_TIMEOUT_FLOOR,
         )
@@ -204,8 +202,6 @@ class TestCheckMcpServerRegisteredCodexBackend:
             f'"{v}"' for v in sorted(CODEX_MCP_ENV_FORWARD_VARS - {HEADLESS_AUTO_GATE_ENV_VAR})
         )
         (codex_dir / "config.toml").write_text(
-            f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}\n"
-            f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}\n"
             f'[mcp_servers.autoskillit]\ncommand = "autoskillit"\n'
             f"env_vars = [{env_vars_str}]\n"
             f"startup_timeout_sec = {CODEX_MCP_STARTUP_TIMEOUT_SEC}\n"

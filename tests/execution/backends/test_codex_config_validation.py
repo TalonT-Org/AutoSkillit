@@ -15,7 +15,6 @@ from typing import Any
 import pytest
 
 import autoskillit.hooks  # noqa: F401 — forces HOOK_REGISTRY population before sync_hooks_to_codex_config validates lifecycle contracts
-from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.backends import _codex_probes as probes
 from autoskillit.execution.process._lifecycle import owned_group
 
@@ -566,16 +565,16 @@ def test_interactive_validator_stops_before_discovery_when_exact_version_probe_f
     assert len(commands) == 2
 
 
-def test_global_codex_home_validation_uses_the_bound_executable_environment_and_cwd(
+def test_generated_codex_home_validation_uses_the_bound_executable_environment_and_cwd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.core import CODEX_RESERVED_HOME_ENV_VARS, resolve_executable_launch_binding
     from autoskillit.execution.backends import codex
 
-    source_home = tmp_path / "source-home"
-    source_home.mkdir()
-    config_path = source_home / "config.toml"
+    generated_home = tmp_path / "generated-home"
+    generated_home.mkdir()
+    config_path = generated_home / "config.toml"
     config_path.write_bytes(_VALID_CONFIG_BYTES)
     executable = tmp_path / "codex-bound"
     executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -607,8 +606,8 @@ def test_global_codex_home_validation_uses_the_bound_executable_environment_and_
     monkeypatch.setattr(probes, "_validate_mcp_probe", validate_mcp)
 
     assert (
-        probes._validate_global_codex_home(
-            source_home,
+        probes._validate_generated_codex_home(
+            generated_home,
             config_path=config_path,
             executable=binding,
         )
@@ -616,12 +615,12 @@ def test_global_codex_home_validation_uses_the_bound_executable_environment_and_
     )
     expected_env = dict(binding.launch_environment)
     for key in CODEX_RESERVED_HOME_ENV_VARS:
-        expected_env[key] = str(source_home)
+        expected_env[key] = str(generated_home)
     assert captured == {
         "command": (
             str(executable),
             codex.CodexFlags.CONFIG_OVERRIDE,
-            f'sqlite_home="{source_home}"',
+            f'sqlite_home="{generated_home}"',
             "mcp",
             "list",
             codex.CodexFlags.JSON,
@@ -632,7 +631,7 @@ def test_global_codex_home_validation_uses_the_bound_executable_environment_and_
     }
 
 
-def test_ensure_pre_launch_forwards_the_bound_executable_to_global_validation(
+def test_ensure_pre_launch_forwards_the_bound_executable_to_generated_home_validation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -642,6 +641,8 @@ def test_ensure_pre_launch_forwards_the_bound_executable_to_global_validation(
     source_home = tmp_path / "source-home"
     source_home.mkdir()
     (source_home / "config.toml").write_bytes(_VALID_CONFIG_BYTES)
+    generated_home = tmp_path / "generated-home"
+    generated_home.mkdir()
     executable = tmp_path / "codex-bound"
     executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     executable.chmod(0o755)
@@ -652,25 +653,31 @@ def test_ensure_pre_launch_forwards_the_bound_executable_to_global_validation(
     )
     captured: dict[str, object] = {}
 
-    def validate_global(
+    def validate_generated(
         received_home: Path,
         *,
         config_path: Path,
         executable: object,
     ) -> list[str]:
         captured.update(
-            source_home=received_home,
+            generated_home=received_home,
             config_path=config_path,
             executable=executable,
         )
         return []
 
-    monkeypatch.setattr(codex, "_validate_global_codex_home", validate_global)
+    monkeypatch.setattr(codex, "_validate_generated_codex_home", validate_generated)
     backend = codex.CodexBackend(source_codex_home=source_home)
 
-    assert backend.ensure_pre_launch(executable=binding) == PreLaunchReadiness((), {})
-    assert captured["source_home"] == source_home
-    assert captured["config_path"] == source_home / "config.toml"
+    readiness = backend.ensure_pre_launch(session_dir=generated_home, executable=binding)
+
+    assert readiness.errors == ()
+    assert readiness.attested_env == {
+        "CODEX_HOME": str(generated_home),
+        "CODEX_SQLITE_HOME": str(generated_home),
+    }
+    assert captured["generated_home"] == generated_home
+    assert captured["config_path"] == generated_home / "config.toml"
     assert captured["executable"] is binding
 
 
@@ -767,7 +774,7 @@ def test_cook_and_init_config_writers_preserve_the_union_under_one_canonical_loc
     assert not (child_home / ".codex" / "config.toml").exists()
 
 
-def test_generated_home_snapshot_is_the_exact_post_mcp_and_hook_transaction(
+def test_generated_home_provisions_runtime_without_mutating_source_preferences(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from autoskillit.execution.backends.codex import CodexBackend
@@ -785,15 +792,54 @@ def test_generated_home_snapshot_is_the_exact_post_mcp_and_hook_transaction(
     monkeypatch.setenv("CODEX_HOME", str(ambient_home))
     monkeypatch.setattr(Path, "home", staticmethod(lambda: ambient_home))
 
-    assert backend.ensure_pre_launch(session_dir=generated_home) == PreLaunchReadiness((), {})
+    readiness = backend.ensure_pre_launch(session_dir=generated_home)
 
-    source_bytes = source_config.read_bytes()
-    assert (generated_home / "config.toml").read_bytes() == source_bytes
-    data = tomllib.loads(source_bytes.decode("utf-8"))
+    assert readiness.errors == ()
+    assert source_config.read_bytes() == b'[foreign]\nowner = "user"\n'
+    data = tomllib.loads((generated_home / "config.toml").read_text(encoding="utf-8"))
     assert data["foreign"] == {"owner": "user"}
     assert "autoskillit" in data["mcp_servers"]
     assert data["hooks"]
+    assert data["tool_output_token_limit"] > 0
     assert not (ambient_home / "config.toml").exists()
+
+
+def test_generated_home_replaces_inherited_runtime_tuning_with_resolved_spec(
+    tmp_path: Path,
+) -> None:
+    from autoskillit.core import CodexRuntimeSpec
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    source_home = tmp_path / "source-home"
+    source_home.mkdir()
+    source_config = source_home / "config.toml"
+    source_bytes = (
+        b"model_context_window = 90000\n"
+        b"model_auto_compact_token_limit = 80000\n"
+        b"[profiles.selected]\n"
+        b"model_context_window = 70000\n"
+        b"model_auto_compact_token_limit = 60000\n"
+    )
+    source_config.write_bytes(source_bytes)
+    generated_home = tmp_path / "generated-home"
+    generated_home.mkdir()
+
+    readiness = CodexBackend(
+        source_codex_home=source_home,
+        runtime_spec=CodexRuntimeSpec(
+            context_window_tokens=200_000,
+            auto_compact_threshold_tokens=180_000,
+        ),
+    ).ensure_pre_launch(session_dir=generated_home)
+
+    assert readiness.errors == ()
+    assert source_config.read_bytes() == source_bytes
+    config = tomllib.loads((generated_home / "config.toml").read_text(encoding="utf-8"))
+    assert config["model_context_window"] == 200_000
+    assert config["model_auto_compact_token_limit"] == 180_000
+    assert "model_context_window" not in config["profiles"]["selected"]
+    assert "model_auto_compact_token_limit" not in config["profiles"]["selected"]
+    assert config["hooks"]["PreCompact"][0]["matcher"] == "auto"
 
 
 def test_interactive_cmd_rejects_environment_changed_after_binding(

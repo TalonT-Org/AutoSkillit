@@ -96,9 +96,6 @@ _NON_HOOK_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("workspace/_projected_artifact/_publication.py", "materialize_sanitized_plugin_root"),
         # Verbatim byte-for-byte asset copy — no path is baked into the copy.
         ("workspace/_projected_artifact/_publication.py", "_copy_non_skill_plugin_assets"),
-        # Bare TOML scalars (tool_output_token_limit, auto-compact limit) — unrelated to hooks.
-        ("execution/backends/_codex_config.py", "_ensure_top_level_key"),
-        ("execution/backends/_codex_config.py", "_upsert_top_level_key_exact"),
         # Drift-check re-renders hooks.json from the registry hash; same content
         # unless the registry changes, so this is the canonical hook-config writer,
         # not a hook-artifact writer.

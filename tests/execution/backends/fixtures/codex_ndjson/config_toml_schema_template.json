@@ -19,16 +19,5 @@
       "expected_type": "float"
     }
   },
-  "top_level_keys": {
-    "model_auto_compact_token_limit": {
-      "constraint": "minimum",
-      "expected_type": "int",
-      "floor_value": 999999999
-    },
-    "tool_output_token_limit": {
-      "constraint": "exact",
-      "expected_type": "int",
-      "expected_value": 56750
-    }
-  }
+  "top_level_keys": {}
 }

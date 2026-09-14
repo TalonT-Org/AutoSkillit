@@ -98,7 +98,10 @@ def _collect_doctor_results() -> list[DoctorResult]:
     cfg, results = _load_config_guarded(Path.cwd())
     if cfg.agent_backend.backend:
         try:
-            _backend = get_backend(cfg.agent_backend.backend)
+            _backend = get_backend(
+                cfg.agent_backend.backend,
+                codex_runtime_spec=cfg.codex_runtime.resolve(),
+            )
         except ValueError:
             logger.warning("unknown_backend_fallback", backend=cfg.agent_backend.backend)
             _backend = None

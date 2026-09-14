@@ -89,18 +89,6 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
                 f"backend does not support food truck dispatch "
                 f"(food_truck_capable=False); got {dispatch_backend.name!r}"
             )
-        if (
-            backend_authority is not None
-            and dispatch_backend is not None
-            and dispatch_backend.capabilities.mcp_config_capable
-            and backend_authority.kind is not BackendAuthorityKind.GLOBAL
-        ):
-            readiness = dispatch_backend.ensure_pre_launch()
-            if readiness.errors:
-                raise RuntimeError(
-                    f"Pre-launch check failed for dispatch backend "
-                    f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
-                )
         return backend_authority, dispatch_backend
 
     async def dispatch_food_truck(

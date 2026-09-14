@@ -676,7 +676,7 @@ def _restrict_doctor_collection(
         "_load_config_guarded",
         lambda _cwd: (AutomationConfig(), []),
     )
-    monkeypatch.setattr(doctor_mod, "get_backend", lambda _name: None)
+    monkeypatch.setattr(doctor_mod, "get_backend", lambda _name, **_kwargs: None)
 
 
 @pytest.mark.parametrize("plugin_installed", [False, True])

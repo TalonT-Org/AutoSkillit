@@ -20,6 +20,7 @@ from autoskillit.core import (
     RECIPE_DELIVERY_SURFACE_REGISTRY_DIGEST,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
+    CodexRuntimeSpec,
     ReadResult,
     RecipeDeliveryBudgetDef,
     RecipeDeliveryEvidenceDef,
@@ -160,16 +161,6 @@ CODEX_RECIPE_DELIVERY_CALLING_CONTRACT_DIGEST: str = hashlib.sha256(
     CODEX_RECIPE_DELIVERY_CALLING_CONTRACT.encode("utf-8")
 ).hexdigest()
 
-# Disable Codex auto-compaction by setting the limit to an unreachable value.
-# Auto-compaction at 90% of 258K context window can destroy recipe content
-# loaded by `open_kitchen`, leaving the agent without the recipe steps it
-# needs to complete the pipeline. Defense-in-depth is provided by the
-# `recipe_read_guard.py` PreToolUse hook which prevents the agent from
-# re-reading recipe files via run_cmd/run_python after compaction. See the
-# "CODEX_AUTO_COMPACT_LIMIT" entry in CODEX_LIMIT_VERIFICATION_REGISTRY below
-# for the upstream-neutralization finding.
-CODEX_AUTO_COMPACT_LIMIT: int = 999_999_999
-
 CodexLimitVerificationStatus = Literal[
     "upstream_honored", "upstream_neutralized", "locally_unreachable"
 ]
@@ -268,33 +259,6 @@ CODEX_LIMIT_VERIFICATION_REGISTRY: Mapping[str, CodexLimitVerificationDef] = Map
                 "truncation_policy field governs BOTH the current-turn exec output sent to "
                 "the model and retained history -- the earlier '(later history only)' "
                 "qualifier was factually wrong and is removed."
-            ),
-        ),
-        "CODEX_AUTO_COMPACT_LIMIT": CodexLimitVerificationDef(
-            governed_symbol="CODEX_AUTO_COMPACT_LIMIT",
-            checked_at_cli_version=(0, 145, 0),
-            upstream_revision="25af12f7e61572b0bc18ddb1008be543b91519b0",
-            upstream_sources=(
-                "codex-rs/protocol/src/openai_models.rs::ModelInfo::auto_compact_token_limit",
-                "codex-rs/protocol/src/config_types.rs::AutoCompactTokenLimitScope",
-                "codex-rs/core/src/session/context_window.rs",
-            ),
-            status="upstream_neutralized",
-            codex_config_key="model_auto_compact_token_limit",
-            configured_value=CODEX_AUTO_COMPACT_LIMIT,
-            upstream_effective_value=244_800,
-            finding=(
-                "ModelInfo::auto_compact_token_limit() returns "
-                "min(config, resolved_context_window * 9 / 10). AutoCompactTokenLimitScope "
-                "defaults to Total, under which the clamped accessor is used, and AutoSkillit "
-                "never writes model_auto_compact_token_limit_scope. gpt-5.6-sol's "
-                "resolved_context_window is 272_000, so the effective threshold is 244_800, "
-                "not the configured 999_999_999. Measured peak last_token_usage.total_tokens "
-                "before the first compaction across 26 compacted 0.145.0 rollouts was "
-                "244_865 (0.027 percent over 244_800); 34 compaction events occurred under "
-                "0.145.0. The sentinel does not disable auto-compaction and ADR-0004's "
-                "'primary defense' framing no longer holds; the recovery-path replacement is "
-                "owned by #4271."
             ),
         ),
         "CODEX_RECIPE_DELIVERY_BUDGET": CodexLimitVerificationDef(
@@ -598,63 +562,7 @@ def _is_autoskillit_registered(
         return False
     if entry.get("startup_timeout_sec") != CODEX_MCP_STARTUP_TIMEOUT_SEC:
         return False
-    if config.get("tool_output_token_limit") != CODEX_HISTORY_RETENTION_TOKEN_LIMIT:
-        return False
-    if config.get("model_auto_compact_token_limit", 0) < CODEX_AUTO_COMPACT_LIMIT:
-        return False
     return True
-
-
-def _ensure_top_level_key(path: Path, *, key: str, value: int) -> None:
-    """Ensure a bare top-level integer scalar is at least ``value``.
-
-    `safe_upsert_section` only writes `[section]` blocks; it cannot write bare
-    top-level scalars. This helper handles the bare-scalar case for the
-    corrupt-file path while preserving higher values.
-    """
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    lines = existing.splitlines(keepends=True)
-    assignment = _re.compile(rf"^\s*{_re.escape(key)}\s*=\s*(?P<value>[+-]?[0-9][0-9_]*)")
-    insert_at = len(lines)
-    for i, line in enumerate(lines):
-        if line.lstrip().startswith("["):
-            insert_at = i
-            break
-        match = assignment.match(line)
-        if match:
-            current = int(match.group("value").replace("_", ""))
-            if current >= value:
-                return
-            newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
-            lines[i] = f"{key} = {value}{newline}"
-            atomic_write(path, "".join(lines))
-            return
-    lines.insert(insert_at, f"{key} = {value}\n")
-    atomic_write(path, "".join(lines))
-
-
-def _upsert_top_level_key_exact(path: Path, *, key: str, value: int) -> None:
-    """Set a bare top-level scalar to exactly ``value`` using text-level edits.
-
-    This is deliberately separate from ``_ensure_top_level_key``: the Codex
-    tool-output setting is exact, while the auto-compact setting retains its
-    independent minimum semantics.
-    """
-    existing = path.read_text(encoding="utf-8") if path.exists() else ""
-    lines = existing.splitlines(keepends=True)
-    assignment = _re.compile(rf"^\s*{_re.escape(key)}\s*=")
-    insert_at = len(lines)
-    for i, line in enumerate(lines):
-        if line.lstrip().startswith("["):
-            insert_at = i
-            break
-        if assignment.match(line):
-            newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
-            lines[i] = f"{key} = {value}{newline}"
-            atomic_write(path, "".join(lines))
-            return
-    lines.insert(insert_at, f"{key} = {value}\n")
-    atomic_write(path, "".join(lines))
 
 
 def _ensure_codex_mcp_registered_unlocked(
@@ -685,16 +593,6 @@ def _ensure_codex_mcp_registered_unlocked(
     if result.is_corrupt:
         section_text = _serialize_mcp_autoskillit_section(entry)
         safe_upsert_section(config_path, "[mcp_servers.autoskillit]", section_text)
-        _upsert_top_level_key_exact(
-            config_path,
-            key="tool_output_token_limit",
-            value=CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-        )
-        _ensure_top_level_key(
-            config_path,
-            key="model_auto_compact_token_limit",
-            value=CODEX_AUTO_COMPACT_LIMIT,
-        )
         return True
     else:
         config = result.data
@@ -705,15 +603,58 @@ def _ensure_codex_mcp_registered_unlocked(
         ):
             return False
         config.setdefault("mcp_servers", {})["autoskillit"] = entry
-        config["tool_output_token_limit"] = CODEX_HISTORY_RETENTION_TOKEN_LIMIT
-        existing_compact_limit = config.get("model_auto_compact_token_limit", 0)
-        if not isinstance(existing_compact_limit, int):
-            existing_compact_limit = 0
-        config["model_auto_compact_token_limit"] = max(
-            existing_compact_limit, CODEX_AUTO_COMPACT_LIMIT
-        )
         _write_codex_config(config_path, config, source=result)
         return True
+
+
+def _apply_codex_runtime_spec_unlocked(
+    *, config_path: Path, runtime_spec: CodexRuntimeSpec
+) -> None:
+    """Apply wrapper-owned runtime tuning to a generated Codex home."""
+    if runtime_spec.auto_compaction_policy != "deny":
+        raise ValueError("Codex runtime auto_compaction_policy must be 'deny'")
+
+    result = _read_codex_config(config_path)
+    if result.is_corrupt:
+        raw_bytes = result.raw_bytes
+        if raw_bytes is None:
+            raise RuntimeError("corrupt ReadResult has no raw_bytes")
+        try:
+            text = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeError(f"config file contains non-UTF-8 bytes: {exc}") from exc
+        text = _re.sub(
+            r"(?m)^\s*(?:model_context_window|model_auto_compact_token_limit)\s*=.*(?:\r?\n|$)",
+            "",
+            text,
+        )
+        runtime_values: dict[str, int] = {
+            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
+        }
+        if runtime_spec.context_window_tokens is not None:
+            runtime_values["model_context_window"] = runtime_spec.context_window_tokens
+        if runtime_spec.auto_compact_threshold_tokens is not None:
+            runtime_values["model_auto_compact_token_limit"] = (
+                runtime_spec.auto_compact_threshold_tokens
+            )
+        atomic_write(config_path, _serialize_toml(runtime_values) + text)
+        return
+
+    config = result.data
+    config.pop("model_context_window", None)
+    config.pop("model_auto_compact_token_limit", None)
+    profiles = config.get("profiles")
+    if isinstance(profiles, dict):
+        for profile in profiles.values():
+            if isinstance(profile, dict):
+                profile.pop("model_context_window", None)
+                profile.pop("model_auto_compact_token_limit", None)
+    config["tool_output_token_limit"] = CODEX_HISTORY_RETENTION_TOKEN_LIMIT
+    if runtime_spec.context_window_tokens is not None:
+        config["model_context_window"] = runtime_spec.context_window_tokens
+    if runtime_spec.auto_compact_threshold_tokens is not None:
+        config["model_auto_compact_token_limit"] = runtime_spec.auto_compact_threshold_tokens
+    _write_codex_config(config_path, config, source=result)
 
 
 def ensure_codex_mcp_registered(

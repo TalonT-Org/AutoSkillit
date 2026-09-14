@@ -298,6 +298,22 @@ def test_default_file_count_boundary(
             test_no_subpackage_exceeds_12_files_default_and_per_package_overrides()
 
 
+def test_nested_core_module_matching_root_shim_counts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "core" / "fixture"
+    package.mkdir(parents=True)
+    (package.parent / "__init__.py").touch()
+    (package / "__init__.py").touch()
+    (package / "paths.py").touch()
+    for index in range(11):
+        (package / f"module_{index}.py").touch()
+    monkeypatch.setattr("tests.arch.test_subpackage_isolation_file_counts.SRC_ROOT", tmp_path)
+
+    with pytest.raises(AssertionError, match=r"core/fixture/: 13 Python files \(max 12\)"):
+        test_no_subpackage_exceeds_12_files_default_and_per_package_overrides()
+
+
 # ── session_skills package shape ─────────────────────────────────────────────
 # The session-skill cluster (facade + five shards + the projection gateway
 # shard) lives entirely under workspace/session_skills/, a default

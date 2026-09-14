@@ -285,6 +285,9 @@ jobs:
           AUTOSKILLIT_TEST_BASE_REF: ${{ needs.preflight.outputs.test-base-revision }}
         run: |
           mkdir -p .autoskillit/temp
+          if [[ "${{ matrix.shard }}" == "execution-channel-b" ]]; then
+            export AUTOSKILLIT_TEST_FILTER=none
+          fi
           set +e
           task test-check 2>&1 | tee .autoskillit/temp/test-check.log
           TEST_CHECK_EXIT="${PIPESTATUS[0]}"

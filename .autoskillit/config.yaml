@@ -1,5 +1,5 @@
 test_check:
-  command: ["task", "test-all"]
+  command: ["task", "test-local-gate"]
   filter_mode: "conservative"
   base_ref: "develop"
   timeout: 900

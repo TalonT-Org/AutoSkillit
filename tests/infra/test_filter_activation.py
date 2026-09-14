@@ -13,12 +13,12 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 def test_project_config_has_operational_test_gate_tuple():
-    """The repository's full test gate has its required command and budget."""
+    """The repository's local test gate has its required command and budget."""
     from autoskillit.core.io import load_yaml
 
     cfg = load_yaml(REPO_ROOT / ".autoskillit/config.yaml")
     test_check = cfg["test_check"]
-    assert test_check["command"] == ["task", "test-all"]
+    assert test_check["command"] == ["task", "test-local-gate"]
     assert test_check["timeout"] == 900
     assert test_check["filter_mode"] == "conservative"
     assert test_check["base_ref"] == "develop"

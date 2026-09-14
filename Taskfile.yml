@@ -120,6 +120,13 @@ tasks:
         export AUTOSKILLIT_TEST_FILTER="${AUTOSKILLIT_TEST_FILTER:-aggressive}"
         task test-check
 
+  test-local-gate:
+    desc: Run the configured local gate without Channel B execution tests
+    cmds:
+      - |
+        export PYTEST_IGNORE_PATHS="--ignore=tests/execution/test_process_channel_b.py --deselect=tests/execution/test_process_channel_b.py"
+        task test-all
+
   test-codex-config-parse:
     desc: Validate generated interactive config overrides with the installed Codex CLI
     cmds:

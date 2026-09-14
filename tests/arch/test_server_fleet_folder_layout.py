@@ -422,17 +422,14 @@ def test_stage_d_canonical_campaign_state_imports_resolve_and_old_paths_are_gone
 
 _STAGE_PACKAGES: tuple[tuple[str, int], ...] = (
     ("server/recipe", 10),
-    # Two directory levels below server/; reached by neither
-    # test_server_file_count_under_limit (root only) nor
-    # test_no_subpackage_exceeds_10_files (one level of nesting only). Ceiling
+    # Two directory levels below server/; the root/first-nested count guard
+    # does not reach this package. This package-specific ceiling
     # carries headroom above the current count (5) -- a ceiling equal to the
     # current count is a rubber stamp that trips on the very next file added.
     ("server/recipe/section", 7),
     ("server/lifecycle", 10),
-    # Two directory levels below server/ and underscore-prefixed; reached by
-    # neither test_server_file_count_under_limit (root only) nor
-    # test_no_subpackage_exceeds_10_files (one level of nesting, non-underscore
-    # names only). Ceiling carries headroom above the current count (4).
+    # Two directory levels below server/ and underscore-prefixed; the public
+    # package guard skips it. Ceiling carries headroom above the current count (4).
     ("server/lifecycle/_lifespan", 6),
     ("server/response", 10),
     # Same two-level, underscore-prefixed coverage gap as
@@ -447,17 +444,10 @@ _STAGE_PACKAGES: tuple[tuple[str, int], ...] = (
 def test_stage_package_exists_within_file_limit_with_docs(rel_path: str, max_files: int) -> None:
     """Each new #4673 package exists, stays within its nested-file ceiling, and is documented.
 
-    server/recipe, server/lifecycle, server/response, and fleet/campaign_state
-    are already file-count-covered at level one by
-    `test_no_subpackage_exceeds_10_files`; they're included here to exercise
-    the AGENTS.md/CLAUDE.md documentation-file assertions that guard does not
-    perform, not for file-count coverage. Only the three two-directory-level
-    (and/or underscore-prefixed) entries -- server/recipe/section,
-    server/lifecycle/_lifespan, server/response/_response_budget -- are
-    reached by neither `test_server_file_count_under_limit` (root only) nor
-    `test_no_subpackage_exceeds_10_files` (one level of nesting, non-underscore
-    names only); these parameterized cases are what actually keep those three
-    file-count-covered.
+    First-level public packages are also covered by
+    `test_no_subpackage_exceeds_12_files_default_and_per_package_overrides`.
+    These cases retain their package-specific ceilings and guide checks;
+    the deeper and underscore-prefixed packages rely on this parameterization.
     """
     pkg_dir = SRC_ROOT / rel_path
     assert pkg_dir.is_dir(), f"{rel_path}/ does not exist"

@@ -88,8 +88,7 @@ def test_rule_registry_completeness() -> None:
             f"Rule {r.rule_id} has unknown lens {r.lens!r}. Known: {sorted(_KNOWN_LENSES)}"
         )
 
-    # (c) exact set of IDs must match the visitor's rule set
-    # Add a RuleDescriptor for every new visitor rule and update this set.
+    # (c) exact set of IDs must match all registered rules, including pytest-enforced rules.
     expected_ids = frozenset(
         {
             "ARCH-001",
@@ -104,6 +103,7 @@ def test_rule_registry_completeness() -> None:
             "ARCH-010",
             "ARCH-011",
             "ARCH-012",
+            "REQ-CNST-003",
         }
     )
     actual_ids = frozenset(rule_ids)
@@ -111,6 +111,14 @@ def test_rule_registry_completeness() -> None:
         f"RULES ID mismatch. Missing: {expected_ids - actual_ids}. "
         f"Extra: {actual_ids - expected_ids}"
     )
+
+
+def test_subpackage_file_count_rule_metadata() -> None:
+    rule = next(rule for rule in RULES if rule.rule_id == "REQ-CNST-003")
+    expected_severity = "error"
+    assert rule.severity == expected_severity
+    assert rule.defense_standard == "DS-013"
+    assert rule.exemptions == frozenset(f"REQ-CNST-003-E{i}" for i in range(1, 9))
 
 
 def test_all_rules_have_defense_standard() -> None:

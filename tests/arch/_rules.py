@@ -201,7 +201,7 @@ _DISPATCH_TABLE_EXEMPT_FUNCTIONS = frozenset(
     }
 )
 
-# ── RULES tuple — 12 entries ──────────────────────────────────────────────────
+# ── RULES tuple ───────────────────────────────────────────────────────────────
 
 RULES: tuple[RuleDescriptor, ...] = (
     RuleDescriptor(
@@ -428,6 +428,33 @@ RULES: tuple[RuleDescriptor, ...] = (
         exemptions=frozenset(),
         severity="error",
         defense_standard="DS-014",
+    ),
+    RuleDescriptor(
+        rule_id="REQ-CNST-003",
+        name="subpackage-file-count",
+        lens="development",
+        description=(
+            "No subpackage may contain more than 12 direct Python files by default; "
+            "per-package overrides are declared in FILE_COUNT_LIMITS."
+        ),
+        rationale=(
+            "A bounded package surface keeps responsibilities discoverable. "
+            "Packages with documented reasons for a larger surface have explicit limits."
+        ),
+        exemptions=frozenset(
+            {
+                "REQ-CNST-003-E1",
+                "REQ-CNST-003-E2",
+                "REQ-CNST-003-E3",
+                "REQ-CNST-003-E4",
+                "REQ-CNST-003-E5",
+                "REQ-CNST-003-E6",
+                "REQ-CNST-003-E7",
+                "REQ-CNST-003-E8",
+            }
+        ),
+        severity="error",
+        defense_standard="DS-013",
     ),
 )
 

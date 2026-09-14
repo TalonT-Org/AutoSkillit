@@ -48,7 +48,7 @@ def _collect_shim_paths() -> list[tuple[str, str]]:
 
 
 def test_no_shim_uses_wildcard_import() -> None:
-    """REQ-CNST-003: every shim must enumerate its re-exports.
+    """Every forwarding shim must enumerate its re-exports.
 
     The test fails with a per-shim message identifying the package and the
     shim file. Empty ``__all__`` declarations are also flagged — they

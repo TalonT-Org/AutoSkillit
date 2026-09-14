@@ -238,12 +238,9 @@ async def _open_kitchen_patched(
     counter: McpCallCounter | None = None,
 ):
     """Call open_kitchen with all infrastructure side-effects patched out."""
-    from autoskillit.recipe.api import _api_cache
-    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools import tools_kitchen
     from autoskillit.server.tools.tools_kitchen import open_kitchen
 
-    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
     fmcp_ctx = _mock_fmcp_ctx()
     with patch.object(tools_kitchen, "_prime_quota_cache", new=AsyncMock()):
         with patch.object(tools_kitchen, "_write_hook_config"):

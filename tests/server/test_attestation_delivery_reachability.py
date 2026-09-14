@@ -290,6 +290,37 @@ async def test_attested_run_skill_reports_missing_canonical_tool_def(
 @pytest.mark.parametrize(
     "tool_ctx_ready_recipe",
     [
+        ("research", "scope", _OVERRIDES),
+        ("planner", "elaborate_phases", {"task": "test task", "source_dir": "."}),
+        ("smoke-test", "run_tests", {"source_dir": "."}),
+    ],
+    indirect=True,
+)
+async def test_ready_recipe_load_uses_worker_cache_without_sharing_context(
+    tmp_path,
+    tool_ctx_ready_recipe,
+    ready_recipe_cache_project_dir,
+) -> None:
+    from autoskillit.recipe.api import _api_cache
+
+    ready = tool_ctx_ready_recipe
+    assert ready.tool_ctx.project_dir == tmp_path
+    assert ready.tool_ctx.temp_dir == tmp_path / ".autoskillit" / "temp"
+    assert not any(ready_recipe_cache_project_dir.iterdir())
+
+    recipe_name = ready.tool_ctx.recipe_initialization_state.recipe_name
+    expected_project_dir = (
+        tmp_path if recipe_name == "smoke-test" else ready_recipe_cache_project_dir
+    )
+    assert any(
+        key[0] == recipe_name and key[3] == str(expected_project_dir)
+        for key in _api_cache._LOAD_CACHE._store
+    )
+
+
+@pytest.mark.parametrize(
+    "tool_ctx_ready_recipe",
+    [
         (_RECIPE_ENVELOPE, _ATTESTED_STEP, _OVERRIDES),
         (
             "research",

@@ -520,7 +520,7 @@ class TestCLIOrderCommand:
         monkeypatch.setattr(
             _patch_session__session_backend,
             "resolve_global_backend",
-            lambda name: _real_get_backend(name),
+            lambda name, **_kwargs: _real_get_backend(name),
         )
 
         def fake_pre_launch(_self, *, session_dir=None, executable=None, plugin_dir=None):

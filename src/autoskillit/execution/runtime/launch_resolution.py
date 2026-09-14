@@ -11,6 +11,7 @@ from types import MappingProxyType
 from autoskillit.core import (
     BackendAuthority,
     CmdSpec,
+    CodexRuntimeSpec,
     CodingAgentBackend,
     LaunchAdapter,
     LaunchAdapterResult,
@@ -67,12 +68,14 @@ class DefaultLaunchResolver:
         *,
         known_backends: tuple[str, ...] = ("claude-code", "codex"),
         backend_aliases: Mapping[str, str] | None = None,
+        codex_runtime_spec: CodexRuntimeSpec | None = None,
     ) -> None:
         self._known_backends = frozenset(known_backends)
         aliases = dict(_DEFAULT_BACKEND_ALIASES)
         if backend_aliases is not None:
             aliases.update(backend_aliases)
         self._backend_aliases = aliases
+        self._codex_runtime_spec = codex_runtime_spec or CodexRuntimeSpec()
 
     def _canonical_backend(self, backend: str, *, key_path: str) -> str:
         canonical = self._backend_aliases.get(backend, backend)
@@ -304,7 +307,7 @@ class DefaultLaunchResolver:
         from autoskillit.execution.backends import get_backend
 
         backend = self._canonical_backend(authority.backend, key_path=authority.key_path)
-        return get_backend(backend)
+        return get_backend(backend, codex_runtime_spec=self._codex_runtime_spec)
 
     @staticmethod
     def _native_model_owners(model: str) -> tuple[str, ...]:

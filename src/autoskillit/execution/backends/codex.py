@@ -6,7 +6,7 @@ import os
 import subprocess
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +26,7 @@ from autoskillit.core import (
     ClaudeDirectoryConventions,
     CmdOrigin,
     CmdSpec,
+    CodexRuntimeSpec,
     ExecutableLaunchBinding,
     ExecutionIdentity,
     ExplorationDispatchRenderer,
@@ -138,6 +139,7 @@ def _codex_logical_role_mapping(plan: SkillSemanticPlan) -> dict[str, str]:
 @dataclass(frozen=True, slots=True)
 class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     source_codex_home: Path | None = None
+    runtime_spec: CodexRuntimeSpec = field(default_factory=CodexRuntimeSpec)
 
     def __post_init__(self) -> None:
         source_home = (

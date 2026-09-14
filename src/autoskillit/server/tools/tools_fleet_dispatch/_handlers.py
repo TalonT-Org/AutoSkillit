@@ -160,6 +160,9 @@ async def dispatch_food_truck(
         return fleet_gate
 
     try:
+        from autoskillit.server import _get_ctx  # circular-break
+
+        tool_ctx = _get_ctx()
         provenance = _ACTIVE_DISPATCH_PROVENANCE.get()
         if caller_instructions and len(caller_instructions) > _MAX_CALLER_INSTRUCTIONS_LEN:
             caller_instructions = caller_instructions[:_MAX_CALLER_INSTRUCTIONS_LEN]
@@ -167,7 +170,10 @@ async def dispatch_food_truck(
         dispatch_backend: CodingAgentBackend | None = None
         if backend is not None:
             try:
-                dispatch_backend = resolve_backend_override(backend)
+                dispatch_backend = resolve_backend_override(
+                    backend,
+                    launch_resolver=tool_ctx.launch_resolver,
+                )
             except ValueError as exc:
                 return fleet_error(
                     FleetErrorCode.FLEET_INVALID_BACKEND,
@@ -177,13 +183,10 @@ async def dispatch_food_truck(
         # Feature guard: config authority check independent of MCP visibility state.
         # Fleet sessions open the gate unconditionally at boot; this catch-all ensures
         # dispatch_food_truck never executes when features.fleet is disabled in config.
-        from autoskillit.server import _get_ctx as _get_ctx_for_feature_check  # circular-break
-
-        _feature_ctx = _get_ctx_for_feature_check()
         if not is_feature_enabled(
             "fleet",
-            _feature_ctx.config.features,
-            experimental_enabled=_feature_ctx.config.experimental_enabled,
+            tool_ctx.config.features,
+            experimental_enabled=tool_ctx.config.experimental_enabled,
         ):
             return fleet_error(
                 FleetErrorCode.FLEET_FEATURE_DISABLED,
@@ -236,7 +239,6 @@ async def dispatch_food_truck(
                         "No further dispatches permitted.",
                     )
 
-        from autoskillit.server import _get_ctx  # circular-break
         from autoskillit.server._misc import (  # circular-break
             _refresh_quota_cache,
             invalidate_cache,
@@ -245,7 +247,6 @@ async def dispatch_food_truck(
         parsed_checkpoint = (
             SessionCheckpoint.from_dict(resume_checkpoint) if resume_checkpoint else None
         )
-        tool_ctx = _get_ctx()
         _override_backend = dispatch_backend if dispatch_backend is not None else tool_ctx.backend
         provenance.start(
             DispatchEffectName.CALLER_IDENTITY,

@@ -878,6 +878,7 @@ from .types import ClosureReport as ClosureReport
 from .types import ClosureRow as ClosureRow
 from .types import CmdOrigin as CmdOrigin
 from .types import CmdSpec as CmdSpec
+from .types import CodexRuntimeSpec as CodexRuntimeSpec
 from .types import CodexAppServerPlan as CodexAppServerPlan
 from .types import CodexEventData as CodexEventData
 from .types import CodexEventType as CodexEventType

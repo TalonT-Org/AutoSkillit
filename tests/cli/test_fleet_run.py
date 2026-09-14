@@ -305,12 +305,6 @@ class TestFleetRunDispatch:
             "autoskillit.config.load_config",
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
-        fake_backend = MagicMock()
-        fake_backend.name = "claude-code"
-        monkeypatch.setattr(
-            "autoskillit.server.resolve_backend_override",
-            lambda name: fake_backend,
-        )
         captured_args: dict[str, object] = {}
 
         async def fake_execute(**kwargs: object) -> DispatchResult:
@@ -326,7 +320,7 @@ class TestFleetRunDispatch:
 
             with pytest.raises(SystemExit):
                 fleet_run("test-recipe", backend="claude-code", task="test")
-        assert captured_args["dispatch_backend"] is fake_backend
+        assert captured_args["dispatch_backend_name"] == "claude-code"
 
     def test_fleet_run_rejects_invalid_backend(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -337,13 +331,6 @@ class TestFleetRunDispatch:
             lambda path=None: _make_test_config(fleet=True, fleet_headless_run=True),
         )
 
-        def fake_resolve(name: str) -> object:
-            raise ValueError(f"Unknown backend {name!r}. Valid names: claude-code, codex")
-
-        monkeypatch.setattr(
-            "autoskillit.server.resolve_backend_override",
-            fake_resolve,
-        )
         from autoskillit.cli.fleet import fleet_run
 
         with pytest.raises(SystemExit):

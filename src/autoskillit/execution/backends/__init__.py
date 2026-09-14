@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from autoskillit.core import CodingAgentBackend
+from autoskillit.core import CodexRuntimeSpec, CodingAgentBackend
 
 from ._codex_config import (
     CODEX_AUTO_COMPACT_LIMIT,
@@ -73,13 +73,19 @@ BACKEND_REGISTRY: dict[str, type[CodingAgentBackend]] = {
 }
 
 
-def get_backend(name: str) -> CodingAgentBackend:
+def get_backend(
+    name: str,
+    *,
+    codex_runtime_spec: CodexRuntimeSpec | None = None,
+) -> CodingAgentBackend:
     try:
         cls = BACKEND_REGISTRY[name]
     except KeyError:
         valid = ", ".join(sorted(BACKEND_REGISTRY))
         msg = f"Unknown backend {name!r}. Valid names: {valid}"
         raise ValueError(msg) from None
+    if cls is CodexBackend:
+        return CodexBackend(runtime_spec=codex_runtime_spec or CodexRuntimeSpec())
     return cls()
 
 

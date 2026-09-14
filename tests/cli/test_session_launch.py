@@ -786,7 +786,7 @@ def test_run_interactive_session_default_backend_uses_typed_resolver(
     mock_config = MagicMock()
     mock_config.agent_backend.backend = "claude-code"
 
-    def fake_get_backend(name: str):
+    def fake_get_backend(name: str, **_kwargs: object):
         get_backend_called.append(name)
         return _FakeBackend()
 
@@ -844,7 +844,7 @@ def test_typed_resolver_di_used_in_session_launch(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _DIBackend(),
+        lambda name, **_kwargs: _DIBackend(),
     )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
@@ -897,7 +897,7 @@ def test_run_interactive_session_default_backend_threads_mcp_tool_timeout_sec(
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _DIBackend(),
+        lambda name, **_kwargs: _DIBackend(),
     )
     _stub_plugin_installed(monkeypatch)
     _capture_subprocess(monkeypatch)
@@ -949,7 +949,7 @@ def test_skill_injection_false_via_typed_resolver_forwards_system_prompt_kwarg(
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _NoInjectDIBackend(),
+        lambda name, **_kwargs: _NoInjectDIBackend(),
     )
 
     def mock_run(cmd, **kwargs):
@@ -1077,7 +1077,7 @@ def test_configured_codex_authority_is_not_implicitly_rerouted(
     mock_config.features = {}
     mock_config.experimental_enabled = False
 
-    def fake_get_backend(name: str):
+    def fake_get_backend(name: str, **_kwargs: object):
         if name == "claude-code":
             return _ClaudeStub()
         return _CodexStub()
@@ -1146,7 +1146,7 @@ def test_feature_flag_gate_allows_codex_backend_when_feature_enabled(
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: _CodexStub(),
+        lambda name, **_kwargs: _CodexStub(),
     )
     monkeypatch.setattr(
         subprocess,

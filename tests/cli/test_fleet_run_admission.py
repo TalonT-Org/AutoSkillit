@@ -93,6 +93,7 @@ async def _run_execute_fleet_run(
     """Call _execute_fleet_run with mocked make_context and execute_dispatch."""
     cfg = MagicMock()
     mock_ctx = _make_mock_ctx(tmp_path, dispatch_backend)
+    mock_ctx.launch_resolver.backend_for_authority.return_value = dispatch_backend
 
     monkeypatch.setattr(
         "autoskillit.server.make_context",
@@ -108,7 +109,7 @@ async def _run_execute_fleet_run(
         task="",
         ingredients=None,
         timeout_sec=None,
-        dispatch_backend=dispatch_backend,
+        dispatch_backend_name=dispatch_backend.name,
         resume_session_id=None,
         prior_dispatch_id=None,
         disable_quota_guard=True,
@@ -206,6 +207,7 @@ class TestFleetRunCliAdmission:
 
         mock_ctx = _make_mock_ctx(tmp_path, backend)
         mock_ctx.skill_resolver = Resolver()
+        mock_ctx.launch_resolver.backend_for_authority.return_value = backend
         monkeypatch.setattr(
             "autoskillit.server.make_context",
             lambda _cfg, project_dir=None, plugin_retirement_coordinator=None: mock_ctx,
@@ -248,7 +250,7 @@ class TestFleetRunCliAdmission:
                 task="",
                 ingredients=None,
                 timeout_sec=None,
-                dispatch_backend=backend,
+                dispatch_backend_name="codex",
                 resume_session_id=None,
                 prior_dispatch_id=None,
                 disable_quota_guard=True,
@@ -282,7 +284,7 @@ class TestFleetRunCliAdmission:
         )
         monkeypatch.setattr(
             "autoskillit.server.resolve_backend_override",
-            lambda name: _make_codex_backend(),
+            lambda name, **_kwargs: _make_codex_backend(),
         )
 
         rejection_result = _make_rejection_result()

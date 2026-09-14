@@ -59,3 +59,29 @@ def test_codex_backend_instantiated_when_enabled(monkeypatch, tmp_path):
     config.agent_backend = AgentBackendConfig(backend="codex")
     ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
     assert isinstance(ctx.backend, CodexBackend)
+
+
+def test_codex_runtime_spec_is_shared_by_factory_backend_and_resolver(tmp_path):
+    from autoskillit.config import CodexRuntimeConfig
+    from autoskillit.config._config_dataclasses import AgentBackendConfig
+    from autoskillit.core import BackendAuthority, BackendAuthorityKind, BackendAuthorityTier
+    from autoskillit.execution.backends.codex import CodexBackend
+
+    config = AutomationConfig(
+        agent_backend=AgentBackendConfig(backend="codex"),
+        codex_runtime=CodexRuntimeConfig(context_window_tokens=200_000),
+    )
+    ctx = make_context(config, runner=_runner(), project_dir=tmp_path)
+    resolved = ctx.launch_resolver.backend_for_authority(
+        BackendAuthority(
+            backend="codex",
+            kind=BackendAuthorityKind.GLOBAL,
+            tier=BackendAuthorityTier.GLOBAL,
+            key_path="agent_backend.backend",
+        )
+    )
+
+    assert isinstance(ctx.backend, CodexBackend)
+    assert isinstance(resolved, CodexBackend)
+    assert ctx.backend.runtime_spec is resolved.runtime_spec
+    assert resolved.runtime_spec.context_window_tokens == 200_000

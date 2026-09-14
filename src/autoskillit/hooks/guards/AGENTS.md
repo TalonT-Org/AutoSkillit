@@ -108,3 +108,13 @@ mechanism for detecting subagent context in hook scripts.
 - Check: `if data.get("agent_id"): sys.exit(0)` for unconditional subagent exemption
 
 Used by: `skill_load_guard.py`, `skill_load_post_hook.py`
+
+## Multi-concern files
+
+Files with no registration support their folder; files with several registrations group one related concern.
+
+- `__init__.py` — Support module: PreToolUse guard scripts — invoked as standalone python3 commands.
+- `_git_command_classification.py` — Support module: Classification primitives for git operations — extracted from git_ops_guard.
+- `branch_protection_guard.py` — Groups 2 registrations: PreToolUse hook: branch protection guard for merge_worktree and push_to_remote.
+- `ingredient_lock_guard.py` — Groups 2 registrations: PreToolUse guard: deny run_skill calls for steps locked by lock_ingredients.
+- `join_settle_guard.py` — Groups 2 registrations: PostToolUse / PostToolUseFailure settlement — record claimed handle outcomes.

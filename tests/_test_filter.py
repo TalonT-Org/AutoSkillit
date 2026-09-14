@@ -1318,7 +1318,6 @@ LAYER_CASCADE_CONSERVATIVE: dict[str, frozenset[str]] = {
             "server/test_fixed_batch_results.py",
             # file-level: fleet tests that import server tool handlers directly
             "fleet/test_api.py",
-            "fleet/test_dispatch_backend_override.py",
             "fleet/test_dispatch_crash_diagnostics.py",
             "fleet/test_fleet_e2e.py",
             "fleet/test_pack_enforcement.py",

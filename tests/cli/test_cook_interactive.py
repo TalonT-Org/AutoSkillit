@@ -685,7 +685,7 @@ def test_cook_resolves_default_backend(monkeypatch: pytest.MonkeyPatch, tmp_path
     monkeypatch.setattr(
         _patch_session__session_backend,
         "resolve_global_backend",
-        lambda name: requested.append(name) or backend,
+        lambda name, **_kwargs: requested.append(name) or backend,
     )
 
     cli.cook()

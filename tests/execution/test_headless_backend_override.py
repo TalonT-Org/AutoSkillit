@@ -8,6 +8,12 @@ import pytest
 
 import autoskillit.execution.headless as _patch_execution_headless
 import autoskillit.execution.headless._headless_execute as _patch_headless__headless_execute
+from autoskillit.core import (
+    BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
+    CodexRuntimeSpec,
+)
 from autoskillit.core.types import (
     CmdSpec,
     RetryReason,
@@ -15,6 +21,7 @@ from autoskillit.core.types import (
     SubprocessResult,
     TerminationReason,
 )
+from autoskillit.execution import DefaultLaunchResolver
 from autoskillit.execution.backends import CodexBackend
 from tests.fixtures.codex import codex_skill_add_dirs
 
@@ -35,6 +42,24 @@ def _stub_result() -> SkillResult:
         retry_reason=RetryReason.NONE,
         stderr="",
     )
+
+
+def test_codex_runtime_spec_reaches_explicit_backend_selection() -> None:
+    spec = CodexRuntimeSpec(
+        context_window_tokens=200_000,
+        auto_compact_threshold_tokens=180_000,
+    )
+    backend = DefaultLaunchResolver(codex_runtime_spec=spec).backend_for_authority(
+        BackendAuthority(
+            backend="codex",
+            kind=BackendAuthorityKind.STEP,
+            tier=BackendAuthorityTier.STEP,
+            key_path="agent_backend.step_overrides.test",
+        )
+    )
+
+    assert isinstance(backend, CodexBackend)
+    assert backend.runtime_spec is spec
 
 
 class TestBackendOverrideCommandRouting:

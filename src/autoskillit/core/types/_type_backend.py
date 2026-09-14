@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Literal
 
 from ._type_checkpoint import SessionCheckpoint
 from ._type_constants import SESSION_ADD_DIR_SUBDIR
@@ -48,6 +48,7 @@ __all__ = [
     "SKILL_REASONING_EFFORTS",
     "CmdOrigin",
     "CmdSpec",
+    "CodexRuntimeSpec",
     "CodexAppServerPlan",
     "SessionAttemptHandle",
     "ExecutableLaunchBinding",
@@ -63,6 +64,17 @@ __all__ = [
     "model_class",
     "strip_context_window_suffix",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class CodexRuntimeSpec:
+    """Immutable Codex runtime policy selected before launch construction."""
+
+    auto_compaction_policy: Literal["deny"] = "deny"
+    context_window_tokens: int | None = None
+    auto_compact_threshold_tokens: int | None = None
+    home_placement: Literal["persistent_session_home"] = "persistent_session_home"
+    context_exhaustion_behavior: Literal["stop"] = "stop"
 
 
 @dataclass(frozen=True, slots=True)

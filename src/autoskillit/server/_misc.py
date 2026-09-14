@@ -18,19 +18,21 @@ from autoskillit.core import (
     MARKETPLACE_PREFIX,
     ArtifactLease,
     ArtifactLeaseContention,
+    BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
     ensure_project_temp,
     get_logger,
     pipeline_tracker_directory,
 )
 from autoskillit.execution import (
-    BACKEND_REGISTRY,
+    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
+)
+from autoskillit.execution import (
     SessionState,
     clear_session_state,
     persist_session_state,
     resolve_remote_repo,
-)
-from autoskillit.execution import (
-    SCENARIO_STEP_NAME_ENV as SCENARIO_STEP_NAME_ENV,
 )
 from autoskillit.execution import (
     _refresh_quota_cache as _refresh_quota_cache,
@@ -95,20 +97,25 @@ from autoskillit.workspace import (
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
-    from autoskillit.core import CodingAgentBackend, SkillResult
+    from autoskillit.core import CodingAgentBackend, LaunchResolver, SkillResult
 
 logger = get_logger(__name__)
 
 
-def resolve_backend_override(name: str) -> CodingAgentBackend:
-    """Resolve a backend name to a CodingAgentBackend instance.
-
-    Raises ValueError if the name is not in BACKEND_REGISTRY.
-    """
-    if name not in BACKEND_REGISTRY:
-        valid = ", ".join(sorted(BACKEND_REGISTRY))
-        raise ValueError(f"Unknown backend {name!r}. Valid names: {valid}")
-    return get_backend(name)
+def resolve_backend_override(
+    name: str,
+    *,
+    launch_resolver: LaunchResolver,
+) -> CodingAgentBackend:
+    """Resolve a caller backend override through the configured authority boundary."""
+    return launch_resolver.backend_for_authority(
+        BackendAuthority(
+            backend=name,
+            kind=BackendAuthorityKind.CALLER,
+            tier=BackendAuthorityTier.CALLER,
+            key_path="request.backend",
+        )
+    )
 
 
 _HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]

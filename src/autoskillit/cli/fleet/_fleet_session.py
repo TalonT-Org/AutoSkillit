@@ -52,13 +52,21 @@ def _launch_fleet_session(
 
     cfg = load_config(project_dir)
 
-    from autoskillit.execution import get_backend  # noqa: PLC0415
+    from autoskillit.cli.session._session_backend import (  # noqa: PLC0415
+        resolve_global_backend,
+    )
+    from autoskillit.execution import DefaultLaunchResolver  # noqa: PLC0415
     from autoskillit.workspace import (  # noqa: PLC0415
         compile_session_skill_catalog,
         default_skill_resolver,
     )
 
-    _backend = get_backend(cfg.agent_backend.backend)
+    _backend = resolve_global_backend(
+        cfg.agent_backend.backend,
+        launch_resolver=DefaultLaunchResolver(
+            codex_runtime_spec=cfg.codex_runtime.resolve(),
+        ),
+    )
     _backend_caps = _backend.capabilities
     mcp_prefix = detect_autoskillit_mcp_prefix(_backend_caps)
     skill_compilation = compile_session_skill_catalog(

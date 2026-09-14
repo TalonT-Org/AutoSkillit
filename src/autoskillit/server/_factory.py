@@ -246,7 +246,11 @@ def make_context(
             reason="config.agent_backend.backend is not 'codex'",
             configured_backend=config.agent_backend.backend,
         )
-    backend = get_backend(config.agent_backend.backend)
+    codex_runtime_spec = config.codex_runtime.resolve()
+    backend = get_backend(
+        config.agent_backend.backend,
+        codex_runtime_spec=codex_runtime_spec,
+    )
 
     if runner is not None and os.environ.get(REPLAY_SCENARIO_ENV):
         if not backend.capabilities.replay_capable:
@@ -423,7 +427,7 @@ def make_context(
         gate=gate,
         plugin_authority=resolved_plugin_authority,
         runner=runner,
-        launch_resolver=DefaultLaunchResolver(),
+        launch_resolver=DefaultLaunchResolver(codex_runtime_spec=codex_runtime_spec),
         backend=backend,
         temp_dir=temp_dir,
         project_dir=project_dir,

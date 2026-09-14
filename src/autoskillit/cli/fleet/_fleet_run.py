@@ -14,7 +14,7 @@ from autoskillit.core import get_logger, is_feature_enabled
 
 if TYPE_CHECKING:
     from autoskillit.config import AutomationConfig
-    from autoskillit.core import CodingAgentBackend, NativeShellCaptureMode
+    from autoskillit.core import NativeShellCaptureMode
     from autoskillit.fleet import DispatchResult
 
 logger = get_logger(__name__)
@@ -50,7 +50,7 @@ async def _execute_fleet_run(
     task: str,
     ingredients: dict[str, str] | None,
     timeout_sec: int | None,
-    dispatch_backend: CodingAgentBackend | None,
+    dispatch_backend_name: str | None,
     resume_session_id: str | None,
     prior_dispatch_id: str | None,
     disable_quota_guard: bool,
@@ -76,6 +76,16 @@ async def _execute_fleet_run(
     if disable_quota_guard:
         ctx.config.quota_guard.enabled = False
 
+    from autoskillit.server import resolve_backend_override
+
+    dispatch_backend = (
+        resolve_backend_override(
+            dispatch_backend_name,
+            launch_resolver=ctx.launch_resolver,
+        )
+        if dispatch_backend_name is not None
+        else None
+    )
     effective_backend = dispatch_backend or ctx.backend
     if effective_backend is None:
         raise RuntimeError("Fleet dispatch requires a configured backend.")
@@ -90,7 +100,7 @@ async def _execute_fleet_run(
     )
     _effective_backend_map, _backend_origin_map = _compute_effective_backend_map(
         _raw_steps,
-        dispatch_backend.name if dispatch_backend else None,
+        dispatch_backend_name,
         recipe,
         config_backend=ctx.config.agent_backend,
     )
@@ -157,8 +167,8 @@ async def _execute_fleet_run(
 def _fleet_run_preflight(
     ingredient: tuple[str, ...],
     backend: str | None,
-) -> tuple[AutomationConfig, dict[str, str] | None, CodingAgentBackend | None]:
-    """Validate fleet-run admission and resolve its dispatch inputs."""
+) -> tuple[AutomationConfig, dict[str, str] | None]:
+    """Validate fleet-run admission and parse its dispatch inputs."""
     if os.environ.get("AUTOSKILLIT_SESSION_TYPE") in ("skill", "leaf"):
         _fleet_run_error(
             "FLEET_SESSION_TYPE_BLOCKED",
@@ -209,16 +219,17 @@ def _fleet_run_preflight(
             key, value = item.split("=", 1)
             ingredients[key] = value
 
-    dispatch_backend = None
     if backend is not None:
-        from autoskillit.server import resolve_backend_override
+        from autoskillit.execution import BACKEND_REGISTRY
 
-        try:
-            dispatch_backend = resolve_backend_override(backend)
-        except ValueError as exc:
-            _fleet_run_error("FLEET_INVALID_BACKEND", str(exc))
+        if backend not in BACKEND_REGISTRY:
+            valid = ", ".join(sorted(BACKEND_REGISTRY))
+            _fleet_run_error(
+                "FLEET_INVALID_BACKEND",
+                f"Unknown backend {backend!r}. Valid names: {valid}",
+            )
 
-    return cfg, ingredients, dispatch_backend
+    return cfg, ingredients
 
 
 def fleet_run(
@@ -251,7 +262,7 @@ def fleet_run(
             lineage_status=native_shell_capture_decision.lineage_status.value,
         )
 
-    cfg, ingredients, dispatch_backend = _fleet_run_preflight(ingredient, backend)
+    cfg, ingredients = _fleet_run_preflight(ingredient, backend)
 
     # --- Run dispatch ---
     import asyncio
@@ -266,7 +277,7 @@ def fleet_run(
                 task=task,
                 ingredients=ingredients,
                 timeout_sec=timeout_sec,
-                dispatch_backend=dispatch_backend,
+                dispatch_backend_name=backend,
                 resume_session_id=resume_session_id,
                 prior_dispatch_id=prior_dispatch_id,
                 disable_quota_guard=disable_quota_guard,

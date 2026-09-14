@@ -42,7 +42,11 @@ from autoskillit.config._dataclasses_diagnostics import (
     TokenUsageConfig,
 )
 from autoskillit.config._dataclasses_errors import ConfigSchemaError
-from autoskillit.config._dataclasses_execution import QuotaGuardConfig, RunSkillConfig
+from autoskillit.config._dataclasses_execution import (
+    CodexRuntimeConfig,
+    QuotaGuardConfig,
+    RunSkillConfig,
+)
 from autoskillit.config._dataclasses_fleet import FleetConfig, ProcessTetherConfig
 from autoskillit.config._dataclasses_github import (
     GitHubConfig,
@@ -113,6 +117,7 @@ class AutomationConfig:
     migration: MigrationConfig = field(default_factory=MigrationConfig)
     token_usage: TokenUsageConfig = field(default_factory=TokenUsageConfig)
     quota_guard: QuotaGuardConfig = field(default_factory=QuotaGuardConfig)
+    codex_runtime: CodexRuntimeConfig = field(default_factory=CodexRuntimeConfig)
     github: GitHubConfig = field(default_factory=GitHubConfig)
     report_bug: ReportBugConfig = field(default_factory=ReportBugConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)

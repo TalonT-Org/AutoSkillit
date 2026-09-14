@@ -337,10 +337,14 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
 
 class TestDispatchBackendOverrideInvalidNameRaises:
     def test_dispatch_backend_override_invalid_name_raises(self):
+        from autoskillit.execution import DefaultLaunchResolver
         from autoskillit.server._misc import resolve_backend_override
 
-        with pytest.raises(ValueError, match="Unknown backend"):
-            resolve_backend_override("nonexistent")
+        with pytest.raises(ValueError, match="unknown backend"):
+            resolve_backend_override(
+                "nonexistent",
+                launch_resolver=DefaultLaunchResolver(),
+            )
 
 
 class TestDispatchBackendOverridePreservedAcrossRetry:

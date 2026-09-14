@@ -58,6 +58,43 @@ from autoskillit.execution.headless._managed._launch_adapter import (
 class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
     """Concrete HeadlessExecutor backed by the shared headless lifecycle."""
 
+    def _resolve_food_truck_backend(
+        self, backend_authority: BackendAuthority | None
+    ) -> tuple[BackendAuthority | None, CodingAgentBackend | None]:
+        if backend_authority is None and self._ctx.backend is not None:
+            backend_authority = BackendAuthority(
+                backend=self._ctx.backend.name,
+                kind=BackendAuthorityKind.GLOBAL,
+                tier=BackendAuthorityTier.GLOBAL,
+                key_path="agent_backend.backend",
+            )
+        dispatch_backend: CodingAgentBackend | None = None
+        if backend_authority is not None:
+            dispatch_backend = (
+                self._ctx.backend
+                if self._ctx.backend is not None
+                and self._ctx.backend.name == backend_authority.backend
+                else self._ctx.launch_resolver.backend_for_authority(backend_authority)
+            )
+        if dispatch_backend is not None and not dispatch_backend.capabilities.food_truck_capable:
+            raise RuntimeError(
+                f"backend does not support food truck dispatch "
+                f"(food_truck_capable=False); got {dispatch_backend.name!r}"
+            )
+        if (
+            backend_authority is not None
+            and dispatch_backend is not None
+            and dispatch_backend.capabilities.mcp_config_capable
+            and backend_authority.kind is not BackendAuthorityKind.GLOBAL
+        ):
+            readiness = dispatch_backend.ensure_pre_launch()
+            if readiness.errors:
+                raise RuntimeError(
+                    f"Pre-launch check failed for dispatch backend "
+                    f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
+                )
+        return backend_authority, dispatch_backend
+
     async def dispatch_food_truck(
         self,
         orchestrator_prompt: str,
@@ -106,38 +143,7 @@ class DefaultHeadlessExecutor(_DefaultHeadlessExecutorBase):
             resolved_command=orchestrator_prompt,
             cwd=cwd,
         )
-        if backend_authority is None and self._ctx.backend is not None:
-            backend_authority = BackendAuthority(
-                backend=self._ctx.backend.name,
-                kind=BackendAuthorityKind.GLOBAL,
-                tier=BackendAuthorityTier.GLOBAL,
-                key_path="agent_backend.backend",
-            )
-        dispatch_backend: CodingAgentBackend | None = None
-        if backend_authority is not None:
-            dispatch_backend = (
-                self._ctx.backend
-                if self._ctx.backend is not None
-                and self._ctx.backend.name == backend_authority.backend
-                else self._ctx.launch_resolver.backend_for_authority(backend_authority)
-            )
-        if dispatch_backend is not None and not dispatch_backend.capabilities.food_truck_capable:
-            raise RuntimeError(
-                f"backend does not support food truck dispatch "
-                f"(food_truck_capable=False); got {dispatch_backend.name!r}"
-            )
-        if (
-            backend_authority is not None
-            and dispatch_backend is not None
-            and dispatch_backend.capabilities.mcp_config_capable
-            and backend_authority.kind is not BackendAuthorityKind.GLOBAL
-        ):
-            readiness = dispatch_backend.ensure_pre_launch()
-            if readiness.errors:
-                raise RuntimeError(
-                    f"Pre-launch check failed for dispatch backend "
-                    f"{dispatch_backend.name!r}: {'; '.join(readiness.errors)}"
-                )
+        backend_authority, dispatch_backend = self._resolve_food_truck_backend(backend_authority)
         cfg = self._ctx.config
         caller_key_path = "fleet.model"
         model_pin = resolve_model_pin(

@@ -22,6 +22,14 @@ def _policy_function(tree: ast.Module) -> ast.FunctionDef | None:
     )
 
 
+def _function_calls(function: ast.FunctionDef, name: str) -> list[ast.Call]:
+    return [
+        node
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
+    ]
+
+
 def test_infra_retry_policy_is_exhaustive() -> None:
     tree = ast.parse((SRC_ROOT / "execution/headless/_headless_result.py").read_text())
     policy = _policy_function(tree)
@@ -38,33 +46,21 @@ def test_infra_retry_policy_is_exhaustive() -> None:
 
 def test_stale_idle_and_main_paths_delegate_to_the_shared_retry_policy() -> None:
     tree = ast.parse((SRC_ROOT / "execution/headless/_headless_result.py").read_text())
+    functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+    main_path = functions["_build_skill_result"]
+    stall_helper = functions["_build_stall_result"]
 
-    # Walk every FunctionDef body and find any call to _apply_infra_retry_policy,
-    # recording the enclosing function name so the call site must match an
-    # expected stale/idle/main path.
-    policy_calls: list[tuple[str, int]] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        body_src = ast.dump(node)
-        if "_apply_infra_retry_policy" not in body_src:
-            continue
-        for call in ast.walk(node):
-            if (
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Name)
-                and call.func.id == "_apply_infra_retry_policy"
-            ):
-                policy_calls.append((node.name, call.lineno))
+    assert len(_function_calls(stall_helper, "_apply_infra_retry_policy")) == 1
 
-    assert len(policy_calls) == 3, (
-        f"expected exactly 3 policy call sites, found {len(policy_calls)}: {policy_calls}"
-    )
-    # Verify the main-path policy call lives inside _build_skill_result, not
-    # anywhere in the module — the stale and idle branches live in two named
-    # local-variable assignments; the main path is identified by being the
-    # only one that receives the runtime-computed infra_category.
-    enclosing = {name for name, _ in policy_calls}
-    assert "_build_skill_result" in enclosing, (
-        f"main-path policy call expected inside _build_skill_result, found in: {enclosing}"
-    )
+    stall_specs = {
+        keyword.value.id
+        for call in _function_calls(main_path, "_build_stall_result")
+        for keyword in call.keywords
+        if keyword.arg == "stall_spec" and isinstance(keyword.value, ast.Name)
+    }
+    assert stall_specs == {"_STALE_SPEC", "_IDLE_STALL_SPEC"}
+
+    main_policy_calls = _function_calls(main_path, "_apply_infra_retry_policy")
+    assert len(main_policy_calls) == 1
+    assert isinstance(main_policy_calls[0].args[0], ast.Name)
+    assert main_policy_calls[0].args[0].id == "infra_category"

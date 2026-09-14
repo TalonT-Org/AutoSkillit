@@ -470,13 +470,7 @@ async def check_and_sleep_if_needed(
             fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
             _write_cache(config.cache_path, fetch_result)
             status = fetch_result.binding
-            if status.should_block and status.resets_at is not None:
-                refetched = True
-                fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
-                _write_cache(config.cache_path, fetch_result)
-                status = fetch_result.binding
-        elif status.should_block and status.resets_at is not None:
-            # Preserve the existing accuracy re-fetch for a cached blocker.
+        if status.should_block and status.resets_at is not None:
             refetched = True
             fetch_result = await _fetch_quota(config.credentials_path, **fetch_kwargs)
             _write_cache(config.cache_path, fetch_result)

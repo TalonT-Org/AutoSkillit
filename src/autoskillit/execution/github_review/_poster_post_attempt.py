@@ -77,6 +77,23 @@ async def reconcile_payload(
             ReviewReconciliationResult.UNCERTAIN,
             error="matched review omitted a valid id",
         )
+    return await _reconcile_remote_comment_set(
+        gateway=gateway,
+        request=request,
+        review_id=review_id,
+        payload=payload,
+        findings=findings,
+    )
+
+
+async def _reconcile_remote_comment_set(
+    *,
+    gateway: DefaultGitHubReviewGateway,
+    request: GitHubReviewRequest,
+    review_id: int,
+    payload: Mapping[str, Any],
+    findings: tuple[_poster_support.CanonicalFinding, ...],
+) -> _poster_support.Reconciliation:
     comments = await gateway.list_review_comments(
         request.repository,
         request.pr_number,

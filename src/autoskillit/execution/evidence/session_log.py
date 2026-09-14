@@ -72,6 +72,114 @@ from autoskillit.execution.session._turn_usage import (
 logger = get_logger(__name__)
 
 
+def _prepare_channel_b_log(
+    *,
+    session_locator: SessionLocator | None,
+    backend: Literal["claude-code", "codex"],
+    channel_b_capable: bool,
+    cwd: str,
+    session_id: str,
+    end_ts: str,
+) -> tuple[str | None, str | None, float | None, str | None]:
+    """Locate Channel-B evidence and read it without affecting log flushing."""
+    from autoskillit.execution.backends import CompositeSessionLocator
+
+    codex_log_str: str | None = None
+    if session_locator is not None:
+        locator = session_locator
+    else:
+        locator = CompositeSessionLocator().locator_for(backend)
+
+    if channel_b_capable:
+        claude_log = locator.session_log_path(cwd, session_id)
+        claude_log_str = str(claude_log) if claude_log else None
+    else:
+        claude_log = None
+        claude_log_str = None
+        if session_id and not session_id.startswith(("no_session_", "crashed_")):
+            try:
+                codex_log = locator.locate_session(session_id)
+                codex_log_str = str(codex_log) if codex_log else None
+            except Exception:
+                logger.debug("session_locate_failed", backend=backend, exc_info=True)
+
+    if claude_log and not claude_log.exists():
+        logger.warning("claude_code_log_not_found", path=claude_log_str, session_id=session_id)
+
+    silent_gap_seconds: float | None = None
+    if claude_log and claude_log.exists() and end_ts:
+        try:
+            claude_log_mtime = claude_log.stat().st_mtime
+            end_dt = datetime.fromisoformat(end_ts)
+            silent_gap_seconds = max(0.0, end_dt.timestamp() - claude_log_mtime)
+        except (OSError, ValueError):
+            pass
+
+    channel_b_text: str | None = None
+    if claude_log and claude_log.exists():
+        try:
+            channel_b_text = claude_log.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            logger.debug("channel_b_log_read_error", path=claude_log_str, exc_info=True)
+    return claude_log_str, codex_log_str, silent_gap_seconds, channel_b_text
+
+
+def _analyze_proc_snapshots(
+    proc_snapshots: list[dict[str, object]],
+    pid: int,
+    tracked_comm: str | None,
+    comm_aliases: frozenset[str],
+) -> tuple[int, int, int, float, list[dict[str, object]], str | None, bool]:
+    """Derive snapshot metrics, process identity evidence, and anomalies."""
+    peak_rss_kb = 0
+    peak_oom_score = 0
+    peak_fd_ratio = 0.0
+    for snap in proc_snapshots:
+        rss = snap.get("vm_rss_kb", 0)
+        if isinstance(rss, int) and rss > peak_rss_kb:
+            peak_rss_kb = rss
+        oom = snap.get("oom_score", 0)
+        if isinstance(oom, int) and oom > peak_oom_score:
+            peak_oom_score = oom
+        fd_count = snap.get("fd_count", 0)
+        fd_limit = snap.get("fd_soft_limit", 0)
+        if isinstance(fd_count, int) and isinstance(fd_limit, int) and fd_limit > 0:
+            peak_fd_ratio = max(peak_fd_ratio, fd_count / fd_limit)
+
+    effective_tracked_comm = tracked_comm
+    if effective_tracked_comm is None:
+        comm_counts: dict[str, int] = {}
+        for snap in proc_snapshots:
+            comm = snap.get("comm", "")
+            if comm and isinstance(comm, str):
+                comm_counts[comm] = comm_counts.get(comm, 0) + 1
+        if comm_counts:
+            effective_tracked_comm = max(comm_counts, key=lambda key: comm_counts[key])
+
+    tracked_comm_drift = False
+    if effective_tracked_comm:
+        comms_seen = {snap.get("comm", "") for snap in proc_snapshots if snap.get("comm", "")}
+        if len(comms_seen) > 1:
+            tracked_comm_drift = True
+
+    anomalies = detect_anomalies(proc_snapshots, pid)
+    if effective_tracked_comm:
+        anomalies.extend(
+            detect_identity_drift(
+                proc_snapshots, effective_tracked_comm, comm_aliases=comm_aliases
+            )
+        )
+    return (
+        len(proc_snapshots),
+        peak_rss_kb,
+        peak_oom_score,
+        peak_fd_ratio,
+        anomalies,
+        effective_tracked_comm,
+        tracked_comm_drift,
+    )
+
+
 def resolve_log_dir(log_dir: str) -> Path:
     """Resolve session log directory. Empty string = platform default."""
     if log_dir:
@@ -199,50 +307,25 @@ def flush_session_log(
     else:
         dir_name = f"no_session_{start_ts.replace(':', '-')}"
 
-    from autoskillit.execution.backends import CompositeSessionLocator
-
-    _codex_log_str: str | None = None
-
-    if session_locator is not None:
-        _locator = session_locator
-    else:
-        _composite = CompositeSessionLocator()
-        _locator = _composite.locator_for(backend)
-
-    if channel_b_capable:
-        cc_log = _locator.session_log_path(cwd, session_id)
-        cc_log_str = str(cc_log) if cc_log else None
-    else:
-        cc_log = None
-        cc_log_str = None
-        if session_id and not session_id.startswith(("no_session_", "crashed_")):
-            try:
-                _codex_found = _locator.locate_session(session_id)
-                _codex_log_str = str(_codex_found) if _codex_found else None
-            except Exception:
-                logger.debug("session_locate_failed", backend=backend, exc_info=True)
-
-    if cc_log and not cc_log.exists():
-        logger.warning("claude_code_log_not_found", path=cc_log_str, session_id=session_id)
-
-    silent_gap_seconds: float | None = None
-    if cc_log and cc_log.exists() and end_ts:
-        try:
-            cc_log_mtime = cc_log.stat().st_mtime
-            end_dt = datetime.fromisoformat(end_ts)
-            silent_gap_seconds = max(0.0, end_dt.timestamp() - cc_log_mtime)
-        except (OSError, ValueError):
-            pass
+    cc_log_str, _codex_log_str, silent_gap_seconds, _channel_b_text = _prepare_channel_b_log(
+        session_locator=session_locator,
+        backend=backend,
+        channel_b_capable=channel_b_capable,
+        cwd=cwd,
+        session_id=session_id,
+        end_ts=end_ts,
+    )
 
     _cb_request_ids: list[str] = []
     _cb_turn_timestamps: list[str] = []
     _cb_turn_tool_calls: list[tuple[str, ...]] = []
     _cb_message_timestamps: dict[str, str] = {}
-    if cc_log and cc_log.exists():
+    if _channel_b_text is not None:
         try:
-            _text = cc_log.read_text(encoding="utf-8", errors="replace")
-            _cb_message_timestamps = _message_timestamps(_text, _is_parent_assistant_record)
-            for _turn in iter_merged_assistant_turns(_text):
+            _cb_message_timestamps = _message_timestamps(
+                _channel_b_text, _is_parent_assistant_record
+            )
+            for _turn in iter_merged_assistant_turns(_channel_b_text):
                 _cb_request_ids.append(_turn.request_id)
                 _cb_turn_timestamps.append(_turn.timestamp)
                 _cb_turn_tool_calls.append(_turn.tool_names)
@@ -305,41 +388,15 @@ def flush_session_log(
                         }
                         f.write(_fast_dumps(record, sort_keys=True) + "\n")
 
-            for snap in proc_snapshots:
-                rss = snap.get("vm_rss_kb", 0)
-                if isinstance(rss, int) and rss > peak_rss_kb:
-                    peak_rss_kb = rss
-                oom = snap.get("oom_score", 0)
-                if isinstance(oom, int) and oom > peak_oom_score:
-                    peak_oom_score = oom
-                fd_count = snap.get("fd_count", 0)
-                fd_limit = snap.get("fd_soft_limit", 0)
-                if isinstance(fd_count, int) and isinstance(fd_limit, int) and fd_limit > 0:
-                    peak_fd_ratio = max(peak_fd_ratio, fd_count / fd_limit)
-
-            if _effective_tracked_comm is None:
-                comm_counts: dict[str, int] = {}
-                for snap in proc_snapshots:
-                    comm = snap.get("comm", "")
-                    if comm and isinstance(comm, str):
-                        comm_counts[comm] = comm_counts.get(comm, 0) + 1
-                if comm_counts:
-                    _effective_tracked_comm = max(comm_counts, key=lambda key: comm_counts[key])
-
-            if _effective_tracked_comm:
-                comms_seen = {
-                    snap.get("comm", "") for snap in proc_snapshots if snap.get("comm", "")
-                }
-                if len(comms_seen) > 1:
-                    _tracked_comm_drift = True
-
-            anomalies = detect_anomalies(proc_snapshots, pid)
-            if _effective_tracked_comm:
-                anomalies.extend(
-                    detect_identity_drift(
-                        proc_snapshots, _effective_tracked_comm, comm_aliases=comm_aliases
-                    )
-                )
+            (
+                snapshot_count,
+                peak_rss_kb,
+                peak_oom_score,
+                peak_fd_ratio,
+                anomalies,
+                _effective_tracked_comm,
+                _tracked_comm_drift,
+            ) = _analyze_proc_snapshots(proc_snapshots, pid, tracked_comm, comm_aliases)
 
         # Outcome anomaly detection (correlates session result with token usage)
         if token_usage:

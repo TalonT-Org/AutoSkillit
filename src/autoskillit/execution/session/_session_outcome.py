@@ -44,18 +44,13 @@ def _compute_success(
     terminal or content evidence.
     """
     match termination:
-        case TerminationReason.TIMED_OUT:
-            return False
-
-        case TerminationReason.STALE:
-            return False
-
-        case TerminationReason.IDLE_STALL:
-            return False
-
-        case TerminationReason.HEALTH_INSPECTOR:
-            # Inspector callback issued a KILL verdict; the subprocess did not
-            # complete its work and its output is not authoritative.
+        case (
+            TerminationReason.TIMED_OUT
+            | TerminationReason.STALE
+            | TerminationReason.IDLE_STALL
+            | TerminationReason.HEALTH_INSPECTOR
+            | TerminationReason.SIGNAL_DEATH
+        ):
             return False
 
         case TerminationReason.COMPLETED:
@@ -80,9 +75,6 @@ def _compute_success(
                 content_check=content_ok,
             )
             return content_ok
-
-        case TerminationReason.SIGNAL_DEATH:
-            return False
 
         case TerminationReason.NATURAL_EXIT:
             # The process exited on its own. A non-zero returncode is normally

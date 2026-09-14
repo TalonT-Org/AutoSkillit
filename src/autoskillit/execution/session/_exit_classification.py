@@ -152,6 +152,20 @@ def is_signal_death_code(returncode: int) -> bool:
     return returncode < 0 or (128 < returncode <= _SHELL_SIGNAL_MAX)
 
 
+def _classify_provider_error(
+    status: int | None, error_code: str | None
+) -> InfraExitCategory | None:
+    if status is not None and status >= 400:
+        return classify_api_status(status)
+    # Mapped provider codes retain their transient/terminal HTTP classification;
+    # unmapped codes have no known recovery path.
+    if error_code:
+        if error_code in _CODEX_ERROR_CODE_API_STATUS:
+            return classify_api_status(_CODEX_ERROR_CODE_API_STATUS[error_code])
+        return InfraExitCategory.API_ERROR_TERMINAL
+    return None
+
+
 def classify_infra_exit(
     session: ClaudeSessionResult,
     result: SubprocessResult,
@@ -173,17 +187,11 @@ def classify_infra_exit(
             return InfraExitCategory.CONTEXT_EXHAUSTED
         if _CODEX_CONTEXT_EXHAUSTION_PATTERN.search(result.stderr):
             return InfraExitCategory.CONTEXT_EXHAUSTED
-    if session.api_error_status is not None and session.api_error_status >= 400:
-        return classify_api_status(session.api_error_status)
-    # Provider-error-code evidence: codes mapped in _CODEX_ERROR_CODE_API_STATUS
-    # are routed through the API-status classifier so a transient
-    # ``insufficient_quota``/``rate_limit_exceeded`` is not forced terminal.
-    # Unmapped codes (e.g. ``authentication_failed``) remain terminal because
-    # there is no known recovery path and downstream retries would waste budget.
-    if session.provider_error_code:
-        if session.provider_error_code in _CODEX_ERROR_CODE_API_STATUS:
-            return classify_api_status(_CODEX_ERROR_CODE_API_STATUS[session.provider_error_code])
-        return InfraExitCategory.API_ERROR_TERMINAL
+    provider_category = _classify_provider_error(
+        session.api_error_status, session.provider_error_code
+    )
+    if provider_category is not None:
+        return provider_category
     # Rate limit text remains useful when structured provider evidence is absent.
     if any(
         p.search(msg) for p in _RATE_LIMIT_PATTERNS for msg in _all_text_sources(session, result)
@@ -197,19 +205,11 @@ def classify_infra_exit(
     # api_retry_last_error can be "unknown" or another value not in _KNOWN_API_ERROR_PATTERNS.
     # In that case _has_api_error() returns False while api_retry_exhausted is still True.
     if session.api_retry_exhausted:
-        # Mirror the provider_error_code evidence consultation above: an exhausted
-        # retry loop may carry its own status/error-code evidence,
-        # and a known-terminal-but-unmapped code should not fall through to the
-        # blanket API_ERROR return below, which would waste a session-level
-        # retry on a code with no known recovery path.
-        if session.api_retry_last_status is not None and session.api_retry_last_status >= 400:
-            return classify_api_status(session.api_retry_last_status)
-        if session.api_retry_last_error:
-            if session.api_retry_last_error in _CODEX_ERROR_CODE_API_STATUS:
-                return classify_api_status(
-                    _CODEX_ERROR_CODE_API_STATUS[session.api_retry_last_error]
-                )
-            return InfraExitCategory.API_ERROR_TERMINAL
+        retry_category = _classify_provider_error(
+            session.api_retry_last_status, session.api_retry_last_error
+        )
+        if retry_category is not None:
+            return retry_category
         return InfraExitCategory.API_ERROR
     if result.returncode is not None and is_signal_death_code(result.returncode):
         return InfraExitCategory.PROCESS_KILLED

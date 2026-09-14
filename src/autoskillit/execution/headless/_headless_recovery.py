@@ -87,6 +87,31 @@ def _is_path_capture_pattern(pattern: str) -> str | None:
     return token_name
 
 
+def _tool_write_path_warnings(
+    tool_name: Any,
+    inputs: dict[str, Any],
+    cwd: str,
+    write_tool_names: frozenset[str],
+    bash_tool_name: str,
+) -> list[str]:
+    warnings: list[str] = []
+    if tool_name == bash_tool_name:
+        command = inputs.get("command", "")
+        if isinstance(command, str):
+            for path in extract_bash_write_targets(command, cwd):
+                if _is_path_outside_cwd(path, cwd):
+                    normalized = os.path.normpath(path)
+                    warnings.append(
+                        f"Bash command contained write target '{normalized}'"
+                        f" outside session cwd '{cwd}'"
+                    )
+    elif tool_name in write_tool_names:
+        file_path = inputs.get("file_path", "")
+        if isinstance(file_path, str) and _is_path_outside_cwd(file_path, cwd):
+            warnings.append(f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'")
+    return warnings
+
+
 def _scan_jsonl_write_paths(
     stdout: str,
     cwd: str,
@@ -122,22 +147,9 @@ def _scan_jsonl_write_paths(
             inputs = block.get("input") or {}
             if not isinstance(inputs, dict):
                 continue
-            if tool_name == bash_tool_name:
-                command = inputs.get("command", "")
-                if isinstance(command, str):
-                    for path in extract_bash_write_targets(command, cwd):
-                        if _is_path_outside_cwd(path, cwd):
-                            normalized = os.path.normpath(path)
-                            warnings.append(
-                                f"Bash command contained write target '{normalized}'"
-                                f" outside session cwd '{cwd}'"
-                            )
-            elif tool_name in write_tool_names:
-                file_path = inputs.get("file_path", "")
-                if isinstance(file_path, str) and _is_path_outside_cwd(file_path, cwd):
-                    warnings.append(
-                        f"{tool_name} tool targeted '{file_path}' outside session cwd '{cwd}'"
-                    )
+            warnings.extend(
+                _tool_write_path_warnings(tool_name, inputs, cwd, write_tool_names, bash_tool_name)
+            )
     return warnings
 
 
@@ -275,6 +287,29 @@ def _parse_single_enum_binding(
     return None
 
 
+def _find_companion_output_path(
+    skill_contract: SkillContractView, token_name: str, normalized_result: str
+) -> str | None:
+    for output in skill_contract.outputs:
+        if output.name == token_name:
+            continue
+        if not (output.type.startswith("file_path") or output.type == "directory_path"):
+            continue
+        companion_match = re.search(
+            rf"^{re.escape(output.name)}\s*=\s*(.+)$", normalized_result, re.MULTILINE
+        )
+        if not companion_match:
+            continue
+        value_str = companion_match.group(1).strip()
+        if output.type == "file_path_list":
+            candidate_paths = [p.strip() for p in value_str.split(",") if p.strip()]
+        else:
+            candidate_paths = [value_str] if value_str else []
+        if candidate_paths and all(Path(p).is_file() or Path(p).is_dir() for p in candidate_paths):
+            return candidate_paths[-1]
+    return None
+
+
 def _infer_enum_token_from_write_contract(
     session: ClaudeSessionResult,
     expected_output_patterns: Sequence[str],
@@ -282,18 +317,11 @@ def _infer_enum_token_from_write_contract(
     write_call_count: int,
     file_changes: Sequence[str] = (),
 ) -> ClaudeSessionResult | None:
-    """Deterministically synthesize an enum-typed output token from write-contract evidence.
+    """Infer a missing enum token from a write contract and emitted companion path.
 
-    Unlike ``_synthesize_from_write_artifacts`` (which fabricates a token the agent never
-    produced and is therefore gated to UNMONITORED-only), this derives the token from
-    evidence the agent DID observably produce: an emitted companion path-token line
-    (in a confirmed channel) whose extracted path exists on disk, combined with the
-    contract's own declared write-expected-when implication. Runs for all channels.
-
-    Fires only when: (1) ``_parse_single_enum_binding`` finds a sound single binding;
-    (2) an expected pattern for that same token remains unsatisfied; (3) write evidence
-    exists; (4) a companion output typed ``file_path*``/``directory_path`` has a token
-    line present in ``session.result`` whose path(s) exist on disk.
+    Unlike ``_synthesize_from_write_artifacts``, this uses observed evidence and
+    applies to all channels. Require one sound enum binding, write evidence, an
+    unsatisfied expected token, and emitted file/directory paths that exist.
     """
     binding = _parse_single_enum_binding(skill_contract)
     if binding is None:
@@ -316,25 +344,7 @@ def _infer_enum_token_from_write_contract(
         return None
 
     assert skill_contract is not None  # narrowed by _parse_single_enum_binding above
-    companion_path = None
-    for output in skill_contract.outputs:
-        if output.name == token_name:
-            continue
-        if not (output.type.startswith("file_path") or output.type == "directory_path"):
-            continue
-        companion_match = re.search(
-            rf"^{re.escape(output.name)}\s*=\s*(.+)$", normalized_result, re.MULTILINE
-        )
-        if not companion_match:
-            continue
-        value_str = companion_match.group(1).strip()
-        if output.type == "file_path_list":
-            candidate_paths = [p.strip() for p in value_str.split(",") if p.strip()]
-        else:
-            candidate_paths = [value_str] if value_str else []
-        if candidate_paths and all(Path(p).is_file() or Path(p).is_dir() for p in candidate_paths):
-            companion_path = candidate_paths[-1]
-            break
+    companion_path = _find_companion_output_path(skill_contract, token_name, normalized_result)
     if companion_path is None:
         return None
 

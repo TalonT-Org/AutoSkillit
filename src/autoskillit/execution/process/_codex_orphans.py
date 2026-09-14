@@ -111,24 +111,17 @@ def find_orphaned_codex_processes(
 
         try:
             comm = Path(f"/proc/{pid}/comm").read_text(encoding="utf-8", errors="replace").strip()
-        except OSError:
-            continue
-        if comm != process_name:
-            continue
+            if comm != process_name:
+                continue
 
-        # Same-user filter — destructive-targeting boundary.
-        try:
+            # Same-user filter — destructive-targeting boundary.
             if os.stat(f"/proc/{pid}").st_uid != my_uid:
                 continue
         except OSError:
             continue
 
         target = _fd0_deleted_pty_target(pid)
-        if target is None:
-            continue
-
-        ticks = read_starttime_ticks(pid)
-        if ticks is None:
+        if target is None or (ticks := read_starttime_ticks(pid)) is None:
             continue
 
         try:

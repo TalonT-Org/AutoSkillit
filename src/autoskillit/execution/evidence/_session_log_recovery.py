@@ -18,10 +18,163 @@ from autoskillit.core import (
     read_boot_id,
     read_starttime_ticks,
 )
-from autoskillit.execution.evidence.linux_tracing import read_enrollment
+from autoskillit.execution.evidence.linux_tracing import TraceEnrollmentRecord, read_enrollment
 from autoskillit.execution.evidence.session_log import flush_session_log, resolve_log_dir
 
 logger = get_logger(__name__)
+
+
+def _delete_trace_pair(trace_file: Path, enrollment_path: Path) -> None:
+    """Remove a trace and its matching enrollment sidecar together."""
+    trace_file.unlink(missing_ok=True)
+    enrollment_path.unlink(missing_ok=True)
+
+
+def _eligible_enrolled_trace(
+    trace_file: Path,
+    tmpfs: Path,
+    current_boot_id: str | None,
+) -> tuple[int, Path, TraceEnrollmentRecord] | None:
+    """Return a dead, enrolled trace that is old enough for crash recovery."""
+    try:
+        age_seconds = time.time() - trace_file.stat().st_mtime
+    except OSError:
+        return None
+    if age_seconds < 30:
+        return None
+
+    try:
+        pid = int(trace_file.stem.split("_")[-1])
+    except (ValueError, IndexError):
+        pid = -1
+
+    enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
+    enrollment = read_enrollment(enrollment_path)
+    if enrollment is None:
+        logger.debug("Skipping %s: no enrollment sidecar", trace_file.name)
+        return None
+
+    if current_boot_id and enrollment.boot_id and enrollment.boot_id != current_boot_id:
+        logger.debug("Skipping %s: boot_id mismatch", trace_file.name)
+        _delete_trace_pair(trace_file, enrollment_path)
+        return None
+
+    current_ticks = read_starttime_ticks(pid)
+    if (
+        current_ticks is not None
+        and current_ticks == enrollment.starttime_ticks
+        and not is_pid_zombie(pid)
+    ):
+        logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
+        return None
+    return pid, enrollment_path, enrollment
+
+
+def _decode_enrolled_trace(
+    trace_file: Path,
+    enrollment_path: Path,
+    enrollment: TraceEnrollmentRecord,
+) -> list[dict[str, object]] | None:
+    """Decode a dead trace, removing only permanently invalid or alien evidence."""
+    snapshots: list[dict[str, object]] = []
+    corrupt_reason: str | None = None
+    try:
+        for line in trace_file.read_text(encoding="utf-8").splitlines():
+            if not line:
+                continue
+            try:
+                snapshot = json.loads(line)
+            except (json.JSONDecodeError, RecursionError):
+                corrupt_reason = "invalid JSON"
+                break
+            if not isinstance(snapshot, dict):
+                corrupt_reason = "non-object JSON"
+                break
+            snapshots.append(snapshot)
+    except UnicodeDecodeError:
+        corrupt_reason = "non-UTF-8 content"
+    except OSError:
+        return None
+
+    if corrupt_reason is not None:
+        logger.warning(
+            "recover_crashed_sessions_permanently_corrupt_trace",
+            trace_path=str(trace_file),
+            reason=corrupt_reason,
+        )
+        _delete_trace_pair(trace_file, enrollment_path)
+        return None
+
+    if snapshots and enrollment.comm:
+        first_comm = snapshots[0].get("comm", "")
+        if first_comm and isinstance(first_comm, str) and first_comm != enrollment.comm:
+            logger.debug(
+                "Skipping %s: alien comm '%s' (expected '%s')",
+                trace_file.name,
+                first_comm,
+                enrollment.comm,
+            )
+            _delete_trace_pair(trace_file, enrollment_path)
+            return None
+    return snapshots
+
+
+def _finalize_crashed_trace(
+    *,
+    trace_file: Path,
+    log_dir: str,
+    project_dir: str,
+    max_sessions: int | None,
+    build_protected_campaign_ids: CampaignProtector | None,
+    pid: int,
+    snapshots: list[dict[str, object]],
+) -> bool:
+    """Write one decoded crash trace into the durable session log."""
+    try:
+        mtime_ts = datetime.fromtimestamp(trace_file.stat().st_mtime, tz=UTC).isoformat()
+    except OSError:
+        return False
+
+    try:
+        from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
+
+        flush_session_log(
+            log_dir=log_dir,
+            cwd="",
+            session_id=f"crashed_{pid}_{mtime_ts.replace(':', '-')}",
+            pid=pid,
+            skill_command="",
+            success=False,
+            needs_retry=False,
+            retry_reason=RetryReason.NONE.value,
+            infra=InfraOutcome(
+                exit_category=InfraExitCategory.UNCLASSIFIED.value,
+                cleanup_incomplete=False,
+                fault_domain=FaultDomain.INFRASTRUCTURE,
+            ),
+            api_error_status=None,
+            is_error=True,
+            subtype="crashed",
+            exit_code=-1,
+            start_ts=mtime_ts,
+            proc_snapshots=snapshots if snapshots else None,
+            termination_reason="CRASHED",
+            provider_outcome=ProviderOutcome.none_used(),
+            recipe_identity=RecipeIdentity.empty(),
+            telemetry=SessionTelemetry.empty(),
+            project_dir=project_dir,
+            max_sessions=max_sessions,
+            build_protected_campaign_ids=build_protected_campaign_ids,
+            is_crash_recovery=True,
+        )
+    except Exception:
+        logger.warning(
+            "recover_crashed_sessions_finalize_failed",
+            trace_path=str(trace_file),
+            exc_info=True,
+        )
+        return False
+    return True
 
 
 def recover_crashed_sessions(
@@ -60,150 +213,20 @@ def recover_crashed_sessions(
     count = 0
     current_boot_id = read_boot_id()
     for trace_file in sorted(tmpfs.glob("autoskillit_trace_*.jsonl")):
-        # Skip files modified within the last 30 seconds — may be active
-        try:
-            age_seconds = time.time() - trace_file.stat().st_mtime
-        except OSError:
-            continue
-        if age_seconds < 30:
-            continue
-
-        # Extract PID from filename: autoskillit_trace_{pid}.jsonl
-        try:
-            pid = int(trace_file.stem.split("_")[-1])
-        except (ValueError, IndexError):
-            pid = -1
-
-        # Gate 1: Enrollment sidecar must exist — no sidecar means alien/test file
-        enrollment_path = tmpfs / f"autoskillit_enrollment_{pid}.json"
-        enrollment = read_enrollment(enrollment_path)
-        if enrollment is None:
-            logger.debug("Skipping %s: no enrollment sidecar", trace_file.name)
-            continue
-
-        # Gate 2: Boot ID must match current boot — mismatch means pre-reboot stale file
-        if current_boot_id and enrollment.boot_id and enrollment.boot_id != current_boot_id:
-            logger.debug("Skipping %s: boot_id mismatch", trace_file.name)
-            trace_file.unlink(missing_ok=True)
-            enrollment_path.unlink(missing_ok=True)
-            continue
-
-        # Gate 3: PID liveness + starttime_ticks identity. A zombie with
-        # matching ticks is treated as dead so the crash trace is recovered.
-        current_ticks = read_starttime_ticks(pid)
-        if (
-            current_ticks is not None
-            and current_ticks == enrollment.starttime_ticks
-            and not is_pid_zombie(pid)
-        ):
-            logger.debug("Skipping %s: PID %d still alive", trace_file.name, pid)
-            continue
-        # PID recycled, dead, or zombie — original process is gone, treat as crash
-
-        # All gates passed — parse snapshots before attempting durable recovery.
-        # Malformed enrolled traces cannot become valid on a later startup, unlike
-        # failures while flushing the already-decoded recovery payload.
-        snapshots: list[dict[str, object]] = []
-        corrupt_reason: str | None = None
-        try:
-            for line in trace_file.read_text(encoding="utf-8").splitlines():
-                if not line:
-                    continue
-                try:
-                    snapshot = json.loads(line)
-                except (json.JSONDecodeError, RecursionError):
-                    corrupt_reason = "invalid JSON"
-                    break
-                if not isinstance(snapshot, dict):
-                    corrupt_reason = "non-object JSON"
-                    break
-                snapshots.append(snapshot)
-        except UnicodeDecodeError:
-            corrupt_reason = "non-UTF-8 content"
-        except OSError:
-            continue
-
-        if corrupt_reason is not None:
-            logger.warning(
-                "recover_crashed_sessions_permanently_corrupt_trace",
-                trace_path=str(trace_file),
-                reason=corrupt_reason,
-            )
-            trace_file.unlink(missing_ok=True)
-            enrollment_path.unlink(missing_ok=True)
-            continue
-
-        # Gate 4: comm-based alien file rejection (issue #806 immunity)
-        # Use enrollment.comm as the expected comm (schema_version=2 records carry the
-        # enrolled binary name). Pre-fix schema_version=1 records have comm="" — skip
-        # the check for those to preserve recovery of legitimate crash data.
-        _is_alien = False
-        expected_comm = enrollment.comm
-        if snapshots and expected_comm:
-            first_comm = snapshots[0].get("comm", "")
-            if first_comm and isinstance(first_comm, str) and first_comm != expected_comm:
-                logger.debug(
-                    "Skipping %s: alien comm '%s' (expected '%s')",
-                    trace_file.name,
-                    first_comm,
-                    expected_comm,
-                )
-                _is_alien = True
-        if _is_alien:
-            # Delete the alien trace — don't leave it to confuse future recovery runs
-            trace_file.unlink(missing_ok=True)
-            enrollment_path.unlink(missing_ok=True)
-            continue
-
-        # Compute start_ts from file mtime
-        try:
-            mtime_ts = datetime.fromtimestamp(trace_file.stat().st_mtime, tz=UTC).isoformat()
-        except OSError:
-            continue
-
-        try:
-            from autoskillit.core import ProviderOutcome, RecipeIdentity, SessionTelemetry
-
-            flush_session_log(
+        candidate = _eligible_enrolled_trace(trace_file, tmpfs, current_boot_id)
+        if candidate is not None:
+            pid, enrollment_path, enrollment = candidate
+            snapshots = _decode_enrolled_trace(trace_file, enrollment_path, enrollment)
+            if snapshots is not None and _finalize_crashed_trace(
+                trace_file=trace_file,
                 log_dir=log_dir,
-                cwd="",
-                session_id=f"crashed_{pid}_{mtime_ts.replace(':', '-')}",
-                pid=pid,
-                skill_command="",
-                success=False,
-                needs_retry=False,
-                retry_reason=RetryReason.NONE.value,
-                infra=InfraOutcome(
-                    exit_category=InfraExitCategory.UNCLASSIFIED.value,
-                    cleanup_incomplete=False,
-                    fault_domain=FaultDomain.INFRASTRUCTURE,
-                ),
-                api_error_status=None,
-                is_error=True,
-                subtype="crashed",
-                exit_code=-1,
-                start_ts=mtime_ts,
-                proc_snapshots=snapshots if snapshots else None,
-                termination_reason="CRASHED",
-                provider_outcome=ProviderOutcome.none_used(),
-                recipe_identity=RecipeIdentity.empty(),
-                telemetry=SessionTelemetry.empty(),
                 project_dir=project_dir,
                 max_sessions=max_sessions,
                 build_protected_campaign_ids=build_protected_campaign_ids,
-                is_crash_recovery=True,
-            )
-        except Exception:
-            logger.warning(
-                "recover_crashed_sessions_finalize_failed",
-                trace_path=str(trace_file),
-                exc_info=True,
-            )
-            continue
-
-        trace_file.unlink(missing_ok=True)
-        enrollment_path.unlink(missing_ok=True)
-
-        count += 1
+                pid=pid,
+                snapshots=snapshots,
+            ):
+                _delete_trace_pair(trace_file, enrollment_path)
+                count += 1
 
     return count

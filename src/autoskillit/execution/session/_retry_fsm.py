@@ -173,20 +173,13 @@ def _compute_retry(
                 return True, RetryReason.RESUME
             return False, RetryReason.NONE
 
-        case TerminationReason.STALE | TerminationReason.IDLE_STALL:
+        case (
+            TerminationReason.STALE
+            | TerminationReason.IDLE_STALL
+            | TerminationReason.TIMED_OUT
+            | TerminationReason.HEALTH_INSPECTOR
+        ):
             logger.debug("compute_retry_result", termination=termination.value, needs_retry=False)
-            return False, RetryReason.NONE
-
-        case TerminationReason.TIMED_OUT:
-            logger.debug("compute_retry_result", termination="TIMED_OUT", needs_retry=False)
-            return False, RetryReason.NONE
-
-        case TerminationReason.HEALTH_INSPECTOR:
-            logger.debug(
-                "compute_retry_result",
-                termination="HEALTH_INSPECTOR",
-                needs_retry=False,
-            )
             return False, RetryReason.NONE
 
         case _ as unreachable:

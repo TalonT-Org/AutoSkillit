@@ -307,12 +307,6 @@ class DefaultMergeQueueWatcher:
                     ejection_cause="ci_failure",
                 )
 
-            elif classification.terminal == PRState.EJECTED:
-                return _make_result(False, PRState.EJECTED, classification.reason)
-
-            elif classification.terminal == PRState.DROPPED_HEALTHY:
-                return _make_result(False, PRState.DROPPED_HEALTHY, classification.reason)
-
             elif classification.terminal == PRState.DROPPED_MERGE_GROUP_CI:
                 if drop_count < max_merge_group_drops:
                     drop_count += 1
@@ -348,8 +342,12 @@ class DefaultMergeQueueWatcher:
                 result["drop_count"] = drop_count
                 return result
 
-            elif classification.terminal == PRState.NOT_ENROLLED:
-                return _make_result(False, PRState.NOT_ENROLLED, classification.reason)
+            elif classification.terminal in {
+                PRState.EJECTED,
+                PRState.DROPPED_HEALTHY,
+                PRState.NOT_ENROLLED,
+            }:
+                return _make_result(False, classification.terminal, classification.reason)
 
             else:
                 # Unreachable: _classify_pr_state never returns TIMEOUT or ERROR.

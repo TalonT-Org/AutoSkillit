@@ -28,6 +28,7 @@ from autoskillit.execution.process._process_kill import (
     ProcessObservationSnapshot,
 )
 from autoskillit.execution.process._process_monitor import (
+    SessionMonitorResult,
     _has_active_api_connection,
     _has_active_child_processes,
     _has_active_execution_marker,
@@ -151,6 +152,29 @@ class RaceAccumulator:
 
     def has_unresolved_obligations(self) -> bool:
         return bool(self.pending_task_ids or self.schedule_wakeup_violation)
+
+    def deposit_session_log_result(
+        self,
+        monitor_result: SessionMonitorResult,
+        channel_b_ready: anyio.Event,
+        trigger: anyio.Event,
+        on_session_id_resolved: Callable[[str], None] | None,
+    ) -> None:
+        """Deposit a Channel B monitor result before the watcher returns."""
+        self.channel_b_status = monitor_result.status
+        self.channel_b_session_id = monitor_result.session_id
+        self.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
+        if monitor_result.cursor is not None:
+            self.channel_b_cursor = monitor_result.cursor
+        if on_session_id_resolved is not None and monitor_result.session_id:
+            on_session_id_resolved(monitor_result.session_id)
+        channel_b_ready.set()
+        if monitor_result.status is ChannelBStatus.COMPLETION:
+            if self.lifecycle_observation_enabled:
+                self.channel_b_candidate_at = anyio.current_time()
+                self.completion_candidate_event.set()
+        else:
+            trigger.set()
 
     def to_race_signals(self) -> RaceSignals:
         return RaceSignals(
@@ -365,53 +389,79 @@ async def _watch_stdout_idle(
                 "stdout idle for %ss — firing IDLE_STALL",
                 idle_output_timeout,
             )
-            if inspector_callback is not None:
-                _invoke = True
-                _budget = INSPECTOR_MAX_SECONDS
-
-                _scope = timeout_scope_ref[0] if timeout_scope_ref else None
-                if _scope is not None:
-                    _remaining = _scope.deadline - _time.monotonic()
-                    _budget = min(INSPECTOR_MAX_SECONDS, _remaining - CLEANUP_BUDGET_SECONDS)
-                    if _budget <= 0:
-                        logger.debug("inspector_skipped_insufficient_time", remaining=_remaining)
-                        _invoke = False
-                elif timeout_scope_ref is not None:
-                    logger.debug("inspector_skipped_scope_not_ready")
-                    _invoke = False
-
-                if _invoke:
-                    _marker_present = marker_dir is not None and _has_active_execution_marker(
-                        marker_dir, session_id=session_id
-                    )
-                    _evidence = _package_evidence(
-                        stdout_path,
-                        idle_seconds=_time.monotonic() - last_growth_time,
-                        execution_marker_present=_marker_present,
-                    )
-                    try:
-                        with anyio.fail_after(_budget):
-                            _verdict = await inspector_callback(_evidence)
-                    except TimeoutError:
-                        logger.warning("inspector_callback_timed_out", budget=_budget)
-                        _verdict = None
-
-                    if _verdict is not None and _verdict.action == "SPARE":
-                        last_growth_time = _time.monotonic()
-                        logger.info(
-                            "inspector_spare",
-                            reasoning=_verdict.reasoning,
-                            confidence=_verdict.confidence,
-                            elapsed=_verdict.elapsed_seconds,
-                        )
-                        continue
-
-                    if _verdict is not None:
-                        acc.inspector_verdict = _verdict
+            spared_at = await _inspect_stdout_idle(
+                stdout_path,
+                last_growth_time,
+                acc,
+                inspector_callback,
+                timeout_scope_ref,
+                marker_dir=marker_dir,
+                session_id=session_id,
+            )
+            if spared_at is not None:
+                last_growth_time = spared_at
+                continue
 
             acc.idle_stall = True
             trigger.set()
             return
+
+
+async def _inspect_stdout_idle(
+    stdout_path: Path,
+    last_growth_time: float,
+    acc: RaceAccumulator,
+    inspector_callback: InspectorCallback | None,
+    timeout_scope_ref: list[anyio.CancelScope | None] | None,
+    *,
+    marker_dir: Path | None,
+    session_id: str | None,
+) -> float | None:
+    """Run the inspector and return the idle-clock reset time when it spares the process."""
+    import time as _time
+
+    if inspector_callback is None:
+        return None
+    invoke = True
+    budget = INSPECTOR_MAX_SECONDS
+    scope = timeout_scope_ref[0] if timeout_scope_ref else None
+    if scope is not None:
+        remaining = scope.deadline - _time.monotonic()
+        budget = min(INSPECTOR_MAX_SECONDS, remaining - CLEANUP_BUDGET_SECONDS)
+        if budget <= 0:
+            logger.debug("inspector_skipped_insufficient_time", remaining=remaining)
+            invoke = False
+    elif timeout_scope_ref is not None:
+        logger.debug("inspector_skipped_scope_not_ready")
+        invoke = False
+    if not invoke:
+        return None
+    marker_present = marker_dir is not None and _has_active_execution_marker(
+        marker_dir, session_id=session_id
+    )
+    evidence = _package_evidence(
+        stdout_path,
+        idle_seconds=_time.monotonic() - last_growth_time,
+        execution_marker_present=marker_present,
+    )
+    try:
+        with anyio.fail_after(budget):
+            verdict = await inspector_callback(evidence)
+    except TimeoutError:
+        logger.warning("inspector_callback_timed_out", budget=budget)
+        return None
+    if verdict is not None and verdict.action == "SPARE":
+        spared_at = _time.monotonic()
+        logger.info(
+            "inspector_spare",
+            reasoning=verdict.reasoning,
+            confidence=verdict.confidence,
+            elapsed=verdict.elapsed_seconds,
+        )
+        return spared_at
+    if verdict is not None:
+        acc.inspector_verdict = verdict
+    return None
 
 
 async def _watch_child_activity(
@@ -507,38 +557,42 @@ async def _extract_stdout_session_id(
         scan_pos = len(raw)
         if not new_raw:
             continue
-        content = new_raw.decode("utf-8", errors="replace")
-        for line in content.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            sid: str | None = None
-            if stream_parser is not None:
-                event = stream_parser.parse_line(line)
-                if event is not None:
-                    sid = event.session_id
-            else:
-                try:
-                    obj = _fast_loads(line)
-                except ValueError:
-                    continue
-                if (
-                    isinstance(obj, dict)
-                    and obj.get("type") == "system"
-                    and obj.get("subtype") == "init"
-                ):
-                    raw_sid = obj.get("session_id")
-                    if isinstance(raw_sid, str):
-                        sid = raw_sid
-            if sid:
-                acc.stdout_session_id = sid
-                logger.debug("stdout_session_id_extracted", session_id=sid)
-                if on_session_id_resolved is not None:
-                    on_session_id_resolved(sid)
-                ready.set()
-                return
+        sid = _decode_stdout_session_id(
+            new_raw.decode("utf-8", errors="replace").splitlines(), stream_parser
+        )
+        if sid:
+            acc.stdout_session_id = sid
+            logger.debug("stdout_session_id_extracted", session_id=sid)
+            if on_session_id_resolved is not None:
+                on_session_id_resolved(sid)
+            ready.set()
+            return
     logger.debug("stdout_session_id_extraction_timeout", timeout=_timeout)
     ready.set()
+
+
+def _decode_stdout_session_id(
+    lines: Sequence[str], stream_parser: StreamParser | None
+) -> str | None:
+    """Decode the first session ID from incremental stdout records in order."""
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if stream_parser is not None:
+            event = stream_parser.parse_line(line)
+            if event is not None and event.session_id:
+                return event.session_id
+            continue
+        try:
+            obj = _fast_loads(line)
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and obj.get("type") == "system" and obj.get("subtype") == "init":
+            session_id = obj.get("session_id")
+            if isinstance(session_id, str) and session_id:
+                return session_id
+    return None
 
 
 async def _watch_session_log(
@@ -613,22 +667,13 @@ async def _watch_session_log(
         session_id=monitor_result.session_id,
         drain_window=monitor_result.status == ChannelBStatus.COMPLETION,
     )
-    # These writes execute atomically before any cancellation delivery:
-    # there is no await between them and the function return.
-    acc.channel_b_status = monitor_result.status
-    acc.channel_b_session_id = monitor_result.session_id
-    acc.channel_b_orphaned_tool_result = monitor_result.orphaned_tool_result
-    if monitor_result.cursor is not None:
-        acc.channel_b_cursor = monitor_result.cursor
-    if on_session_id_resolved is not None and monitor_result.session_id:
-        on_session_id_resolved(monitor_result.session_id)
-    channel_b_ready.set()
-    if monitor_result.status is ChannelBStatus.COMPLETION:
-        if acc.lifecycle_observation_enabled:
-            acc.channel_b_candidate_at = anyio.current_time()
-            acc.completion_candidate_event.set()
-    else:
-        trigger.set()
+    # This synchronous deposition remains atomic before cancellation delivery.
+    acc.deposit_session_log_result(
+        monitor_result,
+        channel_b_ready,
+        trigger,
+        on_session_id_resolved,
+    )
 
 
 async def _watch_completion_eligibility(
@@ -669,6 +714,21 @@ async def _watch_completion_eligibility(
         await anyio.sleep(_poll_interval)
 
 
+def _resolve_channel_confirmation(signals: RaceSignals) -> ChannelConfirmation:
+    """Resolve the independent Channel A/B confirmation evidence."""
+    if signals.channel_a_confirmed:
+        return ChannelConfirmation.CHANNEL_A
+    match signals.channel_b_status:
+        case ChannelBStatus.COMPLETION:
+            return ChannelConfirmation.CHANNEL_B
+        case ChannelBStatus.STALE | None:
+            return ChannelConfirmation.UNMONITORED
+        case ChannelBStatus.DIR_MISSING:
+            return ChannelConfirmation.DIR_MISSING
+        case _ as unreachable:
+            assert_never(unreachable)
+
+
 def resolve_termination(
     signals: RaceSignals,
 ) -> tuple[TerminationReason, ChannelConfirmation]:
@@ -684,19 +744,7 @@ def resolve_termination(
     Exhaustive match over ChannelBStatus ensures mypy flags any new member
     that is added without updating the resolution logic.
     """
-    # Channel confirmation: independent of termination reason
-    if signals.channel_a_confirmed:
-        channel = ChannelConfirmation.CHANNEL_A
-    else:
-        match signals.channel_b_status:
-            case ChannelBStatus.COMPLETION:
-                channel = ChannelConfirmation.CHANNEL_B
-            case ChannelBStatus.STALE | None:
-                channel = ChannelConfirmation.UNMONITORED
-            case ChannelBStatus.DIR_MISSING:
-                channel = ChannelConfirmation.DIR_MISSING
-            case _ as unreachable:
-                assert_never(unreachable)
+    channel = _resolve_channel_confirmation(signals)
 
     # Termination reason: priority order (process exit > idle stall > stale > channel win)
     if signals.process_exited:

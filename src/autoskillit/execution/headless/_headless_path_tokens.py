@@ -53,57 +53,57 @@ def _extract_branch_name(assistant_messages: NormalizedMessages) -> str | None:
 _INTENTIONALLY_EXCLUDED_PATH_TOKENS: frozenset[str] = frozenset({"worktree_path", "branch_name"})
 
 
+def _skill_path_token_groups(skill_data: object) -> tuple[set[str], set[str]]:
+    raw_outputs: set[str] = set()
+    recoverable_tokens: set[str] = set()
+    if not isinstance(skill_data, dict):
+        return raw_outputs, recoverable_tokens
+    outputs = skill_data.get("outputs", [])
+    if not isinstance(outputs, list):
+        return raw_outputs, recoverable_tokens
+    mode_contracts = skill_data.get("audit_output_contracts", {})
+    mode_values = mode_contracts.values() if isinstance(mode_contracts, dict) else ()
+    mode_outputs = (
+        contract.get("outputs", []) for contract in mode_values if isinstance(contract, dict)
+    )
+    for group in (outputs, *(item for item in mode_outputs if isinstance(item, list))):
+        for out in group:
+            if not isinstance(out, dict):
+                continue
+            name = out.get("name", "")
+            out_type = out.get("type", "")
+            if not isinstance(name, str) or not isinstance(out_type, str) or not name:
+                continue
+            if out_type.startswith("file_path"):
+                raw_outputs.add(name)
+                recoverable_tokens.add(name)
+            elif out_type == "directory_path":
+                recoverable_tokens.add(name)
+    return raw_outputs, recoverable_tokens
+
+
 def _build_path_token_registry() -> tuple[
     dict[str, frozenset[str]], frozenset[str], frozenset[str]
 ]:
     """Single-load derivation of (per-skill, output, recoverable) registries."""
-    empty: tuple[dict[str, frozenset[str]], frozenset[str], frozenset[str]] = (
-        {},
-        frozenset(),
-        frozenset(),
-    )
     try:
         manifest = load_yaml(pkg_root() / "recipe" / "skill_contracts.yaml")
     except FileNotFoundError:
         logger.debug("skill_contracts.yaml not found; path-token registries will be empty")
-        return empty
+        return {}, frozenset(), frozenset()
     except Exception:
         logger.warning("Failed to derive path-token registries from contracts YAML", exc_info=True)
-        return empty
+        return {}, frozenset(), frozenset()
     if not isinstance(manifest, dict) or not isinstance(manifest.get("skills"), dict):
         logger.debug("skill_contracts.yaml is empty or non-dict; registries will be empty")
-        return empty
+        return {}, frozenset(), frozenset()
     by_skill: dict[str, frozenset[str]] = {}
     output_tokens: set[str] = set()
     recoverable_tokens: set[str] = set()
     for skill_name, skill_data in manifest["skills"].items():
-        if not isinstance(skill_data, dict):
-            by_skill[skill_name] = frozenset()
-            continue
-        outputs = skill_data.get("outputs", [])
-        if not isinstance(outputs, list):
-            by_skill[skill_name] = frozenset()
-            continue
-        mode_contracts = skill_data.get("audit_output_contracts", {})
-        mode_values = mode_contracts.values() if isinstance(mode_contracts, dict) else ()
-        mode_outputs = (
-            contract.get("outputs", []) for contract in mode_values if isinstance(contract, dict)
-        )
-        raw_outputs: set[str] = set()
-        for group in (outputs, *(item for item in mode_outputs if isinstance(item, list))):
-            for out in group:
-                if not isinstance(out, dict):
-                    continue
-                name = out.get("name", "")
-                out_type = out.get("type", "")
-                if not isinstance(name, str) or not isinstance(out_type, str) or not name:
-                    continue
-                if out_type.startswith("file_path"):
-                    raw_outputs.add(name)
-                    output_tokens.add(name)
-                    recoverable_tokens.add(name)
-                elif out_type == "directory_path":
-                    recoverable_tokens.add(name)
+        raw_outputs, raw_recoverable = _skill_path_token_groups(skill_data)
+        output_tokens.update(raw_outputs)
+        recoverable_tokens.update(raw_recoverable)
         by_skill[skill_name] = frozenset(raw_outputs)
     excluded = _INTENTIONALLY_EXCLUDED_PATH_TOKENS
     return (

@@ -40,6 +40,7 @@ from autoskillit.execution.headless._headless_adjudication import (
     _parse_stdout,
     _resolve_skill_session_id,
     _should_flag_cleanup_incomplete,
+    _StallOutcomeSpec,
 )
 from autoskillit.execution.headless._headless_evidence import (
     _apply_budget_guard,
@@ -90,13 +91,14 @@ def _apply_infra_retry_policy(
 ) -> tuple[SessionOutcome, bool, RetryReason]:
     """Apply the single retry decision authority for an infra exit category."""
     match category:
-        case InfraExitCategory.RATE_LIMITED:
+        case InfraExitCategory.RATE_LIMITED | InfraExitCategory.API_ERROR:
             if not success:
-                return outcome, True, RetryReason.RATE_LIMITED
-            return outcome, needs_retry, retry_reason
-        case InfraExitCategory.API_ERROR:
-            if not success:
-                return outcome, True, RetryReason.RESUME
+                reason = (
+                    RetryReason.RATE_LIMITED
+                    if category == InfraExitCategory.RATE_LIMITED
+                    else RetryReason.RESUME
+                )
+                return outcome, True, reason
             return outcome, needs_retry, retry_reason
         case InfraExitCategory.API_ERROR_TERMINAL:
             if not success:
@@ -126,6 +128,99 @@ def _apply_infra_retry_policy(
             assert_never(unreachable)
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _SkillResultContext:
+    """Fields _build_skill_result forwards to _build_stall_result unchanged."""
+
+    backend: CodingAgentBackend
+    completion_marker: str
+    skill_command: str
+    audit: AuditLog | None
+    max_consecutive_retries: int
+    expected_output_patterns: Sequence[str]
+    completion_required: bool
+    provider_used: str
+    write_behavior: WriteBehaviorSpec | None
+    skill_contract: SkillContract | None
+    cwd: str
+    fs_writes_detected: bool
+    git_writes_detected: bool
+    file_changes: Sequence[str]
+    write_watch_dirs: Sequence[Path]
+    backend_resume_session_id: str
+
+
+def _build_stall_result(
+    result: SubprocessResult,
+    context: _SkillResultContext,
+    *,
+    stall_spec: _StallOutcomeSpec,
+    subtype: str,
+    initial_retry_reason: RetryReason,
+    failure_result_text: str,
+    idle_warning: str | None,
+) -> SkillResult:
+    """Recover or construct a failed result for a stale or idle-stalled session."""
+    recovered_sr, session, evidence, api_retry = _attempt_stall_recovery(
+        result,
+        context.backend,
+        stall_spec,
+        completion_marker=context.completion_marker,
+        skill_command=context.skill_command,
+        expected_output_patterns=context.expected_output_patterns,
+        completion_required=context.completion_required,
+        provider_used=context.provider_used,
+        write_behavior=context.write_behavior,
+        skill_contract=context.skill_contract,
+        cwd=context.cwd,
+        fs_writes_detected=context.fs_writes_detected,
+        git_writes_detected=context.git_writes_detected,
+        file_changes=context.file_changes,
+        write_watch_dirs=context.write_watch_dirs,
+        backend_resume_session_id=context.backend_resume_session_id,
+    )
+    if recovered_sr is not None:
+        return recovered_sr
+
+    category = classify_infra_exit(session, result, capabilities=context.backend.capabilities)
+    _, needs_retry, retry_reason = _apply_infra_retry_policy(
+        category,
+        outcome=SessionOutcome.RETRIABLE,
+        success=False,
+        needs_retry=True,
+        retry_reason=initial_retry_reason,
+        kill_reason=result.kill_reason,
+        termination=result.termination,
+    )
+    _capture_failure(
+        context.skill_command,
+        exit_code=result.returncode if result.returncode is not None else -1,
+        subtype=subtype,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        stderr=result.stderr if result.stderr else "",
+        audit=context.audit,
+    )
+    if idle_warning is not None:
+        logger.warning(idle_warning)
+    stalled_result = _make_terminated_result(
+        result=result,
+        session=session,
+        success=False,
+        result_text=failure_result_text,
+        subtype=subtype,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        evidence=evidence,
+        provider_used=context.provider_used,
+        infra=InfraOutcome(exit_category=category.value),
+        api_retry=api_retry,
+    )
+    return _apply_budget_guard(
+        stalled_result, context.skill_command, context.audit, context.max_consecutive_retries
+    )
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
@@ -152,6 +247,24 @@ def _build_skill_result(
 ) -> SkillResult:
     """Route SubprocessResult fields into the standard run_skill response."""
     file_changes = _extract_file_changes(result.stdout, backend)
+    context = _SkillResultContext(
+        backend=backend,
+        completion_marker=completion_marker,
+        skill_command=skill_command,
+        audit=audit,
+        max_consecutive_retries=max_consecutive_retries,
+        expected_output_patterns=expected_output_patterns,
+        completion_required=completion_required,
+        provider_used=provider_used,
+        write_behavior=write_behavior,
+        skill_contract=skill_contract,
+        cwd=cwd,
+        fs_writes_detected=fs_writes_detected,
+        git_writes_detected=git_writes_detected,
+        file_changes=file_changes,
+        write_watch_dirs=write_watch_dirs,
+        backend_resume_session_id=backend_resume_session_id,
+    )
 
     lifecycle_gate_enabled = result.lifecycle_observation_enabled
     obligation_pending = result.pending_task_ids
@@ -240,129 +353,34 @@ def _build_skill_result(
         branch=branch,
     )
     if result.termination == TerminationReason.STALE:
-        # Attempt to recover from stdout before declaring stale failure.
-        recovered_sr, stale_session, stale_evidence, stale_api_retry = _attempt_stall_recovery(
+        return _build_stall_result(
             result,
-            backend,
-            _STALE_SPEC,
-            completion_marker=completion_marker,
-            skill_command=skill_command,
-            expected_output_patterns=expected_output_patterns,
-            completion_required=completion_required,
-            provider_used=provider_used,
-            write_behavior=write_behavior,
-            skill_contract=skill_contract,
-            cwd=cwd,
-            fs_writes_detected=fs_writes_detected,
-            git_writes_detected=git_writes_detected,
-            file_changes=file_changes,
-            write_watch_dirs=write_watch_dirs,
-            backend_resume_session_id=backend_resume_session_id,
-        )
-        if recovered_sr is not None:
-            return recovered_sr
-        # No valid result in stdout — fall through to original stale response
-        stale_category = classify_infra_exit(
-            stale_session, result, capabilities=backend.capabilities
-        )
-        _, stale_needs_retry, stale_retry_reason = _apply_infra_retry_policy(
-            stale_category,
-            outcome=SessionOutcome.RETRIABLE,
-            success=False,
-            needs_retry=True,
-            retry_reason=RetryReason.STALE,
-            kill_reason=result.kill_reason,
-            termination=result.termination,
-        )
-        _capture_failure(
-            skill_command,
-            exit_code=result.returncode if result.returncode is not None else -1,
+            context,
+            stall_spec=_STALE_SPEC,
             subtype="stale",
-            needs_retry=stale_needs_retry,
-            retry_reason=stale_retry_reason,
-            stderr=result.stderr if result.stderr else "",
-            audit=audit,
-        )
-        stale_sr = _make_terminated_result(
-            result=result,
-            session=stale_session,
-            success=False,
-            result_text=(
+            initial_retry_reason=RetryReason.STALE,
+            failure_result_text=(
                 "Session went stale (no activity for configured threshold). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            subtype="stale",
-            needs_retry=stale_needs_retry,
-            retry_reason=stale_retry_reason,
-            evidence=stale_evidence,
-            provider_used=provider_used,
-            infra=InfraOutcome(exit_category=stale_category.value),
-            api_retry=stale_api_retry,
+            idle_warning=None,
         )
-        return _apply_budget_guard(stale_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.IDLE_STALL:
-        recovered_sr, idle_session, idle_evidence, idle_api_retry = _attempt_stall_recovery(
+        return _build_stall_result(
             result,
-            backend,
-            _IDLE_STALL_SPEC,
-            completion_marker=completion_marker,
-            skill_command=skill_command,
-            expected_output_patterns=expected_output_patterns,
-            completion_required=completion_required,
-            provider_used=provider_used,
-            write_behavior=write_behavior,
-            skill_contract=skill_contract,
-            cwd=cwd,
-            fs_writes_detected=fs_writes_detected,
-            git_writes_detected=git_writes_detected,
-            file_changes=file_changes,
-            write_watch_dirs=write_watch_dirs,
-            backend_resume_session_id=backend_resume_session_id,
-        )
-        if recovered_sr is not None:
-            return recovered_sr
-        idle_category = classify_infra_exit(
-            idle_session, result, capabilities=backend.capabilities
-        )
-        _, idle_needs_retry, idle_retry_reason = _apply_infra_retry_policy(
-            idle_category,
-            outcome=SessionOutcome.RETRIABLE,
-            success=False,
-            needs_retry=True,
-            retry_reason=RetryReason.IDLE_STALL,
-            kill_reason=result.kill_reason,
-            termination=result.termination,
-        )
-        _capture_failure(
-            skill_command,
-            exit_code=result.returncode if result.returncode is not None else -1,
+            context,
+            stall_spec=_IDLE_STALL_SPEC,
             subtype="idle_stall",
-            needs_retry=idle_needs_retry,
-            retry_reason=idle_retry_reason,
-            stderr=result.stderr if result.stderr else "",
-            audit=audit,
-        )
-        logger.warning(
-            "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
-        )
-        idle_sr = _make_terminated_result(
-            result=result,
-            session=idle_session,
-            success=False,
-            result_text=(
+            initial_retry_reason=RetryReason.IDLE_STALL,
+            failure_result_text=(
                 "Session killed: stdout idle for configured threshold (no output growth). "
                 "Partial progress may have been made. Retry to continue."
             ),
-            subtype="idle_stall",
-            needs_retry=idle_needs_retry,
-            retry_reason=idle_retry_reason,
-            evidence=idle_evidence,
-            provider_used=provider_used,
-            infra=InfraOutcome(exit_category=idle_category.value),
-            api_retry=idle_api_retry,
+            idle_warning=(
+                "Headless session killed: stdout idle for configured threshold (IDLE_STALL)"
+            ),
         )
-        return _apply_budget_guard(idle_sr, skill_command, audit, max_consecutive_retries)
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1

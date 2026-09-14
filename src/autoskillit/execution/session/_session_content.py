@@ -144,48 +144,48 @@ def _check_session_content(
     if session.subtype in FAILURE_SUBTYPES:
         logger.debug("content_check_failed", reason="failure_subtype", subtype=session.subtype)
         return False
+    result_text = session.result.strip()
+    qualifying_prior_markers: tuple[str, ...] = ()
     if completion_marker:
-        result_text = session.result.strip()
         if completion_marker in result_text:
             marker_stripped = result_text.replace(completion_marker, "").strip()
             if not marker_stripped:
                 logger.debug("content_check_failed", reason="result_is_only_marker")
                 return False
         else:
-            found_prior = False
             if prior_completion_markers:
                 for prior_marker in prior_completion_markers:
                     if prior_marker and prior_marker in result_text:
                         marker_stripped = result_text.replace(prior_marker, "").strip()
                         if marker_stripped:
-                            found_prior = True
+                            qualifying_prior_markers = (prior_marker,)
                             break
             if completion_required:
                 logger.debug("content_check_failed", reason="completion_required_marker_absent")
                 return False
-            if not found_prior:
-                if expected_output_patterns and _check_expected_patterns(
-                    result_text, expected_output_patterns
-                ):
-                    logger.info(
-                        "pattern_gated_success",
-                        reason="marker_absent_contract_met",
-                        pattern_count=len(expected_output_patterns),
-                    )
-                else:
-                    logger.debug(
-                        "content_check_failed",
-                        reason="completion_marker_absent",
-                        result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
-                    )
-                    return False
-    if not _check_expected_patterns(session.result.strip(), expected_output_patterns):
+    state = _evaluate_content_state(
+        session, completion_marker, expected_output_patterns, qualifying_prior_markers
+    )
+    if state == ContentState.ABSENT:
+        logger.debug(
+            "content_check_failed",
+            reason="completion_marker_absent",
+            result_tail=result_text[-200:] if len(result_text) > 200 else result_text,
+        )
+        return False
+    if state == ContentState.CONTRACT_VIOLATION:
         logger.warning(
             "content_check_failed",
             reason="expected_artifact_absent",
             patterns=list(expected_output_patterns),
         )
         return False
+    if state == ContentState.MARKER_ABSENT_CONTRACT_MET:
+        logger.info(
+            "pattern_gated_success",
+            reason="marker_absent_contract_met",
+            pattern_count=len(expected_output_patterns),
+        )
     logger.debug("content_check_passed")
     return True
 

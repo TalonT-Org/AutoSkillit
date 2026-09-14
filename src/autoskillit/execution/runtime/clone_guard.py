@@ -285,11 +285,12 @@ async def validate_pre_session_index(
         raise RuntimeError(
             f"git status failed (rc={status_result.returncode}): {status_result.stderr.strip()}"
         )
-    status_lines = [line for line in status_result.stdout.splitlines() if line.strip()]
-    if exclude_prefix:
-        status_lines = [
-            line for line in status_lines if not _status_path_under_prefix(line, exclude_prefix)
-        ]
+    status_lines = [
+        line
+        for line in status_result.stdout.splitlines()
+        if line.strip()
+        and (not exclude_prefix or not _status_path_under_prefix(line, exclude_prefix))
+    ]
     if not status_lines:
         return False
 

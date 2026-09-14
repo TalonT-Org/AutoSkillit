@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import IO, TYPE_CHECKING, Any, cast
 
 import anyio
 import anyio.abc
@@ -198,6 +198,179 @@ def _resolve_session_id(
 def _normalize_pass_fds(pass_fds: tuple[int, ...]) -> tuple[int, ...]:
     """Validate and de-duplicate inherited descriptors without reordering them."""
     return normalize_inherited_fds(pass_fds)
+
+
+def _enroll_race_watchers(
+    tg: anyio.abc.TaskGroup,
+    *,
+    owner: OwnedProcessGroup,
+    line_driver_session: LineDriverSession,
+    process: Any,
+    capture_file: IO[bytes],
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    stdout_path: Path,
+    completion_record_types: frozenset[str],
+    completion_marker: str,
+    stream_parser: StreamParser | None,
+    heartbeat_poll: float,
+    session_log_dir: Path | None,
+    stale_threshold: float,
+    spawn_time: float,
+    session_record_types: frozenset[str],
+    observed_pid: int,
+    channel_b_ready: anyio.Event,
+    phase1_poll: float,
+    phase2_poll: float,
+    phase1_timeout: float,
+    session_id_timeout: float,
+    stdout_session_id_ready: anyio.Event,
+    max_suppression_seconds: float | None,
+    marker_dir: Path | None,
+    session_id: str | None,
+    on_session_id_resolved: Callable[[str], None] | None,
+    backend_resume_session_id: str,
+    channel_b_selected: anyio.Event,
+    lifecycle_observation_enabled: bool,
+    lifecycle_parser: StreamParser,
+    completion_drain_timeout: float,
+    child_deferral_ceiling: float,
+    idle_output_timeout: float | None,
+    inspector_callback: InspectorCallback | None,
+    timeout_scope_ref: list[anyio.CancelScope | None],
+) -> None:
+    """Enroll the pre-tracing watchers through facade-resolved patch seams."""
+    tg.start_soon(_watch_process, owner, acc, trigger)
+    line_driver_session.start(tg, process, capture_file=capture_file, trigger=trigger)
+    tg.start_soon(
+        functools.partial(
+            _watch_heartbeat,
+            stream_parser=stream_parser,
+            _poll_interval=heartbeat_poll,
+        ),
+        stdout_path,
+        completion_record_types,
+        completion_marker,
+        acc,
+        trigger,
+    )
+    if session_log_dir is not None:
+        tg.start_soon(
+            functools.partial(
+                _extract_stdout_session_id,
+                stream_parser=stream_parser,
+                on_session_id_resolved=on_session_id_resolved,
+            ),
+            stdout_path,
+            acc,
+            stdout_session_id_ready,
+        )
+        tg.start_soon(
+            _watch_session_log,
+            session_log_dir,
+            completion_marker,
+            stale_threshold,
+            spawn_time,
+            session_record_types,
+            observed_pid,
+            acc,
+            trigger,
+            channel_b_ready,
+            phase1_poll,
+            phase2_poll,
+            phase1_timeout,
+            session_id_timeout,
+            stdout_session_id_ready,
+            max_suppression_seconds,
+            marker_dir,
+            session_id,
+            on_session_id_resolved,
+            backend_resume_session_id,
+            channel_b_selected,
+        )
+    if lifecycle_observation_enabled:
+        tg.start_soon(
+            _watch_completion_eligibility,
+            acc,
+            trigger,
+            channel_b_selected,
+            completion_drain_timeout,
+            child_deferral_ceiling,
+            lifecycle_parser,
+            session_log_dir is not None,
+        )
+    if idle_output_timeout is not None and idle_output_timeout > 0:
+        tg.start_soon(
+            functools.partial(
+                _watch_stdout_idle,
+                stdout_path,
+                idle_output_timeout,
+                acc,
+                trigger,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                max_suppression_seconds=max_suppression_seconds or 1800.0,
+                inspector_callback=inspector_callback,
+                timeout_scope_ref=timeout_scope_ref,
+                has_pending_tasks=(
+                    acc.has_unresolved_obligations if lifecycle_observation_enabled else None
+                ),
+            ),
+        )
+
+
+async def _await_race_and_drain(
+    tg: anyio.abc.TaskGroup,
+    *,
+    timeout: float,
+    trigger: anyio.Event,
+    timeout_scope_ref: list[anyio.CancelScope | None],
+    enable_deadline_extension: bool,
+    observed_pid: int | None,
+    max_extension_seconds: float,
+    marker_dir: Path | None,
+    session_id: str | None,
+    lifecycle_observation_enabled: bool,
+    acc: RaceAccumulator,
+    session_log_dir: Path | None,
+    channel_b_ready: anyio.Event,
+    completion_drain_timeout: float,
+    proc_log: Any,
+) -> anyio.CancelScope | None:
+    """Await the race, draining Channel B after exit, then cancel its watchers."""
+    if enable_deadline_extension and observed_pid is not None:
+        tg.start_soon(
+            functools.partial(
+                _watch_child_activity,
+                observed_pid,
+                timeout_scope_ref,
+                max_extension_seconds,
+                trigger,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                has_pending_tasks=(
+                    acc.has_unresolved_obligations if lifecycle_observation_enabled else None
+                ),
+            ),
+        )
+    with anyio.move_on_after(timeout) as timeout_scope:
+        timeout_scope_ref[0] = timeout_scope
+        await trigger.wait()
+    if acc.process_exited and acc.channel_b_status is None and session_log_dir is not None:
+        proc_log.debug(
+            "symmetric_drain_started",
+            reason="process_exited_before_channel_b",
+            drain_timeout=completion_drain_timeout,
+        )
+        with anyio.move_on_after(completion_drain_timeout):
+            await channel_b_ready.wait()
+        proc_log.debug(
+            "symmetric_drain_complete",
+            channel_b_status=acc.channel_b_status,
+            channel_b_deposited=acc.channel_b_status is not None,
+        )
+    tg.cancel_scope.cancel()
+    return timeout_scope_ref[0]
 
 
 async def run_managed_async(
@@ -441,86 +614,45 @@ async def run_managed_async(
             timeout_scope_ref: list[anyio.CancelScope | None] = [None]
 
             async with anyio.create_task_group() as tg:
-                tg.start_soon(_watch_process, owner, acc, trigger)
-                line_driver_session.start(tg, proc, capture_file=stdout_file, trigger=trigger)
-                tg.start_soon(
-                    functools.partial(
-                        _watch_heartbeat,
-                        stream_parser=stream_parser,
-                        _poll_interval=_heartbeat_poll,
-                    ),
-                    stdout_path,
-                    completion_record_types,
-                    completion_marker,
-                    acc,
-                    trigger,
-                )
-                if session_log_dir is not None:
-                    tg.start_soon(
-                        functools.partial(
-                            _extract_stdout_session_id,
-                            stream_parser=stream_parser,
-                            on_session_id_resolved=on_session_id_resolved,
-                        ),
-                        stdout_path,
-                        acc,
-                        stdout_session_id_ready,
-                    )
-                    tg.start_soon(
-                        _watch_session_log,
-                        session_log_dir,
-                        completion_marker,
-                        stale_threshold,
-                        _spawn_time,
-                        session_record_types,
-                        _observed_pid,
-                        acc,
-                        trigger,
-                        channel_b_ready,
-                        _phase1_poll,
-                        _phase2_poll,
-                        _phase1_timeout,
-                        _session_id_timeout,
-                        stdout_session_id_ready,
-                        max_suppression_seconds,
-                        marker_dir,
-                        session_id,
-                        on_session_id_resolved,
-                        backend_resume_session_id,
-                        channel_b_selected,
-                    )
-                if lifecycle_observation_enabled:
-                    tg.start_soon(
-                        _watch_completion_eligibility,
-                        acc,
-                        trigger,
-                        channel_b_selected,
-                        completion_drain_timeout,
-                        child_deferral_ceiling,
-                        lifecycle_parser,
-                        session_log_dir is not None,
-                    )
-                if idle_output_timeout is not None and idle_output_timeout > 0:
-                    tg.start_soon(
-                        functools.partial(
-                            _watch_stdout_idle,
-                            stdout_path,
-                            idle_output_timeout,
-                            acc,
-                            trigger,
-                            marker_dir=marker_dir,
-                            session_id=session_id,
-                            max_suppression_seconds=max_suppression_seconds or 1800.0,
-                            inspector_callback=inspector_callback,
-                            timeout_scope_ref=timeout_scope_ref,
-                            has_pending_tasks=(
-                                acc.has_unresolved_obligations
-                                if lifecycle_observation_enabled
-                                else None
-                            ),
-                        ),
-                    )
                 tracing_handle = None
+                _enroll_race_watchers(
+                    tg,
+                    owner=owner,
+                    line_driver_session=line_driver_session,
+                    process=proc,
+                    capture_file=stdout_file,
+                    acc=acc,
+                    trigger=trigger,
+                    stdout_path=stdout_path,
+                    completion_record_types=completion_record_types,
+                    completion_marker=completion_marker,
+                    stream_parser=stream_parser,
+                    heartbeat_poll=_heartbeat_poll,
+                    session_log_dir=session_log_dir,
+                    stale_threshold=stale_threshold,
+                    spawn_time=_spawn_time,
+                    session_record_types=session_record_types,
+                    observed_pid=_observed_pid,
+                    channel_b_ready=channel_b_ready,
+                    phase1_poll=_phase1_poll,
+                    phase2_poll=_phase2_poll,
+                    phase1_timeout=_phase1_timeout,
+                    session_id_timeout=_session_id_timeout,
+                    stdout_session_id_ready=stdout_session_id_ready,
+                    max_suppression_seconds=max_suppression_seconds,
+                    marker_dir=marker_dir,
+                    session_id=session_id,
+                    on_session_id_resolved=on_session_id_resolved,
+                    backend_resume_session_id=backend_resume_session_id,
+                    channel_b_selected=channel_b_selected,
+                    lifecycle_observation_enabled=lifecycle_observation_enabled,
+                    lifecycle_parser=lifecycle_parser,
+                    completion_drain_timeout=completion_drain_timeout,
+                    child_deferral_ceiling=child_deferral_ceiling,
+                    idle_output_timeout=idle_output_timeout,
+                    inspector_callback=inspector_callback,
+                    timeout_scope_ref=timeout_scope_ref,
+                )
                 if linux_tracing_config is not None and _target is not None:
                     from autoskillit.execution.evidence.linux_tracing import start_linux_tracing
 
@@ -529,49 +661,23 @@ async def run_managed_async(
                         config=linux_tracing_config,
                         tg=tg,
                     )
-                if enable_deadline_extension and _observed_pid is not None:
-                    tg.start_soon(
-                        functools.partial(
-                            _watch_child_activity,
-                            _observed_pid,
-                            timeout_scope_ref,
-                            max_extension_seconds,
-                            trigger,
-                            marker_dir=marker_dir,
-                            session_id=session_id,
-                            has_pending_tasks=(
-                                acc.has_unresolved_obligations
-                                if lifecycle_observation_enabled
-                                else None
-                            ),
-                        ),
-                    )
-                timeout_scope: anyio.CancelScope | None
-                with anyio.move_on_after(timeout) as _ts:
-                    timeout_scope_ref[0] = _ts
-                    await trigger.wait()
-                timeout_scope = timeout_scope_ref[0]
-                # Symmetric drain: if the process exited before Channel B deposited,
-                # give the session monitor a bounded window to complete its current
-                # poll cycle and deposit its signal.
-                if (
-                    acc.process_exited
-                    and acc.channel_b_status is None
-                    and session_log_dir is not None
-                ):
-                    proc_log.debug(
-                        "symmetric_drain_started",
-                        reason="process_exited_before_channel_b",
-                        drain_timeout=completion_drain_timeout,
-                    )
-                    with anyio.move_on_after(completion_drain_timeout):
-                        await channel_b_ready.wait()
-                    proc_log.debug(
-                        "symmetric_drain_complete",
-                        channel_b_status=acc.channel_b_status,
-                        channel_b_deposited=acc.channel_b_status is not None,
-                    )
-                tg.cancel_scope.cancel()
+                timeout_scope = await _await_race_and_drain(
+                    tg,
+                    timeout=timeout,
+                    trigger=trigger,
+                    timeout_scope_ref=timeout_scope_ref,
+                    enable_deadline_extension=enable_deadline_extension,
+                    observed_pid=_observed_pid,
+                    max_extension_seconds=max_extension_seconds,
+                    marker_dir=marker_dir,
+                    session_id=session_id,
+                    lifecycle_observation_enabled=lifecycle_observation_enabled,
+                    acc=acc,
+                    session_log_dir=session_log_dir,
+                    channel_b_ready=channel_b_ready,
+                    completion_drain_timeout=completion_drain_timeout,
+                    proc_log=proc_log,
+                )
 
             if lifecycle_observation_enabled:
 

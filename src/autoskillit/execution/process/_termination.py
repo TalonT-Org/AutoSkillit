@@ -27,9 +27,8 @@ from autoskillit.execution.process._process_kill import (
     ProcessObservationSnapshot,
 )
 from autoskillit.execution.process._process_monitor import (
-    _has_active_api_connection,
+    _active_liveness_signals,
     _has_active_child_processes,
-    _has_active_execution_marker,
 )
 
 
@@ -79,6 +78,45 @@ def decide_termination_action(
             assert_never(unreachable)
 
 
+async def _drain_before_escalation(
+    *,
+    owner: OwnedProcessGroup,
+    process_exited_event: anyio.Event,
+    grace_seconds: float,
+    proc_log: structlog.BoundLogger,
+    pid: int | None,
+    marker_dir: Path | None,
+    session_id: str | None,
+    child_deferral_ceiling: float,
+) -> tuple[int | None, ProcessCleanupResult] | None:
+    with anyio.move_on_after(grace_seconds):
+        await process_exited_event.wait()
+    if owner.returncode is not None:
+        proc_log.debug("natural_exit_after_drain", returncode=owner.returncode)
+        return await anyio.to_thread.run_sync(owner.settle_evidence, abandon_on_cancel=False)
+    # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
+    if pid is not None and child_deferral_ceiling > 0:
+        deferral_start = anyio.current_time()
+        _poll_interval = 2.0
+        while (anyio.current_time() - deferral_start) < child_deferral_ceiling:
+            if owner.returncode is not None:
+                proc_log.debug("natural_exit_during_deferral", returncode=owner.returncode)
+                return await anyio.to_thread.run_sync(
+                    owner.settle_evidence, abandon_on_cancel=False
+                )
+            active = bool(_active_liveness_signals(pid, marker_dir, session_id))
+            if not active:
+                proc_log.debug("no_active_children_proceeding_to_kill")
+                break
+            proc_log.debug(
+                "child_liveness_deferral",
+                elapsed=anyio.current_time() - deferral_start,
+                ceiling=child_deferral_ceiling,
+            )
+            await anyio.sleep(_poll_interval)
+    return None
+
+
 async def execute_termination_action(
     action: TerminationAction,
     *,
@@ -110,44 +148,19 @@ async def execute_termination_action(
         case TerminationAction.NO_KILL:
             kill_reason = KillReason.NATURAL_EXIT
         case TerminationAction.DRAIN_THEN_KILL_IF_ALIVE:
-            with anyio.move_on_after(grace_seconds):
-                await process_exited_event.wait()
-            if owner.returncode is not None:
-                proc_log.debug("natural_exit_after_drain", returncode=owner.returncode)
-                kill_reason = KillReason.NATURAL_EXIT
-                returncode, cleanup = await anyio.to_thread.run_sync(
-                    owner.settle_evidence, abandon_on_cancel=False
-                )
-                return kill_reason, returncode, cleanup
-            # Child-liveness deferral: same pattern as _session_log_monitor stale-kill suppression
-            if pid is not None and child_deferral_ceiling > 0:
-                deferral_start = anyio.current_time()
-                _poll_interval = 2.0
-                while (anyio.current_time() - deferral_start) < child_deferral_ceiling:
-                    if owner.returncode is not None:
-                        proc_log.debug("natural_exit_during_deferral", returncode=owner.returncode)
-                        kill_reason = KillReason.NATURAL_EXIT
-                        returncode, cleanup = await anyio.to_thread.run_sync(
-                            owner.settle_evidence, abandon_on_cancel=False
-                        )
-                        return kill_reason, returncode, cleanup
-                    active = (
-                        _has_active_child_processes(pid)
-                        or _has_active_api_connection(pid)
-                        or (
-                            marker_dir is not None
-                            and _has_active_execution_marker(marker_dir, session_id=session_id)
-                        )
-                    )
-                    if not active:
-                        proc_log.debug("no_active_children_proceeding_to_kill")
-                        break
-                    proc_log.debug(
-                        "child_liveness_deferral",
-                        elapsed=anyio.current_time() - deferral_start,
-                        ceiling=child_deferral_ceiling,
-                    )
-                    await anyio.sleep(_poll_interval)
+            settled = await _drain_before_escalation(
+                owner=owner,
+                process_exited_event=process_exited_event,
+                grace_seconds=grace_seconds,
+                proc_log=proc_log,
+                pid=pid,
+                marker_dir=marker_dir,
+                session_id=session_id,
+                child_deferral_ceiling=child_deferral_ceiling,
+            )
+            if settled is not None:
+                returncode, cleanup = settled
+                return KillReason.NATURAL_EXIT, returncode, cleanup
             proc_log.debug("grace_expired_killing", grace_seconds=grace_seconds)
             kill_reason = KillReason.KILL_AFTER_COMPLETION
         case TerminationAction.IMMEDIATE_KILL:

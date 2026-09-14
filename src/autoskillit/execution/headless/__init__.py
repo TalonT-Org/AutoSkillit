@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,7 +18,9 @@ from autoskillit.core import (
     BackendAuthorityKind,
     BackendAuthorityTier,
     ClosureAuthoritySpec,
+    CodingAgentBackend,
     ExecutionIdentity,
+    LaunchPreparation,
     LaunchResolutionRequest,
     LaunchSurface,
     LaunchValueSource,
@@ -26,6 +28,7 @@ from autoskillit.core import (
     ManagedHeadlessSessionKind,
     ManagedHeadlessSessionLineageRef,
     ManagedHeadlessSessionTerminalState,
+    ModelIdentity,
     NativeShellCaptureDecision,
     ProviderBinding,
     ResolvedLaunchContract,
@@ -125,6 +128,204 @@ __all__ = [
 logger = get_logger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class HeadlessLaunchPreparation:
+    """Fully-prepared launch context returned by _prepare_headless_launch."""
+
+    backend: CodingAgentBackend
+    model_identity: ModelIdentity
+    launch_preparation: LaunchPreparation
+    add_dirs: tuple[ValidatedAddDir, ...]
+
+
+def _prepare_headless_launch(
+    skill_command: str,
+    cwd: str,
+    ctx: ToolContext,
+    *,
+    model: str,
+    step_name: str,
+    recipe_name: str,
+    profile_name: str,
+    add_dirs: Sequence[ValidatedAddDir],
+    backend_authority: BackendAuthority | None,
+    provider_extras: Mapping[str, str] | None,
+    provider_name: str,
+    capability_contract: SkillProjectionBinding | None,
+    network_access: bool,
+    resume_session_id: str,
+    resume_launch_contract: ResolvedLaunchContract | None,
+    readonly_skill: bool,
+) -> HeadlessLaunchPreparation:
+    caller_key_path = "run_skill.model"
+    model_pin = resolve_model_pin(
+        model,
+        ctx.config,
+        step_name=step_name,
+        recipe_name=recipe_name,
+        caller_key_path=caller_key_path,
+    )
+    model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
+    add_dirs_tuple = tuple(add_dirs)
+    if backend_authority is None:
+        if ctx.backend is None:
+            raise RuntimeError("global backend authority is not configured")
+        backend_authority = BackendAuthority(
+            backend=ctx.backend.name,
+            kind=BackendAuthorityKind.GLOBAL,
+            tier=BackendAuthorityTier.GLOBAL,
+            key_path="agent_backend.backend",
+        )
+    value_source_kind = LaunchValueSourceKind(backend_authority.kind.value)
+    authority_source = LaunchValueSource(value_source_kind, backend_authority.key_path)
+    default_source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "run_skill.defaults")
+    provider_values = dict(provider_extras or {})
+    secret_provider_keys = tuple(
+        sorted(
+            key
+            for key in provider_values
+            if any(
+                token in key.upper()
+                for token in (
+                    "API_KEY",
+                    "ACCESS_KEY",
+                    "TOKEN",
+                    "SECRET",
+                    "PASSWORD",
+                    "CREDENTIAL",
+                )
+            )
+        )
+    )
+    provider_binding = (
+        ProviderBinding(
+            provider=provider_name or profile_name or backend_authority.backend,
+            profile=profile_name or "default",
+            required_backend=backend_authority.backend,
+            normalized_endpoint=(
+                provider_values.get("ANTHROPIC_BASE_URL")
+                or provider_values.get("OPENAI_BASE_URL")
+                or ""
+            ),
+            key_path="run_skill.provider",
+            provider_source=authority_source,
+            profile_source=authority_source,
+            endpoint_source=authority_source,
+            environment={},
+            secret_environment_keys=secret_provider_keys,
+        )
+        if provider_name or profile_name or provider_values
+        else None
+    )
+    projection_payload = (
+        dict(sorted(capability_contract.projected_digests.items()))
+        if capability_contract is not None
+        else {"command": skill_command}
+    )
+    projection_digest = (
+        capability_contract.projection_digest
+        if capability_contract is not None
+        else hashlib.sha256(
+            json.dumps(projection_payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
+    semantic_digest = (
+        hashlib.sha256(
+            json.dumps(
+                dict(sorted(capability_contract.semantic_digests.items())),
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        if capability_contract is not None
+        else hashlib.sha256(skill_command.encode()).hexdigest()
+    )
+    launch_request = LaunchResolutionRequest(
+        surface=LaunchSurface.HEADLESS_SKILL,
+        authority_candidates=(backend_authority,),
+        semantic_plan=SemanticLaunchPlan(
+            surface=LaunchSurface.HEADLESS_SKILL,
+            semantic_digest=semantic_digest,
+            projection_digest=projection_digest,
+        ),
+        command=skill_command,
+        arguments=(),
+        cwd=cwd,
+        requested_model=model or None,
+        requested_model_source=(
+            LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path)
+            if model
+            else default_source
+        ),
+        configured_model=model_identity.configured_model or None,
+        configured_model_source=(
+            model_pin.source if model_identity.configured_model else default_source
+        ),
+        effort=None,
+        effort_source=default_source,
+        sandbox_mode="pending-adapter",
+        network_access=network_access,
+        pty_required=False,
+        inherited_fd_policy="attempt-scoped-plugin-binding",
+        branch_identity={},
+        worktree_identity={"cwd": cwd},
+        executable_identity={"backend": backend_authority.backend},
+        plugin_identity={},
+        projection_identity={
+            "digest": projection_digest,
+            "version": str(
+                capability_contract.projection_version if capability_contract is not None else 0
+            ),
+        },
+        artifact_paths=(
+            capability_contract.artifact_paths if capability_contract is not None else ()
+        ),
+        quota_identity={"provider": provider_name or profile_name or "default"},
+        provider_binding=provider_binding,
+        skill_projection_binding=capability_contract,
+        non_authority_metadata={"entrypoint": "headless"},
+    )
+    if resume_launch_contract is not None:
+        if not resume_session_id:
+            raise RuntimeError("persisted launch contract requires a resume session ID")
+        if backend_authority != resume_launch_contract.backend_authority:
+            raise RuntimeError("resume backend authority drifted from persisted launch contract")
+        launch_preparation = ctx.launch_resolver.prepare_resume(
+            resume_launch_contract,
+            command=skill_command,
+            cwd=cwd,
+        )
+    else:
+        launch_preparation = ctx.launch_resolver.prepare(launch_request)
+    _cmd_backend = (
+        ctx.backend
+        if ctx.backend is not None and ctx.backend.name == launch_preparation.selected_backend
+        else ctx.launch_resolver.backend_for(launch_preparation)
+    )
+    if capability_contract is not None and capability_contract.backend not in {
+        None,
+        _cmd_backend.name,
+    }:
+        raise RuntimeError("skill projection backend drifted from launch authority")
+    launch_preparation = replace(
+        launch_preparation,
+        sandbox_mode=(
+            "read-only" if readonly_skill else _cmd_backend.capabilities.default_skill_sandbox_mode
+        ),
+        pty_required=_resolve_pty_mode(_cmd_backend),
+        executable_identity={
+            "backend": _cmd_backend.name,
+            "process_name": _cmd_backend.capabilities.process_name,
+        },
+    )
+    return HeadlessLaunchPreparation(
+        backend=_cmd_backend,
+        model_identity=model_identity,
+        launch_preparation=launch_preparation,
+        add_dirs=add_dirs_tuple,
+    )
+
+
 async def run_headless_core(
     skill_command: str,
     cwd: str,
@@ -200,192 +401,43 @@ async def run_headless_core(
         skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
     ):
-        caller_key_path = "run_skill.model"
-        model_pin = resolve_model_pin(
-            model,
-            ctx.config,
+        launch = _prepare_headless_launch(
+            skill_command,
+            cwd,
+            ctx,
+            model=model,
             step_name=step_name,
             recipe_name=recipe_name,
-            caller_key_path=caller_key_path,
-        )
-        model_identity = resolve_model_identity(model_pin, profile_name=profile_name)
-        add_dirs_tuple = tuple(add_dirs)
-        if backend_authority is None:
-            if ctx.backend is None:
-                raise RuntimeError("global backend authority is not configured")
-            backend_authority = BackendAuthority(
-                backend=ctx.backend.name,
-                kind=BackendAuthorityKind.GLOBAL,
-                tier=BackendAuthorityTier.GLOBAL,
-                key_path="agent_backend.backend",
-            )
-        value_source_kind = LaunchValueSourceKind(backend_authority.kind.value)
-        authority_source = LaunchValueSource(value_source_kind, backend_authority.key_path)
-        default_source = LaunchValueSource(LaunchValueSourceKind.DEFAULT, "run_skill.defaults")
-        provider_values = dict(provider_extras or {})
-        secret_provider_keys = tuple(
-            sorted(
-                key
-                for key in provider_values
-                if any(
-                    token in key.upper()
-                    for token in (
-                        "API_KEY",
-                        "ACCESS_KEY",
-                        "TOKEN",
-                        "SECRET",
-                        "PASSWORD",
-                        "CREDENTIAL",
-                    )
-                )
-            )
-        )
-        provider_binding = (
-            ProviderBinding(
-                provider=provider_name or profile_name or backend_authority.backend,
-                profile=profile_name or "default",
-                required_backend=backend_authority.backend,
-                normalized_endpoint=(
-                    provider_values.get("ANTHROPIC_BASE_URL")
-                    or provider_values.get("OPENAI_BASE_URL")
-                    or ""
-                ),
-                key_path="run_skill.provider",
-                provider_source=authority_source,
-                profile_source=authority_source,
-                endpoint_source=authority_source,
-                environment={},
-                secret_environment_keys=secret_provider_keys,
-            )
-            if provider_name or profile_name or provider_values
-            else None
-        )
-        projection_payload = (
-            dict(sorted(capability_contract.projected_digests.items()))
-            if capability_contract is not None
-            else {"command": skill_command}
-        )
-        projection_digest = (
-            capability_contract.projection_digest
-            if capability_contract is not None
-            else hashlib.sha256(
-                json.dumps(projection_payload, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest()
-        )
-        semantic_digest = (
-            hashlib.sha256(
-                json.dumps(
-                    dict(sorted(capability_contract.semantic_digests.items())),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                ).encode()
-            ).hexdigest()
-            if capability_contract is not None
-            else hashlib.sha256(skill_command.encode()).hexdigest()
-        )
-        launch_request = LaunchResolutionRequest(
-            surface=LaunchSurface.HEADLESS_SKILL,
-            authority_candidates=(backend_authority,),
-            semantic_plan=SemanticLaunchPlan(
-                surface=LaunchSurface.HEADLESS_SKILL,
-                semantic_digest=semantic_digest,
-                projection_digest=projection_digest,
-            ),
-            command=skill_command,
-            arguments=(),
-            cwd=cwd,
-            requested_model=model or None,
-            requested_model_source=(
-                LaunchValueSource(LaunchValueSourceKind.CALLER, caller_key_path)
-                if model
-                else default_source
-            ),
-            configured_model=model_identity.configured_model or None,
-            configured_model_source=(
-                model_pin.source if model_identity.configured_model else default_source
-            ),
-            effort=None,
-            effort_source=default_source,
-            sandbox_mode="pending-adapter",
+            profile_name=profile_name,
+            add_dirs=add_dirs,
+            backend_authority=backend_authority,
+            provider_extras=provider_extras,
+            provider_name=provider_name,
+            capability_contract=capability_contract,
             network_access=network_access,
-            pty_required=False,
-            inherited_fd_policy="attempt-scoped-plugin-binding",
-            branch_identity={},
-            worktree_identity={"cwd": cwd},
-            executable_identity={"backend": backend_authority.backend},
-            plugin_identity={},
-            projection_identity={
-                "digest": projection_digest,
-                "version": str(
-                    capability_contract.projection_version
-                    if capability_contract is not None
-                    else 0
-                ),
-            },
-            artifact_paths=(
-                capability_contract.artifact_paths if capability_contract is not None else ()
-            ),
-            quota_identity={"provider": provider_name or profile_name or "default"},
-            provider_binding=provider_binding,
-            skill_projection_binding=capability_contract,
-            non_authority_metadata={"entrypoint": "headless"},
-        )
-        if resume_launch_contract is not None:
-            if not resume_session_id:
-                raise RuntimeError("persisted launch contract requires a resume session ID")
-            if backend_authority != resume_launch_contract.backend_authority:
-                raise RuntimeError(
-                    "resume backend authority drifted from persisted launch contract"
-                )
-            launch_preparation = ctx.launch_resolver.prepare_resume(
-                resume_launch_contract,
-                command=skill_command,
-                cwd=cwd,
-            )
-        else:
-            launch_preparation = ctx.launch_resolver.prepare(launch_request)
-        _cmd_backend = (
-            ctx.backend
-            if ctx.backend is not None and ctx.backend.name == launch_preparation.selected_backend
-            else ctx.launch_resolver.backend_for(launch_preparation)
-        )
-        if capability_contract is not None and capability_contract.backend not in {
-            None,
-            _cmd_backend.name,
-        }:
-            raise RuntimeError("skill projection backend drifted from launch authority")
-        launch_preparation = replace(
-            launch_preparation,
-            sandbox_mode=(
-                "read-only"
-                if readonly_skill
-                else _cmd_backend.capabilities.default_skill_sandbox_mode
-            ),
-            pty_required=_resolve_pty_mode(_cmd_backend),
-            executable_identity={
-                "backend": _cmd_backend.name,
-                "process_name": _cmd_backend.capabilities.process_name,
-            },
+            resume_session_id=resume_session_id,
+            resume_launch_contract=resume_launch_contract,
+            readonly_skill=readonly_skill,
         )
         managed_lineage_observer = _ManagedLineageObserver.create(
             store=ctx.managed_headless_session_lineage_store,
             decision=native_shell_capture_decision,
             reference=managed_lineage_ref,
-            backend=_cmd_backend,
+            backend=launch.backend,
             session_kind=ManagedHeadlessSessionKind.SKILL,
         )
         plugin_load_mode = _headless_plugin_load_mode(
-            _cmd_backend,
-            add_dirs=add_dirs_tuple,
+            launch.backend,
+            add_dirs=launch.add_dirs,
         )
         _build_spec = _skill_launch_spec_builder(
-            backend=_cmd_backend,
+            backend=launch.backend,
             skill_command=skill_command,
             cwd=cwd,
             completion_marker=effective_marker,
-            configured_model=launch_preparation.configured_model,
+            configured_model=launch.launch_preparation.configured_model,
             output_format=cfg.output_format,
-            add_dirs=add_dirs_tuple,
+            add_dirs=launch.add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
             mcp_tool_timeout_sec=cfg.mcp_tool_timeout_sec,
@@ -406,14 +458,14 @@ async def run_headless_core(
             child_outcome_log_dir=str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
         )
 
-        logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
+        logger.debug("run_headless_core_backend_dispatch", backend=launch.backend.name)
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
         logger.debug(
             "run_headless_core_entry",
             cwd=cwd,
-            resolved_model=model_identity.configured_model,
+            resolved_model=launch.model_identity.configured_model,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_load_mode=plugin_load_mode.value,
@@ -453,9 +505,9 @@ async def run_headless_core(
                 provider_fallback_name=provider_fallback_name,
                 provider_extras=provider_extras,
                 launch_resolver=ctx.launch_resolver,
-                launch_preparation=launch_preparation,
+                launch_preparation=launch.launch_preparation,
                 resume_launch_contract=resume_launch_contract,
-                model_identity=model_identity,
+                model_identity=launch.model_identity,
                 marker_dir=marker_dir,
                 session_id=caller_session_id,
                 backend_resume_session_id=resume_session_id,

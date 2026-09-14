@@ -816,7 +816,7 @@ class AmbientEnvDisposition:
 
 
 DYNAMIC_READ_EXEMPTIONS: dict[str, str] = {
-    "execution/evidence_reader.py:138": (
+    "execution/evidence/reader/_contract.py:146": (
         "Dict/generator-comprehension key bound by `for name in _PROVIDER_ENV`; this scanner does"
         "not trace comprehension-bound names back through their iterable's members."
     ),

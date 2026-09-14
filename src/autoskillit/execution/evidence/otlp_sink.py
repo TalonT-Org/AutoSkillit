@@ -171,6 +171,53 @@ def _has_attribute(attributes: list[object], key: str) -> bool:
     return any(isinstance(item, dict) and item.get("key") == key for item in attributes)
 
 
+def _claude_model_observation(
+    event_name: str | None, attributes: list[object]
+) -> _ModelObservation | None:
+    if event_name == "api_request":
+        session_id = _unique_string_attribute(attributes, "session.id")
+        model = _unique_string_attribute(attributes, "model")
+        query_source = _unique_string_attribute(attributes, "query_source")
+        if (
+            session_id
+            and model
+            and query_source == "sdk"
+            and not _has_attribute(attributes, "agent.name")
+        ):
+            return session_id, model, None
+    elif event_name == "subagent_completed":
+        session_id = _unique_string_attribute(attributes, "session.id")
+        child_key = _unique_string_attribute(attributes, "agent_type")
+        model = _unique_string_attribute(attributes, "model")
+        final_model = _unique_string_attribute(attributes, "final_model")
+        model_swapped = _unique_bool_attribute(attributes, "model_swapped")
+        if session_id and child_key and model and final_model and model_swapped is not None:
+            return (
+                session_id,
+                "",
+                {
+                    "model": model,
+                    "final_model": final_model,
+                    "model_swapped": model_swapped,
+                    "agent_type": child_key,
+                },
+            )
+    return None
+
+
+def _codex_model_observation(
+    event_name: str | None, attributes: list[object]
+) -> _ModelObservation | None:
+    if event_name != "codex.conversation_starts":
+        return None
+    session_id = _unique_string_attribute(attributes, "conversation.id")
+    model = _unique_string_attribute(attributes, "model")
+    originator = _unique_string_attribute(attributes, "originator")
+    if session_id and model and originator == "codex_exec":
+        return session_id, model, None
+    return None
+
+
 def _model_observations(signal: str, payload: object) -> tuple[_ModelObservation, ...]:
     if signal != "logs" or not isinstance(payload, dict):
         return ()
@@ -199,50 +246,13 @@ def _model_observations(signal: str, payload: object) -> tuple[_ModelObservation
                     continue
                 event_name = _unique_string_attribute(attributes, "event.name")
                 if scope_name == "com.anthropic.claude_code.events":
-                    if event_name == "api_request":
-                        session_id = _unique_string_attribute(attributes, "session.id")
-                        model = _unique_string_attribute(attributes, "model")
-                        query_source = _unique_string_attribute(attributes, "query_source")
-                        if (
-                            session_id
-                            and model
-                            and query_source == "sdk"
-                            and not _has_attribute(attributes, "agent.name")
-                        ):
-                            observations.append((session_id, model, None))
-                    elif event_name == "subagent_completed":
-                        session_id = _unique_string_attribute(attributes, "session.id")
-                        child_key = _unique_string_attribute(attributes, "agent_type")
-                        model = _unique_string_attribute(attributes, "model")
-                        final_model = _unique_string_attribute(attributes, "final_model")
-                        model_swapped = _unique_bool_attribute(attributes, "model_swapped")
-                        if (
-                            session_id
-                            and child_key
-                            and model
-                            and final_model
-                            and model_swapped is not None
-                        ):
-                            observations.append(
-                                (
-                                    session_id,
-                                    "",
-                                    {
-                                        "model": model,
-                                        "final_model": final_model,
-                                        "model_swapped": model_swapped,
-                                        "agent_type": child_key,
-                                    },
-                                )
-                            )
-                elif scope_name == "codex_otel.log_only" and event_name == (
-                    "codex.conversation_starts"
-                ):
-                    session_id = _unique_string_attribute(attributes, "conversation.id")
-                    model = _unique_string_attribute(attributes, "model")
-                    originator = _unique_string_attribute(attributes, "originator")
-                    if session_id and model and originator == "codex_exec":
-                        observations.append((session_id, model, None))
+                    observation = _claude_model_observation(event_name, attributes)
+                elif scope_name == "codex_otel.log_only":
+                    observation = _codex_model_observation(event_name, attributes)
+                else:
+                    continue
+                if observation is not None:
+                    observations.append(observation)
     return tuple(observations)
 
 
@@ -288,60 +298,59 @@ class _OtlpHandler(BaseHTTPRequestHandler):
     def _wrong_method(self) -> None:
         self._send_status(405, "Only POST is supported", extra_headers={"Allow": "POST"})
 
-    def _handle_post(self, sink: LocalOtlpSink) -> None:
-        signal = _SIGNALS.get(self.path)
-        if signal is None:
-            self._send_status(404, "Unsupported OTLP signal path")
-            return
-
+    def _validated_request_framing(self) -> tuple[int, str] | None:
         if self.headers.get_all("Transfer-Encoding"):
             self._send_status(400, "Transfer-Encoding is not supported")
-            return
+            return None
         lengths = self.headers.get_all("Content-Length")
         if lengths is None:
             self._send_status(411, "Content-Length is required")
-            return
+            return None
         if len(lengths) != 1:
             self._send_status(400, "Content-Length must be specified exactly once")
-            return
+            return None
         length_text = lengths[0].strip()
         if not length_text.isdigit():
             self._send_status(400, "Content-Length must be a non-negative integer")
-            return
+            return None
         content_length = int(length_text)
         if content_length > _MAX_ENCODED_REQUEST_BYTES:
             self._send_status(413, "Encoded OTLP request exceeds the size limit")
-            return
+            return None
 
         content_types = self.headers.get_all("Content-Type")
         if content_types is None or len(content_types) != 1:
             self._send_status(415, "Content-Type must be application/json")
-            return
+            return None
         if self.headers.get_content_type().lower() != "application/json":
             self._send_status(415, "Content-Type must be application/json")
-            return
+            return None
         params = self.headers.get_params(header="content-type", failobj=[])[1:]
         charset_values = [value for key, value in params if key.lower() == "charset"]
         if any(key.lower() != "charset" for key, _value in params) or len(charset_values) > 1:
             self._send_status(415, "Only a UTF-8 charset is supported")
-            return
+            return None
         if charset_values and charset_values[0].lower() not in {"utf-8", "utf8"}:
             self._send_status(415, "Only a UTF-8 charset is supported")
-            return
+            return None
 
         encodings = self.headers.get_all("Content-Encoding")
         if encodings is not None and len(encodings) != 1:
             self._send_status(415, "Unsupported Content-Encoding")
-            return
+            return None
         content_encoding = encodings[0].strip().lower() if encodings else "identity"
         if content_encoding not in {"identity", "gzip"}:
             self._send_status(415, "Unsupported Content-Encoding")
-            return
+            return None
+        return content_length, content_encoding
 
+    def _read_json_payload(
+        self, content_length: int, content_encoding: str
+    ) -> tuple[bool, object]:
         body = self.rfile.read(content_length)
         if len(body) != content_length:
             self._send_status(400, "Request body ended before Content-Length bytes")
-            return
+            return False, None
         try:
             if content_encoding == "gzip":
                 body = _decode_gzip_bounded(body)
@@ -349,15 +358,28 @@ class _OtlpHandler(BaseHTTPRequestHandler):
                 raise _PayloadTooLarge
         except _PayloadTooLarge:
             self._send_status(413, "Decoded OTLP request exceeds the size limit")
-            return
+            return False, None
         except _MalformedBody:
             self._send_status(400, "Malformed gzip request body")
-            return
+            return False, None
 
         try:
-            payload = json.loads(body.decode("utf-8"))
+            return True, json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._send_status(400, "Malformed UTF-8 JSON request body")
+            return False, None
+
+    def _handle_post(self, sink: LocalOtlpSink) -> None:
+        signal = _SIGNALS.get(self.path)
+        if signal is None:
+            self._send_status(404, "Unsupported OTLP signal path")
+            return
+        framing = self._validated_request_framing()
+        if framing is None:
+            return
+        content_length, content_encoding = framing
+        payload_valid, payload = self._read_json_payload(content_length, content_encoding)
+        if not payload_valid:
             return
 
         sanitized_payload = _sanitize(payload)

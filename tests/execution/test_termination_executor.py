@@ -138,17 +138,16 @@ async def test_active_child_deferral_runs_until_ceiling(
     clock = _install_deferral_clock(monkeypatch)
     liveness_checks = 0
 
-    def has_active_child(_pid: int) -> bool:
+    def has_active_signals(
+        _pid: int, _marker_dir: Path | None, _session_id: str | None
+    ) -> frozenset[str]:
         nonlocal liveness_checks
         liveness_checks += 1
-        return True
+        return frozenset({"child_processes"})
 
     owner = await _spawn(30, tmp_path)
     monkeypatch.setattr(
-        _patch_process__termination, "_has_active_child_processes", has_active_child
-    )
-    monkeypatch.setattr(
-        _patch_process__termination, "_has_active_api_connection", lambda _pid: False
+        _patch_process__termination, "_active_liveness_signals", has_active_signals
     )
 
     kill_reason, _returncode, cleanup = await execute_termination_action(
@@ -173,12 +172,14 @@ async def test_zero_child_deferral_ceiling_skips_liveness_check(
 ) -> None:
     owner = await _spawn(30, tmp_path)
 
-    def unexpected_liveness_check(_pid: int) -> bool:
+    def unexpected_liveness_check(
+        _pid: int, _marker_dir: Path | None, _session_id: str | None
+    ) -> frozenset[str]:
         pytest.fail("zero child deferral ceiling must skip liveness checks")
 
     monkeypatch.setattr(
         _patch_process__termination,
-        "_has_active_child_processes",
+        "_active_liveness_signals",
         unexpected_liveness_check,
     )
 
@@ -201,15 +202,12 @@ async def test_child_deferral_stops_when_children_become_inactive(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     clock = _install_deferral_clock(monkeypatch)
-    activity = iter((True, False))
+    activity = iter((frozenset({"child_processes"}), frozenset()))
     owner = await _spawn(30, tmp_path)
     monkeypatch.setattr(
         _patch_process__termination,
-        "_has_active_child_processes",
-        lambda _pid: next(activity),
-    )
-    monkeypatch.setattr(
-        _patch_process__termination, "_has_active_api_connection", lambda _pid: False
+        "_active_liveness_signals",
+        lambda _pid, _marker_dir, _session_id: next(activity),
     )
 
     kill_reason, _returncode, cleanup = await execute_termination_action(

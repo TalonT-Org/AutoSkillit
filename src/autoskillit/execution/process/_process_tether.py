@@ -160,8 +160,10 @@ def _tether_record_to_dict(record: TetherRecord) -> dict[str, Any]:
     }
 
 
-def _tether_record_from_dict(data: dict[str, Any]) -> TetherRecord:
+def _tether_record_from_dict(data: dict[str, Any] | None) -> TetherRecord:
     """Raise ValueError/KeyError/TypeError on any malformed/missing field."""
+    if data is None:
+        raise TypeError("tether record must be an object")
     return TetherRecord(
         schema_version=int(data["schema_version"]),
         child_pid=int(data["child_pid"]),
@@ -267,8 +269,6 @@ def find_orphaned_tethers(
         if age < min_age_seconds:
             continue
         data = read_versioned_json(path, 1)
-        if data is None:
-            continue
         try:
             record = _tether_record_from_dict(data)
         except (ValueError, KeyError, TypeError):
@@ -314,10 +314,6 @@ def sweep_orphaned_tethers(
             continue
 
         data = read_versioned_json(path, 1)
-        if data is None:
-            remove_tether(path)
-            outcomes.append(TetherSweepOutcome(str(path), -1, "malformed"))
-            continue
         try:
             record = _tether_record_from_dict(data)
         except (ValueError, KeyError, TypeError):

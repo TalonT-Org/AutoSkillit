@@ -581,7 +581,7 @@ def _validate_credential_parent(credential_file: Path | None, excluded: tuple[Pa
             raise EvidenceReaderLaunchError("provider_auth_invalid")
 
 
-def _process_reader_probes(
+def _run_and_cache_reader_probes(
     codex: str,
     definition: AgentDef,
     auth: EvidenceReaderAuthSelection,
@@ -770,7 +770,7 @@ def launch_evidence_reader(
             codex, cwd=cwd, environment=environment, deadline=deadline
         )
         probe_cache_path = invocation.invocation_dir.parent / _PROBE_CACHE_NAME
-        _process_reader_probes(
+        _run_and_cache_reader_probes(
             codex,
             definition,
             auth,

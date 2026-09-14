@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -128,6 +128,16 @@ __all__ = [
 logger = get_logger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class HeadlessLaunchPreparation:
+    """Fully-prepared launch context returned by _prepare_headless_launch."""
+
+    backend: CodingAgentBackend
+    model_identity: ModelIdentity
+    launch_preparation: LaunchPreparation
+    add_dirs: tuple[ValidatedAddDir, ...]
+
+
 def _prepare_headless_launch(
     skill_command: str,
     cwd: str,
@@ -146,7 +156,7 @@ def _prepare_headless_launch(
     resume_session_id: str,
     resume_launch_contract: ResolvedLaunchContract | None,
     readonly_skill: bool,
-) -> tuple[CodingAgentBackend, ModelIdentity, LaunchPreparation, tuple[ValidatedAddDir, ...]]:
+) -> HeadlessLaunchPreparation:
     caller_key_path = "run_skill.model"
     model_pin = resolve_model_pin(
         model,
@@ -308,7 +318,12 @@ def _prepare_headless_launch(
             "process_name": _cmd_backend.capabilities.process_name,
         },
     )
-    return _cmd_backend, model_identity, launch_preparation, add_dirs_tuple
+    return HeadlessLaunchPreparation(
+        backend=_cmd_backend,
+        model_identity=model_identity,
+        launch_preparation=launch_preparation,
+        add_dirs=add_dirs_tuple,
+    )
 
 
 async def run_headless_core(
@@ -386,45 +401,43 @@ async def run_headless_core(
         skill_command=original_skill_command[:SKILL_COMMAND_DISPLAY_MAX],
         step_name=step_name or None,
     ):
-        _cmd_backend, model_identity, launch_preparation, add_dirs_tuple = (
-            _prepare_headless_launch(
-                skill_command,
-                cwd,
-                ctx,
-                model=model,
-                step_name=step_name,
-                recipe_name=recipe_name,
-                profile_name=profile_name,
-                add_dirs=add_dirs,
-                backend_authority=backend_authority,
-                provider_extras=provider_extras,
-                provider_name=provider_name,
-                capability_contract=capability_contract,
-                network_access=network_access,
-                resume_session_id=resume_session_id,
-                resume_launch_contract=resume_launch_contract,
-                readonly_skill=readonly_skill,
-            )
+        launch = _prepare_headless_launch(
+            skill_command,
+            cwd,
+            ctx,
+            model=model,
+            step_name=step_name,
+            recipe_name=recipe_name,
+            profile_name=profile_name,
+            add_dirs=add_dirs,
+            backend_authority=backend_authority,
+            provider_extras=provider_extras,
+            provider_name=provider_name,
+            capability_contract=capability_contract,
+            network_access=network_access,
+            resume_session_id=resume_session_id,
+            resume_launch_contract=resume_launch_contract,
+            readonly_skill=readonly_skill,
         )
         managed_lineage_observer = _ManagedLineageObserver.create(
             store=ctx.managed_headless_session_lineage_store,
             decision=native_shell_capture_decision,
             reference=managed_lineage_ref,
-            backend=_cmd_backend,
+            backend=launch.backend,
             session_kind=ManagedHeadlessSessionKind.SKILL,
         )
         plugin_load_mode = _headless_plugin_load_mode(
-            _cmd_backend,
-            add_dirs=add_dirs_tuple,
+            launch.backend,
+            add_dirs=launch.add_dirs,
         )
         _build_spec = _skill_launch_spec_builder(
-            backend=_cmd_backend,
+            backend=launch.backend,
             skill_command=skill_command,
             cwd=cwd,
             completion_marker=effective_marker,
-            configured_model=launch_preparation.configured_model,
+            configured_model=launch.launch_preparation.configured_model,
             output_format=cfg.output_format,
-            add_dirs=add_dirs_tuple,
+            add_dirs=launch.add_dirs,
             exit_after_stop_delay_ms=cfg.exit_after_stop_delay_ms,
             stream_idle_timeout_ms=cfg.stream_idle_timeout_ms,
             mcp_tool_timeout_sec=cfg.mcp_tool_timeout_sec,
@@ -445,14 +458,14 @@ async def run_headless_core(
             child_outcome_log_dir=str(resolve_log_dir(ctx.config.linux_tracing.log_dir)),
         )
 
-        logger.debug("run_headless_core_backend_dispatch", backend=_cmd_backend.name)
+        logger.debug("run_headless_core_backend_dispatch", backend=launch.backend.name)
 
         effective_timeout = timeout if timeout is not None else cfg.timeout
         effective_stale = stale_threshold if stale_threshold is not None else cfg.stale_threshold
         logger.debug(
             "run_headless_core_entry",
             cwd=cwd,
-            resolved_model=model_identity.configured_model,
+            resolved_model=launch.model_identity.configured_model,
             timeout=effective_timeout,
             stale_threshold=effective_stale,
             plugin_load_mode=plugin_load_mode.value,
@@ -492,9 +505,9 @@ async def run_headless_core(
                 provider_fallback_name=provider_fallback_name,
                 provider_extras=provider_extras,
                 launch_resolver=ctx.launch_resolver,
-                launch_preparation=launch_preparation,
+                launch_preparation=launch.launch_preparation,
                 resume_launch_contract=resume_launch_contract,
-                model_identity=model_identity,
+                model_identity=launch.model_identity,
                 marker_dir=marker_dir,
                 session_id=caller_session_id,
                 backend_resume_session_id=resume_session_id,

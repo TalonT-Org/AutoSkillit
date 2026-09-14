@@ -75,7 +75,6 @@ exact pull closure. It does not masquerade as the tool's normal operational fail
 | Progressive recipe carrier `< 10_000 UTF-8 bytes` | Exact admission bound for segmented startup, checkpoint, and no-repeat recovery values; base-result spilling reserves the carrier intact. |
 | `authoritative_attested_recipe_result_token_limit = 56_750` | Derived as `((195_000 + 3) // 4) + 8_000`. It is selectable only from protected host evidence for the current call, never from nested arguments or rollout files. |
 | `CODEX_HISTORY_RETENTION_TOKEN_LIMIT = 56_750` | Written to upstream `tool_output_token_limit`; controls later stored history and does not select the current outer result. Equality with the attested result limit is intentional but does not merge the authority domains. |
-| `CODEX_AUTO_COMPACT_LIMIT = 999_999_999` | Retain the unreachable sentinel and the recovery obligation accepted in [ADR-0004](0004-recipe-redelivery.md). This protocol does not relax recipe-preservation policy. |
 | `inline_max_chars = 5_000` | Preserve the previous truncation threshold while changing the representation from destructive clipping to an artifact-backed preview. The configured 2,500-character head and 2,500-character tail retain both diagnostic setup and terminal status; a spill marker is added outside those source slices. |
 | `response_max_bytes = 90_000` | Bound the exact compact serialized handler payload before a coarser transport can clip it. Bytes are authoritative here; this is not a token or full JSON-RPC-envelope estimate. |
 | `MAX_MCP_OUTPUT_TOKENS = 50_000` | Keep Claude's independently defined setting separate. It has no shared source of truth with Codex result or history limits and does not control Claude Code's observed disk-persistence gate. Claude's native Bash spill behavior covers shell output on that backend. |
@@ -136,16 +135,12 @@ damage bound, not the current call's outer result selector, and does not make
 `develop`, not the repository's default branch, `main`. Closure must therefore be
 recorded explicitly in the issue body.
 
-Issue #4369 re-verified both governed limits against upstream `rust-v0.145.0` (see
-Forward Obligations, below). Two claims in the "Numeric Limits and Rationale" table
-above are superseded by that re-verification: `CODEX_HISTORY_RETENTION_TOKEN_LIMIT`'s
-"does not select the current outer result" framing incorrectly implied `tool_output_token_limit`
-only governs later-stored history — it also governs the current turn's tool output,
-per `CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_HISTORY_RETENTION_TOKEN_LIMIT"]`
-(`execution/backends/_codex_config.py`); and `CODEX_AUTO_COMPACT_LIMIT`'s "unreachable
-sentinel" framing no longer holds, since `ModelInfo::auto_compact_token_limit()` clamps
-it to 90% of the resolved context window (244,800 for gpt-5.6-sol), per
-`CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_AUTO_COMPACT_LIMIT"]`.
+Issue #4369 re-verified the history-retention setting against upstream
+`rust-v0.145.0` (see Forward Obligations, below). `tool_output_token_limit` governs
+the output Codex retains, including the current turn's tool output; it never selects
+the outer result limit. The same investigation recorded a historical numeric sentinel
+that Codex clamped to 90% of the resolved context window (244,800 for gpt-5.6-sol).
+That sentinel has no current AutoSkillit authority.
 
 ## Accepted Gaps
 
@@ -253,27 +248,17 @@ insertion control, not a measurement of remaining context.
   addition, or output-discipline policy-version change invalidates the applicable cached
   capability probe.
 - Run and pass the live large-output probe before making any of those changes effective.
-- Preserve ADR-0004's end-to-end recipe re-delivery obligation if the
-  999,999,999 auto-compaction sentinel is ever relaxed. Re-delivery is implemented
-  as re-sending the envelope (when the original response was an envelope) and
-  pulling each step body via `get_recipe_section(section=<step_name>)`, chunked via
-  `part` / `has_more` / `next_part` for oversized sections — not as a replay of
-  the full raw payload. Reconciles with the ADR-0004 cross-reference amendment.
-- After each codex-cli upgrade, re-verify the result-limit parser, history-retention setting
-  (`CODEX_HISTORY_RETENTION_TOKEN_LIMIT`), and auto-compact sentinel
-  (`CODEX_AUTO_COMPACT_LIMIT`) against the upstream registry AND observed session
-  windows, then bump `CODEX_LIMITS_LAST_VERIFIED_VERSION`. Doctor Check 39
-  (`codex_limits_verified`) mechanizes the reminder. `CODEX_LIMIT_VERIFICATION_REGISTRY`
-  is the durable, machine-readable record of what was checked and found;
-  `CODEX_LIMITS_LAST_VERIFIED_VERSION` is derived from it as the minimum
-  `checked_at_cli_version` across its entries. At codex-cli 0.145.0,
-  `CODEX_AUTO_COMPACT_LIMIT` was found neutralized upstream:
-  `ModelInfo::auto_compact_token_limit()` clamps it to 90% of the resolved context
-  window, an effective threshold of 244,800 for gpt-5.6-sol. Issue #4280's investigation
-  found upstream models.json (post-0.144.1) listing gpt-5.6-sol at 372,000 tokens
-  vs 258,400 in cli 0.144.1, but the effective window is server/catalog-controlled
-  and oscillated during July 2026 (openai/codex#31860, #32806) — re-verify, do not
-  assume an upgrade restores headroom.
+- Keep ADR-0004's tested end-to-end recipe re-delivery path. A replacement delivery
+  uses fresh response identities, consumes the fixed pages and every post-prune step
+  page through `get_recipe_section`, completes initialization, and then authorizes a
+  step; it never replays a raw payload.
+- Re-verify the result-limit parser and history-retention setting
+  (`CODEX_HISTORY_RETENTION_TOKEN_LIMIT`) after each codex-cli upgrade. The retained
+  history setting does not select the outer result limit. Runtime tuning is bounded by
+  upstream: Codex clamps the automatic-compaction threshold to 90% of the resolved
+  context window, which the model catalog further scales with
+  `effective_context_window_percent`. The generated `PreCompact(auto)` veto is the
+  recipe-preservation defense; numeric values only tune when that veto is reached.
 - openai/codex#25458 / #27830: `fork_turns "none"` task-envelope delivery bug — until
   the upstream bug is fixed, `codex --json` sessions cannot reliably deliver
   task-envelope context to sub-agents, so the intake discipline requires sub-agents to
@@ -283,12 +268,10 @@ insertion control, not a measurement of remaining context.
   files.
 - openai/codex#33881: agent-TOML `model`/`model_reasoning_effort` reportedly ignored
   on 0.144.5 — affects the pins `_generate_agent_tomls` writes.
-- Upstream auto-compact semantics: `model_auto_compact_token_limit` is consulted
-  directly only under the non-default `BodyAfterPrefix` scope; the default scope is
-  `Total`, under which the trigger uses `ModelInfo::auto_compact_token_limit()`, which
-  clamps the configured value to 90% of the resolved context window. The practical
-  mechanism is the clamp, not a separate trigger — re-verify `CODEX_AUTO_COMPACT_LIMIT`'s
-  disabling effect per upgrade.
+- Historical auto-compact investigation: upstream applies the 90% clamp to a numeric
+  threshold under its default scope. This confirms that numbers tune an upstream
+  trigger rather than disable it. Current AutoSkillit launches rely on the generated
+  `PreCompact(auto)` veto and must retain its compatible, trusted hook contract.
 
 ## Consequences
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 import anyio
 import psutil
@@ -288,28 +288,33 @@ async def _discover_session_log(
     return session_file
 
 
+StaleSuppressionReason = Literal[
+    "pending_tasks", "api_connection", "child_processes", "dispatch_marker"
+]
+
+
 def _stale_suppression_reason(
     has_pending_tasks: Callable[[], bool] | None,
     pid: int | None,
     marker_dir: Path | None,
     caller_session_id: str | None,
-) -> str | None:
+) -> StaleSuppressionReason | None:
     """Return the first active stale-suppression cause in priority order."""
     if has_pending_tasks is not None and has_pending_tasks():
-        return "pending tasks"
+        return "pending_tasks"
     if pid is not None and _has_active_api_connection(pid):
-        return "ESTABLISHED port-443 connection"
+        return "api_connection"
     if pid is not None and _has_active_child_processes(pid):
-        return "CPU-active child processes"
+        return "child_processes"
     if marker_dir is not None and _has_active_execution_marker(
         marker_dir, session_id=caller_session_id
     ):
-        return "active dispatch marker"
+        return "dispatch_marker"
     return None
 
 
 def _continue_stale_suppression(
-    reason: str,
+    reason: StaleSuppressionReason,
     suppression_start: float | None,
     max_suppression_seconds: float,
     elapsed: float,
@@ -320,7 +325,7 @@ def _continue_stale_suppression(
     """Advance one active suppression window and log its cause-specific outcome."""
     if suppression_start is None:
         suppression_start = time.monotonic()
-    if reason == "active dispatch marker":
+    if reason == "dispatch_marker":
         suppression_elapsed = time.monotonic() - suppression_start
         if suppression_elapsed >= max_suppression_seconds:
             logger.warning(
@@ -332,7 +337,7 @@ def _continue_stale_suppression(
             )
             return suppression_start, None
     elif time.monotonic() - suppression_start >= max_suppression_seconds:
-        if reason != "pending tasks":
+        if reason != "pending_tasks":
             logger.warning(
                 "Suppression bounded: stale kill after %.0fs consecutive "
                 "suppression (max_suppression_seconds=%.0f, pid=%d)",
@@ -342,21 +347,21 @@ def _continue_stale_suppression(
             )
         return suppression_start, None
     last_change = time.monotonic()
-    if reason == "ESTABLISHED port-443 connection":
+    if reason == "api_connection":
         logger.warning(
             "JSONL silent for %.0fs but ESTABLISHED port-443 connection — "
             "suppressing stale kill (pid=%d)",
             elapsed,
             pid,
         )
-    elif reason == "CPU-active child processes":
+    elif reason == "child_processes":
         logger.warning(
             "JSONL silent for %.0fs but child processes are CPU-active — "
             "suppressing stale kill (pid=%d)",
             elapsed,
             pid,
         )
-    elif reason == "active dispatch marker":
+    elif reason == "dispatch_marker":
         logger.warning(
             "JSONL silent but active dispatch marker found — suppressing stale kill",
             stale_elapsed=elapsed,

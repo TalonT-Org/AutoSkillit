@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import inspect
 from collections.abc import Mapping
+from typing import Any
 
 import regex as re
 
@@ -23,6 +24,7 @@ from autoskillit.recipe.contracts import (
     load_bundled_manifest,
 )
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
 
 logger = get_logger(__name__)
 
@@ -60,6 +62,99 @@ def _get_args_values(with_args: dict) -> dict[str, object]:
         if key not in {"callable", "timeout", "args"}:
             result[key] = val
     return result
+
+
+def _nullable_skill_input_findings(
+    step_name: str,
+    step: RecipeStep,
+    optional_refs: set[str],
+    manifest: dict[str, Any],
+) -> list[RuleFinding]:
+    """Validate nullable context references passed through skill_inputs."""
+    skill_inputs = step.with_args.get("skill_inputs")
+    skill_command = step.with_args.get("skill_command", "")
+    if not isinstance(skill_inputs, Mapping) or not isinstance(skill_command, str):
+        return []
+    skill_name = resolve_skill_name(skill_command)
+    if not skill_name:
+        return []
+    contract = get_skill_contract(skill_name, manifest)
+    if contract is None:
+        return []
+
+    input_by_name = {item.name: item for item in contract.inputs}
+    findings: list[RuleFinding] = []
+    for input_name, value in skill_inputs.items():
+        input_def = input_by_name.get(input_name)
+        if input_def is None or not isinstance(value, str):
+            continue
+        dependencies = optional_refs.intersection(_CONTEXT_REF_RE.findall(value))
+        if not dependencies:
+            continue
+        dependency = sorted(dependencies)[0]
+        if input_def.required:
+            message = (
+                f"Step '{step_name}' required input '{input_name}' for skill "
+                f"'{skill_name}' depends on optional context ref '{dependency}'. "
+                "Capture or gate the value before dispatch."
+            )
+        elif input_def.absence_value is None:
+            message = (
+                f"Step '{step_name}' optional input '{input_name}' for skill "
+                f"'{skill_name}' depends on optional context ref '{dependency}' "
+                "without a contract absence_value."
+            )
+        else:
+            continue
+        findings.append(
+            make_finding(
+                rule_name="nullable-optional-context-ref",
+                step_name=step_name,
+                message=message,
+            )
+        )
+    return findings
+
+
+def _nullable_callable_input_findings(
+    step_name: str,
+    step: RecipeStep,
+    optional_refs: set[str],
+    manifest: dict[str, Any],
+) -> list[RuleFinding]:
+    """Validate nullable context references passed to callable inputs."""
+    callable_path = step.with_args.get("callable", "")
+    if not callable_path:
+        return []
+    contract = get_callable_contract(callable_path, manifest)
+    if contract is None:
+        return []
+    non_nullable = {input_def.name for input_def in contract.inputs if not input_def.nullable}
+    if not non_nullable:
+        return []
+
+    args_values = _get_args_values(step.with_args)
+    findings: list[RuleFinding] = []
+    for input_name in sorted(non_nullable):
+        argument_value = args_values.get(input_name)
+        if not isinstance(argument_value, str):
+            continue
+        for context_ref in _CONTEXT_REF_RE.findall(argument_value):
+            if context_ref not in optional_refs:
+                continue
+            findings.append(
+                make_finding(
+                    rule_name="nullable-optional-context-ref",
+                    step_name=step_name,
+                    message=(
+                        f"Step '{step_name}' passes optional context ref '{context_ref}' "
+                        f"to non-nullable input '{input_name}' of callable "
+                        f"'{callable_path}'. Add null coercion in the callable "
+                        f"or remove from optional_context_refs."
+                    ),
+                )
+            )
+    return findings
 
 
 @semantic_rule(
@@ -200,82 +295,21 @@ def _check_downstream_context_completeness(ctx: ValidationContext) -> list[RuleF
     severity=Severity.ERROR,
 )
 def _check_nullable_optional_context_ref(ctx: ValidationContext) -> list[RuleFinding]:
-    findings = []
+    findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
     for step_name, step in ctx.recipe.steps.items():
         optional_refs = set(step.optional_context_refs)
         if not optional_refs:
             continue
         if step.tool == "run_skill":
-            skill_inputs = step.with_args.get("skill_inputs")
-            skill_command = step.with_args.get("skill_command", "")
-            if not isinstance(skill_inputs, Mapping) or not isinstance(skill_command, str):
-                continue
-            skill_name = resolve_skill_name(skill_command)
-            if not skill_name:
-                continue
-            contract = get_skill_contract(skill_name, manifest)
-            if contract is None:
-                continue
-            input_by_name = {item.name: item for item in contract.inputs}
-            for input_name, value in skill_inputs.items():
-                input_def = input_by_name.get(input_name)
-                if input_def is None or not isinstance(value, str):
-                    continue
-                dependencies = optional_refs.intersection(_CONTEXT_REF_RE.findall(value))
-                if not dependencies:
-                    continue
-                dependency = sorted(dependencies)[0]
-                if input_def.required:
-                    message = (
-                        f"Step '{step_name}' required input '{input_name}' for skill "
-                        f"'{skill_name}' depends on optional context ref '{dependency}'. "
-                        "Capture or gate the value before dispatch."
-                    )
-                elif input_def.absence_value is None:
-                    message = (
-                        f"Step '{step_name}' optional input '{input_name}' for skill "
-                        f"'{skill_name}' depends on optional context ref '{dependency}' "
-                        "without a contract absence_value."
-                    )
-                else:
-                    continue
-                findings.append(
-                    make_finding(
-                        rule_name="nullable-optional-context-ref",
-                        step_name=step_name,
-                        message=message,
-                    )
-                )
+            findings.extend(
+                _nullable_skill_input_findings(step_name, step, optional_refs, manifest)
+            )
             continue
-        if step.tool != "run_python":
-            continue
-        callable_path = step.with_args.get("callable", "")
-        if not callable_path:
-            continue
-        contract = get_callable_contract(callable_path, manifest)
-        if contract is None:
-            continue
-        non_nullable = {inp.name for inp in contract.inputs if not inp.nullable}
-        if not non_nullable:
-            continue
-        args_values = _get_args_values(step.with_args)
-        for inp_name in sorted(non_nullable):
-            arg_val = args_values.get(inp_name)
-            if not isinstance(arg_val, str):
-                continue
-            for ref in _CONTEXT_REF_RE.findall(arg_val):
-                if ref in optional_refs:
-                    findings.append(
-                        make_finding(
-                            rule_name="nullable-optional-context-ref",
-                            step_name=step_name,
-                            message=f"Step '{step_name}' passes optional context ref '{ref}' "
-                            f"to non-nullable input '{inp_name}' of callable "
-                            f"'{callable_path}'. Add null coercion in the callable "
-                            f"or remove from optional_context_refs.",
-                        )
-                    )
+        if step.tool == "run_python":
+            findings.extend(
+                _nullable_callable_input_findings(step_name, step, optional_refs, manifest)
+            )
     return findings
 
 
@@ -327,6 +361,47 @@ def _check_work_dir_arg_misplacement(ctx: ValidationContext) -> list[RuleFinding
     return findings
 
 
+def _unrouted_callable_verdict_findings(
+    step_name: str,
+    step: RecipeStep,
+    manifest: dict[str, Any],
+) -> list[RuleFinding]:
+    """Return all allowed callable verdict values lacking an explicit route."""
+    if step.on_result is None:
+        return []
+    callable_path = step.with_args.get("callable", "")
+    if not callable_path:
+        return []
+    contract = get_callable_contract(callable_path, manifest)
+    if contract is None:
+        return []
+    conditions = step.on_result.conditions
+    if _has_catch_all(conditions):
+        return []
+
+    findings: list[RuleFinding] = []
+    for output in contract.outputs:
+        if not output.allowed_values:
+            continue
+        for value in output.allowed_values:
+            if any(_is_callable_explicit_condition(cond.when, value) for cond in conditions):
+                continue
+            findings.append(
+                make_finding(
+                    rule_name="unrouted-callable-verdict",
+                    step_name=step_name,
+                    message=f"Step '{step_name}' has callable "
+                    f"'{callable_path}' which declares output "
+                    f"'{output.name}' with allowed_values including "
+                    f"{value!r}, but the on_result block has no condition "
+                    f"explicitly routing that value. Add a per-value "
+                    f"when: \"${{{{ result.{output.name} }}}} == '{value}'\" "
+                    f"condition or remove the value from allowed_values.",
+                )
+            )
+    return findings
+
+
 @semantic_rule(
     name="unrouted-callable-verdict",
     description=(
@@ -341,43 +416,8 @@ def _check_unrouted_callable_verdict(ctx: ValidationContext) -> list[RuleFinding
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
     for step_name, step in ctx.recipe.steps.items():
-        if step.tool != "run_python":
-            continue
-        if step.on_result is None:
-            continue
-        callable_path = step.with_args.get("callable", "")
-        if not callable_path:
-            continue
-        contract = get_callable_contract(callable_path, manifest)
-        if contract is None:
-            continue
-        conditions = step.on_result.conditions
-        for output in contract.outputs:
-            if not output.allowed_values:
-                continue
-            unrouted = [
-                v
-                for v in output.allowed_values
-                if not any(_is_callable_explicit_condition(cond.when, v) for cond in conditions)
-            ]
-            if not unrouted:
-                continue
-            if _has_catch_all(conditions):
-                continue
-            for v in unrouted:
-                findings.append(
-                    make_finding(
-                        rule_name="unrouted-callable-verdict",
-                        step_name=step_name,
-                        message=f"Step '{step_name}' has callable "
-                        f"'{callable_path}' which declares output "
-                        f"'{output.name}' with allowed_values including "
-                        f"{v!r}, but the on_result block has no condition "
-                        f"explicitly routing that value. Add a per-value "
-                        f"when: \"${{{{ result.{output.name} }}}} == '{v}'\" "
-                        f"condition or remove the value from allowed_values.",
-                    )
-                )
+        if step.tool == "run_python":
+            findings.extend(_unrouted_callable_verdict_findings(step_name, step, manifest))
     return findings
 
 

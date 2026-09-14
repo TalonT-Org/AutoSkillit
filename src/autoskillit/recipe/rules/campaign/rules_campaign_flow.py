@@ -13,7 +13,7 @@ from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
 from autoskillit.recipe.schema import CAMPAIGN_REF_RE, RecipeKind
 
 if TYPE_CHECKING:
-    pass
+    from autoskillit.recipe.schema import CampaignDispatch
 
 logger = get_logger(__name__)
 
@@ -36,6 +36,19 @@ def _build_ancestors(name: str, adjacency: dict[str, list[str]]) -> set[str]:
     return ancestors
 
 
+def _ancestor_capture_keys(
+    name: str,
+    adjacency: dict[str, list[str]],
+    dispatch_by_name: dict[str, CampaignDispatch],
+) -> set[str]:
+    available_captures: set[str] = set()
+    for ancestor_name in _build_ancestors(name, adjacency):
+        ancestor = dispatch_by_name.get(ancestor_name)
+        if ancestor:
+            available_captures.update(ancestor.capture.keys())
+    return available_captures
+
+
 @semantic_rule(
     name="campaign-ingredient-refs-have-prior-capture",
     description="${{ campaign.key }} in ingredients must be captured by an ancestor dispatch",
@@ -50,12 +63,7 @@ def _check_campaign_ingredient_refs_have_prior_capture(
     dispatch_by_name = {d.name: d for d in ctx.recipe.dispatches}
     findings = []
     for d in ctx.recipe.dispatches:
-        ancestors = _build_ancestors(d.name, adjacency)
-        available_captures: set[str] = set()
-        for ancestor_name in ancestors:
-            ancestor = dispatch_by_name.get(ancestor_name)
-            if ancestor:
-                available_captures.update(ancestor.capture.keys())
+        available_captures = _ancestor_capture_keys(d.name, adjacency, dispatch_by_name)
         for ing_key, ing_val in d.ingredients.items():
             if not isinstance(ing_val, str):
                 continue
@@ -299,12 +307,7 @@ def _check_dispatch_skip_when_valid(ctx: ValidationContext) -> list[RuleFinding]
                     )
                 )
 
-        ancestors = _build_ancestors(d.name, adjacency)
-        available_captures: set[str] = set()
-        for ancestor_name in ancestors:
-            ancestor = dispatch_by_name.get(ancestor_name)
-            if ancestor:
-                available_captures.update(ancestor.capture.keys())
+        available_captures = _ancestor_capture_keys(d.name, adjacency, dispatch_by_name)
 
         for ref in CAMPAIGN_REF_RE.findall(d.skip_when):
             if ref not in available_captures:

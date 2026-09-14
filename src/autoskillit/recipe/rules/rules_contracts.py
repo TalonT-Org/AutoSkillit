@@ -52,6 +52,22 @@ def _normalize_for_pattern_match(text: str) -> str:
     return text
 
 
+def _classify_context_predecessors(
+    ctx: ValidationContext, step_name: str, context_name: str
+) -> list[tuple[str, bool]]:
+    classified: list[tuple[str, bool]] = []
+    for source, edge in ctx.predecessor_edges.get(step_name, ()):
+        source_facts = ctx.must_defined_context[source]
+        source_captures = frozenset(ctx.recipe.steps[source].capture) | frozenset(
+            ctx.recipe.steps[source].capture_list
+        )
+        edge_facts = source_facts | source_captures if edge.capture_available else source_facts
+        rendered = f"{source} -[{edge.edge_type}]-> {step_name}"
+        classified.append((rendered, context_name in edge_facts))
+
+    return classified
+
+
 @semantic_rule(
     name="mapped-skill-context-definition",
     description=(
@@ -96,18 +112,15 @@ def _check_mapped_skill_context_definitions(
                 if vacancy_is_authorized:
                     continue
 
-                bypassing: list[str] = []
-                carrying: list[str] = []
-                for source, edge in ctx.predecessor_edges.get(step_name, ()):
-                    source_facts = ctx.must_defined_context[source]
-                    source_captures = frozenset(ctx.recipe.steps[source].capture) | frozenset(
-                        ctx.recipe.steps[source].capture_list
-                    )
-                    edge_facts = (
-                        source_facts | source_captures if edge.capture_available else source_facts
-                    )
-                    rendered = f"{source} -[{edge.edge_type}]-> {step_name}"
-                    (carrying if context_name in edge_facts else bypassing).append(rendered)
+                classified_edges = _classify_context_predecessors(ctx, step_name, context_name)
+                bypassing = sorted(
+                    rendered
+                    for rendered, carries_context in classified_edges
+                    if not carries_context
+                )
+                carrying = sorted(
+                    rendered for rendered, carries_context in classified_edges if carries_context
+                )
 
                 findings.append(
                     make_finding(
@@ -117,9 +130,9 @@ def _check_mapped_skill_context_definitions(
                             f"Recipe {ctx.recipe.name!r} step {step_name!r} skill input "
                             f"{bound.name!r} references context {context_name!r} without an "
                             "all-path definition. Bypassing predecessor edges: "
-                            f"{', '.join(sorted(bypassing)) or '(entry)'}. "
+                            f"{', '.join(bypassing) or '(entry)'}. "
                             "Capture-carrying predecessor edges: "
-                            f"{', '.join(sorted(carrying)) or '(none)'}. Add an all-path "
+                            f"{', '.join(carrying) or '(none)'}. Add an all-path "
                             "producer or declare optional_context_refs with a non-required "
                             "SkillInput absence_value."
                         ),
@@ -269,6 +282,17 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
     findings: list[RuleFinding] = []
     manifest = load_bundled_manifest()
 
+    mismatch_messages: dict[tuple[str | None, bool], tuple[str, Severity]] = {
+        ("conditional", False): (
+            "write_behavior='conditional' requires non-empty write_expected_when.",
+            Severity.ERROR,
+        ),
+        ("always", True): (
+            "write_behavior='always' must not have write_expected_when (contradictory).",
+            Severity.WARNING,
+        ),
+    }
+
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
@@ -296,24 +320,15 @@ def _check_write_behavior_consistency(ctx: ValidationContext) -> list[RuleFindin
                     ),
                 )
             )
-        if wb == "conditional" and not wew:
+        mismatch = mismatch_messages.get((wb, bool(wew)))
+        if mismatch is not None:
+            message, severity = mismatch
             findings.append(
                 make_finding(
                     rule_name="write-behavior-consistency",
                     step_name=step_name,
-                    message="write_behavior='conditional' requires non-empty write_expected_when.",
-                )
-            )
-        if wb == "always" and wew:
-            findings.append(
-                make_finding(
-                    rule_name="write-behavior-consistency",
-                    step_name=step_name,
-                    message=(
-                        "write_behavior='always' must not have "
-                        "write_expected_when (contradictory)."
-                    ),
-                    severity=Severity.WARNING,
+                    message=message,
+                    severity=severity,
                 )
             )
         if external_effect not in VALID_EXTERNAL_EFFECTS:

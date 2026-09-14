@@ -154,7 +154,7 @@ FILE_COUNT_LIMITS: dict[str, int] = {
     "pipeline": 19,
     "fleet": 20,
     "server/tools": 39,
-    "execution/process": 11,
+    "execution/process": 12,  # 750-line-budget watcher split (#5036)
     "execution/backends": 30,
     "execution/github_review": 15,
     "execution/headless": 15,

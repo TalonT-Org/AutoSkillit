@@ -533,7 +533,7 @@ def _reader_probe_cache_key(
     ).hexdigest()
 
 
-def _validate_launch_request(
+def _prepare_launch_request(
     definition: AgentDef,
     *,
     prompt: str,
@@ -694,7 +694,7 @@ def launch_evidence_reader(
 ) -> EvidenceReaderLaunchResult:
     """Launch, validate, and completely remove one sterile Codex reader session."""
 
-    tools = _validate_launch_request(
+    tools = _prepare_launch_request(
         definition,
         prompt=prompt,
         expected_scope_digest=expected_scope_digest,

@@ -7,7 +7,10 @@ import tomllib
 import pytest
 
 from autoskillit.execution import _serialize_toml
-from autoskillit.execution.backends._codex_hooks import generate_codex_hooks_config
+from autoskillit.execution.backends._codex_hooks import (
+    generate_codex_hooks_config,
+    sync_managed_codex_hooks_to_config,
+)
 from autoskillit.hook_registry import HOOK_REGISTRY, generate_hooks_json
 
 pytestmark = [pytest.mark.layer("hooks"), pytest.mark.medium]
@@ -73,3 +76,24 @@ class TestCodexTomlFormatContract:
         assert any("shell_capture_hook" in hook["command"] for hook in codex_entry["hooks"])
         assert any("shell_capture_hook" in hook["command"] for hook in claude_entry["hooks"])
         assert codex_entry["matcher"].encode() == claude_entry["matcher"].encode()
+
+    def test_runtime_precompact_hook_is_synchronous_and_destination_only(self, tmp_path):
+        assert "PreCompact" not in generate_codex_hooks_config()
+
+        config_path = tmp_path / "config.toml"
+        sync_managed_codex_hooks_to_config(
+            config_path,
+            route="parent",
+            include_runtime_only=True,
+        )
+        config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        entries = config["hooks"]["PreCompact"]
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry["matcher"] == "auto"
+        assert "async" not in entry
+        assert all("async" not in hook for hook in entry["hooks"])
+        command = entry["hooks"][0]
+        assert command["type"] == "command"
+        assert "auto_compact_guard" in command["command"]
+        assert len(command["trusted_hash"]) == 64

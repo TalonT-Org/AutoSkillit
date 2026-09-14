@@ -115,6 +115,8 @@ def generate_hooks_json(
     # Preserve insertion order; merge scripts from same (event_type, matcher) key.
     groups: dict[tuple[str, str], dict] = {}
     for hook_def in registry:
+        if hook_def.runtime_only:
+            continue
         key = (hook_def.event_type, hook_def.matcher)
         hook_commands = [
             _build_hook_command(None, script, hook_def.timeout_seconds, relocatable=True)

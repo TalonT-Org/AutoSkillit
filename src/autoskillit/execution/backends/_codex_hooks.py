@@ -260,10 +260,12 @@ def generate_codex_hooks_config(
     lifecycle_contracts: Sequence[LifecycleContractDef] = LIFECYCLE_CONTRACTS,
     plugin_dir: Path | None = None,
     managed_route: ManagedCodexRoute | None = None,
+    include_runtime_only: bool = False,
 ) -> dict[str, list[dict]]:
     """Generate Codex config.toml hooks entries from HOOK_REGISTRY.
 
-    Skips interactive_only and codex fix-required/not-applicable hooks.
+    Skips interactive_only, runtime-only, and codex fix-required/not-applicable hooks
+    unless ``include_runtime_only`` is requested for a wrapper-owned home.
     Returns dict keyed by event type for [[hooks.<EventType>]] TOML format.
     """
     if registry is HOOK_REGISTRY and not HOOK_REGISTRY:
@@ -288,6 +290,7 @@ def generate_codex_hooks_config(
             backend="codex",
             session_scope="headless",
         )
+        and (include_runtime_only or not hook_def.runtime_only)
     ]
     if managed_route is not None:
         applicable.extend(_managed_route_hook_defs(managed_route))
@@ -365,6 +368,7 @@ def _sync_hooks_to_codex_config_unlocked(
     hook_config_format: str = "",
     plugin_dir: Path | None = None,
     managed_route: ManagedCodexRoute | None = None,
+    include_runtime_only: bool = False,
 ) -> bool:
     """Mutate hook entries while the caller owns the Codex config lock.
 
@@ -378,6 +382,7 @@ def _sync_hooks_to_codex_config_unlocked(
             hook_config_format=hook_config_format,
             plugin_dir=plugin_dir,
             managed_route=managed_route,
+            include_runtime_only=include_runtime_only,
         )
         _upsert_hooks_text(config_path, result.raw_bytes, fresh)
         return True
@@ -397,6 +402,7 @@ def _sync_hooks_to_codex_config_unlocked(
         hook_config_format=hook_config_format,
         plugin_dir=plugin_dir,
         managed_route=managed_route,
+        include_runtime_only=include_runtime_only,
     )
     merged: dict[str, list[dict]] = {}
     for event_type in set(list(foreign_hooks.keys()) + list(fresh.keys())):
@@ -433,6 +439,7 @@ def sync_managed_codex_hooks_to_config(
     *,
     route: ManagedCodexRoute,
     plugin_dir: Path | None = None,
+    include_runtime_only: bool = False,
 ) -> bool:
     """Install route-specific hooks in one generated Codex home."""
     resolved_config_path = Path(config_path).expanduser().resolve(strict=False)
@@ -441,4 +448,5 @@ def sync_managed_codex_hooks_to_config(
             config_path=resolved_config_path,
             plugin_dir=plugin_dir,
             managed_route=route,
+            include_runtime_only=include_runtime_only,
         )

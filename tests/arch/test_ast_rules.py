@@ -621,6 +621,8 @@ def test_init_files_are_pure_facades() -> None:
             # The public skills package retains the existing resolver facade body.
             Path("workspace/skills/__init__.py"),
             Path("workspace/clone/__init__.py"),
+            # classify_skill_capability_evidence stays here for monkeypatch.setattr (#5018 D1).
+            Path("workspace/skill_capabilities/__init__.py"),
         }
     )
 
@@ -2708,13 +2710,10 @@ def test_consolidation_fail_closed_deferral_has_runtime_race_coverage(
             _load_manifests(tmp_path)
 
 
-def test_enumeration_stat_allowlist_regression_tests_resolve(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_enumeration_stat_allowlist_regression_tests_resolve() -> None:
     assert_deferrals_have_regression_tests(
         _ENUMERATION_STAT_ALLOWLIST,
         registry_name="_ENUMERATION_STAT_ALLOWLIST",
-        collected_node_ids={item.nodeid for item in request.session.items},
     )
 
 

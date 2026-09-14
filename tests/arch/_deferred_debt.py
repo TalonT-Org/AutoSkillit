@@ -5,10 +5,15 @@ for any *new* registry of this kind."""
 
 from __future__ import annotations
 
+import ast
 import dataclasses
+import functools
 from collections.abc import Collection
 from datetime import date
+from pathlib import Path
 from typing import Any
+
+_REPO_ROOT = Path(__file__).parent.parent.parent
 
 STALENESS_THRESHOLD_DAYS = 180  # public and unprefixed, unlike the two file-local
 # `_STALENESS_THRESHOLD_DAYS` copies this replaces the pattern of — deliberate:
@@ -85,17 +90,55 @@ def assert_rationale_present(
     )
 
 
+def _definition_paths(body: list[ast.stmt], prefix: tuple[str, ...] = ()) -> set[tuple[str, ...]]:
+    """Every qualified def path in a module body, e.g. {("TestFoo", "test_bar")}."""
+    paths: set[tuple[str, ...]] = set()
+    for node in body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            paths.add((*prefix, node.name))
+        elif isinstance(node, ast.ClassDef):
+            qualified = (*prefix, node.name)
+            paths.add(qualified)
+            paths |= _definition_paths(node.body, qualified)
+    return paths
+
+
+@functools.cache
+def _module_definition_paths(relative_path: str) -> frozenset[tuple[str, ...]] | None:
+    """Parsed def paths for a test module, or None when the file does not exist."""
+    target = _REPO_ROOT / relative_path
+    if not target.is_file():
+        return None
+    return frozenset(_definition_paths(ast.parse(target.read_text(encoding="utf-8")).body))
+
+
+def _regression_test_resolves(node_id: str) -> bool:
+    file_part, separator, qualname = node_id.partition("::")
+    if not separator or not qualname:
+        return False
+    defined = _module_definition_paths(file_part)
+    if defined is None:
+        return False
+    # test_x[case] names the same function as test_x — parametrisation ids are
+    # generated at collection time and never appear in the source.
+    return tuple(part.partition("[")[0] for part in qualname.split("::")) in defined
+
+
 def assert_deferrals_have_regression_tests(
     registry: dict[Any, TrackedDeferral],
     *,
     registry_name: str,
-    collected_node_ids: Collection[str],
 ) -> None:
-    """Require each deferral to name the regression evidence that keeps it honest."""
+    """Require each deferral to name the regression evidence that keeps it honest.
+
+    Resolution is static: the named test must exist on disk. Resolving against the
+    running session's collected node ids instead breaks whenever the named test is
+    not co-selected, which conservative path filtering and CI sharding both do.
+    """
     unresolved = {
         str(key): entry.regression_test
         for key, entry in registry.items()
-        if not entry.regression_test or entry.regression_test not in collected_node_ids
+        if not entry.regression_test or not _regression_test_resolves(entry.regression_test)
     }
     assert not unresolved, (
         f"{registry_name} entries with an empty or unresolvable regression_test: {unresolved}"

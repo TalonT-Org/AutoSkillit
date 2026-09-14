@@ -47,6 +47,12 @@ both facades (`session_skills/__init__.py` and
 (`tests/arch/test_session_skills_projected_artifact_size_ceilings.py`); split further
 rather than growing past it.
 
-`skill_capabilities.py` owns a process-local, weighted LRU keyed by exact canonical
-content and normalized logical skill name. The cache bounds resident entries and
-accounted payload bytes while coordinating concurrent scans outside its lock.
+`skill_capabilities/` is the capability-evidence classifier package. `__init__.py` is the
+facade and retains `classify_skill_capability_evidence` because it is the late-binding seam
+the test fixtures patch; `_cache.py` owns the process-local weighted LRU keyed by exact
+canonical content and normalized logical skill name, bounding resident entries and
+accounted payload bytes while coordinating concurrent scans outside its lock; `_scanner.py`
+owns the regex catalog and source-line classification; `_authenticity.py` owns
+declaration-vs-evidence validation and reaches `classify_skill_capability_evidence` through
+the module-scope `_capabilities_facade` alias so `monkeypatch.setattr` on the facade takes
+effect; `_semantic_plan.py` owns the semantic-plan parser and `RETIRED_SEMANTIC_CAPABILITIES`.

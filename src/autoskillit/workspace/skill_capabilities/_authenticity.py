@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import autoskillit.workspace.skill_capabilities as _capabilities_facade
 from autoskillit.core import SkillContractError, SkillInvalidityKind
-from autoskillit.workspace.skill_capability_scanner import SkillCapabilityEvidence
+
+from ._scanner import SkillCapabilityEvidence
 
 if TYPE_CHECKING:
     from autoskillit.workspace.skills import SkillInfo

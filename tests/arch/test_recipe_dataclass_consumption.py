@@ -211,9 +211,7 @@ def test_declared_recipe_field_consumers_are_real() -> None:
     )
 
 
-def test_deferred_recipe_fields_are_current_and_explained(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_deferred_recipe_fields_are_current_and_explained() -> None:
     unconsumed = {key for key in live_fields() if key not in DECLARED_RECIPE_FIELDS}
     assert_entries_still_apply(
         DEFERRED_RECIPE_FIELDS,
@@ -225,7 +223,6 @@ def test_deferred_recipe_fields_are_current_and_explained(
     assert_deferrals_have_regression_tests(
         DEFERRED_RECIPE_FIELDS,
         registry_name="DEFERRED_RECIPE_FIELDS",
-        collected_node_ids={item.nodeid for item in request.session.items},
     )
 
 

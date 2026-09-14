@@ -126,3 +126,22 @@ def test_source_map_drops_retired_isolation_facade() -> None:
         assert facade_path not in source_map[source_key]
     # File-layout checks inspect paths without necessarily executing these modules.
     assert all(facade_path not in paths for paths in source_map.values())
+
+
+def test_source_map_drops_retired_skill_capability_source_paths() -> None:
+    """#5018: retired skill_capability source paths must not linger in the coverage oracle."""
+    data = json.loads((ROOT / ".autoskillit" / "test-source-map.json").read_text(encoding="utf-8"))
+    source_map = data["map"]
+    retired = (
+        "src/autoskillit/workspace/skill_capabilities.py",
+        "src/autoskillit/workspace/skill_capability_authenticity.py",
+        "src/autoskillit/workspace/skill_capability_cache.py",
+        "src/autoskillit/workspace/skill_capability_scanner.py",
+        "src/autoskillit/workspace/skill_semantic_plan.py",
+    )
+    stale = [key for key in retired if key in source_map]
+    assert not stale, (
+        "Retired skill-capability source paths remain in the coverage oracle: "
+        + ", ".join(stale)
+        + " — run 'task coverage-audit' and commit .autoskillit/test-source-map.json"
+    )

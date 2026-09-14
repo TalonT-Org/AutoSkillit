@@ -1,10 +1,11 @@
-"""One-way-import guard for the workspace/skills decomposition (#4833).
+"""One-way-import guard for the workspace/skills and workspace/skill_capabilities
+decompositions (#4833, #5018).
 
 External modules (anything outside ``autoskillit.workspace``) may import from
 the two facades (``autoskillit.workspace.skills`` and
-``autoskillit.workspace.skill_capabilities``) only — submodule paths are
-internal. ``TYPE_CHECKING``-guarded imports are excluded (consistent with the
-existing REQ-ARCH-001 semantics).
+``autoskillit.workspace.skill_capabilities``) only — the packages' underscore-
+prefixed submodules are internal. ``TYPE_CHECKING``-guarded imports are
+excluded (consistent with the existing REQ-ARCH-001 semantics).
 """
 
 from __future__ import annotations
@@ -27,10 +28,10 @@ _FORBIDDEN_SHARDS: frozenset[str] = frozenset(
         "autoskillit.workspace.skills._frontmatter",
         "autoskillit.workspace.skills._format",
         "autoskillit.workspace.skills._resources",
-        "autoskillit.workspace.skill_capability_cache",
-        "autoskillit.workspace.skill_capability_scanner",
-        "autoskillit.workspace.skill_capability_authenticity",
-        "autoskillit.workspace.skill_semantic_plan",
+        "autoskillit.workspace.skill_capabilities._cache",
+        "autoskillit.workspace.skill_capabilities._scanner",
+        "autoskillit.workspace.skill_capabilities._authenticity",
+        "autoskillit.workspace.skill_capabilities._semantic_plan",
     }
 )
 _ALLOWED_FACADES: frozenset[str] = frozenset(
@@ -60,7 +61,7 @@ def _collect_external_skill_shard_import_violations() -> list[str]:
                     f"{rel}:{import_from.lineno} imports from forbidden shard {module!r}; "
                     f"import from one of the facades: {sorted(_ALLOWED_FACADES)}"
                 )
-            elif module == "autoskillit.workspace.skills":
+            elif module in _ALLOWED_FACADES:
                 for alias in import_from.names:
                     shard = f"{module}.{alias.name}"
                     if shard in _FORBIDDEN_SHARDS:
@@ -122,6 +123,13 @@ def test_external_skill_shard_guard_flags_both_import_forms(
         "import autoskillit.workspace.skills._overrides as overrides\n"
         "from autoskillit.workspace.skills import _records\n",
     )
+    _write_source(
+        tmp_path,
+        "server/capability_handler.py",
+        "from autoskillit.workspace.skill_capabilities._cache import _EvidenceCache\n"
+        "import autoskillit.workspace.skill_capabilities._scanner as scanner\n"
+        "from autoskillit.workspace.skill_capabilities import _authenticity\n",
+    )
     monkeypatch.setattr(sys.modules[__name__], "SRC_ROOT", tmp_path)
 
     with pytest.raises(AssertionError) as excinfo:
@@ -135,4 +143,13 @@ def test_external_skill_shard_guard_flags_both_import_forms(
     assert (
         "server/handler.py:3 imports forbidden shard 'autoskillit.workspace.skills._records'"
         in message
+    )
+
+    capability_from_form = "server/capability_handler.py:1 imports from forbidden shard "
+    capability_plain_form = "server/capability_handler.py:2 imports forbidden shard "
+    assert capability_from_form + "'autoskillit.workspace.skill_capabilities._cache'" in message
+    assert capability_plain_form + "'autoskillit.workspace.skill_capabilities._scanner'" in message
+    assert (
+        "server/capability_handler.py:3 imports forbidden shard "
+        "'autoskillit.workspace.skill_capabilities._authenticity'" in message
     )

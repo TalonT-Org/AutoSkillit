@@ -17,9 +17,8 @@ from tests.arch._line_budget import count_budget_lines
 pytestmark = [pytest.mark.small]
 
 
-_SKILLS_TARGETS: tuple[str, ...] = (
+_WORKSPACE_SHARD_TARGETS: tuple[str, ...] = (
     "workspace/skills/__init__.py",
-    "workspace/skill_capabilities.py",
     "workspace/skills/_records.py",
     "workspace/skills/_overrides.py",
     "workspace/skills/_exploration.py",
@@ -27,14 +26,15 @@ _SKILLS_TARGETS: tuple[str, ...] = (
     "workspace/skills/_frontmatter.py",
     "workspace/skills/_format.py",
     "workspace/skills/_resources.py",
-    "workspace/skill_capability_cache.py",
-    "workspace/skill_capability_scanner.py",
-    "workspace/skill_capability_authenticity.py",
-    "workspace/skill_semantic_plan.py",
+    "workspace/skill_capabilities/__init__.py",
+    "workspace/skill_capabilities/_cache.py",
+    "workspace/skill_capabilities/_scanner.py",
+    "workspace/skill_capabilities/_authenticity.py",
+    "workspace/skill_capabilities/_semantic_plan.py",
 )
 
 
-@pytest.mark.parametrize("rel_path", _SKILLS_TARGETS)
+@pytest.mark.parametrize("rel_path", _WORKSPACE_SHARD_TARGETS)
 def test_skill_module_under_warning_zone(rel_path: str) -> None:
     """Every decomposed module must stay under the 750-line warning zone."""
     target = SRC_ROOT / rel_path

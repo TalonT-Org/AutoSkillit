@@ -28,6 +28,19 @@ class TestHookDefCodexStatus:
         field_names = {f.name for f in dataclasses.fields(HookDef)}
         assert "codex_status" in field_names
 
+    def test_hook_def_runtime_only_defaults_false_and_affects_hash(self):
+        assert HookDef(matcher="test", scripts=["s.py"]).runtime_only is False
+        original = HOOK_REGISTRY[0]
+        changed = dataclasses.replace(original, runtime_only=not original.runtime_only)
+        assert (
+            compute_registry_hash(
+                [changed, *HOOK_REGISTRY[1:]],
+                RETIRED_SCRIPT_BASENAMES,
+                LIFECYCLE_CONTRACTS,
+            )
+            != HOOK_REGISTRY_HASH
+        )
+
     def test_all_hook_registry_entries_have_codex_status(self):
         for hook_def in HOOK_REGISTRY:
             assert hook_def.codex_status in (

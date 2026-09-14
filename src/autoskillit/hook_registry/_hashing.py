@@ -33,6 +33,7 @@ def _canonical_registry_payload(
                 "mechanism": h.mechanism,
                 "produces_resources": sorted(h.produces_resources),
                 "reclaims_resources": sorted(h.reclaims_resources),
+                "runtime_only": h.runtime_only,
                 "scripts": list(h.scripts),
                 "self_reclaims_resources": sorted(h.self_reclaims_resources),
                 "session_scope": h.session_scope,

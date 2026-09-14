@@ -180,7 +180,7 @@ def _hook_files() -> list[Path]:
 
 
 def _count_hooks_by_event() -> dict[str, int]:
-    """Group unique hook scripts by their PreToolUse / PostToolUse / SessionStart event.
+    """Group unique Claude hook scripts by event type.
 
     Imports HOOK_REGISTRY and counts the distinct script files referenced by
     each event type — duplicates (e.g. branch_protection_guard registered for
@@ -191,6 +191,8 @@ def _count_hooks_by_event() -> dict[str, int]:
     by_event: dict[str, set[str]] = {}
     # join_followup_guard adds one PreToolUse script to the count.
     for hook_def in HOOK_REGISTRY:
+        if hook_def.runtime_only:
+            continue
         for script in hook_def.scripts:
             by_event.setdefault(hook_def.event_type, set()).add(script)
     return {event: len(scripts) for event, scripts in by_event.items()}

@@ -38,16 +38,17 @@ def test_all_pretooluse_hook_scripts_are_registered() -> None:
     carry subfolder-prefixed paths (e.g. ``"guards/quota_guard.py"``).  This test
     compares HOOKS_DIR-relative paths so the comparison is consistent.
     """
-    post_or_session_registered = {
+    non_pretooluse_registered = {
         script
         for hd in HOOK_REGISTRY
-        if hd.event_type in ("PostToolUse", "SessionStart", "Stop", "PostToolUseFailure")
+        if hd.event_type
+        in ("PostToolUse", "SessionStart", "Stop", "PostToolUseFailure", "PreCompact")
         for script in hd.scripts
     }
     hook_files = {
         relpath
         for relpath in _all_hook_script_relpaths()
-        if relpath not in post_or_session_registered
+        if relpath not in non_pretooluse_registered
     }
     registered_scripts: set[str] = set()
     for hook_def in HOOK_REGISTRY:
@@ -65,10 +66,10 @@ def test_all_posttooluse_hook_scripts_are_registered() -> None:
     session_registered = {
         script for hd in HOOK_REGISTRY if hd.event_type == "SessionStart" for script in hd.scripts
     }
-    registered_post = {
+    non_pretooluse_registered = {
         script
         for hd in HOOK_REGISTRY
-        if hd.event_type in ("PostToolUse", "PostToolUseFailure", "Stop")
+        if hd.event_type in ("PostToolUse", "PostToolUseFailure", "Stop", "PreCompact")
         for script in hd.scripts
     }
     all_scripts = _all_hook_script_relpaths()
@@ -76,7 +77,7 @@ def test_all_posttooluse_hook_scripts_are_registered() -> None:
         script for hd in HOOK_REGISTRY if hd.event_type == "PreToolUse" for script in hd.scripts
     }
     post_only = all_scripts - pre_registered - session_registered
-    unregistered = post_only - registered_post
+    unregistered = post_only - non_pretooluse_registered
     assert not unregistered, f"PostToolUse scripts not registered: {unregistered}"
 
 

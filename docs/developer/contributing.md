@@ -50,7 +50,7 @@ change requires an explicit CI-policy task and matching behavioral tests in
 
 Static path ownership is exhaustive and disjoint. Conservative filtering
 intersects the other shards with the tests selected for a change. The
-`execution-channel-b` shard sets `AUTOSKILLIT_TEST_FILTER=none` so all 12
+`execution-channel-b` shard sets `AUTOSKILLIT_TEST_FILTER=none` so all
 Channel B tests run for each supported `pull_request` and `merge_group` event:
 
 | Shard | Ownership |

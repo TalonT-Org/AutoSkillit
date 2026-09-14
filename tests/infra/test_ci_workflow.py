@@ -800,7 +800,7 @@ def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     assert "Conservative filtering\nintersects the other shards" in contributing
     assert "`execution-channel-b` shard sets `AUTOSKILLIT_TEST_FILTER=none`" in contributing
     assert (
-        "all 12\nChannel B tests run for each supported `pull_request` and `merge_group` event"
+        "all\nChannel B tests run for each supported `pull_request` and `merge_group` event"
         in contributing
     )
     assert "Import lint runs only on the retained `execution` shard" in contributing

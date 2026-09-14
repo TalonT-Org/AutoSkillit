@@ -1818,7 +1818,7 @@ def _scoped_test_dirs_for_file(path: str) -> set[str]:
     return set()
 
 
-def check_bucket_a(changed_files: set[str]) -> set[str] | None:
+def compute_bucket_a_scope(changed_files: set[str]) -> set[str] | None:
     """Return None for a global full run, otherwise scoped test directories."""
     scoped_test_dirs: set[str] = set()
     for f in changed_files:
@@ -1923,14 +1923,14 @@ def _is_additive_only(
 _VERSION_BUMP_FILES: frozenset[str] = frozenset({"pyproject.toml", "uv.lock"})
 
 
-def check_bucket_a_content_aware(
+def compute_bucket_a_scope_content_aware(
     changed_files: set[str],
     cwd: str | Path,
     base_ref: str,
 ) -> set[str] | None:
     """Return global or scoped selection, exempting version-bump-only changes.
 
-    Identical to ``check_bucket_a`` except for ``pyproject.toml`` and ``uv.lock``:
+    Identical to ``compute_bucket_a_scope`` except for ``pyproject.toml`` and ``uv.lock``:
     if those files are present in *changed_files* but their entire diff consists only
     of ``version = "..."`` line changes, they are NOT treated as Bucket A triggers.
 
@@ -1939,7 +1939,7 @@ def check_bucket_a_content_aware(
     Scoped support-file directories are preserved when version files are exempted.
     """
     non_version_files = changed_files - _VERSION_BUMP_FILES
-    scoped_test_dirs = check_bucket_a(non_version_files)
+    scoped_test_dirs = compute_bucket_a_scope(non_version_files)
     if scoped_test_dirs is None:
         return None
 
@@ -2248,7 +2248,7 @@ def build_test_scope(
         return FullRunReason.LARGE_CHANGESET
 
     if cwd is not None and base_ref is not None:
-        scoped_test_dirs = check_bucket_a_content_aware(changed_files, cwd, base_ref)
+        scoped_test_dirs = compute_bucket_a_scope_content_aware(changed_files, cwd, base_ref)
         if scoped_test_dirs is None:
             return FullRunReason.BUCKET_A
         # Exclude version-bump files that passed the content-aware check from classification.
@@ -2256,7 +2256,7 @@ def build_test_scope(
         if version_bump_in_bucket_a:
             changed_files = changed_files - version_bump_in_bucket_a
     else:
-        scoped_test_dirs = check_bucket_a(changed_files)
+        scoped_test_dirs = compute_bucket_a_scope(changed_files)
         if scoped_test_dirs is None:
             return FullRunReason.BUCKET_A
 

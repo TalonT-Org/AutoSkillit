@@ -26,7 +26,7 @@ from tests._test_filter import (
     _compile_manifest_matchers,
     apply_manifest,
     build_test_scope,
-    check_bucket_a,
+    compute_bucket_a_scope,
     git_changed_files,
     load_manifest,
 )
@@ -126,14 +126,14 @@ class TestASTImportWalker:
 
 class TestCheckBucketA:
     def test_bucket_a_conftest(self) -> None:
-        assert check_bucket_a({"tests/conftest.py"}) is None
+        assert compute_bucket_a_scope({"tests/conftest.py"}) is None
 
     def test_bucket_a_helpers(self) -> None:
-        assert check_bucket_a({"tests/_helpers.py"}) is None
+        assert compute_bucket_a_scope({"tests/_helpers.py"}) is None
 
     @pytest.mark.parametrize("file", ["tests/arch/_helpers.py", "tests/arch/_rules.py"])
     def test_bucket_a_arch_helpers(self, file: str) -> None:
-        assert check_bucket_a({file}) == {
+        assert compute_bucket_a_scope({file}) == {
             "arch",
             "contracts",
             "execution",
@@ -143,16 +143,16 @@ class TestCheckBucketA:
         }
 
     def test_bucket_a_pyproject(self) -> None:
-        assert check_bucket_a({"pyproject.toml"}) is None
+        assert compute_bucket_a_scope({"pyproject.toml"}) is None
 
     def test_bucket_a_uv_lock(self) -> None:
-        assert check_bucket_a({"uv.lock"}) is None
+        assert compute_bucket_a_scope({"uv.lock"}) is None
 
     def test_bucket_a_precommit(self) -> None:
-        assert check_bucket_a({".pre-commit-config.yaml"}) is None
+        assert compute_bucket_a_scope({".pre-commit-config.yaml"}) is None
 
     def test_bucket_a_factory(self) -> None:
-        assert check_bucket_a({"src/autoskillit/server/_factory.py"}) is None
+        assert compute_bucket_a_scope({"src/autoskillit/server/_factory.py"}) is None
 
     @pytest.mark.parametrize(
         ("file", "expected"),
@@ -162,14 +162,14 @@ class TestCheckBucketA:
         ],
     )
     def test_bucket_a_subdir_conftest(self, file: str, expected: str) -> None:
-        assert check_bucket_a({file}) == {expected}
+        assert compute_bucket_a_scope({file}) == {expected}
 
     def test_bucket_a_negative(self) -> None:
-        assert check_bucket_a({"src/autoskillit/core/io.py"}) == set()
+        assert compute_bucket_a_scope({"src/autoskillit/core/io.py"}) == set()
 
     def test_bucket_a_scoped_files_combine_and_global_wins(self) -> None:
         scoped = {"tests/arch/_rules.py", "tests/recipe/conftest.py"}
-        assert check_bucket_a(scoped) == {
+        assert compute_bucket_a_scope(scoped) == {
             "arch",
             "contracts",
             "execution",
@@ -178,7 +178,7 @@ class TestCheckBucketA:
             "workspace",
             "recipe",
         }
-        assert check_bucket_a(scoped | {"tests/conftest.py"}) is None
+        assert compute_bucket_a_scope(scoped | {"tests/conftest.py"}) is None
 
 
 # ---------------------------------------------------------------------------

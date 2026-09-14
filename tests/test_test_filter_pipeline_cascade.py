@@ -130,7 +130,7 @@ def test_content_aware_path_keeps_ledger_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: set())
+    monkeypatch.setattr(test_filter, "compute_bucket_a_scope_content_aware", lambda *_args: set())
 
     result = build_test_scope(
         changed_files={"src/autoskillit/pipeline/context_admission_ledger.py"},
@@ -194,7 +194,7 @@ def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: set())
+    monkeypatch.setattr(test_filter, "compute_bucket_a_scope_content_aware", lambda *_args: set())
     tests_root = _tests_root(tmp_path)
     expected = _materialize_pipeline_fail_open_route(tests_root)
 

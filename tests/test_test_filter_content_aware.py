@@ -32,7 +32,7 @@ class TestCheckBucketAContentAware:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A version-only pyproject change contributes no Bucket A scope."""
-        from tests._test_filter import check_bucket_a_content_aware
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -5 +5 @@\n"
@@ -47,7 +47,7 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"pyproject.toml"}, "/fake", "main")
+        result = compute_bucket_a_scope_content_aware({"pyproject.toml"}, "/fake", "main")
         assert result == set()
 
     def test_content_aware_uv_lock_version_only_not_triggered(
@@ -55,7 +55,7 @@ class TestCheckBucketAContentAware:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A version-only lockfile change contributes no Bucket A scope."""
-        from tests._test_filter import check_bucket_a_content_aware
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/uv.lock\n+++ b/uv.lock\n@@ -10 +10 @@\n"
@@ -70,7 +70,7 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"uv.lock"}, "/fake", "main")
+        result = compute_bucket_a_scope_content_aware({"uv.lock"}, "/fake", "main")
         assert result == set()
 
     def test_content_aware_pyproject_structural_change_triggers(
@@ -78,7 +78,7 @@ class TestCheckBucketAContentAware:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A structural pyproject change requires the full suite."""
-        from tests._test_filter import check_bucket_a_content_aware
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/pyproject.toml\n+++ b/pyproject.toml\n"
@@ -94,7 +94,7 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"pyproject.toml"}, "/fake", "main")
+        result = compute_bucket_a_scope_content_aware({"pyproject.toml"}, "/fake", "main")
         assert result is None
 
     def test_content_aware_git_failure_falls_back_to_full_run(
@@ -102,13 +102,13 @@ class TestCheckBucketAContentAware:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Git failure requires the full suite."""
-        from tests._test_filter import check_bucket_a_content_aware
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         def _raise(*a: object, **kw: object) -> None:
             raise subprocess.CalledProcessError(1, "git")
 
         monkeypatch.setattr(subprocess, "run", _raise)
-        result = check_bucket_a_content_aware({"pyproject.toml"}, "/fake", "main")
+        result = compute_bucket_a_scope_content_aware({"pyproject.toml"}, "/fake", "main")
         assert result is None
 
     def test_content_aware_other_bucket_a_pattern_unaffected(
@@ -116,11 +116,11 @@ class TestCheckBucketAContentAware:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Global Bucket A files trigger immediately, without a git call."""
-        from tests._test_filter import check_bucket_a_content_aware
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         mock_run = Mock()
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"tests/conftest.py"}, "/fake", "main")
+        result = compute_bucket_a_scope_content_aware({"tests/conftest.py"}, "/fake", "main")
         assert result is None
         mock_run.assert_not_called()  # no git diff needed
 
@@ -129,7 +129,7 @@ class TestCheckBucketAContentAware:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Both version-only files contribute no Bucket A scope."""
-        from tests._test_filter import check_bucket_a_content_aware
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -5 +5 @@\n"
@@ -146,7 +146,9 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"pyproject.toml", "uv.lock"}, "/fake", "main")
+        result = compute_bucket_a_scope_content_aware(
+            {"pyproject.toml", "uv.lock"}, "/fake", "main"
+        )
         assert result == set()
 
     def test_content_aware_version_exemption_preserves_scoped_support(
@@ -154,7 +156,7 @@ class TestCheckBucketAContentAware:
     ) -> None:
         monkeypatch.setattr(test_filter, "_is_only_version_changes_in_diff", lambda *_args: True)
 
-        result = test_filter.check_bucket_a_content_aware(
+        result = test_filter.compute_bucket_a_scope_content_aware(
             {"pyproject.toml", "tests/recipe/rules_skills/conftest.py"}, "/fake", "main"
         )
 

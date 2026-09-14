@@ -166,13 +166,17 @@ class TestTaskfile:
         assert "test-check" in cmds
 
     def test_local_gate_excludes_channel_b_and_runs_import_lint(self) -> None:
-        commands = "\n".join(self._load()["tasks"]["test-local-gate"]["cmds"])
+        tasks = self._load()["tasks"]
+        commands = "\n".join(tasks["test-local-gate"]["cmds"])
+        test_all_commands = "\n".join(tasks["test-all"]["cmds"])
         assert (
             'export PYTEST_IGNORE_PATHS="--ignore=tests/execution/test_process_channel_b.py '
             '--deselect=tests/execution/test_process_channel_b.py"'
         ) in commands
         assert "task test-all" in commands
         assert "task test-check" not in commands
+        assert re.search(r"\$PYTEST_CMD[^\n]*\$\{PYTEST_IGNORE_PATHS:-\}", test_all_commands)
+        assert "lint-imports" in test_all_commands
 
     def test_regen_contracts_task_exists(self):
         """TF-12 — regen-contracts task exists in Taskfile.yml."""

@@ -57,3 +57,16 @@ That inventory test makes any new raw scan under `hooks/` a conscious, reviewed 
 `StdinLiteral` is the second instance of the `ArgvToken` "tag once at tokenization, consume
 tagged provenance downstream" pattern (`_tokenizer.py`, commit `6624dda71`, issue #4680):
 future token-level provenance should extend this path rather than add a parallel parser.
+
+## Multi-concern files
+
+Files with no registration support their folder; files with several registrations group one related concern.
+
+- `__init__.py` — Support module: Hook scripts (PreToolUse and PostToolUse) for AutoSkillit.
+- `_capture_artifacts.py` — Support module: Public executable facade for the descriptor-anchored capture runner.
+- `_capture_contract.py` — Support module: Canonical facade for shell-capture transport contracts (stdlib-only).
+- `_capture_process.py` — Support module: Owned POSIX process groups for the isolated shell runner.
+- `_capture_spawn.py` — Support module: Owned process-group spawn mechanics for the isolated shell runner.
+- `_dispatch.py` — Support module: Stable hook dispatcher — NEVER RENAME THIS FILE.
+- `_join_ledger.py` — Support module: Stdlib-only durable authority for declared fixed-set join batches.
+- `_session_binding.py` — Support module: Shared authority for the cross-process session-binding channel.

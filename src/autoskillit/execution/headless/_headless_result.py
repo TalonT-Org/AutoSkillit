@@ -69,7 +69,7 @@ from autoskillit.execution.session._session_content import _check_expected_patte
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
 )
-from autoskillit.hooks._runtime._hook_constants import CODEX_AUTO_COMPACTION_DENIED_REASON
+from autoskillit.hooks import CODEX_AUTO_COMPACTION_DENIED_REASON
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, SubprocessResult
@@ -748,7 +748,7 @@ def _build_skill_result(
         ),
         completion_required=completion_required,
     )
-    if is_path_contamination:
+    if is_path_contamination and not controlled_context_exhaustion:
         sr = dataclasses.replace(
             sr,
             success=False,

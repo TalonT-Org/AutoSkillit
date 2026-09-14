@@ -58,6 +58,7 @@ def test_retry_reason_values() -> None:
         RetryReason.CANCELLED,
         RetryReason.OUTCOME_INVARIANT,
         RetryReason.ASYNC_OBLIGATION,
+        RetryReason.CONTEXT_EXHAUSTED,
     }
     assert RetryReason.NONE.value == "none"
 

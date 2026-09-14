@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import regex as re
 
 from autoskillit.core import Severity, get_logger, resolve_skill_name
 from autoskillit.recipe._analysis import ValidationContext
+from autoskillit.recipe._analysis_bfs import bfs_reachable_without_barrier_in_graph
 from autoskillit.recipe.contracts import get_tool_output_contract, load_bundled_manifest
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import Recipe, StepResultCondition
 
 logger = get_logger(__name__)
 
@@ -18,6 +22,32 @@ def _extract_context_var(value: str) -> str | None:
     """Return the context variable name from '${{ context.X }}', or None (whole-string match)."""
     m = _CONTEXT_VAR_RE.fullmatch(value.strip())
     return m.group(1) if m else None
+
+
+def _merge_base_routing_graph(recipe: Recipe) -> dict[str, set[str]]:
+    step_names = set(recipe.steps.keys())
+
+    # Build raw routing graph (no skip_when_false bypass edges).
+    graph: dict[str, set[str]] = {name: set() for name in step_names}
+    for name, step in recipe.steps.items():
+        for target in (
+            step.on_success,
+            step.on_failure,
+            step.on_context_limit,
+            step.on_rate_limit,
+        ):
+            if target and target in step_names:
+                graph[name].add(target)
+        if step.on_result:
+            for t in step.on_result.routes.values():
+                if t in step_names:
+                    graph[name].add(t)
+            for cond in step.on_result.conditions:
+                if cond.route in step_names:
+                    graph[name].add(cond.route)
+        if step.action is None and step.on_exhausted in step_names:
+            graph[name].add(step.on_exhausted)
+    return graph
 
 
 @semantic_rule(
@@ -50,28 +80,7 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
         return []
     findings = []
     entry = next(iter(recipe.steps))
-    step_names = set(recipe.steps.keys())
-
-    # Build raw routing graph (no skip_when_false bypass edges).
-    graph: dict[str, set[str]] = {name: set() for name in step_names}
-    for name, step in recipe.steps.items():
-        for target in (
-            step.on_success,
-            step.on_failure,
-            step.on_context_limit,
-            step.on_rate_limit,
-        ):
-            if target and target in step_names:
-                graph[name].add(target)
-        if step.on_result:
-            for t in step.on_result.routes.values():
-                if t in step_names:
-                    graph[name].add(t)
-            for cond in step.on_result.conditions:
-                if cond.route in step_names:
-                    graph[name].add(cond.route)
-        if step.action is None and step.on_exhausted in step_names:
-            graph[name].add(step.on_exhausted)
+    graph = _merge_base_routing_graph(recipe)
 
     for step_name, step in recipe.steps.items():
         if step.tool != "merge_worktree":
@@ -95,24 +104,10 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
             or (s.tool == "create_and_publish_branch" and context_var in (s.capture or {}))
         }
 
-        # BFS from entry treating push_steps as barriers.
-        # If step_name is reachable, some path lacks a push — fire the rule.
-        visited: set[str] = set()
-        queue = [entry]
-        reachable_without_push = False
-        while queue:
-            node = queue.pop()
-            if node in visited:
-                continue
-            visited.add(node)
-            if node == step_name:
-                reachable_without_push = True
-                break
-            if node in push_steps:
-                continue  # barrier: do not expand through push
-            queue.extend(graph.get(node, set()))
-
-        if reachable_without_push:
+        reachable_without_push = bfs_reachable_without_barrier_in_graph(
+            graph, entry, frozenset(push_steps)
+        )
+        if step_name in reachable_without_push:
             findings.append(
                 make_finding(
                     rule_name="merge-base-unpublished",
@@ -126,6 +121,21 @@ def _check_merge_base_unpublished(ctx: ValidationContext) -> list[RuleFinding]:
             )
 
     return findings
+
+
+def _condition_value_routes(
+    conditions: list[StepResultCondition], allowed_values: Collection[str]
+) -> tuple[set[str], str | None]:
+    explicitly_routed: set[str] = set()
+    catchall_route: str | None = None
+    for cond in conditions:
+        if cond.when is None:
+            catchall_route = cond.route
+        else:
+            for value in allowed_values:
+                if value in cond.when:
+                    explicitly_routed.add(value)
+    return explicitly_routed, catchall_route
 
 
 @semantic_rule(
@@ -151,15 +161,9 @@ def _check_on_result_missing_tool_output_value(ctx: ValidationContext) -> list[R
         if field_def is None or not field_def.recoverable_values:
             continue
         conditions = step.on_result.conditions or []
-        explicitly_routed: set[str] = set()
-        catchall_route: str | None = None
-        for cond in conditions:
-            if cond.when is None:
-                catchall_route = cond.route
-            else:
-                for val in field_def.allowed_values:
-                    if val in cond.when:
-                        explicitly_routed.add(val)
+        explicitly_routed, catchall_route = _condition_value_routes(
+            conditions, field_def.allowed_values
+        )
         if catchall_route is None:
             continue
         catchall_step = recipe.steps.get(catchall_route)
@@ -238,15 +242,7 @@ def _check_skill_result_routing_gap(ctx: ValidationContext) -> list[RuleFinding]
             continue
         conditions = step.on_result.conditions or []
         for output_name, allowed_values in outputs_with_allowed_values.items():
-            explicitly_routed: set[str] = set()
-            catchall_route: str | None = None
-            for cond in conditions:
-                if cond.when is None:
-                    catchall_route = cond.route
-                else:
-                    for val in allowed_values:
-                        if val in cond.when:
-                            explicitly_routed.add(val)
+            explicitly_routed, catchall_route = _condition_value_routes(conditions, allowed_values)
             unrouted = [v for v in allowed_values if v not in explicitly_routed]
             if not unrouted:
                 continue

@@ -21,6 +21,17 @@ def _backend(result):
     return result.backend if result is not None else None
 
 
+def test_caller_backend_override_rejects_unknown_backend() -> None:
+    from autoskillit.execution import DefaultLaunchResolver
+    from autoskillit.server._misc import resolve_backend_override
+
+    with pytest.raises(ValueError, match="unknown backend"):
+        resolve_backend_override(
+            "nonexistent",
+            launch_resolver=DefaultLaunchResolver(),
+        )
+
+
 class TestResolveBackendOverride:
     @pytest.mark.parametrize(
         ("recipe_name", "step_name", "key_path"),

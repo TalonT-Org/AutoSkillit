@@ -335,18 +335,6 @@ class TestDispatchBackendOverrideSessionLocatorUsesDispatchBackend:
         assert "codex-logs" in record["dispatched_session_log_dir"]
 
 
-class TestDispatchBackendOverrideInvalidNameRaises:
-    def test_dispatch_backend_override_invalid_name_raises(self):
-        from autoskillit.execution import DefaultLaunchResolver
-        from autoskillit.server._misc import resolve_backend_override
-
-        with pytest.raises(ValueError, match="unknown backend"):
-            resolve_backend_override(
-                "nonexistent",
-                launch_resolver=DefaultLaunchResolver(),
-            )
-
-
 class TestDispatchBackendOverridePreservedAcrossRetry:
     def test_dispatch_backend_override_preserved_across_retry(self):
         assert "backend_name" in _RETRY_IDENTITY_FIELDS

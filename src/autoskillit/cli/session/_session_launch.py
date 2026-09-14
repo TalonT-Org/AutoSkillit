@@ -242,7 +242,7 @@ def _run_interactive_session(
         _InfraExitSignal — when an infrastructure exit is detected
         None — clean exit
     """
-    from autoskillit.execution import DefaultLaunchResolver, read_session_state
+    from autoskillit.execution import read_session_state
 
     if backend is None:
         from autoskillit.cli.session._session_backend import resolve_global_backend
@@ -251,9 +251,7 @@ def _run_interactive_session(
         config = load_config()
         backend = resolve_global_backend(
             config.agent_backend.backend,
-            launch_resolver=DefaultLaunchResolver(
-                codex_runtime_spec=config.codex_runtime.resolve(),
-            ),
+            codex_runtime_spec=config.codex_runtime.resolve(),
         )
         configured_base_branch = config.branching.default_base_branch
         if isinstance(configured_base_branch, str):

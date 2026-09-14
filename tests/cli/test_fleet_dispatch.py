@@ -11,6 +11,7 @@ import autoskillit.cli.fleet as _patch_cli_fleet
 import autoskillit.cli.session._session_launch as _patch_session__session_launch
 import autoskillit.cli.ui._timed_input as _patch_ui__timed_input
 from autoskillit.cli.fleet import fleet_dispatch as _fleet_dispatch
+from autoskillit.config import CodexRuntimeConfig
 from tests.cli._fleet_helpers import (
     _capture_subprocess,
     _stub_guards,
@@ -121,6 +122,7 @@ def test_fleet_dispatch_exits_when_claude_missing(
                 "branching": _branching,
                 "run_skill": _run_skill,
                 "process_tether": _process_tether,
+                "codex_runtime": CodexRuntimeConfig(),
             },
         )(),
     )
@@ -209,6 +211,7 @@ def test_fleet_dispatch_proceeds_when_enabled(
                 "branching": _branching,
                 "run_skill": _run_skill,
                 "process_tether": _process_tether,
+                "codex_runtime": CodexRuntimeConfig(),
             },
         )(),
     )

@@ -20,6 +20,9 @@ branching.promotion_target
 ci.event
 ci.workflow
 classify_fix.path_prefixes
+codex_runtime.auto_compact_threshold_tokens
+codex_runtime.auto_compaction_policy
+codex_runtime.context_window_tokens
 diagnostics.pipeline_health
 diagnostics.post_run_analysis
 features.codex_backend

@@ -538,7 +538,7 @@ class OwnedProcessGroup:
         try:
             signal_leader()
         except ProcessLookupError:
-            pass
+            pass  # expected race: leader can exit between exit-poll and this signal
         except PermissionError:
             self._record_incomplete(self.pid)
 

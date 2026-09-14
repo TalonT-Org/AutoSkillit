@@ -2208,12 +2208,7 @@ class TestCodexDiscardDispositions:
 
 
 class TestCodexBackendEnsurePreLaunchStageTagging:
-    """No existing test drives a failure through ensure_pre_launch's composed
-    transaction — every existing caller only exercises the success path. The
-    4 sub-steps (source-config sync, hook update; then, mutually exclusive per
-    call, snapshot write or native home validation) each get their own stage
-    prefix inside the single ``errors`` tuple element, since ``PreLaunchReadiness``
-    has no dedicated ``stage`` field."""
+    """Pre-launch errors identify the failed destination-provisioning stage."""
 
     _CANONICAL_AUTOSKILLIT_MCP_CONFIG = (
         "[mcp_servers.autoskillit]\n"
@@ -2236,7 +2231,7 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         (self.session_dir / "config.toml").write_text(self._CANONICAL_AUTOSKILLIT_MCP_CONFIG)
         monkeypatch.setattr(Path, "home", staticmethod(lambda: self.fake_home))
 
-    def test_source_config_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_runtime_mcp_sync_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             _patch_backends__codex_prelaunch,
             "_ensure_codex_mcp_registered_unlocked",
@@ -2244,10 +2239,10 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
         assert len(readiness.errors) == 1
-        assert "source-config sync" in readiness.errors[0]
+        assert "runtime MCP sync" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_hook_update_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_runtime_hook_update_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             _patch_backends__codex_prelaunch,
             "_sync_hooks_to_codex_config_unlocked",
@@ -2255,31 +2250,34 @@ class TestCodexBackendEnsurePreLaunchStageTagging:
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
         assert len(readiness.errors) == 1
-        assert "hook update" in readiness.errors[0]
+        assert "runtime hook update" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_snapshot_write_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_destination_snapshot_failure_is_tagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            _patch_backends_codex,
+            _patch_backends__codex_prelaunch,
             "atomic_write",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         readiness = CodexBackend().ensure_pre_launch(session_dir=self.session_dir)
         assert len(readiness.errors) == 1
-        assert "snapshot write" in readiness.errors[0]
+        assert "destination snapshot" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
-    def test_native_home_validation_failure_is_tagged(
+    def test_generated_home_validation_failure_is_tagged(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(
             _patch_backends_codex,
-            "_validate_global_codex_home",
+            "_validate_generated_codex_home",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        readiness = CodexBackend().ensure_pre_launch(session_dir=None)
+        readiness = CodexBackend().ensure_pre_launch(
+            session_dir=self.session_dir,
+            executable=object(),
+        )
         assert len(readiness.errors) == 1
-        assert "native home validation" in readiness.errors[0]
+        assert "generated home validation" in readiness.errors[0]
         assert "boom" in readiness.errors[0]
 
 
@@ -3520,17 +3518,14 @@ class TestCodexBackendSetupSessionDir:
         CodexBackend().setup_session_dir(self.session_dir)
         assert not (self.session_dir / ".git").exists()
 
-    def test_snapshotted_config_has_auto_compact_limit(self) -> None:
-        from autoskillit.execution.backends import CODEX_AUTO_COMPACT_LIMIT
-
+    def test_setup_preserves_generated_auto_compact_limit(self) -> None:
         (self.session_dir / "config.toml").write_text(
-            f"model_auto_compact_token_limit = {CODEX_AUTO_COMPACT_LIMIT}\n"
-            + self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
+            "model_auto_compact_token_limit = 100000\n" + self._CANONICAL_AUTOSKILLIT_MCP_CONFIG
         )
         (self.codex_home / "auth.json").write_text("{}")
         CodexBackend().setup_session_dir(self.session_dir)
         data = tomllib.loads((self.session_dir / "config.toml").read_text(encoding="utf-8"))
-        assert data["model_auto_compact_token_limit"] == CODEX_AUTO_COMPACT_LIMIT
+        assert data["model_auto_compact_token_limit"] == 100_000
 
     def test_session_config_lacks_key_when_source_lacks_it(self) -> None:
         (self.codex_home / "config.toml").write_text("[mcp_servers.autoskillit]\n")

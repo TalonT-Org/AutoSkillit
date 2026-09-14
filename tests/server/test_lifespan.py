@@ -2,12 +2,11 @@
 
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
 
-from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.evidence.recording import RecordingSubprocessRunner
 
 pytestmark = [pytest.mark.layer("server"), pytest.mark.small]
@@ -348,7 +347,7 @@ def test_lifespan_boot_registry_covers_all_session_types() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_launches_backend_owned_registration_for_capable_backend():
+async def test_lifespan_does_not_provision_backend_without_a_wrapper_home():
     from autoskillit.server import _autoskillit_lifespan
     from autoskillit.server.lifecycle import _lifespan
 
@@ -357,50 +356,11 @@ async def test_lifespan_launches_backend_owned_registration_for_capable_backend(
     mock_ctx.backend.capabilities.mcp_config_capable = True
     mock_ctx.runner = MagicMock()
 
-    reg_mock = AsyncMock()
-
-    with (
-        patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx),
-        patch.object(_lifespan, "_run_backend_mcp_registration_async", reg_mock),
-    ):
+    with patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx):
         async with _autoskillit_lifespan(MagicMock()):
             pass
 
-    reg_mock.assert_called_once_with(mock_ctx.backend)
-
-
-@pytest.mark.asyncio
-async def test_backend_registration_dispatches_through_prelaunch() -> None:
-    import autoskillit.server.lifecycle._lifespan as lifespan
-
-    backend = MagicMock()
-    backend.ensure_pre_launch.return_value = PreLaunchReadiness((), {})
-
-    await lifespan._run_backend_mcp_registration_async(backend)
-
-    backend.ensure_pre_launch.assert_called_once_with()
-
-
-@pytest.mark.asyncio
-async def test_lifespan_skips_codex_registration_for_non_codex_backend():
-    from autoskillit.server import _autoskillit_lifespan
-    from autoskillit.server.lifecycle import _lifespan
-
-    mock_ctx = MagicMock()
-    mock_ctx.backend.name = "claude-code"
-    mock_ctx.backend.capabilities.mcp_config_capable = False
-    mock_ctx.runner = MagicMock()
-
-    reg_mock = AsyncMock()
-
-    with (
-        patch.object(_lifespan, "_get_ctx_or_none", return_value=mock_ctx),
-        patch.object(_lifespan, "_run_backend_mcp_registration_async", reg_mock),
-    ):
-        async with _autoskillit_lifespan(MagicMock()):
-            pass
-
-    reg_mock.assert_not_called()
+    mock_ctx.backend.ensure_pre_launch.assert_not_called()
 
 
 @pytest.mark.anyio

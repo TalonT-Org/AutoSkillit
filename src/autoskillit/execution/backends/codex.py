@@ -89,7 +89,7 @@ from autoskillit.execution.backends._codex_prelaunch import (
     codex_prelaunch_transaction,
 )
 from autoskillit.execution.backends._codex_probes import (
-    _validate_global_codex_home,
+    _validate_generated_codex_home,
     _validate_inert_rollout_paths,
     _validate_mcp_probe,
 )
@@ -754,31 +754,37 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
         executable: ExecutableLaunchBinding | None = None,
         plugin_dir: Path | None = None,
     ) -> PreLaunchReadiness:
+        if session_dir is None:
+            return PreLaunchReadiness(())
         try:
             assert self.source_codex_home is not None
+            generated_home = Path(session_dir).expanduser().resolve(strict=False)
             with codex_prelaunch_transaction(
                 source_codex_home=self.source_codex_home,
+                destination_home=generated_home,
+                runtime_spec=self.runtime_spec,
                 hook_config_format=self.capabilities.hook_config_format,
                 plugin_dir=plugin_dir,
             ) as config_path:
-                if session_dir is not None:
+                errors: tuple[str, ...] = ()
+                if executable is not None:
                     try:
-                        snapshot = config_path.read_bytes()
-                        atomic_write(Path(session_dir) / "config.toml", snapshot.decode("utf-8"))
-                    except Exception as exc:
-                        raise _staged_error("snapshot write", exc) from exc
-                    return PreLaunchReadiness(())
-                try:
-                    errors = tuple(
-                        _validate_global_codex_home(
-                            self.source_codex_home,
-                            config_path=config_path,
-                            executable=executable,
+                        errors = tuple(
+                            _validate_generated_codex_home(
+                                generated_home,
+                                config_path=config_path,
+                                executable=executable,
+                            )
                         )
-                    )
-                except Exception as exc:
-                    raise _staged_error("native home validation", exc) from exc
-                return PreLaunchReadiness(errors)
+                    except Exception as exc:
+                        raise _staged_error("generated home validation", exc) from exc
+                return PreLaunchReadiness(
+                    errors,
+                    {
+                        CODEX_HOME_ENV_VAR: str(generated_home),
+                        _CODEX_SQLITE_HOME_ENV_VAR: str(generated_home),
+                    },
+                )
         except Exception as exc:
             logger.error("codex_prelaunch_transaction_failed", exc_info=True)
             return PreLaunchReadiness((f"Codex pre-launch configuration failed: {exc}",))

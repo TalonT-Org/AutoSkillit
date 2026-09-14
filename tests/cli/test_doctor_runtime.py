@@ -103,7 +103,6 @@ class TestCheckCodexLimitsVerified:
         result = mod._check_codex_limits_verified(backend=CodexBackend())
         assert result.severity == Severity.WARNING
         assert "CODEX_HISTORY_RETENTION_TOKEN_LIMIT" in result.message
-        assert "CODEX_AUTO_COMPACT_LIMIT" in result.message
 
     def test_codex_limits_verified_skips_for_a_backend_without_a_limits_pin(
         self, monkeypatch: pytest.MonkeyPatch

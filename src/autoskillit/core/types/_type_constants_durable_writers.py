@@ -197,8 +197,8 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     DurableArtifactWriterDef(
         writer="autoskillit.execution.backends._codex_hooks:_upsert_hooks_text",
         artifact=(
-            "~/.codex/config.toml [[hooks]] blocks (absolute host paths) — the "
-            "foreign-block-preserving text rewrite used by sync_hooks_to_codex_config()"
+            "Codex config.toml [[hooks]] blocks in native or wrapper-owned homes "
+            "(absolute host paths) — the foreign-block-preserving text rewrite"
         ),
         machine_local=True,
         detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
@@ -206,9 +206,17 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
     DurableArtifactWriterDef(
         writer="autoskillit.execution.backends._codex_config:_write_codex_config",
         artifact=(
-            "~/.codex/config.toml — generic TOML writer; persists "
-            "sync_hooks_to_codex_config()'s merged hook entries (absolute host paths) "
-            "as well as MCP server registration"
+            "Codex config.toml in native or wrapper-owned homes — generic TOML writer "
+            "for MCP registration, runtime tuning, and merged hook entries"
+        ),
+        machine_local=True,
+        detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
+    ),
+    DurableArtifactWriterDef(
+        writer="autoskillit.execution.backends._codex_config:_apply_codex_runtime_spec_unlocked",
+        artifact=(
+            "wrapper-owned Codex config.toml text fallback for a corrupt native preference "
+            "snapshot, preserving non-runtime bytes while projecting runtime tuning"
         ),
         machine_local=True,
         detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",

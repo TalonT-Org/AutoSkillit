@@ -148,8 +148,8 @@ def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -
             Severity.WARNING,
             check_name,
             f"Codex CLI {cur_str} is newer than verified pin {pin_str}; re-verify "
-            "CODEX_HISTORY_RETENTION_TOKEN_LIMIT, CODEX_AUTO_COMPACT_LIMIT, and "
-            "CODEX_RECIPE_DELIVERY_BUDGET against upstream behavior and update "
+            "CODEX_HISTORY_RETENTION_TOKEN_LIMIT and CODEX_RECIPE_DELIVERY_BUDGET "
+            "against upstream behavior and update "
             "CODEX_LIMIT_VERIFICATION_REGISTRY, from which "
             "CODEX_LIMITS_LAST_VERIFIED_VERSION is derived",
         )

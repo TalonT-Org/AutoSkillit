@@ -11,8 +11,6 @@ from autoskillit.cli.doctor._doctor_mcp import (
 )
 from autoskillit.core import ReadResult, Severity
 from autoskillit.execution.backends._codex_config import (
-    CODEX_AUTO_COMPACT_LIMIT,
-    CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
 )
@@ -41,8 +39,6 @@ class TestCheckMcpServerRegisteredCodexBranch:
                             "tool_timeout_sec": CODEX_MCP_TOOL_TIMEOUT_FLOOR,
                         }
                     },
-                    "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-                    "model_auto_compact_token_limit": CODEX_AUTO_COMPACT_LIMIT,
                 }
             ),
         )

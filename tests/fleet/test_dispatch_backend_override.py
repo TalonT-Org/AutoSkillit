@@ -120,7 +120,7 @@ class TestFoodTruckBackendOverridePrelaunch:
         assert runner.call_args_list
 
     @pytest.mark.anyio
-    async def test_non_global_codex_dispatch_still_runs_prelaunch(
+    async def test_non_global_codex_dispatch_defers_prelaunch_to_materialization(
         self,
         tool_ctx,
         monkeypatch: pytest.MonkeyPatch,
@@ -210,7 +210,7 @@ class TestFoodTruckBackendOverridePrelaunch:
         await _run_with_backend(tool_ctx, dispatch_backend=backend)
 
         assert runner.call_args_list
-        prelaunch.assert_called_once_with()
+        prelaunch.assert_not_called()
         assert admissions[0]["provider"] == "codex"
         assert admissions[0]["diagnostic_log_root"] == Path(tool_ctx.config.linux_tracing.log_dir)
 

@@ -60,7 +60,7 @@ class TestGroupCMigration:
         assert "class RaceAccumulator" in source  # REQ-SIG-003
 
     def test_cancel_scope_cancel_present(self):
-        source = PROCESS_PY.read_text()
+        source = (SRC_ROOT / "execution" / "process" / "_race_watchers.py").read_text()
         assert "cancel_scope.cancel()" in source  # REQ-SIG-004
 
     def test_resolve_termination_preserved(self):
@@ -68,7 +68,7 @@ class TestGroupCMigration:
         assert "def resolve_termination(" in source  # REQ-SIG-005
 
     def test_channel_b_drain_wait_uses_move_on_after(self):
-        source = PROCESS_PY.read_text()
+        source = (SRC_ROOT / "execution" / "process" / "_race_watchers.py").read_text()
         assert "anyio.move_on_after(" in source  # REQ-SIG-006
 
     def test_watch_process_present(self):

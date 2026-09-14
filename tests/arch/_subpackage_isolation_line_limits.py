@@ -42,14 +42,6 @@ _LINE_LIMIT_EXEMPTIONS: dict[str, LineLimitExemption] = {
         "REQ-CNST-010-E25: #4585 keeps sterile auth, projection, probes, managed process "
         "lifecycle, and strict result validation behind one evidence-reader launch interface",
     ),
-    "execution/process/__init__.py": LineLimitExemption(
-        1050,
-        "REQ-CNST-010-E27: #4678 rectify threads ceiling_seconds through run_managed_async/"
-        "run_managed_sync/DefaultSubprocessRunner and adds the PTY-wrapper workload-identity "
-        "resolution for the process-tether spawner-death immunity mechanism — this facade is "
-        "the single composition point for both spawn paths and must stay adjacent to the "
-        "spawn call sites it wires the tether into.",
-    ),
     "hooks/_capture_artifacts.py": LineLimitExemption(
         1200,
         "REQ-CNST-010-E22: descriptor-anchored capture authority and isolated runner — "

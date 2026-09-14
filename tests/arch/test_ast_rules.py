@@ -2710,13 +2710,10 @@ def test_consolidation_fail_closed_deferral_has_runtime_race_coverage(
             _load_manifests(tmp_path)
 
 
-def test_enumeration_stat_allowlist_regression_tests_resolve(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_enumeration_stat_allowlist_regression_tests_resolve() -> None:
     assert_deferrals_have_regression_tests(
         _ENUMERATION_STAT_ALLOWLIST,
         registry_name="_ENUMERATION_STAT_ALLOWLIST",
-        collected_node_ids={item.nodeid for item in request.session.items},
     )
 
 

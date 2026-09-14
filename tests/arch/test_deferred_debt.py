@@ -1,11 +1,14 @@
 """Tests for shared architectural-deferral registry checks."""
 
+import ast
 from datetime import date
 
 import pytest
 
 from tests.arch._deferred_debt import (
     TrackedDeferral,
+    _definition_paths,
+    _regression_test_resolves,
     assert_deferrals_have_regression_tests,
     assert_entries_still_apply,
     assert_not_stale,
@@ -93,7 +96,6 @@ def test_deferral_without_regression_test_is_rejected() -> None:
         assert_deferrals_have_regression_tests(
             {"missing-evidence": entry},
             registry_name="TEST_REGISTRY",
-            collected_node_ids=set(),
         )
 
 
@@ -117,10 +119,49 @@ def test_deferral_with_orphaned_regression_test_is_rejected(stale_node_id: str) 
                 )
             },
             registry_name="TEST_REGISTRY",
-            collected_node_ids={
-                "tests/arch/test_deferred_debt.py::test_current_regression",
-                "tests/arch/test_deferred_debt.py::test_parametrized_regression[current-case]",
-            },
         )
     assert "missing-evidence" in str(exc_info.value)
     assert stale_node_id in str(exc_info.value)
+
+
+def test_regression_test_naming_a_live_test_resolves() -> None:
+    """Resolution is by source, so a named test resolves whether or not the
+    running session collected it — the property that lets these registries
+    survive conservative path filtering and CI sharding."""
+    assert_deferrals_have_regression_tests(
+        {"tracked": _entry()},
+        registry_name="TEST_REGISTRY",
+    )
+
+
+def test_regression_test_in_an_unknown_file_is_rejected() -> None:
+    entry = TrackedDeferral(
+        issue=1234,
+        rationale="A concrete deferred architectural violation remains live.",
+        added_date=date.today(),
+        regression_test="tests/arch/test_no_such_module.py::test_missing",
+    )
+    with pytest.raises(AssertionError, match="TEST_REGISTRY"):
+        assert_deferrals_have_regression_tests(
+            {"missing-evidence": entry},
+            registry_name="TEST_REGISTRY",
+        )
+
+
+def test_definition_paths_reach_class_nested_methods() -> None:
+    tree = ast.parse(
+        "def test_top() -> None: ...\nclass TestOuter:\n    def test_inner(self) -> None: ...\n"
+    )
+    assert _definition_paths(tree.body) == {
+        ("test_top",),
+        ("TestOuter",),
+        ("TestOuter", "test_inner"),
+    }
+
+
+def test_parametrisation_id_resolves_to_its_base_function() -> None:
+    """A parametrised node id names a function that exists in source; the bracket
+    suffix is generated at collection time, so only the base name is checked."""
+    assert _regression_test_resolves(
+        "tests/arch/test_deferred_debt.py::test_parametrisation_id_resolves_to_its_base_function[x]"
+    )

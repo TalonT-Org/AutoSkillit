@@ -172,9 +172,7 @@ def test_forward_declared_capability_remains_present_and_unconsumed(field: str) 
     )
 
 
-def test_every_tracked_deferral_names_a_resolvable_regression_test(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_every_tracked_deferral_names_a_resolvable_regression_test() -> None:
     from autoskillit.core import BackendCapabilities
 
     assert_entries_still_apply(
@@ -187,5 +185,4 @@ def test_every_tracked_deferral_names_a_resolvable_regression_test(
     assert_deferrals_have_regression_tests(
         _FORWARD_DECLARED,
         registry_name="_FORWARD_DECLARED",
-        collected_node_ids={item.nodeid for item in request.session.items},
     )

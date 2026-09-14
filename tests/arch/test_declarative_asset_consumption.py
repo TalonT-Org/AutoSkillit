@@ -86,9 +86,7 @@ def test_prefix_reader_is_real_and_leaf_specific() -> None:
     assert _function_exists(_PREFIX_READER)
 
 
-def test_unread_leaf_deferrals_are_current_and_explained(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_unread_leaf_deferrals_are_current_and_explained() -> None:
     data = load_yaml(_REGISTRY_PATH)
     unread = _leaf_paths(data["families"], "families") - set(PRODUCTION_LEAF_READERS)
     assert_entries_still_apply(
@@ -101,5 +99,4 @@ def test_unread_leaf_deferrals_are_current_and_explained(
     assert_deferrals_have_regression_tests(
         PHOROPTER_LEAF_DEFERRALS,
         registry_name="PHOROPTER_LEAF_DEFERRALS",
-        collected_node_ids={item.nodeid for item in request.session.items},
     )

@@ -436,12 +436,8 @@ def test_deferred_stdin_literal_shapes_are_rationale_and_current() -> None:
     assert_not_stale(_DEFERRED_STDIN_LITERAL_SHAPES, registry_name="deferred stdin-literal shapes")
 
 
-def test_deferred_stdin_literal_shapes_have_regression_tests(
-    request: pytest.FixtureRequest,
-) -> None:
-    collected = {item.nodeid for item in request.session.items}
+def test_deferred_stdin_literal_shapes_have_regression_tests() -> None:
     assert_deferrals_have_regression_tests(
         _DEFERRED_STDIN_LITERAL_SHAPES,
         registry_name="deferred stdin-literal shapes",
-        collected_node_ids=collected,
     )

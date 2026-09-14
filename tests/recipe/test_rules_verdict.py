@@ -14,6 +14,7 @@ import pytest
 
 import autoskillit.recipe.contracts as _contracts
 import autoskillit.recipe.contracts.contracts as _real_contracts
+from autoskillit.core import CaptureEntrySpec
 from autoskillit.core.types import Severity
 from autoskillit.recipe.io import builtin_recipes_dir, load_recipe
 from autoskillit.recipe.schema import (
@@ -101,6 +102,20 @@ def test_unrouted_verdict_value_fires_when_needs_human_not_explicitly_routed() -
         "run_semantic_rules must emit 'unrouted-verdict-value' finding when "
         "'needs_human' falls through the catch-all in review_pr on_result."
     )
+
+
+def test_unrouted_verdict_value_skips_empty_first_capture_key() -> None:
+    """The first matching but empty capture key leaves routing to dataflow validation."""
+    steps = _catchall_steps()
+    steps["review_pr"].capture = {
+        "": CaptureEntrySpec(from_="${{ result.verdict }}", value_type="string"),
+        "verdict": CaptureEntrySpec(from_="${{ result.verdict }}", value_type="string"),
+    }
+
+    findings = run_semantic_rules(_make_recipe(steps))
+
+    hits = [f for f in findings if f.rule == "unrouted-verdict-value"]
+    assert not hits
 
 
 def test_unrouted_verdict_value_passes_when_all_verdicts_explicitly_routed() -> None:
@@ -370,13 +385,18 @@ def _make_review_pr_recipe(
     return recipe, manifest
 
 
+@pytest.mark.parametrize(
+    "allowed_values",
+    [["approved", "changes_requested"], []],
+)
 def test_on_result_values_in_allowed_values_fires_on_unregistered_route(
     monkeypatch: pytest.MonkeyPatch,
+    allowed_values: list[str],
 ) -> None:
     """on-result-values-in-allowed-values fires ERROR when recipe routes an unlisted value."""
     recipe, manifest = _make_review_pr_recipe(
         verdict_route="approved_with_comments",
-        allowed_values=["approved", "changes_requested"],
+        allowed_values=allowed_values,
     )
     # get_allowed_values_for_skill (helpers/_skill_helpers.py) does a per-call inline
     # import from autoskillit.recipe.contracts.contracts, bypassing the recipe.contracts

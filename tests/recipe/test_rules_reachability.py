@@ -438,3 +438,72 @@ def test_event_scope_fork_only_one_branch_has_producer_fires():
         f"got {len(matching)}: {[f.message for f in matching]}"
     )
     assert matching[0].step_name == "ci_watch"
+
+
+def test_capture_inversion_ignores_list_only_producer_and_keeps_repeated_reads():
+    """A scalar producer fires once per reader reference; a list-only producer does not."""
+    recipe = Recipe(
+        name="synthetic-scalar-and-list-captures",
+        description="fork, conditional join, and a reader with repeated scalar references",
+        steps={
+            "entry": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="context.route == 'producer'",
+                            route="producer",
+                        ),
+                        StepResultCondition(route="other"),
+                    ]
+                ),
+            ),
+            "producer": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo producing"},
+                capture={"var_x": "${{ result.var_x }}"},
+                capture_list={"list_only": "${{ result.list_only }}"},
+                retries=0,
+                on_success="joiner",
+            ),
+            "other": RecipeStep(
+                tool="run_cmd",
+                with_args={"cmd": "echo other"},
+                on_success="joiner",
+            ),
+            "joiner": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(
+                            when="context.var_x == 'yes'",
+                            route="reader",
+                        ),
+                        StepResultCondition(
+                            when="context.list_only == 'yes'",
+                            route="reader",
+                        ),
+                        StepResultCondition(route="reader"),
+                    ]
+                ),
+            ),
+            "reader": RecipeStep(
+                tool="run_cmd",
+                with_args={
+                    "cmd": (
+                        "echo ${{ context.var_x }} ${{ context.var_x }} ${{ context.list_only }}"
+                    )
+                },
+            ),
+        },
+    )
+
+    findings = _check_capture_inversion(make_validation_context(recipe))
+    scalar_findings = [
+        finding
+        for finding in findings
+        if finding.step_name == "reader" and "context.var_x" in finding.message
+    ]
+    list_findings = [finding for finding in findings if "context.list_only" in finding.message]
+    assert len(scalar_findings) == 2
+    assert list_findings == []

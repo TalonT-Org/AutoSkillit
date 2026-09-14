@@ -134,6 +134,42 @@ class TestLoopCounterCrossPathSharing:
         sharing = [f for f in findings if f.rule == "loop-counter-cross-path-sharing"]
         assert sharing == []
 
+    def test_literal_iteration_guard_is_excluded_from_external_predecessors(self) -> None:
+        """A disconnected literal guard cannot make a real loop counter look shared."""
+        steps = {
+            "entry": RecipeStep(
+                action="route",
+                on_result=StepResultRoute(
+                    conditions=[
+                        StepResultCondition(when="context.route == 'fix'", route="outside_fix"),
+                        StepResultCondition(route="literal_guard"),
+                    ]
+                ),
+            ),
+            "outside_fix": RecipeStep(tool="run_skill", on_success="fix", on_failure="done"),
+            "literal_guard": RecipeStep(
+                tool="run_python",
+                with_args={
+                    "callable": "autoskillit.smoke_utils.check_loop_iteration",
+                    "current_iteration": "1",
+                    "max_iterations": "3",
+                },
+                on_success="guard",
+            ),
+            "guard": _guard_step("counter", non_exit="test", exit_route="done"),
+            "test": RecipeStep(
+                tool="test_check",
+                on_success="done",
+                on_failure="fix",
+            ),
+            "fix": RecipeStep(tool="run_skill", on_success="guard", on_failure="done"),
+            "done": RecipeStep(action="stop", message="Done. Emit sentinel: {}"),
+        }
+
+        findings = run_semantic_rules(_make_recipe(steps))
+        sharing = [f for f in findings if f.rule == "loop-counter-cross-path-sharing"]
+        assert sharing == []
+
     @pytest.mark.parametrize(
         "recipe_name",
         ("remediation", "implementation", "implementation-groups", "merge-prs"),

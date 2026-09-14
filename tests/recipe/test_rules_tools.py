@@ -576,9 +576,9 @@ def test_release_issue_requires_disposition_passes_with_close_issue_and_target_b
 # ---------------------------------------------------------------------------
 
 
-def _make_edit_then_push_recipe_tools(force: str | None = None) -> Recipe:
+def _make_edit_then_push_recipe_tools(force: object | None = None) -> Recipe:
     """Minimal recipe: run_skill (write-behavior) → push_to_remote."""
-    push_args: dict[str, str] = {"clone_path": "/tmp", "remote_url": "r", "branch": "b"}
+    push_args: dict[str, object] = {"clone_path": "/tmp", "remote_url": "r", "branch": "b"}
     if force is not None:
         push_args["force"] = force
     return Recipe(
@@ -649,13 +649,24 @@ def test_push_after_always_write_skill_without_force_fires() -> None:
     assert hits[0].severity == Severity.ERROR
 
 
-def test_push_after_conditional_write_skill_with_force_passes() -> None:
+@pytest.mark.parametrize("force", ["true", " TRUE "])
+def test_push_after_conditional_write_skill_with_force_passes(force: str) -> None:
     """push-after-edit-requires-force does NOT fire when push has force='true'."""
-    recipe = _make_edit_then_push_recipe_tools(force="true")
+    recipe = _make_edit_then_push_recipe_tools(force=force)
     with _patch_contract_for_push_rule("conditional"):
         findings = run_semantic_rules(recipe)
     hits = [f for f in findings if f.rule == "push-after-edit-requires-force"]
     assert not hits, "push-after-edit-requires-force must not fire when force='true'"
+
+
+def test_push_after_nonstring_force_without_writable_predecessor_passes() -> None:
+    """A non-string force value is untouched when no writable skill precedes the push."""
+    recipe = _make_edit_then_push_recipe_tools(force=True)
+    with _patch_contract_for_push_rule("always", read_only=True):
+        findings = run_semantic_rules(recipe)
+
+    hits = [f for f in findings if f.rule == "push-after-edit-requires-force"]
+    assert not hits
 
 
 def test_push_after_readonly_skill_without_force_passes() -> None:

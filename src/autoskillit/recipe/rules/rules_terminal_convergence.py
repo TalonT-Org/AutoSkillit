@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from itertools import combinations
 
 import regex as re
 
@@ -32,6 +33,15 @@ def _predecessors_bfs(step_graph: dict[str, set[str]], start: str) -> set[str]:
     return visited
 
 
+def _success_stop_reason(message: str | None) -> str | None:
+    message = message or ""
+    success_match = _SUCCESS_RE.search(message)
+    if not success_match or success_match.group(1) != "true":
+        return None
+    reason_match = _REASON_RE.search(message)
+    return reason_match.group(1) if reason_match else None
+
+
 @semantic_rule(
     name="success-stop-reason-uniqueness",
     description=(
@@ -50,53 +60,44 @@ def _check_success_stop_reason_uniqueness(ctx: ValidationContext) -> list[RuleFi
     for step_name, step in ctx.recipe.steps.items():
         if step.action != "stop":
             continue
-        msg = step.message or ""
-        success_match = _SUCCESS_RE.search(msg)
-        if not success_match:
-            continue
-        if success_match.group(1) != "true":
-            continue
-        reason_match = _REASON_RE.search(msg)
-        if not reason_match:
-            continue
-        reason = reason_match.group(1)
-        success_stops[reason].append(step_name)
+        reason = _success_stop_reason(step.message)
+        if reason is not None:
+            success_stops[reason].append(step_name)
 
     findings: list[RuleFinding] = []
     for reason, step_names in success_stops.items():
         if len(step_names) < 2:
             continue
         ancestors_by_step = {name: _predecessors_bfs(ctx.step_graph, name) for name in step_names}
-        for i, name_a in enumerate(step_names):
-            for name_b in step_names[i + 1 :]:
-                shared_ancestors = ancestors_by_step[name_a] & ancestors_by_step[name_b]
-                if shared_ancestors:
-                    findings.append(
-                        make_finding(
-                            rule_name="success-stop-reason-uniqueness",
-                            step_name=name_a,
-                            message=(
-                                f"Stop steps '{name_a}' and '{name_b}' both emit "
-                                f'success=true with reason="{reason}" and share common '
-                                f"ancestors. Distinct success paths must use distinct "
-                                f"reason strings for fleet outcome classification."
-                            ),
-                            severity=Severity.ERROR,
-                        )
+        for name_a, name_b in combinations(step_names, 2):
+            shared_ancestors = ancestors_by_step[name_a] & ancestors_by_step[name_b]
+            if shared_ancestors:
+                findings.append(
+                    make_finding(
+                        rule_name="success-stop-reason-uniqueness",
+                        step_name=name_a,
+                        message=(
+                            f"Stop steps '{name_a}' and '{name_b}' both emit "
+                            f'success=true with reason="{reason}" and share common '
+                            f"ancestors. Distinct success paths must use distinct "
+                            f"reason strings for fleet outcome classification."
+                        ),
+                        severity=Severity.ERROR,
                     )
-                else:
-                    findings.append(
-                        make_finding(
-                            rule_name="success-stop-reason-uniqueness",
-                            step_name=name_a,
-                            message=(
-                                f"Stop steps '{name_a}' and '{name_b}' both emit "
-                                f'success=true with reason="{reason}". Consider using '
-                                f"distinct reason strings for fleet outcome "
-                                f"classification."
-                            ),
-                            severity=Severity.WARNING,
-                        )
+                )
+            else:
+                findings.append(
+                    make_finding(
+                        rule_name="success-stop-reason-uniqueness",
+                        step_name=name_a,
+                        message=(
+                            f"Stop steps '{name_a}' and '{name_b}' both emit "
+                            f'success=true with reason="{reason}". Consider using '
+                            f"distinct reason strings for fleet outcome "
+                            f"classification."
+                        ),
+                        severity=Severity.WARNING,
                     )
+                )
 
     return findings

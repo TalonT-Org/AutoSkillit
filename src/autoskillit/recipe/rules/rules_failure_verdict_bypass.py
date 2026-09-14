@@ -13,6 +13,32 @@ from autoskillit.recipe._analysis_bfs import _bfs_capped
 from autoskillit.recipe._rule_helpers import is_success_stop
 from autoskillit.recipe._skill_helpers import get_allowed_values_for_skill
 from autoskillit.recipe.registry import RuleFinding, make_finding, semantic_rule
+from autoskillit.recipe.schema import RecipeStep
+
+
+def _has_routed_failure_verdict(step: RecipeStep, ctx: ValidationContext) -> bool:
+    """Whether a skill's declared verdict has a route to a non-success stop."""
+    if not step.on_result:
+        return False
+    skill_command = str((step.with_args or {}).get("skill_command") or "")
+    skill_name = resolve_skill_name(skill_command)
+    if not skill_name:
+        return False
+    allowed_by_output = get_allowed_values_for_skill(skill_name)
+    if not allowed_by_output:
+        return False
+    for _output_name, allowed_values in allowed_by_output.items():
+        for value in allowed_values:
+            for condition in step.on_result.conditions or []:
+                if condition.when and value in condition.when and condition.route:
+                    target_step = ctx.recipe.steps.get(condition.route)
+                    if (
+                        target_step
+                        and target_step.action == "stop"
+                        and not is_success_stop(target_step)
+                    ):
+                        return True
+    return False
 
 
 @semantic_rule(
@@ -35,47 +61,15 @@ def _check_failure_verdict_bypass_reachable(ctx: ValidationContext) -> list[Rule
         if step.tool != "run_skill":
             continue
 
-        if not step.on_result:
+        if not _has_routed_failure_verdict(step, ctx):
             continue
 
-        skill_command = str((step.with_args or {}).get("skill_command") or "")
-        skill_name = resolve_skill_name(skill_command)
-        if not skill_name:
-            continue
-
-        allowed_by_output = get_allowed_values_for_skill(skill_name)
-        if not allowed_by_output:
-            continue
-
-        conditions = step.on_result.conditions or []
-        has_failure_verdict = False
-        for _output_name, allowed_values in allowed_by_output.items():
-            for value in allowed_values:
-                for cond in conditions:
-                    if cond.when and value in cond.when and cond.route:
-                        target_step = ctx.recipe.steps.get(cond.route)
-                        if (
-                            target_step
-                            and target_step.action == "stop"
-                            and not is_success_stop(target_step)
-                        ):
-                            has_failure_verdict = True
-                            break
-                if has_failure_verdict:
-                    break
-            if has_failure_verdict:
-                break
-
-        if not has_failure_verdict:
-            continue
-
-        bypass_targets: list[tuple[str, str]] = []
-        if step.on_context_limit:
-            bypass_targets.append(("on_context_limit", step.on_context_limit))
-        if step.on_rate_limit:
-            bypass_targets.append(("on_rate_limit", step.on_rate_limit))
-
-        for bypass_kind, bypass_target in bypass_targets:
+        for bypass_kind, bypass_target in (
+            ("on_context_limit", step.on_context_limit),
+            ("on_rate_limit", step.on_rate_limit),
+        ):
+            if not bypass_target:
+                continue
             reachable = _bfs_capped(full_graph, {bypass_target}, set())
             for reached_name in reachable:
                 reached_step = ctx.recipe.steps.get(reached_name)

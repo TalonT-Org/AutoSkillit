@@ -5,6 +5,8 @@ Validates that no skill other than the designated owner writes a registered stam
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from autoskillit.core import DRY_WALKTHROUGH_VERIFIED_MARKER, Severity
 from autoskillit.recipe._analysis import ValidationContext
 from autoskillit.recipe._skill_helpers import _resolve_skill_md
@@ -29,16 +31,8 @@ def _has_write_instruction(content: str, stamp: str) -> bool:
     return False
 
 
-@semantic_rule(
-    name="exclusive-stamp-ownership",
-    description=(
-        "A SKILL.md contains instructions to write a registered stamp string that belongs "
-        "exclusively to another skill. Only the designated owner may write each stamp."
-    ),
-    severity=Severity.ERROR,
-)
-def _check_exclusive_stamp_ownership(ctx: ValidationContext) -> list[RuleFinding]:
-    findings: list[RuleFinding] = []
+def _foreign_stamp_writes(ctx: ValidationContext) -> Iterator[tuple[str, str, str, str]]:
+    """Yield step name, skill, stamp, and owner for each foreign stamp write."""
     for step_name, step in ctx.recipe.steps.items():
         if step.tool != "run_skill":
             continue
@@ -58,20 +52,32 @@ def _check_exclusive_stamp_ownership(ctx: ValidationContext) -> list[RuleFinding
         except OSError:
             continue
         for stamp, owner in _STAMP_OWNERS.items():
-            if skill_name == owner:
-                continue
-            if stamp not in content:
+            if skill_name == owner or stamp not in content:
                 continue
             if _has_write_instruction(content, stamp):
-                findings.append(
-                    make_finding(
-                        rule_name="exclusive-stamp-ownership",
-                        step_name=step_name,
-                        message=(
-                            f"Skill '{skill_name}' contains the stamp "
-                            f"'{stamp}' which is exclusively owned by '{owner}'. "
-                            f"Only '{owner}' may write this stamp."
-                        ),
-                    )
-                )
+                yield step_name, skill_name, stamp, owner
+
+
+@semantic_rule(
+    name="exclusive-stamp-ownership",
+    description=(
+        "A SKILL.md contains instructions to write a registered stamp string that belongs "
+        "exclusively to another skill. Only the designated owner may write each stamp."
+    ),
+    severity=Severity.ERROR,
+)
+def _check_exclusive_stamp_ownership(ctx: ValidationContext) -> list[RuleFinding]:
+    findings: list[RuleFinding] = []
+    for step_name, skill_name, stamp, owner in _foreign_stamp_writes(ctx):
+        findings.append(
+            make_finding(
+                rule_name="exclusive-stamp-ownership",
+                step_name=step_name,
+                message=(
+                    f"Skill '{skill_name}' contains the stamp "
+                    f"'{stamp}' which is exclusively owned by '{owner}'. "
+                    f"Only '{owner}' may write this stamp."
+                ),
+            )
+        )
     return findings

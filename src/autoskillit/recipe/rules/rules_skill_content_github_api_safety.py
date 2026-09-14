@@ -104,6 +104,105 @@ def _json_payload_binds_variable(section: str, variable: str) -> bool:
     )
 
 
+def _graphql_section_findings(
+    section: str,
+    skill_name: str,
+    step_name: str,
+) -> list[RuleFinding]:
+    """Validate GraphQL payloads, fenced blocks, and prose within one section."""
+    findings: list[RuleFinding] = []
+    section_graphql = extract_graphql_blocks(section)
+    section_bash = extract_bash_blocks(section)
+    section_bash_graphql = [
+        block for block in section_bash if _GH_API_GRAPHQL_BLOCK_RE.search(block)
+    ]
+    section_is_mutation = (
+        any(_GRAPHQL_MUTATION_SECTION_RE.search(block) for block in section_graphql)
+        if section_graphql
+        else bool(_GRAPHQL_MUTATION_SECTION_RE.search(section))
+    )
+
+    for bash_block in section_bash_graphql:
+        if _GRAPHQL_VARIABLES_BLOB_RE.search(bash_block):
+            findings.append(
+                make_finding(
+                    rule_name="graphql-query-requires-shell-invocation",
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' uses a single variables blob binding; "
+                        "use individual fields or a validated JSON payload "
+                        "variables object."
+                    ),
+                )
+            )
+        block_is_mutation = bool(_GRAPHQL_MUTATION_SECTION_RE.search(bash_block))
+        if (
+            block_is_mutation or (section_is_mutation and len(section_bash_graphql) == 1)
+        ) and not _has_guard_compatible_graphql_mutation(section, bash_block):
+            findings.append(
+                make_finding(
+                    rule_name="graphql-query-requires-shell-invocation",
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' prescribes a GraphQL mutation that is "
+                        "not guard-compatible: use a fully literal inline mutation or "
+                        "a literal JSON --input path written in a prior tool call."
+                    ),
+                )
+            )
+
+    for block in section_graphql:
+        if not section_bash_graphql:
+            findings.append(
+                make_finding(
+                    rule_name="graphql-query-requires-shell-invocation",
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' has a graphql block in a section "
+                        f"with no 'gh api graphql' bash block in the same section."
+                    ),
+                )
+            )
+            break
+
+        variable_names = set(_GRAPHQL_VARIABLE_RE.findall(block))
+        for var in variable_names:
+            flag_found = any(
+                re.search(rf"-[Ff]\s*{re.escape(var)}=", bash_block)
+                for bash_block in section_bash_graphql
+            )
+            payload_found = any(
+                _literal_graphql_input_path(bash_block) is not None
+                for bash_block in section_bash_graphql
+            ) and _json_payload_binds_variable(section, var)
+            if not flag_found and not payload_found:
+                findings.append(
+                    make_finding(
+                        rule_name="graphql-query-requires-shell-invocation",
+                        step_name=step_name,
+                        message=(
+                            f"Skill '{skill_name}' graphql variable '${var}' has no "
+                            f"'-F {var}=' or '-f {var}=' binding in any "
+                            f"same-section `gh api graphql` bash block."
+                        ),
+                    )
+                )
+
+    if not section_graphql and has_prose_graphql_execution(section) and not section_bash_graphql:
+        findings.append(
+            make_finding(
+                rule_name="graphql-query-requires-shell-invocation",
+                step_name=step_name,
+                message=(
+                    f"Skill '{skill_name}' has a section referencing GraphQL "
+                    f"execution in prose but no 'gh api graphql' bash block "
+                    f"in the same section."
+                ),
+            )
+        )
+    return findings
+
+
 @semantic_rule(
     name="skill-no-issue-comments",
     description=(
@@ -243,94 +342,6 @@ def _check_graphql_query_requires_shell_invocation(ctx: ValidationContext) -> li
             continue
 
         for section in extract_sections(content):
-            section_graphql = extract_graphql_blocks(section)
-            section_bash = extract_bash_blocks(section)
-            section_bash_graphql = [b for b in section_bash if _GH_API_GRAPHQL_BLOCK_RE.search(b)]
-            section_is_mutation = (
-                any(_GRAPHQL_MUTATION_SECTION_RE.search(block) for block in section_graphql)
-                if section_graphql
-                else bool(_GRAPHQL_MUTATION_SECTION_RE.search(section))
-            )
-
-            for bash_block in section_bash_graphql:
-                if _GRAPHQL_VARIABLES_BLOB_RE.search(bash_block):
-                    findings.append(
-                        make_finding(
-                            rule_name="graphql-query-requires-shell-invocation",
-                            step_name=step_name,
-                            message=(
-                                f"Skill '{skill_name}' uses a single variables blob binding; "
-                                "use individual fields or a validated JSON payload "
-                                "variables object."
-                            ),
-                        )
-                    )
-                block_is_mutation = bool(_GRAPHQL_MUTATION_SECTION_RE.search(bash_block))
-                if (
-                    block_is_mutation or (section_is_mutation and len(section_bash_graphql) == 1)
-                ) and not _has_guard_compatible_graphql_mutation(section, bash_block):
-                    findings.append(
-                        make_finding(
-                            rule_name="graphql-query-requires-shell-invocation",
-                            step_name=step_name,
-                            message=(
-                                f"Skill '{skill_name}' prescribes a GraphQL mutation that is "
-                                "not guard-compatible: use a fully literal inline mutation or "
-                                "a literal JSON --input path written in a prior tool call."
-                            ),
-                        )
-                    )
-
-            for block in section_graphql:
-                if not section_bash_graphql:
-                    findings.append(
-                        make_finding(
-                            rule_name="graphql-query-requires-shell-invocation",
-                            step_name=step_name,
-                            message=(
-                                f"Skill '{skill_name}' has a graphql block in a section "
-                                f"with no 'gh api graphql' bash block in the same section."
-                            ),
-                        )
-                    )
-                    break
-
-                variable_names = set(_GRAPHQL_VARIABLE_RE.findall(block))
-                for var in variable_names:
-                    flag_found = any(
-                        re.search(rf"-[Ff]\s*{re.escape(var)}=", b) for b in section_bash_graphql
-                    )
-                    payload_found = any(
-                        _literal_graphql_input_path(b) is not None for b in section_bash_graphql
-                    ) and _json_payload_binds_variable(section, var)
-                    if not flag_found and not payload_found:
-                        findings.append(
-                            make_finding(
-                                rule_name="graphql-query-requires-shell-invocation",
-                                step_name=step_name,
-                                message=(
-                                    f"Skill '{skill_name}' graphql variable '${var}' has no "
-                                    f"'-F {var}=' or '-f {var}=' binding in any "
-                                    f"same-section `gh api graphql` bash block."
-                                ),
-                            )
-                        )
-
-            if (
-                not section_graphql
-                and has_prose_graphql_execution(section)
-                and not section_bash_graphql
-            ):
-                findings.append(
-                    make_finding(
-                        rule_name="graphql-query-requires-shell-invocation",
-                        step_name=step_name,
-                        message=(
-                            f"Skill '{skill_name}' has a section referencing GraphQL "
-                            f"execution in prose but no 'gh api graphql' bash block "
-                            f"in the same section."
-                        ),
-                    )
-                )
+            findings.extend(_graphql_section_findings(section, skill_name, step_name))
 
     return findings

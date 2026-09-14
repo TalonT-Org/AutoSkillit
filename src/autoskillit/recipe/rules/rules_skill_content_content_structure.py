@@ -56,6 +56,18 @@ _TRANSITION_ANTI_CONFIRM_RE: re.Pattern[str] = re.compile(
 )
 
 
+def _unprotected_transition_boundaries(content: str) -> list[tuple[str, str]]:
+    unprotected: list[tuple[str, str]] = []
+    for section in extract_sections(content):
+        lines = section.splitlines()
+        heading = lines[0].strip() if lines else ""
+        for boundary_name, boundary_re in _TRANSITION_BOUNDARY_RES:
+            if boundary_re.search(section) and not _TRANSITION_ANTI_CONFIRM_RE.search(section):
+                unprotected.append((boundary_name, heading))
+                break
+    return unprotected
+
+
 @semantic_rule(
     name="transition-boundary-anti-confirmation",
     description=(
@@ -89,14 +101,7 @@ def _check_transition_boundary_anti_confirmation(ctx: ValidationContext) -> list
             content = skill_md.read_text(encoding="utf-8")
         except OSError:
             continue
-        unprotected: list[tuple[str, str]] = []
-        for section in extract_sections(content):
-            lines = section.splitlines()
-            heading = lines[0].strip() if lines else ""
-            for boundary_name, boundary_re in _TRANSITION_BOUNDARY_RES:
-                if boundary_re.search(section) and not _TRANSITION_ANTI_CONFIRM_RE.search(section):
-                    unprotected.append((boundary_name, heading))
-                    break
+        unprotected = _unprotected_transition_boundaries(content)
         if unprotected:
             boundary_desc = "; ".join(f"'{b}' in section '{h}'" for b, h in unprotected)
             findings.append(

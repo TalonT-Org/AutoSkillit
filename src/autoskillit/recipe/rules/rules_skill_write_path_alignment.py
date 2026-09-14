@@ -59,6 +59,21 @@ def _normalise_path(path: str) -> str:
     return path.rstrip("/")
 
 
+def _first_misaligned_write_path(content: str, output_dir: str) -> str | None:
+    if has_dynamic_write_path(content):
+        return None
+    declared_paths = extract_write_path_declarations(content)
+    if not declared_paths:
+        return None
+    static_base = _static_base_prefix(output_dir)
+    normalised_base = _normalise_path(static_base)
+    for declared in declared_paths:
+        normalised_declared = _normalise_path("{{AUTOSKILLIT_TEMP}}/" + declared)
+        if normalised_base.startswith(normalised_declared):
+            return declared
+    return None
+
+
 @semantic_rule(
     name="skill-write-path-recipe-alignment",
     description=(
@@ -107,35 +122,21 @@ def _check_skill_write_path_alignment(ctx: ValidationContext) -> list[RuleFindin
             logger.debug("Could not read SKILL.md for %s at %s", skill_name, skill_md_path)
             continue
 
-        if has_dynamic_write_path(content):
-            continue
-
-        declared_paths = extract_write_path_declarations(content)
-        if not declared_paths:
-            continue
-
-        static_base = _static_base_prefix(output_dir)
-
-        for declared in declared_paths:
-            normalised_declared = _normalise_path("{{AUTOSKILLIT_TEMP}}/" + declared)
-            normalised_base = _normalise_path(static_base)
-            if normalised_base.startswith(normalised_declared):
-                # Recipe output_dir is a subdirectory of the SKILL.md declared scope
-                # and includes iteration scoping — SKILL.md paths will be blocked
-                findings.append(
-                    make_finding(
-                        rule_name="skill-write-path-recipe-alignment",
-                        step_name=step_name,
-                        message=(
-                            f"Skill '{skill_name}' NEVER block declares write scope "
-                            f"'{declared}' but recipe output_dir '{output_dir}' enforces "
-                            f"a narrower iteration-scoped prefix. The write guard will block "
-                            f"all writes from the agent. Either update the SKILL.md to use "
-                            f"${{AUTOSKILLIT_ALLOWED_WRITE_PREFIX}} for write paths, or align "
-                            f"the output_dir to match the SKILL.md's declared scope."
-                        ),
-                    )
+        declared = _first_misaligned_write_path(content, output_dir)
+        if declared is not None:
+            findings.append(
+                make_finding(
+                    rule_name="skill-write-path-recipe-alignment",
+                    step_name=step_name,
+                    message=(
+                        f"Skill '{skill_name}' NEVER block declares write scope "
+                        f"'{declared}' but recipe output_dir '{output_dir}' enforces "
+                        f"a narrower iteration-scoped prefix. The write guard will block "
+                        f"all writes from the agent. Either update the SKILL.md to use "
+                        f"${{AUTOSKILLIT_ALLOWED_WRITE_PREFIX}} for write paths, or align "
+                        f"the output_dir to match the SKILL.md's declared scope."
+                    ),
                 )
-                break
+            )
 
     return findings

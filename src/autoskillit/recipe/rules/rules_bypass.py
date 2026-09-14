@@ -377,14 +377,11 @@ def _check_hidden_input_ref_in_template(ctx: ValidationContext) -> list[RuleFind
     for step_name, step in recipe.steps.items():
         for val in (step.with_args or {}).values():
             _check_text(str(val), f"Step '{step_name}'")
-        if step.model:
-            _check_text(step.model, f"Step '{step_name}'")
-        if step.note:
-            _check_text(step.note, f"Step '{step_name}'")
+        _check_text(step.model or "", f"Step '{step_name}'")
+        _check_text(step.note or "", f"Step '{step_name}'")
         if step.on_result and step.on_result.conditions:
             for cond in step.on_result.conditions:
-                if cond.when:
-                    _check_text(cond.when, f"Step '{step_name}'")
+                _check_text(cond.when or "", f"Step '{step_name}'")
 
     for rule_text in recipe.kitchen_rules or []:
         _check_text(str(rule_text), "kitchen_rules")

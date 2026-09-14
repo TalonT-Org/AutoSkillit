@@ -69,11 +69,9 @@ def _check_verdict_context_precondition(ctx: ValidationContext) -> list[RuleFind
         if not allowed_by_output:
             continue
 
-        ci_context_values = set()
-        for _output, values in allowed_by_output.items():
-            for v in values:
-                if v in _CI_CONTEXT_DEPENDENT_VERDICTS:
-                    ci_context_values.add(v)
+        ci_context_values = (
+            set().union(*allowed_by_output.values()) & _CI_CONTEXT_DEPENDENT_VERDICTS
+        )
         if not ci_context_values:
             continue
 

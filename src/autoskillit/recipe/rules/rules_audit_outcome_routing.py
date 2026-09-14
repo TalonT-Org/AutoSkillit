@@ -56,6 +56,50 @@ def _capture_source(step: RecipeStep, name: str) -> str | None:
     return capture.from_ if capture is not None else None
 
 
+def _route_partition_violations(
+    conditions: list[StepResultCondition],
+    keyed: dict[tuple[str | None, str | None], tuple[int, str]],
+) -> list[str]:
+    """Validate ordered outcome partitions after every required key is present."""
+    violations: list[str] = []
+    first_verdict_index = min(keyed[(status, "GO")][0] for status in _PUBLISHED_STATUSES)
+    pre_verdict_keys = {
+        ("SEMANTIC_REJECTED", None),
+        *((status, None) for status in _INFRASTRUCTURE_STATUSES),
+    }
+    if any(keyed[key][0] >= first_verdict_index for key in pre_verdict_keys):
+        violations.append("semantic rejection and infrastructure statuses must route first")
+
+    go_routes = {keyed[(status, "GO")][1] for status in _PUBLISHED_STATUSES}
+    correction_routes = {
+        keyed[("SEMANTIC_REJECTED", None)][1],
+        *(keyed[(status, "NO GO")][1] for status in _PUBLISHED_STATUSES),
+    }
+    infrastructure_routes = {keyed[(status, None)][1] for status in _INFRASTRUCTURE_STATUSES}
+    if len(go_routes) != 1:
+        violations.append("PUBLISHED and EXACT_REPLAY GO must share one route")
+    if len(correction_routes) != 1:
+        violations.append("semantic rejection and published/replayed NO GO must share one route")
+    if len(infrastructure_routes) != 1:
+        violations.append("conflict, storage, quarantine, and standalone must share one route")
+
+    error_routes = {
+        condition.route
+        for condition in conditions
+        if _normalized_condition(condition) == "result.error"
+    }
+    default_routes = {condition.route for condition in conditions if condition.when is None}
+    if len(error_routes) != 1 or error_routes != infrastructure_routes:
+        violations.append("generic result.error must route to infrastructure failure")
+    if len(default_routes) != 1 or default_routes != infrastructure_routes:
+        violations.append("the catch-all route must be the infrastructure failure route")
+    if go_routes & correction_routes or go_routes & infrastructure_routes:
+        violations.append("semantic success must not share correction or infrastructure routes")
+    if correction_routes & infrastructure_routes:
+        violations.append("semantic correction must not share the infrastructure failure route")
+    return violations
+
+
 def _routing_violations(step: RecipeStep) -> list[str]:
     violations: list[str] = []
     if step.on_result is None or not step.on_result.conditions:
@@ -79,47 +123,7 @@ def _routing_violations(step: RecipeStep) -> list[str]:
         violations.append("child-authored result.verdict must not control audit routing")
 
     if not missing:
-        first_verdict_index = min(keyed[(status, "GO")][0] for status in _PUBLISHED_STATUSES)
-        pre_verdict_keys = {
-            ("SEMANTIC_REJECTED", None),
-            *((status, None) for status in _INFRASTRUCTURE_STATUSES),
-        }
-        if any(keyed[key][0] >= first_verdict_index for key in pre_verdict_keys):
-            violations.append("semantic rejection and infrastructure statuses must route first")
-
-        go_routes = {keyed[(status, "GO")][1] for status in _PUBLISHED_STATUSES}
-        correction_routes = {
-            keyed[("SEMANTIC_REJECTED", None)][1],
-            *(keyed[(status, "NO GO")][1] for status in _PUBLISHED_STATUSES),
-        }
-        infrastructure_routes = {keyed[(status, None)][1] for status in _INFRASTRUCTURE_STATUSES}
-        if len(go_routes) != 1:
-            violations.append("PUBLISHED and EXACT_REPLAY GO must share one route")
-        if len(correction_routes) != 1:
-            violations.append(
-                "semantic rejection and published/replayed NO GO must share one route"
-            )
-        if len(infrastructure_routes) != 1:
-            violations.append("conflict, storage, quarantine, and standalone must share one route")
-
-        error_routes = {
-            condition.route
-            for condition in conditions
-            if _normalized_condition(condition) == "result.error"
-        }
-        default_routes = {condition.route for condition in conditions if condition.when is None}
-        if len(error_routes) != 1 or error_routes != infrastructure_routes:
-            violations.append("generic result.error must route to infrastructure failure")
-        if len(default_routes) != 1 or default_routes != infrastructure_routes:
-            violations.append("the catch-all route must be the infrastructure failure route")
-        if go_routes & correction_routes or go_routes & infrastructure_routes:
-            violations.append(
-                "semantic success must not share correction or infrastructure routes"
-            )
-        if correction_routes & infrastructure_routes:
-            violations.append(
-                "semantic correction must not share the infrastructure failure route"
-            )
+        violations.extend(_route_partition_violations(conditions, keyed))
 
     return violations
 

@@ -119,28 +119,27 @@ def _check_verdict_ungated_degradation(ctx: ValidationContext) -> list[RuleFindi
             continue
 
         degradation_verdict = _find_degradation_verdict(skill_md_content)
-        if degradation_verdict is None:
+        if degradation_verdict is None or degradation_verdict in _SAFE_DEGRADATION_VERDICTS:
             continue
 
         nominal_verdicts = _find_nominal_verdicts(skill_md_content)
-
-        if degradation_verdict in _SAFE_DEGRADATION_VERDICTS:
+        if (
+            degradation_verdict not in nominal_verdicts
+            or degradation_verdict not in verdict_allowed
+        ):
             continue
-
-        # The bug: the degradation verdict is ALSO used on the nominal path.
-        if degradation_verdict in nominal_verdicts and degradation_verdict in verdict_allowed:
-            findings.append(
-                make_finding(
-                    rule_name="verdict-ungated-degradation",
-                    step_name=step_name,
-                    message=(
-                        f"Skill '{name}' emits verdict='{degradation_verdict}' on its "
-                        f"graceful-degradation path but '{degradation_verdict}' is also "
-                        f"used by the nominal (work-performed) path.  A zero-validation "
-                        f"run is indistinguishable from a real review.  Use a distinct "
-                        f"verdict (e.g., 'needs_human') for degradation paths."
-                    ),
-                )
+        findings.append(
+            make_finding(
+                rule_name="verdict-ungated-degradation",
+                step_name=step_name,
+                message=(
+                    f"Skill '{name}' emits verdict='{degradation_verdict}' on its "
+                    f"graceful-degradation path but '{degradation_verdict}' is also "
+                    f"used by the nominal (work-performed) path.  A zero-validation "
+                    f"run is indistinguishable from a real review.  Use a distinct "
+                    f"verdict (e.g., 'needs_human') for degradation paths."
+                ),
             )
+        )
 
     return findings

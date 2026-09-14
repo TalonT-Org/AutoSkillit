@@ -79,11 +79,10 @@ def _check_unrouted_verdict_values(ctx: ValidationContext) -> list[RuleFinding]:
         capture = step.capture or {}
         for output_name, allowed_values in allowed_by_output.items():
             # Check that the output is captured
-            captured_key = None
-            for cap_key, cap_expr in capture.items():
-                if f"result.{output_name}" in cap_expr.from_:
-                    captured_key = cap_key
-                    break
+            captured_key = next(
+                (key for key, entry in capture.items() if f"result.{output_name}" in entry.from_),
+                None,
+            )
             if not captured_key:
                 continue  # Not captured — dataflow rules handle this separately
 
@@ -175,12 +174,14 @@ def _check_verdict_routing_asymmetry(ctx: ValidationContext) -> list[RuleFinding
         conditions = step.on_result.conditions or []
         for _output_name, allowed_values in allowed_by_output.items():
             for value in allowed_values:
-                for cond in conditions:
-                    if _is_explicit_condition(cond.when, value):
-                        classification = _classify_route_target(cond.route)
-                        key = (skill_name, value)
-                        routing_map.setdefault(key, []).append((step_name, classification))
-                        break
+                condition = next(
+                    (cond for cond in conditions if _is_explicit_condition(cond.when, value)),
+                    None,
+                )
+                if condition is not None:
+                    classification = _classify_route_target(condition.route)
+                    key = (skill_name, value)
+                    routing_map.setdefault(key, []).append((step_name, classification))
 
     for (skill_name, value), entries in routing_map.items():
         classifications = {cls for _, cls in entries}
@@ -257,21 +258,21 @@ def _check_on_result_values_in_allowed_values(ctx: ValidationContext) -> list[Ru
             for m in _VALUE_FROM_WHEN_RE.finditer(when):
                 output_name = m.group("output")
                 value = m.group("value").strip("'")
-                if output_name not in allowed_by_output:
+                allowed_values = allowed_by_output.get(output_name)
+                if allowed_values is None or value in allowed_values:
                     continue
-                if value not in allowed_by_output[output_name]:
-                    findings.append(
-                        make_finding(
-                            rule_name="on-result-values-in-allowed-values",
-                            step_name=step_name,
-                            message=(
-                                f"Step '{step_name}' routes {output_name} == '{value}' "
-                                f"but skill '{skill_name}' contract allowed_values does "
-                                f"not include '{value}'. Add '{value}' to allowed_values "
-                                f"in skill_contracts.yaml."
-                            ),
-                        )
+                findings.append(
+                    make_finding(
+                        rule_name="on-result-values-in-allowed-values",
+                        step_name=step_name,
+                        message=(
+                            f"Step '{step_name}' routes {output_name} == '{value}' "
+                            f"but skill '{skill_name}' contract allowed_values does "
+                            f"not include '{value}'. Add '{value}' to allowed_values "
+                            f"in skill_contracts.yaml."
+                        ),
                     )
+                )
 
     return findings
 

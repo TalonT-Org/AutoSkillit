@@ -147,6 +147,7 @@ def finalize_recipe_delivery(
     ):
         surface_payload[generation_field] = candidate_payload[generation_field]
     initialization_id = uuid4().hex if surface_definition.initialization_activating else None
+    active_requirements: tuple[RecipeInitializationRequirement, ...] | None = None
     try:
         generation = persist_recipe_artifact(
             tool_ctx.temp_dir,
@@ -197,6 +198,7 @@ def finalize_recipe_delivery(
             and current_initialization.flow_generation == flow_generation
         ):
             initialization_id = current_initialization.initialization_id
+            active_requirements = current_initialization.requirements
     if initialization_id is not None:
         surface_payload["initialization_id"] = initialization_id
     try:
@@ -347,22 +349,26 @@ def finalize_recipe_delivery(
         if surface_definition.response_exemption_tool is None:
             envelope_bound_bytes = min(envelope_bound_bytes, response_ceiling_bytes)
         try:
-            initialization_requirements = _recipe_delivery_pkg._initialization_requirements(
-                tool_ctx=tool_ctx,
-                generation=generation,
-                payload=candidate_payload,
-                entrypoint=finalized_projection.entrypoint,
-                bound_bytes=section_response_bound_bytes,
-                initialization_id=initialization_id,
-                backend_name=backend_name,
-                completion_required=surface_definition.initialization_activating,
-                flow_generation=flow_generation,
-                execution_snapshot=execution_snapshot,
-                char_ceiling=(
-                    surface_definition.response_exemption.max_chars
-                    if surface_definition.response_exemption is not None
-                    else None
-                ),
+            initialization_requirements = (
+                active_requirements
+                if active_requirements is not None
+                else _recipe_delivery_pkg._initialization_requirements(
+                    tool_ctx=tool_ctx,
+                    generation=generation,
+                    payload=candidate_payload,
+                    entrypoint=finalized_projection.entrypoint,
+                    bound_bytes=section_response_bound_bytes,
+                    initialization_id=initialization_id,
+                    backend_name=backend_name,
+                    completion_required=surface_definition.initialization_activating,
+                    flow_generation=flow_generation,
+                    execution_snapshot=execution_snapshot,
+                    char_ceiling=(
+                        surface_definition.response_exemption.max_chars
+                        if surface_definition.response_exemption is not None
+                        else None
+                    ),
+                )
             )
             rendered = json.dumps(
                 build_recipe_envelope(

@@ -530,16 +530,17 @@ async def test_recipe_redelivery_recovers_after_discarded_delivery_context(
     tool_ctx_kitchen_open.session_serve_defer_unresolved = False
     tool_ctx_kitchen_open.recipe_name = ""
 
-    first_delivery = await _open_kitchen_patched(_RECIPE_ENVELOPE, _OVERRIDES, monkeypatch)
-    assert first_delivery["success"] is True
-    assert first_delivery["delivery_bound_spill"] is True
-    del first_delivery
-
     if page_budget is not None:
         tool_ctx_kitchen_open.config.output_budget = OutputBudgetConfig(
             response_max_bytes=page_budget,
             page_max_bytes=page_budget,
         )
+
+    first_delivery = await _open_kitchen_patched(_RECIPE_ENVELOPE, _OVERRIDES, monkeypatch)
+    assert first_delivery["success"] is True
+    assert first_delivery["delivery_bound_spill"] is True
+    del first_delivery
+
     recovered = json.loads(await load_recipe(name=_RECIPE_ENVELOPE))
     assert recovered["success"] is True
     assert recovered["delivery_bound_spill"] is True

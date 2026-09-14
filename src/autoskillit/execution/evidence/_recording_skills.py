@@ -16,6 +16,7 @@ from autoskillit.core import (
     MACHINE_ONLY_SKILL_FRONTMATTER_KEYS,
     VANISHED_ERRORS,
     ValidatedAddDir,
+    YAMLError,
     load_yaml,
     scan_observed,
     write_versioned_json,
@@ -42,7 +43,7 @@ def _assert_agent_safe_skill_frontmatter(skill_md: Path) -> None:
         return
     try:
         frontmatter = load_yaml(match.group(1))
-    except Exception as exc:
+    except YAMLError as exc:
         raise ValueError(f"agent-safe SKILL.md has invalid YAML: {skill_md}") from exc
     if frontmatter is None:
         frontmatter = {}

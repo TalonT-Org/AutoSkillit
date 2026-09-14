@@ -444,6 +444,23 @@ def tool_ctx_kitchen_open(tool_ctx: ToolContext) -> ToolContext:
     return tool_ctx
 
 
+@pytest.fixture(scope="session")
+def ready_recipe_cache_project_dir(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[Path, None, None]:
+    """Give bundled ready-recipe loads one empty project root per worker."""
+    project_dir = tmp_path_factory.mktemp("ready-recipe-cache-project")
+    assert not any(project_dir.iterdir())
+    project_dir.chmod(0o555)
+    try:
+        yield project_dir
+    finally:
+        try:
+            assert not any(project_dir.iterdir())
+        finally:
+            project_dir.chmod(0o700)
+
+
 @pytest.fixture
 async def tool_ctx_ready_recipe(
     request: pytest.FixtureRequest,
@@ -471,8 +488,6 @@ async def tool_ctx_ready_recipe(
     ``test_attestation_delivery_reachability.py`` and ``test_recipe_segment_delivery.py``
     are source-compatible.
     """
-    from autoskillit.recipe.api import _api_cache
-    from autoskillit.recipe.api._api_cache import LoadCache
     from autoskillit.server.tools.tools_recipe import complete_recipe_initialization
     from tests.server._helpers import (
         _credit_initialization_sections,
@@ -485,7 +500,6 @@ async def tool_ctx_ready_recipe(
     )
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(_api_cache, "_LOAD_CACHE", LoadCache())
 
     if recipe_name == "smoke-test":
         import shutil
@@ -497,7 +511,29 @@ async def tool_ctx_ready_recipe(
         )
         shutil.copy2(source, recipes_dir / "smoke-test.yaml")
 
-    envelope = await _open_kitchen_patched(recipe_name, ingredient_overrides, monkeypatch)
+    if recipe_name == "smoke-test":
+        envelope = await _open_kitchen_patched(recipe_name, ingredient_overrides, monkeypatch)
+    else:
+        project_dir = request.getfixturevalue("ready_recipe_cache_project_dir")
+        repository = tool_ctx_kitchen_open.recipes
+        original_load = repository.load_and_validate
+
+        def load_from_worker_project(name, loaded_project_dir, *args, **kwargs):
+            assert loaded_project_dir == tmp_path
+            assert not any(project_dir.iterdir())
+            previous_cwd = Path.cwd()
+            os.chdir(project_dir)
+            try:
+                return original_load(name, project_dir, *args, **kwargs)
+            finally:
+                os.chdir(previous_cwd)
+                assert not any(project_dir.iterdir())
+
+        setattr(repository, "load_and_validate", load_from_worker_project)
+        try:
+            envelope = await _open_kitchen_patched(recipe_name, ingredient_overrides, monkeypatch)
+        finally:
+            delattr(repository, "load_and_validate")
     assert envelope["success"] is True
     # Delivery shape depends on compiled recipe size, not on this fixture:
     # research.yaml (~80KB) exceeds the inline-response budget and delivers

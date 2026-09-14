@@ -6,6 +6,7 @@ pattern detection (e.g., sustained RSS growth, persistent zombies).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
@@ -200,16 +201,26 @@ def _oom_anomalies(
     return records
 
 
+@dataclass(frozen=True, slots=True)
+class ConsecutiveProcessCounters:
+    """Consecutive-occurrence counters threaded across process-state snapshots."""
+
+    zombie: int = 0
+    d_state: int = 0
+    high_cpu: int = 0
+
+
 def _consecutive_process_state_anomalies(
     snapshot: dict[str, object],
     seq: int,
     pid: int,
-    consecutive_zombie: int,
-    consecutive_d_state: int,
-    consecutive_high_cpu: int,
-) -> tuple[list[dict[str, object]], int, int, int]:
+    counters: ConsecutiveProcessCounters,
+) -> tuple[list[dict[str, object]], ConsecutiveProcessCounters]:
     """Return process-state records and updated consecutive-state counters."""
     records: list[dict[str, object]] = []
+    consecutive_zombie = counters.zombie
+    consecutive_d_state = counters.d_state
+    consecutive_high_cpu = counters.high_cpu
     state = snapshot.get("state", "")
     if state == "zombie":
         consecutive_zombie += 1
@@ -278,7 +289,9 @@ def _consecutive_process_state_anomalies(
             )
     else:
         consecutive_high_cpu = 0
-    return records, consecutive_zombie, consecutive_d_state, consecutive_high_cpu
+    return records, ConsecutiveProcessCounters(
+        zombie=consecutive_zombie, d_state=consecutive_d_state, high_cpu=consecutive_high_cpu
+    )
 
 
 def _signal_transition_anomalies(
@@ -319,24 +332,15 @@ def detect_anomalies(
     if not snapshots:
         return anomalies
 
-    consecutive_zombie = 0
-    consecutive_d_state = 0
-    consecutive_high_cpu = 0
+    counters = ConsecutiveProcessCounters()
     prev_sig_pnd: str | None = None
     initial_rss: int | None = None
     previous_snapshot: dict[str, object] | None = None
 
     for seq, snap in enumerate(snapshots):
         anomalies.extend(_oom_anomalies(snap, previous_snapshot, seq, pid))
-        process_state_records, consecutive_zombie, consecutive_d_state, consecutive_high_cpu = (
-            _consecutive_process_state_anomalies(
-                snap,
-                seq,
-                pid,
-                consecutive_zombie,
-                consecutive_d_state,
-                consecutive_high_cpu,
-            )
+        process_state_records, counters = _consecutive_process_state_anomalies(
+            snap, seq, pid, counters
         )
         anomalies.extend(process_state_records)
         signal_records, prev_sig_pnd = _signal_transition_anomalies(snap, seq, pid, prev_sig_pnd)

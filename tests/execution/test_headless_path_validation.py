@@ -19,6 +19,7 @@ from autoskillit.core.types import (
     TerminationReason,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend, ClaudeResultParser
+from autoskillit.execution.backends.codex import CodexBackend
 from autoskillit.execution.headless import (
     _build_skill_result,
     _extract_missing_token_hints,
@@ -1882,6 +1883,46 @@ def test_build_skill_result_surfaces_last_stop_reason():
     result = _make_result(returncode=0, stdout=ndjson)
     sr = _build_skill_result(result, backend=ClaudeCodeBackend())
     assert sr.last_stop_reason == "end_turn"
+
+
+@pytest.mark.parametrize(
+    ("termination", "has_obligation_failure"),
+    [
+        (TerminationReason.NATURAL_EXIT, True),
+        (TerminationReason.STALE, False),
+        (TerminationReason.IDLE_STALL, False),
+    ],
+)
+def test_correlated_auto_compaction_denial_precedes_headless_early_returns(
+    termination: TerminationReason, has_obligation_failure: bool
+) -> None:
+    denial = "autoskillit_auto_compaction_denied"
+    result = SubprocessResult(
+        returncode=1,
+        stdout=json.dumps(
+            {
+                "type": "turn.failed",
+                "error": {"message": denial, "code": denial},
+            }
+        ),
+        stderr="",
+        termination=termination,
+        pid=12345,
+        lifecycle_observation_enabled=has_obligation_failure,
+        lifecycle_observation_complete=has_obligation_failure,
+        pending_task_ids=("pending-task",) if has_obligation_failure else (),
+    )
+
+    skill_result = _build_skill_result(result, backend=CodexBackend())
+
+    assert skill_result.success is False
+    assert skill_result.subtype == CliSubtype.CONTEXT_EXHAUSTION
+    assert skill_result.cli_subtype == CliSubtype.CONTEXT_EXHAUSTION
+    assert skill_result.needs_retry is False
+    assert skill_result.retry_reason == RetryReason.CONTEXT_EXHAUSTED
+    assert skill_result.infra.exit_category == "context_exhausted"
+    assert skill_result.last_stop_reason == denial
+    assert "Automatic Codex context compaction was blocked" in skill_result.result
 
 
 class TestEarlyStopRecovery:

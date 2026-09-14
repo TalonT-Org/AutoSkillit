@@ -69,9 +69,11 @@ from autoskillit.execution.session._session_content import _check_expected_patte
 from autoskillit.execution.session._session_outcome import (
     _compute_outcome,
 )
+from autoskillit.hooks._runtime._hook_constants import CODEX_AUTO_COMPACTION_DENIED_REASON
 
 if TYPE_CHECKING:
     from autoskillit.core import AuditLog, CodingAgentBackend, SubprocessResult
+    from autoskillit.execution.session import ClaudeSessionResult
     from autoskillit.recipe._contracts_types import SkillContract
 
 logger = get_logger(__name__)
@@ -88,6 +90,7 @@ def _apply_infra_retry_policy(
     retry_reason: RetryReason,
     kill_reason: KillReason,
     termination: TerminationReason,
+    controlled_context_exhaustion: bool = False,
 ) -> tuple[SessionOutcome, bool, RetryReason]:
     """Apply the single retry decision authority for an infra exit category."""
     match category:
@@ -104,7 +107,11 @@ def _apply_infra_retry_policy(
             if not success:
                 return SessionOutcome.FAILED, False, RetryReason.NONE
             return outcome, needs_retry, retry_reason
-        case InfraExitCategory.UNCLASSIFIED | InfraExitCategory.CONTEXT_EXHAUSTED:
+        case InfraExitCategory.UNCLASSIFIED:
+            return outcome, needs_retry, retry_reason
+        case InfraExitCategory.CONTEXT_EXHAUSTED:
+            if controlled_context_exhaustion:
+                return SessionOutcome.FAILED, False, RetryReason.CONTEXT_EXHAUSTED
             return outcome, needs_retry, retry_reason
         case InfraExitCategory.PROCESS_KILLED:
             # `not needs_retry` is reachable only from the main call site (where
@@ -221,6 +228,62 @@ def _build_stall_result(
     )
 
 
+def _make_controlled_context_exhaustion_result(
+    *,
+    result: SubprocessResult,
+    session: ClaudeSessionResult,
+    context: _SkillResultContext,
+) -> SkillResult:
+    """Build the terminal result for the correlated Codex compaction veto."""
+    evidence = _compute_write_evidence(
+        session,
+        context.fs_writes_detected,
+        context.git_writes_detected,
+        context.backend,
+        file_changes=context.file_changes,
+        write_watch_dirs=context.write_watch_dirs,
+        cwd=context.cwd,
+        skill_command=context.skill_command,
+    )
+    _, needs_retry, retry_reason = _apply_infra_retry_policy(
+        InfraExitCategory.CONTEXT_EXHAUSTED,
+        outcome=SessionOutcome.FAILED,
+        success=False,
+        needs_retry=False,
+        retry_reason=RetryReason.CONTEXT_EXHAUSTED,
+        kill_reason=result.kill_reason,
+        termination=result.termination,
+        controlled_context_exhaustion=True,
+    )
+    _capture_failure(
+        context.skill_command,
+        exit_code=result.returncode if result.returncode is not None else -1,
+        subtype=CliSubtype.CONTEXT_EXHAUSTION.value,
+        needs_retry=needs_retry,
+        retry_reason=retry_reason,
+        stderr=result.stderr if result.stderr else "",
+        audit=context.audit,
+    )
+    return dataclasses.replace(
+        _make_terminated_result(
+            result=result,
+            session=session,
+            success=False,
+            result_text=(
+                "Automatic Codex context compaction was blocked. Start an explicit new "
+                "session, or compact manually and deliberately resume."
+            ),
+            subtype=CliSubtype.CONTEXT_EXHAUSTION.value,
+            needs_retry=needs_retry,
+            retry_reason=retry_reason,
+            evidence=evidence,
+            provider_used=context.provider_used,
+            infra=InfraOutcome(exit_category=InfraExitCategory.CONTEXT_EXHAUSTED.value),
+        ),
+        last_stop_reason=CODEX_AUTO_COMPACTION_DENIED_REASON,
+    )
+
+
 def _build_skill_result(
     result: SubprocessResult,
     completion_marker: str = "",
@@ -287,6 +350,13 @@ def _build_skill_result(
             obligation_pending = tuple(sorted(set(obligation_pending) | set(defensive_pending)))
             obligation_wakeup = obligation_wakeup or defensive_wakeup
 
+    session = _parse_stdout(
+        result, backend=backend, backend_resume_session_id=backend_resume_session_id
+    )
+    controlled_context_exhaustion = (
+        session.provider_error_code == CODEX_AUTO_COMPACTION_DENIED_REASON
+    )
+
     obligation_failure = lifecycle_gate_enabled and (
         not observation_complete
         or bool(obligation_pending)
@@ -301,9 +371,13 @@ def _build_skill_result(
         TerminationReason.SIGNAL_DEATH,
     }
     if obligation_failure and not provenance_failure:
-        obligation_session = _parse_stdout(
-            result, backend=backend, backend_resume_session_id=backend_resume_session_id
-        )
+        if controlled_context_exhaustion:
+            return _make_controlled_context_exhaustion_result(
+                result=result,
+                session=session,
+                context=context,
+            )
+        obligation_session = session
         obligation_evidence = _compute_write_evidence(
             obligation_session,
             fs_writes_detected,
@@ -331,6 +405,16 @@ def _build_skill_result(
             retry_reason=RetryReason.ASYNC_OBLIGATION,
             evidence=obligation_evidence,
             provider_used=provider_used,
+        )
+
+    if controlled_context_exhaustion and result.termination in {
+        TerminationReason.STALE,
+        TerminationReason.IDLE_STALL,
+    }:
+        return _make_controlled_context_exhaustion_result(
+            result=result,
+            session=session,
+            context=context,
         )
 
     branch = (
@@ -384,9 +468,6 @@ def _build_skill_result(
 
     if result.termination == TerminationReason.TIMED_OUT:
         returncode = -1
-        session = _parse_stdout(
-            result, backend=backend, backend_resume_session_id=backend_resume_session_id
-        )
         if not session.session_id:
             session = dataclasses.replace(
                 session,
@@ -396,9 +477,6 @@ def _build_skill_result(
             session = dataclasses.replace(session, subtype=CliSubtype.TIMEOUT, is_error=True)
     else:
         returncode = result.returncode if result.returncode is not None else -1
-        session = _parse_stdout(
-            result, backend=backend, backend_resume_session_id=backend_resume_session_id
-        )
 
     evidence = _compute_write_evidence(
         session,
@@ -518,7 +596,11 @@ def _build_skill_result(
     success = outcome == SessionOutcome.SUCCEEDED
     needs_retry = outcome == SessionOutcome.RETRIABLE
 
-    infra_category = classify_infra_exit(session, result, capabilities=backend.capabilities)
+    infra_category = (
+        InfraExitCategory.CONTEXT_EXHAUSTED
+        if controlled_context_exhaustion
+        else classify_infra_exit(session, result, capabilities=backend.capabilities)
+    )
     api_retry = _build_api_retry_outcome(session)
 
     outcome, needs_retry, retry_reason = _apply_infra_retry_policy(
@@ -529,11 +611,16 @@ def _build_skill_result(
         retry_reason=retry_reason,
         kill_reason=result.kill_reason,
         termination=result.termination,
+        controlled_context_exhaustion=controlled_context_exhaustion,
     )
+    if controlled_context_exhaustion:
+        success = False
 
     normalized_subtype = session.normalize_subtype(
         outcome, completion_marker, prior_completion_markers
     )
+    if controlled_context_exhaustion:
+        normalized_subtype = CliSubtype.CONTEXT_EXHAUSTION.value
 
     if (
         normalized_subtype == "missing_completion_marker"
@@ -587,7 +674,12 @@ def _build_skill_result(
             audit=audit,
         )
 
-    result_text = session.agent_result
+    result_text = (
+        "Automatic Codex context compaction was blocked. Start an explicit new session, "
+        "or compact manually and deliberately resume."
+        if controlled_context_exhaustion
+        else session.agent_result
+    )
     if completion_marker:
         result_text = result_text.replace(completion_marker, "").strip()
 
@@ -638,7 +730,11 @@ def _build_skill_result(
         write_path_warnings=write_path_warnings,
         evidence=evidence,
         kill_reason=result.kill_reason,
-        last_stop_reason=session.last_stop_reason,
+        last_stop_reason=(
+            CODEX_AUTO_COMPACTION_DENIED_REASON
+            if controlled_context_exhaustion
+            else session.last_stop_reason
+        ),
         lifespan_started=session.lifespan_started,
         provider=ProviderOutcome(provider_used=provider_used, fallback_activated=False),
         infra=InfraOutcome(

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, NoReturn, overload
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
     LAUNCH_ID_ENV_VAR,
+    InfraExitCategory,
     NamedResume,
     NoResume,
     SkillContractError,
@@ -370,7 +371,7 @@ def _run_interactive_session(
         systemd_scope_enabled = False
 
     from autoskillit.cli.session._session_reload import consume_reload_sentinel
-    from autoskillit.core import InfraExitCategory, bind_session_owner
+    from autoskillit.core import bind_session_owner
 
     managed = managed_home is not None
     if managed != (attempt is not None):
@@ -645,6 +646,12 @@ def _launch_cook_session(
             if session_signal is None:
                 return
             if isinstance(session_signal, _InfraExitSignal):
+                if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
+                    print(
+                        "Automatic Codex context compaction was blocked. Start an explicit new "
+                        "session, or compact manually and deliberately resume."
+                    )
+                    return
                 infra_resume_count += 1
                 if infra_resume_count >= _max_infra_resumes:
                     raise SystemExit(

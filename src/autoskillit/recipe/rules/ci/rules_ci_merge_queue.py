@@ -179,13 +179,23 @@ def _check_dropped_merge_group_ci_reenqueue_guard(
                     continue
         visited_bfs: set[str] = set()
         frontier: set[str] = {dmgci_target}
-        mq_reachable = False
         while frontier:
             frontier -= visited_bfs
             if not frontier:
                 break
             if frontier & mq_steps_set:
-                mq_reachable = True
+                findings.append(
+                    make_finding(
+                        rule_name="dropped-merge-group-ci-unguarded-reenqueue-loop",
+                        step_name=step_name,
+                        message=f"Step {step_name!r} routes dropped_merge_group_ci → "
+                        f"{dmgci_target!r} without a direct loop guard. The path "
+                        f"reaches wait_for_merge_queue, creating an unbounded "
+                        f"re-enqueue loop. Add a run_python guard step (e.g. "
+                        f"check_dropped_merge_group_ci_loop) between the "
+                        f"wait_for_merge_queue and diagnose_ci steps.",
+                    )
+                )
                 break
             visited_bfs |= frontier
             next_frontier: set[str] = set()
@@ -203,17 +213,4 @@ def _check_dropped_merge_group_ci_reenqueue_guard(
                     for v in (ns.on_result.routes or {}).values():
                         next_frontier.add(v)
             frontier = next_frontier
-        if mq_reachable:
-            findings.append(
-                make_finding(
-                    rule_name="dropped-merge-group-ci-unguarded-reenqueue-loop",
-                    step_name=step_name,
-                    message=f"Step {step_name!r} routes dropped_merge_group_ci → "
-                    f"{dmgci_target!r} without a direct loop guard. The path "
-                    f"reaches wait_for_merge_queue, creating an unbounded "
-                    f"re-enqueue loop. Add a run_python guard step (e.g. "
-                    f"check_dropped_merge_group_ci_loop) between the "
-                    f"wait_for_merge_queue and diagnose_ci steps.",
-                )
-            )
     return findings

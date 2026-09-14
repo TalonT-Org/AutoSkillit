@@ -73,17 +73,11 @@ def _check_merge_fix_cycle_without_guard(ctx: ValidationContext) -> list[RuleFin
         if not fix_routes:
             continue
 
-        has_guard = False
+        reachable_fix_steps = set(fix_routes)
         for fix_step_name in fix_routes:
-            reachable = bfs_reachable(ctx.step_graph, fix_step_name) | {fix_step_name}
-            for reached in reachable:
-                if _is_loop_guard_step(reached, ctx):
-                    has_guard = True
-                    break
-            if has_guard:
-                break
+            reachable_fix_steps.update(bfs_reachable(ctx.step_graph, fix_step_name))
 
-        if not has_guard:
+        if not any(_is_loop_guard_step(reached, ctx) for reached in reachable_fix_steps):
             findings.append(
                 make_finding(
                     rule_name="merge-fix-cycle-without-iteration-guard",

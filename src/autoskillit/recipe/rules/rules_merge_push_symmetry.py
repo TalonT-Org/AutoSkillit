@@ -55,8 +55,7 @@ def _check_merge_site_push_symmetry(ctx: ValidationContext) -> list[RuleFinding]
 
         visited: set[str] = set()
         queue: list[str] = [target]
-        push_found = False
-        earlier_merge = None
+        boundary: tuple[str, str] | None = None
         while queue:
             current = queue.pop(0)
             if current in visited:
@@ -65,15 +64,13 @@ def _check_merge_site_push_symmetry(ctx: ValidationContext) -> list[RuleFinding]
             current_step = ctx.recipe.steps.get(current)
             if current_step is None:
                 continue
-            if current_step.tool == "push_to_remote":
-                push_found = True
-                break
-            if current_step.tool == "merge_worktree":
-                earlier_merge = current
+            if current_step.tool in {"push_to_remote", "merge_worktree"}:
+                boundary = (current, current_step.tool)
                 break
             queue.extend(success_graph.get(current, set()))
 
-        if earlier_merge is not None:
+        if boundary is not None and boundary[1] == "merge_worktree":
+            earlier_merge = boundary[0]
             findings.append(
                 make_finding(
                     rule_name="merge-site-push-symmetry",
@@ -86,7 +83,7 @@ def _check_merge_site_push_symmetry(ctx: ValidationContext) -> list[RuleFinding]
                     ),
                 )
             )
-        elif not push_found:
+        elif boundary is None:
             findings.append(
                 make_finding(
                     rule_name="merge-site-push-symmetry",

@@ -1,4 +1,4 @@
-"""Guidance requirements for large private folders and IL-0 type shards."""
+"""Guidance requirements for large private folders and core packages."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def test_private_folder_guidance_starts_at_ten_files(tmp_path: Path) -> None:
     ]
 
 
-def _type_shard_concern_map_errors(core_root: Path) -> list[str]:
+def _large_core_package_concern_map_errors(core_root: Path) -> list[str]:
     errors: list[str] = []
     for package in sorted(core_root.rglob("*")):
         if not package.is_dir() or not (package / "__init__.py").is_file():
@@ -90,17 +90,21 @@ def _type_shard_concern_map_errors(core_root: Path) -> list[str]:
     return sorted(errors)
 
 
-def test_type_shards_have_agents_md_concern_map() -> None:
-    assert not (errors := _type_shard_concern_map_errors(SRC_ROOT / "core")), "\n".join(errors)
+def test_large_core_packages_have_agents_md_concern_map() -> None:
+    assert not (errors := _large_core_package_concern_map_errors(SRC_ROOT / "core")), "\n".join(
+        errors
+    )
 
 
-def test_type_shard_concern_map_starts_at_twenty_files(tmp_path: Path) -> None:
+def test_large_core_package_concern_map_starts_at_twenty_files(tmp_path: Path) -> None:
     core_root = tmp_path / "core"
     package = core_root / "fixture"
     package.mkdir(parents=True)
     (package / "__init__.py").touch()
     for index in range(18):
         (package / f"file_{index}.py").touch()
-    assert _type_shard_concern_map_errors(core_root) == []
+    assert _large_core_package_concern_map_errors(core_root) == []
     (package / "file_18.py").touch()
-    assert _type_shard_concern_map_errors(core_root) == ["fixture/: missing or empty AGENTS.md"]
+    assert _large_core_package_concern_map_errors(core_root) == [
+        "fixture/: missing or empty AGENTS.md"
+    ]

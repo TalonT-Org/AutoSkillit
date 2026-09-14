@@ -203,7 +203,14 @@ class ClaudeCodeBackend(ClaudeCookSupportMixin, ClaudeSessionCommandMixin):
         if roles:
             raise ValueError(_EXPLORER_BINDING_REJECTION_MESSAGE)
 
-    def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
+    def build_cmd(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        generated_home: Path | str | None = None,
+    ) -> CmdSpec:
+        del generated_home
         spec = self.build_headless_cmd(skill_command)
         return replace(spec, cwd=cwd)
 

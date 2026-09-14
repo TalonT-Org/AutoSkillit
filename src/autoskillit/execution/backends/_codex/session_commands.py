@@ -6,7 +6,6 @@ import os
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
 
 from autoskillit.core import (
     AGENT_BACKEND_CODEX,
@@ -121,6 +120,22 @@ def _configure_interactive_home(
         return ()
     merged_extras.setdefault(CODEX_HOME_ENV_VAR, str(plugin_binding.plugin_dir))
     return ()
+
+
+def _canonical_generated_home(home: Path | str, *, argument_name: str) -> Path:
+    """Validate the generated child runtime home shared by every Codex builder."""
+    supplied_home = Path(home)
+    if not supplied_home.is_absolute():
+        raise ValueError(f"{argument_name} must be absolute")
+    generated_home = supplied_home.expanduser().resolve(strict=False)
+    if supplied_home != generated_home:
+        raise ValueError(f"{argument_name} must already be canonical")
+    return generated_home
+
+
+def _generated_home_config_overrides(generated_home: Path) -> dict[str, str]:
+    """Keep the app-server's per-thread SQLite location bound to its wrapper home."""
+    return {"sqlite_home": str(generated_home)}
 
 
 class CodexCommandMixin(BackendCmdBuilderBase):
@@ -395,7 +410,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             provider_extras=provider_extras,
             profile_name=profile_name,
         )
-        session_home = managed_catalog.session_home
+        session_home = str(
+            _canonical_generated_home(
+                managed_catalog.session_home,
+                argument_name="managed catalog session_home",
+            )
+        )
         env.update(
             _managed_native_shell_env(
                 decision=native_shell_capture_decision,
@@ -408,7 +428,10 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         bypass_hook_trust = _should_bypass_hook_trust(
             self.capabilities.hook_trust_policy, automated_session=True
         )
-        config_overrides: dict[str, object] = {"bypass_hook_trust": bypass_hook_trust}
+        config_overrides: dict[str, object] = {
+            "bypass_hook_trust": bypass_hook_trust,
+            **_generated_home_config_overrides(Path(session_home)),
+        }
         if model:
             for override in self.model_config_overrides(model):
                 key, _, value = override.partition("=")
@@ -535,7 +558,12 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             env_extras,
             denylist=_PROVIDER_EXTRAS_BASE_DENYLIST,
         )
-        session_home = managed_skill_catalog.session_home
+        session_home = str(
+            _canonical_generated_home(
+                managed_skill_catalog.session_home,
+                argument_name="managed catalog session_home",
+            )
+        )
         for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
             extras[reserved_key] = session_home
         if exit_after_stop_delay_ms:
@@ -569,6 +597,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         config_overrides: dict[str, object] = {
             "bypass_hook_trust": bypass_hook_trust,
             "web_search": "disabled",
+            **_generated_home_config_overrides(Path(session_home)),
         }
         if model:
             for override in self.model_config_overrides(model):
@@ -661,17 +690,16 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 CodexFlags.CONFIG_OVERRIDE,
                 f"developer_instructions={_format_toml_value(developer_instructions)}",
             )
-        if generated_home is not None:
-            supplied_home = Path(generated_home)
-            if not supplied_home.is_absolute():
-                raise ValueError("generated_home must be absolute")
-            generated_home = supplied_home.expanduser().resolve(strict=False)
-            if supplied_home != generated_home:
-                raise ValueError("generated_home must already be canonical")
-            builder.kv_flag(
-                CodexFlags.CONFIG_OVERRIDE,
-                f"sqlite_home={_format_toml_value(str(generated_home))}",
-            )
+        if generated_home is None:
+            raise ValueError("generated_home is required for Codex interactive launches")
+        generated_home = _canonical_generated_home(
+            generated_home,
+            argument_name="generated_home",
+        )
+        builder.kv_flag(
+            CodexFlags.CONFIG_OVERRIDE,
+            f"sqlite_home={_format_toml_value(str(generated_home))}",
+        )
         if initial_prompt is not None:
             builder.positional(initial_prompt)
         for d in add_dirs:
@@ -740,21 +768,24 @@ class CodexCommandMixin(BackendCmdBuilderBase):
                 )
             session_home = managed_skill_catalog.session_home
 
+        if session_home is None:
+            raise ValueError("session_home is required for Codex resume launches")
+        session_home = str(_canonical_generated_home(session_home, argument_name="session_home"))
+
         filtered_base = {k: v for k, v in os.environ.items() if k not in _HEADLESS_EXCLUSIVE_VARS}
         resume_extras = _codex_exec_extras(
             session_type="", include_session_baseline=True, include_agent_backend_flat=True
         )
         _merge_caller_env_extras(resume_extras, env_extras)
-        if session_home is not None:
-            for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
-                resume_extras[reserved_key] = session_home
+        for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
+            resume_extras[reserved_key] = session_home
         env = self.env_policy().build_env(
             filtered_base,
             extras=resume_extras,
             required=(
                 RESUME_SESSION_BASELINE_KEYS
                 | {MCP_CLIENT_BACKEND_ENV_VAR}
-                | (CODEX_RESERVED_HOME_ENV_VARS if session_home is not None else frozenset())
+                | CODEX_RESERVED_HOME_ENV_VARS
             ),
         )
         env.update(
@@ -783,7 +814,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             f"{codex_discipline_suffix(include_scope=include_scope_discipline)}\n\n{prompt}"
         )
         app_server_plan = CodexAppServerPlan(
-            session_home=session_home or "",
+            session_home=session_home,
             catalog_root=catalog_root,
             expected_skill_names=frozenset(name for name, _ in expected_entries),
             expected_skill_entries=expected_entries,
@@ -794,7 +825,10 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             approval_policy="never",
             bypass_hook_trust=bypass_hook_trust,
             developer_instructions=None,
-            config_overrides={"bypass_hook_trust": bypass_hook_trust},
+            config_overrides={
+                "bypass_hook_trust": bypass_hook_trust,
+                **_generated_home_config_overrides(Path(session_home)),
+            },
             client_version=AUTOSKILLIT_INSTALLED_VERSION,
             resume_thread_id=resume_session_id,
         )

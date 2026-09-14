@@ -251,6 +251,23 @@ class TestCodexBackend:
 
 
 class TestCodexBackendCommands:
+    def test_headless_builder_requires_and_pins_a_canonical_generated_home(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        backend = CodexBackend()
+        with pytest.raises(ValueError, match="generated_home is required"):
+            backend.build_headless_cmd("do stuff")
+
+        generated_home = tmp_path / "generated-home"
+        spec = backend.build_headless_cmd("do stuff", generated_home=generated_home)
+
+        assert spec.env["CODEX_HOME"] == str(generated_home)
+        assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+        assert spec.app_server_plan is not None
+        assert spec.app_server_plan.session_home == str(generated_home)
+        assert spec.app_server_plan.config_overrides["sqlite_home"] == str(generated_home)
+
     def test_build_headless_cmd_codex_at_0(self) -> None:
         spec = CodexBackend().build_headless_cmd("do stuff")
         assert spec.cmd[0] == "codex"
@@ -432,18 +449,13 @@ class TestCodexBackendCommands:
         assert spec.env["CODEX_HOME"] == "/session-home"
         assert spec.env["CODEX_SQLITE_HOME"] == "/session-home"
 
-    def test_build_resume_cmd_does_not_select_plugin_home_without_session_home(self) -> None:
-        """Part D: 'Do not select a plugin projection as CODEX_HOME' for resume —
-        without an explicit/managed home, resume proceeds against the selected
-        native home and registers no managed root at all."""
-        spec = CodexBackend().build_resume_cmd(
-            resume_session_id="sess-123",
-            prompt="continue",
-            plugin_binding=plugin_binding(Path("/plugin")),
-        )
-        assert "CODEX_HOME" not in spec.env
-        assert "CODEX_SQLITE_HOME" not in spec.env
-        assert spec.app_server_plan.session_home == ""
+    def test_build_resume_cmd_requires_a_generated_home(self) -> None:
+        with pytest.raises(ValueError, match="session_home is required"):
+            CodexBackend().build_resume_cmd(
+                resume_session_id="sess-123",
+                prompt="continue",
+                plugin_binding=plugin_binding(Path("/plugin")),
+            )
 
     def test_build_resume_cmd_env_uses_filtered_base(self, monkeypatch) -> None:
         monkeypatch.setenv("PATH", "/usr/bin")

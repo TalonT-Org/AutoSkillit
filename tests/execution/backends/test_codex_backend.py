@@ -50,7 +50,6 @@ from autoskillit.core import (
 from autoskillit.execution.backends._codex_config import effective_codex_agent_names
 from autoskillit.execution.backends.codex import (
     CODEX_ENV_PREFIX_DENYLIST,
-    CodexBackend,
     CodexEnvPolicy,
     CodexFlags,
     CodexResultParser,
@@ -59,11 +58,48 @@ from autoskillit.execution.backends.codex import (
     clear_explorer_binding_env,
     refresh_explorer_binding_env,
 )
+from autoskillit.execution.backends.codex import (
+    CodexBackend as _CodexBackend,
+)
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
 from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_legacy_direct_home: Path | None = None
+
+
+@pytest.fixture(autouse=True)
+def _bind_legacy_direct_home(tmp_path: Path):
+    global _legacy_direct_home
+    _legacy_direct_home = tmp_path / "generated-home"
+    try:
+        yield
+    finally:
+        _legacy_direct_home = None
+
+
+def _legacy_home() -> Path:
+    assert _legacy_direct_home is not None
+    return _legacy_direct_home
+
+
+class CodexBackend(_CodexBackend):
+    """Give legacy direct-builder assertions an isolated wrapper home."""
+
+    def build_headless_cmd(self, *args, **kwargs):
+        kwargs.setdefault("generated_home", _legacy_home())
+        return super().build_headless_cmd(*args, **kwargs)
+
+    def build_interactive_cmd(self, *args, **kwargs):
+        kwargs.setdefault("generated_home", _legacy_home())
+        return super().build_interactive_cmd(*args, **kwargs)
+
+    def build_resume_cmd(self, *args, **kwargs):
+        kwargs.setdefault("session_home", str(_legacy_home()))
+        return super().build_resume_cmd(*args, **kwargs)
+
 
 _OTLP_OVERRIDES = (
     'otel.exporter={otlp-http={endpoint="http://127.0.0.1:4318/v1/logs",protocol="json"}}',
@@ -255,7 +291,7 @@ class TestCodexBackendCommands:
         self,
         tmp_path: Path,
     ) -> None:
-        backend = CodexBackend()
+        backend = _CodexBackend()
         with pytest.raises(ValueError, match="generated_home is required"):
             backend.build_headless_cmd("do stuff")
 
@@ -451,7 +487,7 @@ class TestCodexBackendCommands:
 
     def test_build_resume_cmd_requires_a_generated_home(self) -> None:
         with pytest.raises(ValueError, match="session_home is required"):
-            CodexBackend().build_resume_cmd(
+            _CodexBackend().build_resume_cmd(
                 resume_session_id="sess-123",
                 prompt="continue",
                 plugin_binding=plugin_binding(Path("/plugin")),

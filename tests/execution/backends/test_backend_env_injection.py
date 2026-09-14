@@ -13,12 +13,41 @@ from autoskillit.core import (
     CmdSpec,
 )
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend
+from autoskillit.execution.backends.codex import CodexBackend as _CodexBackend
 from autoskillit.execution.evidence.otlp_sink import _build_env
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_legacy_direct_home: Path | None = None
+
+
+@pytest.fixture(autouse=True)
+def _bind_legacy_direct_home(tmp_path: Path) -> None:
+    global _legacy_direct_home
+    _legacy_direct_home = tmp_path / "generated-home"
+
+
+def _legacy_home() -> Path:
+    assert _legacy_direct_home is not None
+    return _legacy_direct_home
+
+
+class CodexBackend(_CodexBackend):
+    """Supply an isolated home to legacy direct builder calls."""
+
+    def build_headless_cmd(self, *args, **kwargs):
+        kwargs.setdefault("generated_home", _legacy_home())
+        return super().build_headless_cmd(*args, **kwargs)
+
+    def build_interactive_cmd(self, *args, **kwargs):
+        kwargs.setdefault("generated_home", _legacy_home())
+        return super().build_interactive_cmd(*args, **kwargs)
+
+    def build_resume_cmd(self, *args, **kwargs):
+        kwargs.setdefault("session_home", str(_legacy_home()))
+        return super().build_resume_cmd(*args, **kwargs)
 
 
 @pytest.fixture(autouse=True)

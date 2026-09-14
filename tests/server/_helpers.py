@@ -541,6 +541,24 @@ def _check_recipe_section_total(previous: int | None, observed: int) -> int:
     return previous
 
 
+def _record_recipe_section_page(
+    counter: McpCallCounter | None,
+    *,
+    raw_response: str,
+    section: str,
+    part: int,
+) -> None:
+    if counter is None:
+        return
+    counter.record(
+        "get_recipe_section",
+        response=raw_response,
+        delivery_shape="NON_SEGMENTED_ENVELOPE",
+        segment_or_section=section,
+        part=part,
+    )
+
+
 async def _resolve_recipe_section(
     result: dict[str, Any],
     *,
@@ -584,14 +602,12 @@ async def _resolve_recipe_section(
             **identity,
         )
         response = json.loads(raw_response)
-        if counter is not None:
-            counter.record(
-                "get_recipe_section",
-                response=raw_response,
-                delivery_shape="NON_SEGMENTED_ENVELOPE",
-                segment_or_section=section,
-                part=part,
-            )
+        _record_recipe_section_page(
+            counter,
+            raw_response=raw_response,
+            section=section,
+            part=part,
+        )
         assert response.get("success") is True, f"get_recipe_section returned error: {response}"
         assert response["pagination_version"] == RECIPE_SECTION_PAGINATION_VERSION
         assert response["section_registry_sha256"] == RECIPE_SECTION_REGISTRY_DIGEST

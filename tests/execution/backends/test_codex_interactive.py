@@ -12,9 +12,35 @@ import pytest
 
 from autoskillit.core import BareResume, CmdOrigin, CmdSpec, NamedResume, NoResume
 from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
-from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
+from autoskillit.execution.backends.codex import CodexBackend as _CodexBackend
+from autoskillit.execution.backends.codex import CodexFlags
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_legacy_direct_home: Path | None = None
+
+
+@pytest.fixture(autouse=True)
+def _bind_legacy_direct_home(tmp_path: Path):
+    global _legacy_direct_home
+    _legacy_direct_home = tmp_path / "generated-home"
+    try:
+        yield
+    finally:
+        _legacy_direct_home = None
+
+
+def _legacy_home() -> Path:
+    assert _legacy_direct_home is not None
+    return _legacy_direct_home
+
+
+class CodexBackend(_CodexBackend):
+    """Give legacy direct-builder assertions an isolated wrapper home."""
+
+    def build_interactive_cmd(self, *args, **kwargs):
+        kwargs.setdefault("generated_home", _legacy_home())
+        return super().build_interactive_cmd(*args, **kwargs)
 
 
 def _developer_instructions(spec: CmdSpec) -> str | None:
@@ -38,7 +64,7 @@ def _developer_instructions(spec: CmdSpec) -> str | None:
 
 class TestCodexInteractiveCmdBaseStructure:
     def test_requires_and_pins_a_canonical_generated_home(self, tmp_path: Path) -> None:
-        backend = CodexBackend()
+        backend = _CodexBackend()
         with pytest.raises(ValueError, match="generated_home is required"):
             backend.build_interactive_cmd()
 

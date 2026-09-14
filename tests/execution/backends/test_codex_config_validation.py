@@ -1224,7 +1224,11 @@ def test_interactive_cmd_rejects_environment_changed_after_binding(
     executable.chmod(0o755)
     backend = CodexBackend(source_codex_home=source_home)
     extras = {"PATH": str(tmp_path)}
-    candidate = backend.build_interactive_cmd(env_extras=extras)
+    generated_home = tmp_path / "generated-home"
+    candidate = backend.build_interactive_cmd(
+        env_extras=extras,
+        generated_home=generated_home,
+    )
     binding = resolve_executable_launch_binding(
         binary_name="codex",
         environment=candidate.env,
@@ -1237,7 +1241,11 @@ def test_interactive_cmd_rejects_environment_changed_after_binding(
         ValueError,
         match="interactive environment changed after executable binding",
     ):
-        backend.build_interactive_cmd(executable=binding, env_extras=extras)
+        backend.build_interactive_cmd(
+            executable=binding,
+            env_extras=extras,
+            generated_home=generated_home,
+        )
 
 
 def test_config_lock_is_non_reentrant_for_the_same_canonical_path(tmp_path: Path) -> None:

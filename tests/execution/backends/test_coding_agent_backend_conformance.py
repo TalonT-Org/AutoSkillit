@@ -114,6 +114,13 @@ class TestCodingAgentBackendConformance(BackendContractBase):
     def _setup_backend(self, backend_name: str) -> None:
         self.backend = make_backend(backend_name)
 
+    @pytest.fixture(autouse=True)
+    def _bind_generated_home(self, tmp_path: Path) -> None:
+        self._generated_home = tmp_path / "generated-home"
+
+    def _builder_home_kwargs(self, argument: str) -> dict[str, str]:
+        return {argument: str(self._generated_home)} if self.backend.name == "codex" else {}
+
     def make_backend(self) -> CodingAgentBackend:
         return self.backend
 
@@ -210,7 +217,11 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """CmdSpec.app_server_plan — a backend hands back a driver only when its
         CmdSpec carries a plan; Codex's build_cmd always carries one (Part D moved
         even the no-catalog headless builder to app-server transport)."""
-        spec = self.backend.build_cmd(skill_command="do stuff", cwd="/tmp")
+        spec = self.backend.build_cmd(
+            skill_command="do stuff",
+            cwd="/tmp",
+            **self._builder_home_kwargs("generated_home"),
+        )
         if self.backend.name == "codex":
             assert spec.app_server_plan is not None
             assert self.backend.line_driver(spec) is not None
@@ -264,7 +275,11 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_build_cmd_returns_cmd_spec(self) -> None:
         """BackendCapabilities.exit_code_is_terminal and pty_required — cmd construction deps."""
-        result = self.backend.build_cmd(skill_command="do stuff", cwd="/tmp")
+        result = self.backend.build_cmd(
+            skill_command="do stuff",
+            cwd="/tmp",
+            **self._builder_home_kwargs("generated_home"),
+        )
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
 
@@ -279,7 +294,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_build_interactive_cmd_returns_cmd_spec(self) -> None:
         """BackendCapabilities.mcp_config_capable — interactive cmd uses MCP config when true."""
-        result = self.backend.build_interactive_cmd()
+        result = self.backend.build_interactive_cmd(**self._builder_home_kwargs("generated_home"))
         assert isinstance(result, CmdSpec)
         assert isinstance(result.cmd, tuple)
 
@@ -288,7 +303,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         assert isinstance(result, list)
 
     def test_validate_interactive_invocation_returns_list(self) -> None:
-        spec = self.backend.build_interactive_cmd()
+        spec = self.backend.build_interactive_cmd(**self._builder_home_kwargs("generated_home"))
         assert isinstance(self.backend.validate_interactive_invocation(spec), list)
 
     def test_cook_lifecycle_boundaries_are_implemented(self) -> None:
@@ -355,7 +370,9 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """BackendCapabilities.session_resume_capable — build_resume_cmd returns valid CmdSpec."""
         self._require_capability("session_resume_capable")
         result = self.backend.build_resume_cmd(
-            resume_session_id="test-session-id", prompt="test prompt"
+            resume_session_id="test-session-id",
+            prompt="test prompt",
+            **self._builder_home_kwargs("session_home"),
         )
         assert isinstance(result, CmdSpec)
         assert len(result.cmd) > 0
@@ -366,6 +383,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
             resume_session_id="test-session-id",
             prompt="test prompt",
             plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
+            **self._builder_home_kwargs("session_home"),
         )
         assert result.inherited_fds == (9, 3)
 
@@ -412,7 +430,8 @@ class TestCodingAgentBackendConformance(BackendContractBase):
 
     def test_interactive_cmd_carries_plugin_binding_descriptors(self) -> None:
         result = self.backend.build_interactive_cmd(
-            plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3))
+            plugin_binding=plugin_binding("/tmp/plugin", inherited_fds=(9, 3)),
+            **self._builder_home_kwargs("generated_home"),
         )
         assert result.inherited_fds == (9, 3)
 
@@ -435,7 +454,11 @@ class TestCodingAgentBackendConformance(BackendContractBase):
                 f"mcp_env_forward_vars is empty for {self.backend.name!r}"
                 " — no env injection to verify"
             )
-        result = self.backend.build_cmd(skill_command="do stuff", cwd="/tmp")
+        result = self.backend.build_cmd(
+            skill_command="do stuff",
+            cwd="/tmp",
+            **self._builder_home_kwargs("generated_home"),
+        )
         for var in forward_vars:
             assert var in result.env, (
                 f"{var!r} declared in mcp_env_forward_vars"
@@ -452,7 +475,9 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         """
         self._require_capability("session_resume_capable")
         result = self.backend.build_resume_cmd(
-            resume_session_id="test-session-id", prompt="test prompt"
+            resume_session_id="test-session-id",
+            prompt="test prompt",
+            **self._builder_home_kwargs("session_home"),
         )
         if result.app_server_plan is not None:
             assert result.app_server_plan.resume_thread_id == "test-session-id", (

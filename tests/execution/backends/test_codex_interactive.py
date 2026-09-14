@@ -37,6 +37,22 @@ def _developer_instructions(spec: CmdSpec) -> str | None:
 
 
 class TestCodexInteractiveCmdBaseStructure:
+    def test_requires_and_pins_a_canonical_generated_home(self, tmp_path: Path) -> None:
+        backend = CodexBackend()
+        with pytest.raises(ValueError, match="generated_home is required"):
+            backend.build_interactive_cmd()
+
+        generated_home = tmp_path / "generated-home"
+        spec = backend.build_interactive_cmd(generated_home=generated_home)
+
+        assert spec.env["CODEX_HOME"] == str(generated_home)
+        assert spec.env["CODEX_SQLITE_HOME"] == str(generated_home)
+        assert spec.origin is not None
+        assert (
+            CodexFlags.CONFIG_OVERRIDE,
+            f'sqlite_home="{generated_home}"',
+        ) in spec.origin.kv_flags
+
     def test_no_resume_base_command(self) -> None:
         spec = CodexBackend().build_interactive_cmd(resume_spec=NoResume())
         assert spec.cmd[0] == "codex"

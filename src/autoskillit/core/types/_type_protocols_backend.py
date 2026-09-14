@@ -214,7 +214,13 @@ class CodingAgentBackend(Protocol):
     @property
     def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer: ...
 
-    def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
+    def build_cmd(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        generated_home: Path | str | None = None,
+    ) -> CmdSpec: ...
 
     def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
 

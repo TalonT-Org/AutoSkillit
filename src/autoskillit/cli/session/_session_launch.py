@@ -310,67 +310,26 @@ def _run_interactive_session(
         assert attempt is not None
         assert retained_projection_binding is not None
         assert startup_trace is not None
-        if backend.capabilities.cook_exact_binding_probe_required:
-            try:
-                prepared = prepare_interactive_launch(
-                    backend,
-                    project_dir=_project_dir,
-                    extra_env=extra_env,
-                    required_env=required_env,
-                    plugin_binding=plugin_binding,
-                    resume_spec=final_resume_spec,
-                    system_prompt=system_prompt,
-                    initial_prompt=initial_message,
-                    add_dirs=[managed_home.skills_dir],
-                    generated_home=managed_home.generated_home,
-                    tools=tools_arg,
-                    force_inactive_agent_teams=force_inactive_agent_teams,
-                    mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-                )
-            except ValueError as exc:
-                _exit_launch_preparation_error(exc)
-            built_spec = prepared.spec
-            executable = prepared.executable
-        else:
-            candidate_spec = backend.build_interactive_cmd(
-                initial_prompt=initial_message,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                env_extras=extra_env,
+        try:
+            prepared = prepare_interactive_launch(
+                backend,
+                project_dir=_project_dir,
+                extra_env=extra_env,
                 required_env=required_env,
                 plugin_binding=plugin_binding,
+                resume_spec=final_resume_spec,
+                system_prompt=system_prompt,
+                initial_prompt=initial_message,
                 add_dirs=[managed_home.skills_dir],
                 generated_home=managed_home.generated_home,
                 tools=tools_arg,
                 force_inactive_agent_teams=force_inactive_agent_teams,
-                project_root=_project_dir,
                 mcp_tool_timeout_sec=mcp_tool_timeout_sec,
             )
-            selector = backend.capabilities.explicit_path_env_var
-            try:
-                executable = resolve_executable_launch_binding(
-                    binary_name=backend.binary_name(),
-                    environment=candidate_spec.env,
-                    cwd=_project_dir,
-                    explicit_path_env=(selector if selector in candidate_spec.env else None),
-                )
-            except ValueError as exc:
-                _exit_launch_preparation_error(exc)
-            built_spec = backend.build_interactive_cmd(
-                initial_prompt=initial_message,
-                executable=executable,
-                resume_spec=final_resume_spec,
-                system_prompt=system_prompt,
-                env_extras=extra_env,
-                required_env=required_env,
-                plugin_binding=plugin_binding,
-                add_dirs=[managed_home.skills_dir],
-                generated_home=managed_home.generated_home,
-                tools=tools_arg,
-                force_inactive_agent_teams=force_inactive_agent_teams,
-                project_root=_project_dir,
-                mcp_tool_timeout_sec=mcp_tool_timeout_sec,
-            )
+        except ValueError as exc:
+            _exit_launch_preparation_error(exc)
+        built_spec = prepared.spec
+        executable = prepared.executable
         spec = replace(built_spec, cwd=str(_project_dir))
         assert_interactive_ordering(spec=spec)
         validation_errors = backend.validate_interactive_invocation(spec)
@@ -466,17 +425,12 @@ def _run_interactive_session(
                 _exit_launch_preparation_error(exc)
             spec = prepared.spec
             executable = prepared.executable
-            # This is the sole raw/non-managed launch path for ad-hoc fleet
-            # and campaign interactive sessions (_run_interactive_session
-            # called without managed_home — cli/fleet/_fleet_session.py:89,199).
-            # backend.validate_interactive_invocation is never called on this
-            # branch, so force_inactive_agent_teams enforcement is a no-op
-            # here today. It is deliberately not added generically: for Codex
-            # it enforces a stricter CODEX_HOME/SQLite-home contract that
-            # only a managed session home satisfies, and adding it would
-            # break real fleet/campaign Codex sessions, which never have one.
-            # assert_interactive_ordering's cmd-shape check still applies.
             assert_interactive_ordering(spec=spec)
+            validation_errors = backend.validate_interactive_invocation(spec)
+            if validation_errors:
+                for error in validation_errors:
+                    print(f"ERROR: {error}", file=sys.stderr)
+                sys.exit(1)
             if not executable_binding_matches_current_file(executable):
                 sys.stderr.write(
                     "ERROR: interactive executable changed after capability probing\n"

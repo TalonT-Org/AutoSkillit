@@ -254,8 +254,14 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
     def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer:
         return CODEX_EXPLORATION_DISPATCH_RENDERER
 
-    def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec:
-        spec = self.build_headless_cmd(skill_command)
+    def build_cmd(
+        self,
+        skill_command: str,
+        cwd: str,
+        *,
+        generated_home: Path | str | None = None,
+    ) -> CmdSpec:
+        spec = self.build_headless_cmd(skill_command, generated_home=generated_home)
         spec = replace(spec, cwd=cwd)
         if spec.app_server_plan is not None:
             spec = replace(spec, app_server_plan=replace(spec.app_server_plan, cwd=cwd))

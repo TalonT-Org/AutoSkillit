@@ -400,39 +400,24 @@ def cook(
             while True:
                 attempt += 1
                 launch_binding = projection_binding if load_mode.consumes_artifact else None
-                prepared = None
-                if backend.capabilities.cook_exact_binding_probe_required:
-                    try:
-                        prepared = prepare_interactive_launch(
-                            backend,
-                            project_dir=project_dir,
-                            extra_env=cook_env_extras,
-                            required_env=None,
-                            plugin_binding=launch_binding,
-                            resume_spec=current_resume_spec,
-                            system_prompt=cook_system_prompt,
-                            initial_prompt=current_initial_prompt,
-                            add_dirs=[managed_home.skills_dir],
-                            generated_home=managed_home.generated_home,
-                            force_inactive_agent_teams=force_inactive_agent_teams,
-                            mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
-                        )
-                    except ValueError as exc:
-                        _exit_launch_preparation_error(exc)
-                    built_spec = prepared.spec
-                else:
-                    built_spec = backend.build_interactive_cmd(
+                try:
+                    prepared = prepare_interactive_launch(
+                        backend,
+                        project_dir=project_dir,
+                        extra_env=cook_env_extras,
+                        required_env=None,
                         plugin_binding=launch_binding,
-                        add_dirs=[managed_home.skills_dir],
-                        generated_home=managed_home.generated_home,
-                        initial_prompt=current_initial_prompt,
                         resume_spec=current_resume_spec,
                         system_prompt=cook_system_prompt,
-                        env_extras=cook_env_extras,
+                        initial_prompt=current_initial_prompt,
+                        add_dirs=[managed_home.skills_dir],
+                        generated_home=managed_home.generated_home,
                         force_inactive_agent_teams=force_inactive_agent_teams,
-                        project_root=project_dir,
                         mcp_tool_timeout_sec=config.run_skill.mcp_tool_timeout_sec,
                     )
+                except ValueError as exc:
+                    _exit_launch_preparation_error(exc)
+                built_spec = prepared.spec
                 final_cmd = built_spec.cmd
                 final_origin = built_spec.origin
                 final_env = dict(built_spec.env)
@@ -479,9 +464,7 @@ def cook(
                             )
                         )
                     )
-                    if prepared is not None and not executable_binding_matches_current_file(
-                        prepared.executable
-                    ):
+                    if not executable_binding_matches_current_file(prepared.executable):
                         sys.stderr.write(
                             "ERROR: interactive executable changed after capability probing\n"
                         )

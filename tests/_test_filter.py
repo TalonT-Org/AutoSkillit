@@ -53,6 +53,7 @@ class SourceMapRejection(enum.StrEnum):
     PRODUCER_FAILED = "producer_failed"
     STALE = "stale"
     MALFORMED_ENTRY = "malformed_entry"
+    NOT_ANCESTOR = "not_ancestor"
 
 
 _REJECTION_DETAIL: dict[SourceMapRejection, str] = {
@@ -65,6 +66,7 @@ _REJECTION_DETAIL: dict[SourceMapRejection, str] = {
     SourceMapRejection.PRODUCER_FAILED: "coverage map was produced by a failed pytest run",
     SourceMapRejection.STALE: "coverage map is stale",
     SourceMapRejection.MALFORMED_ENTRY: "coverage map has a malformed map entry",
+    SourceMapRejection.NOT_ANCESTOR: "coverage map source commit is not an ancestor of HEAD",
 }
 
 
@@ -73,8 +75,6 @@ BUCKET_A_PATTERNS: frozenset[str] = frozenset(
         "tests/conftest.py",
         "tests/_helpers.py",
         "tests/_arch_constraint_discovery.py",
-        "tests/arch/_helpers.py",
-        "tests/arch/_rules.py",
         "pyproject.toml",
         "uv.lock",
         ".pre-commit-config.yaml",
@@ -83,6 +83,14 @@ BUCKET_A_PATTERNS: frozenset[str] = frozenset(
 )
 
 BUCKET_A_GLOBS: tuple[str, ...] = ("tests/*/conftest.py",)
+
+_ARCH_HELPER_TEST_DIRS: frozenset[str] = frozenset(
+    {"arch", "contracts", "execution", "recipe/rules_skills", "skills", "workspace"}
+)
+TEST_HELPER_CASCADE: dict[str, frozenset[str]] = {
+    "tests/arch/_helpers.py": _ARCH_HELPER_TEST_DIRS,
+    "tests/arch/_rules.py": _ARCH_HELPER_TEST_DIRS,
+}
 
 # Matches lines that only change a version string: -version = "0.9.x" / +version = "0.9.y"
 _VERSION_LINE_RE: re.Pattern[str] = re.compile(r'^[+-]version\s*=\s*"[^"]*"', re.IGNORECASE)
@@ -1797,15 +1805,27 @@ def git_changed_files_local(
     return files
 
 
-def check_bucket_a(changed_files: set[str]) -> bool:
-    """Return True if any changed file triggers a full test run."""
+def _scoped_test_dirs_for_file(path: str) -> set[str]:
+    """Return test directories affected by a scoped support file.
+
+    ``fnmatch`` lets ``*`` cross ``/``, including nested conftests; glob,
+    ``PurePath.match``, and pytest's ``--ignore-glob`` match path segments instead.
+    """
+    if path in TEST_HELPER_CASCADE:
+        return set(TEST_HELPER_CASCADE[path])
+    if any(fnmatch.fnmatch(path, pattern) for pattern in BUCKET_A_GLOBS):
+        return {Path(path).parent.relative_to("tests").as_posix()}
+    return set()
+
+
+def check_bucket_a(changed_files: set[str]) -> set[str] | None:
+    """Return None for a global full run, otherwise scoped test directories."""
+    scoped_test_dirs: set[str] = set()
     for f in changed_files:
         if f in BUCKET_A_PATTERNS:
-            return True
-        for glob_pat in BUCKET_A_GLOBS:
-            if fnmatch.fnmatch(f, glob_pat):
-                return True
-    return False
+            return None
+        scoped_test_dirs.update(_scoped_test_dirs_for_file(f))
+    return scoped_test_dirs
 
 
 def _is_only_version_changes_in_diff(
@@ -1907,8 +1927,8 @@ def check_bucket_a_content_aware(
     changed_files: set[str],
     cwd: str | Path,
     base_ref: str,
-) -> bool:
-    """Content-aware Bucket A check that skips version-bump-only changes.
+) -> set[str] | None:
+    """Return global or scoped selection, exempting version-bump-only changes.
 
     Identical to ``check_bucket_a`` except for ``pyproject.toml`` and ``uv.lock``:
     if those files are present in *changed_files* but their entire diff consists only
@@ -1916,24 +1936,23 @@ def check_bucket_a_content_aware(
 
     Falls back to treating them as Bucket A triggers on any git failure (fail-open).
 
-    Other Bucket A patterns (conftest.py, _rules.py, etc.) are unaffected — they
-    still trigger a full run immediately without any git diff inspection.
+    Scoped support-file directories are preserved when version files are exempted.
     """
-    # Fast path: check all non-version-bump patterns first (no git I/O)
     non_version_files = changed_files - _VERSION_BUMP_FILES
-    if check_bucket_a(non_version_files):
-        return True
+    scoped_test_dirs = check_bucket_a(non_version_files)
+    if scoped_test_dirs is None:
+        return None
 
     # Check version-bump-candidate files that are also in BUCKET_A_PATTERNS
     version_hits = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
     if not version_hits:
-        return False  # no version-bump candidates hit Bucket A
+        return scoped_test_dirs
 
     # Content check: if every diff line is a version string, skip Bucket A
     if _is_only_version_changes_in_diff(cwd, base_ref, *version_hits):
-        return False  # version-only bump — not a structural change
+        return scoped_test_dirs
 
-    return True  # diff contains non-version changes → full run
+    return None
 
 
 def load_manifest(path: str | Path) -> dict[str, Any] | None:
@@ -1958,13 +1977,16 @@ def load_manifest(path: str | Path) -> dict[str, Any] | None:
 def load_coverage_map(
     map_path: str | Path,
     max_age_days: int = 30,
+    *,
+    cwd: str | Path,
 ) -> dict[str, set[str]] | None:
-    """Load .autoskillit/test-source-map.json with staleness guard.
+    """Load .autoskillit/test-source-map.json with age and lineage guards.
 
     Args:
         map_path: Path to the test-source-map.json file.
         max_age_days: Maximum age in days before the map is considered stale.
                       Defaults to 30 days.
+        cwd: Repository whose HEAD is being filtered.
 
     Returns None whenever the artifact is not a successful schema-version-one
     publication. This preserves the coarser directory-level cascade.
@@ -1999,6 +2021,9 @@ def load_coverage_map(
         return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
     if provenance.get("pytest_exit_code") != 0:
         return _reject_coverage_map(map_path, SourceMapRejection.PRODUCER_FAILED)
+    source_commit = provenance.get("source_commit")
+    if not isinstance(source_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+        return _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE)
 
     source_map = raw.get("map")
     if not isinstance(source_map, dict):
@@ -2013,6 +2038,28 @@ def load_coverage_map(
         ):
             return _reject_coverage_map(map_path, SourceMapRejection.MALFORMED_ENTRY)
         result[src] = set(tests)
+
+    try:
+        ancestry = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", source_commit, "HEAD"],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        warnings.warn(
+            f"Coverage map {map_path}: could not check source lineage: {exc}", stacklevel=2
+        )
+        return result
+    if ancestry.returncode == 1:
+        return _reject_coverage_map(map_path, SourceMapRejection.NOT_ANCESTOR)
+    if ancestry.returncode != 0:
+        warnings.warn(
+            f"Coverage map {map_path}: git lineage check failed: {ancestry.stderr}",
+            stacklevel=2,
+        )
     return result
 
 
@@ -2181,11 +2228,11 @@ def build_test_scope(
     Algorithm:
     1. None changed_files -> FullRunReason.GIT_UNAVAILABLE (fail-open)
     2. Conservative + >30 files -> FullRunReason.LARGE_CHANGESET (aggressive mode: no threshold)
-    3. Bucket A triggered -> FullRunReason.BUCKET_A (full run)
-    4. Classify: src Python -> cascade, test Python -> direct, non-Python -> manifest
+    3. Global Bucket A -> full run; scoped support files -> required test directories
+    4. Classify: src Python -> cascade, ordinary test Python -> direct, others -> manifest
     5. Compute always-run set for mode (includes arch/contracts for both modes)
     6. Union all sets
-    7. Coverage oracle file-level refinement (same-package narrowing, both modes)
+    7. Coverage oracle file-level refinement; restore required support directories
     8. Resolve to concrete paths
     """
     if mode == FilterMode.NONE:
@@ -2201,16 +2248,16 @@ def build_test_scope(
         return FullRunReason.LARGE_CHANGESET
 
     if cwd is not None and base_ref is not None:
-        if check_bucket_a_content_aware(changed_files, cwd, base_ref):
+        scoped_test_dirs = check_bucket_a_content_aware(changed_files, cwd, base_ref)
+        if scoped_test_dirs is None:
             return FullRunReason.BUCKET_A
         # Exclude version-bump files that passed the content-aware check from classification.
-        # Recomputes the same set as `version_hits` inside check_bucket_a_content_aware because
-        # that function returns bool; extracting the set here avoids changing its signature.
         version_bump_in_bucket_a = changed_files & _VERSION_BUMP_FILES & BUCKET_A_PATTERNS
         if version_bump_in_bucket_a:
             changed_files = changed_files - version_bump_in_bucket_a
     else:
-        if check_bucket_a(changed_files):
+        scoped_test_dirs = check_bucket_a(changed_files)
+        if scoped_test_dirs is None:
             return FullRunReason.BUCKET_A
 
     tests_root = Path(tests_root)
@@ -2222,12 +2269,13 @@ def build_test_scope(
         ALWAYS_RUN_CONSERVATIVE if mode == FilterMode.CONSERVATIVE else ALWAYS_RUN_AGGRESSIVE
     )
 
-    test_dirs: set[str] = set()
+    test_dirs: set[str] = set(scoped_test_dirs)
     direct_test_files: set[str] = set()
     compiled_matchers: dict[str, pathspec.PathSpec] | None = None
     for f in changed_files:
         if f.startswith("tests/") and f.endswith(".py"):
-            direct_test_files.add(f)
+            if not _scoped_test_dirs_for_file(f):
+                direct_test_files.add(f)
         elif f.startswith("src/") and f.endswith(".py"):
             pkg = _file_to_package(f)
             if pkg == "core" and mode == FilterMode.CONSERVATIVE:
@@ -2485,8 +2533,8 @@ def build_test_scope(
     # Uses LAYER_CASCADE_AGGRESSIVE for grouping regardless of mode, ensuring
     # only same-package test directories are narrowed — cross-package cascade
     # directories from conservative mode remain untouched.
-    if coverage_map_path is not None:
-        cov_map = load_coverage_map(coverage_map_path)
+    if coverage_map_path is not None and cwd is not None:
+        cov_map = load_coverage_map(coverage_map_path, cwd=cwd)
         if cov_map is not None:
             oracle_cascade = LAYER_CASCADE_AGGRESSIVE
             dir_to_src_files: dict[str, set[str]] = {}
@@ -2501,6 +2549,8 @@ def build_test_scope(
                     test_dirs.discard(d)
                     for f in src_files:
                         direct_test_files.update(str(tests_root.parent / fp) for fp in cov_map[f])
+
+    test_dirs.update(scoped_test_dirs)
 
     result: set[Path] = set()
     for d in test_dirs:

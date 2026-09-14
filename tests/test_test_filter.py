@@ -126,32 +126,59 @@ class TestASTImportWalker:
 
 class TestCheckBucketA:
     def test_bucket_a_conftest(self) -> None:
-        assert check_bucket_a({"tests/conftest.py"}) is True
+        assert check_bucket_a({"tests/conftest.py"}) is None
 
     def test_bucket_a_helpers(self) -> None:
-        assert check_bucket_a({"tests/_helpers.py"}) is True
+        assert check_bucket_a({"tests/_helpers.py"}) is None
 
-    def test_bucket_a_arch_helpers(self) -> None:
-        assert check_bucket_a({"tests/arch/_helpers.py"}) is True
-        assert check_bucket_a({"tests/arch/_rules.py"}) is True
+    @pytest.mark.parametrize("file", ["tests/arch/_helpers.py", "tests/arch/_rules.py"])
+    def test_bucket_a_arch_helpers(self, file: str) -> None:
+        assert check_bucket_a({file}) == {
+            "arch",
+            "contracts",
+            "execution",
+            "recipe/rules_skills",
+            "skills",
+            "workspace",
+        }
 
     def test_bucket_a_pyproject(self) -> None:
-        assert check_bucket_a({"pyproject.toml"}) is True
+        assert check_bucket_a({"pyproject.toml"}) is None
 
     def test_bucket_a_uv_lock(self) -> None:
-        assert check_bucket_a({"uv.lock"}) is True
+        assert check_bucket_a({"uv.lock"}) is None
 
     def test_bucket_a_precommit(self) -> None:
-        assert check_bucket_a({".pre-commit-config.yaml"}) is True
+        assert check_bucket_a({".pre-commit-config.yaml"}) is None
 
     def test_bucket_a_factory(self) -> None:
-        assert check_bucket_a({"src/autoskillit/server/_factory.py"}) is True
+        assert check_bucket_a({"src/autoskillit/server/_factory.py"}) is None
 
-    def test_bucket_a_subdir_conftest(self) -> None:
-        assert check_bucket_a({"tests/execution/conftest.py"}) is True
+    @pytest.mark.parametrize(
+        ("file", "expected"),
+        [
+            ("tests/execution/conftest.py", "execution"),
+            ("tests/recipe/rules_skills/conftest.py", "recipe/rules_skills"),
+        ],
+    )
+    def test_bucket_a_subdir_conftest(self, file: str, expected: str) -> None:
+        assert check_bucket_a({file}) == {expected}
 
     def test_bucket_a_negative(self) -> None:
-        assert check_bucket_a({"src/autoskillit/core/io.py"}) is False
+        assert check_bucket_a({"src/autoskillit/core/io.py"}) == set()
+
+    def test_bucket_a_scoped_files_combine_and_global_wins(self) -> None:
+        scoped = {"tests/arch/_rules.py", "tests/recipe/conftest.py"}
+        assert check_bucket_a(scoped) == {
+            "arch",
+            "contracts",
+            "execution",
+            "recipe/rules_skills",
+            "skills",
+            "workspace",
+            "recipe",
+        }
+        assert check_bucket_a(scoped | {"tests/conftest.py"}) is None
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +204,18 @@ class TestBuildTestScope:
         )
         assert result is FullRunReason.LARGE_CHANGESET
 
+    def test_large_changeset_precedes_scoped_support(self, tmp_path: Path) -> None:
+        files = {f"src/autoskillit/core/f{i}.py" for i in range(30)}
+        files.add("tests/execution/conftest.py")
+
+        result = build_test_scope(
+            changed_files=files,
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tmp_path / "tests",
+        )
+
+        assert result is FullRunReason.LARGE_CHANGESET
+
     def test_aggressive_mode_ignores_large_changeset_threshold(self, tmp_path: Path) -> None:
         """Aggressive mode does not trigger LARGE_CHANGESET even with >30 files."""
         tests_root = tmp_path / "tests"
@@ -199,6 +238,68 @@ class TestBuildTestScope:
             tests_root=tmp_path / "tests",
         )
         assert result is FullRunReason.BUCKET_A
+
+    @pytest.mark.parametrize("support_file", ["tests/arch/_helpers.py", "tests/arch/_rules.py"])
+    def test_arch_support_file_selects_six_directories(
+        self, tmp_path: Path, support_file: str
+    ) -> None:
+        tests_root = tmp_path / "tests"
+        expected = {
+            tests_root / directory
+            for directory in (
+                "arch",
+                "contracts",
+                "execution",
+                "recipe/rules_skills",
+                "skills",
+                "workspace",
+            )
+        }
+        for directory in expected:
+            directory.mkdir(parents=True, exist_ok=True)
+
+        result = build_test_scope(
+            changed_files={support_file},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+
+        assert result == expected
+        assert tests_root / "arch" / Path(support_file).name not in result
+
+    def test_nested_conftest_selects_literal_parent_only(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for directory in ("arch", "contracts", "recipe/rules_skills"):
+            (tests_root / directory).mkdir(parents=True)
+
+        result = build_test_scope(
+            changed_files={"tests/recipe/rules_skills/conftest.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+        )
+
+        assert result == {
+            tests_root / "arch",
+            tests_root / "contracts",
+            tests_root / "recipe" / "rules_skills",
+        }
+        assert tests_root / "recipe" / "rules_skills" / "conftest.py" not in result
+
+    def test_package_conftest_combines_with_tier_trigger(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for directory in ("arch", "contracts", "execution", "infra"):
+            (tests_root / directory).mkdir(parents=True)
+
+        result = build_test_scope(
+            changed_files={"tests/execution/conftest.py", ".github/workflows/check.yml"},
+            mode=FilterMode.CONSERVATIVE,
+            manifest={".github/workflows/check.yml": []},
+            tests_root=tests_root,
+        )
+
+        assert isinstance(result, set)
+        assert {tests_root / "execution", tests_root / "infra"} <= result
+        assert tests_root / "execution" / "conftest.py" not in result
 
     def test_scope_l0_core_conservative(self, tmp_path: Path) -> None:
         tests_root = tmp_path / "tests"

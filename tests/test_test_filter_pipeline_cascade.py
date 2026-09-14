@@ -130,7 +130,7 @@ def test_content_aware_path_keeps_ledger_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: False)
+    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: set())
 
     result = build_test_scope(
         changed_files={"src/autoskillit/pipeline/context_admission_ledger.py"},
@@ -144,6 +144,28 @@ def test_content_aware_path_keeps_ledger_route(
     dir_names = {path.name for path in result if path.is_dir()}
     assert {"pipeline", "server"} <= dir_names
     assert "execution" not in dir_names
+
+
+def test_scoped_conftest_combines_with_source_cascade(tmp_path: Path) -> None:
+    tests_root = _tests_root(tmp_path)
+    (tests_root / "recipe" / "rules_skills").mkdir(parents=True)
+
+    result = build_test_scope(
+        changed_files={
+            "src/autoskillit/pipeline/context_admission_ledger.py",
+            "tests/recipe/rules_skills/conftest.py",
+        },
+        mode=FilterMode.CONSERVATIVE,
+        tests_root=tests_root,
+    )
+
+    assert isinstance(result, set)
+    assert {
+        tests_root / "pipeline",
+        tests_root / "server",
+        tests_root / "recipe" / "rules_skills",
+    } <= result
+    assert tests_root / "recipe" / "rules_skills" / "conftest.py" not in result
 
 
 def _materialize_pipeline_fail_open_route(tests_root: Path) -> set[Path]:
@@ -172,7 +194,7 @@ def test_content_aware_unknown_pipeline_module_uses_full_fail_open_route(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: False)
+    monkeypatch.setattr(test_filter, "check_bucket_a_content_aware", lambda *_args: set())
     tests_root = _tests_root(tmp_path)
     expected = _materialize_pipeline_fail_open_route(tests_root)
 

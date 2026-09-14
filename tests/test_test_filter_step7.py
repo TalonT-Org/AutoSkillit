@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
 import pytest
 
+from tests import _test_filter as test_filter
 from tests._test_filter import (
     FilterMode,
     build_test_scope,
@@ -16,13 +18,24 @@ from tests._test_filter import (
 
 pytestmark = [pytest.mark.medium]
 
+SOURCE_COMMIT = "a" * 40
+
+
+@pytest.fixture(autouse=True)
+def accept_source_lineage(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        test_filter.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0),
+    )
+
 
 def _write_successful_source_map(path: Path, source_map: dict[str, list[str]]) -> None:
     path.write_text(
         json.dumps(
             {
                 "schema_version": 1,
-                "provenance": {"pytest_exit_code": 0},
+                "provenance": {"pytest_exit_code": 0, "source_commit": SOURCE_COMMIT},
                 "map": source_map,
             }
         ),
@@ -48,7 +61,10 @@ class TestBuildTestScopeStep7:
                 json.dumps(
                     {
                         "schema_version": 1,
-                        "provenance": {"pytest_exit_code": pytest_exit_code},
+                        "provenance": {
+                            "pytest_exit_code": pytest_exit_code,
+                            "source_commit": SOURCE_COMMIT,
+                        },
                         "map": source_map,
                     }
                 ),
@@ -60,12 +76,14 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=success_map,
+            cwd=tmp_path,
         )
         fallback = build_test_scope(
             changed_files={"src/autoskillit/core/io.py"},
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=failed_map,
+            cwd=tmp_path,
         )
 
         assert narrowed is not None
@@ -95,6 +113,7 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         assert not any(p.is_dir() and p.name == "core" for p in result)
@@ -121,6 +140,7 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         dir_names = {p.name for p in result if p.is_dir()}
@@ -143,6 +163,63 @@ class TestBuildTestScopeStep7:
         dir_names = {p.name for p in result}
         assert "core" in dir_names
 
+    def test_step7_requires_cwd_to_load_oracle(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        for directory in ("core", "arch", "contracts"):
+            (tests_root / directory).mkdir(parents=True)
+        (tests_root / "core" / "test_io.py").write_text("")
+        map_file = tmp_path / "test-source-map.json"
+        _write_successful_source_map(
+            map_file, {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}
+        )
+
+        result = build_test_scope(
+            changed_files={"src/autoskillit/core/io.py"},
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+            coverage_map_path=map_file,
+        )
+
+        assert result is not None
+        assert tests_root / "core" in result
+        assert tests_root / "core" / "test_io.py" not in result
+
+    def test_scoped_conftest_and_arch_helper_survive_refinement(self, tmp_path: Path) -> None:
+        tests_root = tmp_path / "tests"
+        helper_dirs = {
+            "arch",
+            "contracts",
+            "execution",
+            "recipe/rules_skills",
+            "skills",
+            "workspace",
+        }
+        for directory in {"core", *helper_dirs}:
+            (tests_root / directory).mkdir(parents=True)
+        specific_test = tests_root / "core" / "test_io.py"
+        specific_test.write_text("")
+        map_file = tmp_path / "test-source-map.json"
+        _write_successful_source_map(
+            map_file, {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}
+        )
+
+        result = build_test_scope(
+            changed_files={
+                "src/autoskillit/core/io.py",
+                "tests/core/conftest.py",
+                "tests/arch/_helpers.py",
+            },
+            mode=FilterMode.AGGRESSIVE,
+            tests_root=tests_root,
+            coverage_map_path=map_file,
+            cwd=tmp_path,
+        )
+
+        assert result is not None
+        assert specific_test in result
+        assert tests_root / "core" in result
+        assert {tests_root / directory for directory in helper_dirs} <= result
+
     def test_step7_stale_oracle_falls_back_to_directory(self, tmp_path: Path) -> None:
         """When load_coverage_map returns None (stale file), dir-level is preserved."""
         tests_root = tmp_path / "tests"
@@ -163,10 +240,40 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         dir_names = {p.name for p in result if p.is_dir()}
         assert "core" in dir_names
+
+    def test_step7_non_ancestor_oracle_falls_back_to_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tests_root = tmp_path / "tests"
+        for directory in ("core", "arch", "contracts"):
+            (tests_root / directory).mkdir(parents=True)
+        (tests_root / "core" / "test_io.py").write_text("")
+        map_file = tmp_path / "test-source-map.json"
+        _write_successful_source_map(
+            map_file, {"src/autoskillit/core/io.py": ["tests/core/test_io.py"]}
+        )
+        monkeypatch.setattr(
+            test_filter.subprocess,
+            "run",
+            lambda *args, **kwargs: subprocess.CompletedProcess(args, 1),
+        )
+
+        with pytest.warns(UserWarning, match="not an ancestor of HEAD"):
+            result = build_test_scope(
+                changed_files={"src/autoskillit/core/io.py"},
+                mode=FilterMode.AGGRESSIVE,
+                tests_root=tests_root,
+                coverage_map_path=map_file,
+                cwd=tmp_path,
+            )
+
+        assert result is not None
+        assert tests_root / "core" in result
 
     def test_step7_conservative_mode_narrows_same_package_only(self, tmp_path: Path) -> None:
         """Conservative mode narrows same-package dir via oracle, keeps cross-package dirs."""
@@ -205,6 +312,7 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         dir_names = {p.name for p in result if p.is_dir()}
@@ -302,6 +410,7 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.CONSERVATIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         dir_names = {p.name for p in result if p.is_dir()}
@@ -336,6 +445,7 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         dir_names = {p.name for p in result if p.is_dir()}
@@ -364,6 +474,7 @@ class TestBuildTestScopeStep7:
             mode=FilterMode.AGGRESSIVE,
             tests_root=tests_root,
             coverage_map_path=map_file,
+            cwd=tmp_path,
         )
         assert result is not None
         result_paths = list(result)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -649,43 +651,27 @@ def test_audit_mode_does_not_require_pytest_status(cov_ast, tmp_path, monkeypatc
 
 @pytest.mark.small
 def test_test_source_map_is_committed():
-    """Sentinel: .autoskillit/test-source-map.json must be committed to version control.
-
-    Fails if the file is missing — run 'task coverage-audit' and commit the output.
-    """
-    import json
-
-    map_path = Path(__file__).parent.parent.parent / ".autoskillit" / "test-source-map.json"
+    """The committed oracle remains a fresh, well-formed successful publication."""
+    map_path = REPO_ROOT / ".autoskillit" / "test-source-map.json"
     assert map_path.exists(), (
         ".autoskillit/test-source-map.json is missing. "
         "Run 'task coverage-audit' and commit the output to activate the coverage oracle."
     )
     data = json.loads(map_path.read_text(encoding="utf-8"))
     assert data["schema_version"] == 1
-    assert data["provenance"]["pytest_exit_code"] == 0
-    assert isinstance(data["map"], dict)
-
-
-@pytest.mark.small
-def test_load_coverage_map_reads_committed_file():
-    """load_coverage_map() returns a populated dict from the committed oracle file.
-
-    Verifies that the file is also parseable and fresh (not older than 30 days).
-    """
-    from tests._test_filter import load_coverage_map
-
-    map_path = Path(__file__).parent.parent.parent / ".autoskillit" / "test-source-map.json"
-    assert map_path.exists(), (
-        ".autoskillit/test-source-map.json is missing. "
-        "Run 'task coverage-audit' and commit the output to activate the coverage oracle."
+    provenance = data["provenance"]
+    assert isinstance(provenance, dict)
+    assert provenance["pytest_exit_code"] == 0
+    source_commit = provenance["source_commit"]
+    assert isinstance(source_commit, str)
+    assert re.fullmatch(r"[0-9a-f]{40}", source_commit)
+    assert time.time() - map_path.stat().st_mtime <= 30 * 24 * 3600
+    source_map = data["map"]
+    assert isinstance(source_map, dict)
+    assert len(source_map) >= 50, f"Oracle returned only {len(source_map)} entries"
+    assert all(
+        isinstance(source, str)
+        and isinstance(tests, list)
+        and all(isinstance(test, str) for test in tests)
+        for source, tests in source_map.items()
     )
-    data = json.loads(map_path.read_text(encoding="utf-8"))
-    assert data["schema_version"] == 1
-    assert data["provenance"]["pytest_exit_code"] == 0
-    assert isinstance(data["map"], dict)
-    result = load_coverage_map(map_path)
-    assert result is not None, (
-        "load_coverage_map() returned None — oracle file is older than 30 days or malformed. "
-        "Run 'task coverage-audit' and commit the result."
-    )
-    assert len(result) >= 50, f"Oracle returned only {len(result)} entries"

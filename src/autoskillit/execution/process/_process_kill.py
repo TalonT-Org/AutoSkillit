@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import anyio
 import anyio.abc
@@ -138,7 +138,7 @@ def _snapshot_process_tree(pid: int) -> ProcessObservationSnapshot:
 
 
 def _signal_processes(
-    processes: Sequence[psutil.Process], signum: signal.Signals, stage: str
+    processes: Sequence[psutil.Process], signum: signal.Signals, stage: Literal["term", "kill"]
 ) -> tuple[set[int], bool]:
     denied: set[int] = set()
     complete = True
@@ -159,7 +159,7 @@ def _signal_processes(
 def _wait_for_processes(
     processes: Sequence[psutil.Process],
     timeout: float,
-    stage: str,
+    stage: Literal["term", "kill"],
     pid: int,
 ) -> tuple[list[psutil.Process], set[int], bool]:
     denied: set[int] = set()

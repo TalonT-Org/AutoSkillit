@@ -49,8 +49,21 @@ def test_stale_idle_and_main_paths_delegate_to_the_shared_retry_policy() -> None
     functions = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
     main_path = functions["_build_skill_result"]
     stall_helper = functions["_build_stall_result"]
+    controlled_helper = functions["_make_controlled_context_exhaustion_result"]
 
     assert len(_function_calls(stall_helper, "_apply_infra_retry_policy")) == 1
+    assert len(_function_calls(controlled_helper, "_apply_infra_retry_policy")) == 1
+
+    policy_call_owners = {
+        name
+        for name, function in functions.items()
+        if _function_calls(function, "_apply_infra_retry_policy")
+    }
+    assert policy_call_owners == {
+        "_build_skill_result",
+        "_build_stall_result",
+        "_make_controlled_context_exhaustion_result",
+    }
 
     stall_specs = {
         keyword.value.id

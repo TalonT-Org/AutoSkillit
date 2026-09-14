@@ -190,7 +190,7 @@ def prepare_interactive_launch(
         cwd=project_dir,
         explicit_path_env=explicit_path_env,
     )
-    if final != provisional:
+    if backend.capabilities.cook_exact_binding_probe_required and final != provisional:
         raise ValueError(
             "interactive executable identity changed between probe and launch preparation"
         )

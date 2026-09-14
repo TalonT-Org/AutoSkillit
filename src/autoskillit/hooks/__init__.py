@@ -62,6 +62,7 @@ from autoskillit.hooks._runtime._github_mutation_analysis import analyze_github_
 # ``_hook_constants`` itself remains the canonical authority and is still
 # importable directly by standalone guard scripts (via ``_HOOKS_DIR`` bootstrap).
 from autoskillit.hooks._runtime._hook_constants import (  # noqa: E402,F401
+    CODEX_AUTO_COMPACTION_DENIED_REASON,
     DENY_REASON_BY_GUARD,
     DENY_TRIGGER_BY_GUARD,
     EXEMPT_SESSION_TYPES_BY_GUARD,
@@ -87,6 +88,7 @@ del _HOOK_REGISTRY_LIST
 
 __all__ = [
     "BRANCH_PROTECTION_DENY_TRIGGER",
+    "CODEX_AUTO_COMPACTION_DENIED_REASON",
     "DENY_REASON_BY_GUARD",
     "DENY_TRIGGER_BY_GUARD",
     "EXEMPT_SESSION_TYPES_BY_GUARD",

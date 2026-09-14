@@ -38,7 +38,7 @@ from autoskillit.core import (
     get_logger,
 )
 from autoskillit.execution.process import _marker_is_standalone
-from autoskillit.hooks._runtime._hook_constants import CODEX_AUTO_COMPACTION_DENIED_REASON
+from autoskillit.hooks import CODEX_AUTO_COMPACTION_DENIED_REASON
 
 logger = get_logger(__name__)
 

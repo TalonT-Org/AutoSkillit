@@ -1746,6 +1746,9 @@ def test_default_classes_only_instantiated_inside_factory_or_allowlist() -> None
         Path("cli/fleet/_fleet_lifecycle.py"): {
             "DefaultWorkspaceManager",  # signal guard cleanup
         },
+        Path("cli/fleet/_fleet_session.py"): {
+            "DefaultSessionSkillManager"
+        },  # persistent fleet-session generated-home composition
         Path("cli/app.py"): {"DefaultSkillResolver"},  # skill listing command
         Path("cli/install/_marketplace.py"): {
             "DefaultSkillResolver"

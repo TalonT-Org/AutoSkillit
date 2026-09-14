@@ -230,7 +230,7 @@ def test_server_file_count_under_limit() -> None:
     assert len(py_files) <= limit, f"server/ has {len(py_files)} files, max is {limit}"
 
 
-def test_no_subpackage_exceeds_12_files_default_and_per_package_overrides() -> None:
+def _subpackage_file_count_violations() -> list[str]:
     """REQ-CNST-003: Direct Python files have a 12-file default or explicit override.
 
     The root-package exemptions retain distinct responsibilities whose modules
@@ -274,6 +274,12 @@ def test_no_subpackage_exceeds_12_files_default_and_per_package_overrides() -> N
         limit = FILE_COUNT_LIMITS.get(rel_key, 12)
         if len(py_files) > limit:
             violations.append(f"{rel_key}/: {len(py_files)} Python files (max {limit})")
+    return violations
+
+
+def test_no_subpackage_exceeds_12_files_default_and_per_package_overrides() -> None:
+    """REQ-CNST-003: Enforce the 12-file default and per-package ceilings."""
+    violations = _subpackage_file_count_violations()
     assert not violations, (
         "Subpackages exceeding their Python file limits (default 12):\n"
         + "\n".join(f"  {v}" for v in violations)
@@ -291,11 +297,8 @@ def test_default_file_count_boundary(
         (package / f"module_{index}.py").touch()
     monkeypatch.setattr("tests.arch.test_subpackage_isolation_file_counts.SRC_ROOT", tmp_path)
 
-    if total_files == 12:
-        test_no_subpackage_exceeds_12_files_default_and_per_package_overrides()
-    else:
-        with pytest.raises(AssertionError, match=r"fixture/: 13 Python files \(max 12\)"):
-            test_no_subpackage_exceeds_12_files_default_and_per_package_overrides()
+    expected = [] if total_files == 12 else ["fixture/: 13 Python files (max 12)"]
+    assert _subpackage_file_count_violations() == expected
 
 
 def test_nested_core_module_matching_root_shim_counts(
@@ -310,8 +313,7 @@ def test_nested_core_module_matching_root_shim_counts(
         (package / f"module_{index}.py").touch()
     monkeypatch.setattr("tests.arch.test_subpackage_isolation_file_counts.SRC_ROOT", tmp_path)
 
-    with pytest.raises(AssertionError, match=r"core/fixture/: 13 Python files \(max 12\)"):
-        test_no_subpackage_exceeds_12_files_default_and_per_package_overrides()
+    assert _subpackage_file_count_violations() == ["core/fixture/: 13 Python files (max 12)"]
 
 
 # ── session_skills package shape ─────────────────────────────────────────────

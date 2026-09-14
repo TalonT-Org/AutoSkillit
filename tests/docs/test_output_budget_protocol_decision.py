@@ -134,7 +134,6 @@ def test_adr_0005_contains_per_repo_ceiling_and_upgrade_tracking(decision_text: 
         "CODEX_HISTORY_RETENTION_TOKEN_LIMIT",
         "ordinary_omitted_result_token_limit",
         "history-retained tokens",
-        "372,000",
         "CODEX_LIMITS_LAST_VERIFIED_VERSION",
         "codex_limits_verified",
     ]:

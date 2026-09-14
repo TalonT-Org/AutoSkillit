@@ -8,6 +8,8 @@ Tests verify that:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from autoskillit.recipe._analysis import (
@@ -441,61 +443,25 @@ def test_event_scope_fork_only_one_branch_has_producer_fires():
 
 
 def test_capture_inversion_ignores_list_only_producer_and_keeps_repeated_reads():
-    """A scalar producer fires once per reader reference; a list-only producer does not."""
-    recipe = Recipe(
-        name="synthetic-scalar-and-list-captures",
-        description="fork, conditional join, and a reader with repeated scalar references",
-        steps={
-            "entry": RecipeStep(
-                action="route",
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(
-                            when="context.route == 'producer'",
-                            route="producer",
-                        ),
-                        StepResultCondition(route="other"),
-                    ]
-                ),
-            ),
-            "producer": RecipeStep(
-                tool="run_cmd",
-                with_args={"cmd": "echo producing"},
-                capture={"var_x": "${{ result.var_x }}"},
-                capture_list={"list_only": "${{ result.list_only }}"},
-                retries=0,
-                on_success="joiner",
-            ),
-            "other": RecipeStep(
-                tool="run_cmd",
-                with_args={"cmd": "echo other"},
-                on_success="joiner",
-            ),
-            "joiner": RecipeStep(
-                action="route",
-                on_result=StepResultRoute(
-                    conditions=[
-                        StepResultCondition(
-                            when="context.var_x == 'yes'",
-                            route="reader",
-                        ),
-                        StepResultCondition(
-                            when="context.list_only == 'yes'",
-                            route="reader",
-                        ),
-                        StepResultCondition(route="reader"),
-                    ]
-                ),
-            ),
-            "reader": RecipeStep(
-                tool="run_cmd",
-                with_args={
-                    "cmd": (
-                        "echo ${{ context.var_x }} ${{ context.var_x }} ${{ context.list_only }}"
-                    )
-                },
-            ),
-        },
+    recipe = _make_non_dominating_producer_recipe()
+    recipe.steps["branch_producer"] = replace(
+        recipe.steps["branch_producer"],
+        retries=0,
+        capture_list={"list_only": "${{ result.list_only }}"},
+    )
+    joiner = recipe.steps["joiner"]
+    assert joiner.on_result is not None
+    joiner.on_result.conditions.insert(
+        1, StepResultCondition(route="check_list", when="context.list_only == 'yes'")
+    )
+    recipe.steps["check_list"] = RecipeStep(
+        name="check_list",
+        tool="run_cmd",
+        with_args={"cmd": "echo check list"},
+        on_success="reader",
+    )
+    recipe.steps["reader"].with_args["cmd"] = (
+        "echo ${{ context.var_x }} ${{ context.var_x }} ${{ context.list_only }}"
     )
 
     findings = _check_capture_inversion(make_validation_context(recipe))

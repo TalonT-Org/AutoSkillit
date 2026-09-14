@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,6 +22,11 @@ _SESSION_HOME = "/tmp/session"
 _CATALOG_ROOT = "/tmp/session/add-dir/skills"
 _CWD = "/tmp/session"
 _MIN_VERSION = CODEX_SKILL_DISCOVERY_CONTRACT.extra_roots_min_version
+_APP_SERVER_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "codex_ndjson"
+
+
+def _app_server_fixture(name: str) -> dict[str, Any]:
+    return json.loads((_APP_SERVER_FIXTURE_DIR / name).read_text())
 
 
 def _make_plan(**overrides: object) -> CodexAppServerPlan:
@@ -345,6 +352,23 @@ class TestThreadAndTurn:
         assert not driver.finished
         lines = driver.on_line(_notification("turn/completed", {"status": "completed"}))
         assert lines == ()
+        assert driver.finished
+        assert driver.failure is None
+
+    def test_interrupted_turn_notification_finishes_after_hook_notification(self) -> None:
+        driver = CodexAppServerDriver(_make_plan())
+        _advance_to_thread_request(driver)
+        driver.on_line(_response(4, result=_thread_result()))
+        driver.on_line(_response(5, result={}))
+
+        driver.on_line(
+            json.dumps(_app_server_fixture("app_server_hook_completed_pre_compact_stopped.json"))
+        )
+        assert not driver.finished
+        driver.on_line(
+            json.dumps(_app_server_fixture("app_server_turn_completed_interrupted.json"))
+        )
+
         assert driver.finished
         assert driver.failure is None
 

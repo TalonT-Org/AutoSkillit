@@ -158,11 +158,15 @@ changed files. Controlled by env var + CLI flags:
 1. **Fail-open gate**: If env var is unset/falsy, all tests run. On any error, all tests run.
 2. **Changed files**: `git merge-base HEAD base_ref` → SHA, then `git diff --name-only <sha>` (working tree vs merge-base: committed + staged + unstaged tracked) + `git ls-files --others --exclude-standard` (new untracked files). Union of all three — a strict superset of the old three-dot form. **Known limitation**: `git rm --cached` (stage-only deletions) are not captured — the file still exists on disk so the working-tree diff misses the deletion. This is acceptable given the fail-open design.
    - **Aggressive mode override**: Uses `git diff HEAD --name-only` (working-tree-only) instead of merge-base diff. This prevents committed-but-old files from inflating the changed set.
-3. **Bucket A**: If any "global impact" file changed (conftest.py, pyproject.toml, etc.) -> full run
-4. **Large changeset**: >30 files -> full run (conservative only; disabled in aggressive mode)
-5. **Classification**: src Python -> layer cascade, test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup
+3. **Large changeset**: >30 files -> full run (conservative only; disabled in aggressive mode)
+4. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
+5. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
 6. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
-7. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
+7. **Coverage refinement**: A valid map can narrow source-driven directory selections to test files. Required support-file directories are re-added afterward, so refinement cannot remove them. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
+8. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
+
+Directory-scoped conftests do not follow cross-package Python imports. The arch helper
+mapping does not follow imports through arbitrary intermediate test modules.
 
 **Modes**:
 
@@ -208,10 +212,18 @@ after significant architectural changes (new subpackages, major refactors).
 - **Partially covered functions**: Functions where some branches are untested
 - Exit code is always 0 (audit tool, not a gate)
 
-**Coverage oracle staleness guard:**
-`load_coverage_map()` (`tests/_test_filter.py:1328`) returns `None` if `test-source-map.json`
-is older than 30 days. When this happens, Step 7 silently falls back
-to directory-level cascade — no error is raised. Refresh cadence:
+**Coverage oracle admission:**
+`load_coverage_map()` returns `None` for a map older than 30 days, with invalid
+provenance, or whose stamped source commit is definitively not an ancestor of
+`HEAD` in the supplied repository. Step 7 then keeps the directory-level cascade.
+Git operational errors warn and retain an otherwise valid map. A map carried from
+a discarded worktree commit through a squash may therefore select coarser test
+directories until a new map is published. Ancestry alone does not detect a map
+that predates newer tests.
+
+The lineage check requires a checkout containing the stamped commit. The CI `test:`
+job uses `fetch-depth: 0`; reducing that depth can make a valid stamp unreachable
+and degrade the check to its operational-error path. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
 - The scheduled weekly refresh keeps the coverage oracle current in CI (conservative or aggressive mode).
 

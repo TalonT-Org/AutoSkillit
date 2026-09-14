@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import tests._test_filter as test_filter
 from tests._test_filter import (
     _CORE_UNIVERSAL_EXCLUSIONS,
     _CORE_UNIVERSAL_MODULES,
@@ -30,8 +31,8 @@ class TestCheckBucketAContentAware:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """pyproject.toml with only version= line change: content-aware check returns False."""
-        from tests._test_filter import check_bucket_a_content_aware
+        """A version-only pyproject change contributes no Bucket A scope."""
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -5 +5 @@\n"
@@ -46,15 +47,15 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"pyproject.toml"}, "/fake", "main")
-        assert result is False
+        result = compute_bucket_a_scope_content_aware({"pyproject.toml"}, "/fake", "main")
+        assert result == set()
 
     def test_content_aware_uv_lock_version_only_not_triggered(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """uv.lock with only version= line change: content-aware check returns False."""
-        from tests._test_filter import check_bucket_a_content_aware
+        """A version-only lockfile change contributes no Bucket A scope."""
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/uv.lock\n+++ b/uv.lock\n@@ -10 +10 @@\n"
@@ -69,15 +70,15 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"uv.lock"}, "/fake", "main")
-        assert result is False
+        result = compute_bucket_a_scope_content_aware({"uv.lock"}, "/fake", "main")
+        assert result == set()
 
     def test_content_aware_pyproject_structural_change_triggers(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """pyproject.toml with non-version line change: content-aware check returns True."""
-        from tests._test_filter import check_bucket_a_content_aware
+        """A structural pyproject change requires the full suite."""
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/pyproject.toml\n+++ b/pyproject.toml\n"
@@ -93,42 +94,42 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"pyproject.toml"}, "/fake", "main")
-        assert result is True
+        result = compute_bucket_a_scope_content_aware({"pyproject.toml"}, "/fake", "main")
+        assert result is None
 
     def test_content_aware_git_failure_falls_back_to_full_run(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Git failure: content-aware check returns True (fail-open)."""
-        from tests._test_filter import check_bucket_a_content_aware
+        """Git failure requires the full suite."""
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         def _raise(*a: object, **kw: object) -> None:
             raise subprocess.CalledProcessError(1, "git")
 
         monkeypatch.setattr(subprocess, "run", _raise)
-        result = check_bucket_a_content_aware({"pyproject.toml"}, "/fake", "main")
-        assert result is True
+        result = compute_bucket_a_scope_content_aware({"pyproject.toml"}, "/fake", "main")
+        assert result is None
 
     def test_content_aware_other_bucket_a_pattern_unaffected(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Other Bucket A patterns (not pyproject/uv.lock) trigger immediately, no git call."""
-        from tests._test_filter import check_bucket_a_content_aware
+        """Global Bucket A files trigger immediately, without a git call."""
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         mock_run = Mock()
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"tests/conftest.py"}, "/fake", "main")
-        assert result is True
+        result = compute_bucket_a_scope_content_aware({"tests/conftest.py"}, "/fake", "main")
+        assert result is None
         mock_run.assert_not_called()  # no git diff needed
 
     def test_content_aware_version_only_both_files_not_triggered(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Both pyproject.toml and uv.lock with version-only changes: returns False."""
-        from tests._test_filter import check_bucket_a_content_aware
+        """Both version-only files contribute no Bucket A scope."""
+        from tests._test_filter import compute_bucket_a_scope_content_aware
 
         diff_output = (
             "--- a/pyproject.toml\n+++ b/pyproject.toml\n@@ -5 +5 @@\n"
@@ -145,8 +146,21 @@ class TestCheckBucketAContentAware:
             ]
         )
         monkeypatch.setattr(subprocess, "run", mock_run)
-        result = check_bucket_a_content_aware({"pyproject.toml", "uv.lock"}, "/fake", "main")
-        assert result is False
+        result = compute_bucket_a_scope_content_aware(
+            {"pyproject.toml", "uv.lock"}, "/fake", "main"
+        )
+        assert result == set()
+
+    def test_content_aware_version_exemption_preserves_scoped_support(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(test_filter, "_is_only_version_changes_in_diff", lambda *_args: True)
+
+        result = test_filter.compute_bucket_a_scope_content_aware(
+            {"pyproject.toml", "tests/recipe/rules_skills/conftest.py"}, "/fake", "main"
+        )
+
+        assert result == {"recipe/rules_skills"}
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +169,27 @@ class TestCheckBucketAContentAware:
 
 
 class TestBuildTestScopeContentAware:
+    def test_scope_version_exemption_keeps_package_conftest(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tests_root = tmp_path / "tests"
+        (tests_root / "recipe" / "rules_skills").mkdir(parents=True)
+        for directory in ["arch", "contracts"]:
+            (tests_root / directory).mkdir()
+        monkeypatch.setattr(test_filter, "_is_only_version_changes_in_diff", lambda *_args: True)
+
+        result = build_test_scope(
+            changed_files={"pyproject.toml", "tests/recipe/rules_skills/conftest.py"},
+            mode=FilterMode.CONSERVATIVE,
+            tests_root=tests_root,
+            cwd=tmp_path,
+            base_ref="main",
+        )
+
+        assert isinstance(result, set)
+        assert tests_root / "recipe" / "rules_skills" in result
+        assert tests_root / "recipe" / "rules_skills" / "conftest.py" not in result
+
     def test_scope_pyproject_version_only_with_cwd_no_full_run(
         self,
         tmp_path: Path,

@@ -941,6 +941,13 @@ _T5_ROWS = [
         set(),
     ),
     (
+        {"tests/core/conftest.py"},
+        None,
+        FilterMode.CONSERVATIVE,
+        None,
+        {"tests/core", "tests/arch", "tests/contracts"},
+    ),
+    (
         {"some/unknown/file.txt"},
         _T5_ARTIFACT_MANIFEST,
         FilterMode.CONSERVATIVE,
@@ -964,6 +971,7 @@ _T5_IDS = [
     "manifest_artifact_conservative",
     "manifest_artifact_aggressive",
     "bucket_a_conservative",
+    "package_conftest_conservative",
     "unmapped_conservative",
     "unmapped_aggressive",
 ]

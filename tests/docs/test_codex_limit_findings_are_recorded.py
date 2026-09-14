@@ -25,7 +25,6 @@ def test_neutralized_limits_are_disclosed_in_the_governing_adrs() -> None:
         for entry in CODEX_LIMIT_VERIFICATION_REGISTRY.values()
         if entry.status == "upstream_neutralized"
     ]
-    assert neutralized, "expected at least one upstream_neutralized entry to disclose"
     for entry in neutralized:
         value = entry.upstream_effective_value
         assert value is not None

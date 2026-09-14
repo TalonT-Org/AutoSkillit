@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -30,6 +31,7 @@ _CURRENT_TURN_USAGE_FIXTURE = "turn_usage_native_v0153_4.ndjson"
 _COMPACTION_REGRESSION_FIXTURE = "turn_usage_compaction_regression_v0135_0.ndjson"
 _CURRENT_INTERVAL = ("2026-09-01T10:00:00Z", "2026-09-01T10:00:02Z")
 _LEGACY_INTERVAL = ("2026-06-03T10:00:00Z", "2026-06-03T10:00:01Z")
+_APP_SERVER_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "codex_ndjson"
 
 
 def _locator(path: Path | None = None, *, raises: bool = False) -> SessionLocator:
@@ -53,6 +55,10 @@ def _extract_fixture(name: str, interval: tuple[str, str]) -> list[TurnTokenEntr
 def _fixture_version(name: str) -> str:
     first_line = fixture_path(name).read_text().splitlines()[0]
     return json.loads(first_line)["payload"]["cli_version"]
+
+
+def _app_server_fixture(name: str) -> dict[str, Any]:
+    return json.loads((_APP_SERVER_FIXTURE_DIR / name).read_text())
 
 
 def _token_count_record(
@@ -1078,6 +1084,36 @@ class TestCodexResultParserAppServerEquivalence:
             "cached_input_tokens": 400,
             "output_tokens": 2500,
         }
+
+
+class TestCodexResultParserAutoCompactionCorrelation:
+    def test_app_server_capture_preserves_correlated_denial(self) -> None:
+        hook = _app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = _app_server_fixture("app_server_turn_completed_interrupted.json")
+
+        result = CodexResultParser().parse_stdout(
+            "\n".join((json.dumps(hook), json.dumps(terminal)))
+        )
+
+        assert result.success is False
+        assert result.error == "autoskillit_auto_compaction_denied"
+        assert result.raw["error_code"] == "autoskillit_auto_compaction_denied"
+
+    def test_event_list_failed_terminal_never_becomes_success(self) -> None:
+        hook = _app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = _app_server_fixture("app_server_turn_completed_interrupted.json")
+        terminal["params"]["turn"]["status"] = "failed"
+        stream = CodexStreamParser()
+        assert stream.parse_line(json.dumps(hook)) is None
+        event = stream.parse_line(json.dumps(terminal))
+        assert event is not None
+        completed = stream.parse_line(json.dumps({"type": "turn.completed"}))
+        assert completed is not None
+
+        result = CodexResultParser().parse_result([event, completed])
+
+        assert result.success is False
+        assert result.error == "failed"
 
 
 class TestExtractCodexTurnUsage:

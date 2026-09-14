@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any
 
 import pytest
 import structlog.testing
@@ -28,6 +30,12 @@ from tests.fixtures.codex import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
+
+_APP_SERVER_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "codex_ndjson"
+
+
+def _app_server_fixture(name: str) -> dict[str, Any]:
+    return json.loads((_APP_SERVER_FIXTURE_DIR / name).read_text())
 
 
 class TestCodexStreamParserHappyPath:
@@ -806,4 +814,71 @@ class TestAppServerUsageAccumulation:
             "input_tokens": 5000,
             "cached_input_tokens": None,
             "output_tokens": 2500,
+        }
+
+
+class TestAppServerAutoCompactionCorrelation:
+    def test_stopped_pre_compact_hook_marks_matching_interrupted_turn(self) -> None:
+        hook = _app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = _app_server_fixture("app_server_turn_completed_interrupted.json")
+        assert hook["params"]["run"]["executionMode"] == "sync"
+
+        parser = CodexStreamParser()
+        assert parser.parse_line(json.dumps(hook)) is None
+        event = parser.parse_line(json.dumps(terminal))
+
+        assert event is not None
+        assert event.kind == BackendEventKind.COMPLETION
+        assert event.is_terminal is True
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.record_type == "turn.failed"
+        assert event.backend_data.raw == {
+            "type": "turn.failed",
+            "error": {
+                "message": "autoskillit_auto_compaction_denied",
+                "code": "autoskillit_auto_compaction_denied",
+            },
+        }
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "user_interruption",
+            "other_hook_reason",
+            "manual_control",
+            "other_thread",
+            "other_turn",
+            "continued_turn",
+            "failed_terminal",
+        ],
+    )
+    def test_only_matching_stopped_auto_compact_hook_is_classified(self, case: str) -> None:
+        hook = _app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = _app_server_fixture("app_server_turn_completed_interrupted.json")
+        parser = CodexStreamParser()
+
+        if case == "user_interruption":
+            event = parser.parse_line(json.dumps(terminal))
+        else:
+            if case == "other_hook_reason":
+                hook["params"]["run"]["entries"][0]["text"] = "another reason"
+            elif case == "manual_control":
+                hook["params"]["run"]["status"] = "completed"
+            elif case == "other_thread":
+                terminal["params"]["threadId"] = "another-thread"
+            elif case == "other_turn":
+                terminal["params"]["turn"]["id"] = "another-turn"
+            elif case == "failed_terminal":
+                terminal["params"]["turn"]["status"] = "failed"
+            assert parser.parse_line(json.dumps(hook)) is None
+            if case == "continued_turn":
+                assert parser.parse_line(json.dumps({"method": "turn/started", "params": {}}))
+            event = parser.parse_line(json.dumps(terminal))
+
+        assert event is not None
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.record_type == "turn.failed"
+        assert event.backend_data.raw["error"] == {
+            "message": terminal["params"]["turn"]["status"],
+            "code": "",
         }

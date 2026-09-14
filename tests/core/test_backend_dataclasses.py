@@ -602,6 +602,7 @@ def test_backend_module_all_exhaustive():
         "CmdOrigin",
         "CmdSpec",
         "CodexAppServerPlan",
+        "CodexRuntimeSpec",
         "SessionAttemptHandle",
         "ExecutableLaunchBinding",
         "ModelTranslation",

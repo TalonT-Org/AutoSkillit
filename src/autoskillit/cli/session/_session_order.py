@@ -31,7 +31,7 @@ from autoskillit.core import (
     pkg_root,
     resume_spec_from_cli,
 )
-from autoskillit.execution import DefaultLaunchResolver, default_tether_dir, sweep_orphaned_tethers
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 from autoskillit.workspace import (
     DefaultSkillResolver,
     compile_session_skill_catalog,
@@ -158,9 +158,7 @@ def order(
 
     backend = resolve_global_backend(
         config.agent_backend.backend,
-        launch_resolver=DefaultLaunchResolver(
-            codex_runtime_spec=config.codex_runtime.resolve(),
-        ),
+        codex_runtime_spec=config.codex_runtime.resolve(),
     )
     backend_caps = backend.capabilities
     mcp_prefix = detect_autoskillit_mcp_prefix(backend_caps)

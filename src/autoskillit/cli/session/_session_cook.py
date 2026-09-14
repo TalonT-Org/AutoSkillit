@@ -29,7 +29,7 @@ from autoskillit.core import (
     plugin_launch_binding_scope,
     resolve_project_dir,
 )
-from autoskillit.execution import DefaultLaunchResolver, default_tether_dir, sweep_orphaned_tethers
+from autoskillit.execution import default_tether_dir, sweep_orphaned_tethers
 
 if TYPE_CHECKING:
     from autoskillit.cli.session._session_startup_trace import StartupTrace
@@ -156,9 +156,7 @@ def cook(
 
         backend = resolve_global_backend(
             config.agent_backend.backend,
-            launch_resolver=DefaultLaunchResolver(
-                codex_runtime_spec=config.codex_runtime.resolve(),
-            ),
+            codex_runtime_spec=config.codex_runtime.resolve(),
         )
     cook_system_prompt = (
         _COOK_PRE_REVEALED_KITCHEN_PROMPT

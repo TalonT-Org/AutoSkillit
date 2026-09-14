@@ -13,11 +13,16 @@
 
 ## Running Tests
 
+The configured AutoSkillit local gate is `task test-local-gate`. It excludes
+`tests/execution/test_process_channel_b.py` from local gate runs, including when
+that file is explicitly selected with `PYTEST_TEST_PATHS`. To run the complete
+manual suite, use:
+
     task test-all
 
 Tests run in parallel via pytest-xdist (`-n 4`). All tests must be safe for
-parallel execution. Never use `pytest` directly — always use `task test-all`
-(or `task test-check` for CI/automation).
+parallel execution. Never use `pytest` directly; use `task test-all` for the
+complete suite or `task test-check` for CI automation.
 
 ## Branch-Targeted CI Policy
 
@@ -43,8 +48,10 @@ change requires an explicit CI-policy task and matching behavioral tests in
 
 ## CI Test Shards
 
-Static path ownership is exhaustive and disjoint before conservative filtering
-intersects each shard with the tests selected for a change:
+Static path ownership is exhaustive and disjoint. Conservative filtering
+intersects the other shards with the tests selected for a change. The
+`execution-channel-b` shard sets `AUTOSKILLIT_TEST_FILTER=none` so all
+Channel B tests run for each supported `pull_request` and `merge_group` event:
 
 | Shard | Ownership |
 |---|---|

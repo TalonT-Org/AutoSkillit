@@ -549,6 +549,16 @@ def test_workflow_consumes_one_target_policy_authority() -> None:
     }
     assert "github.event" not in run_tests["run"]
     assert "develop" not in run_tests["run"]
+    channel_b_override = (
+        'if [[ "${{ matrix.shard }}" == "execution-channel-b" ]]; then\n'
+        "  export AUTOSKILLIT_TEST_FILTER=none\n"
+        "fi"
+    )
+    assert channel_b_override in run_tests["run"]
+    assert run_tests["run"].count("export AUTOSKILLIT_TEST_FILTER=none") == 1
+    assert run_tests["run"].index(channel_b_override) < run_tests["run"].index(
+        "task test-check 2>&1"
+    )
     assert "task test-check 2>&1 | tee .autoskillit/temp/test-check.log" in run_tests["run"]
     assert 'TEST_CHECK_EXIT="${PIPESTATUS[0]}"' in run_tests["run"]
     assert '[[ "$AUTOSKILLIT_TEST_FILTER" == "conservative" ]]' in run_tests["run"]
@@ -784,7 +794,15 @@ def test_ci_policy_is_recorded_in_durable_contributor_instructions() -> None:
     assert "`tests/execution/test_process_channel_b.py`" in contributing
     assert "Other direct `tests/execution/test_*.py` files" in contributing
     assert "Nested `tests/execution/**`" in contributing
-    assert "before conservative filtering" in contributing
+    assert "`task test-local-gate`" in contributing
+    assert "`task test-all`" in contributing
+    assert "complete\nmanual suite" in contributing
+    assert "Conservative filtering\nintersects the other shards" in contributing
+    assert "`execution-channel-b` shard sets `AUTOSKILLIT_TEST_FILTER=none`" in contributing
+    assert (
+        "all\nChannel B tests run for each supported `pull_request` and `merge_group` event"
+        in contributing
+    )
     assert "Import lint runs only on the retained `execution` shard" in contributing
 
     agent_rules = (_repo_root() / ".github" / "AGENTS.md").read_text(encoding="utf-8")

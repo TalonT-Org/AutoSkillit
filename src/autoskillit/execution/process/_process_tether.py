@@ -269,8 +269,6 @@ def find_orphaned_tethers(
         if age < min_age_seconds:
             continue
         data = read_versioned_json(path, 1)
-        if data is None:
-            continue
         try:
             record = _tether_record_from_dict(data)
         except (ValueError, KeyError, TypeError):

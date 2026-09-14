@@ -352,6 +352,32 @@ selector. Bound ordinary producers directly and use `max_output_tokens` only wit
 generated recipe-delivery contract. See
 [ADR-0005](decisions/0005-output-budget-protocol.md) for the separate authority domains.
 
+### Codex automatic-compaction policy
+
+```yaml
+codex_runtime:
+  auto_compaction_policy: deny       # only supported policy
+  context_window_tokens: null        # positive integer or null for Codex defaults
+  auto_compact_threshold_tokens: null # positive integer or null for Codex defaults
+```
+
+The matching environment names are `AUTOSKILLIT_CODEX_RUNTIME__AUTO_COMPACTION_POLICY`,
+`AUTOSKILLIT_CODEX_RUNTIME__CONTEXT_WINDOW_TOKENS`, and
+`AUTOSKILLIT_CODEX_RUNTIME__AUTO_COMPACT_THRESHOLD_TOKENS`. `null` leaves that setting
+unprojected so Codex uses its default. When configured, these values only tune the
+upstream trigger: Codex clamps the threshold to 90% of the resolved context window,
+which is additionally scaled by the model catalog's `effective_context_window_percent`.
+
+AutoSkillit provisions an isolated, wrapper-owned Codex home for each launch. It adds a
+trusted synchronous `PreCompact` hook for the `auto` trigger; the hook reports
+`autoskillit_auto_compaction_denied` and a visible `systemMessage`. Headless execution
+ends with that terminal, non-retryable outcome. In the TUI the message is visible and a
+user may continue explicitly or compact manually; manual compaction is not vetoed.
+This requires Codex hook support from the configured minimum version and a trusted hook
+environment. A native `~/.codex/config.toml` that still contains the old `999999999`
+sentinel is left untouched, clamped upstream, and stripped from wrapper destinations,
+so it neither protects nor affects AutoSkillit launches.
+
 ## MCP Response Tracking
 
 ```yaml

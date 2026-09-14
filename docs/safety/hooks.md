@@ -8,6 +8,16 @@ and are bound to event types in `src/autoskillit/hook_registry.py` via the
 `HOOK_REGISTRY` list of `HookDef` entries; `generate_hooks_json()` then
 materializes the canonical `hooks.json` that Claude Code reads.
 
+## Codex runtime-only hook
+
+`auto_compact_guard.py` is a runtime-only Codex `PreCompact` hook with matcher `auto`.
+It is synchronous and trusted in wrapper-owned Codex homes. Before Codex replaces
+history automatically, it returns `continue: false`, the
+`autoskillit_auto_compaction_denied` stop reason, and a visible `systemMessage` that
+explains the terminal headless result and explicit TUI continuation. A `manual` trigger
+does not match, so users may compact manually. This hook is excluded from the Claude
+Code count above.
+
 ## PreToolUse hooks (38)
 
 ### `branch_protection_guard.py`

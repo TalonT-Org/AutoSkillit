@@ -63,5 +63,13 @@ This pass proves the fail-closed envelope/pull recovery path. It does not prove 
 authoritative selected outer limit, raw pre-truncation bytes, or a protected pre-call event,
 so it cannot enable `ATTESTED_INLINE`.
 
+The server delivery-reachability suite also models context loss by discarding an initial
+delivery response while retaining only server state. It obtains a fresh complete or
+bounded-envelope response, uses only the new recipe, flow, pull, and initialization
+identities, consumes all fixed pages and every post-prune step page, completes
+initialization, and runs one authorized step. The bounded case reduces the legal page
+budget to exercise multi-page dynamic-step reconstruction. This is recovery through the
+public tools, not an MCP startup failure or an artifact-file read.
+
 Until the protected-host prerequisite exists and this report contains a passing
 authoritative-high/next-request oracle, no supported evidence identity may be added.

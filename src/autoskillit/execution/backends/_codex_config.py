@@ -616,40 +616,16 @@ def _ensure_codex_mcp_registered_unlocked(
         return True
 
 
-def _apply_codex_runtime_spec_unlocked(
-    *, config_path: Path, runtime_spec: CodexRuntimeSpec
-) -> None:
-    """Apply wrapper-owned runtime tuning to a generated Codex home."""
-    if runtime_spec.auto_compaction_policy != "deny":
-        raise ValueError("Codex runtime auto_compaction_policy must be 'deny'")
+def _runtime_tuning_values(runtime_spec: CodexRuntimeSpec) -> dict[str, int]:
+    values = {"tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT}
+    if runtime_spec.context_window_tokens is not None:
+        values["model_context_window"] = runtime_spec.context_window_tokens
+    if runtime_spec.auto_compact_threshold_tokens is not None:
+        values["model_auto_compact_token_limit"] = runtime_spec.auto_compact_threshold_tokens
+    return values
 
-    result = _read_codex_config(config_path)
-    if result.is_corrupt:
-        raw_bytes = result.raw_bytes
-        if raw_bytes is None:
-            raise RuntimeError("corrupt ReadResult has no raw_bytes")
-        try:
-            text = raw_bytes.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise RuntimeError(f"config file contains non-UTF-8 bytes: {exc}") from exc
-        text = _re.sub(
-            r"(?m)^\s*(?:model_context_window|model_auto_compact_token_limit)\s*=.*(?:\r?\n|$)",
-            "",
-            text,
-        )
-        runtime_values: dict[str, int] = {
-            "tool_output_token_limit": CODEX_HISTORY_RETENTION_TOKEN_LIMIT,
-        }
-        if runtime_spec.context_window_tokens is not None:
-            runtime_values["model_context_window"] = runtime_spec.context_window_tokens
-        if runtime_spec.auto_compact_threshold_tokens is not None:
-            runtime_values["model_auto_compact_token_limit"] = (
-                runtime_spec.auto_compact_threshold_tokens
-            )
-        atomic_write(config_path, _serialize_toml(runtime_values) + text)
-        return
 
-    config = result.data
+def _strip_inherited_runtime_tuning(config: dict[str, Any]) -> None:
     config.pop("model_context_window", None)
     config.pop("model_auto_compact_token_limit", None)
     profiles = config.get("profiles")
@@ -658,11 +634,46 @@ def _apply_codex_runtime_spec_unlocked(
             if isinstance(profile, dict):
                 profile.pop("model_context_window", None)
                 profile.pop("model_auto_compact_token_limit", None)
-    config["tool_output_token_limit"] = CODEX_HISTORY_RETENTION_TOKEN_LIMIT
-    if runtime_spec.context_window_tokens is not None:
-        config["model_context_window"] = runtime_spec.context_window_tokens
-    if runtime_spec.auto_compact_threshold_tokens is not None:
-        config["model_auto_compact_token_limit"] = runtime_spec.auto_compact_threshold_tokens
+
+
+def _apply_corrupt_codex_runtime_spec(
+    *, config_path: Path, raw_bytes: bytes, runtime_values: dict[str, int]
+) -> None:
+    try:
+        text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"config file contains non-UTF-8 bytes: {exc}") from exc
+    text = _re.sub(
+        r"(?m)^\s*(?:model_context_window|model_auto_compact_token_limit)\s*=.*(?:\r?\n|$)",
+        "",
+        text,
+    )
+    atomic_write(config_path, _serialize_toml(runtime_values) + text)
+
+
+def _apply_codex_runtime_spec_unlocked(
+    *, config_path: Path, runtime_spec: CodexRuntimeSpec
+) -> None:
+    """Apply wrapper-owned runtime tuning to a generated Codex home."""
+    if runtime_spec.auto_compaction_policy != "deny":
+        raise ValueError("Codex runtime auto_compaction_policy must be 'deny'")
+
+    runtime_values = _runtime_tuning_values(runtime_spec)
+    result = _read_codex_config(config_path)
+    if result.is_corrupt:
+        raw_bytes = result.raw_bytes
+        if raw_bytes is None:
+            raise RuntimeError("corrupt ReadResult has no raw_bytes")
+        _apply_corrupt_codex_runtime_spec(
+            config_path=config_path,
+            raw_bytes=raw_bytes,
+            runtime_values=runtime_values,
+        )
+        return
+
+    config = result.data
+    _strip_inherited_runtime_tuning(config)
+    config.update(runtime_values)
     _write_codex_config(config_path, config, source=result)
 
 

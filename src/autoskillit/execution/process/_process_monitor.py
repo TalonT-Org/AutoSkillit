@@ -293,6 +293,25 @@ StaleSuppressionReason = Literal[
 ]
 
 
+def _active_liveness_signals(
+    pid: int | None,
+    marker_dir: Path | None,
+    session_id: str | None,
+) -> frozenset[str]:
+    """Return the subset of {'api_connection', 'child_processes', 'dispatch_marker'}
+    currently active — the three liveness predicates shared with _termination.py's
+    post-completion drain deferral.
+    """
+    signals: set[str] = set()
+    if pid is not None and _has_active_api_connection(pid):
+        signals.add("api_connection")
+    if pid is not None and _has_active_child_processes(pid):
+        signals.add("child_processes")
+    if marker_dir is not None and _has_active_execution_marker(marker_dir, session_id=session_id):
+        signals.add("dispatch_marker")
+    return frozenset(signals)
+
+
 def _stale_suppression_reason(
     has_pending_tasks: Callable[[], bool] | None,
     pid: int | None,
@@ -302,13 +321,12 @@ def _stale_suppression_reason(
     """Return the first active stale-suppression cause in priority order."""
     if has_pending_tasks is not None and has_pending_tasks():
         return "pending_tasks"
-    if pid is not None and _has_active_api_connection(pid):
+    active = _active_liveness_signals(pid, marker_dir, caller_session_id)
+    if "api_connection" in active:
         return "api_connection"
-    if pid is not None and _has_active_child_processes(pid):
+    if "child_processes" in active:
         return "child_processes"
-    if marker_dir is not None and _has_active_execution_marker(
-        marker_dir, session_id=caller_session_id
-    ):
+    if "dispatch_marker" in active:
         return "dispatch_marker"
     return None
 

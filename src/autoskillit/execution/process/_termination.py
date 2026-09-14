@@ -27,9 +27,8 @@ from autoskillit.execution.process._process_kill import (
     ProcessObservationSnapshot,
 )
 from autoskillit.execution.process._process_monitor import (
-    _has_active_api_connection,
+    _active_liveness_signals,
     _has_active_child_processes,
-    _has_active_execution_marker,
 )
 
 
@@ -105,14 +104,7 @@ async def _drain_before_escalation(
                 return await anyio.to_thread.run_sync(
                     owner.settle_evidence, abandon_on_cancel=False
                 )
-            active = (
-                _has_active_child_processes(pid)
-                or _has_active_api_connection(pid)
-                or (
-                    marker_dir is not None
-                    and _has_active_execution_marker(marker_dir, session_id=session_id)
-                )
-            )
+            active = bool(_active_liveness_signals(pid, marker_dir, session_id))
             if not active:
                 proc_log.debug("no_active_children_proceeding_to_kill")
                 break

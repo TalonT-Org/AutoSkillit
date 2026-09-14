@@ -83,7 +83,10 @@ def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
         assert watcher in _functions_calling_predicate(
             _PROCESS_MONITOR, "_stale_suppression_reason"
         )
-        assert "_stale_suppression_reason" in callers_monitor
+        assert "_stale_suppression_reason" in _functions_calling_predicate(
+            _PROCESS_MONITOR, "_active_liveness_signals"
+        )
+        assert "_active_liveness_signals" in callers_monitor
         return
     all_callers = callers_race | callers_monitor
     assert watcher in all_callers, (
@@ -123,7 +126,12 @@ def test_kill_executor_checks_child_liveness(executor: str) -> None:
     assert executor in _functions_calling_predicate(
         _PROCESS_TERMINATION, "_drain_before_escalation"
     )
-    assert "_drain_before_escalation" in callers
+    assert "_drain_before_escalation" in _functions_calling_predicate(
+        _PROCESS_TERMINATION, "_active_liveness_signals"
+    )
+    assert "_active_liveness_signals" in _functions_calling_predicate(
+        _PROCESS_MONITOR, "_has_active_child_processes"
+    )
 
 
 def test_completion_marker_watchers_do_not_trigger_lifecycle_completion_directly() -> None:

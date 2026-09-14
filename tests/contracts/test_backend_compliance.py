@@ -35,13 +35,14 @@ class TestBackendCompliance:
             assert implementation is not None, backend_name
             assert inspect.signature(implementation) == protocol_signature, backend_name
 
-    def test_all_backends_build_cmd_returns_cmdspec(self):
+    def test_all_backends_build_cmd_returns_cmdspec(self, tmp_path: Path):
         from autoskillit.core import CmdSpec
         from autoskillit.execution.backends import BACKEND_REGISTRY
-        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+        from autoskillit.execution.backends.codex import CodexBackend
 
         for cls in BACKEND_REGISTRY.values():
-            assert isinstance(cls().build_cmd("/test-skill", "/tmp"), CmdSpec)
+            kwargs = {"generated_home": tmp_path / "generated-home"} if cls is CodexBackend else {}
+            assert isinstance(cls().build_cmd("/test-skill", "/tmp", **kwargs), CmdSpec)
 
     def test_all_backends_build_skill_session_cmd_returns_cmdspec(self):
         from autoskillit.core import CmdSpec, SkillSessionConfig
@@ -79,21 +80,29 @@ class TestBackendCompliance:
                 )
             assert isinstance(result, CmdSpec)
 
-    def test_all_backends_build_interactive_cmd_returns_cmdspec(self):
+    def test_all_backends_build_interactive_cmd_returns_cmdspec(self, tmp_path: Path):
         from autoskillit.core import CmdSpec
         from autoskillit.execution.backends import BACKEND_REGISTRY
-        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+        from autoskillit.execution.backends.codex import CodexBackend
 
         for cls in BACKEND_REGISTRY.values():
-            assert isinstance(cls().build_interactive_cmd(), CmdSpec)
+            kwargs = {"generated_home": tmp_path / "generated-home"} if cls is CodexBackend else {}
+            assert isinstance(cls().build_interactive_cmd(**kwargs), CmdSpec)
 
-    def test_all_backends_build_resume_cmd_returns_cmdspec(self):
+    def test_all_backends_build_resume_cmd_returns_cmdspec(self, tmp_path: Path):
         from autoskillit.core import CmdSpec
         from autoskillit.execution.backends import BACKEND_REGISTRY
-        from autoskillit.execution.backends.codex import CodexBackend  # noqa: F401
+        from autoskillit.execution.backends.codex import CodexBackend
 
         for cls in BACKEND_REGISTRY.values():
-            result = cls().build_resume_cmd(resume_session_id="test-session-id", prompt="test")
+            kwargs = (
+                {"session_home": str(tmp_path / "generated-home")} if cls is CodexBackend else {}
+            )
+            result = cls().build_resume_cmd(
+                resume_session_id="test-session-id",
+                prompt="test",
+                **kwargs,
+            )
             assert isinstance(result, CmdSpec)
 
     def test_all_backends_stream_parser_satisfies_protocol(self):

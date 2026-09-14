@@ -213,7 +213,7 @@ DURABLE_ARTIFACT_WRITERS: tuple[DurableArtifactWriterDef, ...] = (
         detection="autoskillit.execution.backends._codex_hooks:find_broken_codex_hook_commands",
     ),
     DurableArtifactWriterDef(
-        writer="autoskillit.execution.backends._codex_config:_apply_codex_runtime_spec_unlocked",
+        writer="autoskillit.execution.backends._codex_config:_apply_corrupt_codex_runtime_spec",
         artifact=(
             "wrapper-owned Codex config.toml text fallback for a corrupt native preference "
             "snapshot, preserving non-runtime bytes while projecting runtime tuning"

@@ -24,6 +24,12 @@ from autoskillit.execution.backends._codex_probes import (
 class CodexSkillDiscoveryContractDef:
     """Pinned upstream discovery behavior consumed by managed Codex launches."""
 
+    # Upstream Codex's original top-level skills root (see
+    # upstream_legacy_root_citation below) — distinct from catalog_relpath,
+    # the newer add-dir-based managed catalog path. Managed launches supply
+    # this as attest_catalog_discovery's expected_discovery_root; projected
+    # launches use catalog_dir directly instead, since there is no legacy
+    # vs. catalog distinction for a projected home.
     legacy_root_relpath: str = "skills"
     catalog_relpath: str = "add-dir/skills"
     prompt_probe: tuple[str, ...] = ("debug", "prompt-input")

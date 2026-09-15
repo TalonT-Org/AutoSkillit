@@ -4,6 +4,7 @@ import functools
 import os
 import shutil
 import sys
+import warnings
 from collections.abc import Mapping
 from pathlib import Path as _Path
 from types import MappingProxyType
@@ -981,8 +982,6 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
 
 
 def _warn_layer_marker_mismatches(items: list[pytest.Item], config: pytest.Config) -> None:
-    import warnings
-
     # Layer marker mismatch validation (controller-only under xdist)
     if not hasattr(config, "workerinput"):
         tests_root = config.rootpath / "tests"
@@ -1006,8 +1005,6 @@ def _warn_layer_marker_mismatches(items: list[pytest.Item], config: pytest.Confi
 
 
 def _mark_feature_gated_items(items: list[pytest.Item], config: pytest.Config) -> None:
-    import warnings
-
     # Feature gate pass — orthogonal to layer/size, runs on every worker
     _test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
     # Stash the full feature scope for all registered features (not just those
@@ -1053,8 +1050,6 @@ def _mark_feature_gated_items(items: list[pytest.Item], config: pytest.Config) -
 def _deselect_outside_scope(
     items: list[pytest.Item], config: pytest.Config, scope: set[_Path]
 ) -> None:
-    import warnings
-
     root = config.rootpath
     scope_abs: set[_Path] = set()
     for p in scope:
@@ -1097,8 +1092,6 @@ def _deselect_outside_scope(
 
 
 def _deselect_large_items(items: list[pytest.Item], config: pytest.Config) -> None:
-    import warnings
-
     from tests._test_filter import ALWAYS_RUN_AGGRESSIVE
 
     tests_root = config.rootpath / "tests"

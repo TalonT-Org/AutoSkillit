@@ -220,6 +220,14 @@ def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
     raise SystemExit(1)
 
 
+def _exit_launch_cwd_mismatch(spec_cwd: str, executable_cwd: Path) -> NoReturn:
+    sys.stderr.write(
+        f"ERROR: finalized spec cwd {spec_cwd!r} does not match bound executable "
+        f"cwd {str(executable_cwd)!r}\n"
+    )
+    raise SystemExit(1)
+
+
 def _run_interactive_session(
     system_prompt: str,
     *,
@@ -464,9 +472,14 @@ def _run_interactive_session(
                 _exit_launch_preparation_error(exc)
             spec = replace(prepared.spec, cwd=str(_project_dir))
             executable = prepared.executable
-            assert Path(spec.cwd) == executable.cwd
-            # Raw fleet and campaign sessions validate the finalized projected-home
-            # catalog while its reader lease remains held by this binding scope.
+            if Path(spec.cwd) != executable.cwd:
+                _exit_launch_cwd_mismatch(spec.cwd, executable.cwd)
+            # Raw fleet/campaign sessions now validate the finalized projected-home
+            # catalog too, while its reader lease remains held by this binding scope:
+            # force_inactive_agent_teams enforcement applies uniformly, and Codex's
+            # stricter CODEX_HOME/SQLite-home contract — previously satisfiable only
+            # by a generated (managed) session home — does not constrain the
+            # projected-home path validated here.
             assert_interactive_ordering(spec=spec)
             validation_errors = backend.validate_interactive_invocation(spec)
             if validation_errors:

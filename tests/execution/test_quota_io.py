@@ -528,6 +528,25 @@ class TestInvalidateCache:
         assert "cache.json" in unlinked_paths[0]
 
 
+def test_quota_scope_fallback_preserves_failure_diagnostics(monkeypatch):
+    import structlog.testing
+
+    import autoskillit.execution.quota._quota_gate as quota_gate
+
+    def unavailable_scope(*args, **kwargs):  # noqa: ARG001
+        raise OSError("credentials unavailable")
+
+    monkeypatch.setattr(quota_gate, "quota_scope", unavailable_scope)
+
+    with structlog.testing.capture_logs() as logs:
+        assert quota_gate._quota_scope_or_none(None, "/missing/credentials.json") is None
+
+    failure = next(log for log in logs if log["event"] == "quota_credential_scope_unavailable")
+    assert failure["error"] == "credentials unavailable"
+    assert failure["error_type"] == "OSError"
+    assert failure["exc_info"] is True
+
+
 class TestAPIWindowVocabularyContract:
     """Contract tests: LONG_WINDOW_NAMES × default long_window_patterns → correct classification.
 

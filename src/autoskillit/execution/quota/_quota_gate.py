@@ -394,7 +394,9 @@ def _quota_scope_or_none(credential_scope: str | None, credentials_path: str) ->
     except _OPERATIONAL_EXCEPTION_TYPES as exc:
         logger.warning(
             "quota_credential_scope_unavailable",
+            error=str(exc),
             error_type=type(exc).__name__,
+            exc_info=True,
         )
         return None
 

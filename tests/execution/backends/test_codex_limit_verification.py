@@ -13,12 +13,14 @@ import json
 
 import pytest
 
+from autoskillit.core import CodexRuntimeSpec
 from autoskillit.execution.backends import ensure_codex_mcp_registered
 from autoskillit.execution.backends._codex_config import (
     CODEX_LIMIT_VERIFICATION_REGISTRY,
     CODEX_LIMIT_VERIFICATION_REGISTRY_DIGEST,
     CODEX_LIMITS_LAST_VERIFIED_VERSION,
     CodexLimitVerificationDef,
+    _apply_codex_runtime_spec_unlocked,
     _read_codex_config,
     validate_codex_limit_verification,
 )
@@ -42,6 +44,17 @@ def test_native_mcp_registration_writes_no_runtime_tuning(tmp_path) -> None:
     config = _read_codex_config(p).data
     written = set(config) - {"mcp_servers"}
     assert written == set()
+
+
+def test_runtime_writer_matches_the_verification_registry(tmp_path) -> None:
+    entry = CODEX_LIMIT_VERIFICATION_REGISTRY["CODEX_HISTORY_RETENTION_TOKEN_LIMIT"]
+    assert entry.codex_config_key is not None
+
+    p = tmp_path / "config.toml"
+    _apply_codex_runtime_spec_unlocked(config_path=p, runtime_spec=CodexRuntimeSpec())
+
+    config = _read_codex_config(p).data
+    assert config[entry.codex_config_key] == entry.configured_value
 
 
 def test_declared_status_matches_the_recorded_numbers() -> None:

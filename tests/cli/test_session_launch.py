@@ -1978,17 +1978,17 @@ def _prepare_codex_order_composition(
         record_final_process,
     )
 
-    def launch() -> None:
-        if raw:
-            _run_interactive_session(
-                "composition contract",
-                project_dir=project_dir,
-                required_env=frozenset(),
-                backend=backend,
-                skill_compilation=compilation,
-                default_base_branch="main",
-            )
-            return
+    def launch_raw() -> None:
+        _run_interactive_session(
+            "composition contract",
+            project_dir=project_dir,
+            required_env=frozenset(),
+            backend=backend,
+            skill_compilation=compilation,
+            default_base_branch="main",
+        )
+
+    def launch_managed() -> None:
         _launch_cook_session(
             "composition contract",
             project_dir=project_dir,
@@ -2000,7 +2000,7 @@ def _prepare_codex_order_composition(
             workspace_temp_dir=None,
         )
 
-    return captured, launch
+    return captured, {False: launch_managed, True: launch_raw}[raw]
 
 
 def test_codex_order_composition_produces_canonical_generated_home(

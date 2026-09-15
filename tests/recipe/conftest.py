@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -111,7 +112,7 @@ def _write_yaml(path: Path, data: dict) -> Path:
 PRIMARY_CI_EVENT_KEYS = {"ci_event", "conflict_ci_event"}
 
 
-def _iter_routing_targets(step: dict):
+def _iter_routing_targets(step: dict) -> Iterator[str]:
     """Yield routing targets in the order the fixture routing formats define."""
     for key in ("on_success", "on_failure"):
         target = step.get(key)

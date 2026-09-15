@@ -139,25 +139,8 @@ def test_pip_global_flag_spec_covers_every_live_value_taking_flag() -> None:
     _assert_spec_covers_parsed_flags(parsed_flags, _PIP_GLOBAL_FLAG_SPEC, cli_label="pip")
 
 
-def _parse_git_help_value_flags(help_text: str) -> set[str]:
-    """Parse git's top-level usage synopsis for value-taking global flags.
-
-    `git --help`'s usage line uses bracket notation: `[--flag <value>]` or
-    `[--flag=<value>]` for value-taking flags, `[--flag]` (no `<...>`/`=`)
-    for boolean ones, `|` to separate short/long spellings within one
-    bracket group (e.g. `[-v | --version]`), and nested brackets for a
-    flag's own *optional* value (e.g. `[--exec-path[=<path>]]`) -- the
-    latter is excluded from this check entirely (ambiguous, neither
-    definitely boolean nor definitely value-taking; see
-    _GIT_GLOBAL_FLAG_SPEC's own --exec-path comment for why this module
-    treats it as BOOLEAN by default rather than guessing).
-    """
-    value_flags: set[str] = set()
-    match = re.search(r"usage:\s*git\s+(.*?)\s*<command>", help_text, re.DOTALL)
-    if not match:
-        return value_flags
-    usage_text = match.group(1).replace("\n", " ")
-
+def _parse_balanced_usage_groups(usage_text: str) -> list[str]:
+    """Return completed outer bracket groups from a git usage synopsis."""
     groups: list[str] = []
     depth = 0
     current: list[str] = []
@@ -178,8 +161,29 @@ def _parse_git_help_value_flags(help_text: str) -> set[str]:
             continue
         if depth > 0:
             current.append(char)
+    return groups
 
-    for group in groups:
+
+def _parse_git_help_value_flags(help_text: str) -> set[str]:
+    """Parse git's top-level usage synopsis for value-taking global flags.
+
+    `git --help`'s usage line uses bracket notation: `[--flag <value>]` or
+    `[--flag=<value>]` for value-taking flags, `[--flag]` (no `<...>`/`=`)
+    for boolean ones, `|` to separate short/long spellings within one
+    bracket group (e.g. `[-v | --version]`), and nested brackets for a
+    flag's own *optional* value (e.g. `[--exec-path[=<path>]]`) -- the
+    latter is excluded from this check entirely (ambiguous, neither
+    definitely boolean nor definitely value-taking; see
+    _GIT_GLOBAL_FLAG_SPEC's own --exec-path comment for why this module
+    treats it as BOOLEAN by default rather than guessing).
+    """
+    value_flags: set[str] = set()
+    match = re.search(r"usage:\s*git\s+(.*?)\s*<command>", help_text, re.DOTALL)
+    if not match:
+        return value_flags
+    usage_text = match.group(1).replace("\n", " ")
+
+    for group in _parse_balanced_usage_groups(usage_text):
         if "[" in group:
             continue
         if "<" not in group and "=" not in group:

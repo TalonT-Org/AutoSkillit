@@ -13,16 +13,42 @@ import pytest
 if TYPE_CHECKING:
     from autoskillit.recipe._recipe_ingredients import OpenKitchenResult
 
+from autoskillit import __version__
 from autoskillit.core import (
     RECIPE_FLOW_SCHEMA_VERSION,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY_DIGEST,
     RecipeFlowGeneration,
     SkillResolver,
+    load_yaml,
+    resolve_recipe_envelope_byte_limit,
 )
 from autoskillit.execution import CODEX_RECIPE_DELIVERY_BUDGET
-from autoskillit.hooks.formatters.pretty_output_hook import _format_response
-from autoskillit.server.recipe._recipe_delivery import _attested_render, persist_recipe_artifact
+from autoskillit.execution.backends import BACKEND_REGISTRY
+from autoskillit.hooks.formatters import _fmt_recipe_compact
+from autoskillit.hooks.formatters._fmt_recipe_compact import compact_recipe_display
+from autoskillit.hooks.formatters.pretty_output_hook import (
+    _fmt_open_kitchen,
+    _format_response,
+    _strip_yaml_ingredients_block,
+)
+from autoskillit.recipe import load_and_validate
+from autoskillit.recipe.api import _api_cache
+from autoskillit.recipe.api._api_cache import LoadCache
+from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
+from autoskillit.recipe.repository import DefaultRecipeRepository
+from autoskillit.server._misc import strip_ingredients_only_keys
+from autoskillit.server.recipe._recipe_delivery import (
+    _attested_render,
+    build_recipe_envelope,
+    persist_recipe_artifact,
+)
+from autoskillit.server.tools._serve_helpers import (
+    build_open_kitchen_recipe_payload,
+    render_served_response,
+    serve_recipe,
+)
+from tests._tracked_recipes import tracked_recipe_names
 from tests.infra._pretty_output_helpers import (
     REALISTIC_RECIPE_YAML,
     _make_event,
@@ -1015,6 +1041,187 @@ _COMPACT_TEST_OVERRIDES = {
 }
 
 
+def _assert_compaction_semantics(recipe_name: str, mode_name: str, loaded_result: dict) -> bool:
+    content = loaded_result.get("content")
+    if not content:
+        return False
+    original_parsed = load_yaml(content)
+    if not isinstance(original_parsed, dict):
+        return False
+    compacted = compact_recipe_display(content)
+    compacted_parsed = load_yaml(compacted)
+    expected = _strip_presentation_fields(original_parsed)
+    assert compacted_parsed == expected, (
+        f"property=compaction semantics; recipe={recipe_name}; mode={mode_name}"
+    )
+    if recipe_name != "remediation":
+        return False
+    rectify_note = original_parsed["steps"]["rectify"]["note"]
+    assert "Glob plan_dir for *_part_*.md" in rectify_note, (
+        f"property=remediation rectify note source; recipe={recipe_name}; mode={mode_name}"
+    )
+    assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note, (
+        f"property=remediation rectify note preservation; recipe={recipe_name}; mode={mode_name}"
+    )
+    return True
+
+
+def _measure_served_response_budgets(
+    recipe_name: str,
+    mode_name: str,
+    step_names: list[str],
+    project_root: Path,
+    resolved: dict[str, str],
+    tmp_path: Path,
+    scripts_dir: str,
+    maxima: dict[str, tuple[int, str, str]],
+    measured_modes: set[tuple[str, str, bool]],
+) -> None:
+    if not step_names:
+        return
+    tool_ctx = SimpleNamespace(
+        recipes=DefaultRecipeRepository(),
+        skill_resolver=MagicMock(spec=SkillResolver),
+        project_dir=project_root,
+        session_serve_overrides=None,
+        session_serve_defer_unresolved=False,
+    )
+    tool_ctx.skill_resolver.resolve_effective.return_value = None
+    served_result = serve_recipe(
+        tool_ctx,
+        recipe_name,
+        caller_overrides=resolved,
+        config_default=resolved,
+        session_overrides=resolved,
+        config_layer=resolved,
+        resolved_defaults=resolved,
+        temp_dir=tmp_path,
+    )
+    for ingredients_only in (False, True):
+        for tool_name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY:
+            payload = dict(served_result)
+            if tool_name == "open_kitchen":
+                payload = build_open_kitchen_recipe_payload(payload, version=__version__)
+            if ingredients_only:
+                payload = strip_ingredients_only_keys(payload)
+            raw = render_served_response(payload)
+            definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
+            char_count = len(raw)
+            assert char_count <= definition.max_chars, (
+                "property=canonical character ceiling; "
+                f"recipe={recipe_name}; mode={mode_name}; tool={tool_name}; "
+                f"ingredients_only={ingredients_only}; actual={char_count}; "
+                f"limit={definition.max_chars}"
+            )
+            byte_count = len(raw.encode("utf-8"))
+            assert byte_count <= definition.max_utf8_bytes, (
+                "property=canonical UTF-8 ceiling; "
+                f"recipe={recipe_name}; mode={mode_name}; tool={tool_name}; "
+                f"ingredients_only={ingredients_only}; actual={byte_count}; "
+                f"limit={definition.max_utf8_bytes}"
+            )
+            normalized = raw.replace(scripts_dir, _SCRIPTS_PLACEHOLDER)
+            maxima[tool_name] = max(
+                maxima[tool_name],
+                (len(normalized.encode("utf-8")), recipe_name, mode_name),
+            )
+            measured_modes.add((tool_name, mode_name, ingredients_only))
+
+
+def _measure_persisted_envelope(
+    recipe_name: str,
+    mode_name: str,
+    step_names: list[str],
+    loaded_result: dict,
+    tmp_path: Path,
+    smallest_bound_bytes: int,
+    ceiling: int,
+    maximum: tuple[int, str, str],
+    over_budget: list[str],
+) -> tuple[int, str, str]:
+    if not step_names:
+        return maximum
+    payload = dict(loaded_result)
+    flow_records = [
+        json.dumps(
+            {"kind": "entrypoint", "name": step_names[0]},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+        *[
+            json.dumps(
+                {"index": index, "kind": "step", "name": name},
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            for index, name in enumerate(step_names)
+        ],
+    ]
+    flow_generation = RecipeFlowGeneration(
+        schema_version=RECIPE_FLOW_SCHEMA_VERSION,
+        records=tuple(flow_records),
+    )
+    payload["flow_records"] = list(flow_generation.records)
+    payload["recipe_flow"] = flow_generation.identity()
+    generation = persist_recipe_artifact(
+        tmp_path,
+        kitchen_id="pretty-output",
+        producer_tool="open_kitchen",
+        recipe_name=recipe_name,
+        payload=payload,
+        flow_generation=flow_generation,
+    )
+    envelope = build_recipe_envelope(
+        generation=generation,
+        flow_generation=flow_generation,
+        bound_bytes=smallest_bound_bytes,
+    )
+    rendered = _fmt_open_kitchen(envelope, pipeline=False)
+    byte_len = len(rendered.encode("utf-8"))
+    maximum = max(maximum, (byte_len, recipe_name, mode_name))
+    if byte_len > ceiling:
+        over_budget.append(
+            "property=envelope rendered UTF-8 budget; "
+            f"recipe={recipe_name}; mode={mode_name}; actual={byte_len}; "
+            f"limit={ceiling}"
+        )
+    return maximum
+
+
+def _assert_ordinary_inline(
+    recipe_name: str,
+    mode_name: str,
+    step_names: list[str],
+    loaded_result: dict,
+    ceiling: int,
+) -> None:
+    if not step_names:
+        return
+    ordinary_payload_bytes = len(
+        json.dumps(dict(loaded_result), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    if ordinary_payload_bytes > ceiling:
+        return
+    ordinary_rendered = _fmt_open_kitchen(
+        cast("OpenKitchenResult", dict(loaded_result)), pipeline=False
+    )
+    raw_recipe_content = loaded_result.get("content") or ""
+    assert raw_recipe_content, (
+        f"property=ordinary-inline content; recipe={recipe_name}; mode={mode_name}"
+    )
+    display_content = raw_recipe_content
+    if loaded_result.get("ingredients_table"):
+        display_content = _strip_yaml_ingredients_block(display_content)
+    compacted_content = _fmt_recipe_compact.compact_recipe_display(display_content)
+    assert compacted_content in ordinary_rendered, (
+        "property=ordinary-inline compacted content; "
+        f"recipe={recipe_name}; mode={mode_name}; "
+        f"actual={len(ordinary_rendered)}"
+    )
+
+
 @pytest.mark.timeout(120)
 def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, monkeypatch):
     """Exercise the shared recipe/mode grid across its original contracts.
@@ -1024,29 +1231,6 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     rendering gate implements issue #4304 Part B REQ-B-T8, and issue #4399 requires
     ordinary-inline content to remain visible whenever its raw response fits the ceiling.
     """
-    from autoskillit import __version__
-    from autoskillit.core import load_yaml, resolve_recipe_envelope_byte_limit
-    from autoskillit.execution.backends import BACKEND_REGISTRY
-    from autoskillit.hooks.formatters import _fmt_recipe_compact
-    from autoskillit.hooks.formatters._fmt_recipe_compact import compact_recipe_display
-    from autoskillit.hooks.formatters.pretty_output_hook import (
-        _fmt_open_kitchen,
-        _strip_yaml_ingredients_block,
-    )
-    from autoskillit.recipe import load_and_validate
-    from autoskillit.recipe.api import _api_cache
-    from autoskillit.recipe.api._api_cache import LoadCache
-    from autoskillit.recipe.io import _SCRIPTS_PLACEHOLDER, builtin_scripts_dir
-    from autoskillit.recipe.repository import DefaultRecipeRepository
-    from autoskillit.server._misc import strip_ingredients_only_keys
-    from autoskillit.server.recipe._recipe_delivery import build_recipe_envelope
-    from autoskillit.server.tools._serve_helpers import (
-        build_open_kitchen_recipe_payload,
-        render_served_response,
-        serve_recipe,
-    )
-    from tests._tracked_recipes import tracked_recipe_names
-
     project_root = Path(__file__).resolve().parent.parent.parent
     recipe_names = tracked_recipe_names(project_root)
     remediation_note_checked = False
@@ -1076,154 +1260,38 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
                 temp_dir=tmp_path,
             )
             checked_recipe_modes.add((recipe_name, mode_name))
-            content = loaded_result.get("content")
-            if content:
-                original_parsed = load_yaml(content)
-                if isinstance(original_parsed, dict):
-                    compacted = compact_recipe_display(content)
-                    compacted_parsed = load_yaml(compacted)
-                    expected = _strip_presentation_fields(original_parsed)
-                    assert compacted_parsed == expected, (
-                        f"property=compaction semantics; recipe={recipe_name}; mode={mode_name}"
-                    )
-                    if recipe_name == "remediation":
-                        remediation_note_checked = True
-                        rectify_note = original_parsed["steps"]["rectify"]["note"]
-                        assert "Glob plan_dir for *_part_*.md" in rectify_note, (
-                            "property=remediation rectify note source; "
-                            f"recipe={recipe_name}; mode={mode_name}"
-                        )
-                        assert compacted_parsed["steps"]["rectify"]["note"] == rectify_note, (
-                            "property=remediation rectify note preservation; "
-                            f"recipe={recipe_name}; mode={mode_name}"
-                        )
-
             step_names = [
                 name
                 for name in loaded_result.get("post_prune_step_names") or []
                 if isinstance(name, str)
             ]
-            if step_names:
-                tool_ctx = SimpleNamespace(
-                    recipes=DefaultRecipeRepository(),
-                    skill_resolver=MagicMock(spec=SkillResolver),
-                    project_dir=project_root,
-                    session_serve_overrides=None,
-                    session_serve_defer_unresolved=False,
-                )
-                tool_ctx.skill_resolver.resolve_effective.return_value = None
-                served_result = serve_recipe(
-                    tool_ctx,
-                    recipe_name,
-                    caller_overrides=resolved,
-                    config_default=resolved,
-                    session_overrides=resolved,
-                    config_layer=resolved,
-                    resolved_defaults=resolved,
-                    temp_dir=tmp_path,
-                )
-                for ingredients_only in (False, True):
-                    for tool_name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY:
-                        payload = dict(served_result)
-                        if tool_name == "open_kitchen":
-                            payload = build_open_kitchen_recipe_payload(
-                                payload, version=__version__
-                            )
-                        if ingredients_only:
-                            payload = strip_ingredients_only_keys(payload)
-                        raw = render_served_response(payload)
-                        definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
-                        char_count = len(raw)
-                        assert char_count <= definition.max_chars, (
-                            "property=canonical character ceiling; "
-                            f"recipe={recipe_name}; mode={mode_name}; tool={tool_name}; "
-                            f"ingredients_only={ingredients_only}; actual={char_count}; "
-                            f"limit={definition.max_chars}"
-                        )
-                        byte_count = len(raw.encode("utf-8"))
-                        assert byte_count <= definition.max_utf8_bytes, (
-                            "property=canonical UTF-8 ceiling; "
-                            f"recipe={recipe_name}; mode={mode_name}; tool={tool_name}; "
-                            f"ingredients_only={ingredients_only}; actual={byte_count}; "
-                            f"limit={definition.max_utf8_bytes}"
-                        )
-                        normalized = raw.replace(_scripts_dir, _SCRIPTS_PLACEHOLDER)
-                        maxima[tool_name] = max(
-                            maxima[tool_name],
-                            (len(normalized.encode("utf-8")), recipe_name, mode_name),
-                        )
-                        measured_modes.add((tool_name, mode_name, ingredients_only))
-
-            if step_names:
-                payload = dict(loaded_result)
-                flow_records = [
-                    json.dumps(
-                        {"kind": "entrypoint", "name": step_names[0]},
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                        sort_keys=True,
-                    ),
-                    *[
-                        json.dumps(
-                            {"index": index, "kind": "step", "name": name},
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                            sort_keys=True,
-                        )
-                        for index, name in enumerate(step_names)
-                    ],
-                ]
-                flow_generation = RecipeFlowGeneration(
-                    schema_version=RECIPE_FLOW_SCHEMA_VERSION,
-                    records=tuple(flow_records),
-                )
-                payload["flow_records"] = list(flow_generation.records)
-                payload["recipe_flow"] = flow_generation.identity()
-                generation = persist_recipe_artifact(
-                    tmp_path,
-                    kitchen_id="pretty-output",
-                    producer_tool="open_kitchen",
-                    recipe_name=recipe_name,
-                    payload=payload,
-                    flow_generation=flow_generation,
-                )
-                envelope = build_recipe_envelope(
-                    generation=generation,
-                    flow_generation=flow_generation,
-                    bound_bytes=smallest_bound_bytes,
-                )
-                rendered = _fmt_open_kitchen(envelope, pipeline=False)
-                byte_len = len(rendered.encode("utf-8"))
-                maximum = max(maximum, (byte_len, recipe_name, mode_name))
-                if byte_len > ceiling:
-                    over_budget.append(
-                        "property=envelope rendered UTF-8 budget; "
-                        f"recipe={recipe_name}; mode={mode_name}; actual={byte_len}; "
-                        f"limit={ceiling}"
-                    )
-
-                ordinary_payload_bytes = len(
-                    json.dumps(
-                        dict(loaded_result), ensure_ascii=False, separators=(",", ":")
-                    ).encode("utf-8")
-                )
-                if ordinary_payload_bytes <= ceiling:
-                    ordinary_rendered = _fmt_open_kitchen(
-                        cast("OpenKitchenResult", dict(loaded_result)), pipeline=False
-                    )
-                    raw_recipe_content = loaded_result.get("content") or ""
-                    assert raw_recipe_content, (
-                        f"property=ordinary-inline content; recipe={recipe_name}; mode={mode_name}"
-                    )
-                    display_content = raw_recipe_content
-                    if loaded_result.get("ingredients_table"):
-                        display_content = _strip_yaml_ingredients_block(display_content)
-                    compacted_content = _fmt_recipe_compact.compact_recipe_display(display_content)
-                    assert compacted_content in ordinary_rendered, (
-                        "property=ordinary-inline compacted content; "
-                        f"recipe={recipe_name}; mode={mode_name}; "
-                        f"actual={len(ordinary_rendered)}"
-                    )
+            observed_remediation_note = _assert_compaction_semantics(
+                recipe_name, mode_name, loaded_result
+            )
+            remediation_note_checked |= observed_remediation_note
+            _measure_served_response_budgets(
+                recipe_name,
+                mode_name,
+                step_names,
+                project_root,
+                resolved,
+                tmp_path,
+                _scripts_dir,
+                maxima,
+                measured_modes,
+            )
+            maximum = _measure_persisted_envelope(
+                recipe_name,
+                mode_name,
+                step_names,
+                loaded_result,
+                tmp_path,
+                smallest_bound_bytes,
+                ceiling,
+                maximum,
+                over_budget,
+            )
+            _assert_ordinary_inline(recipe_name, mode_name, step_names, loaded_result, ceiling)
 
     assert remediation_note_checked, (
         "property=remediation note coverage; recipe=remediation; mode=all"

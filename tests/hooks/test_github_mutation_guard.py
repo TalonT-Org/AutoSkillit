@@ -677,49 +677,74 @@ def test_false_positive_corpus_is_allowed(
     repo = str(tmp_path / "repo")
     worktree = str(tmp_path / "worktree")
 
-    if case_id == "fp1-run-cmd-pwd-differing-cwds":
-        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=worktree, payload_cwd=repo)
-    elif case_id == "fp2-run-cmd-git-rev-parse":
-        event = make_hook_event(
-            tool="run_cmd",
-            command="git rev-parse --show-toplevel 2>&1 | head -c 2000",
-            tool_cwd=worktree,
-            payload_cwd=repo,
-        )
-    elif case_id == "fp3-run-cmd-sed":
-        event = make_hook_event(
-            tool="run_cmd",
-            command="sed -n '1,50p' plan.md",
-            tool_cwd=worktree,
-            payload_cwd=repo,
-        )
-    elif case_id == "fp4-run-cmd-pwd-tool-cwd-omitted":
-        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=None, payload_cwd=repo)
-    elif case_id == "fp5-run-cmd-pwd-equal-cwds":
-        event = make_hook_event(tool="run_cmd", command="pwd", tool_cwd=repo, payload_cwd=repo)
-    elif case_id == "fp6-bash-chained-benign":
-        event = make_hook_event(tool="Bash", command="ls && pwd", payload_cwd=repo)
-    elif case_id == "fp7-bash-benign-loop":
-        event = make_hook_event(tool="Bash", command="for n in 1 2; do ls; done", payload_cwd=repo)
-    elif case_id == "fp8-bash-dynamic-echo":
-        event = make_hook_event(tool="Bash", command='echo "$X"', payload_cwd=repo)
-    elif case_id == "fp9-bash-dynamic-git-log":
-        event = make_hook_event(tool="Bash", command='git log "$REF"', payload_cwd=repo)
-    elif case_id == "fp10-bash-gh-in-quoted-loop-string":
-        event = make_hook_event(
-            tool="Bash",
-            command='for f in *; do echo "see gh docs"; done',
-            payload_cwd=repo,
-        )
-    elif case_id == "fp11-run-cmd-source-then-gh-read":
-        event = make_hook_event(
-            tool="run_cmd",
-            command="source .venv/bin/activate && gh pr view --json state",
-            tool_cwd=worktree,
-            payload_cwd=repo,
-        )
-    else:
-        raise AssertionError(f"unhandled false-positive corpus case: {case_id}")
+    event_kwargs_by_case: dict[str, dict] = {
+        "fp1-run-cmd-pwd-differing-cwds": {
+            "tool": "run_cmd",
+            "command": "pwd",
+            "tool_cwd": worktree,
+            "payload_cwd": repo,
+        },
+        "fp2-run-cmd-git-rev-parse": {
+            "tool": "run_cmd",
+            "command": "git rev-parse --show-toplevel 2>&1 | head -c 2000",
+            "tool_cwd": worktree,
+            "payload_cwd": repo,
+        },
+        "fp3-run-cmd-sed": {
+            "tool": "run_cmd",
+            "command": "sed -n '1,50p' plan.md",
+            "tool_cwd": worktree,
+            "payload_cwd": repo,
+        },
+        "fp4-run-cmd-pwd-tool-cwd-omitted": {
+            "tool": "run_cmd",
+            "command": "pwd",
+            "tool_cwd": None,
+            "payload_cwd": repo,
+        },
+        "fp5-run-cmd-pwd-equal-cwds": {
+            "tool": "run_cmd",
+            "command": "pwd",
+            "tool_cwd": repo,
+            "payload_cwd": repo,
+        },
+        "fp6-bash-chained-benign": {
+            "tool": "Bash",
+            "command": "ls && pwd",
+            "payload_cwd": repo,
+        },
+        "fp7-bash-benign-loop": {
+            "tool": "Bash",
+            "command": "for n in 1 2; do ls; done",
+            "payload_cwd": repo,
+        },
+        "fp8-bash-dynamic-echo": {
+            "tool": "Bash",
+            "command": 'echo "$X"',
+            "payload_cwd": repo,
+        },
+        "fp9-bash-dynamic-git-log": {
+            "tool": "Bash",
+            "command": 'git log "$REF"',
+            "payload_cwd": repo,
+        },
+        "fp10-bash-gh-in-quoted-loop-string": {
+            "tool": "Bash",
+            "command": 'for f in *; do echo "see gh docs"; done',
+            "payload_cwd": repo,
+        },
+        "fp11-run-cmd-source-then-gh-read": {
+            "tool": "run_cmd",
+            "command": "source .venv/bin/activate && gh pr view --json state",
+            "tool_cwd": worktree,
+            "payload_cwd": repo,
+        },
+    }
+    try:
+        event_kwargs = event_kwargs_by_case[case_id]
+    except KeyError:
+        raise AssertionError(f"unhandled false-positive corpus case: {case_id}") from None
+    event = make_hook_event(**event_kwargs)
 
     assert _decision(event, monkeypatch) is None
 

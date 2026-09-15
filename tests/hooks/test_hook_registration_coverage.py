@@ -290,6 +290,80 @@ def test_skill_load_post_hook_matcher_is_skill() -> None:
     )
 
 
+def _assert_guard_script_imports_from_hook_constants(guard_path: Path) -> None:
+    """Assert one guard imports and uses its hook-constant authority."""
+    import ast
+
+    source = guard_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    # Check the file imports from _hook_constants (either via direct ImportFrom
+    # in the standalone context, or via `from autoskillit.hooks._hook_constants`
+    # in the package context — though guards should use the standalone form).
+    imports_from_hook_constants = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "_hook_constants":
+            imports_from_hook_constants = True
+            break
+        if isinstance(node, ast.Import) and any(
+            alias.name == "_hook_constants" for alias in node.names
+        ):
+            imports_from_hook_constants = True
+            break
+    assert imports_from_hook_constants, f"{guard_path.name} does not import from _hook_constants"
+
+    # Collect names imported from _hook_constants at module scope so we can
+    # recognize RHS references like `DENY_REASON_BY_GUARD["git_ops_guard"]`
+    # (a subscript into a value imported from the authority module).
+    hook_constants_names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "_hook_constants":
+            for alias in node.names:
+                hook_constants_names.add(alias.asname or alias.name)
+        if isinstance(node, ast.Import) and any(
+            alias.name == "_hook_constants" for alias in node.names
+        ):
+            hook_constants_names.add("_hook_constants")
+
+    target_lhs_names = {
+        "_EXEMPT_SKILLS",
+        "_EXEMPT_SESSION_TYPES",
+        "GIT_OPS_DENY_TRIGGER",
+        "TEST_RUNNER_DENY_TRIGGER",
+        "PR_CREATE_DENY_TRIGGER",
+        "_DENY_REASON",
+        "_DENY_REASON_TEMPLATE",
+        "_BLOCKED_GIT_OPS",
+    }
+
+    def _rhs_references_hook_constants(node: ast.expr) -> bool:
+        """True when the AST node is a Name/Subscript/Attribute rooted at _hook_constants
+        or at a name imported from _hook_constants."""
+        if isinstance(node, ast.Name):
+            return node.id == "_hook_constants" or node.id in hook_constants_names
+        if isinstance(node, ast.Attribute):
+            return _rhs_references_hook_constants(node.value)
+        if isinstance(node, ast.Subscript):
+            return _rhs_references_hook_constants(node.value)
+        return False
+
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            lhs_name = target.id
+            if lhs_name not in target_lhs_names:
+                continue
+            rhs = node.value
+            assert _rhs_references_hook_constants(rhs), (
+                f"{guard_path.name}: {lhs_name} RHS must reference _hook_constants "
+                "(directly or via a name imported from it); got a literal or "
+                "unrelated expression."
+            )
+
+
 def test_each_guard_script_imports_from_hook_constants() -> None:
     """Every re-wired guard must import its constants from autoskillit.hooks._hook_constants.
 
@@ -301,8 +375,6 @@ def test_each_guard_script_imports_from_hook_constants() -> None:
     context) — not a frozenset literal. The LHS names are retained as the
     public guard-API attributes; what changes is the RHS.
     """
-    import ast
-
     guard_paths = [
         HOOKS_DIR / "guards" / "git_ops_guard.py",
         HOOKS_DIR / "guards" / "test_runner_guard.py",
@@ -310,73 +382,4 @@ def test_each_guard_script_imports_from_hook_constants() -> None:
     ]
 
     for guard_path in guard_paths:
-        source = guard_path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-
-        # Check the file imports from _hook_constants (either via direct ImportFrom
-        # in the standalone context, or via `from autoskillit.hooks._hook_constants`
-        # in the package context — though guards should use the standalone form).
-        imports_from_hook_constants = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "_hook_constants":
-                imports_from_hook_constants = True
-                break
-            if isinstance(node, ast.Import) and any(
-                alias.name == "_hook_constants" for alias in node.names
-            ):
-                imports_from_hook_constants = True
-                break
-        assert imports_from_hook_constants, (
-            f"{guard_path.name} does not import from _hook_constants"
-        )
-
-        # Collect names imported from _hook_constants at module scope so we can
-        # recognize RHS references like `DENY_REASON_BY_GUARD["git_ops_guard"]`
-        # (a subscript into a value imported from the authority module).
-        hook_constants_names: set[str] = set()
-        for node in tree.body:
-            if isinstance(node, ast.ImportFrom) and node.module == "_hook_constants":
-                for alias in node.names:
-                    hook_constants_names.add(alias.asname or alias.name)
-            if isinstance(node, ast.Import) and any(
-                alias.name == "_hook_constants" for alias in node.names
-            ):
-                hook_constants_names.add("_hook_constants")
-
-        target_lhs_names = {
-            "_EXEMPT_SKILLS",
-            "_EXEMPT_SESSION_TYPES",
-            "GIT_OPS_DENY_TRIGGER",
-            "TEST_RUNNER_DENY_TRIGGER",
-            "PR_CREATE_DENY_TRIGGER",
-            "_DENY_REASON",
-            "_DENY_REASON_TEMPLATE",
-            "_BLOCKED_GIT_OPS",
-        }
-
-        def _rhs_references_hook_constants(node: ast.expr) -> bool:
-            """True when the AST node is a Name/Subscript/Attribute rooted at _hook_constants
-            or at a name imported from _hook_constants."""
-            if isinstance(node, ast.Name):
-                return node.id == "_hook_constants" or node.id in hook_constants_names
-            if isinstance(node, ast.Attribute):
-                return _rhs_references_hook_constants(node.value)
-            if isinstance(node, ast.Subscript):
-                return _rhs_references_hook_constants(node.value)
-            return False
-
-        for node in tree.body:
-            if not isinstance(node, ast.Assign):
-                continue
-            for target in node.targets:
-                if not isinstance(target, ast.Name):
-                    continue
-                lhs_name = target.id
-                if lhs_name not in target_lhs_names:
-                    continue
-                rhs = node.value
-                assert _rhs_references_hook_constants(rhs), (
-                    f"{guard_path.name}: {lhs_name} RHS must reference _hook_constants "
-                    "(directly or via a name imported from it); got a literal or "
-                    "unrelated expression."
-                )
+        _assert_guard_script_imports_from_hook_constants(guard_path)

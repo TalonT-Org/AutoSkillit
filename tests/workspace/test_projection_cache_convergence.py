@@ -6,6 +6,7 @@ import json
 import os
 import uuid
 import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
@@ -611,6 +612,21 @@ def test_prune_rejects_candidates_outside_managed_home_without_mutation(
     assert _filesystem_snapshot(root) == after_first
 
 
+def _fail_once_then_delegate(
+    operation: Callable[..., object], message: str
+) -> Callable[..., object]:
+    attempts = 0
+
+    def call(*args: object, **kwargs: object) -> object:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError(message)
+        return operation(*args, **kwargs)
+
+    return call
+
+
 @pytest.mark.parametrize(
     "failure_seam",
     ["lease", "install_lock", "rename", "rmtree"],
@@ -631,16 +647,13 @@ def test_quarantine_io_failures_leave_recoverable_shape_and_converge(
     attempts = 0
 
     if failure_seam == "lease":
-        real_acquire = projection_cache.ArtifactLease.acquire_exclusive
-
-        def acquire_once(*args: object, **kwargs: object) -> object:
-            nonlocal attempts
-            attempts += 1
-            if attempts == 1:
-                raise OSError("injected lease failure")
-            return real_acquire(*args, **kwargs)
-
-        monkeypatch.setattr(projection_cache.ArtifactLease, "acquire_exclusive", acquire_once)
+        monkeypatch.setattr(
+            projection_cache.ArtifactLease,
+            "acquire_exclusive",
+            _fail_once_then_delegate(
+                projection_cache.ArtifactLease.acquire_exclusive, "injected lease failure"
+            ),
+        )
     elif failure_seam == "install_lock":
         real_install_lock = projection_cache._InstallLock
 
@@ -660,27 +673,17 @@ def test_quarantine_io_failures_leave_recoverable_shape_and_converge(
 
         monkeypatch.setattr(projection_cache, "_InstallLock", FailOnceInstallLock)
     elif failure_seam == "rename":
-        real_rename = artifact_residue.os.rename
-
-        def rename_once(src: Path, dst: Path) -> None:
-            nonlocal attempts
-            attempts += 1
-            if attempts == 1:
-                raise OSError("injected rename failure")
-            real_rename(src, dst)
-
-        monkeypatch.setattr(artifact_residue.os, "rename", rename_once)
+        monkeypatch.setattr(
+            artifact_residue.os,
+            "rename",
+            _fail_once_then_delegate(artifact_residue.os.rename, "injected rename failure"),
+        )
     else:
-        real_rmtree = artifact_residue.shutil.rmtree
-
-        def rmtree_once(path: Path) -> None:
-            nonlocal attempts
-            attempts += 1
-            if attempts == 1:
-                raise OSError("injected rmtree failure")
-            real_rmtree(path)
-
-        monkeypatch.setattr(artifact_residue.shutil, "rmtree", rmtree_once)
+        monkeypatch.setattr(
+            artifact_residue.shutil,
+            "rmtree",
+            _fail_once_then_delegate(artifact_residue.shutil.rmtree, "injected rmtree failure"),
+        )
 
     with capture_logs() as first_logs:
         assert (

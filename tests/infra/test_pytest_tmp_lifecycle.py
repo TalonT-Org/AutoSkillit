@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from collections import defaultdict
+from contextlib import ExitStack
 from pathlib import Path
 from types import ModuleType
 
@@ -705,6 +706,44 @@ def test_setup_fails_when_the_bound_cannot_be_satisfied(tmp_path: Path) -> None:
         _stop(sleeper)
 
 
+def _arrange_owner_state(
+    tmp_path: Path, owner_state: str, cleanup: ExitStack
+) -> tuple[Path, Path, Path]:
+    platform_root, generation, tmp_dir, cache_dir = _layout(tmp_path)
+    if owner_state == "alive":
+        holder = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(60)"],
+            text=True,
+            env=production_interpreter_env(),
+        )
+        cleanup.callback(_stop, holder)
+        assert _setup(platform_root, tmp_dir, cache_dir, owner_pid=holder.pid).returncode == 0
+    else:
+        generation.mkdir(parents=True)
+        tmp_dir.mkdir()
+        cache_dir.mkdir()
+        if owner_state == "dead-within-grace":
+            marker = _write_dead_marker(generation)
+            os.utime(marker, None)
+        elif owner_state == "dead-past-grace":
+            # _write_dead_marker backdates by exactly 300s (5 min), which equals the 5-minute
+            # grace window passed below -- _older_than's strict ">" would then be a coin flip
+            # on the boundary. Push it safely further back.
+            marker = _write_dead_marker(generation)
+            _backdate(marker, seconds=400)
+        elif owner_state == "corrupt-within-grace":
+            (generation / "owner.json").write_text('{"pid": 1, "start_id": "x", "boot_id": "y"')
+        elif owner_state == "corrupt-past-grace":
+            marker = generation / "owner.json"
+            marker.write_text('{"pid": 1, "start_id": "x", "boot_id": "y"')
+            _backdate(marker, seconds=400)
+        elif owner_state == "absent-old":
+            _backdate(generation, seconds=3 * 60 * 60)
+        elif owner_state != "absent-young":
+            raise AssertionError(owner_state)
+    return platform_root, generation, tmp_dir
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux /proc revocable-reference behavior")
 @pytest.mark.parametrize(
     ("owner_state", "has_revocable_reference", "expect_survives"),
@@ -731,42 +770,8 @@ def test_reap_owner_state_matrix(
     grace-gated exactly like a valid dead marker, never demoted to the weaker markerless/
     legacy-age path).
     """
-    platform_root, generation, tmp_dir, cache_dir = _layout(tmp_path)
-    holder: subprocess.Popen[str] | None = None
-
-    if owner_state == "alive":
-        holder = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"],
-            text=True,
-            env=production_interpreter_env(),
-        )
-        assert _setup(platform_root, tmp_dir, cache_dir, owner_pid=holder.pid).returncode == 0
-    else:
-        generation.mkdir(parents=True)
-        tmp_dir.mkdir()
-        cache_dir.mkdir()
-        if owner_state == "dead-within-grace":
-            marker = _write_dead_marker(generation)
-            os.utime(marker, None)
-        elif owner_state == "dead-past-grace":
-            # _write_dead_marker backdates by exactly 300s (5 min), which equals the 5-minute
-            # grace window passed below -- _older_than's strict ">" would then be a coin flip
-            # on the boundary. Push it safely further back.
-            marker = _write_dead_marker(generation)
-            _backdate(marker, seconds=400)
-        elif owner_state == "corrupt-within-grace":
-            (generation / "owner.json").write_text('{"pid": 1, "start_id": "x", "boot_id": "y"')
-        elif owner_state == "corrupt-past-grace":
-            marker = generation / "owner.json"
-            marker.write_text('{"pid": 1, "start_id": "x", "boot_id": "y"')
-            _backdate(marker, seconds=400)
-        elif owner_state == "absent-old":
-            _backdate(generation, seconds=3 * 60 * 60)
-        elif owner_state != "absent-young":
-            raise AssertionError(owner_state)
-
-    reference_holder: subprocess.Popen[str] | None = None
-    try:
+    with ExitStack() as cleanup:
+        platform_root, generation, tmp_dir = _arrange_owner_state(tmp_path, owner_state, cleanup)
         if has_revocable_reference:
             reference_holder = subprocess.Popen(
                 [sys.executable, "-c", "import time; time.sleep(60)"],
@@ -774,17 +779,13 @@ def test_reap_owner_state_matrix(
                 env={k: v for k, v in production_interpreter_env().items() if k != "TMPDIR"},
                 text=True,
             )
+            cleanup.callback(_stop, reference_holder)
             time.sleep(0.1)  # let the child actually chdir before we scan /proc
 
         result = _reap(platform_root, "--grace-minutes", 5, "--legacy-age-minutes", 120)
 
         assert result.returncode == 0, result.stderr
         assert generation.exists() == expect_survives
-    finally:
-        if reference_holder is not None:
-            _stop(reference_holder)
-        if holder is not None:
-            _stop(holder)
 
 
 def test_reap_frees_bytes(tmp_path: Path) -> None:

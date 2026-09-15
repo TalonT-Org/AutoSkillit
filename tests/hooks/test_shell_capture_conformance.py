@@ -188,6 +188,121 @@ def _run_wrapped(command: str, tmp_path: Path) -> subprocess.CompletedProcess[by
     )
 
 
+def _run_capture_trial(
+    label: str,
+    command: str,
+    tmp_path: Path,
+) -> tuple[
+    subprocess.CompletedProcess[bytes],
+    bytes,
+    subprocess.CompletedProcess[bytes],
+    list[Path],
+]:
+    _make_project_dirs(tmp_path)
+    if label == "nested_wrap":
+        command = _build_harness(_NESTED_WRAP_INNER, str(tmp_path), uuid4().hex[:16])
+
+    raw = _run_raw(command, tmp_path)
+    raw_combined = raw.stdout + raw.stderr
+
+    if label == "heredoc_append":
+        # raw run already appended once; reset the target file so the
+        # wrapped run's append produces byte-identical content to compare.
+        report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
+        report.unlink(missing_ok=True)
+    if label == "nested_wrap":
+        shutil.rmtree(_capture_dir(tmp_path))
+        _capture_dir(tmp_path).mkdir()
+
+    wrapped = _run_wrapped(command, tmp_path)
+    return raw, raw_combined, wrapped, _artifact_files(tmp_path)
+
+
+def _assert_capture_outcome(
+    label: str,
+    raw: subprocess.CompletedProcess[bytes],
+    raw_combined: bytes,
+    wrapped: subprocess.CompletedProcess[bytes],
+    artifacts: list[Path],
+    tmp_path: Path,
+) -> None:
+    expected_wrapped_returncode = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
+    assert wrapped.returncode == expected_wrapped_returncode, (
+        f"[{label}] exit code mismatch: raw={raw.returncode} wrapped={wrapped.returncode}\n"
+        f"raw stderr={raw.stderr!r}\nwrapped stderr={wrapped.stderr!r}"
+    )
+
+    if label == "true_cmd":
+        assert raw_combined == b""
+        assert wrapped.stdout == b""
+        assert raw.returncode == 0
+        assert artifacts, "[true_cmd] expected artifact retained (Python-side cleanup)"
+        assert len(artifacts) == 1
+        return
+
+    if label == "self_bg":
+        assert b"started" in wrapped.stdout
+        assert b"late" in wrapped.stdout
+        assert wrapped.returncode == 0
+        return
+
+    if label == "heredoc_append":
+        report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
+        assert report.exists()
+        assert "some content" in report.read_text()
+        return
+
+    if label == "nested_wrap":
+        assert wrapped.returncode == 0
+        assert b"hi" in wrapped.stdout
+        return
+
+    expected_returncode = {"mid_exit": 7, "errexit": 1}.get(label)
+    if expected_returncode is not None:
+        assert raw.returncode == expected_returncode
+        assert wrapped.returncode == expected_returncode
+
+    if label == "self_signal":
+        # The isolated runner deliberately translates a child signal to the
+        # shell-compatible 128+signal status.
+        assert raw.returncode == -15
+        assert wrapped.returncode == 143
+        if artifacts:
+            assert b"pre" in artifacts[0].read_bytes()
+        return
+
+    if label == "trailing_backslash":
+        return
+
+    if label == "unicode_heavy":
+        assert artifacts, f"[{label}] expected an artifact for large unicode output"
+        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
+        artifact_bytes = artifacts[0].read_bytes()
+        assert artifact_bytes == raw_combined, (
+            f"[{label}] artifact content mismatch with raw combined output"
+        )
+        artifact_bytes.decode("utf-8")
+        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
+        return
+
+    if len(raw_combined) <= _INLINE_BYTES:
+        assert wrapped.stdout == raw_combined, (
+            f"[{label}] inline output mismatch.\nraw={raw_combined!r}\nwrapped={wrapped.stdout!r}"
+        )
+        assert artifacts, (
+            f"[{label}] expected artifact retained for small output (Python-side cleanup)"
+        )
+        assert len(artifacts) == 1
+    else:
+        assert artifacts, f"[{label}] expected an artifact for large output, found none"
+        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
+        artifact_bytes = artifacts[0].read_bytes()
+        assert artifact_bytes == raw_combined, (
+            f"[{label}] artifact content mismatch with raw combined output"
+        )
+        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
+
+
 def _write_detached_pipe_helper(tmp_path: Path) -> Path:
     helper = tmp_path / "detached_pipe_child.py"
     helper.write_text(
@@ -462,104 +577,8 @@ def test_capture_conformance(label: str, command: str, tmp_path: Path) -> None:
     if label == "jq_keys" and shutil.which("jq") is None:
         pytest.skip("jq not available")
 
-    _make_project_dirs(tmp_path)
-    if label == "nested_wrap":
-        command = _build_harness(_NESTED_WRAP_INNER, str(tmp_path), uuid4().hex[:16])
-
-    raw = _run_raw(command, tmp_path)
-    raw_combined = raw.stdout + raw.stderr
-
-    if label == "heredoc_append":
-        # raw run already appended once; reset the target file so the
-        # wrapped run's append produces byte-identical content to compare.
-        report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
-        report.unlink(missing_ok=True)
-    if label == "nested_wrap":
-        shutil.rmtree(_capture_dir(tmp_path))
-        _capture_dir(tmp_path).mkdir()
-
-    wrapped = _run_wrapped(command, tmp_path)
-
-    expected_wrapped_returncode = 128 + (-raw.returncode) if raw.returncode < 0 else raw.returncode
-    assert wrapped.returncode == expected_wrapped_returncode, (
-        f"[{label}] exit code mismatch: raw={raw.returncode} wrapped={wrapped.returncode}\n"
-        f"raw stderr={raw.stderr!r}\nwrapped stderr={wrapped.stderr!r}"
-    )
-
-    artifacts = _artifact_files(tmp_path)
-
-    if label == "true_cmd":
-        assert raw_combined == b""
-        assert wrapped.stdout == b""
-        assert raw.returncode == 0
-        assert artifacts, "[true_cmd] expected artifact retained (Python-side cleanup)"
-        assert len(artifacts) == 1
-        return
-
-    if label == "self_bg":
-        assert b"started" in wrapped.stdout
-        assert b"late" in wrapped.stdout
-        assert wrapped.returncode == 0
-        return
-
-    if label == "heredoc_append":
-        report = tmp_path / ".autoskillit" / "temp" / "investigate" / "report.md"
-        assert report.exists()
-        assert "some content" in report.read_text()
-        return
-
-    if label == "nested_wrap":
-        assert wrapped.returncode == 0
-        assert b"hi" in wrapped.stdout
-        return
-
-    if label == "mid_exit":
-        assert raw.returncode == 7
-        assert wrapped.returncode == 7
-
-    if label == "errexit":
-        assert raw.returncode == 1
-        assert wrapped.returncode == 1
-
-    if label == "self_signal":
-        # The isolated runner deliberately translates a child signal to the
-        # shell-compatible 128+signal status.
-        assert raw.returncode == -15
-        assert wrapped.returncode == 143
-        if artifacts:
-            assert b"pre" in artifacts[0].read_bytes()
-        return
-
-    if label == "trailing_backslash":
-        return
-
-    if label == "unicode_heavy":
-        assert artifacts, f"[{label}] expected an artifact for large unicode output"
-        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
-        artifact_bytes = artifacts[0].read_bytes()
-        assert artifact_bytes == raw_combined, (
-            f"[{label}] artifact content mismatch with raw combined output"
-        )
-        artifact_bytes.decode("utf-8")
-        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
-        return
-
-    if len(raw_combined) <= _INLINE_BYTES:
-        assert wrapped.stdout == raw_combined, (
-            f"[{label}] inline output mismatch.\nraw={raw_combined!r}\nwrapped={wrapped.stdout!r}"
-        )
-        assert artifacts, (
-            f"[{label}] expected artifact retained for small output (Python-side cleanup)"
-        )
-        assert len(artifacts) == 1
-    else:
-        assert artifacts, f"[{label}] expected an artifact for large output, found none"
-        assert len(artifacts) == 1, f"[{label}] expected exactly one artifact, found {artifacts}"
-        artifact_bytes = artifacts[0].read_bytes()
-        assert artifact_bytes == raw_combined, (
-            f"[{label}] artifact content mismatch with raw combined output"
-        )
-        _assert_published_capture_v2(tmp_path, wrapped.stdout, raw_combined)
+    raw, raw_combined, wrapped, artifacts = _run_capture_trial(label, command, tmp_path)
+    _assert_capture_outcome(label, raw, raw_combined, wrapped, artifacts, tmp_path)
 
 
 def test_retained_pipe_waits_for_actual_eof_and_includes_late_bytes(

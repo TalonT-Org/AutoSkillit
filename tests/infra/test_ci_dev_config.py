@@ -414,6 +414,39 @@ class TestCIWorkflowExpressions:
         )
 
 
+def _ci_environment_names(workflow: dict) -> set[str]:
+    # Collect all AUTOSKILLIT_* env vars from CI
+    ci_env_vars = set()
+    for job in workflow["jobs"].values():
+        for step in job.get("steps", []):
+            env = step.get("env", {})
+            for key in env:
+                if key.startswith("AUTOSKILLIT_"):
+                    ci_env_vars.add(key)
+            run_block = step.get("run", "")
+            # Also check inline exports
+            for line in run_block.splitlines():
+                if "export AUTOSKILLIT_" in line:
+                    parts = line.split("AUTOSKILLIT_", 1)
+                    if len(parts) > 1:
+                        var_name = "AUTOSKILLIT_" + parts[1].split("=")[0]
+                        ci_env_vars.add(var_name.strip())
+    return ci_env_vars
+
+
+def _missing_ci_env_cleanup(ci_env_vars: set[str], conftest_text: str) -> list[str]:
+    missing = []
+    for var in sorted(ci_env_vars):
+        if "__" in var:
+            prefix = var.rsplit("__", 1)[0] + "__"
+            covered = var in conftest_text or prefix in conftest_text
+        else:
+            covered = var in conftest_text
+        if not covered:
+            missing.append(var)
+    return missing
+
+
 class TestCIEnvVarIsolation:
     """Verify that every AUTOSKILLIT_* env var set in CI has a
     corresponding cleanup mechanism in the test conftest."""
@@ -428,32 +461,8 @@ class TestCIEnvVarIsolation:
         workflow = load_yaml(CI_WORKFLOW)
         conftest_text = CONFTEST_PATH.read_text()
 
-        # Collect all AUTOSKILLIT_* env vars from CI
-        ci_env_vars = set()
-        for job in workflow["jobs"].values():
-            for step in job.get("steps", []):
-                env = step.get("env", {})
-                for key in env:
-                    if key.startswith("AUTOSKILLIT_"):
-                        ci_env_vars.add(key)
-                run_block = step.get("run", "")
-                # Also check inline exports
-                for line in run_block.splitlines():
-                    if "export AUTOSKILLIT_" in line:
-                        parts = line.split("AUTOSKILLIT_", 1)
-                        if len(parts) > 1:
-                            var_name = "AUTOSKILLIT_" + parts[1].split("=")[0]
-                            ci_env_vars.add(var_name.strip())
-
-        missing = []
-        for var in sorted(ci_env_vars):
-            if "__" in var:
-                prefix = var.rsplit("__", 1)[0] + "__"
-                covered = var in conftest_text or prefix in conftest_text
-            else:
-                covered = var in conftest_text
-            if not covered:
-                missing.append(var)
+        ci_env_vars = _ci_environment_names(workflow)
+        missing = _missing_ci_env_cleanup(ci_env_vars, conftest_text)
 
         assert not missing, (
             f"CI env vars missing conftest cleanup: {missing}. "

@@ -164,22 +164,23 @@ def test_invalid_spill_metadata_remains_lossless_response_data(invalid_case: str
     """Every malformed or untrusted reserved value stays visible and unbounded."""
     artifact_text = "authoritative response"
     metadata = _valid_spill_metadata(tmp_path, artifact_text)
-    if invalid_case == "missing_key":
+    value_corruptions = {
+        "schema_version": ("schema_version", 2),
+        "schema_version_bool": ("schema_version", True),
+        "negative_number": ("omitted_chars", -1),
+        "numeric_bool": ("omitted_items", False),
+        "invalid_reason": ("reason", "other"),
+        "non_string_reason": ("reason", ["oversized_values"]),
+        "size_mismatch": ("original_utf8_bytes", len(artifact_text.encode("utf-8")) + 1),
+        "digest_mismatch": ("sha256", "0" * 64),
+    }
+    if invalid_case in value_corruptions:
+        key, value = value_corruptions[invalid_case]
+        metadata[key] = value
+    elif invalid_case == "missing_key":
         metadata.pop("reason")
     elif invalid_case == "extra_key":
         metadata["unexpected"] = "collision"
-    elif invalid_case == "schema_version":
-        metadata["schema_version"] = 2
-    elif invalid_case == "schema_version_bool":
-        metadata["schema_version"] = True
-    elif invalid_case == "negative_number":
-        metadata["omitted_chars"] = -1
-    elif invalid_case == "numeric_bool":
-        metadata["omitted_items"] = False
-    elif invalid_case == "invalid_reason":
-        metadata["reason"] = "other"
-    elif invalid_case == "non_string_reason":
-        metadata["reason"] = ["oversized_values"]
     elif invalid_case == "relative_path":
         metadata["artifact_path"] = ".autoskillit/temp/responses/full.log"
     elif invalid_case == "outside_project_temp":
@@ -192,10 +193,6 @@ def test_invalid_spill_metadata_remains_lossless_response_data(invalid_case: str
         metadata["artifact_path"] = str(link)
     elif invalid_case == "directory":
         metadata["artifact_path"] = str(tmp_path / ".autoskillit" / "temp" / "responses")
-    elif invalid_case == "size_mismatch":
-        metadata["original_utf8_bytes"] = len(artifact_text.encode("utf-8")) + 1
-    elif invalid_case == "digest_mismatch":
-        metadata["sha256"] = "0" * 64
     elif invalid_case == "uppercase_digest":
         metadata["sha256"] = str(metadata["sha256"]).upper()
 

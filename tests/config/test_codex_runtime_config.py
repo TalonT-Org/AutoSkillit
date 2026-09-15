@@ -42,6 +42,17 @@ def test_runtime_policy_loads_optional_tuning_from_yaml(tmp_path) -> None:
     assert spec.auto_compact_threshold_tokens == 180_000
 
 
+def test_runtime_policy_rejects_non_deny_yaml(tmp_path) -> None:
+    config_dir = tmp_path / ".autoskillit"
+    config_dir.mkdir()
+    (config_dir / "config.yaml").write_text(
+        yaml.dump({"codex_runtime": {"auto_compaction_policy": "allow"}})
+    )
+
+    with pytest.raises(ValueError, match="auto_compaction_policy"):
+        load_config(tmp_path)
+
+
 def test_runtime_policy_loads_optional_tuning_from_environment(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("AUTOSKILLIT_CODEX_RUNTIME__CONTEXT_WINDOW_TOKENS", "128000")
     monkeypatch.setenv("AUTOSKILLIT_CODEX_RUNTIME__AUTO_COMPACT_THRESHOLD_TOKENS", "115000")

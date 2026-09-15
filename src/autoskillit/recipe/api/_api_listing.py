@@ -39,7 +39,6 @@ logger = get_logger(__name__)
 
 
 def _invalid_validation_result(message: str) -> RecipePathValidationInputError:
-    """Return the established validation result shape for an input error."""
     return {
         "valid": False,
         "findings": [{"error": message}],

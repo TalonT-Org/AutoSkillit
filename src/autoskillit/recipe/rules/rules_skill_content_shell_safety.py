@@ -12,7 +12,6 @@ patchability contract this module participates in.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
 
 import regex as re
 
@@ -70,8 +69,8 @@ def _has_hardcoded_origin_in_bash(bash_blocks: list[str]) -> bool:
 
 def _interpreter_write_block_violations(
     content: str,
-    interpreter_line_re: Any,
-    write_apis_re: Any,
+    interpreter_line_re: re.Pattern[str],
+    write_apis_re: re.Pattern[str],
 ) -> list[str]:
     """Return labels for bash and Python blocks containing interpreter writes."""
     violations: list[str] = []

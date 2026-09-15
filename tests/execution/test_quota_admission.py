@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 import pytest
+import structlog.testing
 
 from tests._helpers import make_quota_guard_config
 
@@ -55,16 +56,21 @@ async def test_oauth_fetch_failure_is_a_pre_spawn_rejection_not_a_sleep_or_admis
         lambda *_args, **_kwargs: "anthropic-oauth:token-digest",
     )
 
-    decision = await admission.admit_quota(
-        config=make_quota_guard_config(credentials_path=str(tmp_path / "credentials.json")),
-        credential_scope="anthropic-oauth:token-digest",
-        diagnostic_log_root=tmp_path,
-        deadline_monotonic=time.monotonic() + 5,
-    )
+    with structlog.testing.capture_logs() as logs:
+        decision = await admission.admit_quota(
+            config=make_quota_guard_config(credentials_path=str(tmp_path / "credentials.json")),
+            credential_scope="anthropic-oauth:token-digest",
+            diagnostic_log_root=tmp_path,
+            deadline_monotonic=time.monotonic() + 5,
+        )
 
     assert decision.admitted is False
     assert decision.reason == "quota_authority_unavailable"
     assert decision.lease is None
+    failure = next(log for log in logs if log["event"] == "quota_admission_authority_unavailable")
+    assert failure["error"] == "usage endpoint unavailable"
+    assert failure["error_type"] == "OSError"
+    assert failure["exc_info"] is True
 
 
 @pytest.mark.anyio

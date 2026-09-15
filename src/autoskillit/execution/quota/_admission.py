@@ -293,7 +293,9 @@ async def admit_quota(
     except Exception as exc:
         logger.warning(
             "quota_admission_authority_unavailable",
+            error=str(exc),
             error_type=type(exc).__name__,
+            exc_info=True,
         )
         return QuotaAdmission(False, "quota_authority_unavailable")
     finally:

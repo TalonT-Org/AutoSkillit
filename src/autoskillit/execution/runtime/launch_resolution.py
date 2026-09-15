@@ -10,6 +10,8 @@ from types import MappingProxyType
 
 from autoskillit.core import (
     BackendAuthority,
+    BackendAuthorityKind,
+    BackendAuthorityTier,
     CmdSpec,
     CodexRuntimeSpec,
     CodingAgentBackend,
@@ -18,6 +20,7 @@ from autoskillit.core import (
     LaunchContractError,
     LaunchPreparation,
     LaunchResolutionRequest,
+    LaunchResolver,
     LaunchValueSource,
     LaunchValueSourceKind,
     ResolvedLaunchContract,
@@ -27,7 +30,7 @@ from autoskillit.core import (
     strip_context_window_suffix,
 )
 
-__all__ = ["DefaultLaunchResolver"]
+__all__ = ["DefaultLaunchResolver", "resolve_backend_override"]
 
 logger = get_logger(__name__)
 
@@ -58,6 +61,22 @@ def _is_credential_environment_key(key: str) -> bool:
 
 def _default_source() -> LaunchValueSource:
     return LaunchValueSource(LaunchValueSourceKind.DEFAULT, "backend.default")
+
+
+def resolve_backend_override(
+    name: str,
+    *,
+    launch_resolver: LaunchResolver,
+) -> CodingAgentBackend:
+    """Resolve a caller backend override through the configured authority boundary."""
+    return launch_resolver.backend_for_authority(
+        BackendAuthority(
+            backend=name,
+            kind=BackendAuthorityKind.CALLER,
+            tier=BackendAuthorityTier.CALLER,
+            key_path="request.backend",
+        )
+    )
 
 
 class DefaultLaunchResolver:

@@ -76,7 +76,7 @@ async def _execute_fleet_run(
     if disable_quota_guard:
         ctx.config.quota_guard.enabled = False
 
-    from autoskillit.server import resolve_backend_override
+    from autoskillit.execution import resolve_backend_override
 
     dispatch_backend = (
         resolve_backend_override(

@@ -12,6 +12,7 @@ from autoskillit.core import (
     HEADLESS_AUTO_GATE_ENV_VAR,
     RECIPE_DELIVERY_SURFACE_REGISTRY,
     RESPONSE_BACKSTOP_EXEMPTION_REGISTRY,
+    CodexRuntimeSpec,
 )
 from autoskillit.execution.backends import (
     CODEX_RECIPE_DELIVERY_BUDGET,
@@ -25,6 +26,7 @@ from autoskillit.execution.backends._codex_config import (
     CODEX_MCP_REQUIRED_KEYS,
     CODEX_MCP_STARTUP_TIMEOUT_SEC,
     CODEX_MCP_TOOL_TIMEOUT_FLOOR,
+    _apply_codex_runtime_spec_unlocked,
     _is_autoskillit_registered,
     _read_codex_config,
     _serialize_toml,
@@ -617,6 +619,32 @@ class TestDestructiveOverwritePrevention:
         assert "tool_output_token_limit = 50_000" in content
         assert "model_auto_compact_token_limit = 100_000" in content
         assert content.count("model_auto_compact_token_limit =") == 1
+
+    def test_corrupt_file_replaces_owned_runtime_tuning(self, tmp_path):
+        p = tmp_path / "config.toml"
+        p.write_text(
+            "tool_output_token_limit = 50_000\n"
+            "model_context_window = 120_000\n"
+            "model_auto_compact_token_limit = 100_000\n"
+            "not valid toml = =\n",
+            encoding="utf-8",
+        )
+
+        _apply_codex_runtime_spec_unlocked(
+            config_path=p,
+            runtime_spec=CodexRuntimeSpec(
+                context_window_tokens=200_000,
+                auto_compact_threshold_tokens=180_000,
+            ),
+        )
+
+        content = p.read_text(encoding="utf-8")
+        assert content.count("tool_output_token_limit =") == 1
+        assert content.count("model_context_window =") == 1
+        assert content.count("model_auto_compact_token_limit =") == 1
+        assert f"tool_output_token_limit = {CODEX_HISTORY_RETENTION_TOKEN_LIMIT}" in content
+        assert "model_context_window = 200000" in content
+        assert "model_auto_compact_token_limit = 180000" in content
 
     def test_preserves_unknown_top_level_scalars(self, tmp_path):
         """Unknown top-level scalar keys (model/theme/disable_telemetry) must survive

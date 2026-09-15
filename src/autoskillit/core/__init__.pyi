@@ -1336,7 +1336,6 @@ from .types import (
 )
 from .types import managed_home as managed_home
 from .types import managed_home_for as managed_home_for
-from .types import skill_relative_path as skill_relative_path
 from .types import model_class as model_class
 from .types import new_managed_attempt_id as new_managed_attempt_id
 from .types import new_managed_launch_id as new_managed_launch_id
@@ -1365,6 +1364,7 @@ from .types import review_receipt_validation_error as review_receipt_validation_
 from .types import select_child_session_deadline as select_child_session_deadline
 from .types import session_type as session_type
 from .types import session_type_for_skill_execution_role as session_type_for_skill_execution_role
+from .types import skill_relative_path as skill_relative_path
 from .types import strip_context_window_suffix as strip_context_window_suffix
 from .types import strip_markdown_code_regions as strip_markdown_code_regions
 from .types import truncate_text as truncate_text
@@ -1372,9 +1372,9 @@ from .types import (
     validate_context_admission_persistence_value as validate_context_admission_persistence_value,
 )
 from .types import validate_label_transition as validate_label_transition
-from .types import validate_skill_entries as validate_skill_entries
 from .types import validate_recipe_artifact_sections as validate_recipe_artifact_sections
 from .types import validate_skill_capability_roles as validate_skill_capability_roles
+from .types import validate_skill_entries as validate_skill_entries
 from .types._type_exploration import (
     EXPLORATION_FAILURE_CODE_RESPONSES as EXPLORATION_FAILURE_CODE_RESPONSES,
 )

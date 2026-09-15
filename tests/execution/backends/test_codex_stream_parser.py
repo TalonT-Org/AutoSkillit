@@ -833,6 +833,25 @@ class TestAppServerAutoCompactionCorrelation:
             },
         }
 
+    def test_unrelated_completion_preserves_pending_compaction_correlation(self) -> None:
+        hook = app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = app_server_fixture("app_server_turn_completed_interrupted.json")
+        unrelated = app_server_fixture("app_server_turn_completed_interrupted.json")
+        unrelated["params"]["turn"]["id"] = "another-turn"
+
+        parser = CodexStreamParser()
+        assert parser.parse_line(json.dumps(hook)) is None
+        unrelated_event = parser.parse_line(json.dumps(unrelated))
+        event = parser.parse_line(json.dumps(terminal))
+
+        assert unrelated_event is not None
+        assert event is not None
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.raw["error"] == {
+            "message": "autoskillit_auto_compaction_denied",
+            "code": "autoskillit_auto_compaction_denied",
+        }
+
     @pytest.mark.parametrize(
         "case",
         [

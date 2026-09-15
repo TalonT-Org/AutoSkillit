@@ -189,12 +189,13 @@ class _AutoCompactionCorrelation:
 
     def correlated_interruption(self, params: Mapping[str, Any]) -> bool:
         turn = params.get("turn")
-        matched = (
-            isinstance(turn, Mapping)
-            and params.get("threadId") == self.thread_id
-            and turn.get("id") == self.turn_id
-            and turn.get("status") == "interrupted"
-        )
+        if (
+            not isinstance(turn, Mapping)
+            or params.get("threadId") != self.thread_id
+            or turn.get("id") != self.turn_id
+        ):
+            return False
+        matched = turn.get("status") == "interrupted"
         self.clear()
         return matched
 

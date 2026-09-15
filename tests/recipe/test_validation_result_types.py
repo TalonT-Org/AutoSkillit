@@ -193,7 +193,7 @@ ingredients:
 steps:
   done:
     action: stop
-    message: Recipe validation completed successfully.
+    message: Emit the L3 sentinel block with success=true and reason=Validated.
 """
 _PARSED_INVALID_RECIPE = """\
 name: validation-result-invalid

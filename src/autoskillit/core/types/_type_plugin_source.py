@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Protocol, TypeGuard
 from uuid import UUID, uuid4
 
+from ._type_skill_identity import validate_skill_entries
+
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
 
 __all__ = [
@@ -356,6 +358,7 @@ class PluginLaunchBinding:
             "projected_skill_entries",
             tuple((name, relative_path) for name, relative_path in self.projected_skill_entries),
         )
+        validate_skill_entries(self.projected_skill_entries)
 
     @property
     def closed(self) -> bool:

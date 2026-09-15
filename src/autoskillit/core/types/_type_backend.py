@@ -23,6 +23,7 @@ from ._type_native_shell_capture import (
 from ._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
+from ._type_skill_identity import validate_skill_entries
 from ._type_skill_semantics import SKILL_MODEL_CLASS_REGISTRY, SKILL_REASONING_EFFORTS
 
 __all__ = [
@@ -586,6 +587,7 @@ class CmdSpec:
             "projected_skill_entries",
             tuple((name, relative_path) for name, relative_path in self.projected_skill_entries),
         )
+        validate_skill_entries(self.projected_skill_entries)
 
 
 @dataclass(frozen=True, slots=True)

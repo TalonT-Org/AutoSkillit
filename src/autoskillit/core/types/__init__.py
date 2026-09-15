@@ -128,6 +128,8 @@ from ._type_session_env import *  # noqa: F401, F403
 from ._type_session_env import __all__ as _session_env_all
 from ._type_skill_contract import *  # noqa: F401, F403
 from ._type_skill_contract import __all__ as _skill_contract_all
+from ._type_skill_identity import *  # noqa: F401, F403
+from ._type_skill_identity import __all__ as _skill_identity_all
 from ._type_skill_semantics import *  # noqa: F401, F403
 from ._type_skill_semantics import __all__ as _skill_semantics_all
 from ._type_subprocess import *  # noqa: F401, F403
@@ -197,6 +199,7 @@ __all__ = (
     + _resume_all
     + _session_env_all
     + _skill_contract_all
+    + _skill_identity_all
     + _skill_semantics_all
     + _subprocess_all
     + _token_all

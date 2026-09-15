@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import ValidatedAddDir, validate_managed_skill_entries
+from autoskillit.core import ValidatedAddDir, validate_skill_entries
 from autoskillit.core.claude_conventions import (
     LayoutError,
     validate_add_dir,
@@ -34,11 +34,11 @@ class TestValidatedAddDir:
             vd.path = "/other"  # type: ignore[misc]
 
 
-def test_managed_skill_entries_reject_duplicate_names() -> None:
+def test_skill_entries_reject_duplicate_names() -> None:
     duplicate = ("test-skill", "test-skill/SKILL.md")
 
-    with pytest.raises(ValueError, match="duplicate managed skill name: test-skill"):
-        validate_managed_skill_entries((duplicate, duplicate))
+    with pytest.raises(ValueError, match="duplicate skill name: test-skill"):
+        validate_skill_entries((duplicate, duplicate))
 
 
 class TestValidateAddDir:

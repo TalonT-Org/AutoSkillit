@@ -13,7 +13,7 @@ from typing import Any
 
 import regex as re
 
-from autoskillit.core import normalize_codex_cli_version, validate_managed_skill_entries
+from autoskillit.core import normalize_codex_cli_version, validate_skill_entries
 from autoskillit.execution.backends._codex_probes import (
     _probe_diagnostic,
     _run_bounded_codex_probe,
@@ -208,7 +208,7 @@ def _validated_expected_paths(
     canonical_catalog = catalog_dir.resolve(strict=True)
     if catalog_dir != canonical_catalog or catalog_dir.is_symlink() or not catalog_dir.is_dir():
         raise ValueError("managed catalog must be a canonical real directory")
-    relative_paths = validate_managed_skill_entries(expected_entries)
+    relative_paths = validate_skill_entries(expected_entries)
     return {
         name: canonical_catalog / relative_path for name, relative_path in relative_paths.items()
     }

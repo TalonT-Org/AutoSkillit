@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import ast
 import json
-from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -15,6 +13,7 @@ from autoskillit.execution.backends._codex.app_server import (
     _parse_user_agent_version,
 )
 from autoskillit.execution.backends._codex_discovery import CODEX_SKILL_DISCOVERY_CONTRACT
+from tests.execution.backends._codex_fixtures import app_server_fixture
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
 
@@ -22,11 +21,6 @@ _SESSION_HOME = "/tmp/session"
 _CATALOG_ROOT = "/tmp/session/add-dir/skills"
 _CWD = "/tmp/session"
 _MIN_VERSION = CODEX_SKILL_DISCOVERY_CONTRACT.extra_roots_min_version
-_APP_SERVER_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "codex_ndjson"
-
-
-def _app_server_fixture(name: str) -> dict[str, Any]:
-    return json.loads((_APP_SERVER_FIXTURE_DIR / name).read_text())
 
 
 def _make_plan(**overrides: object) -> CodexAppServerPlan:
@@ -362,11 +356,11 @@ class TestThreadAndTurn:
         driver.on_line(_response(5, result={}))
 
         driver.on_line(
-            json.dumps(_app_server_fixture("app_server_hook_completed_pre_compact_stopped.json"))
+            json.dumps(app_server_fixture("app_server_hook_completed_pre_compact_stopped.json"))
         )
         assert not driver.finished
         driver.on_line(
-            json.dumps(_app_server_fixture("app_server_turn_completed_interrupted.json"))
+            json.dumps(app_server_fixture("app_server_turn_completed_interrupted.json"))
         )
 
         assert driver.finished

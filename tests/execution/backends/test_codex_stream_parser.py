@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Any
 
 import pytest
 import structlog.testing
@@ -20,6 +18,7 @@ from autoskillit.execution.backends._codex_parse import (
     CodexStreamParser,
     _scan_codex_ndjson,
 )
+from tests.execution.backends._codex_fixtures import app_server_fixture
 from tests.fixtures.codex import (
     HAPPY_PATH_SINGLE_TURN,
     HAPPY_PATH_V0136,
@@ -30,12 +29,6 @@ from tests.fixtures.codex import (
 )
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
-
-_APP_SERVER_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "codex_ndjson"
-
-
-def _app_server_fixture(name: str) -> dict[str, Any]:
-    return json.loads((_APP_SERVER_FIXTURE_DIR / name).read_text())
 
 
 class TestCodexStreamParserHappyPath:
@@ -819,8 +812,8 @@ class TestAppServerUsageAccumulation:
 
 class TestAppServerAutoCompactionCorrelation:
     def test_stopped_pre_compact_hook_marks_matching_interrupted_turn(self) -> None:
-        hook = _app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
-        terminal = _app_server_fixture("app_server_turn_completed_interrupted.json")
+        hook = app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = app_server_fixture("app_server_turn_completed_interrupted.json")
         assert hook["params"]["run"]["executionMode"] == "sync"
 
         parser = CodexStreamParser()
@@ -853,8 +846,8 @@ class TestAppServerAutoCompactionCorrelation:
         ],
     )
     def test_only_matching_stopped_auto_compact_hook_is_classified(self, case: str) -> None:
-        hook = _app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
-        terminal = _app_server_fixture("app_server_turn_completed_interrupted.json")
+        hook = app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = app_server_fixture("app_server_turn_completed_interrupted.json")
         parser = CodexStreamParser()
 
         if case == "user_interruption":

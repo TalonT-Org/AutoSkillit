@@ -15,7 +15,7 @@ import signal
 import threading
 import time
 from pathlib import Path
-from typing import IO
+from typing import IO, NoReturn
 from unittest.mock import patch
 
 import pytest
@@ -77,6 +77,119 @@ _MUTATION_FUNCTIONS: dict[str, object] = {
     "update_orchestrator_session_id": update_orchestrator_session_id,
     "upsert_dispatch_record_by_name": upsert_dispatch_record_by_name,
 }
+
+
+def _open_target(call: ast.Call) -> ast.expr | None:
+    if isinstance(call.func, ast.Name) and call.func.id == "open":
+        return call.args[0] if call.args else None
+    if not isinstance(call.func, ast.Attribute) or call.func.attr != "open":
+        return None
+    if isinstance(call.func.value, ast.Name) and call.func.value.id == "os":
+        return call.args[0] if call.args else None
+    return call.func.value
+
+
+def _function_flock_sidecar_violations(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[tuple[str, int]]:
+    has_flock = any(
+        isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Attribute)
+        and child.func.attr == "flock"
+        and isinstance(child.func.value, ast.Name)
+        and child.func.value.id == "fcntl"
+        for child in ast.walk(node)
+    )
+    if not has_flock:
+        return []
+
+    violations: list[tuple[str, int]] = []
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        target = _open_target(child)
+        if target is None:
+            continue
+        arg_src = ast.unparse(target)
+        if (
+            ".lock" in arg_src
+            or "with_suffix('.lock')" in arg_src
+            or "lock_path" in arg_src
+            or "LOCK_NAME" in arg_src
+        ):
+            continue
+        violations.append((arg_src, child.lineno))
+    return violations
+
+
+def _prepare_running_dispatch(sp: Path, fn_name: str) -> None:
+    if fn_name not in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
+        return
+
+    import json
+
+    raw = json.loads(sp.read_text())
+    raw["dispatches"][0]["status"] = "running"
+    sp.write_text(json.dumps(raw))
+
+
+def _invoke_state_mutation(fn_name: str, fn: object, sp: Path) -> None:
+    if fn_name == "mark_dispatch_running":
+        fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
+    elif fn_name == "mark_dispatch_interrupted":
+        fn(sp, "d1", reason="test")  # type: ignore[operator]
+    elif fn_name == "mark_dispatch_session_identity":
+        fn(sp, "d1", dispatched_session_id="sess-test")  # type: ignore[operator]
+    elif fn_name == "mark_dispatch_resumable":
+        fn(sp, "d1", sidecar_path="/tmp/sidecar")  # type: ignore[operator]
+    elif fn_name == "append_dispatch_record":
+        fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
+    elif fn_name == "write_captured_values":
+        fn(sp, {"key": "val"})  # type: ignore[operator]
+    elif fn_name == "reset_blocking_dispatch":
+        fn(sp, "d1")  # type: ignore[operator]
+    elif fn_name == "update_orchestrator_session_id":
+        fn(sp, "sess-123")  # type: ignore[operator]
+    elif fn_name == "upsert_dispatch_record_by_name":
+        fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
+
+
+def _run_pending_sigint_cleanup_child(
+    state_path: Path, lock_path: Path, read_fd: int, write_fd: int
+) -> NoReturn:
+    os.close(read_fd)
+    result = b"sigint-not-delivered"
+    try:
+        import autoskillit.fleet.campaign_state._state_lock as state_lock
+
+        original_pthread_sigmask = state_lock.signal.pthread_sigmask
+        sent_sigint = False
+
+        def inject_pending_sigint(how: int, signals: set[signal.Signals]) -> set[signal.Signals]:
+            nonlocal sent_sigint
+            previous_mask = original_pthread_sigmask(how, signals)
+            if how == signal.SIG_BLOCK and signal.SIGINT in signals and not sent_sigint:
+                sent_sigint = True
+                os.kill(os.getpid(), signal.SIGINT)
+            return previous_mask
+
+        state_lock.signal.pthread_sigmask = inject_pending_sigint
+        with CampaignStateMutator(state_path):
+            pass
+    except KeyboardInterrupt:
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = b"cleanup-complete"
+        except BlockingIOError:
+            result = b"lock-leaked"
+        finally:
+            os.close(lock_fd)
+    except BaseException:
+        result = b"unexpected-exception"
+    os.write(write_fd, result)
+    os.close(write_fd)
+    os._exit(0)
 
 
 class TestCampaignStateMutatorBoundedLocking:
@@ -236,41 +349,7 @@ class TestCampaignStateMutatorBoundedLocking:
         read_fd, write_fd = os.pipe()
         child_pid = os.fork()
         if child_pid == 0:
-            os.close(read_fd)
-            result = b"sigint-not-delivered"
-            try:
-                import autoskillit.fleet.campaign_state._state_lock as state_lock
-
-                original_pthread_sigmask = state_lock.signal.pthread_sigmask
-                sent_sigint = False
-
-                def inject_pending_sigint(
-                    how: int, signals: set[signal.Signals]
-                ) -> set[signal.Signals]:
-                    nonlocal sent_sigint
-                    previous_mask = original_pthread_sigmask(how, signals)
-                    if how == signal.SIG_BLOCK and signal.SIGINT in signals and not sent_sigint:
-                        sent_sigint = True
-                        os.kill(os.getpid(), signal.SIGINT)
-                    return previous_mask
-
-                state_lock.signal.pthread_sigmask = inject_pending_sigint
-                with CampaignStateMutator(state_path):
-                    pass
-            except KeyboardInterrupt:
-                lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
-                try:
-                    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    result = b"cleanup-complete"
-                except BlockingIOError:
-                    result = b"lock-leaked"
-                finally:
-                    os.close(lock_fd)
-            except BaseException:
-                result = b"unexpected-exception"
-            os.write(write_fd, result)
-            os.close(write_fd)
-            os._exit(0)
+            _run_pending_sigint_cleanup_child(state_path, lock_path, read_fd, write_fd)
 
         os.close(write_fd)
         status: int | None = None
@@ -328,25 +407,12 @@ class TestFlockLockTarget:
             ),
         }
 
-        scan_roots = [fleet_root, cli_fleet_root] + list(FCNTL_ALLOWED_MODULES)
-
         violations: list[tuple[str, str, int]] = []
-
-        def _open_target(call: ast.Call) -> ast.expr | None:
-            if isinstance(call.func, ast.Name) and call.func.id == "open":
-                return call.args[0] if call.args else None
-            if not isinstance(call.func, ast.Attribute) or call.func.attr != "open":
-                return None
-            if isinstance(call.func.value, ast.Name) and call.func.value.id == "os":
-                return call.args[0] if call.args else None
-            return call.func.value
-
-        py_files: set[Path] = set()
-        for r in scan_roots:
-            if r.is_dir():
-                py_files.update(r.rglob("*.py"))
-            elif r.suffix == ".py":
-                py_files.add(r)
+        py_files = (
+            set(fleet_root.rglob("*.py"))
+            | set(cli_fleet_root.rglob("*.py"))
+            | FCNTL_ALLOWED_MODULES
+        )
         for py_file in py_files:
             try:
                 content = py_file.read_text()
@@ -360,33 +426,10 @@ class TestFlockLockTarget:
                 exempt_functions = FLOCK_DATA_FILE_EXCEPTIONS.get(py_file, frozenset())
                 if exempt_functions is None or node.name in exempt_functions:
                     continue
-
-                open_calls: list[tuple[str, int]] = []
-                for child in ast.walk(node):
-                    if not isinstance(child, ast.Call):
-                        continue
-                    target = _open_target(child)
-                    if target is not None:
-                        open_calls.append((ast.unparse(target), child.lineno))
-
-                for arg_src, lineno in open_calls:
-                    if (
-                        ".lock" in arg_src
-                        or "with_suffix('.lock')" in arg_src
-                        or "lock_path" in arg_src
-                        or "LOCK_NAME" in arg_src
-                    ):
-                        continue
-                    has_flock = any(
-                        isinstance(n, ast.Call)
-                        and isinstance(n.func, ast.Attribute)
-                        and n.func.attr == "flock"
-                        and isinstance(n.func.value, ast.Name)
-                        and n.func.value.id == "fcntl"
-                        for n in ast.walk(node)
-                    )
-                    if has_flock:
-                        violations.append((str(py_file), arg_src, lineno))
+                violations.extend(
+                    (str(py_file), arg_src, lineno)
+                    for arg_src, lineno in _function_flock_sidecar_violations(node)
+                )
 
         assert not violations, (
             f"Found {len(violations)} flock call(s) targeting non-.lock file:\n"
@@ -407,6 +450,7 @@ class TestAllMutationsAcquireLock:
         """Each state mutation function must take the exclusive sidecar lock."""
         sp = tmp_path / "state.json"
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
+        _prepare_running_dispatch(sp, fn_name)
 
         flock_calls: list[tuple[int, int]] = []
         original_flock = fcntl.flock
@@ -415,41 +459,16 @@ class TestAllMutationsAcquireLock:
             flock_calls.append((fd, operation))
             original_flock(fd, operation)
 
-        # Some transitions require specific pre-states
-        if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
-            # These need RUNNING dispatch — inject via direct JSON modification
-            import json
-
-            raw = json.loads(sp.read_text())
-            raw["dispatches"][0]["status"] = "running"
-            sp.write_text(json.dumps(raw))
-
         with patch(
             "autoskillit.core.runtime.artifact_lease.fcntl.flock",
             side_effect=tracking_flock,
         ):
-            if fn_name == "mark_dispatch_running":
-                fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
-            elif fn_name == "mark_dispatch_interrupted":
-                fn(sp, "d1", reason="test")  # type: ignore[operator]
-            elif fn_name == "mark_dispatch_session_identity":
-                fn(sp, "d1", dispatched_session_id="sess-test")  # type: ignore[operator]
-            elif fn_name == "mark_dispatch_resumable":
-                fn(sp, "d1", sidecar_path="/tmp/sidecar")  # type: ignore[operator]
-            elif fn_name == "append_dispatch_record":
-                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
-            elif fn_name == "write_captured_values":
-                fn(sp, {"key": "val"})  # type: ignore[operator]
-            elif fn_name == "reset_blocking_dispatch":
+            if fn_name == "reset_blocking_dispatch":
                 append_dispatch_record(
                     sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE)
                 )
                 flock_calls.clear()
-                fn(sp, "d1")  # type: ignore[operator]
-            elif fn_name == "update_orchestrator_session_id":
-                fn(sp, "sess-123")  # type: ignore[operator]
-            elif fn_name == "upsert_dispatch_record_by_name":
-                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
+            _invoke_state_mutation(fn_name, fn, sp)
 
         assert flock_calls, f"{fn_name} did not acquire the flock sidecar"
         acquisition_operations = [op for _, op in flock_calls if op != fcntl.LOCK_UN]
@@ -547,6 +566,7 @@ class TestFlockTargetPathVerification:
 
         sp = tmp_path / "state.json"
         write_initial_state(sp, "cid", "camp", "/m.yaml", [DispatchRecord(name="d1")])
+        _prepare_running_dispatch(sp, fn_name)
 
         fd_to_path: dict[int, str] = {}
         original_open = builtins.open
@@ -571,13 +591,6 @@ class TestFlockTargetPathVerification:
             flock_calls.append((fd, operation))
             return original_acquire_flock(fd, operation=operation, timeout=timeout, path=path)
 
-        if fn_name in ("mark_dispatch_interrupted", "mark_dispatch_resumable"):
-            import json
-
-            raw = json.loads(sp.read_text())
-            raw["dispatches"][0]["status"] = "running"
-            sp.write_text(json.dumps(raw))
-
         with (
             patch.object(builtins, "open", side_effect=tracking_open),
             patch.object(
@@ -586,29 +599,13 @@ class TestFlockTargetPathVerification:
                 side_effect=tracking_acquire_flock,
             ),
         ):
-            if fn_name == "mark_dispatch_running":
-                fn(sp, "d1", dispatch_id="x", dispatched_pid=42)  # type: ignore[operator]
-            elif fn_name == "mark_dispatch_interrupted":
-                fn(sp, "d1", reason="test")  # type: ignore[operator]
-            elif fn_name == "mark_dispatch_session_identity":
-                fn(sp, "d1", dispatched_session_id="sess-test")  # type: ignore[operator]
-            elif fn_name == "mark_dispatch_resumable":
-                fn(sp, "d1", sidecar_path="/tmp/sidecar")  # type: ignore[operator]
-            elif fn_name == "append_dispatch_record":
-                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
-            elif fn_name == "write_captured_values":
-                fn(sp, {"key": "val"})  # type: ignore[operator]
-            elif fn_name == "reset_blocking_dispatch":
+            if fn_name == "reset_blocking_dispatch":
                 append_dispatch_record(
                     sp, DispatchRecord(name="d1", status=DispatchStatus.FAILURE)
                 )
                 flock_calls.clear()
                 fd_to_path.clear()
-                fn(sp, "d1")  # type: ignore[operator]
-            elif fn_name == "update_orchestrator_session_id":
-                fn(sp, "sess-123")  # type: ignore[operator]
-            elif fn_name == "upsert_dispatch_record_by_name":
-                fn(sp, DispatchRecord(name="d1", status=DispatchStatus.SUCCESS))  # type: ignore[operator]
+            _invoke_state_mutation(fn_name, fn, sp)
 
         assert flock_calls, f"{fn_name} did not acquire the flock sidecar"
         for fd, _ in flock_calls:

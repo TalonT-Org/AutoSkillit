@@ -2,9 +2,37 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 import pytest
+
+from autoskillit.core import (
+    AgentDef,
+    BackendCapabilities,
+    BackendConventions,
+    CmdSpec,
+    CodingAgentBackend,
+    EnvPolicy,
+    ExecutionIdentity,
+    ExplorationDispatchRenderer,
+    LineDriver,
+    NoResume,
+    OutputFormat,
+    PluginLaunchBinding,
+    PreLaunchReadiness,
+    ResultParser,
+    ResumeSpec,
+    SemanticAdaptationContext,
+    SessionLocator,
+    SkillExecutionRole,
+    SkillSemanticAdaptationResult,
+    SkillSemanticPlan,
+    SkillSessionConfig,
+    StreamParser,
+    ValidatedAddDir,
+)
 
 pytestmark = [pytest.mark.layer("core"), pytest.mark.small]
 
@@ -246,202 +274,173 @@ def test_stub_class_satisfies_line_driver():
     assert isinstance(_Driver(), LineDriver)
 
 
+class _Backend:
+    @property
+    def name(self) -> str:
+        return "test"
+
+    @property
+    def capabilities(self) -> BackendCapabilities: ...
+
+    @property
+    def conventions(self) -> BackendConventions:
+        return BackendConventions(
+            skills_subdir=Path("test/skills"),
+            project_local_skill_search_dirs=(),
+            profile_skills_source=None,
+        )
+
+    @property
+    def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer: ...
+
+    def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
+
+    def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
+
+    def result_parser(self) -> ResultParser: ...
+
+    def env_policy(self) -> EnvPolicy: ...
+
+    def session_locator(self) -> SessionLocator: ...
+
+    def resolve_effective_execution_identity(
+        self,
+        *,
+        requested: ExecutionIdentity,
+        session_id: str,
+    ) -> ExecutionIdentity:
+        del session_id
+        return requested
+
+    def write_tool_names(self) -> frozenset[str]: ...
+
+    def binary_name(self) -> str: ...
+
+    def build_resume_cmd(
+        self,
+        *,
+        resume_session_id: str,
+        prompt: str,
+        output_format: OutputFormat = OutputFormat.JSON,
+        plugin_binding: PluginLaunchBinding | None = None,
+        session_home: str | None = None,
+        env_extras: Mapping[str, str] | None = None,
+    ) -> CmdSpec: ...
+
+    def build_skill_session_cmd(
+        self,
+        skill_command: str,
+        cwd: str,
+        config: SkillSessionConfig,
+    ) -> CmdSpec: ...
+
+    def build_food_truck_cmd(
+        self,
+        *,
+        orchestrator_prompt: str,
+        plugin_binding: PluginLaunchBinding | None,
+        cwd: str,
+        completion_marker: str,
+    ) -> CmdSpec: ...
+
+    def build_interactive_cmd(
+        self,
+        *,
+        initial_prompt: str | None = None,
+        model: str | None = None,
+        plugin_binding: PluginLaunchBinding | None = None,
+        add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
+        generated_home: Path | None = None,
+        resume_spec: ResumeSpec = NoResume(),
+        system_prompt: str | None = None,
+        env_extras: Mapping[str, str] | None = None,
+        required_env: frozenset[str] | None = None,
+        tools: Sequence[str] = (),
+    ) -> CmdSpec: ...
+
+    def validate_session_layout(
+        self,
+        session_dir: Path,
+        *,
+        project_dir: Path | None = None,
+    ) -> list[str]: ...
+
+    def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
+        return []
+
+    def validate_skill_content(self, content: str) -> list[str]: ...
+
+    def version(self) -> str: ...
+
+    def list_plugins(self) -> list[dict[str, Any]]: ...
+
+    def ensure_pre_launch(self, *, session_dir: Path | None = None) -> PreLaunchReadiness:
+        return PreLaunchReadiness((), {})
+
+    def recover_cook_history(self) -> None:
+        return None
+
+    def session_attempt_context(
+        self,
+        *,
+        session_home: Path,
+        project_dir: Path,
+        launch_id: str,
+        attempt: int,
+        current_resume_spec: ResumeSpec,
+    ):
+        del project_dir
+        from contextlib import nullcontext
+
+        from autoskillit.core import SessionAttemptHandle
+
+        return nullcontext(
+            SessionAttemptHandle(
+                view_id=f"{launch_id}-{attempt}",
+                pass_fds=(),
+                _record_spawn=lambda _pid, _pgid: None,
+                _record_reaped=lambda _pid, _pgid: None,
+            )
+        )
+
+    def translate_model(self, model: str) -> str: ...
+
+    def adapt_skill_semantics(
+        self,
+        plan: SkillSemanticPlan,
+        adaptation_context: SemanticAdaptationContext | None = None,
+    ) -> SkillSemanticAdaptationResult: ...
+
+    def model_config_overrides(self, model: str) -> tuple[str, ...]:
+        return ()
+
+    def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
+        return CmdSpec(cmd=(), env={})
+
+    def line_driver(self, spec: CmdSpec) -> LineDriver | None:
+        del spec
+        return None
+
+    def setup_session_dir(
+        self,
+        session_dir: Path,
+        *,
+        parent_sandbox_mode: str = "workspace-write",
+        agent_defs: tuple[AgentDef, ...] | None = None,
+        explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
+        execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
+    ) -> frozenset[str] | None: ...
+
+    def refresh_explorer_binding_env(
+        self,
+        session_dir: Path,
+        explorer_binding_env: Mapping[str, Mapping[str, str]],
+    ) -> None: ...
+
+    def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None: ...
+
+
 def test_stub_class_satisfies_coding_agent_backend():
-    from collections.abc import Sequence
-    from pathlib import Path
-    from typing import Any
-
-    from autoskillit.core import (
-        AgentDef,
-        BackendCapabilities,
-        BackendConventions,
-        CmdSpec,
-        CodingAgentBackend,
-        EnvPolicy,
-        ExecutionIdentity,
-        ExplorationDispatchRenderer,
-        LineDriver,
-        NoResume,
-        OutputFormat,
-        PluginLaunchBinding,
-        PreLaunchReadiness,
-        ResultParser,
-        ResumeSpec,
-        SemanticAdaptationContext,
-        SessionLocator,
-        SkillExecutionRole,
-        SkillSemanticAdaptationResult,
-        SkillSemanticPlan,
-        SkillSessionConfig,
-        StreamParser,
-        ValidatedAddDir,
-    )
-
-    class _Backend:
-        @property
-        def name(self) -> str:
-            return "test"
-
-        @property
-        def capabilities(self) -> BackendCapabilities: ...
-
-        @property
-        def conventions(self) -> BackendConventions:
-            return BackendConventions(
-                skills_subdir=Path("test/skills"),
-                project_local_skill_search_dirs=(),
-                profile_skills_source=None,
-            )
-
-        @property
-        def exploration_dispatch_renderer(self) -> ExplorationDispatchRenderer: ...
-
-        def build_cmd(self, skill_command: str, cwd: str) -> CmdSpec: ...
-
-        def stream_parser(self, completion_marker: str = "") -> StreamParser: ...
-
-        def result_parser(self) -> ResultParser: ...
-
-        def env_policy(self) -> EnvPolicy: ...
-
-        def session_locator(self) -> SessionLocator: ...
-
-        def resolve_effective_execution_identity(
-            self,
-            *,
-            requested: ExecutionIdentity,
-            session_id: str,
-        ) -> ExecutionIdentity:
-            del session_id
-            return requested
-
-        def write_tool_names(self) -> frozenset[str]: ...
-
-        def binary_name(self) -> str: ...
-
-        def build_resume_cmd(
-            self,
-            *,
-            resume_session_id: str,
-            prompt: str,
-            output_format: OutputFormat = OutputFormat.JSON,
-            plugin_binding: PluginLaunchBinding | None = None,
-            session_home: str | None = None,
-            env_extras: Mapping[str, str] | None = None,
-        ) -> CmdSpec: ...
-
-        def build_skill_session_cmd(
-            self,
-            skill_command: str,
-            cwd: str,
-            config: SkillSessionConfig,
-        ) -> CmdSpec: ...
-
-        def build_food_truck_cmd(
-            self,
-            *,
-            orchestrator_prompt: str,
-            plugin_binding: PluginLaunchBinding | None,
-            cwd: str,
-            completion_marker: str,
-        ) -> CmdSpec: ...
-
-        def build_interactive_cmd(
-            self,
-            *,
-            initial_prompt: str | None = None,
-            model: str | None = None,
-            plugin_binding: PluginLaunchBinding | None = None,
-            add_dirs: Sequence[Path | str | ValidatedAddDir] = (),
-            generated_home: Path | None = None,
-            resume_spec: ResumeSpec = NoResume(),
-            system_prompt: str | None = None,
-            env_extras: Mapping[str, str] | None = None,
-            required_env: frozenset[str] | None = None,
-            tools: Sequence[str] = (),
-        ) -> CmdSpec: ...
-
-        def validate_session_layout(
-            self,
-            session_dir: Path,
-            *,
-            project_dir: Path | None = None,
-        ) -> list[str]: ...
-
-        def validate_interactive_invocation(self, spec: CmdSpec) -> list[str]:
-            return []
-
-        def validate_skill_content(self, content: str) -> list[str]: ...
-
-        def version(self) -> str: ...
-
-        def list_plugins(self) -> list[dict[str, Any]]: ...
-
-        def ensure_pre_launch(self, *, session_dir: Path | None = None) -> PreLaunchReadiness:
-            return PreLaunchReadiness((), {})
-
-        def recover_cook_history(self) -> None:
-            return None
-
-        def session_attempt_context(
-            self,
-            *,
-            session_home: Path,
-            project_dir: Path,
-            launch_id: str,
-            attempt: int,
-            current_resume_spec: ResumeSpec,
-        ):
-            del project_dir
-            from contextlib import nullcontext
-
-            from autoskillit.core import SessionAttemptHandle
-
-            return nullcontext(
-                SessionAttemptHandle(
-                    view_id=f"{launch_id}-{attempt}",
-                    pass_fds=(),
-                    _record_spawn=lambda _pid, _pgid: None,
-                    _record_reaped=lambda _pid, _pgid: None,
-                )
-            )
-
-        def translate_model(self, model: str) -> str: ...
-
-        def adapt_skill_semantics(
-            self,
-            plan: SkillSemanticPlan,
-            adaptation_context: SemanticAdaptationContext | None = None,
-        ) -> SkillSemanticAdaptationResult: ...
-
-        def model_config_overrides(self, model: str) -> tuple[str, ...]:
-            return ()
-
-        def build_inspector_cmd(self, prompt: str, *, model: str = "") -> CmdSpec:
-            return CmdSpec(cmd=(), env={})
-
-        def line_driver(self, spec: CmdSpec) -> LineDriver | None:
-            del spec
-            return None
-
-        def setup_session_dir(
-            self,
-            session_dir: Path,
-            *,
-            parent_sandbox_mode: str = "workspace-write",
-            agent_defs: tuple[AgentDef, ...] | None = None,
-            explorer_binding_env: Mapping[str, Mapping[str, str]] | None = None,
-            execution_role: SkillExecutionRole = SkillExecutionRole.SESSION,
-        ) -> frozenset[str] | None: ...
-
-        def refresh_explorer_binding_env(
-            self,
-            session_dir: Path,
-            explorer_binding_env: Mapping[str, Mapping[str, str]],
-        ) -> None: ...
-
-        def clear_explorer_binding_env(self, session_dir: Path, roles: frozenset[str]) -> None: ...
-
     backend = _Backend()
     assert backend.conventions.profile_skills_source is None
     assert isinstance(backend, CodingAgentBackend)

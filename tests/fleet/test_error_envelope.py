@@ -169,23 +169,14 @@ class TestFleetErrorASTScan:
 
         violations = []
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            # Check if this is a json.dumps(...) call
-            func = node.func
-            is_json_dumps = (
-                isinstance(func, ast.Attribute)
-                and func.attr == "dumps"
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "json"
-            )
-            if not is_json_dumps:
-                continue
-            if not node.args:
-                continue
-            dict_arg = node.args[0]
-            if not isinstance(dict_arg, ast.Dict):
-                continue
+            match node:
+                case ast.Call(
+                    func=ast.Attribute(value=ast.Name(id="json"), attr="dumps"),
+                    args=[ast.Dict() as dict_arg, *_],
+                ):
+                    pass
+                case _:
+                    continue
             # Look for "error" key with a franchise-style string literal value
             for key, value in zip(dict_arg.keys, dict_arg.values):
                 if not isinstance(key, ast.Constant) or key.value != "error":

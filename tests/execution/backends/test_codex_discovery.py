@@ -16,6 +16,8 @@ pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
 _FIXTURE_ROOT = Path("/opt/autoskillit-fixtures/codex/discovery")
 _FIXTURES = ("discovery_prompt_input_v0130.json", "discovery_prompt_input_v0153.json")
+# Diagnostics stay pasteable into an issue/log line without truncation tools.
+_MAX_DIAGNOSTIC_ERROR_LENGTH = 2_000
 
 
 def _skills_text(document: list[object]) -> str:
@@ -406,7 +408,7 @@ def test_attest_catalog_discovery_rejects_invalid_explicit_discovery_root(
     assert "roots=" in diagnostic
     assert f"catalog={catalog_dir}" in diagnostic
     assert "version=0.153.4" in diagnostic
-    assert all(len(error) <= 2_000 for error in errors)
+    assert all(len(error) <= _MAX_DIAGNOSTIC_ERROR_LENGTH for error in errors)
 
 
 def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(

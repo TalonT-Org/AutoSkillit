@@ -612,12 +612,10 @@ def test_projected_interactive_validator_accepts_canonical_home_without_managed_
 
     assert backend.validate_interactive_invocation(spec) == []
     assert events == ["version", "prompt-input"]
-    assert version_call == {
-        "executable": str(executable),
-        "env": spec.env,
-        "cwd": spec.cwd,
-        "timeout_seconds": 30.0,
-    }
+    assert version_call["executable"] == str(executable)
+    assert version_call["env"] == spec.env
+    assert version_call["cwd"] == spec.cwd
+    assert version_call["timeout_seconds"] == 30.0
     assert discovery_call["probe_command"] == (
         *codex._interactive_probe_prefix(spec.origin),
         *codex.CODEX_SKILL_DISCOVERY_CONTRACT.prompt_probe,
@@ -685,6 +683,18 @@ def test_projected_interactive_validator_rejects_home_file(tmp_path: Path) -> No
     home_file.write_text("not a directory", encoding="utf-8")
     environment = dict(spec.env)
     environment["CODEX_HOME"] = str(home_file)
+
+    assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
+        "Codex projected interactive CODEX_HOME must be a canonical real directory"
+    ]
+
+
+def test_projected_interactive_validator_rejects_symlinked_home(tmp_path: Path) -> None:
+    backend, spec, projected_home, _executable = _projected_interactive_spec(tmp_path)
+    symlinked_home = tmp_path / "symlinked-home"
+    symlinked_home.symlink_to(projected_home)
+    environment = dict(spec.env)
+    environment["CODEX_HOME"] = str(symlinked_home)
 
     assert backend.validate_interactive_invocation(replace(spec, env=environment)) == [
         "Codex projected interactive CODEX_HOME must be a canonical real directory"

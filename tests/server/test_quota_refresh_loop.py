@@ -169,6 +169,8 @@ def test_ensure_quota_refresh_started_reuses_live_task(
         assert ctx.quota_refresh_task is started_task
         assert create_task.call_args.args == (loop,)
         assert create_task.call_args.kwargs == {"label": "quota_refresh_loop"}
+    else:
+        assert ctx.quota_refresh_task is existing_task
 
 
 @pytest.mark.parametrize(

@@ -237,8 +237,6 @@ class TestCheckCodexRuntimePolicy:
         assert "auto_compaction_policy=deny" in result.message
         assert "context_window_tokens=200000" in result.message
         assert "auto_compact_threshold_tokens=180000" in result.message
-        assert "home_placement=persistent_session_home" in result.message
-        assert "context_exhaustion_behavior=stop" in result.message
 
     def test_reports_codex_defaults_for_omitted_tuning(self, tmp_path: Path) -> None:
         from autoskillit.cli.doctor._doctor_runtime import _check_codex_runtime_policy

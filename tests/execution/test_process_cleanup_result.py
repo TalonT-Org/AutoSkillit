@@ -404,6 +404,10 @@ class FakePopen:
         return self.returncode
 
 
+@pytest.mark.skipif(
+    not hasattr(_owned_group.os, "WNOWAIT"),
+    reason="WNOWAIT is required for non-reaping observation",
+)
 def test_observe_exit_uses_waitid_without_reaping(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

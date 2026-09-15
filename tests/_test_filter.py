@@ -2541,7 +2541,11 @@ def _refine_with_coverage(
     cwd: str | Path | None,
     tests_root: Path,
 ) -> None:
-    """Use a valid coverage map to replace complete source groups with test files."""
+    """Use a valid coverage map to replace complete source groups with test files.
+
+    Use the aggressive cascade here in every filter mode so conservative
+    cross-package cascades remain intact during file-level refinement.
+    """
     if coverage_map_path is None or cwd is None:
         return
     coverage_map = load_coverage_map(coverage_map_path, cwd=cwd)

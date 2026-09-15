@@ -594,6 +594,7 @@ def test_backend_module_all_exhaustive():
         "BackendConventions",
         "CLAUDE_CODE_CAPABILITIES",
         "CLAUDE_MODEL_ALIASES",
+        "CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE",
         "CODEX_EFFORT_MAPPING",
         "CODEX_MODEL_ALIASES",
         "CODEX_MODEL_ALIASES_LAST_VERIFIED",

@@ -160,91 +160,38 @@ def _install_fault(
             fault_hits.append(stage)
             raise OSError(f"injected audit fault: {stage}")
 
-    if stage == "semantic_acceptance":
-        original = audit_artifacts_module._write_or_verify_semantic_result
+    def patch_once(target: object, attribute: str) -> None:
+        original = getattr(target, attribute)
 
-        def fault_semantic(*args, **kwargs):
+        def fault(*args, **kwargs):
             fail_once()
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(
-            audit_artifacts_module,
-            "_write_or_verify_semantic_result",
-            fault_semantic,
-        )
-    elif stage == "prepared_record_persistence":
-        original = tool_ctx.audit_admission_ledger.prepare
+        monkeypatch.setattr(target, attribute, fault)
 
-        def fault_prepare(*args, **kwargs):
-            fail_once()
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(tool_ctx.audit_admission_ledger, "prepare", fault_prepare)
+    ordinary_patches = {
+        "semantic_acceptance": (audit_artifacts_module, "_write_or_verify_semantic_result"),
+        "prepared_record_persistence": (tool_ctx.audit_admission_ledger, "prepare"),
+        "cas": (tool_ctx.audit_admission_ledger, "commit_authority"),
+        "success_effect_finalization": (execution_module, "_complete_audit_finalization_effects"),
+        "result_rewrite": (execution_module, "AuditResultOutcome"),
+        "response_shaping": (execution_module, "shape_execution_response"),
+        "response_commit": (tool_ctx.audit_admission_ledger, "finalize_response"),
+    }
+    if stage in ordinary_patches:
+        patch_once(*ordinary_patches[stage])
     elif stage in {"inventory_write", "authority_write", "post_write_pre_cas"}:
         original = materializer_module._write_or_verify
+        artifact_kind = "inventory" if stage == "inventory_write" else "authority"
 
         def fault_write(effect, allowed_root):
-            if not fault_hits and effect.artifact_kind == (
-                "inventory" if stage == "inventory_write" else "authority"
-            ):
+            if not fault_hits and effect.artifact_kind == artifact_kind:
                 if stage == "post_write_pre_cas":
                     original(effect, allowed_root)
                 fail_once()
             return original(effect, allowed_root)
 
         monkeypatch.setattr(materializer_module, "_write_or_verify", fault_write)
-    elif stage == "cas":
-        original = tool_ctx.audit_admission_ledger.commit_authority
-
-        def fault_commit(*args, **kwargs):
-            fail_once()
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(
-            tool_ctx.audit_admission_ledger,
-            "commit_authority",
-            fault_commit,
-        )
-    elif stage == "success_effect_finalization":
-        original = execution_module._complete_audit_finalization_effects
-
-        def fault_finalization(*args, **kwargs):
-            fail_once()
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(
-            execution_module,
-            "_complete_audit_finalization_effects",
-            fault_finalization,
-        )
-    elif stage == "result_rewrite":
-        original = execution_module.AuditResultOutcome
-
-        def fault_rewrite(*args, **kwargs):
-            fail_once()
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(execution_module, "AuditResultOutcome", fault_rewrite)
-    elif stage == "response_shaping":
-        original = execution_module.shape_execution_response
-
-        def fault_shape(*args, **kwargs):
-            fail_once()
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(execution_module, "shape_execution_response", fault_shape)
-    elif stage == "response_commit":
-        original = tool_ctx.audit_admission_ledger.finalize_response
-
-        def fault_response_commit(*args, **kwargs):
-            fail_once()
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(
-            tool_ctx.audit_admission_ledger,
-            "finalize_response",
-            fault_response_commit,
-        )
     else:  # pragma: no cover - parameter registry is intentionally closed
         raise AssertionError(f"unregistered fault stage: {stage}")
     return fault_hits

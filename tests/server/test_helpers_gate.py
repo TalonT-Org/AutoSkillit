@@ -73,26 +73,21 @@ def _mutate_recipe_section_pages(
     mutation: str,
 ) -> None:
     second = pages[1]
-    if mutation == "pagination_version":
-        second["pagination_version"] = -1
-    elif mutation == "section_registry":
-        second["section_registry_sha256"] = "sha256:" + ("a" * 64)
-    elif mutation == "section":
-        second["section"] = "different-section"
-    elif mutation == "section_digest":
-        second["section_sha256"] = "sha256:" + ("b" * 64)
-    elif mutation == "plan_digest":
-        second["page_plan_sha256"] = "sha256:" + ("c" * 64)
-    elif mutation == "payload_identity":
-        second["payload_sha256"] = "sha256:" + ("d" * 64)
-    elif mutation == "body_identity":
-        second["body_sha256"] = "sha256:" + ("e" * 64)
-    elif mutation == "total_parts":
-        second["total_parts"] = int(second["total_parts"]) + 1
-    elif mutation == "duplicate_part":
-        second["part"] = pages[0]["part"]
-    elif mutation == "unknown_format":
-        second["content_format"] = "future-format"
+    ordinary_mutations = {
+        "pagination_version": ("pagination_version", -1),
+        "section_registry": ("section_registry_sha256", "sha256:" + ("a" * 64)),
+        "section": ("section", "different-section"),
+        "section_digest": ("section_sha256", "sha256:" + ("b" * 64)),
+        "plan_digest": ("page_plan_sha256", "sha256:" + ("c" * 64)),
+        "payload_identity": ("payload_sha256", "sha256:" + ("d" * 64)),
+        "body_identity": ("body_sha256", "sha256:" + ("e" * 64)),
+        "total_parts": ("total_parts", int(second["total_parts"]) + 1),
+        "duplicate_part": ("part", pages[0]["part"]),
+        "unknown_format": ("content_format", "future-format"),
+    }
+    if mutation in ordinary_mutations:
+        field, value = ordinary_mutations[mutation]
+        second[field] = value
     elif mutation in {"gap", "overlap", "duplicate_range"}:
         fields = {
             "raw-text": ("byte_start", "byte_end"),

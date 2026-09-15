@@ -278,115 +278,127 @@ def _content_text(value: object) -> str:
     return ""
 
 
+def _normalize_claude_event(event: dict, index: int) -> list[_WorkflowEvent]:
+    if event.get("isSidechain") is True:
+        return []
+    record_type = event.get("type")
+    message = event.get("message", {})
+    if not isinstance(message, dict):
+        return []
+    blocks = message.get("content", [])
+    if not isinstance(blocks, list):
+        return []
+
+    normalized: list[_WorkflowEvent] = []
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        block_type = block.get("type")
+        if record_type == "assistant" and block_type == "text":
+            normalized.append(_WorkflowEvent("text", "", "", str(block.get("text", "")), index))
+        elif record_type == "assistant" and block_type == "tool_use":
+            name = str(block.get("name", ""))
+            kind = "launch" if name in {"Agent", "Task"} else "tool_call"
+            normalized.append(
+                _WorkflowEvent(
+                    kind,
+                    name,
+                    str(block.get("id", "")),
+                    json.dumps(block.get("input", {}), sort_keys=True),
+                    index,
+                )
+            )
+        elif record_type == "user" and block_type == "tool_result":
+            normalized.append(
+                _WorkflowEvent(
+                    "completion",
+                    "",
+                    str(block.get("tool_use_id", "")),
+                    _content_text(block.get("content", "")),
+                    index,
+                )
+            )
+    return normalized
+
+
+def _normalize_codex_event(event: dict, index: int) -> list[_WorkflowEvent]:
+    if event.get("type") != "response_item":
+        return []
+    payload = event.get("payload", {})
+    if not isinstance(payload, dict):
+        return []
+    payload_type = payload.get("type")
+    if payload_type == "function_call":
+        name = str(payload.get("name", ""))
+        kind = "launch" if name in {"spawn_agent", "followup_task"} else "tool_call"
+        return [
+            _WorkflowEvent(
+                kind,
+                name,
+                str(payload.get("call_id", "")),
+                str(payload.get("arguments", "")),
+                index,
+            )
+        ]
+    if payload_type == "function_call_output":
+        return [
+            _WorkflowEvent(
+                "completion",
+                "",
+                str(payload.get("call_id", "")),
+                str(payload.get("output", "")),
+                index,
+            )
+        ]
+    if payload_type == "message" and payload.get("role") == "assistant":
+        return [
+            _WorkflowEvent(
+                "text",
+                "",
+                "",
+                _content_text(payload.get("content", [])),
+                index,
+            )
+        ]
+    if payload_type == "agent_message":
+        content = _content_text(payload.get("content", []))
+        sender_match = re.search(r"(?m)^Sender:\s*(\S+)", content)
+        return [
+            _WorkflowEvent(
+                "agent_result",
+                sender_match.group(1) if sender_match else "",
+                "",
+                content,
+                index,
+            )
+        ]
+    if payload_type == "custom_tool_call":
+        name = str(payload.get("name", ""))
+        content = str(payload.get("input", ""))
+        normalized: list[_WorkflowEvent] = []
+        if "inter-batch synthesis:" in content.lower():
+            normalized.append(_WorkflowEvent("text", name, "", content, index))
+        if name in {"apply_patch", "tools.apply_patch"} or "tools.apply_patch" in content:
+            normalized.append(
+                _WorkflowEvent(
+                    "tool_call",
+                    "apply_patch",
+                    str(payload.get("call_id", "")),
+                    content,
+                    index,
+                )
+            )
+        return normalized
+    return []
+
+
 def _normalize_workflow_events(backend: str, raw_events: list[dict]) -> list[_WorkflowEvent]:
     normalized: list[_WorkflowEvent] = []
     for index, event in enumerate(raw_events):
         if backend == "claude-code":
-            if event.get("isSidechain") is True:
-                continue
-            record_type = event.get("type")
-            message = event.get("message", {})
-            if not isinstance(message, dict):
-                continue
-            blocks = message.get("content", [])
-            if not isinstance(blocks, list):
-                continue
-            for block in blocks:
-                if not isinstance(block, dict):
-                    continue
-                block_type = block.get("type")
-                if record_type == "assistant" and block_type == "text":
-                    normalized.append(
-                        _WorkflowEvent("text", "", "", str(block.get("text", "")), index)
-                    )
-                elif record_type == "assistant" and block_type == "tool_use":
-                    name = str(block.get("name", ""))
-                    kind = "launch" if name in {"Agent", "Task"} else "tool_call"
-                    normalized.append(
-                        _WorkflowEvent(
-                            kind,
-                            name,
-                            str(block.get("id", "")),
-                            json.dumps(block.get("input", {}), sort_keys=True),
-                            index,
-                        )
-                    )
-                elif record_type == "user" and block_type == "tool_result":
-                    normalized.append(
-                        _WorkflowEvent(
-                            "completion",
-                            "",
-                            str(block.get("tool_use_id", "")),
-                            _content_text(block.get("content", "")),
-                            index,
-                        )
-                    )
+            normalized.extend(_normalize_claude_event(event, index))
         elif backend == "codex":
-            if event.get("type") != "response_item":
-                continue
-            payload = event.get("payload", {})
-            if not isinstance(payload, dict):
-                continue
-            payload_type = payload.get("type")
-            if payload_type == "function_call":
-                name = str(payload.get("name", ""))
-                kind = "launch" if name in {"spawn_agent", "followup_task"} else "tool_call"
-                normalized.append(
-                    _WorkflowEvent(
-                        kind,
-                        name,
-                        str(payload.get("call_id", "")),
-                        str(payload.get("arguments", "")),
-                        index,
-                    )
-                )
-            elif payload_type == "function_call_output":
-                normalized.append(
-                    _WorkflowEvent(
-                        "completion",
-                        "",
-                        str(payload.get("call_id", "")),
-                        str(payload.get("output", "")),
-                        index,
-                    )
-                )
-            elif payload_type == "message" and payload.get("role") == "assistant":
-                normalized.append(
-                    _WorkflowEvent(
-                        "text",
-                        "",
-                        "",
-                        _content_text(payload.get("content", [])),
-                        index,
-                    )
-                )
-            elif payload_type == "agent_message":
-                content = _content_text(payload.get("content", []))
-                sender_match = re.search(r"(?m)^Sender:\s*(\S+)", content)
-                normalized.append(
-                    _WorkflowEvent(
-                        "agent_result",
-                        sender_match.group(1) if sender_match else "",
-                        "",
-                        content,
-                        index,
-                    )
-                )
-            elif payload_type == "custom_tool_call":
-                name = str(payload.get("name", ""))
-                content = str(payload.get("input", ""))
-                if "inter-batch synthesis:" in content.lower():
-                    normalized.append(_WorkflowEvent("text", name, "", content, index))
-                if name in {"apply_patch", "tools.apply_patch"} or "tools.apply_patch" in content:
-                    normalized.append(
-                        _WorkflowEvent(
-                            "tool_call",
-                            "apply_patch",
-                            str(payload.get("call_id", "")),
-                            content,
-                            index,
-                        )
-                    )
+            normalized.extend(_normalize_codex_event(event, index))
         else:  # pragma: no cover - parametrization is sealed above
             raise AssertionError(f"unsupported backend {backend}")
     return normalized

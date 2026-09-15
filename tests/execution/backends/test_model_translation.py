@@ -9,7 +9,10 @@ import pytest
 from autoskillit.core import SkillSessionConfig
 from autoskillit.core.types._type_backend import CLAUDE_MODEL_ALIASES, CODEX_MODEL_ALIASES
 from autoskillit.execution.backends.claude import ClaudeCodeBackend
-from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 from tests.execution.backends._plugin_binding import plugin_binding
 from tests.fixtures.codex import codex_skill_add_dirs
 
@@ -21,11 +24,7 @@ CodexBackend = GeneratedHomeCodexBackend
 
 @pytest.fixture(autouse=True)
 def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        CodexBackend,
-        "generated_home",
-        tmp_path / "generated-home",
-    )
+    bind_generated_home_backend(tmp_path, monkeypatch)
 
 
 class TestCodexTranslateModel:

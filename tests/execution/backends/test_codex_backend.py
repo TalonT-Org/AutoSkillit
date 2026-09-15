@@ -62,7 +62,10 @@ from autoskillit.execution.backends.codex import (
     CodexBackend as _CodexBackend,
 )
 from tests._codex_feature_policy import RETIRED_CODEX_FEATURES
-from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
+from tests.execution.backends._generated_home_backend import (
+    GeneratedHomeCodexBackend,
+    bind_generated_home_backend,
+)
 from tests.execution.backends._otlp_test_data import OTLP_EXTRAS
 from tests.execution.backends._plugin_binding import plugin_binding
 
@@ -73,11 +76,7 @@ CodexBackend = GeneratedHomeCodexBackend
 
 @pytest.fixture(autouse=True)
 def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        CodexBackend,
-        "generated_home",
-        tmp_path / "generated-home",
-    )
+    bind_generated_home_backend(tmp_path, monkeypatch)
 
 
 _OTLP_OVERRIDES = (

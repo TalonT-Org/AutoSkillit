@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
+import pytest
+
 from autoskillit.execution.backends.codex import CodexBackend
 
 
@@ -29,3 +31,12 @@ class GeneratedHomeCodexBackend(CodexBackend):
     def build_resume_cmd(self, *args: Any, **kwargs: Any):
         kwargs.setdefault("session_home", str(self._fixture_home()))
         return super().build_resume_cmd(*args, **kwargs)
+
+
+def bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Bind the shared adapter to one test's isolated generated home."""
+    monkeypatch.setattr(
+        GeneratedHomeCodexBackend,
+        "generated_home",
+        tmp_path / "generated-home",
+    )

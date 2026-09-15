@@ -10,7 +10,6 @@ from pathlib import Path
 import anyio
 import pytest
 
-import autoskillit.core.fs_observation as fs_observation
 import autoskillit.execution.process._process_monitor as process_monitor
 import autoskillit.execution.process._process_race as _patch_process__process_race
 from autoskillit.core import ObservedEntry
@@ -802,64 +801,18 @@ class TestSessionLogMonitorDirMissing:
         survivor.write_text(json.dumps({"type": "assistant", "message": {"content": "start"}}))
         await anyio.sleep(0.02)
         newest.write_text(json.dumps({"type": "assistant", "message": {"content": "start"}}))
-        victim_removed = False
+        original_stat = os.DirEntry.stat
 
-        def remove_victim() -> None:
-            nonlocal victim_removed
-            if not victim_removed:
-                victim_removed = True
+        def vanish_victim_then_stat(
+            entry: os.DirEntry[str],
+            *,
+            follow_symlinks: bool = True,
+        ) -> os.stat_result:
+            if Path(entry.path) == victim:
                 victim.unlink()
+            return original_stat(entry, follow_symlinks=follow_symlinks)
 
-        class FakeDirEntry:
-            def __init__(self, entry: os.DirEntry[str]) -> None:
-                self._entry = entry
-                self.name = entry.name
-                self.path = entry.path
-
-            def stat(self, *, follow_symlinks: bool = True) -> os.stat_result:
-                if Path(self.path) == victim:
-                    remove_victim()
-                return self._entry.stat(follow_symlinks=follow_symlinks)
-
-            def is_dir(self, *, follow_symlinks: bool = True) -> bool:
-                return self._entry.is_dir(follow_symlinks=follow_symlinks)
-
-            def is_symlink(self) -> bool:
-                return self._entry.is_symlink()
-
-        class FakeScandir:
-            def __init__(self, scanner: os.ScandirIterator[str]) -> None:
-                self._scanner = scanner
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args: object) -> None:
-                self.close()
-
-            def __iter__(self):
-                return self
-
-            def __next__(self):
-                return FakeDirEntry(next(self._scanner))
-
-            def close(self) -> None:
-                self._scanner.close()
-
-        original_scandir = os.scandir
-        original_stat = Path.stat
-
-        def direct_stat(path: Path, *args: object, **kwargs: object) -> os.stat_result:
-            if path == victim:
-                remove_victim()
-            return original_stat(path, *args, **kwargs)
-
-        monkeypatch.setattr(
-            fs_observation.os,
-            "scandir",
-            lambda root: FakeScandir(original_scandir(root)),
-        )
-        monkeypatch.setattr(Path, "stat", direct_stat)
+        monkeypatch.setattr(os.DirEntry, "stat", vanish_victim_then_stat)
 
         selected: list[Path] = []
         results: list[SessionMonitorResult] = []

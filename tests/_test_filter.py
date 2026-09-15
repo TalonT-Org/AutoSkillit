@@ -1983,7 +1983,7 @@ def _decode_coverage_publication(
     if schema_version is None:
         _reject_coverage_map(map_path, SourceMapRejection.MISSING_PROVENANCE, stacklevel=3)
         return None
-    if schema_version != 1:
+    if schema_version not in {1, 2}:
         _reject_coverage_map(map_path, SourceMapRejection.UNKNOWN_SCHEMA_VERSION, stacklevel=3)
         return None
     provenance = raw.get("provenance")
@@ -2030,8 +2030,8 @@ def load_coverage_map(
                       Defaults to 30 days.
         cwd: Repository whose HEAD is being filtered.
 
-    Returns None whenever the artifact is not a successful schema-version-one
-    publication. This preserves the coarser directory-level cascade.
+    Returns None whenever the artifact is not a successful publication at schema
+    version 1 or 2. This preserves the coarser directory-level cascade.
     """
     map_path = Path(map_path)
     try:

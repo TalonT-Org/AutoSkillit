@@ -268,7 +268,7 @@ class OwnedProcessGroup:
                 self._record_incomplete()
 
     def _identity_is_alive(self, identity: tuple[int, float]) -> bool:
-        """Return whether the identified PID is still a live, non-zombie process."""
+        """Return whether the PID is live, treating unobservable identity as alive."""
         pid, create_time = identity
         try:
             proc = psutil.Process(pid)

@@ -635,7 +635,8 @@ def _apply_corrupt_codex_runtime_spec(
     except UnicodeDecodeError as exc:
         raise RuntimeError(f"config file contains non-UTF-8 bytes: {exc}") from exc
     text = _re.sub(
-        r"(?m)^\s*(?:model_context_window|model_auto_compact_token_limit)\s*=.*(?:\r?\n|$)",
+        r"(?m)^\s*(?:tool_output_token_limit|model_context_window|"
+        r"model_auto_compact_token_limit)\s*=.*(?:\r?\n|$)",
         "",
         text,
     )

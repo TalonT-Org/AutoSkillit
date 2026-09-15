@@ -1181,49 +1181,49 @@ AUDITED_RETENTION_DECISIONS: dict[str, RetentionDecision | SafetyDecision] = {
     # the #4623 pass's own child_outcomes import to inside the try block (issue
     # #4672 decomposition — module-level would circularly import back through
     # the evidence/ gateway that now wraps this file).
-    f"{_SR}::L211": _retries_after_input_changes(
+    f"{_SR}::L230": _retries_after_input_changes(
         "The configured trace root is absent, so no crash candidate can be discovered yet."
     ),
-    f"{_SRE}::L42": _retries_after_input_changes(
+    f"{_SRE}::L45": _retries_after_input_changes(
         "The trace cannot be statted, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SRE}::L44": _resolves_with_contention(
+    f"{_SRE}::L47": _resolves_with_contention(
         "A fresh trace may still belong to its active writer and ages past this gate."
     ),
-    f"{_SRE}::L55": _retries_after_input_changes(
+    f"{_SRE}::L58": _retries_after_input_changes(
         "An unowned trace is deliberately retained until enrollment or operator input changes."
     ),
-    f"{_SRE}::L60": _self_limiting(
+    f"{_SRE}::L63": _self_limiting(
         "A boot-mismatched trace and enrollment are deleted as a terminal stale-process "
         "disposition."
     ),
-    f"{_SRE}::L69": _resolves_with_contention(
+    f"{_SRE}::L72": _resolves_with_contention(
         "The enrolled process remains live, so its trace waits for the observed owner to exit."
     ),
-    f"{_SRD}::L84": _self_limiting(
+    f"{_SRD}::L87": _self_limiting(
         "A blank JSONL line is ignored while this same trace continues through later recovery "
         "gates."
     ),
-    f"{_SRD}::L89": _self_limiting(
+    f"{_SRD}::L92": _self_limiting(
         "Invalid JSON breaks to permanent-corruption cleanup, which removes the trace and "
         "enrollment."
     ),
-    f"{_SRD}::L92": _self_limiting(
+    f"{_SRD}::L95": _self_limiting(
         "A non-object JSON record breaks to permanent-corruption cleanup and removes this trace."
     ),
-    f"{_SRD}::L97": _retries_after_input_changes(
+    f"{_SRD}::L100": _retries_after_input_changes(
         "The trace cannot be read, so recovery waits for filesystem accessibility to return."
     ),
-    f"{_SRD}::L106": _self_limiting(
+    f"{_SRD}::L109": _self_limiting(
         "Permanent trace corruption deletes both trace and enrollment before another startup pass."
     ),
-    f"{_SRD}::L118": _self_limiting(
+    f"{_SRD}::L121": _self_limiting(
         "An alien-command trace and its enrollment are deleted as a terminal safety disposition."
     ),
-    f"{_SRF}::L136": _retries_after_input_changes(
+    f"{_SRF}::L139": _retries_after_input_changes(
         "A second stat failure keeps the trace retryable until the filesystem becomes available."
     ),
-    f"{_SRF}::L176": _retries_after_input_changes(
+    f"{_SRF}::L179": _retries_after_input_changes(
         "Flush or output-index failure retains both files until output infrastructure recovers."
     ),
 }

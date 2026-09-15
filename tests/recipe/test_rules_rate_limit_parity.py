@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from autoskillit.core import is_recipe_path_validation_report
 from autoskillit.recipe._api_listing import validate_from_path
 from autoskillit.recipe.io import load_recipe
 from tests._tracked_recipes import tracked_recipe_paths
@@ -76,9 +77,10 @@ class TestRateLimitRuleFiring:
         stays silent once every run_skill step has on_rate_limit. WARNING
         severity must NOT block recipe validation.
 
-        The :func:`validate_from_path` API returns ``dict[str, Any]``. The
-        ``"findings"`` value is ``list[dict[str, str]]`` with keys ``"rule"``,
-        ``"severity"`` (lowercase string via ``Severity.value``), ``"step"``,
+        The :func:`validate_from_path` API returns either an input-error result
+        or a completed report. Completed-report ``"findings"`` is
+        ``list[dict[str, str]]`` with keys ``"rule"``, ``"severity"``
+        (lowercase string via ``Severity.value``), ``"step"``, and
         ``"message"``. Each item is a plain dict — not a ``RuleFinding``
         dataclass instance.
 
@@ -92,6 +94,7 @@ class TestRateLimitRuleFiring:
             return
 
         result = validate_from_path(recipe_path)
+        assert is_recipe_path_validation_report(result)
         rate_limit_warnings = [
             f
             for f in result["findings"]

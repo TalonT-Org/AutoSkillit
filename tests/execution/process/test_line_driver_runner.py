@@ -78,8 +78,8 @@ _KEEP_ALIVE_CHILD_SCRIPT = (
     "time.sleep(30)\n"
 )
 
-# A child that exits immediately without ever reading or writing anything.
-_IMMEDIATE_EXIT_CHILD_SCRIPT = "pass\n"
+# A child that consumes the initial request, then exits without responding.
+_EXIT_AFTER_INITIAL_REQUEST_CHILD_SCRIPT = "import sys\nsys.stdin.readline()\n"
 
 # A child that reads stdin but never responds (stdout stays silent) until
 # killed — used to exercise the overall wall-clock timeout path.
@@ -177,7 +177,7 @@ class TestChildExitsMidHandshake:
 
         with pytest.raises(LineDriverError, match="closed stdout"):
             await run_managed_async(
-                [sys.executable, "-c", _IMMEDIATE_EXIT_CHILD_SCRIPT],
+                [sys.executable, "-c", _EXIT_AFTER_INITIAL_REQUEST_CHILD_SCRIPT],
                 cwd=tmp_path,
                 timeout=5.0,
                 line_driver=_EchoDriver(),

@@ -18,6 +18,11 @@ ROOT_PUBLIC_NAMES = (
     "CloneGateUncommitted",
     "CloneGateUnpublished",
     "CloneResult",
+    "RecipePathValidationErrorFinding",
+    "RecipePathValidationInputError",
+    "RecipePathValidationReport",
+    "RecipePathValidationResult",
+    "is_recipe_path_validation_report",
     "ModelTotalEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
     "LoadReport",
@@ -37,7 +42,14 @@ INTERNAL_INDEX_NAMES = (
 MOVED_NAMES = ROOT_PUBLIC_NAMES + INTERNAL_INDEX_NAMES
 
 RUNTIME_TYPE_NAMES = tuple(
-    name for name in MOVED_NAMES if name not in {"CloneResult", "SESSION_INDEX_SCHEMA_VERSION"}
+    name
+    for name in MOVED_NAMES
+    if name
+    not in {
+        "CloneResult",
+        "RecipePathValidationResult",
+        "SESSION_INDEX_SCHEMA_VERSION",
+    }
 )
 
 

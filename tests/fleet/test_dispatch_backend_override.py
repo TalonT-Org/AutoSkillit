@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -216,6 +217,41 @@ class TestFoodTruckBackendOverridePrelaunch:
 
 
 class TestDispatchBackendOverrideThreadsToExecutor:
+    def test_caller_override_retains_codex_runtime_spec_and_terminal_outcome(
+        self, tool_ctx
+    ) -> None:
+        from autoskillit.core import (
+            CodexRuntimeSpec,
+            FleetErrorCode,
+            RetryReason,
+        )
+        from autoskillit.execution import CodexBackend, DefaultLaunchResolver
+        from autoskillit.fleet import DispatchStatus
+        from autoskillit.fleet._outcome import classify_dispatch_outcome
+        from tests.fakes import _DEFAULT_SKILL_RESULT
+        from tests.fleet._helpers import _make_completed_clean
+
+        runtime_spec = CodexRuntimeSpec(
+            context_window_tokens=200_000,
+            auto_compact_threshold_tokens=180_000,
+        )
+        tool_ctx.launch_resolver = DefaultLaunchResolver(codex_runtime_spec=runtime_spec)
+
+        backend = tool_ctx.launch_resolver.backend_for_authority(_caller_authority("codex"))
+        assert isinstance(backend, CodexBackend)
+        assert backend.runtime_spec == runtime_spec
+
+        status, reason = classify_dispatch_outcome(
+            _make_completed_clean(success=True),
+            dataclasses.replace(
+                _DEFAULT_SKILL_RESULT,
+                success=True,
+                retry_reason=RetryReason.CONTEXT_EXHAUSTED,
+            ),
+        )
+        assert status is DispatchStatus.FAILURE
+        assert reason == FleetErrorCode.FLEET_L3_NO_RESULT_BLOCK
+
     @pytest.mark.anyio
     async def test_dispatch_backend_override_threads_to_executor(self, tool_ctx, monkeypatch):
         _setup(tool_ctx, monkeypatch)

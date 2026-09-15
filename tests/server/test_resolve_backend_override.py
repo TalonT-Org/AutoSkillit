@@ -34,6 +34,41 @@ def test_caller_backend_override_rejects_unknown_backend() -> None:
 
 class TestResolveBackendOverride:
     @pytest.mark.parametrize(
+        ("recipe_overrides", "expected_tier", "context_window_tokens"),
+        [
+            (
+                {"remediation": {"dry_walkthrough": "codex"}},
+                "recipe_step",
+                None,
+            ),
+            ({"remediation": {"*": "codex"}}, "recipe_wildcard", 200_000),
+        ],
+    )
+    def test_recipe_authority_retains_codex_runtime_spec(
+        self,
+        recipe_overrides: dict[str, dict[str, str]],
+        expected_tier: str,
+        context_window_tokens: int | None,
+    ) -> None:
+        from autoskillit.config import CodexRuntimeConfig
+        from autoskillit.execution import CodexBackend, DefaultLaunchResolver
+        from autoskillit.server.lifecycle._guards import _resolve_backend_override
+
+        runtime_spec = CodexRuntimeConfig(context_window_tokens=context_window_tokens).resolve()
+        resolver = DefaultLaunchResolver(codex_runtime_spec=runtime_spec)
+        authority = _resolve_backend_override(
+            "dry_walkthrough",
+            "remediation",
+            _make_backend(recipe_overrides=recipe_overrides),
+        )
+
+        assert authority is not None
+        assert authority.tier == expected_tier
+        resolved_backend = resolver.backend_for_authority(authority)
+        assert isinstance(resolved_backend, CodexBackend)
+        assert resolved_backend.runtime_spec == runtime_spec
+
+    @pytest.mark.parametrize(
         ("recipe_name", "step_name", "key_path"),
         BUNDLED_RECIPE_STEP_BACKEND_PIN_CASES,
     )

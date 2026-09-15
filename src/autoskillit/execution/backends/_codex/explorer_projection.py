@@ -144,6 +144,27 @@ def _validated_explorer_binding_env(label: str, binding: Mapping[str, str]) -> d
     return normalized
 
 
+def _validate_explorer_role_policy(role: str, definition: AgentDef) -> None:
+    projected_tools = tuple(
+        tool.removeprefix(DIRECT_PREFIX)
+        for tool in definition.tools
+        if tool.startswith(DIRECT_PREFIX)
+    )
+    if len(projected_tools) != len(definition.tools) or projected_tools != (
+        _EXPLORER_BROKER_TOOLS
+    ):
+        raise ValueError(
+            f"explorer role {role!r} must project exactly the exploration broker tools"
+        )
+    if definition.codex.sandbox_mode != "read-only":
+        raise ValueError(f"explorer role {role!r} must be read-only")
+    if definition.codex.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
+        raise ValueError(
+            f"explorer role {role!r} must disable native web search "
+            f"({CODEX_DISABLED_WEB_SEARCH_POLICY!r})"
+        )
+
+
 def _validated_explorer_binding_envs(
     definitions: tuple[AgentDef, ...],
     explorer_binding_env: Mapping[str, Mapping[str, str]] | None,
@@ -178,24 +199,7 @@ def _validated_explorer_binding_envs(
     shared_binding: dict[str, str] | None = None
     for role in sorted(binding_roles):
         definition = definitions_by_name[role]
-        projected_tools = tuple(
-            tool.removeprefix(DIRECT_PREFIX)
-            for tool in definition.tools
-            if tool.startswith(DIRECT_PREFIX)
-        )
-        if len(projected_tools) != len(definition.tools) or projected_tools != (
-            _EXPLORER_BROKER_TOOLS
-        ):
-            raise ValueError(
-                f"explorer role {role!r} must project exactly the exploration broker tools"
-            )
-        if definition.codex.sandbox_mode != "read-only":
-            raise ValueError(f"explorer role {role!r} must be read-only")
-        if definition.codex.web_search != CODEX_DISABLED_WEB_SEARCH_POLICY:
-            raise ValueError(
-                f"explorer role {role!r} must disable native web search "
-                f"({CODEX_DISABLED_WEB_SEARCH_POLICY!r})"
-            )
+        _validate_explorer_role_policy(role, definition)
 
         binding = _validated_explorer_binding_env(role, explorer_binding_env[role])
         if shared_binding is None:
@@ -206,6 +210,19 @@ def _validated_explorer_binding_envs(
             )
         validated[role] = binding
     return validated
+
+
+def _validate_explorer_mcp_transport_values(transport: Mapping[str, object]) -> None:
+    for key in ("args", "env_vars"):
+        value = transport.get(key)
+        if value is not None and (
+            not isinstance(value, list) or any(not isinstance(item, str) for item in value)
+        ):
+            raise ValueError(f"canonical autoskillit MCP {key} must be a text list")
+    for key in ("startup_timeout_sec", "tool_timeout_sec"):
+        value = transport.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise ValueError(f"canonical autoskillit MCP {key} must be numeric")
 
 
 def _canonical_explorer_mcp_transport(
@@ -239,16 +256,7 @@ def _canonical_explorer_mcp_transport(
         value = server.get(key)
         if value is not None:
             transport[key] = value
-    for key in ("args", "env_vars"):
-        value = transport.get(key)
-        if value is not None and (
-            not isinstance(value, list) or any(not isinstance(item, str) for item in value)
-        ):
-            raise ValueError(f"canonical autoskillit MCP {key} must be a text list")
-    for key in ("startup_timeout_sec", "tool_timeout_sec"):
-        value = transport.get(key)
-        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
-            raise ValueError(f"canonical autoskillit MCP {key} must be numeric")
+    _validate_explorer_mcp_transport_values(transport)
     return transport
 
 

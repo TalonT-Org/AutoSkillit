@@ -132,12 +132,18 @@ class _CodexSessionReconciliationMixin:
             lifecycle.release()
         return True
 
-    def _validate_manifest(
-        self,
-        view_path: Path,
-        manifest: Mapping[str, Any],
-    ) -> None:
-        store = cast("CodexSessionStore", self)
+    def _validate_manifest(self, view_path: Path, manifest: Mapping[str, Any]) -> None:
+        self._validate_manifest_envelope(view_path, manifest)
+        state, child_absent, child_valid, reaped = self._validate_manifest_child_state(manifest)
+        self._validate_manifest_rollout_lineage(view_path, manifest, state)
+        if state == "prepared" and (not child_absent or reaped):
+            raise RuntimeError("Prepared Codex recovery view has child lifecycle data")
+        if state in {"running", "finalizing", "complete"} and not child_valid:
+            raise RuntimeError("Spawned Codex recovery view has no child identity")
+        if state in {"finalizing", "complete"} and not reaped:
+            raise RuntimeError("Final Codex recovery view has no reap proof")
+
+    def _validate_manifest_envelope(self, view_path: Path, manifest: Mapping[str, Any]) -> None:
         _require_real_directory(view_path, label="Codex recovery view")
         manifest_path = view_path / _MANIFEST_NAME
         try:
@@ -155,6 +161,10 @@ class _CodexSessionReconciliationMixin:
                 label=f"Codex recovery {public_name} root",
             )
 
+        self._validate_manifest_identity(view_path, manifest)
+
+    @staticmethod
+    def _validate_manifest_identity(view_path: Path, manifest: Mapping[str, Any]) -> None:
         if manifest.get("schema_version") != 1:
             raise RuntimeError("Unsupported Codex recovery manifest schema")
         launch_id = manifest.get("launch_id")
@@ -178,6 +188,10 @@ class _CodexSessionReconciliationMixin:
         ):
             raise RuntimeError("Codex recovery project discriminator is not canonical")
 
+    @staticmethod
+    def _validate_manifest_child_state(
+        manifest: Mapping[str, Any],
+    ) -> tuple[str, bool, bool, bool]:
         state = manifest.get("state")
         if state not in _MANIFEST_STATES:
             raise RuntimeError("Codex recovery manifest has an invalid lifecycle state")
@@ -204,6 +218,12 @@ class _CodexSessionReconciliationMixin:
         elif reaped_ns is not None:
             raise RuntimeError("Codex recovery has a reap timestamp without proof")
 
+        return state, child_absent, child_valid, reaped
+
+    def _validate_manifest_rollout_lineage(
+        self, view_path: Path, manifest: Mapping[str, Any], state: str
+    ) -> None:
+        store = cast("CodexSessionStore", self)
         resume_thread_id = manifest.get("resume_thread_id")
         resume_store = manifest.get("resume_source_store")
         resume_relpath = manifest.get("resume_source_relpath")
@@ -220,45 +240,9 @@ class _CodexSessionReconciliationMixin:
 
         final_store = manifest.get("final_store")
         final_relpath = manifest.get("final_relpath")
-        if (final_store is None) != (final_relpath is None):
-            raise RuntimeError("Codex recovery final metadata is incomplete")
-        if final_store is not None:
-            if final_store not in _STORE_TO_PUBLIC or not isinstance(final_relpath, str):
-                raise RuntimeError("Codex recovery final metadata is invalid")
-            final_relative = _safe_relative_value(final_relpath)
-            if state not in {"finalizing", "complete"}:
-                raise RuntimeError("Codex recovery final metadata precedes finalization")
-            if state == "complete":
-                canonical_root = (
-                    store.active_root if final_store == "active" else store.archive_root
-                )
-                canonical = canonical_root / final_relative
-                _safe_relative(canonical, canonical_root)
-                final_thread_id = _thread_id(canonical)
-                if final_thread_id is None or (
-                    isinstance(resume_thread_id, str) and final_thread_id != resume_thread_id
-                ):
-                    raise RuntimeError("Codex recovery final rollout identity is invalid")
-        elif state == "complete":
-            raise RuntimeError("Complete Codex recovery view has no final rollout metadata")
+        self._validate_final_manifest_metadata(state, resume_thread_id, final_store, final_relpath)
 
-        staged_rollouts: list[tuple[str, Path, Path, str]] = []
-        for public_name, store_name in _PUBLIC_TO_STORE.items():
-            staged_root = view_path / public_name
-            for staged in _rollout_files(staged_root):
-                relative = _safe_relative(staged, staged_root)
-                thread_id = _thread_id(staged)
-                if thread_id is None or _THREAD_ID_RE.fullmatch(thread_id) is None:
-                    raise RuntimeError("Codex recovery staged rollout has no valid thread id")
-                staged_rollouts.append((store_name, relative, staged, thread_id))
-
-        staged_thread_ids = {item[3] for item in staged_rollouts}
-        if len(staged_thread_ids) > 1:
-            raise RuntimeError("Codex recovery view contains multiple thread identities")
-        if isinstance(resume_thread_id, str) and any(
-            thread_id != resume_thread_id for *_, thread_id in staged_rollouts
-        ):
-            raise RuntimeError("Codex recovery resume view changed thread identity")
+        staged_rollouts = self._validate_staged_rollout_lineage(view_path, resume_thread_id)
 
         if isinstance(resume_store, str) and isinstance(resume_relpath, str):
             resume_root = store.active_root if resume_store == "active" else store.archive_root
@@ -295,12 +279,62 @@ class _CodexSessionReconciliationMixin:
                 ):
                     raise RuntimeError("Codex recovery final rollout identity is invalid")
 
-        if state == "prepared" and (not child_absent or reaped):
-            raise RuntimeError("Prepared Codex recovery view has child lifecycle data")
-        if state in {"running", "finalizing", "complete"} and not child_valid:
-            raise RuntimeError("Spawned Codex recovery view has no child identity")
-        if state in {"finalizing", "complete"} and not reaped:
-            raise RuntimeError("Final Codex recovery view has no reap proof")
+    def _validate_final_manifest_metadata(
+        self, state: str, resume_thread_id: Any, final_store: Any, final_relpath: Any
+    ) -> None:
+        store = cast("CodexSessionStore", self)
+        if (final_store is None) != (final_relpath is None):
+            raise RuntimeError("Codex recovery final metadata is incomplete")
+        if final_store is not None:
+            if final_store not in _STORE_TO_PUBLIC or not isinstance(final_relpath, str):
+                raise RuntimeError("Codex recovery final metadata is invalid")
+            final_relative = _safe_relative_value(final_relpath)
+            if state not in {"finalizing", "complete"}:
+                raise RuntimeError("Codex recovery final metadata precedes finalization")
+            if state == "complete":
+                canonical_root = (
+                    store.active_root if final_store == "active" else store.archive_root
+                )
+                canonical = canonical_root / final_relative
+                _safe_relative(canonical, canonical_root)
+                final_thread_id = _thread_id(canonical)
+                if final_thread_id is None or (
+                    isinstance(resume_thread_id, str) and final_thread_id != resume_thread_id
+                ):
+                    raise RuntimeError("Codex recovery final rollout identity is invalid")
+        elif state == "complete":
+            raise RuntimeError("Complete Codex recovery view has no final rollout metadata")
+
+    @staticmethod
+    def _validate_staged_rollout_lineage(
+        view_path: Path, resume_thread_id: Any
+    ) -> list[tuple[str, Path, Path, str]]:
+        staged_rollouts: list[tuple[str, Path, Path, str]] = []
+        for public_name, store_name in _PUBLIC_TO_STORE.items():
+            staged_root = view_path / public_name
+            for staged in _rollout_files(staged_root):
+                relative = _safe_relative(staged, staged_root)
+                thread_id = _thread_id(staged)
+                if thread_id is None or _THREAD_ID_RE.fullmatch(thread_id) is None:
+                    raise RuntimeError("Codex recovery staged rollout has no valid thread id")
+                staged_rollouts.append((store_name, relative, staged, thread_id))
+
+        staged_thread_ids = {item[3] for item in staged_rollouts}
+        if len(staged_thread_ids) > 1:
+            raise RuntimeError("Codex recovery view contains multiple thread identities")
+        if isinstance(resume_thread_id, str) and any(
+            thread_id != resume_thread_id for *_, thread_id in staged_rollouts
+        ):
+            raise RuntimeError("Codex recovery resume view changed thread identity")
+
+        return staged_rollouts
+
+    def _read_validated_manifest(self, view_path: Path) -> dict[str, Any]:
+        manifest = json.loads(_read_bounded(view_path / _MANIFEST_NAME, _MANIFEST_READ_LIMIT))
+        if not isinstance(manifest, dict):
+            raise RuntimeError("Codex recovery manifest is not an object")
+        self._validate_manifest(view_path, manifest)
+        return manifest
 
     def _read_reconciliation_candidate(
         self,
@@ -407,6 +441,17 @@ class _CodexSessionReconciliationMixin:
         shutil.rmtree(tombstone_path)
         _fsync_directory(store.reconciliation_tombstones_root)
 
+    def _validated_reconciliation_audit(
+        self, path: Path, *, view_id: str, reason: str, manifest_digest: str | None = None
+    ) -> dict[str, Any]:
+        audit = self._read_reconciliation_audit(path, view_id=view_id)
+        if manifest_digest is None:
+            if audit["reason"] != reason:
+                raise RuntimeError(f"Reconciliation reason conflicts for {view_id}")
+        elif audit["reason"] != reason or audit["manifest_sha256"] != manifest_digest:
+            raise RuntimeError(f"Reconciliation audit conflicts for {view_id}")
+        return audit
+
     def discard_attempt_view(self, view_id: str, reason: str) -> dict[str, Any]:
         """Explicitly reconcile one eligible retained schema-v1 unknown view."""
         store = cast("CodexSessionStore", self)
@@ -437,9 +482,9 @@ class _CodexSessionReconciliationMixin:
                 if not audit_exists:
                     raise RuntimeError(f"Tombstone has no reconciliation audit for {view_id}")
                 _require_real_directory(tombstone_path, label="Codex reconciliation tombstone")
-                audit = store._read_reconciliation_audit(audit_path, view_id=view_id)
-                if audit["reason"] != normalized_reason:
-                    raise RuntimeError(f"Reconciliation reason conflicts for {view_id}")
+                audit = store._validated_reconciliation_audit(
+                    audit_path, view_id=view_id, reason=normalized_reason
+                )
                 lifecycle = _FileLease.acquire(
                     store.locks_root / "lifecycle.lock",
                     timeout=ARTIFACT_LEASE_TIMEOUT_SECONDS,
@@ -450,9 +495,9 @@ class _CodexSessionReconciliationMixin:
             elif not view_exists:
                 if not audit_exists:
                     raise FileNotFoundError(f"Codex attempt view not found: {view_id}")
-                audit = store._read_reconciliation_audit(audit_path, view_id=view_id)
-                if audit["reason"] != normalized_reason:
-                    raise RuntimeError(f"Reconciliation reason conflicts for {view_id}")
+                audit = store._validated_reconciliation_audit(
+                    audit_path, view_id=view_id, reason=normalized_reason
+                )
             else:
                 initial_raw, initial_manifest = store._read_reconciliation_candidate(view_path)
                 initial_digest = hashlib.sha256(initial_raw).hexdigest()
@@ -477,12 +522,12 @@ class _CodexSessionReconciliationMixin:
                         f"Codex attempt view changed during reconciliation: {view_id}"
                     )
                 if audit_exists:
-                    audit = store._read_reconciliation_audit(audit_path, view_id=view_id)
-                    if (
-                        audit["reason"] != normalized_reason
-                        or audit["manifest_sha256"] != final_digest
-                    ):
-                        raise RuntimeError(f"Reconciliation audit conflicts for {view_id}")
+                    audit = store._validated_reconciliation_audit(
+                        audit_path,
+                        view_id=view_id,
+                        reason=normalized_reason,
+                        manifest_digest=final_digest,
+                    )
                 else:
                     audit = {
                         "schema_version": _RECONCILIATION_AUDIT_SCHEMA_VERSION,
@@ -509,6 +554,90 @@ class _CodexSessionReconciliationMixin:
             raise RuntimeError(f"Reconciliation did not produce an audit for {view_id}")
         return dict(audit)
 
+    @staticmethod
+    def _reap_recovery_child(
+        view_path: Path, manifest_path: Path, manifest: dict[str, Any]
+    ) -> bool:
+        if manifest.get("reaped") is True:
+            return True
+        child_pid = manifest.get("child_pid")
+        boot_id = manifest.get("boot_id")
+        child_starttime_ticks = manifest.get("child_starttime_ticks")
+        pidns_inode = manifest.get("pidns_inode")
+        has_identity = (
+            isinstance(child_pid, int)
+            and isinstance(boot_id, str)
+            and isinstance(child_starttime_ticks, int)
+        )
+        if has_identity:
+            assert isinstance(child_pid, int)
+            assert isinstance(boot_id, str)
+            assert isinstance(child_starttime_ticks, int)
+            identity_verified = is_session_alive(child_pid, boot_id, child_starttime_ticks)
+            if identity_verified and isinstance(pidns_inode, int):
+                actual_inode = read_pid_namespace_inode(child_pid)
+                if actual_inode is not None and actual_inode != pidns_inode:
+                    identity_verified = False
+            if identity_verified:
+                cleanup_result = kill_process_tree(
+                    child_pid,
+                    expected_boot_id=boot_id,
+                    expected_starttime_ticks=child_starttime_ticks,
+                )
+                if not cleanup_result.complete:
+                    # Retain this view for retry without blocking unrelated startup.
+                    logger.warning(
+                        "codex_recover_kill_incomplete",
+                        view_id=view_path.name,
+                        child_pid=child_pid,
+                    )
+                    return False
+        elif child_pid is not None and is_pid_alive(child_pid):
+            # A live legacy PID has no identity proof and cannot safely be killed.
+            logger.warning(
+                "codex_recover_legacy_manifest_live_pid",
+                view_id=view_path.name,
+                child_pid=child_pid,
+            )
+            manifest["state"] = "failed"
+            _atomic_json(manifest_path, manifest)
+            return False
+        manifest["reaped"] = True
+        manifest["reaped_ns"] = time.time_ns()
+        _atomic_json(manifest_path, manifest)
+        return True
+
+    def _finalize_recovered_view(
+        self,
+        view_path: Path,
+        manifest: dict[str, Any],
+        view_lock: _FileLease,
+        resume_thread_id: Any,
+    ) -> tuple[str, ...]:
+        store = cast("CodexSessionStore", self)
+        attempt_lease = CodexSessionAttemptLease(
+            store=store,
+            session_home=Path("/"),
+            launch_id=str(manifest["launch_id"]),
+            attempt=int(manifest["attempt"]),
+            current_resume_spec=(
+                NamedResume(resume_thread_id) if isinstance(resume_thread_id, str) else NoResume()
+            ),
+            view_id=view_path.name,
+            view_path=view_path,
+            manifest=manifest,
+            view_lease=view_lock,
+            inert_targets={},
+        )
+        manifest["state"] = "finalizing"
+        store._write_manifest(attempt_lease)
+        recovered_rows = store._promote_view(attempt_lease)
+        store._merge_index_unlocked(recovered_rows)
+        manifest["state"] = "complete"
+        store._write_manifest(attempt_lease)
+        store._validate_completed_view(view_path)
+        return tuple(dict.fromkeys(str(row["session_id"]) for row in recovered_rows))
+
     def recover(self) -> None:
         """Recover safely-owned orphan views, then rebuild the derived index."""
         store = cast("CodexSessionStore", self)
@@ -532,10 +661,7 @@ class _CodexSessionReconciliationMixin:
             try:
                 try:
                     manifest_path = view_path / _MANIFEST_NAME
-                    manifest = json.loads(_read_bounded(manifest_path, _MANIFEST_READ_LIMIT))
-                    if not isinstance(manifest, dict):
-                        raise RuntimeError("Codex recovery manifest is not an object")
-                    store._validate_manifest(view_path, manifest)
+                    manifest = store._read_validated_manifest(view_path)
                 except BaseException as exc:
                     logger.error("codex_recovery_manifest_invalid", exc_info=True)
                     failures.append(
@@ -597,94 +723,10 @@ class _CodexSessionReconciliationMixin:
                         shutil.rmtree(view_path)
                         _fsync_directory(store.views_root)
                     elif state in {"running", "finalizing", "failed"}:
-                        if manifest.get("reaped") is not True:
-                            child_pid = manifest.get("child_pid")
-                            boot_id = manifest.get("boot_id")
-                            child_starttime_ticks = manifest.get("child_starttime_ticks")
-                            pidns_inode = manifest.get("pidns_inode")
-                            has_identity = (
-                                isinstance(child_pid, int)
-                                and isinstance(boot_id, str)
-                                and isinstance(child_starttime_ticks, int)
-                            )
-                            if has_identity:
-                                assert isinstance(child_pid, int)
-                                assert isinstance(boot_id, str)
-                                assert isinstance(child_starttime_ticks, int)
-                                identity_verified = is_session_alive(
-                                    child_pid, boot_id, child_starttime_ticks
-                                )
-                                if identity_verified and isinstance(pidns_inode, int):
-                                    actual_inode = read_pid_namespace_inode(child_pid)
-                                    if actual_inode is not None and actual_inode != pidns_inode:
-                                        identity_verified = False
-                                if identity_verified:
-                                    cleanup_result = kill_process_tree(
-                                        child_pid,
-                                        expected_boot_id=boot_id,
-                                        expected_starttime_ticks=child_starttime_ticks,
-                                    )
-                                    if not cleanup_result.complete:
-                                        # Fail-closed per view, fail-open at the call site —
-                                        # not appended to `failures`, so an unresolvable view
-                                        # never blocks cook/order startup at the two unguarded
-                                        # call sites. The next recovery/chokepoint retries.
-                                        logger.warning(
-                                            "codex_recover_kill_incomplete",
-                                            view_id=view_path.name,
-                                            child_pid=child_pid,
-                                        )
-                                        continue
-                                    manifest["reaped"] = True
-                                    manifest["reaped_ns"] = time.time_ns()
-                                    _atomic_json(manifest_path, manifest)
-                                else:
-                                    # Dead, or identity mismatch (PID recycled) — the
-                                    # original child is provably gone either way.
-                                    manifest["reaped"] = True
-                                    manifest["reaped_ns"] = time.time_ns()
-                                    _atomic_json(manifest_path, manifest)
-                            elif child_pid is not None and is_pid_alive(child_pid):
-                                # Legacy manifest, no identity fields: cannot verify —
-                                # never kill, never lie. Operator remediation path:
-                                # doctor / process-orphans --reap.
-                                logger.warning(
-                                    "codex_recover_legacy_manifest_live_pid",
-                                    view_id=view_path.name,
-                                    child_pid=child_pid,
-                                )
-                                manifest["state"] = "failed"
-                                _atomic_json(manifest_path, manifest)
-                                continue
-                            else:
-                                manifest["reaped"] = True
-                                manifest["reaped_ns"] = time.time_ns()
-                                _atomic_json(manifest_path, manifest)
-                        attempt_lease = CodexSessionAttemptLease(
-                            store=store,
-                            session_home=Path("/"),
-                            launch_id=str(manifest["launch_id"]),
-                            attempt=int(manifest["attempt"]),
-                            current_resume_spec=(
-                                NamedResume(resume_thread_id)
-                                if isinstance(resume_thread_id, str)
-                                else NoResume()
-                            ),
-                            view_id=view_path.name,
-                            view_path=view_path,
-                            manifest=manifest,
-                            view_lease=view_lock,
-                            inert_targets={},
-                        )
-                        manifest["state"] = "finalizing"
-                        store._write_manifest(attempt_lease)
-                        recovered_rows = store._promote_view(attempt_lease)
-                        store._merge_index_unlocked(recovered_rows)
-                        manifest["state"] = "complete"
-                        store._write_manifest(attempt_lease)
-                        store._validate_completed_view(view_path)
-                        parent_session_ids = tuple(
-                            dict.fromkeys(str(row["session_id"]) for row in recovered_rows)
+                        if not store._reap_recovery_child(view_path, manifest_path, manifest):
+                            continue
+                        parent_session_ids = store._finalize_recovered_view(
+                            view_path, manifest, view_lock, resume_thread_id
                         )
                     else:
                         raise RuntimeError(f"Unsupported Codex recovery state retained: {state!r}")

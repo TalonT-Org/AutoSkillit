@@ -44,6 +44,10 @@ from autoskillit.execution.process._daemon_orphans import (
     reap_orphaned_autoskillit_daemons,
 )
 from autoskillit.execution.process._lifecycle.line_driver_tee import LineDriverSession
+from autoskillit.execution.process._lifecycle.owned_group import (
+    OwnedProcessGroup,
+    spawn_owned_process,
+)
 from autoskillit.execution.process._lifecycle.runner import (
     DefaultSubprocessRunner,
     _coalesce_returncode,
@@ -65,10 +69,8 @@ from autoskillit.execution.process._process_jsonl import (
     fold_event_cursor,
 )
 from autoskillit.execution.process._process_kill import (
-    OwnedProcessGroup,
     async_kill_process_tree,
     kill_process_tree,
-    spawn_owned_process,
 )
 from autoskillit.execution.process._process_monitor import (
     _has_active_api_connection,
@@ -82,12 +84,9 @@ from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     _extract_stdout_session_id,
-    _watch_child_activity,
-    _watch_completion_eligibility,
     _watch_heartbeat,
     _watch_process,
     _watch_session_log,
-    _watch_stdout_idle,
     fold_lifecycle_evidence,
     fold_lifecycle_evidence_path,
     resolve_termination,
@@ -112,6 +111,9 @@ from autoskillit.execution.process._process_tether import (
 from autoskillit.execution.process._race_watchers import (
     _await_race_and_drain,
     _enroll_race_watchers,
+    _watch_child_activity,
+    _watch_completion_eligibility,
+    _watch_stdout_idle,
 )
 from autoskillit.execution.process._termination import (
     decide_termination_action,

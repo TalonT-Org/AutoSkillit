@@ -100,7 +100,10 @@ from autoskillit.execution.evidence.reader._protocol import (
 from autoskillit.execution.evidence.reader._protocol import (
     _validate_stream as _validate_stream,
 )
-from autoskillit.execution.process._process_kill import OwnedProcessGroup, spawn_owned_process
+from autoskillit.execution.process._lifecycle.owned_group import (
+    OwnedProcessGroup,
+    spawn_owned_process,
+)
 from autoskillit.execution.process._process_tether import TetherSpec
 
 _SUPPORTED_CODEX_CLI_VERSION = "codex-cli 0.147.0"

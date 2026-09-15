@@ -10,10 +10,13 @@ import anyio
 import psutil
 import pytest
 
-import autoskillit.execution.process._process_race as _patch_process__process_race
+import autoskillit.execution.process._race_watchers as _patch_process__race_watchers
 from autoskillit.execution.process import run_managed_async
-from autoskillit.execution.process._process_race import RaceAccumulator, _watch_child_activity
-from autoskillit.execution.process._race_watchers import _enroll_child_activity_watcher
+from autoskillit.execution.process._process_race import RaceAccumulator
+from autoskillit.execution.process._race_watchers import (
+    _enroll_child_activity_watcher,
+    _watch_child_activity,
+)
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -24,12 +27,12 @@ async def test_pending_task_extension_releases_on_terminal_and_respects_cap(
     monkeypatch, terminal_after: float | None
 ) -> None:
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: False,
     )
@@ -67,12 +70,12 @@ async def test_pending_task_extension_releases_on_terminal_and_respects_cap(
 async def test_extends_deadline_when_children_active(monkeypatch) -> None:
     """Deadline is extended when _has_active_child_processes returns True."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: True,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: False,
     )
@@ -97,12 +100,12 @@ async def test_extends_deadline_when_children_active(monkeypatch) -> None:
 async def test_no_extension_when_inactive(monkeypatch) -> None:
     """Deadline is NOT extended when both probes return False."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: False,
     )
@@ -131,12 +134,12 @@ async def test_no_extension_when_inactive(monkeypatch) -> None:
 async def test_max_extension_cap_enforced(monkeypatch) -> None:
     """Extension is capped at max_extension_seconds beyond original deadline."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: True,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: False,
     )
@@ -161,12 +164,12 @@ async def test_max_extension_cap_enforced(monkeypatch) -> None:
 async def test_terminates_on_trigger(monkeypatch) -> None:
     """Watcher exits cleanly when trigger fires immediately."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: True,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: True,
     )
@@ -183,12 +186,12 @@ async def test_terminates_on_trigger(monkeypatch) -> None:
 async def test_api_connection_also_extends(monkeypatch) -> None:
     """Deadline is extended when _has_active_api_connection returns True (children inactive)."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: True,
     )
@@ -213,12 +216,12 @@ async def test_api_connection_also_extends(monkeypatch) -> None:
 async def test_scope_ref_none_polling(monkeypatch) -> None:
     """Watcher polls harmlessly when scope_ref is None (before scope binding)."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: True,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: True,
     )
@@ -240,17 +243,17 @@ async def test_scope_ref_none_polling(monkeypatch) -> None:
 async def test_extends_deadline_when_dispatch_marker_active(monkeypatch, tmp_path) -> None:
     """Deadline is extended when dispatch marker is active (other signals inactive)."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, **kw: True,
     )
@@ -286,17 +289,17 @@ async def test_extends_deadline_when_dispatch_marker_active(monkeypatch, tmp_pat
 async def test_no_extension_when_marker_inactive(monkeypatch, tmp_path) -> None:
     """Deadline is NOT extended when all three signals are inactive (fleet context)."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_child_processes",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_api_connection",
         lambda pid: False,
     )
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, **kw: False,
     )

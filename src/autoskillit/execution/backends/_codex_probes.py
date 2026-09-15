@@ -51,7 +51,7 @@ class _BoundedProbeResult:
 
 
 def _terminate_probe(owner: object) -> None:
-    from autoskillit.execution.process._process_kill import OwnedProcessGroup
+    from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
 
     if not isinstance(owner, OwnedProcessGroup):
         raise TypeError("Codex probe cleanup requires its spawn-bound owner")
@@ -82,7 +82,7 @@ def _run_bounded_codex_probe(
     ):
         raise ValueError("Codex probe stream limit must be a positive integer")
     try:
-        from autoskillit.execution.process._process_kill import spawn_owned_process
+        from autoskillit.execution.process._lifecycle.owned_group import spawn_owned_process
         from autoskillit.execution.process._process_tether import TetherSpec
 
         owner = spawn_owned_process(

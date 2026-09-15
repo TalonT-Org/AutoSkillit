@@ -22,7 +22,7 @@ import psutil
 import pytest
 
 import autoskillit.execution.evidence.linux_tracing as _patch_execution_linux_tracing
-import autoskillit.execution.process._process_kill as _patch_process__process_kill
+import autoskillit.execution.process._lifecycle.owned_group as _patch_process_owned_group
 import autoskillit.execution.process._process_tether as _patch_process__process_tether
 from autoskillit.config._config_dataclasses import ProcessTetherConfig
 from autoskillit.core import read_boot_id, read_starttime_ticks
@@ -166,7 +166,7 @@ class TestSpawnFailsClosedOnUnwritableTetherDir:
             captured["pid"] = record.child_pid
             raise OSError("simulated unwritable tether dir")
 
-        monkeypatch.setattr(_patch_process__process_kill, "write_tether", _boom)
+        monkeypatch.setattr(_patch_process_owned_group, "write_tether", _boom)
 
         with pytest.raises(OSError, match="simulated unwritable tether dir"):
             spawn_owned_process(

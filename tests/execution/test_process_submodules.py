@@ -93,6 +93,23 @@ def test_process_kill_exports():
     assert async_kill_process_tree.__module__ == "autoskillit.execution.process._process_kill"
 
 
+def test_owned_process_group_exports() -> None:
+    from autoskillit.execution.process._lifecycle.owned_group import (
+        OwnedProcessCleanupError,
+        OwnedProcessGroup,
+        ProcessObservationSnapshot,
+        spawn_owned_process,
+    )
+
+    for symbol in (
+        ProcessObservationSnapshot,
+        OwnedProcessCleanupError,
+        OwnedProcessGroup,
+        spawn_owned_process,
+    ):
+        assert symbol.__module__ == "autoskillit.execution.process._lifecycle.owned_group"
+
+
 def test_process_pty_exports():
     """pty_wrap_command is defined in _process_pty submodule."""
     from autoskillit.execution.process._process_pty import pty_wrap_command
@@ -157,7 +174,10 @@ def test_process_race_exports():
     from autoskillit.execution.process._process_race import (
         RaceAccumulator,
         RaceSignals,
+        _extract_stdout_session_id,
         _watch_heartbeat,
+        _watch_process,
+        _watch_session_log,
         fold_lifecycle_evidence,
         fold_lifecycle_evidence_path,
         resolve_termination,
@@ -169,10 +189,28 @@ def test_process_race_exports():
     assert resolve_termination.__module__ == "autoskillit.execution.process._process_race"
     assert callable(_watch_heartbeat)
     assert _watch_heartbeat.__module__ == "autoskillit.execution.process._process_race"
+    assert _watch_process.__module__ == "autoskillit.execution.process._process_race"
+    assert _extract_stdout_session_id.__module__ == "autoskillit.execution.process._process_race"
+    assert _watch_session_log.__module__ == "autoskillit.execution.process._process_race"
     assert callable(fold_lifecycle_evidence)
     assert fold_lifecycle_evidence.__module__ == "autoskillit.execution.process._process_race"
     assert callable(fold_lifecycle_evidence_path)
     assert fold_lifecycle_evidence_path.__module__ == "autoskillit.execution.process._process_race"
+
+
+def test_supervisory_watchers_live_in_coordinator_module() -> None:
+    from autoskillit.execution.process._race_watchers import (
+        _watch_child_activity,
+        _watch_completion_eligibility,
+        _watch_stdout_idle,
+    )
+
+    for watcher in (
+        _watch_stdout_idle,
+        _watch_child_activity,
+        _watch_completion_eligibility,
+    ):
+        assert watcher.__module__ == "autoskillit.execution.process._race_watchers"
 
 
 def test_race_coordinator_lives_in_watcher_module() -> None:

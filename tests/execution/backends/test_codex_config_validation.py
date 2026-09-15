@@ -17,6 +17,7 @@ import pytest
 import autoskillit.hooks  # noqa: F401 — forces HOOK_REGISTRY population before sync_hooks_to_codex_config validates lifecycle contracts
 from autoskillit.core import PreLaunchReadiness
 from autoskillit.execution.backends import _codex_probes as probes
+from autoskillit.execution.process._lifecycle import owned_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -106,8 +107,8 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    original_popen = probes.subprocess.Popen
-    original_killpg = probes.os.killpg
+    original_popen = owned_group.subprocess.Popen
+    original_killpg = owned_group.os.killpg
     processes: list[probes.subprocess.Popen[bytes]] = []
     group_signals: list[tuple[int, signal.Signals]] = []
 
@@ -122,8 +123,8 @@ def test_bounded_codex_probe_owns_and_kills_process_group(
         original_killpg(pgid, sig)
 
     monkeypatch.setattr(probes, "_CODEX_PROBE_TIMEOUT_SECONDS", 0.05)
-    monkeypatch.setattr(probes.subprocess, "Popen", recording_popen)
-    monkeypatch.setattr(probes.os, "killpg", recording_killpg)
+    monkeypatch.setattr(owned_group.subprocess, "Popen", recording_popen)
+    monkeypatch.setattr(owned_group.os, "killpg", recording_killpg)
 
     result = probes._run_bounded_codex_probe(
         (sys.executable, "-c", "import time; time.sleep(60)"),
@@ -176,7 +177,7 @@ def test_run_bounded_codex_probe_returns_success_with_diagnostic_on_incomplete_c
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from autoskillit.core import ProcessCleanupResult
-    from autoskillit.execution.process._process_kill import OwnedProcessGroup
+    from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
 
     original_cleanup = OwnedProcessGroup.cleanup
 

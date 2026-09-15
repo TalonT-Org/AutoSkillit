@@ -14,6 +14,7 @@ import structlog.testing
 
 from autoskillit.execution import TetherSpec, async_kill_process_tree, kill_process_tree
 from autoskillit.execution.process import _process_kill
+from autoskillit.execution.process._lifecycle import owned_group as _owned_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -29,9 +30,27 @@ def _fake_spawn_identity() -> Generator[None, None, None]:
     to fixed fake values for every test in this module.
     """
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(_process_kill, "read_boot_id", lambda: "test-boot-id")
-        mp.setattr(_process_kill, "read_starttime_ticks", lambda _pid: 12345)
+        mp.setattr(_owned_group, "read_boot_id", lambda: "test-boot-id")
+        mp.setattr(_owned_group, "read_starttime_ticks", lambda _pid: 12345)
         yield
+
+
+def test_observation_snapshot_merge_unions_evidence_fail_closed() -> None:
+    left = _owned_group.ProcessObservationSnapshot(
+        process_identities=((202, 2.0), (101, 1.0)),
+        access_denied_pids=(404, 303),
+    )
+    right = _owned_group.ProcessObservationSnapshot(
+        process_identities=((303, 3.0), (101, 1.0)),
+        access_denied_pids=(505, 303),
+        observation_complete=False,
+    )
+
+    assert left.merge(right) == _owned_group.ProcessObservationSnapshot(
+        process_identities=((101, 1.0), (202, 2.0), (303, 3.0)),
+        access_denied_pids=(303, 404, 505),
+        observation_complete=False,
+    )
 
 
 def test_missing_unowned_root_is_incomplete_evidence() -> None:
@@ -75,9 +94,9 @@ def test_snapshot_disappearance_preserves_observation_evidence(
                 raise psutil.NoSuchProcess(pid=self.pid)
             return 123.0
 
-    monkeypatch.setattr(_process_kill.psutil, "Process", FakeProcess)
+    monkeypatch.setattr(_owned_group.psutil, "Process", FakeProcess)
 
-    snapshot = _process_kill._snapshot_process_tree(101)
+    snapshot = _owned_group._snapshot_process_tree(101)
 
     assert snapshot.process_identities == expected_identities
     assert snapshot.access_denied_pids == ()
@@ -385,20 +404,39 @@ class FakePopen:
         return self.returncode
 
 
+def test_observe_exit_uses_waitid_without_reaping(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    owner = _spawn_owner(monkeypatch, tmp_path)
+
+    class ExitStatus:
+        si_code = _owned_group.os.CLD_EXITED
+        si_status = 17
+
+    monkeypatch.setattr(_owned_group.os, "waitid", lambda *_args: ExitStatus())
+    monkeypatch.setattr(owner.process, "poll", lambda: pytest.fail("poll reaped leader"))
+    monkeypatch.setattr(owner.process, "wait", lambda **_kwargs: pytest.fail("wait reaped leader"))
+
+    assert owner.observe_exit() == 17
+    assert owner.process.returncode is None
+    assert owner._reaped is False
+    assert owner._group_authority is True
+
+
 def test_spawn_provenance_and_unreaped_leader_authorize_group_signal(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     signals: list[tuple[int, signal.Signals]] = []
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
-    monkeypatch.setattr(_process_kill.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(_owned_group.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
     monkeypatch.setattr(
-        _process_kill,
+        _owned_group,
         "_snapshot_process_tree",
-        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+        lambda _pid: _owned_group.ProcessObservationSnapshot(),
     )
 
-    owner = _process_kill.spawn_owned_process(
+    owner = _owned_group.spawn_owned_process(
         ["command"],
         start_new_session=True,
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -413,18 +451,18 @@ def test_spawn_preserves_identity_exception_when_reap_times_out(
 ) -> None:
     class ReapTimeoutPopen(FakePopen):
         def wait(self, timeout: float | None = None) -> int:
-            raise _process_kill.subprocess.TimeoutExpired("command", timeout)
+            raise _owned_group.subprocess.TimeoutExpired("command", timeout)
 
     identity_error = KeyboardInterrupt()
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", ReapTimeoutPopen)
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", ReapTimeoutPopen)
     monkeypatch.setattr(
-        _process_kill.os,
+        _owned_group.os,
         "getpgid",
         lambda _pid: (_ for _ in ()).throw(identity_error),
     )
 
     with pytest.raises(KeyboardInterrupt) as raised:
-        _process_kill.spawn_owned_process(
+        _owned_group.spawn_owned_process(
             ["command"],
             start_new_session=True,
             tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -438,13 +476,13 @@ def test_spawn_validation_error_is_not_masked_by_reap_timeout(
 ) -> None:
     class ReapTimeoutPopen(FakePopen):
         def wait(self, timeout: float | None = None) -> int:
-            raise _process_kill.subprocess.TimeoutExpired("command", timeout)
+            raise _owned_group.subprocess.TimeoutExpired("command", timeout)
 
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", ReapTimeoutPopen)
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid + 1)
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", ReapTimeoutPopen)
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid + 1)
 
     with pytest.raises(RuntimeError, match="did not establish owned group leadership"):
-        _process_kill.spawn_owned_process(
+        _owned_group.spawn_owned_process(
             ["command"],
             start_new_session=True,
             tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -456,13 +494,13 @@ def test_missing_atomic_spawn_provenance_refuses_ownership(
 ) -> None:
     popen_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        _process_kill.subprocess,
+        _owned_group.subprocess,
         "Popen",
         lambda *_args, **kwargs: popen_calls.append(kwargs),
     )
 
     with pytest.raises(ValueError, match="fresh-group mode"):
-        _process_kill.spawn_owned_process(
+        _owned_group.spawn_owned_process(
             ["command"],
             tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
         )
@@ -474,15 +512,15 @@ def test_reaped_leader_permanently_revokes_group_signal(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     signals: list[tuple[int, signal.Signals]] = []
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", FakePopen)
     monkeypatch.setattr(
-        _process_kill,
+        _owned_group,
         "_snapshot_process_tree",
-        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+        lambda _pid: _owned_group.ProcessObservationSnapshot(),
     )
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
-    monkeypatch.setattr(_process_kill.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
-    owner = _process_kill.spawn_owned_process(
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(_owned_group.os, "killpg", lambda pgid, sig: signals.append((pgid, sig)))
+    owner = _owned_group.spawn_owned_process(
         ["command"],
         start_new_session=True,
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -505,14 +543,14 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
             wait_timeouts.append(timeout)
             return super().wait(timeout)
 
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", RecordingPopen)
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", RecordingPopen)
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(
-        _process_kill,
+        _owned_group,
         "_snapshot_process_tree",
-        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+        lambda _pid: _owned_group.ProcessObservationSnapshot(),
     )
-    owner = _process_kill.spawn_owned_process(
+    owner = _owned_group.spawn_owned_process(
         ["command"],
         start_new_session=True,
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -525,7 +563,7 @@ def test_sigkill_escalation_uses_final_direct_reap_timeout(
 
     owner.cleanup(timeout=7.0)
 
-    assert wait_timeouts == [_process_kill._FINAL_WAIT_SECONDS]
+    assert wait_timeouts == [_owned_group._FINAL_WAIT_SECONDS]
 
 
 def test_cleanup_shares_one_aggregate_deadline_across_multiple_survivors(
@@ -537,13 +575,13 @@ def test_cleanup_shares_one_aggregate_deadline_across_multiple_survivors(
     waits: list[float] = []
     deadlines: list[float] = []
     owner = _spawn_owner(monkeypatch, tmp_path)
-    owner.merge_snapshot(_process_kill.ProcessObservationSnapshot(process_identities=identities))
+    owner.merge_snapshot(_owned_group.ProcessObservationSnapshot(process_identities=identities))
     owner.process.returncode = 0
     monkeypatch.setattr(owner, "capture_snapshot", lambda: owner.snapshot)
     monkeypatch.setattr(owner, "_scan_group", lambda: ())
     monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
     monkeypatch.setattr(owner, "_identity_is_alive", lambda _identity: True)
-    monkeypatch.setattr(_process_kill.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(_owned_group.time, "monotonic", lambda: clock[0])
 
     def fake_kill_process_tree(
         pid: int,
@@ -560,7 +598,7 @@ def test_cleanup_shares_one_aggregate_deadline_across_multiple_survivors(
         clock[0] += wait
         return _process_kill.ProcessCleanupResult(root_pid=pid, survivor_pids=(pid,))
 
-    monkeypatch.setattr(_process_kill, "kill_process_tree", fake_kill_process_tree)
+    monkeypatch.setattr(_owned_group, "kill_process_tree", fake_kill_process_tree)
 
     _, result = owner.cleanup(timeout=0.1, escalate=True)
 
@@ -573,14 +611,14 @@ def test_cleanup_shares_one_aggregate_deadline_across_multiple_survivors(
 def test_settle_preserving_converts_cleanup_failure_to_evidence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(
-        _process_kill,
+        _owned_group,
         "_snapshot_process_tree",
-        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+        lambda _pid: _owned_group.ProcessObservationSnapshot(),
     )
-    owner = _process_kill.spawn_owned_process(
+    owner = _owned_group.spawn_owned_process(
         ["command"],
         start_new_session=True,
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -603,20 +641,20 @@ def test_settle_preserving_converts_cleanup_failure_to_evidence(
 def test_unexpected_group_authority_error_is_logged(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(
-        _process_kill,
+        _owned_group,
         "_snapshot_process_tree",
-        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+        lambda _pid: _owned_group.ProcessObservationSnapshot(),
     )
-    owner = _process_kill.spawn_owned_process(
+    owner = _owned_group.spawn_owned_process(
         ["command"],
         start_new_session=True,
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
     )
     monkeypatch.setattr(
-        _process_kill.os,
+        _owned_group.os,
         "getpgid",
         lambda _pid: (_ for _ in ()).throw(OSError(errno.EIO, "identity unavailable")),
     )
@@ -632,20 +670,20 @@ def test_arbitrary_handle_cannot_be_adopted_as_owned_group() -> None:
     process = FakePopen([])
 
     with pytest.raises(TypeError, match="spawn_owned_process"):
-        _process_kill.OwnedProcessGroup(process, process.pid)
+        _owned_group.OwnedProcessGroup(process, process.pid)
 
 
 def _spawn_owner(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> _process_kill.OwnedProcessGroup:
-    monkeypatch.setattr(_process_kill.subprocess, "Popen", FakePopen)
-    monkeypatch.setattr(_process_kill.os, "getpgid", lambda pid: pid)
+) -> _owned_group.OwnedProcessGroup:
+    monkeypatch.setattr(_owned_group.subprocess, "Popen", FakePopen)
+    monkeypatch.setattr(_owned_group.os, "getpgid", lambda pid: pid)
     monkeypatch.setattr(
-        _process_kill,
+        _owned_group,
         "_snapshot_process_tree",
-        lambda _pid: _process_kill.ProcessObservationSnapshot(),
+        lambda _pid: _owned_group.ProcessObservationSnapshot(),
     )
-    return _process_kill.spawn_owned_process(
+    return _owned_group.spawn_owned_process(
         ["command"],
         start_new_session=True,
         tether=TetherSpec(origin="test", ceiling_seconds=60.0, tether_dir=tmp_path),
@@ -666,7 +704,7 @@ def test_identity_is_alive_returns_false_for_zombie(
             return psutil.STATUS_ZOMBIE
 
     owner = _spawn_owner(monkeypatch, tmp_path)
-    monkeypatch.setattr(_process_kill.psutil, "Process", lambda pid: ZombieProcess(pid))
+    monkeypatch.setattr(_owned_group.psutil, "Process", lambda pid: ZombieProcess(pid))
 
     assert owner._identity_is_alive((101, 123.0)) is False
 
@@ -690,14 +728,14 @@ def test_cleanup_completes_when_only_survivor_is_zombie(
     zombie_identity = (99999, 111.0)
     owner = _spawn_owner(monkeypatch, tmp_path)
     owner.merge_snapshot(
-        _process_kill.ProcessObservationSnapshot(
+        _owned_group.ProcessObservationSnapshot(
             process_identities=(zombie_identity,), observation_complete=True
         )
     )
     monkeypatch.setattr(owner, "_scan_group", lambda: (zombie_identity,))
     monkeypatch.setattr(owner, "_signal_group", lambda _signum: None)
     monkeypatch.setattr(
-        _process_kill.psutil,
+        _owned_group.psutil,
         "Process",
         lambda pid: ZombieProcess(pid, zombie_identity[1]),
     )
@@ -722,7 +760,7 @@ def test_settle_still_raises_on_genuinely_incomplete_evidence(
     )
     monkeypatch.setattr(owner, "cleanup", lambda _timeout, **_kwargs: (0, incomplete_result))
 
-    with pytest.raises(_process_kill.OwnedProcessCleanupError):
+    with pytest.raises(_owned_group.OwnedProcessCleanupError):
         owner.settle()
 
 

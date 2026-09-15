@@ -11,12 +11,270 @@ from typing import IO, TYPE_CHECKING, Any
 import anyio
 import anyio.abc
 
+from autoskillit.core import InspectorEvidence, get_logger
+from autoskillit.execution.process._process_jsonl import fold_event_cursor
+from autoskillit.execution.process._process_monitor import (
+    _has_active_api_connection,
+    _has_active_child_processes,
+    _has_active_execution_marker,
+)
 from autoskillit.execution.process._process_race import RaceAccumulator
 
 if TYPE_CHECKING:
     from autoskillit.core import InspectorCallback, StreamParser, SupportsDebug
     from autoskillit.execution.process._lifecycle.line_driver_tee import LineDriverSession
-    from autoskillit.execution.process._process_kill import OwnedProcessGroup
+    from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
+
+logger = get_logger(__name__)
+
+INSPECTOR_MAX_SECONDS: float = 60.0
+CLEANUP_BUDGET_SECONDS: float = 15.0
+
+
+def _package_evidence(
+    stdout_path: Path,
+    idle_seconds: float,
+    execution_marker_present: bool,
+) -> InspectorEvidence:
+    return InspectorEvidence(
+        idle_seconds=idle_seconds,
+        stdout_path=str(stdout_path),
+        jsonl_lines=(),
+        execution_marker_present=execution_marker_present,
+    )
+
+
+async def _watch_stdout_idle(
+    stdout_path: Path,
+    idle_output_timeout: float,
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    _poll_interval: float = 5.0,
+    *,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
+    max_suppression_seconds: float = 1800.0,
+    inspector_callback: InspectorCallback | None = None,
+    timeout_scope_ref: list[anyio.CancelScope | None] | None = None,
+    has_pending_tasks: Callable[[], bool] | None = None,
+) -> None:
+    """Kill the child if stdout stops growing for idle_output_timeout seconds."""
+    import time as _time
+
+    last_size: int = 0
+    last_growth_time: float = _time.monotonic()
+    suppression_start_marker: float | None = None
+    while True:
+        await anyio.sleep(_poll_interval)
+        if trigger.is_set():
+            return
+        try:
+            current_size = stdout_path.stat().st_size
+        except OSError:
+            continue
+        if current_size > last_size:
+            last_size = current_size
+            last_growth_time = _time.monotonic()
+            suppression_start_marker = None
+        elif _time.monotonic() - last_growth_time >= idle_output_timeout:
+            authoritative_task_active = has_pending_tasks is not None and has_pending_tasks()
+            marker_active = marker_dir is not None and _has_active_execution_marker(
+                marker_dir, session_id=session_id
+            )
+            if authoritative_task_active or marker_active:
+                now = _time.monotonic()
+                if suppression_start_marker is None:
+                    suppression_start_marker = now
+                    logger.debug(
+                        "stdout_idle_stall_suppression_evaluated",
+                        marker_dir_present=True,
+                        session_id=session_id,
+                    )
+                elapsed = now - suppression_start_marker
+                if elapsed < max_suppression_seconds:
+                    logger.warning(
+                        "stdout_idle_stall_suppressed",
+                        marker_dir=str(marker_dir),
+                        session_id=session_id,
+                        suppression_elapsed=elapsed,
+                        max_suppression_seconds=max_suppression_seconds,
+                    )
+                    continue
+            logger.debug(
+                "stdout_idle_stall_suppression_evaluated",
+                marker_dir_present=marker_dir is not None,
+                session_id=session_id,
+                **(
+                    {"suppression_skipped_reason": "marker_dir_none"} if marker_dir is None else {}
+                ),
+            )
+            logger.warning(
+                "stdout idle for %ss — firing IDLE_STALL",
+                idle_output_timeout,
+            )
+            spared_at = await _inspect_stdout_idle(
+                stdout_path,
+                last_growth_time,
+                acc,
+                inspector_callback,
+                timeout_scope_ref,
+                marker_dir=marker_dir,
+                session_id=session_id,
+            )
+            if spared_at is not None:
+                last_growth_time = spared_at
+                continue
+
+            acc.idle_stall = True
+            trigger.set()
+            return
+
+
+async def _inspect_stdout_idle(
+    stdout_path: Path,
+    last_growth_time: float,
+    acc: RaceAccumulator,
+    inspector_callback: InspectorCallback | None,
+    timeout_scope_ref: list[anyio.CancelScope | None] | None,
+    *,
+    marker_dir: Path | None,
+    session_id: str | None,
+) -> float | None:
+    """Run the inspector and return the idle-clock reset time when it spares the process."""
+    import time as _time
+
+    if inspector_callback is None:
+        return None
+    invoke = True
+    budget = INSPECTOR_MAX_SECONDS
+    scope = timeout_scope_ref[0] if timeout_scope_ref else None
+    if scope is not None:
+        remaining = scope.deadline - _time.monotonic()
+        budget = min(INSPECTOR_MAX_SECONDS, remaining - CLEANUP_BUDGET_SECONDS)
+        if budget <= 0:
+            logger.debug("inspector_skipped_insufficient_time", remaining=remaining)
+            invoke = False
+    elif timeout_scope_ref is not None:
+        logger.debug("inspector_skipped_scope_not_ready")
+        invoke = False
+    if not invoke:
+        return None
+    marker_present = marker_dir is not None and _has_active_execution_marker(
+        marker_dir, session_id=session_id
+    )
+    evidence = _package_evidence(
+        stdout_path,
+        idle_seconds=_time.monotonic() - last_growth_time,
+        execution_marker_present=marker_present,
+    )
+    try:
+        with anyio.fail_after(budget):
+            verdict = await inspector_callback(evidence)
+    except TimeoutError:
+        logger.warning("inspector_callback_timed_out", budget=budget)
+        return None
+    if verdict is not None and verdict.action == "SPARE":
+        spared_at = _time.monotonic()
+        logger.info(
+            "inspector_spare",
+            reasoning=verdict.reasoning,
+            confidence=verdict.confidence,
+            elapsed=verdict.elapsed_seconds,
+        )
+        return spared_at
+    if verdict is not None:
+        acc.inspector_verdict = verdict
+    return None
+
+
+async def _watch_child_activity(
+    pid: int,
+    timeout_scope_ref: list[anyio.CancelScope | None],
+    max_extension_seconds: float,
+    trigger: anyio.Event,
+    _poll_interval: float = 30.0,
+    *,
+    marker_dir: Path | None = None,
+    session_id: str | None = None,
+    has_pending_tasks: Callable[[], bool] | None = None,
+) -> None:
+    """Extend the wall-clock deadline while managed child activity remains active."""
+    _first_observed_deadline: float | None = None
+
+    while not trigger.is_set():
+        await anyio.sleep(_poll_interval)
+        if trigger.is_set():
+            return
+
+        scope = timeout_scope_ref[0]
+        if scope is None:
+            continue
+
+        if _first_observed_deadline is None:
+            _first_observed_deadline = scope.deadline
+
+        active = (
+            (has_pending_tasks is not None and has_pending_tasks())
+            or _has_active_child_processes(pid)
+            or _has_active_api_connection(pid)
+            or (
+                marker_dir is not None
+                and _has_active_execution_marker(marker_dir, session_id=session_id)
+            )
+        )
+        if not active:
+            continue
+
+        cap = _first_observed_deadline + max_extension_seconds
+        desired = anyio.current_time() + _poll_interval * 2
+        new_deadline = min(desired, cap)
+        if new_deadline > scope.deadline:
+            logger.debug(
+                "deadline_extended",
+                extension=new_deadline - scope.deadline,
+                new_deadline=new_deadline,
+                cap=cap,
+            )
+            scope.deadline = new_deadline
+        if trigger.is_set():
+            return
+
+
+async def _watch_completion_eligibility(
+    acc: RaceAccumulator,
+    trigger: anyio.Event,
+    channel_b_selected: anyio.Event,
+    completion_drain_timeout: float,
+    child_deferral_ceiling: float,
+    stream_parser: StreamParser,
+    session_log_enabled: bool,
+    _poll_interval: float = 0.05,
+) -> None:
+    """Release a completion candidate only after both owned streams are caught up."""
+    await acc.completion_candidate_event.wait()
+    if session_log_enabled and acc.channel_b_cursor is None:
+        with anyio.move_on_after(completion_drain_timeout):
+            await channel_b_selected.wait()
+    started = min(
+        timestamp
+        for timestamp in (acc.channel_a_candidate_at, acc.channel_b_candidate_at)
+        if timestamp is not None
+    )
+    while not trigger.is_set():
+        if acc.stdout_cursor is not None:
+            fold_event_cursor(acc.stdout_cursor, stream_parser, acc.observe_event)
+        if acc.channel_b_cursor is not None:
+            fold_event_cursor(acc.channel_b_cursor, stream_parser, acc.observe_event)
+        if not acc.has_unresolved_obligations():
+            acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+            trigger.set()
+            return
+        if anyio.current_time() - started >= child_deferral_ceiling:
+            acc.completion_ceiling_expired = True
+            acc.channel_a_confirmed = acc.channel_a_candidate_at is not None
+            trigger.set()
+            return
+        await anyio.sleep(_poll_interval)
 
 
 def _enroll_race_watchers(

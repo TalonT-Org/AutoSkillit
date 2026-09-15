@@ -214,6 +214,12 @@ def _exit_launch_preparation_error(exc: ValueError) -> NoReturn:
     raise SystemExit(1)
 
 
+def _exit_launch_validation_errors(errors: Sequence[str]) -> NoReturn:
+    for error in errors:
+        sys.stderr.write(f"ERROR: {error}\n")
+    raise SystemExit(1)
+
+
 def _run_interactive_session(
     system_prompt: str,
     *,
@@ -369,9 +375,7 @@ def _run_interactive_session(
         assert_interactive_ordering(spec=spec)
         validation_errors = backend.validate_interactive_invocation(spec)
         if validation_errors:
-            for error in validation_errors:
-                print(f"ERROR: {error}", file=sys.stderr)
-            sys.exit(1)
+            _exit_launch_validation_errors(validation_errors)
 
         from autoskillit.cli.session._session_process import run_cook_attempt
 
@@ -458,19 +462,15 @@ def _run_interactive_session(
                 )
             except ValueError as exc:
                 _exit_launch_preparation_error(exc)
-            spec = prepared.spec
+            spec = replace(prepared.spec, cwd=str(_project_dir))
             executable = prepared.executable
-            # This is the sole raw/non-managed launch path for ad-hoc fleet
-            # and campaign interactive sessions (_run_interactive_session
-            # called without managed_home — cli/fleet/_fleet_session.py:89,199).
-            # backend.validate_interactive_invocation is never called on this
-            # branch, so force_inactive_agent_teams enforcement is a no-op
-            # here today. It is deliberately not added generically: for Codex
-            # it enforces a stricter CODEX_HOME/SQLite-home contract that
-            # only a managed session home satisfies, and adding it would
-            # break real fleet/campaign Codex sessions, which never have one.
-            # assert_interactive_ordering's cmd-shape check still applies.
+            assert Path(spec.cwd) == executable.cwd
+            # Raw fleet and campaign sessions validate the finalized projected-home
+            # catalog while its reader lease remains held by this binding scope.
             assert_interactive_ordering(spec=spec)
+            validation_errors = backend.validate_interactive_invocation(spec)
+            if validation_errors:
+                _exit_launch_validation_errors(validation_errors)
             if not executable_binding_matches_current_file(executable):
                 sys.stderr.write(
                     "ERROR: interactive executable changed after capability probing\n"
@@ -481,7 +481,7 @@ def _run_interactive_session(
                 process = subprocess.Popen(
                     cmd,
                     env=spec.env,
-                    cwd=str(executable.cwd),
+                    cwd=spec.cwd,
                     pass_fds=spec.inherited_fds,
                 )
                 try:

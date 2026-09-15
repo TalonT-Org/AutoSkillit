@@ -772,6 +772,26 @@ class TestCodexResultParserToolUses:
 
 
 class TestScanCodexNdjsonErrorCode:
+    def test_flat_error_without_code_replaces_message_but_retains_last_code(self) -> None:
+        ndjson = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "first failure",
+                        "code": "rate_limit_exceeded",
+                    }
+                ),
+                _flat_error_line("second failure"),
+            ]
+        )
+
+        acc = _scan_codex_ndjson(ndjson)
+
+        assert acc.error_message == "second failure"
+        assert acc.error_code == "rate_limit_exceeded"
+        assert acc.saw_failure is True
+
     def test_scan_turn_failed_error_code_appended_to_message(self) -> None:
         ndjson = _turn_failed_code_line("context_length_exceeded", "Context window exceeded")
         acc = _scan_codex_ndjson(ndjson)

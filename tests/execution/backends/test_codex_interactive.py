@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from autoskillit.core import BareResume, CmdSpec, NamedResume, NoResume
+from autoskillit.core import BareResume, CmdOrigin, CmdSpec, NamedResume, NoResume
 from autoskillit.execution.backends._claude_prompt import codex_discipline_suffix
 from autoskillit.execution.backends.codex import CodexBackend, CodexFlags
 
@@ -62,11 +62,49 @@ class TestCodexInteractiveCmdResumeVariants:
     def test_named_resume_includes_resume_with_session_id(self) -> None:
         spec = CodexBackend().build_interactive_cmd(
             resume_spec=NamedResume(session_id="abc123"),
+            model="gpt-5.6-sol",
+            generated_home=Path("/session/home"),
+            initial_prompt="",
+            add_dirs=[Path("/first"), Path("/second")],
+            env_extras={"AUTOSKILLIT_PROVIDER_PROFILE": "test-profile"},
         )
-        assert CodexFlags.RESUME_SUBCOMMAND in spec.cmd
-        assert "abc123" in spec.cmd
-        assert spec.origin is not None
-        assert "abc123" in spec.origin.positional
+        assert spec.cmd == (
+            "codex",
+            CodexFlags.RESUME_SUBCOMMAND,
+            CodexFlags.DANGEROUSLY_BYPASS,
+            CodexFlags.PROFILE,
+            "test-profile",
+            CodexFlags.MODEL,
+            "gpt-5.6-sol",
+            CodexFlags.CONFIG_OVERRIDE,
+            "features.image_generation=false",
+            CodexFlags.CONFIG_OVERRIDE,
+            'sqlite_home="/session/home"',
+            "abc123",
+            "",
+            CodexFlags.ADD_DIR,
+            "/first",
+            CodexFlags.ADD_DIR,
+            "/second",
+        )
+        assert spec.origin == CmdOrigin(
+            binary="codex",
+            mode_flags=(
+                CodexFlags.RESUME_SUBCOMMAND,
+                CodexFlags.DANGEROUSLY_BYPASS,
+            ),
+            kv_flags=(
+                (CodexFlags.PROFILE, "test-profile"),
+                (CodexFlags.MODEL, "gpt-5.6-sol"),
+                (CodexFlags.CONFIG_OVERRIDE, "features.image_generation=false"),
+                (CodexFlags.CONFIG_OVERRIDE, 'sqlite_home="/session/home"'),
+            ),
+            positional=("abc123", ""),
+            variadic_pairs=(
+                (CodexFlags.ADD_DIR, "/first"),
+                (CodexFlags.ADD_DIR, "/second"),
+            ),
+        )
 
     def test_bare_resume_includes_resume_without_session_id(self) -> None:
         spec = CodexBackend().build_interactive_cmd(resume_spec=BareResume())

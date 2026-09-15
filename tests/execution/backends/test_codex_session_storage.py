@@ -911,6 +911,33 @@ def test_darwin_filesystem_classification_uses_diskutil(
     ]
 
 
+def test_linux_filesystem_classification_decodes_and_selects_deepest_mount(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "mount space" / "nested mount" / "child"
+    target.mkdir(parents=True)
+    outer_mount = target.parents[1]
+    nested_mount = target.parent
+    escaped_outer = str(outer_mount).replace(" ", r"\040")
+    escaped_nested = str(nested_mount).replace(" ", r"\040")
+    mountinfo = (
+        f"36 25 0:32 / {escaped_outer} rw - ext4 /dev/root rw\n"
+        f"37 36 0:33 / {escaped_nested} rw - xfs /dev/data rw\n"
+    ).encode()
+    calls: list[tuple[Path, int]] = []
+
+    def read_bounded(path: Path, limit: int) -> bytes:
+        calls.append((path, limit))
+        return mountinfo
+
+    monkeypatch.setattr(atomic.sys, "platform", "linux")
+    monkeypatch.setattr(atomic, "_read_bounded", read_bounded)
+
+    assert storage._filesystem_type(target) == "xfs"
+    assert calls == [(Path("/proc/self/mountinfo"), 4 * 1024 * 1024)]
+
+
 def test_filesystem_mount_root_resolves_and_stops_at_device_boundary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

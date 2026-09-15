@@ -32,6 +32,7 @@ from autoskillit.core import (
     get_logger,
     is_valid_codex_model_id,
     platform_temp_root,
+    resolve_temp_dir,
     user_generation_root,
 )
 from autoskillit.execution import (
@@ -154,6 +155,59 @@ def _check_codex_limits_verified(*, backend: CodingAgentBackend | None = None) -
             "CODEX_LIMITS_LAST_VERIFIED_VERSION is derived",
         )
     return DoctorResult(Severity.OK, check_name, f"Codex CLI {cur_str} at or below verified pin")
+
+
+def _check_codex_runtime_policy(
+    *,
+    backend: CodingAgentBackend | None = None,
+    generated_home: Path | None = None,
+    project_dir: Path | None = None,
+    workspace_temp_dir: str | None = None,
+) -> DoctorResult:
+    """Report the read-only wrapper target and resolved Codex runtime policy."""
+    check_name = "codex_runtime_policy"
+    if not isinstance(backend, CodexBackend):
+        return DoctorResult(
+            Severity.OK,
+            check_name,
+            "Skipped (selected backend has no Codex wrapper runtime policy)",
+        )
+    if generated_home is None:
+        from autoskillit.workspace import resolve_persistent_session_root
+
+        persistent_root = resolve_persistent_session_root(
+            resolve_temp_dir(project_dir or Path.cwd(), workspace_temp_dir),
+            backend,
+        )
+        if persistent_root is not None:
+            generated_home = persistent_root / "<session-id>"
+    if generated_home is None:
+        return DoctorResult(
+            Severity.WARNING,
+            check_name,
+            "Codex wrapper runtime policy is configured, but its persistent session-home "
+            "target could not be resolved.",
+        )
+
+    target = generated_home.resolve(strict=False)
+    runtime_spec = backend.runtime_spec
+
+    def configured_value(value: int | None) -> str:
+        return str(value) if value is not None else "Codex default"
+
+    return DoctorResult(
+        Severity.OK,
+        check_name,
+        "Codex wrapper runtime: "
+        f"CODEX_HOME={target}; CODEX_SQLITE_HOME={target}; "
+        f"auto_compaction_policy={runtime_spec.auto_compaction_policy}; "
+        "context_window_tokens="
+        f"{configured_value(runtime_spec.context_window_tokens)}; "
+        "auto_compact_threshold_tokens="
+        f"{configured_value(runtime_spec.auto_compact_threshold_tokens)}; "
+        f"home_placement={runtime_spec.home_placement}; "
+        f"context_exhaustion_behavior={runtime_spec.context_exhaustion_behavior}.",
+    )
 
 
 def _check_quota_cache_schema(cache_path: Path | None = None) -> DoctorResult:

@@ -123,6 +123,7 @@ Enumerated by `run_doctor` in `src/autoskillit/cli/doctor/__init__.py`:
 | 37 | Standing backend pins | Standing backend model pins are feasible |
 | 38 | Local recipe validity | Local recipes satisfy the current recipe contract |
 | 39 | Codex limits pin | Codex limits version pin is current |
+| 39b | Codex runtime policy | Read-only wrapper-home target and resolved compaction/window policy |
 | 40 | Skill capability authenticity | Bundled skill capabilities match authentic source evidence |
 | 41 | Capture-store statistics | Capture ledger and retained-directory statistics are readable |
 | 42 | Project-local skill contracts | Excluded or shadowed project-local skill copies are reported |

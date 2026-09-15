@@ -504,7 +504,11 @@ async def _execute_claude_headless(
                         plugin_authority=plugin_authority,
                         plugin_load_mode=plugin_load_mode,
                         retained_binding=retained_binding,
-                        session_env=spec.env,
+                        session_home=(
+                            spec.app_server_plan.session_home
+                            if spec.app_server_plan is not None
+                            else None
+                        ),
                         managed_skill_catalog=spec.managed_skill_catalog,
                         launch_resolver=launch_resolver,
                         launch_preparation=launch_preparation,

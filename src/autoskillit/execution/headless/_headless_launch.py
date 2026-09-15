@@ -245,7 +245,7 @@ async def _attempt_contract_nudge(
     skill_contract: SkillContractView | None = None,
     plugin_authority: PluginArtifactAuthority | None = None,
     plugin_load_mode: PluginLoadMode = PluginLoadMode.NONE,
-    session_env: Mapping[str, str] | None = None,
+    session_home: str | None = None,
     managed_skill_catalog: ValidatedAddDir | None = None,
     managed_lineage_observer: _ManagedLineageObserver | None = None,
     launch_resolver: LaunchResolver | None = None,
@@ -369,7 +369,7 @@ async def _attempt_contract_nudge(
                     skill_session=True,
                     force_inactive_agent_teams=force_inactive_agent_teams,
                     project_root=cwd,
-                    session_home=(session_env.get("CODEX_HOME") if session_env else None),
+                    session_home=session_home,
                 )
 
             plugin_identity = _binding_identity(binding)

@@ -213,6 +213,45 @@ class TestCheckCodexLimitsVerified:
         assert "Skipped" in result.message
 
 
+class TestCheckCodexRuntimePolicy:
+    def test_reports_wrapper_target_and_resolved_policy(self, tmp_path: Path) -> None:
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_runtime_policy
+        from autoskillit.core import CodexRuntimeSpec
+        from autoskillit.execution import CodexBackend
+
+        generated_home = tmp_path / "codex-sessions" / "session-123"
+        result = _check_codex_runtime_policy(
+            backend=CodexBackend(
+                runtime_spec=CodexRuntimeSpec(
+                    context_window_tokens=200_000,
+                    auto_compact_threshold_tokens=180_000,
+                )
+            ),
+            generated_home=generated_home,
+        )
+
+        assert result.severity is Severity.OK
+        assert result.check == "codex_runtime_policy"
+        assert f"CODEX_HOME={generated_home}" in result.message
+        assert f"CODEX_SQLITE_HOME={generated_home}" in result.message
+        assert "auto_compaction_policy=deny" in result.message
+        assert "context_window_tokens=200000" in result.message
+        assert "auto_compact_threshold_tokens=180000" in result.message
+        assert "home_placement=persistent_session_home" in result.message
+        assert "context_exhaustion_behavior=stop" in result.message
+
+    def test_reports_codex_defaults_for_omitted_tuning(self, tmp_path: Path) -> None:
+        from autoskillit.cli.doctor._doctor_runtime import _check_codex_runtime_policy
+        from autoskillit.execution import CodexBackend
+
+        result = _check_codex_runtime_policy(
+            backend=CodexBackend(),
+            generated_home=tmp_path / "codex-sessions" / "session-123",
+        )
+
+        assert result.message.count("Codex default") == 2
+
+
 class TestCheckSessionIndexProjection:
     @staticmethod
     def _write_summary(log_root: Path, dir_name: str) -> None:

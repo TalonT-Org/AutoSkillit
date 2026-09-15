@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final, Generic, Literal, TypedDict, TypeVar
+from typing import Any, Final, Generic, Literal, TypedDict, TypeGuard, TypeVar
 
 from ._type_execution_identity import ChildExecutionIdentityDict, ChildOutcomeDict
 from ._type_results_execution import SubagentModelOutcomeDict
@@ -20,6 +20,11 @@ __all__ = [
     "CloneGateUncommitted",
     "CloneGateUnpublished",
     "CloneResult",
+    "RecipePathValidationErrorFinding",
+    "RecipePathValidationInputError",
+    "RecipePathValidationReport",
+    "RecipePathValidationResult",
+    "is_recipe_path_validation_report",
     "ModelTotalEntry",
     "SESSION_INDEX_SCHEMA_VERSION",
     "LoadReport",
@@ -189,6 +194,65 @@ class CloneGateUnpublished(TypedDict):
 
 
 CloneResult = CloneSuccessResult | CloneGateUncommitted | CloneGateUnpublished
+
+
+class RecipePathValidationErrorFinding(TypedDict):
+    error: str
+
+
+class RecipePathValidationInputError(TypedDict):
+    valid: Literal[False]
+    findings: list[RecipePathValidationErrorFinding]
+
+
+class RecipePathValidationReport(TypedDict):
+    valid: bool
+    errors: list[str]
+    quality: dict[str, object]
+    findings: list[dict[str, str]]
+    contracts: list[dict[str, Any]]
+
+
+RecipePathValidationResult = RecipePathValidationInputError | RecipePathValidationReport
+
+
+def is_recipe_path_validation_report(
+    result: object,
+) -> TypeGuard[RecipePathValidationReport]:
+    if not isinstance(result, dict) or set(result) != {
+        "valid",
+        "errors",
+        "quality",
+        "findings",
+        "contracts",
+    }:
+        return False
+
+    valid = result["valid"]
+    errors = result["errors"]
+    quality = result["quality"]
+    findings = result["findings"]
+    contracts = result["contracts"]
+    return (
+        isinstance(valid, bool)
+        and isinstance(errors, list)
+        and all(isinstance(error, str) for error in errors)
+        and isinstance(quality, dict)
+        and all(isinstance(key, str) for key in quality)
+        and isinstance(findings, list)
+        and all(
+            isinstance(finding, dict)
+            and all(
+                isinstance(key, str) and isinstance(value, str) for key, value in finding.items()
+            )
+            for finding in findings
+        )
+        and isinstance(contracts, list)
+        and all(
+            isinstance(contract, dict) and all(isinstance(key, str) for key in contract)
+            for contract in contracts
+        )
+    )
 
 
 class ModelTotalEntry(TypedDict):

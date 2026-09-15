@@ -18,7 +18,7 @@ else:
     # annotations defers everything to strings).
     from ._type_backend import BackendCapabilities  # noqa: F401
 
-from ._type_results import LoadResult
+from ._type_results import LoadResult, RecipePathValidationResult
 
 __all__ = [
     "RecipeRepository",
@@ -88,7 +88,7 @@ class RecipeRepository(Protocol):
         effective_backend_map: dict[str, str] | None = None,
         backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
         backend_origin_map: dict[str, str] | None = None,
-    ) -> dict[str, Any]: ...
+    ) -> RecipePathValidationResult: ...
 
     def list_all(
         self,

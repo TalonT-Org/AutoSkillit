@@ -1126,6 +1126,10 @@ from .types import RecipeIdentity as RecipeIdentity
 from .types import RecipeLoadError as RecipeLoadError
 from .types import RecipeNotFoundError as RecipeNotFoundError
 from .types import RecipePackDef as RecipePackDef
+from .types import RecipePathValidationErrorFinding as RecipePathValidationErrorFinding
+from .types import RecipePathValidationInputError as RecipePathValidationInputError
+from .types import RecipePathValidationReport as RecipePathValidationReport
+from .types import RecipePathValidationResult as RecipePathValidationResult
 from .types import RecipeRepository as RecipeRepository
 from .types import RecipeSectionContentFormatDef as RecipeSectionContentFormatDef
 from .types import RecipeSectionDef as RecipeSectionDef
@@ -1324,6 +1328,9 @@ from .types import (
 )
 from .types import is_final_github_review_state as is_final_github_review_state
 from .types import is_path_like_token as is_path_like_token
+from .types import (
+    is_recipe_path_validation_report as is_recipe_path_validation_report,
+)
 from .types import is_valid_codex_model_id as is_valid_codex_model_id
 from .types import is_valid_github_review_head_sha as is_valid_github_review_head_sha
 from .types import (

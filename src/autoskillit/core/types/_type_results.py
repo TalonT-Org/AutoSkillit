@@ -33,6 +33,10 @@ from ._type_results_records import (
     ManagedSessionHome,
     ModelTotalEntry,
     PreLaunchReadiness,
+    RecipePathValidationErrorFinding,
+    RecipePathValidationInputError,
+    RecipePathValidationReport,
+    RecipePathValidationResult,
     SessionIndexEntry,
     SkillUnavailabilityPayload,
     SkillUnavailabilityRecord,
@@ -42,6 +46,7 @@ from ._type_results_records import (
     TokenUsageFileEntry,
     ValidatedAddDir,
     ValidatedWorktreePath,
+    is_recipe_path_validation_report,
 )
 from ._type_token import TurnTokenEntry
 
@@ -84,6 +89,11 @@ __all__ = [
     "FailureRecord",
     "ProviderOutcome",
     "PreLaunchReadiness",
+    "RecipePathValidationErrorFinding",
+    "RecipePathValidationInputError",
+    "RecipePathValidationReport",
+    "RecipePathValidationResult",
+    "is_recipe_path_validation_report",
     "InfraOutcome",
     "ApiRetryOutcome",
     "CandidatePreSpawnRejection",

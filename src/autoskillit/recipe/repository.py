@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
-    from autoskillit.core import BackendCapabilities, LoadResult
+    from autoskillit.core import (
+        BackendCapabilities,
+        LoadResult,
+        RecipePathValidationResult,
+    )
     from autoskillit.recipe.schema import Recipe, RecipeInfo
 
 import autoskillit.recipe.api._api as _api
@@ -109,7 +113,7 @@ class DefaultRecipeRepository:
         effective_backend_map: dict[str, str] | None = None,
         backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
         backend_origin_map: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> RecipePathValidationResult:
         return _api.validate_from_path(
             script_path,
             temp_dir_relpath=temp_dir_relpath,

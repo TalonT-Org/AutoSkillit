@@ -21,6 +21,7 @@ from autoskillit.core import SpaceProbe, default_space_probe
 from autoskillit.core.types import (
     MANAGED_JOIN_ATTESTATION_SCHEMA_VERSION,
     BackendAuthority,
+    BackendCapabilities,
     CIRunScope,
     CIWatcher,
     ClosureAuthoritySpec,
@@ -46,6 +47,7 @@ from autoskillit.core.types import (
     PluginLoadMode,
     ProcessStaleError,
     RecipeNotFoundError,
+    RecipePathValidationResult,
     RecipeRepository,
     ResolvedLaunchContract,
     SemanticAdaptationContext,
@@ -1046,7 +1048,7 @@ class InMemoryRecipeRepository(RecipeRepository):
         self._recipes: dict[str, Any] = {}
         self._full_recipes: dict[Any, Any] = {}
         self._validated: dict[str, dict[str, Any]] = {}
-        self._path_validated: dict[str, dict[str, Any]] = {}
+        self._path_validated: dict[str, RecipePathValidationResult] = {}
         self._all_recipes: dict[str, Any] = {}
         self._stale: bool = False
         self.calls: list[dict[str, Any]] = []
@@ -1070,7 +1072,7 @@ class InMemoryRecipeRepository(RecipeRepository):
     def set_validated(self, name: str, result: dict[str, Any]) -> None:
         self._validated[name] = result
 
-    def set_path_validated(self, path: str, result: dict[str, Any]) -> None:
+    def set_path_validated(self, path: str, result: RecipePathValidationResult) -> None:
         self._path_validated[path] = result
 
     def set_all(self, data: dict[str, Any]) -> None:
@@ -1147,7 +1149,9 @@ class InMemoryRecipeRepository(RecipeRepository):
         backend_name: str | None = None,
         ingredient_overrides: dict[str, str] | None = None,
         effective_backend_map: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
+        backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
+        backend_origin_map: dict[str, str] | None = None,
+    ) -> RecipePathValidationResult:
         self.calls.append(
             {
                 "method": "validate_from_path",
@@ -1156,10 +1160,15 @@ class InMemoryRecipeRepository(RecipeRepository):
                 "backend_name": backend_name,
                 "ingredient_overrides": ingredient_overrides,
                 "effective_backend_map": effective_backend_map,
+                "backend_capabilities_map": backend_capabilities_map,
+                "backend_origin_map": backend_origin_map,
             }
         )
         key = str(script_path)
-        return self._path_validated.get(key, {"valid": False, "error": "not configured"})
+        return self._path_validated.get(
+            key,
+            {"valid": False, "findings": [{"error": "not configured"}]},
+        )
 
     def list_all(self, project_dir: Any | None = None) -> dict[str, Any]:
         self.calls.append({"method": "list_all", "project_dir": project_dir})

@@ -8,6 +8,8 @@ from typing import Any
 from autoskillit.core import (
     BackendCapabilities,
     LoadResult,
+    RecipePathValidationInputError,
+    RecipePathValidationResult,
     SkillLister,
     YAMLError,
     get_logger,
@@ -36,7 +38,7 @@ from autoskillit.recipe.validator import (
 logger = get_logger(__name__)
 
 
-def _invalid_validation_result(message: str) -> dict[str, Any]:
+def _invalid_validation_result(message: str) -> RecipePathValidationInputError:
     """Return the established validation result shape for an input error."""
     return {
         "valid": False,
@@ -96,7 +98,7 @@ def validate_from_path(
     effective_backend_map: dict[str, str] | None = None,
     backend_capabilities_map: dict[str, BackendCapabilities] | None = None,
     backend_origin_map: dict[str, str] | None = None,
-) -> dict[str, Any]:
+) -> RecipePathValidationResult:
     """Validate a recipe YAML file at the given path.
 
     Args:
@@ -106,8 +108,9 @@ def validate_from_path(
             ``.autoskillit/temp``.
 
     Returns:
-        {"valid": bool, "errors": list, "quality": dict, "semantic": list, "contracts": list}
-        File and parse errors return only "valid" and "findings".
+        Completed validation returns ``valid``, ``errors``, ``quality``,
+        ``findings``, and ``contracts``. File and parse errors return only
+        ``valid`` and ``findings``.
     """
     if not path.is_file():
         return _invalid_validation_result(f"File not found: {path}")

@@ -160,11 +160,11 @@ def _spawn_group_escaping_owner(
     child_count: int,
 ) -> Any:
     """Spawn a directly owned leader whose descendants escape its process group."""
-    from autoskillit.execution.process import _process_kill
+    from autoskillit.execution.process._lifecycle import owned_group
 
     script = tmp_path / "group_escaping_descendants.py"
     script.write_text(GROUP_ESCAPING_DESCENDANTS_SCRIPT)
-    return _process_kill.spawn_owned_process(
+    return owned_group.spawn_owned_process(
         [sys.executable, str(script), str(ready_path), str(child_count), "hold"],
         cwd=tmp_path,
         env=production_interpreter_env(),

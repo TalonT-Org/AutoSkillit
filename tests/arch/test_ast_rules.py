@@ -49,6 +49,7 @@ from tests.arch._deferred_debt import (
 )
 from tests.arch._helpers import (
     _SOURCE_FILES,
+    PROCESS_OWNED_GROUP_PY,
     SRC_ROOT,
     _scan,
     _scan_strenum_compare,
@@ -715,7 +716,8 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     outside the designated kill helper functions.
 
     Allowed call sites:
-    - src/autoskillit/execution/_process_kill.py (defines the helpers)
+    - _process_kill.py (defines the recovery helpers)
+    - _lifecycle/owned_group.py (identity-fenced escalation for escaped descendants)
     - execute_termination_action in src/autoskillit/execution/process.py
     - BaseException handler in run_managed_async in process.py (cleanup path)
     - run_managed_sync in process.py (sync cleanup path)
@@ -727,6 +729,7 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
     """
     allowed_files = {
         SRC_ROOT / "execution" / "process" / "_process_kill.py",
+        PROCESS_OWNED_GROUP_PY,
         SRC_ROOT / "execution" / "process" / "__init__.py",
         SRC_ROOT / "execution" / "process" / "_codex_orphans.py",
         SRC_ROOT / "execution" / "process" / "_daemon_orphans.py",
@@ -774,9 +777,7 @@ def test_no_direct_async_kill_process_tree_outside_executor() -> None:
         + "\n".join(violations)
     )
 
-    process_kill_tree = ast.parse(
-        (SRC_ROOT / "execution" / "process" / "_process_kill.py").read_text()
-    )
+    process_kill_tree = ast.parse(PROCESS_OWNED_GROUP_PY.read_text())
     owned_group = next(
         node
         for node in process_kill_tree.body
@@ -825,7 +826,7 @@ def test_no_direct_settle_call_outside_allowlist() -> None:
     # that do not need that raising behavior must use .settle_evidence() or
     # .settle_preserving() instead — a bare .settle() call is deliberately narrow.
     allowed_files = {
-        SRC_ROOT / "execution" / "process" / "_process_kill.py",  # defines settle()
+        PROCESS_OWNED_GROUP_PY,  # defines settle()
         SRC_ROOT / "cli" / "session" / "_session_process.py",  # requires raising semantics
         SRC_ROOT / "execution" / "evidence_reader.py",  # pre-existing catch-and-convert
         SRC_ROOT / "hooks" / "_capture_process.py",  # retained capture settlement
@@ -948,6 +949,7 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
         / "execution"
         / "process"
         / "_process_kill.py",  # identity-coherence with create_time
+        PROCESS_OWNED_GROUP_PY,  # owned group identity revalidation
         SRC_ROOT / "fleet" / "_dispatch_reaper.py",  # pre-existing follow-up
         SRC_ROOT / "hooks" / "guards" / "mcp_health_advisor.py",  # stdlib-only hook
     }
@@ -984,7 +986,7 @@ def test_no_raw_zombie_blind_liveness_check_outside_shared_primitive() -> None:
 # rationale to entry here makes that drift unrepresentable.
 _DETACHED_SPAWN_ALLOWLIST: list[tuple[Path, str]] = [
     (
-        SRC_ROOT / "execution" / "process" / "_process_kill.py",
+        PROCESS_OWNED_GROUP_PY,
         "defines spawn_owned_process — the funnel itself",
     ),
     (
@@ -1051,7 +1053,7 @@ def _detach_spawn_violation_reason(node: ast.Call) -> str | None:
 def test_no_detached_spawn_outside_owned_funnel() -> None:
     """No src file may construct a detached/process-group-isolated
     subprocess.Popen or asyncio.create_subprocess_exec/_shell call outside the
-    owned-process spawn funnel (spawn_owned_process in _process_kill.py).
+    owned-process spawn funnel (spawn_owned_process in _lifecycle/owned_group.py).
 
     Every detached spawn must fund through spawn_owned_process so it durably
     records a process tether (see _process_tether.py) — an untethered detached

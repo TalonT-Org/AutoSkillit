@@ -14,8 +14,11 @@ from autoskillit.core import (
     TerminationReason,
     get_logger,
 )
+from autoskillit.execution.process._lifecycle.owned_group import (
+    OwnedProcessGroup,
+    spawn_owned_process,
+)
 from autoskillit.execution.process._process_io import create_temp_io, read_temp_output
-from autoskillit.execution.process._process_kill import OwnedProcessGroup, spawn_owned_process
 from autoskillit.execution.process._process_tether import (
     DEFAULT_TETHER_CEILING_SECONDS,
     TetherSpec,

@@ -13,10 +13,10 @@ import anyio
 import pytest
 import structlog.testing
 
-import autoskillit.execution.process._process_race as _patch_process__process_race
-from autoskillit.execution.process._process_race import (
+import autoskillit.execution.process._race_watchers as _patch_process__race_watchers
+from autoskillit.execution.process._process_race import RaceAccumulator
+from autoskillit.execution.process._race_watchers import (
     CLEANUP_BUDGET_SECONDS,
-    RaceAccumulator,
     _watch_stdout_idle,
 )
 from tests.conftest import make_stub_inspector
@@ -76,7 +76,7 @@ async def test_watch_stdout_idle_emits_suppression_evaluated_debug_log(
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    with patch.object(_patch_process__process_race, "logger", new=MagicMock()) as mock_debug:
+    with patch.object(_patch_process__race_watchers, "logger", new=MagicMock()) as mock_debug:
         with anyio.fail_after(2.0):
             async with anyio.create_task_group() as tg:
                 tg.start_soon(
@@ -113,7 +113,7 @@ async def test_watch_stdout_idle_emits_suppression_evaluated_with_marker_dir(
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    with patch.object(_patch_process__process_race, "logger", new=MagicMock()) as mock_debug:
+    with patch.object(_patch_process__race_watchers, "logger", new=MagicMock()) as mock_debug:
         with anyio.fail_after(2.0):
             async with anyio.create_task_group() as tg:
                 tg.start_soon(
@@ -148,7 +148,7 @@ async def test_watch_stdout_idle_suppression_evaluated_fires_once_during_suppres
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
@@ -156,7 +156,7 @@ async def test_watch_stdout_idle_suppression_evaluated_fires_once_during_suppres
     acc = RaceAccumulator()
     trigger = anyio.Event()
 
-    with patch.object(_patch_process__process_race, "logger", new=MagicMock()) as mock_debug:
+    with patch.object(_patch_process__race_watchers, "logger", new=MagicMock()) as mock_debug:
 
         async def cancel_when_suppressed() -> None:
             # Wait for at least 2 suppressed warnings before cancelling
@@ -319,6 +319,34 @@ async def test_watch_stdout_idle_handles_missing_file(tmp_path: anyio.Path) -> N
 
 
 @pytest.mark.anyio
+async def test_watch_stdout_idle_resets_size_after_stat_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [0.0]
+    polls = [0]
+    acc = RaceAccumulator()
+    trigger = anyio.Event()
+
+    async def advance_clock(_seconds: float) -> None:
+        clock[0] += 1.0
+        polls[0] += 1
+        if polls[0] == 4:
+            trigger.set()
+
+    first_stat = MagicMock(st_size=10)
+    recreated_stat = MagicMock(st_size=2)
+    stdout_path = MagicMock()
+    stdout_path.stat.side_effect = [first_stat, OSError(), recreated_stat]
+    monkeypatch.setattr(_patch_process__race_watchers.anyio, "sleep", advance_clock)
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+
+    await _watch_stdout_idle(stdout_path, 1.5, acc, trigger, 1.0)
+
+    assert acc.idle_stall is False
+    assert stdout_path.stat.call_count == 3
+
+
+@pytest.mark.anyio
 async def test_watch_stdout_idle_suppressed_by_dispatch_marker(
     tmp_path: anyio.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -327,7 +355,7 @@ async def test_watch_stdout_idle_suppressed_by_dispatch_marker(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
@@ -372,7 +400,7 @@ async def test_watch_stdout_idle_fires_when_suppression_cap_exceeded(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
@@ -433,7 +461,7 @@ async def test_watch_stdout_idle_suppression_timer_resets_on_growth(
     await anyio.Path(stdout_file).write_bytes(b"initial\n")
 
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
@@ -477,7 +505,7 @@ async def test_watch_stdout_idle_emits_suppression_warning(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
@@ -528,7 +556,7 @@ async def test_watch_stdout_idle_marker_false_fires_immediately(
     await anyio.Path(stdout_file).write_bytes(b"initial output\n")
 
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: False,
     )
@@ -561,7 +589,7 @@ async def test_watch_stdout_idle_dispatch_marker_suppresses_stall(
 ) -> None:
     """Active dispatch marker suppresses idle stall within the suppression window."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )
@@ -653,7 +681,7 @@ async def test_watch_stdout_idle_marker_suppression_bounded(
 ) -> None:
     """Suppression cap exceeded — idle stall fires despite active marker."""
     monkeypatch.setattr(
-        _patch_process__process_race,
+        _patch_process__race_watchers,
         "_has_active_execution_marker",
         lambda marker_dir, session_id=None: True,
     )

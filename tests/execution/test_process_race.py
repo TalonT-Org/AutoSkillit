@@ -24,10 +24,10 @@ from autoskillit.execution.process._process_race import (
     RaceAccumulator,
     RaceSignals,
     _extract_stdout_session_id,
-    _watch_completion_eligibility,
     fold_lifecycle_evidence_path,
     resolve_termination,
 )
+from autoskillit.execution.process._race_watchers import _watch_completion_eligibility
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 

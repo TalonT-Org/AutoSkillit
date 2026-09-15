@@ -1,7 +1,7 @@
 """Process-tether registry: fail-closed spawner-death immunity for detached children.
 
 A tether is a small JSON record written as a mandatory side effect of every
-funnel spawn (see ``spawn_owned_process`` in ``_process_kill.py``). It carries
+funnel spawn (see ``spawn_owned_process`` in ``_lifecycle/owned_group.py``). It carries
 the spawner's identity, the child's identity, and an absolute ``not_after``
 ceiling. ``sweep_orphaned_tethers`` is the single generic reaper wired into
 every boot/open chokepoint: a tether is only ever acted on when its child's
@@ -299,8 +299,8 @@ def sweep_orphaned_tethers(
     if not tether_dir.is_dir():
         return TetherSweepReport()
 
-    # Deferred import: _process_kill imports TetherSpec/write_tether/remove_tether
-    # from this module at spawn time, so a module-level import here would cycle.
+    # Keep the psutil-backed recovery primitive local so importing tether data
+    # definitions and registry helpers does not initialize process-control code.
     from autoskillit.execution.process._process_kill import kill_process_tree
 
     now = time.time()

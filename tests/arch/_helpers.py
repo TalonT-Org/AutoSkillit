@@ -33,8 +33,10 @@ if TYPE_CHECKING:
 SRC_ROOT = Path(__file__).parent.parent.parent / "src" / "autoskillit"
 PROCESS_PY = SRC_ROOT / "execution" / "process" / "__init__.py"
 PROCESS_KILL_PY = SRC_ROOT / "execution" / "process" / "_process_kill.py"
+PROCESS_OWNED_GROUP_PY = SRC_ROOT / "execution" / "process" / "_lifecycle" / "owned_group.py"
 PROCESS_MONITOR_PY = SRC_ROOT / "execution" / "process" / "_process_monitor.py"
 PROCESS_RACE_PY = SRC_ROOT / "execution" / "process" / "_process_race.py"
+RACE_WATCHERS_PY = SRC_ROOT / "execution" / "process" / "_race_watchers.py"
 
 
 def _collect_line_limit_violations(

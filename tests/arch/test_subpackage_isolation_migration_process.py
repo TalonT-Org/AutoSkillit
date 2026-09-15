@@ -9,6 +9,7 @@ import pytest
 from tests.arch._helpers import (
     PROCESS_PY,
     PROCESS_RACE_PY,
+    RACE_WATCHERS_PY,
     SRC_ROOT,
     _extract_module_level_internal_imports,
 )
@@ -84,7 +85,7 @@ class TestGroupCMigration:
         assert "async def _watch_session_log(" in source  # REQ-SIG-007
 
     def test_watch_child_activity_present(self):
-        source = PROCESS_RACE_PY.read_text()
+        source = RACE_WATCHERS_PY.read_text()
         assert "async def _watch_child_activity(" in source  # REQ-SIG-007
 
     def test_race_signals_fields_unchanged(self):

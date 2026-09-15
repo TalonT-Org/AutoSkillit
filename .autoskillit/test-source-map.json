@@ -1,10 +1,10 @@
 {
   "provenance": {
-    "generated_at": "2026-09-14T23:29:13.988296+00:00",
-    "source_commit": "b9b359ade7765e324e6351eecd4657de6760fe71",
+    "generated_at": "2026-09-15T15:10:21.953513+00:00",
+    "source_commit": "e4346eb759b24876173c3d9d0671704fb72d1527",
     "pytest_exit_code": 0,
-    "tool_version": "0.10.1138",
-    "source_file_count": 870
+    "tool_version": "0.10.1140",
+    "source_file_count": 871
   },
   "map": {
     "src/autoskillit/__init__.py": [
@@ -6719,6 +6719,7 @@
       "tests/server/test_run_skill_resume.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
+      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
       "tests/server/test_tools_agents.py",
       "tests/server/test_tools_dispatch_params.py",
@@ -6822,6 +6823,7 @@
       "tests/server/test_serve_idempotence.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
+      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
       "tests/server/test_tools_agents.py",
       "tests/server/test_tools_kitchen_cache_poison.py",
@@ -7362,6 +7364,7 @@
       "tests/server/test_server_tool_registration.py",
       "tests/server/test_server_version_telemetry.py",
       "tests/server/test_session_deadline.py",
+      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_session_type_visibility_orchestrator.py",
       "tests/server/test_step_guard_admission.py",
       "tests/server/test_tool_annotation_completeness.py",
@@ -10251,6 +10254,7 @@
       "tests/server/test_serve_idempotence.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
+      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
       "tests/server/test_tools_agents.py",
       "tests/server/test_tools_dispatch.py",
@@ -15129,6 +15133,36 @@
       "tests/execution/test_testing.py",
       "tests/workspace/test_worktree_allocator.py"
     ],
+    "src/autoskillit/execution/process/_lifecycle/owned_group.py": [
+      "tests/cli/test_cook_process_lifecycle.py",
+      "tests/cli/test_session_launch.py",
+      "tests/cli/test_terminal.py",
+      "tests/contracts/test_protocol_satisfaction.py",
+      "tests/execution/backends/test_codex_config_validation.py",
+      "tests/execution/backends/test_codex_discovery.py",
+      "tests/execution/process/test_line_driver_runner.py",
+      "tests/execution/test_boundary_pty_dispatch.py",
+      "tests/execution/test_linux_tracing_pty_integration.py",
+      "tests/execution/test_on_spawn_timing.py",
+      "tests/execution/test_process_channel_b.py",
+      "tests/execution/test_process_cleanup_result.py",
+      "tests/execution/test_process_deadline_extension.py",
+      "tests/execution/test_process_debug_logging.py",
+      "tests/execution/test_process_env_boundary.py",
+      "tests/execution/test_process_heartbeat.py",
+      "tests/execution/test_process_identity.py",
+      "tests/execution/test_process_kill.py",
+      "tests/execution/test_process_pty.py",
+      "tests/execution/test_process_race.py",
+      "tests/execution/test_process_run.py",
+      "tests/execution/test_process_tether.py",
+      "tests/execution/test_session_log_integration.py",
+      "tests/execution/test_termination_executor.py",
+      "tests/execution/test_testing.py",
+      "tests/exploration/test_bounded_collectors.py",
+      "tests/server/test_exploration_service.py",
+      "tests/workspace/test_worktree_allocator.py"
+    ],
     "src/autoskillit/execution/process/_lifecycle/runner.py": [
       "tests/contracts/test_protocol_satisfaction.py",
       "tests/execution/process/test_line_driver_runner.py",
@@ -15213,7 +15247,6 @@
     "src/autoskillit/execution/process/_process_kill.py": [
       "tests/cli/test_cook_process_lifecycle.py",
       "tests/cli/test_session_launch.py",
-      "tests/cli/test_terminal.py",
       "tests/contracts/test_protocol_satisfaction.py",
       "tests/execution/backends/test_codex_config_validation.py",
       "tests/execution/backends/test_codex_discovery.py",
@@ -15291,7 +15324,6 @@
       "tests/execution/test_process_env_boundary.py",
       "tests/execution/test_process_heartbeat.py",
       "tests/execution/test_process_identity.py",
-      "tests/execution/test_process_idle_watchdog.py",
       "tests/execution/test_process_jsonl.py",
       "tests/execution/test_process_kill.py",
       "tests/execution/test_process_pty.py",
@@ -15391,6 +15423,7 @@
       "tests/execution/test_process_env_boundary.py",
       "tests/execution/test_process_heartbeat.py",
       "tests/execution/test_process_identity.py",
+      "tests/execution/test_process_idle_watchdog.py",
       "tests/execution/test_process_kill.py",
       "tests/execution/test_process_pty.py",
       "tests/execution/test_process_race.py",
@@ -17655,6 +17688,7 @@
     ],
     "src/autoskillit/hook_registry/_hashing.py": [
       "tests/arch/test_feature_markers.py",
+      "tests/arch/test_tier3_atomicity.py",
       "tests/cli/test_cli_hooks.py",
       "tests/cli/test_cook_env_scrub.py",
       "tests/cli/test_cook_features.py",
@@ -17702,11 +17736,11 @@
       "tests/server/test_declare_join_batch_handler.py",
       "tests/server/test_enable_exploration.py",
       "tests/server/test_factory_context_construction.py",
+      "tests/server/test_headless_session.py",
       "tests/server/test_lifespan.py",
       "tests/server/test_lifespan_fleet_boot.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
-      "tests/server/test_tool_annotation_completeness.py",
       "tests/server/test_tools_kitchen_visibility.py",
       "tests/server/test_tools_recipe.py",
       "tests/server/test_wire_compat.py",
@@ -17776,6 +17810,7 @@
     "src/autoskillit/hook_registry/_rendering.py": [
       "tests/arch/test_capability_consistency.py",
       "tests/arch/test_feature_markers.py",
+      "tests/arch/test_tier3_atomicity.py",
       "tests/backend/test_codex_hooks_round_trip.py",
       "tests/cli/test_cli_hooks.py",
       "tests/cli/test_cook_env_scrub.py",
@@ -17861,6 +17896,7 @@
     "src/autoskillit/hook_registry/_risky_operations.py": [
       "tests/arch/test_capability_consistency.py",
       "tests/arch/test_feature_markers.py",
+      "tests/arch/test_tier3_atomicity.py",
       "tests/backend/test_codex_hooks_round_trip.py",
       "tests/cli/test_cli_hooks.py",
       "tests/cli/test_cook_env_scrub.py",
@@ -18876,7 +18912,6 @@
       "tests/infra/test_risky_git_ops_coverage.py"
     ],
     "src/autoskillit/hooks/guards/recipe_write_advisor.py": [
-      "tests/contracts/test_advisory_coverage.py",
       "tests/hooks/test_recipe_write_advisor.py"
     ],
     "src/autoskillit/hooks/guards/remove_clone_guard.py": [
@@ -44039,6 +44074,7 @@
       "tests/server/test_response_backstop_metadata.py",
       "tests/server/test_server_init_gate.py",
       "tests/server/test_server_tool_registration.py",
+      "tests/server/test_session_type_explorer_binding.py",
       "tests/server/test_tool_annotation_completeness.py",
       "tests/server/test_tools_agents.py",
       "tests/server/test_tools_kitchen_visibility.py",

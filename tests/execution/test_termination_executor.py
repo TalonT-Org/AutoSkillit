@@ -15,13 +15,13 @@ from autoskillit.core import KillReason, ProcessCleanupResult, TerminationAction
 from autoskillit.execution.process import (
     RaceAccumulator,
     TetherSpec,
-    _process_kill,
     _watch_process,
     execute_termination_action,
     run_managed_async,
     run_managed_sync,
     spawn_owned_process,
 )
+from autoskillit.execution.process._lifecycle import owned_group as _owned_group
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.medium]
 
@@ -276,7 +276,7 @@ def test_run_managed_sync_survives_incomplete_cleanup_evidence(
         observation_complete=True,
     )
     monkeypatch.setattr(
-        _process_kill.OwnedProcessGroup,
+        _owned_group.OwnedProcessGroup,
         "cleanup",
         lambda self, timeout: (0, incomplete_result),
     )
@@ -298,7 +298,7 @@ async def test_run_managed_async_coalesces_none_returncode_to_sentinel(
     """A None leader returncode never reaches SubprocessResult.returncode: int."""
     complete_result = ProcessCleanupResult(root_pid=1, observation_complete=True)
     monkeypatch.setattr(
-        _process_kill.OwnedProcessGroup,
+        _owned_group.OwnedProcessGroup,
         "cleanup",
         lambda self, timeout: (None, complete_result),
     )

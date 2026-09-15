@@ -228,7 +228,7 @@ class TestProcessLifecycleCallbacks:
     ) -> None:
         """Callback errors cannot turn incomplete exception cleanup into a reap report."""
         from autoskillit.execution.process import run_managed_async
-        from autoskillit.execution.process._process_kill import OwnedProcessGroup
+        from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
 
         original_settle = OwnedProcessGroup.settle_preserving
 

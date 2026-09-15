@@ -22,7 +22,7 @@ from autoskillit.core import (
     TerminationAction,
     TerminationReason,
 )
-from autoskillit.execution.process._process_kill import (
+from autoskillit.execution.process._lifecycle.owned_group import (
     OwnedProcessGroup,
     ProcessObservationSnapshot,
 )

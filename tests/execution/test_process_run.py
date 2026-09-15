@@ -391,7 +391,7 @@ class TestManagedProcessOwnership:
     async def test_run_managed_async_settles_its_owned_group_on_cancellation(
         self, monkeypatch, tmp_path
     ) -> None:
-        from autoskillit.execution.process._process_kill import OwnedProcessGroup
+        from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
 
         settled: list[BaseException] = []
         original_settle = OwnedProcessGroup.settle_preserving

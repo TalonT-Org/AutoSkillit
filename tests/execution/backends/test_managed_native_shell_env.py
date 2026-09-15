@@ -19,7 +19,7 @@ from autoskillit.core import (
     resolve_native_shell_capture_decision,
 )
 from autoskillit.execution.backends import ClaudeCodeBackend
-from autoskillit.execution.backends.codex import CodexBackend as _CodexBackend
+from tests.execution.backends._generated_home_backend import GeneratedHomeCodexBackend
 from tests.fixtures.codex import codex_skill_add_dirs
 
 pytestmark = [pytest.mark.layer("execution"), pytest.mark.small]
@@ -35,34 +35,16 @@ _PROTECTED_KEYS = frozenset(
         MANAGED_LINEAGE_REF_ENV_VAR,
     }
 )
-_legacy_direct_home: Path | None = None
+CodexBackend = GeneratedHomeCodexBackend
 
 
 @pytest.fixture(autouse=True)
-def _bind_legacy_direct_home(tmp_path: Path) -> None:
-    global _legacy_direct_home
-    _legacy_direct_home = tmp_path / "generated-home"
-
-
-def _legacy_home() -> Path:
-    assert _legacy_direct_home is not None
-    return _legacy_direct_home
-
-
-class CodexBackend(_CodexBackend):
-    """Supply an isolated home to legacy direct builder calls."""
-
-    def build_headless_cmd(self, *args, **kwargs):
-        kwargs.setdefault("generated_home", _legacy_home())
-        return super().build_headless_cmd(*args, **kwargs)
-
-    def build_interactive_cmd(self, *args, **kwargs):
-        kwargs.setdefault("generated_home", _legacy_home())
-        return super().build_interactive_cmd(*args, **kwargs)
-
-    def build_resume_cmd(self, *args, **kwargs):
-        kwargs.setdefault("session_home", str(_legacy_home()))
-        return super().build_resume_cmd(*args, **kwargs)
+def _bind_generated_home_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        CodexBackend,
+        "generated_home",
+        tmp_path / "generated-home",
+    )
 
 
 @pytest.fixture(autouse=True)

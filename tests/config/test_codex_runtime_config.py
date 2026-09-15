@@ -18,8 +18,6 @@ def test_default_runtime_policy_resolves_to_immutable_deny_spec() -> None:
     assert spec.auto_compaction_policy == "deny"
     assert spec.context_window_tokens is None
     assert spec.auto_compact_threshold_tokens is None
-    assert spec.home_placement == "persistent_session_home"
-    assert spec.context_exhaustion_behavior == "stop"
     with pytest.raises(dataclasses.FrozenInstanceError):
         spec.context_window_tokens = 1  # type: ignore[misc]
 

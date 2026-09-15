@@ -73,8 +73,6 @@ class CodexRuntimeSpec:
     auto_compaction_policy: Literal["deny"] = "deny"
     context_window_tokens: int | None = None
     auto_compact_threshold_tokens: int | None = None
-    home_placement: Literal["persistent_session_home"] = "persistent_session_home"
-    context_exhaustion_behavior: Literal["stop"] = "stop"
 
 
 @dataclass(frozen=True, slots=True)

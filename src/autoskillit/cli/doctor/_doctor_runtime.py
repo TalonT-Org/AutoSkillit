@@ -204,9 +204,7 @@ def _check_codex_runtime_policy(
         "context_window_tokens="
         f"{configured_value(runtime_spec.context_window_tokens)}; "
         "auto_compact_threshold_tokens="
-        f"{configured_value(runtime_spec.auto_compact_threshold_tokens)}; "
-        f"home_placement={runtime_spec.home_placement}; "
-        f"context_exhaustion_behavior={runtime_spec.context_exhaustion_behavior}.",
+        f"{configured_value(runtime_spec.auto_compact_threshold_tokens)}.",
     )
 
 

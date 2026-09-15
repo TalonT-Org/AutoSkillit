@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from autoskillit.core import (
     CodingAgentBackend,
@@ -23,9 +23,6 @@ from autoskillit.core import (
     SkillResult,
     SubprocessResult,
 )
-
-if TYPE_CHECKING:
-    from autoskillit.pipeline.context import ToolContext
 
 
 def finalize_terminal_selection(
@@ -161,7 +158,7 @@ def build_recipe_identity(
 
 def build_terminal_flush_kwargs(
     *,
-    ctx: ToolContext,
+    ctx: Any,
     result: SubprocessResult | None,
     skill_result: SkillResult,
     cwd: str,

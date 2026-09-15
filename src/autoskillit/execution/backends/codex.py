@@ -64,6 +64,7 @@ from autoskillit.execution.backends._codex_config import (
     ensure_codex_mcp_registered,
 )
 from autoskillit.execution.backends._codex_discovery import (
+    CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
     CODEX_SKILL_DISCOVERY_CONTRACT,
     attest_catalog_discovery,
     probe_codex_version,
@@ -464,7 +465,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             executable=origin.binary,
             env=spec.env,
             cwd=spec.cwd,
-            timeout_seconds=30,
+            timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
         )
         if version_errors:
             return version_errors
@@ -478,9 +479,11 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
             env=spec.env,
             cwd=spec.cwd,
             catalog_dir=catalog_dir,
+            expected_discovery_root=generated_home
+            / CODEX_SKILL_DISCOVERY_CONTRACT.legacy_root_relpath,
             expected_entries=managed_catalog.skill_entries,
             version=raw_version,
-            timeout_seconds=30,
+            timeout_seconds=CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
         )
         final_errors, final_fingerprint = _validate_inert_rollout_paths(generated_home)
         errors.extend(final_errors)

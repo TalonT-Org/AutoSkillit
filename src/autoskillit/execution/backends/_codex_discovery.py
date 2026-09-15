@@ -41,6 +41,7 @@ class CodexSkillDiscoveryContractDef:
 # codex-rs/core-skills/src/render.rs:62-85 (rust-v0.130.0) and at
 # codex-rs/ext/skills/src/render.rs in the pinned revision above.
 CODEX_SKILL_DISCOVERY_CONTRACT = CodexSkillDiscoveryContractDef()
+CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS = 30.0
 _CODEX_DISCOVERY_STREAM_LIMIT = 1024 * 1024
 
 
@@ -187,23 +188,15 @@ def _contract_context(
     executable: str,
     catalog_dir: Path | str,
     version: str,
+    timeout_seconds: float,
 ) -> str:
     contract = CODEX_SKILL_DISCOVERY_CONTRACT
     return (
         f"contract_revision={contract.upstream_revision} "
         f"contract_source={contract.upstream_legacy_root_citation} "
-        f"catalog={catalog_dir} executable={executable} version={version}"
+        f"catalog={catalog_dir} executable={executable} version={version} "
+        f"timeout_seconds={timeout_seconds}"
     )
-
-
-def _legacy_root_for_catalog(
-    catalog_dir: Path,
-    contract: CodexSkillDiscoveryContractDef,
-) -> Path:
-    generated_home = catalog_dir
-    for _part in Path(contract.catalog_relpath).parts:
-        generated_home = generated_home.parent
-    return generated_home / contract.legacy_root_relpath
 
 
 def _validated_expected_paths(
@@ -249,7 +242,7 @@ def probe_codex_version(
     executable: str,
     env: Mapping[str, str],
     cwd: str,
-    timeout_seconds: float = 30,
+    timeout_seconds: float = CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
 ) -> tuple[str, str, list[str]]:
     """Probe one exact Codex executable and normalize its bounded version output."""
     result = _run_bounded_codex_probe(
@@ -258,7 +251,12 @@ def probe_codex_version(
         cwd=cwd,
         timeout_seconds=timeout_seconds,
     )
-    context = _contract_context(executable=executable, catalog_dir="unbound", version="unknown")
+    context = _contract_context(
+        executable=executable,
+        catalog_dir="unbound",
+        version="unknown",
+        timeout_seconds=timeout_seconds,
+    )
     if result.failure is not None:
         return (
             "",
@@ -288,9 +286,10 @@ def attest_catalog_discovery(
     env: Mapping[str, str],
     cwd: str,
     catalog_dir: Path,
+    expected_discovery_root: Path,
     expected_entries: Sequence[tuple[str, str]],
     version: str,
-    timeout_seconds: float = 30,
+    timeout_seconds: float = CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS,
 ) -> list[str]:
     """Require Codex's real prompt loader to expose the frozen managed catalog."""
     executable = probe_command[0] if probe_command else "<missing>"
@@ -298,7 +297,10 @@ def attest_catalog_discovery(
         executable=executable,
         catalog_dir=catalog_dir,
         version=version,
+        timeout_seconds=timeout_seconds,
     )
+    if not expected_discovery_root.is_absolute():
+        return [f"Codex skill discovery expected root must be absolute; {context}"]
     try:
         expected_paths = _validated_expected_paths(catalog_dir, expected_entries)
         before_fingerprint = _fingerprint_managed_files(expected_paths)
@@ -346,40 +348,38 @@ def attest_catalog_discovery(
                     misplaced.append(f"{name}={actual_path}")
             if missing:
                 errors.append(
-                    f"Codex skill discovery is missing managed names {missing}; "
+                    f"Codex skill discovery is missing expected names {missing}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
             if misplaced:
                 errors.append(
-                    f"Codex skill discovery reported misplaced managed paths {misplaced}; "
+                    f"Codex skill discovery reported misplaced expected paths {misplaced}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
-            legacy_root = _legacy_root_for_catalog(
-                catalog_dir,
-                CODEX_SKILL_DISCOVERY_CONTRACT,
-            )
-            legacy_matches = [root for root in discovered.roots if root == legacy_root]
-            if not legacy_matches:
+            root_matches = [root for root in discovered.roots if root == expected_discovery_root]
+            if not root_matches:
                 errors.append(
-                    f"Codex skill discovery roots do not contain legacy root {legacy_root}; "
+                    "Codex skill discovery roots do not contain expected discovery root "
+                    f"{expected_discovery_root}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
-            elif len(legacy_matches) > 1:
+            elif len(root_matches) > 1:
                 errors.append(
-                    f"Codex skill discovery roots contain duplicate legacy root {legacy_root}; "
+                    "Codex skill discovery roots contain duplicate expected discovery root "
+                    f"{expected_discovery_root}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
             else:
                 try:
-                    legacy_target = legacy_matches[0].resolve(strict=True)
+                    root_target = root_matches[0].resolve(strict=True)
                 except OSError as exc:
                     errors.append(
-                        f"Codex skill discovery legacy root is unreadable: {exc}; {context}"
+                        f"Codex skill discovery expected root is unreadable: {exc}; {context}"
                     )
                 else:
-                    if legacy_target != catalog_dir:
+                    if root_target != catalog_dir:
                         errors.append(
-                            "Codex skill discovery legacy root does not resolve to the managed "
+                            "Codex skill discovery expected root does not resolve to the "
                             f"catalog; roots={[str(root) for root in discovered.roots]}; {context}"
                         )
     try:
@@ -398,6 +398,7 @@ def attest_catalog_discovery(
 
 
 __all__ = [
+    "CODEX_DISCOVERY_ATTESTATION_TIMEOUT_SECONDS",
     "CODEX_SKILL_DISCOVERY_CONTRACT",
     "CodexSkillDiscoveryContractDef",
     "DiscoveredSkills",

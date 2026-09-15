@@ -14,6 +14,7 @@ from autoskillit.core import (
     AGENT_BACKEND_ENV_VAR,
     AUTOSKILLIT_INSTALLED_VERSION,
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+    CODEX_HOME_ENV_VAR,
     CODEX_INTERACTIVE_REQUIRED_ENV,
     CODEX_RESERVED_HOME_ENV_VARS,
     FLEET_INSPECTOR_MODEL_ENV_VAR,
@@ -40,6 +41,7 @@ from autoskillit.core import (
     NoResume,
     OutputFormat,
     PluginLaunchBinding,
+    PluginLoadMode,
     ResumeSpec,
     SessionCheckpoint,
     SkillExecutionRole,
@@ -576,13 +578,29 @@ class CodexCommandMixin(BackendCmdBuilderBase):
         merged_extras.setdefault(LAUNCH_ID_ENV_VAR, "")
         merged_extras.setdefault(AUTOSKILLIT_STATE_ROOT_ENV_VAR, "")
         _merge_caller_env_extras(merged_extras, env_extras)
+        projected_skill_entries: tuple[tuple[str, str], ...] = ()
         if generated_home is not None:
             for reserved_key in CODEX_RESERVED_HOME_ENV_VARS:
                 merged_extras[reserved_key] = str(generated_home)
+        elif (
+            plugin_binding is not None
+            and plugin_binding.load_mode is PluginLoadMode.PROJECTED_HOME
+        ):
+            projected_home = plugin_binding.plugin_dir
+            if projected_home is None or not projected_home.is_dir():
+                raise ValueError("projected CODEX_HOME must be an existing directory")
+            if projected_home != projected_home.resolve(strict=True):
+                raise ValueError("projected CODEX_HOME must already be canonical")
+            if not plugin_binding.skill_entries:
+                raise ValueError("projected CODEX_HOME requires nonempty skill entries")
+            base_env.pop("CODEX_SQLITE_HOME", None)
+            merged_extras.pop("CODEX_SQLITE_HOME", None)
+            merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
+            projected_skill_entries = plugin_binding.skill_entries
         else:
             projected_codex_home = _codex_home_from_plugin_binding(plugin_binding)
             if projected_codex_home is not None:
-                merged_extras.setdefault("CODEX_HOME", projected_codex_home)
+                merged_extras.setdefault(CODEX_HOME_ENV_VAR, projected_codex_home)
         effective_required = CODEX_INTERACTIVE_REQUIRED_ENV | (required_env or frozenset())
         if generated_home is not None:
             effective_required |= CODEX_RESERVED_HOME_ENV_VARS
@@ -605,6 +623,7 @@ class CodexCommandMixin(BackendCmdBuilderBase):
             is_resume=isinstance(resume_spec, (NamedResume, BareResume)),
             inherited_fds=plugin_binding.inherited_fds if plugin_binding is not None else (),
             managed_skill_catalog=managed_skill_catalog,
+            projected_skill_entries=projected_skill_entries,
             force_inactive_agent_teams=force_inactive_agent_teams,
         )
 

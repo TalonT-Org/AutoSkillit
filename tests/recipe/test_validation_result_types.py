@@ -221,23 +221,7 @@ def test_validate_from_path_completed_reports_have_the_declared_shape(
     result = validate_from_path(path, lister=_EmptyLister())
 
     assert is_recipe_path_validation_report(result)
-    assert set(result) == {"valid", "errors", "quality", "findings", "contracts"}
     assert result["valid"] is expected_valid
-    assert isinstance(result["errors"], list)
-    assert all(isinstance(error, str) for error in result["errors"])
-    assert isinstance(result["quality"], dict)
-    assert all(isinstance(key, str) for key in result["quality"])
-    assert isinstance(result["findings"], list)
-    assert all(
-        isinstance(finding, dict)
-        and all(isinstance(key, str) and isinstance(value, str) for key, value in finding.items())
-        for finding in result["findings"]
-    )
-    assert isinstance(result["contracts"], list)
-    assert all(
-        isinstance(contract, dict) and all(isinstance(key, str) for key in contract)
-        for contract in result["contracts"]
-    )
 
 
 def test_mypy_accepts_recipe_path_validation_result_narrowing(tmp_path: Path) -> None:

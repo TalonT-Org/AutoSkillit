@@ -85,6 +85,44 @@ def _module_string_constants(
     return per_module, flat
 
 
+def _prohibited_os_aliases(node: ast.AST) -> tuple[str, ...]:
+    if isinstance(node, ast.ImportFrom) and node.module == "os":
+        return tuple(
+            imported.name for imported in node.names if imported.name in {"environ", "getenv"}
+        )
+    if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        value = node.value
+        if value is not None and (_is_os_environ(value) or _is_os_getenv(value)):
+            targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
+            return tuple(target.id for target in targets if isinstance(target, ast.Name))
+    return ()
+
+
+def _direct_hook_env_key(node: ast.AST) -> ast.expr | None:
+    if isinstance(node, ast.Call):
+        if _is_os_getenv(node.func):
+            return _literal_key_arg(node)
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and _is_os_environ(node.func.value)
+        ):
+            return _literal_key_arg(node)
+    elif isinstance(node, ast.Subscript) and _is_os_environ(node.value):
+        return node.slice
+    return None
+
+
+def _resolve_direct_hook_env_key(
+    key: ast.expr, constants: dict[str, str], flat_constants: dict[str, str]
+) -> str | None:
+    if isinstance(key, ast.Constant) and isinstance(key.value, str):
+        return key.value
+    if isinstance(key, ast.Name) and key.id in (constants | flat_constants):
+        return constants.get(key.id) or flat_constants[key.id]
+    return None
+
+
 def _literal_direct_hook_env_reads(
     hooks_root: Path,
 ) -> tuple[tuple[_DirectHookEnvRead, ...], tuple[str, ...], tuple[str, ...]]:
@@ -105,46 +143,17 @@ def _literal_direct_hook_env_reads(
         rel = path.relative_to(hooks_root).as_posix()
         constants = module_constants[path]
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "os":
-                for imported in node.names:
-                    if imported.name in {"environ", "getenv"}:
-                        aliases.append(f"{rel}:{node.lineno}:{imported.name}")
-            elif isinstance(node, (ast.Assign, ast.AnnAssign)):
-                value = node.value
-                if value is None or not (_is_os_environ(value) or _is_os_getenv(value)):
-                    continue
-                targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
-                for target in targets:
-                    if isinstance(target, ast.Name):
-                        aliases.append(f"{rel}:{node.lineno}:{target.id}")
-            elif isinstance(node, ast.Call):
-                key: ast.expr | None = None
-                if _is_os_getenv(node.func):
-                    key = _literal_key_arg(node)
-                elif (
-                    isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "get"
-                    and _is_os_environ(node.func.value)
-                ):
-                    key = _literal_key_arg(node)
-                if key is not None:
-                    if isinstance(key, ast.Constant) and isinstance(key.value, str):
-                        reads.append(_DirectHookEnvRead(key.value, rel, node.lineno))
-                    elif isinstance(key, ast.Name) and key.id in (constants | flat_constants):
-                        value = constants.get(key.id) or flat_constants[key.id]
-                        reads.append(_DirectHookEnvRead(value, rel, node.lineno))
-                    else:
-                        dynamic_keys.append(f"{rel}:{node.lineno}:{ast.unparse(key)}")
-            elif isinstance(node, ast.Subscript) and _is_os_environ(node.value):
-                if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
-                    reads.append(_DirectHookEnvRead(node.slice.value, rel, node.lineno))
-                elif isinstance(node.slice, ast.Name) and node.slice.id in (
-                    constants | flat_constants
-                ):
-                    value = constants.get(node.slice.id) or flat_constants[node.slice.id]
-                    reads.append(_DirectHookEnvRead(value, rel, node.lineno))
-                else:
-                    dynamic_keys.append(f"{rel}:{node.lineno}:{ast.unparse(node.slice)}")
+            aliases.extend(
+                f"{rel}:{node.lineno}:{alias}" for alias in _prohibited_os_aliases(node)
+            )
+            key = _direct_hook_env_key(node)
+            if key is None:
+                continue
+            value = _resolve_direct_hook_env_key(key, constants, flat_constants)
+            if value is None:
+                dynamic_keys.append(f"{rel}:{node.lineno}:{ast.unparse(key)}")
+            else:
+                reads.append(_DirectHookEnvRead(value, rel, node.lineno))
     return tuple(reads), tuple(dynamic_keys), tuple(aliases)
 
 
@@ -260,7 +269,8 @@ def test_direct_hook_literal_discipline_catches_computed_keys_and_aliases(tmp_pa
     hooks_root = tmp_path / "hooks"
     hooks_root.mkdir()
     (hooks_root / "synthetic_hook.py").write_text(
-        "import os\n\n"
+        "import os\n"
+        "from os import getenv\n\n"
         'LITERAL_KEY = "SYNTHETIC_LITERAL_KEY"\n\n'
         "def read(suffix: str) -> None:\n"
         "    runtime_key = 'SYNTHETIC_' + suffix\n"
@@ -274,7 +284,7 @@ def test_direct_hook_literal_discipline_catches_computed_keys_and_aliases(tmp_pa
     assert {read.var for read in reads} == {"SYNTHETIC_LITERAL_KEY"}
     assert any(key.endswith(":runtime_key") for key in dynamic_keys)
     assert any("f'SYNTHETIC_{suffix}'" in key for key in dynamic_keys)
-    assert aliases == ("synthetic_hook.py:10:environment",)
+    assert aliases == ("synthetic_hook.py:2:getenv", "synthetic_hook.py:11:environment")
 
 
 def test_hook_env_contract_entries_have_one_shape_and_substantive_rationale() -> None:

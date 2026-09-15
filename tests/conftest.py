@@ -980,14 +980,7 @@ def _is_test_feature_enabled(feature_name: str, *, env_val: str | None) -> bool:
     )
 
 
-def pytest_collection_modifyitems(
-    items: list[pytest.Item],
-    config: pytest.Config,
-) -> None:
-    """Deselect test items outside the computed filter scope.
-
-    Fail-open: any error leaves all items selected.
-    """
+def _warn_layer_marker_mismatches(items: list[pytest.Item], config: pytest.Config) -> None:
     import warnings
 
     # Layer marker mismatch validation (controller-only under xdist)
@@ -1010,6 +1003,10 @@ def pytest_collection_modifyitems(
                         f"but lives in tests/{expected_dir}/",
                         stacklevel=1,
                     )
+
+
+def _mark_feature_gated_items(items: list[pytest.Item], config: pytest.Config) -> None:
+    import warnings
 
     # Feature gate pass — orthogonal to layer/size, runs on every worker
     _test_features_env = os.environ.get("AUTOSKILLIT_TEST_FEATURES")
@@ -1052,93 +1049,117 @@ def pytest_collection_modifyitems(
                     reason = f"feature '{feature_name}' disabled via config resolution"
                 item.add_marker(pytest.mark.skip(reason=reason))
 
+
+def _deselect_outside_scope(
+    items: list[pytest.Item], config: pytest.Config, scope: set[_Path]
+) -> None:
+    import warnings
+
+    root = config.rootpath
+    scope_abs: set[_Path] = set()
+    for p in scope:
+        scope_abs.add(p if p.is_absolute() else root / p)
+
+    file_scopes: set[_Path] = set()
+    ancestor_scopes: set[_Path] = set()
+    for sp in scope_abs:
+        if sp.is_file():
+            file_scopes.add(sp)
+        else:
+            ancestor_scopes.add(sp)
+
+    selected: list[pytest.Item] = []
+    deselected: list[pytest.Item] = []
+
+    for item in items:
+        item_path = item.path
+        matched = (
+            item_path in file_scopes
+            or item_path in ancestor_scopes
+            or not ancestor_scopes.isdisjoint(item_path.parents)
+        )
+        if matched:
+            selected.append(item)
+        else:
+            deselected.append(item)
+
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
+        warnings.warn(
+            f"Test filter: {len(selected)} selected, {len(deselected)} deselected "
+            f"({len(scope)} scope paths)",
+            stacklevel=1,
+        )
+
+    config.stash[_selected_count_key] = len(items)
+    config.stash[_deselected_count_key] = len(deselected)
+
+
+def _deselect_large_items(items: list[pytest.Item], config: pytest.Config) -> None:
+    import warnings
+
+    from tests._test_filter import ALWAYS_RUN_AGGRESSIVE
+
+    tests_root = config.rootpath / "tests"
+    _SIZE_MARKERS = {"small", "medium", "large"}
+    size_selected: list[pytest.Item] = []
+    size_deselected: list[pytest.Item] = []
+
+    for item in items:
+        try:
+            first_part = item.path.relative_to(tests_root).parts[0]
+        except (ValueError, IndexError):
+            first_part = ""
+        if first_part in ALWAYS_RUN_AGGRESSIVE:
+            size_selected.append(item)
+            continue
+        size_marks = [m.name for m in item.iter_markers() if m.name in _SIZE_MARKERS]
+        effective_size = size_marks[0] if size_marks else "large"
+        if effective_size in ("small", "medium"):
+            size_selected.append(item)
+        else:
+            size_deselected.append(item)
+
+    if size_deselected:
+        config.hook.pytest_deselected(items=size_deselected)
+        items[:] = size_selected
+        warnings.warn(
+            f"Size filter (aggressive): {len(size_selected)} selected, "
+            f"{len(size_deselected)} large/unannotated deselected",
+            stacklevel=1,
+        )
+        prev_deselected = config.stash.get(_deselected_count_key, None) or 0
+        config.stash[_selected_count_key] = len(size_selected)
+        config.stash[_deselected_count_key] = prev_deselected + len(size_deselected)
+
+
+def pytest_collection_modifyitems(
+    items: list[pytest.Item],
+    config: pytest.Config,
+) -> None:
+    """Deselect test items outside the computed filter scope.
+
+    Fail-open: any error leaves all items selected.
+    """
+    import warnings
+
+    _warn_layer_marker_mismatches(items, config)
+    _mark_feature_gated_items(items, config)
     scope: set[_Path] | None = config.stash.get(_scope_key, None)
     if scope is None:
         return
 
     try:
-        root = config.rootpath
-        scope_abs: set[_Path] = set()
-        for p in scope:
-            scope_abs.add(p if p.is_absolute() else root / p)
-
-        file_scopes: set[_Path] = set()
-        ancestor_scopes: set[_Path] = set()
-        for sp in scope_abs:
-            if sp.is_file():
-                file_scopes.add(sp)
-            else:
-                ancestor_scopes.add(sp)
-
-        selected: list[pytest.Item] = []
-        deselected: list[pytest.Item] = []
-
-        for item in items:
-            item_path = item.path
-            matched = (
-                item_path in file_scopes
-                or item_path in ancestor_scopes
-                or not ancestor_scopes.isdisjoint(item_path.parents)
-            )
-            if matched:
-                selected.append(item)
-            else:
-                deselected.append(item)
-
-        if deselected:
-            config.hook.pytest_deselected(items=deselected)
-            items[:] = selected
-            warnings.warn(
-                f"Test filter: {len(selected)} selected, {len(deselected)} deselected "
-                f"({len(scope)} scope paths)",
-                stacklevel=1,
-            )
-
-        config.stash[_selected_count_key] = len(items)
-        config.stash[_deselected_count_key] = len(deselected)
-
+        _deselect_outside_scope(items, config, scope)
     except Exception as exc:
         warnings.warn(
             f"Test filter deselection failed, running all tests: {exc}",
             stacklevel=1,
         )
 
-    # --- Size-based deselection (aggressive mode only) ---
-    filter_mode = config.stash.get(_filter_mode_key, None)
-    if filter_mode == "aggressive":
-        from tests._test_filter import ALWAYS_RUN_AGGRESSIVE
-
-        tests_root = config.rootpath / "tests"
-        _SIZE_MARKERS = {"small", "medium", "large"}
-        size_selected: list[pytest.Item] = []
-        size_deselected: list[pytest.Item] = []
-
-        for item in items:
-            try:
-                first_part = item.path.relative_to(tests_root).parts[0]
-            except (ValueError, IndexError):
-                first_part = ""
-            if first_part in ALWAYS_RUN_AGGRESSIVE:
-                size_selected.append(item)
-                continue
-            size_marks = [m.name for m in item.iter_markers() if m.name in _SIZE_MARKERS]
-            effective_size = size_marks[0] if size_marks else "large"
-            if effective_size in ("small", "medium"):
-                size_selected.append(item)
-            else:
-                size_deselected.append(item)
-
-        if size_deselected:
-            config.hook.pytest_deselected(items=size_deselected)
-            items[:] = size_selected
-            warnings.warn(
-                f"Size filter (aggressive): {len(size_selected)} selected, "
-                f"{len(size_deselected)} large/unannotated deselected",
-                stacklevel=1,
-            )
-            prev_deselected = config.stash.get(_deselected_count_key, None) or 0
-            config.stash[_selected_count_key] = len(size_selected)
-            config.stash[_deselected_count_key] = prev_deselected + len(size_deselected)
+    if config.stash.get(_filter_mode_key, None) == "aggressive":
+        _deselect_large_items(items, config)
 
 
 def pytest_sessionfinish(session, exitstatus):

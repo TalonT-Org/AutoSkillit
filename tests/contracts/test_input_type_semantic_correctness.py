@@ -45,6 +45,54 @@ _LIST_COLLECTION_RE = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+_DIRECTORY_PROSE_RE = re.compile(
+    r"\b(directory|directories|folder|glob\b.*inside|files\s+in\s+the|files\s+under)\b",
+    re.IGNORECASE,
+)
+_FILE_PROSE_RE = re.compile(
+    r"\b(read\s+the\s+file|parse\s+the\s+file|load.*\bfile\b|\.md\b|\.yaml\b|\.json\b)\b",
+    re.IGNORECASE,
+)
+
+
+def _mention_positions(names: tuple[str, ...], skillmd_text: str) -> list[int]:
+    mentions: list[int] = []
+    for name in names:
+        mentions.extend(
+            match.start() for match in re.finditer(re.escape(name), skillmd_text, re.IGNORECASE)
+        )
+    for name in names:
+        placeholder = f"{{{name}}}"
+        mentions.extend(
+            match.start()
+            for match in re.finditer(re.escape(placeholder), skillmd_text, re.IGNORECASE)
+        )
+    return mentions
+
+
+def _has_list_evidence(input_name: str, skillmd_text: str, aliases: tuple[str, ...]) -> bool:
+    if not _is_list_shaped_name(input_name):
+        return False
+    mentions = _mention_positions((input_name, *aliases), skillmd_text)
+    if mentions:
+        return any(
+            _LIST_COLLECTION_RE.search(skillmd_text[max(0, pos - 200) : pos + 200])
+            for pos in mentions
+        )
+    return bool(_LIST_COLLECTION_RE.search(skillmd_text))
+
+
+def _scalar_prose_evidence_counts(
+    input_name: str, skillmd_text: str
+) -> tuple[list[int], int, int]:
+    mentions = _mention_positions((input_name,), skillmd_text)
+    directory_count = 0
+    file_count = 0
+    for pos in mentions:
+        window = skillmd_text[max(0, pos - 200) : pos + 200]
+        directory_count += len(_DIRECTORY_PROSE_RE.findall(window))
+        file_count += len(_FILE_PROSE_RE.findall(window))
+    return mentions, directory_count, file_count
 
 
 def _infer_path_kind_from_skillmd(
@@ -61,26 +109,8 @@ def _infer_path_kind_from_skillmd(
     language such as ``comma-separated`` or ``list of``. Falls through to the
     existing directory/file inference otherwise.
     """
-    if _is_list_shaped_name(input_name):
-        search_names = (input_name, *aliases)
-        placeholder_variants = [f"{{{n}}}" for n in search_names]
-        mentions: list[int] = []
-        for name in search_names:
-            mentions.extend(
-                m.start() for m in re.finditer(re.escape(name), skillmd_text, re.IGNORECASE)
-            )
-        for placeholder in placeholder_variants:
-            mentions.extend(
-                m.start() for m in re.finditer(re.escape(placeholder), skillmd_text, re.IGNORECASE)
-            )
-        if mentions:
-            for pos in mentions:
-                window = skillmd_text[max(0, pos - 200) : pos + 200]
-                if _LIST_COLLECTION_RE.search(window):
-                    return "list"
-        else:
-            if _LIST_COLLECTION_RE.search(skillmd_text):
-                return "list"
+    if _has_list_evidence(input_name, skillmd_text, aliases):
+        return "list"
 
     if input_name.endswith(("_dir", "_directory")) or input_name == "run_dir":
         return "directory"
@@ -91,29 +121,9 @@ def _infer_path_kind_from_skillmd(
     ):
         return "file"
 
-    placeholder = f"{{{input_name}}}"
-    mentions = [m.start() for m in re.finditer(re.escape(input_name), skillmd_text, re.IGNORECASE)]
-    mentions.extend(
-        m.start() for m in re.finditer(re.escape(placeholder), skillmd_text, re.IGNORECASE)
-    )
+    mentions, dir_count, file_count = _scalar_prose_evidence_counts(input_name, skillmd_text)
     if not mentions:
         return "ambiguous"
-
-    dir_re = re.compile(
-        r"\b(directory|directories|folder|glob\b.*inside|files\s+in\s+the|files\s+under)\b",
-        re.IGNORECASE,
-    )
-    file_re = re.compile(
-        r"\b(read\s+the\s+file|parse\s+the\s+file|load.*\bfile\b|\.md\b|\.yaml\b|\.json\b)\b",
-        re.IGNORECASE,
-    )
-
-    dir_count = 0
-    file_count = 0
-    for pos in mentions:
-        window = skillmd_text[max(0, pos - 200) : pos + 200]
-        dir_count += len(dir_re.findall(window))
-        file_count += len(file_re.findall(window))
 
     if dir_count > 0 and file_count == 0:
         return "directory"

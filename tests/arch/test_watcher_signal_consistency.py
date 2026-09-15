@@ -7,11 +7,12 @@ from pathlib import Path
 
 import pytest
 
+from tests.arch._helpers import RACE_WATCHERS_PY
+
 pytestmark = [pytest.mark.layer("arch"), pytest.mark.small]
 
 _CLI_APP = Path("src/autoskillit/cli/app.py")
 _PROCESS_RACE = Path("src/autoskillit/execution/process/_process_race.py")
-_RACE_WATCHERS = Path("src/autoskillit/execution/process/_race_watchers.py")
 _PROCESS_MONITOR = Path("src/autoskillit/execution/process/_process_monitor.py")
 _PROCESS_INIT = Path("src/autoskillit/execution/process/__init__.py")
 _PROCESS_TERMINATION = Path("src/autoskillit/execution/process/_termination.py")
@@ -77,7 +78,9 @@ def _calls_trigger_set(node: ast.AST) -> bool:
 def test_watcher_calls_has_active_execution_marker(watcher: str) -> None:
     """Each watcher in the set must call _has_active_execution_marker."""
     callers_race = _functions_calling_predicate(_PROCESS_RACE, "_has_active_execution_marker")
-    callers_watchers = _functions_calling_predicate(_RACE_WATCHERS, "_has_active_execution_marker")
+    callers_watchers = _functions_calling_predicate(
+        RACE_WATCHERS_PY, "_has_active_execution_marker"
+    )
     callers_monitor = _functions_calling_predicate(
         _PROCESS_MONITOR, "_has_active_execution_marker"
     )
@@ -220,7 +223,7 @@ def test_completion_marker_watchers_do_not_trigger_lifecycle_completion_directly
 
 
 def test_completion_eligibility_and_final_fold_consume_both_cursors() -> None:
-    eligibility = _function(_RACE_WATCHERS, "_watch_completion_eligibility")
+    eligibility = _function(RACE_WATCHERS_PY, "_watch_completion_eligibility")
     managed_async = _function(_PROCESS_INIT, "run_managed_async")
 
     assert _called_cursor_names(eligibility) == {"stdout_cursor", "channel_b_cursor"}
@@ -246,8 +249,8 @@ def test_completion_eligibility_and_final_fold_consume_both_cursors() -> None:
 @pytest.mark.parametrize(
     ("source_path", "watcher"),
     [
-        (_RACE_WATCHERS, "_watch_stdout_idle"),
-        (_RACE_WATCHERS, "_watch_child_activity"),
+        (RACE_WATCHERS_PY, "_watch_stdout_idle"),
+        (RACE_WATCHERS_PY, "_watch_child_activity"),
         (_PROCESS_MONITOR, "_session_log_monitor"),
     ],
 )

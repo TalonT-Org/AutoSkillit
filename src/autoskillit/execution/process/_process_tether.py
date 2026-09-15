@@ -299,8 +299,8 @@ def sweep_orphaned_tethers(
     if not tether_dir.is_dir():
         return TetherSweepReport()
 
-    # Keep recovery loading local so tether definitions remain importable without
-    # initializing the process-control stack.
+    # Keep the psutil-backed recovery primitive local so importing tether data
+    # definitions and registry helpers does not initialize process-control code.
     from autoskillit.execution.process._process_kill import kill_process_tree
 
     now = time.time()

@@ -400,7 +400,7 @@ def _projected_plugin_binding(
         ),
         inherited_fds=(),
         _lease=_InertPluginLease(),
-        skill_entries=skill_entries,
+        projected_skill_entries=skill_entries,
     )
     return binding, projected_home
 

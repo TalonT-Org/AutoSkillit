@@ -54,7 +54,7 @@ class _TestBinding:
         self.load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
         self.plugin_dir = plugin_dir
         self.inherited_fds: tuple[int, ...] = ()
-        self.skill_entries: tuple[tuple[str, str], ...] = ()
+        self.projected_skill_entries: tuple[tuple[str, str], ...] = ()
         self.closed = False
 
     def close(self) -> None:
@@ -2159,7 +2159,7 @@ def test_raw_codex_launch_attests_finalized_projected_home_while_lease_is_live(
     assert spec.cwd == str(project_dir)
     assert binding.plugin_dir is not None
     assert spec.env["CODEX_HOME"] == str(binding.plugin_dir)
-    assert spec.projected_skill_entries == binding.skill_entries
+    assert spec.projected_skill_entries == binding.projected_skill_entries
     _, popen_kwargs = cast(tuple[object, dict[str, object]], captured["popen"])
     assert popen_kwargs["cwd"] == str(project_dir)
     assert probe_cwd_log.read_text(encoding="utf-8").splitlines()

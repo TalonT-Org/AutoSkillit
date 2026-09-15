@@ -813,7 +813,7 @@ def test_projected_home_prelaunch_attestation_uses_the_direct_skill_root(
                 projected_home=projected_home,
             ),
         )
-        expected_entries = plugin_binding.skill_entries
+        expected_entries = plugin_binding.projected_skill_entries
         assert spec.managed_skill_catalog is None
         assert spec.projected_skill_entries == expected_entries
 

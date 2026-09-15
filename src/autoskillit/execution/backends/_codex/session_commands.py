@@ -104,12 +104,12 @@ def _configure_interactive_home(
         raise ValueError("projected CODEX_HOME must be an existing directory")
     if projected_home != projected_home.resolve(strict=True):
         raise ValueError("projected CODEX_HOME must already be canonical")
-    if not plugin_binding.skill_entries:
+    if not plugin_binding.projected_skill_entries:
         raise ValueError("projected CODEX_HOME requires nonempty skill entries")
     base_env.pop("CODEX_SQLITE_HOME", None)
     merged_extras.pop("CODEX_SQLITE_HOME", None)
     merged_extras[CODEX_HOME_ENV_VAR] = str(projected_home)
-    return plugin_binding.skill_entries
+    return plugin_binding.projected_skill_entries
 
 
 class CodexCommandMixin(BackendCmdBuilderBase):

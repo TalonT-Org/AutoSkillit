@@ -517,9 +517,9 @@ def test_direct_install_projection_cache_identity_and_reuse(
         ("alpha-cache", "alpha-cache/SKILL.md"),
         ("immutable-cache", "immutable-cache/SKILL.md"),
     )
-    assert first.skill_entries == expected_entries
+    assert first.projected_skill_entries == expected_entries
     skills_dir = first.plugin_dir / "skills"
-    for skill_name, relative_path in first.skill_entries:
+    for skill_name, relative_path in first.projected_skill_entries:
         projected_entry = skills_dir / relative_path
         assert projected_entry.parent == skills_dir / skill_name
         assert stat.S_ISREG(projected_entry.lstat().st_mode)
@@ -533,7 +533,7 @@ def test_direct_install_projection_cache_identity_and_reuse(
     assert second.plugin_dir is not None
     assert second.plugin_dir == first.plugin_dir
     assert second.plugin_dir.stat().st_ino == first_inode
-    assert second.skill_entries == expected_entries
+    assert second.projected_skill_entries == expected_entries
     manifest_path = first.plugin_dir.parent / (
         f".{first.plugin_dir.name}.autoskillit-projection.json"
     )

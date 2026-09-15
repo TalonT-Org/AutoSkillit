@@ -682,7 +682,7 @@ class ProjectedPluginArtifactAuthority:
                 semantic_key=identity.semantic_key,
                 incarnation=identity.incarnation_id,
             ),
-            skill_entries=skill_entries,
+            projected_skill_entries=skill_entries,
         )
 
 

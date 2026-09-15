@@ -193,7 +193,7 @@ class TestPluginArtifactAuthoritySurface:
                 _lease=_TestLease(),
             )
 
-    def test_binding_deep_freezes_nested_skill_entries(self) -> None:
+    def test_binding_deep_freezes_nested_projected_skill_entries(self) -> None:
         from autoskillit.core import (
             PluginArtifactIdentity,
             PluginLaunchBinding,
@@ -216,14 +216,14 @@ class TestPluginArtifactAuthoritySurface:
             ),
             inherited_fds=(),
             _lease=_TestLease(),
-            skill_entries=cast(tuple[tuple[str, str], ...], entries),
+            projected_skill_entries=cast(tuple[tuple[str, str], ...], entries),
         )
 
         entries[0][0] = "changed"
 
-        assert binding.skill_entries == (("test-skill", "test-skill/SKILL.md"),)
-        assert isinstance(binding.skill_entries, tuple)
-        assert isinstance(binding.skill_entries[0], tuple)
+        assert binding.projected_skill_entries == (("test-skill", "test-skill/SKILL.md"),)
+        assert isinstance(binding.projected_skill_entries, tuple)
+        assert isinstance(binding.projected_skill_entries[0], tuple)
 
 
 class TestAllEntrypointsAgree:

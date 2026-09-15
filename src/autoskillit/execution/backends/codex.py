@@ -140,7 +140,7 @@ def _validated_interactive_origin(spec: CmdSpec) -> tuple[CmdOrigin | None, list
     return origin, []
 
 
-def _validate_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin) -> list[str]:
+def _attest_projected_interactive_invocation(spec: CmdSpec, origin: CmdOrigin) -> list[str]:
     home_value = spec.env.get(CODEX_HOME_ENV_VAR)
     if not home_value:
         return ["Codex projected interactive validation requires CODEX_HOME"]
@@ -454,7 +454,7 @@ class CodexBackend(CodexOrdinaryHeadlessCommandMixin):
                 return [
                     "Codex interactive validation requires managed or projected catalog evidence"
                 ]
-            return _validate_projected_interactive_invocation(spec, origin)
+            return _attest_projected_interactive_invocation(spec, origin)
 
         home_value = spec.env.get(CODEX_HOME_ENV_VAR)
         sqlite_value = spec.env.get(_CODEX_SQLITE_HOME_ENV_VAR)

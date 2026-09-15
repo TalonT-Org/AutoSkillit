@@ -1102,6 +1102,7 @@ def _measure_served_response_budgets(
     tool_payload_builders = {
         "open_kitchen": partial(build_open_kitchen_recipe_payload, version=__version__)
     }
+    assert sharing_tools.isdisjoint(tool_payload_builders)
     ingredients_payload_builders = {
         False: dict,
         True: strip_ingredients_only_keys,

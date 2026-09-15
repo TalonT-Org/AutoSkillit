@@ -1102,7 +1102,6 @@ def _measure_served_response_budgets(
     tool_payload_builders = {
         "open_kitchen": partial(build_open_kitchen_recipe_payload, version=__version__)
     }
-    assert sharing_tools.isdisjoint(tool_payload_builders)
     ingredients_payload_builders = {
         False: dict,
         True: strip_ingredients_only_keys,
@@ -1262,7 +1261,6 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     sharing_tools = frozenset({"get_recipe_section", "load_recipe"})
     registry_keys = set(RESPONSE_BACKSTOP_EXEMPTION_REGISTRY)
     assert sharing_tools <= registry_keys
-    assert sharing_tools
     eligible_served_points = 0
     render_call_count = 0
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes

@@ -19,6 +19,22 @@ def test_cmd_spec_frozen():
         spec.cmd = ()  # type: ignore[misc]
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "field_name"),
+    [
+        ({"auto_compaction_policy": "allow"}, "auto_compaction_policy"),
+        ({"context_window_tokens": True}, "context_window_tokens"),
+        ({"context_window_tokens": 0}, "context_window_tokens"),
+        ({"auto_compact_threshold_tokens": -1}, "auto_compact_threshold_tokens"),
+    ],
+)
+def test_codex_runtime_spec_rejects_invalid_values(kwargs, field_name: str) -> None:
+    from autoskillit.core import CodexRuntimeSpec
+
+    with pytest.raises(ValueError, match=field_name):
+        CodexRuntimeSpec(**kwargs)
+
+
 def test_cmd_spec_fields():
     from autoskillit.core import CmdSpec
 

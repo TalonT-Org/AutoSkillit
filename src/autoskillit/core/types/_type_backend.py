@@ -81,6 +81,21 @@ class CodexRuntimeSpec:
     context_window_tokens: int | None = None
     auto_compact_threshold_tokens: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.auto_compaction_policy != "deny":
+            raise ValueError(
+                f"auto_compaction_policy must be 'deny', got {self.auto_compaction_policy!r}."
+            )
+        for field_name in (
+            "context_window_tokens",
+            "auto_compact_threshold_tokens",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            ):
+                raise ValueError(f"{field_name}={value!r} must be a positive integer or null.")
+
 
 @dataclass(frozen=True, slots=True)
 class ExecutableLaunchBinding:

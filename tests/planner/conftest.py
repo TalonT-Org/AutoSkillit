@@ -118,72 +118,67 @@ def make_minimal_output_dir(
         )
 
     for p in range(1, num_phases + 1):
-        for a in range(1, 2):
-            write_json(
-                assigns_dir / f"P{p}-A{a}_result.json",
-                make_assignment_result(
-                    p,
-                    a,
-                    name=f"Assignment P{p}-A{a}",
-                    proposed_work_packages=[
-                        f"P{p}-A{a}-WP{w}" for w in range(1, wps_per_assignment + 1)
-                    ],
-                ),
-            )
+        write_json(
+            assigns_dir / f"P{p}-A1_result.json",
+            make_assignment_result(
+                p,
+                1,
+                name=f"Assignment P{p}-A1",
+                proposed_work_packages=[
+                    f"P{p}-A1-WP{w}" for w in range(1, wps_per_assignment + 1)
+                ],
+            ),
+        )
 
     _stub_ids = stub_wp_ids or set()
     for p in range(1, num_phases + 1):
-        for a in range(1, 2):
-            for w in range(1, wps_per_assignment + 1):
-                wp_id = f"P{p}-A{a}-WP{w}"
-                if wp_id in _stub_ids:
-                    write_json(
-                        wps_dir / f"{wp_id}_result.json",
-                        make_wp_result(
-                            wp_id,
-                            allow_stub=True,
-                            elaboration_failed=True,
-                            deliverables=[],
-                            technical_steps=[],
-                            acceptance_criteria=[],
-                        ),
-                    )
-                else:
-                    deliverables = (
-                        deliverables_override
-                        if deliverables_override is not None
-                        else [f"src/mod_{wp_id}.py"]
-                    )
-                    deps = (depends_on_override or {}).get(wp_id, [])
-                    write_json(
-                        wps_dir / f"{wp_id}_result.json",
-                        make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
-                    )
+        for w in range(1, wps_per_assignment + 1):
+            wp_id = f"P{p}-A1-WP{w}"
+            if wp_id in _stub_ids:
+                write_json(
+                    wps_dir / f"{wp_id}_result.json",
+                    make_wp_result(
+                        wp_id,
+                        allow_stub=True,
+                        elaboration_failed=True,
+                        deliverables=[],
+                        technical_steps=[],
+                        acceptance_criteria=[],
+                    ),
+                )
+            else:
+                deliverables = (
+                    deliverables_override
+                    if deliverables_override is not None
+                    else [f"src/mod_{wp_id}.py"]
+                )
+                deps = (depends_on_override or {}).get(wp_id, [])
+                write_json(
+                    wps_dir / f"{wp_id}_result.json",
+                    make_wp_result(wp_id, deliverables=deliverables, depends_on=deps),
+                )
 
     manifest_items = []
     for p in range(1, num_phases + 1):
-        for a in range(1, 2):
-            for w in range(1, wps_per_assignment + 1):
-                wp_id = f"P{p}-A{a}-WP{w}"
-                status = "elaboration_failed" if wp_id in _stub_ids else "done"
-                manifest_items.append({"id": wp_id, "status": status})
+        for w in range(1, wps_per_assignment + 1):
+            wp_id = f"P{p}-A1-WP{w}"
+            status = "elaboration_failed" if wp_id in _stub_ids else "done"
+            manifest_items.append({"id": wp_id, "status": status})
     write_json(
         wps_dir / "wp_manifest.json",
         {"pass_name": "work_packages", "items": manifest_items},
     )
 
-    if extra_phases:
-        for p in extra_phases:
-            write_json(
-                phases_dir / f"P{p}_result.json",
-                make_phase_result(p, name=f"Phase {p}"),
-            )
+    for p in extra_phases or []:
+        write_json(
+            phases_dir / f"P{p}_result.json",
+            make_phase_result(p, name=f"Phase {p}"),
+        )
 
-    if extra_assignments:
-        for p, a in extra_assignments:
-            write_json(
-                assigns_dir / f"P{p}-A{a}_result.json",
-                make_assignment_result(p, a, name=f"Orphan assignment P{p}-A{a}"),
-            )
+    for p, a in extra_assignments or []:
+        write_json(
+            assigns_dir / f"P{p}-A{a}_result.json",
+            make_assignment_result(p, a, name=f"Orphan assignment P{p}-A{a}"),
+        )
 
     return tmp_path

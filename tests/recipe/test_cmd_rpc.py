@@ -701,79 +701,54 @@ def test_batch_create_issues_chunks_large_batches(tmp_path):
         patch.object(_patch_cmd_rpc__cmd_rpc_issues, "run_gh") as mock_run_gh,
         patch("autoskillit.recipe.cmd_rpc._cmd_rpc_issues.time.sleep"),
     ):
-
-        def side_effect_factory():
-            call_count = [0]
-
-            def side_effect(_args, **_kwargs):
-                c = call_count[0]
-                call_count[0] += 1
-                if c == 0:
-                    return subprocess.CompletedProcess(
-                        args=[], returncode=0, stdout="org repo\n", stderr=""
-                    )
-                if c == 1:
-                    return subprocess.CompletedProcess(
-                        args=[],
-                        returncode=0,
-                        stdout=json.dumps({"data": {"repository": {"id": "R_123"}}}),
-                        stderr="",
-                    )
-                if c in (2, 3):
-                    return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-                if c == 4:
-                    return subprocess.CompletedProcess(
-                        args=[],
-                        returncode=0,
-                        stdout=json.dumps(
-                            {"data": {"repository": {"impl": {"id": "L_1"}, "enh": {"id": "L_2"}}}}
-                        ),
-                        stderr="",
-                    )
-                if c == 5:
-                    data5 = {
-                        f"issue{i}": {
-                            "issue": {
-                                "number": i + 1,
-                                "url": f"https://github.com/org/repo/issues/{i + 1}",
+        empty_response = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        responses = iter(
+            _make_side_effect(
+                issue_data=[
+                    {"number": i, "url": f"https://github.com/org/repo/issues/{i}"}
+                    for i in range(1, 11)
+                ]
+            )
+            + [
+                subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "data": {
+                                f"issue{i}": {
+                                    "issue": {
+                                        "number": i + 11,
+                                        "url": f"https://github.com/org/repo/issues/{i + 11}",
+                                    }
+                                }
+                                for i in range(10)
                             }
                         }
-                        for i in range(10)
-                    }
-                    return subprocess.CompletedProcess(
-                        args=[], returncode=0, stdout=json.dumps({"data": data5}), stderr=""
-                    )
-                if c == 6:
-                    data6 = {
-                        f"issue{i}": {
-                            "issue": {
-                                "number": i + 11,
-                                "url": f"https://github.com/org/repo/issues/{i + 11}",
+                    ),
+                    stderr="",
+                ),
+                subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "data": {
+                                f"issue{i}": {
+                                    "issue": {
+                                        "number": i + 21,
+                                        "url": f"https://github.com/org/repo/issues/{i + 21}",
+                                    }
+                                }
+                                for i in range(5)
                             }
                         }
-                        for i in range(10)
-                    }
-                    return subprocess.CompletedProcess(
-                        args=[], returncode=0, stdout=json.dumps({"data": data6}), stderr=""
-                    )
-                if c == 7:
-                    data7 = {
-                        f"issue{i}": {
-                            "issue": {
-                                "number": i + 21,
-                                "url": f"https://github.com/org/repo/issues/{i + 21}",
-                            }
-                        }
-                        for i in range(5)
-                    }
-                    return subprocess.CompletedProcess(
-                        args=[], returncode=0, stdout=json.dumps({"data": data7}), stderr=""
-                    )
-                return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-
-            return side_effect
-
-        mock_run_gh.side_effect = side_effect_factory()
+                    ),
+                    stderr="",
+                ),
+            ]
+        )
+        mock_run_gh.side_effect = lambda _args, **_kwargs: next(responses, empty_response)
         result = batch_create_issues(workspace=str(tmp_path), chunk_size="10")
     mutation_calls = []
     for call in mock_run_gh.call_args_list:

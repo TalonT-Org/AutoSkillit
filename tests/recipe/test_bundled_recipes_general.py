@@ -1211,9 +1211,6 @@ def test_optional_output_with_string_capture_type_flagged() -> None:
             name = resolve_skill_name(skill_cmd)
             if not name:
                 continue
-            contract = manifest.get("skills", {}).get(name)
-            if contract is None:
-                continue
             from autoskillit.recipe.contracts import get_skill_contract
 
             c = get_skill_contract(name, manifest)

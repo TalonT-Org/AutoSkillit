@@ -1065,20 +1065,21 @@ class TestDisplayConditionContract:
             display = {r[0].rstrip(" *"): r[2] for r in rows}
 
             for name, ing in recipe.ingredients.items():
-                if getattr(ing, "hidden", False) or name not in display:
+                if (
+                    getattr(ing, "hidden", False)
+                    or name not in display
+                    or ing.default not in ("true", "false")
+                ):
                     continue
-                if ing.default in ("true", "false"):
-                    assert display[name] == ing.default, (
-                        f"{recipe_name}: boolean ingredient {name} has "
-                        f"default '{ing.default}' but display shows "
-                        f"'{display[name]}' — boolean normalization "
-                        f"must not occur"
-                    )
+                assert display[name] == ing.default, (
+                    f"{recipe_name}: boolean ingredient {name} has "
+                    f"default '{ing.default}' but display shows "
+                    f"'{display[name]}' — boolean normalization "
+                    f"must not occur"
+                )
 
             for step_name, step in recipe.steps.items():
-                if not step.on_result:
-                    continue
-                for cond in step.on_result.conditions:
+                for cond in step.on_result.conditions if step.on_result else ():
                     if cond.when is None:
                         continue
                     for match in _INPUTS_CONDITION_RE.finditer(cond.when):

@@ -111,27 +111,33 @@ def _write_yaml(path: Path, data: dict) -> Path:
 PRIMARY_CI_EVENT_KEYS = {"ci_event", "conflict_ci_event"}
 
 
+def _iter_routing_targets(step: dict):
+    """Yield routing targets in the order the fixture routing formats define."""
+    for key in ("on_success", "on_failure"):
+        target = step.get(key)
+        if target:
+            yield target
+    on_result = step.get("on_result", [])
+    if isinstance(on_result, list):
+        for condition in on_result:
+            if isinstance(condition, dict):
+                target = condition.get("route")
+                if target:
+                    yield target
+            elif isinstance(condition, str):
+                yield condition
+    elif isinstance(on_result, dict):
+        for target in on_result.get("routes", {}).values():
+            if target:
+                yield target
+
+
 def build_reverse_graph(steps: dict) -> dict[str, set[str]]:
     """Build a reverse routing graph: step -> set of steps that route to it."""
     reverse: dict[str, set[str]] = {}
     for name, step in steps.items():
-        for key in ("on_success", "on_failure"):
-            target = step.get(key)
-            if target:
-                reverse.setdefault(target, set()).add(name)
-        on_result = step.get("on_result", [])
-        if isinstance(on_result, list):
-            for cond in on_result:
-                if isinstance(cond, dict):
-                    target = cond.get("route")
-                    if target:
-                        reverse.setdefault(target, set()).add(name)
-                elif isinstance(cond, str):
-                    reverse.setdefault(cond, set()).add(name)
-        elif isinstance(on_result, dict):
-            for target in on_result.get("routes", {}).values():
-                if target:
-                    reverse.setdefault(target, set()).add(name)
+        for target in _iter_routing_targets(step):
+            reverse.setdefault(target, set()).add(name)
     return reverse
 
 
@@ -164,25 +170,9 @@ def reaches_wait_for_ci(steps: dict, start: str, depth: int = 5) -> bool:
             node_step = steps.get(node, {})
             if node_step.get("tool") == "wait_for_ci":
                 return True
-            for key in ("on_success", "on_failure"):
-                target = node_step.get(key)
+            for target in _iter_routing_targets(node_step):
                 if target and target in steps and target not in visited:
                     next_queue.append(target)
-            on_result = node_step.get("on_result", [])
-            if isinstance(on_result, list):
-                for cond in on_result:
-                    if isinstance(cond, dict):
-                        target = cond.get("route")
-                    elif isinstance(cond, str):
-                        target = cond
-                    else:
-                        continue
-                    if target and target in steps and target not in visited:
-                        next_queue.append(target)
-            elif isinstance(on_result, dict):
-                for target in on_result.get("routes", {}).values():
-                    if target and target in steps and target not in visited:
-                        next_queue.append(target)
         queue = next_queue
         if not queue:
             break

@@ -570,6 +570,7 @@ async def test_manifest_write_failure_does_not_skip_terminal_flush(
         minimal_ctx,
         timeout=30.0,
         stale_threshold=5.0,
+        step_name="manifest-failure",
         launch_resolver=minimal_ctx.launch_resolver,
         launch_preparation=_launch_preparation(minimal_ctx, cwd=str(tmp_path)),
         execution_selection=selection,

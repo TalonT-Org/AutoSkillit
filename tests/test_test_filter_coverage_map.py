@@ -35,7 +35,7 @@ _REJECTION_CASES = {
     "UNREADABLE": "directory",
     "MALFORMED_JSON": "{bad json}",
     "NOT_AN_OBJECT": [],
-    "UNKNOWN_SCHEMA_VERSION": _envelope({}, pytest_exit_code=0) | {"schema_version": 2},
+    "UNKNOWN_SCHEMA_VERSION": _envelope({}, pytest_exit_code=0) | {"schema_version": 3},
     "MISSING_PROVENANCE": {"schema_version": 1, "map": {}},
     "PRODUCER_FAILED": _envelope({}, pytest_exit_code=1),
     "STALE": _envelope({}),
@@ -158,6 +158,32 @@ class TestLoadCoverageMap:
         detail = test_filter._REJECTION_DETAIL[rejection]
         with pytest.warns(UserWarning, match=re.escape(detail)):
             assert load_coverage_map(map_file, cwd=tmp_path) is None
+
+    def test_schema_v2_with_unobservable_sources_loads(self, tmp_path: Path) -> None:
+        """A v2 artifact loads through the unchanged v1 per-entry parser.
+
+        unobservable_sources is a sibling top-level key the consumer never reads —
+        that is the point of the shape choice: no per-entry parsing change needed.
+        """
+        map_file = tmp_path / "test-source-map.json"
+        payload = _envelope({"src/foo.py": ["tests/test_foo.py"]})
+        payload["schema_version"] = 2
+        payload["unobservable_sources"] = [
+            {"path": "src/bar.py", "reason": "not_measured"},
+            {"path": "src/baz.py", "reason": "attributed_only_by_fixture"},
+        ]
+        map_file.write_text(json.dumps(payload), encoding="utf-8")
+        result = load_coverage_map(map_file, cwd=tmp_path)
+        assert result == {"src/foo.py": {"tests/test_foo.py"}}
+
+    def test_schema_v1_still_loads(self, tmp_path: Path) -> None:
+        """A v1 artifact (no unobservable_sources key) still loads successfully."""
+        map_file = tmp_path / "test-source-map.json"
+        map_file.write_text(
+            json.dumps(_envelope({"src/foo.py": ["tests/test_foo.py"]})), encoding="utf-8"
+        )
+        result = load_coverage_map(map_file, cwd=tmp_path)
+        assert result == {"src/foo.py": {"tests/test_foo.py"}}
 
     def test_load_coverage_map_rejects_legacy_unenveloped_map(self, tmp_path: Path) -> None:
         """The pre-envelope map format fails open instead of narrowing Step 7."""

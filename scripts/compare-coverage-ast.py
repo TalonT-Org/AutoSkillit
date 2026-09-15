@@ -174,15 +174,21 @@ def query_coverage_db(
     return covered_result, executable_result
 
 
-def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
-    """Query .coverage DB and return {source_file: {test_file_paths}}.
+def query_contexts_map(
+    db_path: Path,
+) -> tuple[dict[str, set[str]], list[dict[str, str]]]:
+    """Query .coverage DB and return ({source_file: {test_file_paths}}, fixture_only_entries).
 
     Uses CoverageData.contexts_by_lineno() to build the inversion.
     Only includes source files under src/ and test contexts from tests/.
     Context names from --cov-context=test are test node IDs like
     'tests/recipe/test_rules_dataflow.py::TestClass::test_method|run'.
-    Only |run phase contexts are included to exclude fixture-inflation from
-    |setup and |teardown phases.
+    Only |run phase contexts count toward the map, to exclude fixture-inflation
+    from |setup and |teardown phases. A source that coverage measured but whose
+    contexts are exclusively |setup/|teardown is not silently dropped: it is
+    returned as an ``attributed_only_by_fixture`` entry — the admission check
+    never sees it, but the artifact records that it ran and was unattributable,
+    rather than looking identical to a source coverage never saw at all.
     """
     import coverage
 
@@ -193,6 +199,7 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
         raise CoverageReadError(f"Failed to read coverage database {db_path}: {exc}") from exc
 
     result: dict[str, set[str]] = {}
+    fixture_only: list[dict[str, str]] = []
     for measured_file in data.measured_files():
         try:
             rel = str(Path(measured_file).relative_to(PROJECT_ROOT))
@@ -215,7 +222,73 @@ def query_contexts_map(db_path: Path) -> dict[str, set[str]]:
                         test_files.add(test_file)
         if test_files:
             result[rel] = test_files
-    return result
+        else:
+            fixture_only.append({"path": rel, "reason": "attributed_only_by_fixture"})
+    return result, sorted(fixture_only, key=lambda entry: entry["path"])
+
+
+def _has_main_guard(source_path: Path) -> bool:
+    """Return True if *source_path* contains an ``if __name__ == "__main__":`` guard."""
+    try:
+        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+    except (OSError, SyntaxError):
+        return False
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name)
+            and node.test.left.id == "__name__"
+            and len(node.test.comparators) == 1
+            and isinstance(node.test.comparators[0], ast.Constant)
+            and node.test.comparators[0].value == "__main__"
+        ):
+            return True
+    return False
+
+
+def _under_hooks_dir(rel_path: str) -> bool:
+    parts = Path(rel_path).parts
+    try:
+        idx = parts.index("autoskillit")
+    except ValueError:
+        return False
+    return idx + 1 < len(parts) and parts[idx + 1] == "hooks"
+
+
+def _registered_hook_script_paths() -> frozenset[str]:
+    """Repo-root-relative source paths of every script registered in HOOK_REGISTRY."""
+    from autoskillit import hooks  # noqa: F401  (triggers HOOK_REGISTRY population)
+    from autoskillit.hook_registry import HOOK_REGISTRY
+
+    return frozenset(
+        f"src/autoskillit/hooks/{script}"
+        for hook_def in HOOK_REGISTRY
+        for script in hook_def.scripts
+    )
+
+
+def find_not_measured_unobservable_sources(
+    src_root: Path,
+    measured: set[str],
+) -> list[dict[str, str]]:
+    """Sources coverage never executed at all, restricted to ones structurally expected to be.
+
+    A registered hook script, anything under hooks/, or a __main__-guarded module
+    is invisible to the parent test's coverage context by construction — it runs
+    as a subprocess, or only ever standalone. Every other never-measured source is
+    simply untested, a different (and far larger) concern this artifact does not
+    attempt to enumerate.
+    """
+    hook_script_paths = _registered_hook_script_paths()
+    entries: list[dict[str, str]] = []
+    for source_path in sorted(src_root.rglob("*.py")):
+        rel = str(source_path.relative_to(PROJECT_ROOT))
+        if rel in measured:
+            continue
+        if rel in hook_script_paths or _under_hooks_dir(rel) or _has_main_guard(source_path):
+            entries.append({"path": rel, "reason": "not_measured"})
+    return entries
 
 
 def build_test_source_map(
@@ -224,12 +297,15 @@ def build_test_source_map(
     *,
     pytest_exit_code: int,
     source_commit: str,
+    src_root: Path | None = None,
 ) -> int:
     """Build and write {source_file: [test_files]} map from coverage DB.
 
     Args:
         db_path: Path to .coverage SQLite database.
         output_path: Path where test-source-map.json will be written.
+        src_root: Source directory to classify for unobservable_sources
+                   (default: src/autoskillit under PROJECT_ROOT).
 
     Returns:
         Zero after canonical publication, nonzero when publication is refused.
@@ -239,7 +315,7 @@ def build_test_source_map(
         print("Run 'task coverage-audit' first to generate coverage data.", file=sys.stderr)
         return 1
 
-    mapping = query_contexts_map(db_path)
+    mapping, fixture_only_entries = query_contexts_map(db_path)
     # Convert sets to sorted lists for stable, human-readable JSON
     serializable = {src: sorted(tests) for src, tests in sorted(mapping.items())}
     candidate_path = PROJECT_ROOT / ".autoskillit" / "temp" / "test-source-map-candidate.json"
@@ -254,6 +330,14 @@ def build_test_source_map(
         )
         return 1
 
+    measured = set(mapping) | {entry["path"] for entry in fixture_only_entries}
+    not_measured_entries = find_not_measured_unobservable_sources(
+        src_root or (PROJECT_ROOT / "src" / "autoskillit"), measured
+    )
+    unobservable_sources = sorted(
+        [*fixture_only_entries, *not_measured_entries], key=lambda entry: entry["path"]
+    )
+
     write_versioned_json(
         output_path,
         {
@@ -265,10 +349,14 @@ def build_test_source_map(
                 "source_file_count": len(serializable),
             },
             "map": serializable,
+            "unobservable_sources": unobservable_sources,
         },
-        schema_version=1,
+        schema_version=2,
     )
-    print(f"Test-source map written to: {output_path} ({len(serializable)} source files)")
+    print(
+        f"Test-source map written to: {output_path} ({len(serializable)} source files, "
+        f"{len(unobservable_sources)} unobservable)"
+    )
     return 0
 
 
@@ -424,6 +512,7 @@ def main() -> int:
                 output_path,
                 pytest_exit_code=args.pytest_status,
                 source_commit=source_commit,
+                src_root=args.src_root,
             )
         except CoverageReadError as exc:
             print(f"ERROR: Cannot build test-source map: {exc}", file=sys.stderr)

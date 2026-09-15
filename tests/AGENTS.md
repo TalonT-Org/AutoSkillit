@@ -162,7 +162,7 @@ changed files. Controlled by env var + CLI flags:
 4. **Bucket A**: Root `tests/conftest.py` and other global-impact files -> full run. A package or nested conftest selects its literal directory subtree; `tests/arch/_helpers.py` and `_rules.py` select their known dependent test directories. Scoped support files are not direct test targets.
 5. **Classification**: src Python -> layer cascade, ordinary test Python -> direct, other Python -> manifest lookup, non-Python -> manifest lookup. Scoped directories add to other changed-file selections.
 6. **Always-run**: `arch/` + `contracts/` always included (+ `infra/` + `docs/` in conservative mode)
-7. **Coverage refinement**: A valid map can narrow source-driven directory selections to test files. Required support-file directories are re-added afterward, so refinement cannot remove them. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
+7. **Coverage refinement**: A valid map may only *add* test files to the structurally-selected scope, never remove a directory — a dynamic observation can prove a source/test relationship exists but never that one is absent. Map admission requires a repository `cwd` and checks that the stamped source commit is an ancestor of that checkout's `HEAD`.
 8. **Deselection**: `pytest_collection_modifyitems` deselects items outside scope paths
 
 Directory-scoped conftests do not follow cross-package Python imports. The arch helper
@@ -219,13 +219,35 @@ provenance, or whose stamped source commit is definitively not an ancestor of
 Git operational errors warn and retain an otherwise valid map. A map carried from
 a discarded worktree commit through a squash may therefore select coarser test
 directories until a new map is published. Ancestry alone does not detect a map
-that predates newer tests.
+that predates newer tests. Admission checks envelope, freshness, and lineage —
+never relationship *completeness*: a coverage trace can prove a source/test
+relationship exists but never that one is absent (a subprocess-invoked, fixture-
+mediated, or shallow-import execution is invisible to coverage contexts), which
+is why refinement is additive-only rather than gated on a per-entry confidence
+check. The artifact declares its own blind spots as a sibling `unobservable_sources`
+field (`{"path": ..., "reason": "not_measured" | "attributed_only_by_fixture"}`) —
+diagnostic rather than load-bearing under an additive consumer, which never reads
+it. The consumer accepts schema versions 1 and 2.
 
 The lineage check requires a checkout containing the stamped commit. The CI `test:`
 job uses `fetch-depth: 0`; reducing that depth can make a valid stamp unreachable
 and degrade the check to its operational-error path. Refresh cadence:
 - Run `task coverage-audit` after any architectural change that adds or moves source files.
 - The scheduled weekly refresh keeps the coverage oracle current in CI (conservative or aggressive mode).
+
+**Subprocess instrumentation — not adopted, spike not run.** coverage.py 7.10+ supports
+`[tool.coverage.run] patch = ["subprocess"]` to trace subprocess-invoked code (pytest-cov
+7.0.0 dropped its own subprocess support and requires coverage >= 7.10.6, both satisfied by
+this repo's locked versions). Whether the parent test's dynamic coverage *context*
+propagates into a patched subprocess — required for a subprocess-invoked hook script to
+gain a `|run` attribution at all — is undocumented and unconfirmed; the only concrete
+precedent (pytest-cov PR #443) shows this had to be built under the old mechanism, not that
+it is automatic. This needs a bounded spike (one subprocess-invoked hook test, `patch =
+["subprocess"]`, inspect `contexts_by_lineno()` for the parent's nodeid) that requires
+actually running pytest with coverage collection — outside what an implementation pass may
+do directly. **The setting has not been added to `pyproject.toml`.** `unobservable_sources`
+remains the honest representation of this blind spot until the spike is run and its result
+recorded here.
 
 ```
 tests/

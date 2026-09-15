@@ -199,15 +199,19 @@ class TestBuildTestSourceMap:
         }
         monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
 
-        result = cov_ast.query_contexts_map(tmp_path / ".coverage")
+        result, fixture_only = cov_ast.query_contexts_map(tmp_path / ".coverage")
         assert "src/autoskillit/core/io.py" in result
         assert "tests/core/test_io.py" in result["src/autoskillit/core/io.py"]
+        assert fixture_only == []
 
     def test_setup_and_teardown_contexts_excluded(self, cov_ast, tmp_path, monkeypatch):
         """query_contexts_map excludes |setup and |teardown contexts.
 
         Only |run phase entries map source files to tests. A source file touched
-        only during |setup or |teardown must NOT appear in the result.
+        only during |setup or |teardown must NOT appear in the map — but it ran and
+        was measured, so it must appear as an attributed_only_by_fixture entry
+        rather than being silently indistinguishable from a source coverage never
+        saw at all.
         """
         from unittest.mock import MagicMock
 
@@ -225,8 +229,11 @@ class TestBuildTestSourceMap:
         }
         monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
 
-        result = cov_ast.query_contexts_map(tmp_path / ".coverage")
+        result, fixture_only = cov_ast.query_contexts_map(tmp_path / ".coverage")
         assert "src/autoskillit/core/io.py" not in result
+        assert fixture_only == [
+            {"path": "src/autoskillit/core/io.py", "reason": "attributed_only_by_fixture"}
+        ]
 
     def test_build_test_source_map_writes_json(self, cov_ast, tmp_path, monkeypatch):
         """build_test_source_map() writes a valid JSON file to the output path."""
@@ -258,7 +265,7 @@ class TestBuildTestSourceMap:
 
         assert output_path.exists()
         parsed = json.loads(output_path.read_text())
-        assert parsed["schema_version"] == 1
+        assert parsed["schema_version"] == 2
         assert parsed["provenance"]["pytest_exit_code"] == 0
         expected_key = "src/autoskillit/core/io.py"
         assert expected_key in parsed["map"]
@@ -270,11 +277,12 @@ class TestBuildTestSourceMap:
         called_with: dict = {}
         output_path = tmp_path / "test-source-map.json"
 
-        def fake_build(db_path, output_path, *, pytest_exit_code, source_commit):
+        def fake_build(db_path, output_path, *, pytest_exit_code, source_commit, src_root=None):
             called_with["db_path"] = db_path
             called_with["output_path"] = output_path
             called_with["pytest_exit_code"] = pytest_exit_code
             called_with["source_commit"] = source_commit
+            called_with["src_root"] = src_root
             return 0
 
         monkeypatch.setattr(cov_ast, "build_test_source_map", fake_build)
@@ -546,7 +554,7 @@ class TestBuildTestSourceMap:
         )
 
         published = json.loads(output_path.read_text())
-        assert published["schema_version"] == 1
+        assert published["schema_version"] == 2
         provenance = published["provenance"]
         assert set(provenance) == {
             "generated_at",
@@ -592,6 +600,78 @@ class TestBuildTestSourceMap:
                 source_commit="test-commit",
             )
         assert output_path.read_bytes() == b"canonical sentinel"
+
+    def test_subprocess_only_source_appears_as_not_measured(self, cov_ast, tmp_path, monkeypatch):
+        """A source coverage never executed under the tracer at all — absent from
+
+        measured_files() entirely — appears in unobservable_sources with reason
+        not_measured, restricted to sources structurally expected to be invisible
+        to it (here: a script under hooks/, which the producer runs as a
+        subprocess).
+        """
+        from unittest.mock import MagicMock
+
+        import coverage as coverage_mod
+
+        src_root = tmp_path / "src" / "autoskillit"
+        subprocess_script = src_root / "hooks" / "guards" / "example_guard.py"
+        subprocess_script.parent.mkdir(parents=True)
+        subprocess_script.write_text("def main():\n    pass\n", encoding="utf-8")
+        measured_source = src_root / "core" / "io.py"
+        measured_source.parent.mkdir(parents=True)
+
+        mock_data = MagicMock()
+        mock_data.measured_files.return_value = [str(measured_source)]
+        mock_data.contexts_by_lineno.return_value = {
+            1: ["tests/core/test_io.py::TestIO::test_write|run"],
+        }
+        monkeypatch.setattr(coverage_mod, "CoverageData", MagicMock(return_value=mock_data))
+        monkeypatch.setattr(cov_ast, "PROJECT_ROOT", tmp_path)
+
+        db_path = tmp_path / ".coverage"
+        db_path.touch()
+        output_path = tmp_path / "test-source-map.json"
+        assert (
+            cov_ast.build_test_source_map(
+                db_path,
+                output_path,
+                pytest_exit_code=0,
+                source_commit="test-commit",
+                src_root=src_root,
+            )
+            == 0
+        )
+
+        parsed = json.loads(output_path.read_text())
+        unobservable = {entry["path"]: entry["reason"] for entry in parsed["unobservable_sources"]}
+        assert unobservable["src/autoskillit/hooks/guards/example_guard.py"] == "not_measured"
+
+    def test_observed_source_appears_in_map_not_unobservable(self, cov_ast, tmp_path, monkeypatch):
+        """A source with a |run attribution belongs in map, never in unobservable_sources."""
+        from unittest.mock import MagicMock
+
+        self._install_context_data(
+            cov_ast,
+            tmp_path,
+            monkeypatch,
+            contexts_by_lineno=MagicMock(
+                return_value={1: ["tests/core/test_io.py::test_write|run"]}
+            ),
+        )
+        db_path = tmp_path / ".coverage"
+        db_path.touch()
+        output_path = tmp_path / "test-source-map.json"
+        assert (
+            cov_ast.build_test_source_map(
+                db_path, output_path, pytest_exit_code=0, source_commit="test-commit"
+            )
+            == 0
+        )
+
+        parsed = json.loads(output_path.read_text())
+        assert "src/autoskillit/core/io.py" in parsed["map"]
+        unobservable_paths = {entry["path"] for entry in parsed["unobservable_sources"]}
+        assert "src/autoskillit/core/io.py" not in unobservable_paths
 
     def test_taskfile_coverage_audit_invokes_map_mode(self):
         """Taskfile.yml coverage-audit task includes --mode build-test-source-map."""
@@ -658,7 +738,7 @@ def test_test_source_map_is_committed():
         "Run 'task coverage-audit' and commit the output to activate the coverage oracle."
     )
     data = json.loads(map_path.read_text(encoding="utf-8"))
-    assert data["schema_version"] == 1
+    assert data["schema_version"] in {1, 2}
     provenance = data["provenance"]
     assert isinstance(provenance, dict)
     assert provenance["pytest_exit_code"] == 0

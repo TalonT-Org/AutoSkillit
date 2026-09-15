@@ -72,14 +72,15 @@ def _load_test_filter_module() -> Any:
 
 def _collect_cascade_selection(changed_files: list[str]) -> set[str]:
     mod = _load_test_filter_module()
-    manifest = mod.load_manifest(PROJECT_ROOT / ".autoskillit" / "test-filter-manifest.yaml")
+    manifest = mod.load_manifest(PROJECT_ROOT)
     scope = mod.build_test_scope(
-        changed=[Path(f) for f in changed_files],
-        repo_root=PROJECT_ROOT,
-        manifest=manifest,
+        changed_files=set(changed_files),
         mode=mod.FilterMode.CONSERVATIVE,
+        manifest=manifest,
+        tests_root=PROJECT_ROOT / "tests",
+        cwd=PROJECT_ROOT,
     )
-    if scope is None:
+    if isinstance(scope, mod.FullRunReason):
         tests_dir = PROJECT_ROOT / "tests"
         return {str(p.relative_to(tests_dir)) for p in tests_dir.rglob("test_*.py")}
     return {str(p.relative_to(PROJECT_ROOT / "tests")) for p in scope}

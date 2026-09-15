@@ -119,7 +119,7 @@ class TestCodingAgentBackendConformance(BackendContractBase):
         self._generated_home = tmp_path / "generated-home"
 
     def _builder_home_kwargs(self, argument: str) -> dict[str, str]:
-        return {argument: str(self._generated_home)} if self.backend.name == "codex" else {}
+        return {argument: str(self._generated_home)}
 
     def make_backend(self) -> CodingAgentBackend:
         return self.backend

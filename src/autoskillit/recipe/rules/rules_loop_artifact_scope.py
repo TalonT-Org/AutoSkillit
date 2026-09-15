@@ -26,9 +26,9 @@ def _check_loop_artifact_scope(ctx: ValidationContext) -> list[RuleFinding]:
 
     cycle_sets = _find_cycle_members(ctx.step_graph, recipe_steps)
     manifest = load_bundled_manifest()
-    cycle_members = dict.fromkeys(step for cycle in cycle_sets for step in cycle)
+    all_cycle_members = dict.fromkeys(step for cycle in cycle_sets for step in cycle)
 
-    for step_name in cycle_members:
+    for step_name in all_cycle_members:
         step = recipe_steps.get(step_name)
         if step is None or step.tool not in SKILL_TOOLS:
             continue

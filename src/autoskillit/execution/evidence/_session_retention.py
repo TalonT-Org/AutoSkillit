@@ -21,6 +21,7 @@ from autoskillit.core import (
     ARTIFACT_LEASE_TIMEOUT_SECONDS,
     VANISHED_ERRORS,
     ArtifactLease,
+    ExecutionSelection,
     atomic_write,
     fast_dumps,
     fast_loads,
@@ -227,7 +228,7 @@ def _execution_candidate_manifest_lock_path(log_root: Path) -> Path:
 
 
 def write_execution_candidate_manifest_at_root(
-    selection: Any,
+    selection: ExecutionSelection,
     log_root: Path,
     *,
     max_sessions: int | None,

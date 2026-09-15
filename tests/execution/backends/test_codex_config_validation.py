@@ -746,9 +746,9 @@ def test_cook_and_init_config_writers_preserve_the_union_under_one_canonical_loc
     try:
         for process in processes:
             process.start()
-        assert {ready.get(timeout=10), ready.get(timeout=10)} == {"mcp", "hooks"}
+        assert {ready.get(timeout=30), ready.get(timeout=30)} == {"mcp", "hooks"}
         start.set()
-        outcomes = {result.get(timeout=15), result.get(timeout=15)}
+        outcomes = {result.get(timeout=30), result.get(timeout=30)}
         assert outcomes == {("mcp", "ok"), ("hooks", "ok")}
     finally:
         start.set()

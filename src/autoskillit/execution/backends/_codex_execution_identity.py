@@ -244,6 +244,79 @@ def extract_codex_child_metadata(
     return metadata
 
 
+def _effective_parent_identity(
+    events: list[Mapping[str, Any]], requested: ExecutionIdentity
+) -> ExecutionIdentity:
+    parent_id = codex_parent_thread_id(events)
+    parent_meta = _payloads(events, "session_meta")[0]
+    if requested.parent_session_id and requested.parent_session_id != parent_id:
+        raise ValueError("Codex parent rollout identity disagrees with requested linkage")
+    contexts = _payloads(events, "turn_context")
+    if not contexts:
+        raise ValueError("Codex parent rollout omitted turn_context")
+    model = _unique_text(
+        "parent", "model", [context.get("model") for context in contexts], required=True
+    )
+    effort = _unique_text(
+        "parent", "effort", [context.get("effort") for context in contexts], required=False
+    )
+    return replace(
+        requested,
+        effective_parent_backend=AGENT_BACKEND_CODEX,
+        effective_parent_model=model,
+        effective_parent_effort=effort,
+        cli_version=_meta_text(parent_meta, {}, "cli_version"),
+        parent_session_id=parent_id,
+    )
+
+
+def _validated_child_identity(
+    child_rollout_path: Path,
+    *,
+    expected_parent_id: str,
+    linked_child_ids: tuple[str, ...],
+    requested_children: tuple[ChildExecutionIdentity, ...],
+) -> tuple[ChildExecutionIdentity, str]:
+    events = _read_rollout(child_rollout_path)
+    child_meta, spawn, child_id, role = _child_session_metadata(
+        events,
+        expected_parent_id=expected_parent_id,
+        expected_child_id=None,
+    )
+    if child_id not in linked_child_ids:
+        raise ValueError("Codex child session_meta has an invalid child id")
+    evidence = _instruction_text(child_meta) + "\n" + _message_text(events)
+    matches = tuple(
+        child
+        for child in requested_children
+        if child.role == role
+        and _has_exact_identity_field(evidence, "task_id", child.task_id)
+        and _has_exact_identity_field(evidence, "router_plan_digest", child.plan_digest)
+        and _has_exact_identity_field(evidence, "role_definition_digest", child.definition_digest)
+    )
+    if len(matches) != 1:
+        raise ValueError("Codex child rollout does not uniquely match requested evidence")
+    contexts = _payloads(events, "turn_context")
+    if not contexts:
+        raise ValueError("Codex child rollout omitted turn_context")
+    model = _unique_text(
+        "child", "model", [context.get("model") for context in contexts], required=True
+    )
+    effort = _unique_text(
+        "child", "effort", [context.get("effort") for context in contexts], required=True
+    )
+    return (
+        replace(
+            matches[0],
+            effective_backend=AGENT_BACKEND_CODEX,
+            effective_model=model,
+            effective_effort=effort,
+            session_id=child_id,
+        ),
+        _meta_text(child_meta, spawn, "cli_version"),
+    )
+
+
 def extract_codex_execution_identity(
     parent_rollout_path: Path,
     *,
@@ -258,29 +331,8 @@ def extract_codex_execution_identity(
     ``turn_context`` records. A child rollout must link back to the exact parent.
     """
     parent_events = _read_rollout(parent_rollout_path)
-    parent_id = codex_parent_thread_id(parent_events)
-    parent_meta = _payloads(parent_events, "session_meta")[0]
-    if requested.parent_session_id and requested.parent_session_id != parent_id:
-        raise ValueError("Codex parent rollout identity disagrees with requested linkage")
-    parent_contexts = _payloads(parent_events, "turn_context")
-    if not parent_contexts:
-        raise ValueError("Codex parent rollout omitted turn_context")
-    parent_model = _unique_text(
-        "parent", "model", [context.get("model") for context in parent_contexts], required=True
-    )
-    parent_effort = _unique_text(
-        "parent", "effort", [context.get("effort") for context in parent_contexts], required=False
-    )
-    cli_version = _meta_text(parent_meta, {}, "cli_version")
-
-    effective = replace(
-        requested,
-        effective_parent_backend=AGENT_BACKEND_CODEX,
-        effective_parent_model=parent_model,
-        effective_parent_effort=parent_effort,
-        cli_version=cli_version,
-        parent_session_id=parent_id,
-    )
+    effective = _effective_parent_identity(parent_events, requested)
+    parent_id = effective.parent_session_id
     # Computed unconditionally (not gated by `requested.children`) so unplanned/
     # undeclared child discovery (execution/child_outcomes.py, issue #4623) can
     # reuse this exact structural filter without re-deriving it.
@@ -302,55 +354,23 @@ def extract_codex_execution_identity(
     observed: dict[str, ChildExecutionIdentity] = {}
     child_cli_versions: set[str] = set()
     for child_rollout_path in child_rollout_paths:
-        child_events = _read_rollout(child_rollout_path)
-        child_meta, spawn, child_id, role = _child_session_metadata(
-            child_events,
+        observed_child, child_cli_version = _validated_child_identity(
+            child_rollout_path,
             expected_parent_id=parent_id,
-            expected_child_id=None,
+            linked_child_ids=linked_child_ids,
+            requested_children=requested.children,
         )
-        if child_id not in linked_child_ids:
-            raise ValueError("Codex child session_meta has an invalid child id")
-        evidence = _instruction_text(child_meta) + "\n" + _message_text(child_events)
-        matches = tuple(
-            child
-            for child in requested.children
-            if child.role == role
-            and _has_exact_identity_field(evidence, "task_id", child.task_id)
-            and _has_exact_identity_field(evidence, "router_plan_digest", child.plan_digest)
-            and _has_exact_identity_field(
-                evidence, "role_definition_digest", child.definition_digest
-            )
-        )
-        if len(matches) != 1:
-            raise ValueError("Codex child rollout does not uniquely match requested evidence")
-        requested_child = matches[0]
-        if requested_child.task_id in observed:
+        if observed_child.task_id in observed:
             raise ValueError("Codex child rollouts duplicate a requested task identity")
-        child_contexts = _payloads(child_events, "turn_context")
-        if not child_contexts:
-            raise ValueError("Codex child rollout omitted turn_context")
-        child_model = _unique_text(
-            "child", "model", [context.get("model") for context in child_contexts], required=True
-        )
-        child_effort = _unique_text(
-            "child", "effort", [context.get("effort") for context in child_contexts], required=True
-        )
-        child_cli_version = _meta_text(child_meta, spawn, "cli_version")
         if child_cli_version:
             child_cli_versions.add(child_cli_version)
-        observed[requested_child.task_id] = replace(
-            requested_child,
-            effective_backend=AGENT_BACKEND_CODEX,
-            effective_model=child_model,
-            effective_effort=child_effort,
-            session_id=child_id,
-        )
+        observed[observed_child.task_id] = observed_child
     if set(observed) != {child.task_id for child in requested.children}:
         raise ValueError("Codex child rollouts omitted a requested task identity")
     if len(child_cli_versions) > 1:
         raise ValueError("Codex child rollouts have conflicting CLI versions")
     return replace(
         effective,
-        cli_version=next(iter(child_cli_versions), cli_version),
+        cli_version=next(iter(child_cli_versions), effective.cli_version),
         children=tuple(observed.values()),
     )

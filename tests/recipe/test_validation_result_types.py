@@ -183,10 +183,17 @@ def test_recipe_path_validation_report_guard_rejects_malformed_fields(
 _VALID_RECIPE = """\
 name: validation-result-valid
 description: A valid recipe for validation result testing.
+kitchen_rules:
+  - Use the terminal stop step to complete the recipe.
+ingredients:
+  task:
+    description: A task ingredient.
+    required: true
+    default: test task
 steps:
   done:
     action: stop
-    message: done
+    message: Recipe validation completed successfully.
 """
 _PARSED_INVALID_RECIPE = """\
 name: validation-result-invalid

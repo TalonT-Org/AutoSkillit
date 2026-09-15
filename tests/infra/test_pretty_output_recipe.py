@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
@@ -1070,15 +1071,16 @@ def _measure_served_response_budgets(
     recipe_name: str,
     mode_name: str,
     step_names: list[str],
+    sharing_tools: frozenset[str],
     project_root: Path,
     resolved: dict[str, str],
     tmp_path: Path,
     scripts_dir: str,
     maxima: dict[str, tuple[int, str, str]],
     measured_modes: set[tuple[str, str, bool]],
-) -> None:
+) -> int:
     if not step_names:
-        return
+        return 0
     tool_ctx = SimpleNamespace(
         recipes=DefaultRecipeRepository(),
         skill_resolver=MagicMock(spec=SkillResolver),
@@ -1097,14 +1099,33 @@ def _measure_served_response_budgets(
         resolved_defaults=resolved,
         temp_dir=tmp_path,
     )
+    tool_payload_builders = {
+        "open_kitchen": partial(build_open_kitchen_recipe_payload, version=__version__)
+    }
+    assert sharing_tools.isdisjoint(tool_payload_builders)
+    ingredients_payload_builders = {
+        False: dict,
+        True: strip_ingredients_only_keys,
+    }
+    render_call_count = 0
+
+    def counted_render_served_response(payload: dict) -> str:
+        nonlocal render_call_count
+        render_call_count += 1
+        return render_served_response(payload)
+
     for ingredients_only in (False, True):
+        ingredients_payload_builder = ingredients_payload_builders[ingredients_only]
+        shared_payload = ingredients_payload_builder(dict(served_result))
+        shared_raw = counted_render_served_response(shared_payload)
+        raw_by_tool = dict.fromkeys(sharing_tools, shared_raw)
+        for tool_name in set(RESPONSE_BACKSTOP_EXEMPTION_REGISTRY) - sharing_tools:
+            payload_builder = tool_payload_builders.get(tool_name, dict)
+            payload = payload_builder(dict(served_result))
+            payload = ingredients_payload_builder(payload)
+            raw_by_tool[tool_name] = counted_render_served_response(payload)
         for tool_name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY:
-            payload = dict(served_result)
-            if tool_name == "open_kitchen":
-                payload = build_open_kitchen_recipe_payload(payload, version=__version__)
-            if ingredients_only:
-                payload = strip_ingredients_only_keys(payload)
-            raw = render_served_response(payload)
+            raw = raw_by_tool[tool_name]
             definition = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY[tool_name]
             char_count = len(raw)
             assert char_count <= definition.max_chars, (
@@ -1126,6 +1147,7 @@ def _measure_served_response_budgets(
                 (len(normalized.encode("utf-8")), recipe_name, mode_name),
             )
             measured_modes.add((tool_name, mode_name, ingredients_only))
+    return render_call_count
 
 
 def _measure_persisted_envelope(
@@ -1237,6 +1259,12 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     checked_recipe_modes: set[tuple[str, str]] = set()
     measured_modes: set[tuple[str, str, bool]] = set()
     maxima = {name: (0, "", "") for name in RESPONSE_BACKSTOP_EXEMPTION_REGISTRY}
+    sharing_tools = frozenset({"get_recipe_section", "load_recipe"})
+    registry_keys = set(RESPONSE_BACKSTOP_EXEMPTION_REGISTRY)
+    assert sharing_tools <= registry_keys
+    assert sharing_tools
+    eligible_served_points = 0
+    render_call_count = 0
     ceiling = RESPONSE_BACKSTOP_EXEMPTION_REGISTRY["open_kitchen"].max_utf8_bytes
     backend_caps = {name: cls().capabilities for name, cls in BACKEND_REGISTRY.items()}
     smallest_bound_bytes = min(
@@ -1269,10 +1297,12 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
                 recipe_name, mode_name, loaded_result
             )
             remediation_note_checked |= observed_remediation_note
-            _measure_served_response_budgets(
+            eligible_served_points += int(bool(step_names))
+            render_call_count += _measure_served_response_budgets(
                 recipe_name,
                 mode_name,
                 step_names,
+                sharing_tools,
                 project_root,
                 resolved,
                 tmp_path,
@@ -1326,4 +1356,11 @@ def test_pretty_output_recipe_grid_preserves_semantics_and_budgets(tmp_path, mon
     }, (
         "property=canonical baseline maxima; recipe=all; mode=all; tool=all; "
         f"ingredients_only=both; actual={maxima!r}; limit=measured current baseline"
+    )
+    expected_render_calls = 2 * eligible_served_points * (1 + len(registry_keys - sharing_tools))
+    assert eligible_served_points
+    assert render_call_count == expected_render_calls, (
+        "property=served response render call count; "
+        f"eligible_points={eligible_served_points}; actual={render_call_count}; "
+        f"expected={expected_render_calls}"
     )

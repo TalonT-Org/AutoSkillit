@@ -406,7 +406,7 @@ def test_attest_catalog_discovery_rejects_invalid_explicit_discovery_root(
     assert "roots=" in diagnostic
     assert f"catalog={catalog_dir}" in diagnostic
     assert "version=0.153.4" in diagnostic
-    assert len(diagnostic) <= 2_000
+    assert all(len(error) <= 2_000 for error in errors)
 
 
 def test_attest_catalog_discovery_requires_absolute_explicit_root_before_probe(
@@ -484,7 +484,7 @@ def test_attest_catalog_discovery_same_name_native_skill_does_not_satisfy_manage
         version="0.153.4",
     )
 
-    assert any("misplaced managed paths" in error and "alpha=" in error for error in errors)
+    assert any("misplaced expected paths" in error and "alpha=" in error for error in errors)
 
 
 @pytest.mark.parametrize(

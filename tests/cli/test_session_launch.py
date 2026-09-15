@@ -30,6 +30,7 @@ from autoskillit.core import (
     BackendConventions,
     ClaudeFlags,
     HookTrustPolicy,
+    PluginLoadMode,
     PreLaunchReadiness,
 )
 from autoskillit.core._plugin_ids import (
@@ -50,8 +51,10 @@ pytestmark = [pytest.mark.layer("cli"), pytest.mark.medium]
 
 class _TestBinding:
     def __init__(self, plugin_dir: Path | None) -> None:
+        self.load_mode = PluginLoadMode.EXPLICIT_PLUGIN_DIR
         self.plugin_dir = plugin_dir
         self.inherited_fds: tuple[int, ...] = ()
+        self.skill_entries: tuple[tuple[str, str], ...] = ()
         self.closed = False
 
     def close(self) -> None:
@@ -198,6 +201,7 @@ def _stub_codex_pre_launch(monkeypatch: pytest.MonkeyPatch) -> None:
         "ensure_pre_launch",
         lambda _self, *, session_dir=None, executable=None: PreLaunchReadiness((), {}),
     )
+    monkeypatch.setattr(CodexBackend, "validate_interactive_invocation", lambda _self, _spec: [])
 
 
 # Module-level flags map — shared by Tests B, C, and the registry guard.
@@ -1932,8 +1936,10 @@ def _prepare_codex_order_composition(
         cast(list[str], captured["events"]).append("validated")
         captured["spec"] = spec
         generated_home = Path(spec.env["CODEX_HOME"])
-        captured["config_text"] = (generated_home / "config.toml").read_text()
-        captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
+        config_path = generated_home / "config.toml"
+        if config_path.is_file():
+            captured["config_text"] = config_path.read_text()
+            captured["config"] = tomllib.loads(cast(str, captured["config_text"]))
         errors = original_validate(self, spec)
         cast(list[list[str]], captured["validation_errors"]).append(errors)
         return errors

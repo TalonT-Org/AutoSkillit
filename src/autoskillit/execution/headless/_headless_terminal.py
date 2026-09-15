@@ -5,19 +5,27 @@ from __future__ import annotations
 import dataclasses
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CodingAgentBackend,
     ContinuationRecommendation,
     ExecutionSelection,
     KillReason,
+    ModelIdentity,
+    NativeShellCaptureDiagnostic,
     ProviderOutcome,
     RecipeIdentity,
     ResolvedLaunchContract,
     RetryReason,
+    SessionTelemetry,
+    SessionType,
     SkillResult,
+    SubprocessResult,
 )
+
+if TYPE_CHECKING:
+    from autoskillit.pipeline.context import ToolContext
 
 
 def finalize_terminal_selection(
@@ -153,8 +161,8 @@ def build_recipe_identity(
 
 def build_terminal_flush_kwargs(
     *,
-    ctx: Any,
-    result: Any,
+    ctx: ToolContext,
+    result: SubprocessResult | None,
     skill_result: SkillResult,
     cwd: str,
     kitchen_id: str,
@@ -171,16 +179,16 @@ def build_terminal_flush_kwargs(
     exception_text: str,
     versions: dict[str, Any],
     provider_outcome: ProviderOutcome,
-    recipe_identity: Any,
-    model_identity: Any,
+    recipe_identity: RecipeIdentity,
+    model_identity: ModelIdentity,
     backend: str,
     channel_b_capable: bool,
     comm_aliases: frozenset[str],
-    telemetry: Any,
+    telemetry: SessionTelemetry,
     backend_authority: dict[str, object],
     launch_contract_digest: str,
-    native_shell_capture: Any,
-    session_type: Any,
+    native_shell_capture: NativeShellCaptureDiagnostic | None,
+    session_type: SessionType | None,
     execution_selection: ExecutionSelection | None,
     clone_contamination_reverted: bool,
     is_resume: bool,

@@ -236,10 +236,7 @@ def _app_server_to_exec_event(
     handler = _APP_SERVER_METHOD_HANDLERS.get(method)
     if handler is None:
         return {"type": method}
-    event = handler(params)
-    if correlation is not None and event.get("type") == CodexEventType.ERROR.value:
-        correlation.clear()
-    return event
+    return handler(params)
 
 
 @dataclass(slots=True)

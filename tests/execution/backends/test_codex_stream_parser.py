@@ -852,6 +852,29 @@ class TestAppServerAutoCompactionCorrelation:
             "code": "autoskillit_auto_compaction_denied",
         }
 
+    def test_error_preserves_pending_compaction_correlation(self) -> None:
+        hook = app_server_fixture("app_server_hook_completed_pre_compact_stopped.json")
+        terminal = app_server_fixture("app_server_turn_completed_interrupted.json")
+        error = {
+            "method": "error",
+            "params": {
+                "willRetry": False,
+                "error": {"message": "unrelated error", "code": "E1"},
+            },
+        }
+
+        parser = CodexStreamParser()
+        assert parser.parse_line(json.dumps(hook)) is None
+        assert parser.parse_line(json.dumps(error)) is not None
+        event = parser.parse_line(json.dumps(terminal))
+
+        assert event is not None
+        assert isinstance(event.backend_data, CodexEventData)
+        assert event.backend_data.raw["error"] == {
+            "message": "autoskillit_auto_compaction_denied",
+            "code": "autoskillit_auto_compaction_denied",
+        }
+
     @pytest.mark.parametrize(
         "case",
         [

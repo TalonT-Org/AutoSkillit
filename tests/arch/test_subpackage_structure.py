@@ -187,6 +187,7 @@ class TestExecutionSubpackages:
             "_headless_model",
             "_headless_outcome",
             "_headless_path_tokens",
+            "_headless_prepare",
             "_headless_recovery",
             "_headless_result",
             "_headless_terminal",

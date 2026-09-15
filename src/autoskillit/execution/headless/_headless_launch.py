@@ -57,12 +57,8 @@ logger = get_logger(__name__)
 _NUDGE_TIMEOUT: float = 60.0
 
 
-def _report_plugin_binding_close_failure(
-    primary_error: BaseException, _cleanup_error: BaseException
-) -> None:
-    logger.warning(
-        "plugin_launch_binding_close_failed", primary_error=repr(primary_error), exc_info=True
-    )
+def _report_plugin_binding_close_failure(error: BaseException, _: BaseException) -> None:
+    logger.warning("plugin_launch_binding_close_failed", primary_error=repr(error), exc_info=True)
 
 
 def _plugin_launch_binding(

@@ -64,10 +64,6 @@ def _configure_candidate_backends(tool_ctx: Any, monkeypatch: pytest.MonkeyPatch
         "backend_for_authority",
         lambda authority: get_backend(authority.backend),
     )
-    monkeypatch.setattr(
-        "autoskillit.server.tools.tools_execution._run_skill_prepare.shutil.which",
-        lambda binary: f"/test-bin/{binary}",
-    )
 
 
 @pytest.mark.anyio

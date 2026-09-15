@@ -237,6 +237,37 @@ def _fingerprint_managed_files(
     return tuple(fingerprint)
 
 
+def _validate_expected_discovery_root(
+    discovered: DiscoveredSkills,
+    *,
+    expected_discovery_root: Path,
+    catalog_dir: Path,
+    context: str,
+) -> list[str]:
+    roots = [str(root) for root in discovered.roots]
+    root_matches = [root for root in discovered.roots if root == expected_discovery_root]
+    if not root_matches:
+        return [
+            "Codex skill discovery roots do not contain expected discovery root "
+            f"{expected_discovery_root}; roots={roots}; {context}"
+        ]
+    if len(root_matches) > 1:
+        return [
+            "Codex skill discovery roots contain duplicate expected discovery root "
+            f"{expected_discovery_root}; roots={roots}; {context}"
+        ]
+    try:
+        root_target = root_matches[0].resolve(strict=True)
+    except OSError as exc:
+        return [f"Codex skill discovery expected root is unreadable: {exc}; {context}"]
+    if root_target != catalog_dir:
+        return [
+            "Codex skill discovery expected root does not resolve to the "
+            f"catalog; roots={roots}; {context}"
+        ]
+    return []
+
+
 def probe_codex_version(
     *,
     executable: str,
@@ -356,32 +387,14 @@ def attest_catalog_discovery(
                     f"Codex skill discovery reported misplaced expected paths {misplaced}; "
                     f"roots={[str(root) for root in discovered.roots]}; {context}"
                 )
-            root_matches = [root for root in discovered.roots if root == expected_discovery_root]
-            if not root_matches:
-                errors.append(
-                    "Codex skill discovery roots do not contain expected discovery root "
-                    f"{expected_discovery_root}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
+            errors.extend(
+                _validate_expected_discovery_root(
+                    discovered,
+                    expected_discovery_root=expected_discovery_root,
+                    catalog_dir=catalog_dir,
+                    context=context,
                 )
-            elif len(root_matches) > 1:
-                errors.append(
-                    "Codex skill discovery roots contain duplicate expected discovery root "
-                    f"{expected_discovery_root}; "
-                    f"roots={[str(root) for root in discovered.roots]}; {context}"
-                )
-            else:
-                try:
-                    root_target = root_matches[0].resolve(strict=True)
-                except OSError as exc:
-                    errors.append(
-                        f"Codex skill discovery expected root is unreadable: {exc}; {context}"
-                    )
-                else:
-                    if root_target != catalog_dir:
-                        errors.append(
-                            "Codex skill discovery expected root does not resolve to the "
-                            f"catalog; roots={[str(root) for root in discovered.roots]}; {context}"
-                        )
+            )
     try:
         after_fingerprint = _fingerprint_managed_files(expected_paths)
     except OSError as exc:

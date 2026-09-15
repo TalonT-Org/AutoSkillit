@@ -42,8 +42,10 @@ from autoskillit.core import (
     get_logger,
     log_plugin_artifact_lifecycle,
     managed_home,
+    managed_skill_relative_path,
     new_plugin_artifact_incarnation_id,
     pkg_root,
+    validate_managed_skill_entries,
     write_versioned_json,
 )
 from autoskillit.hook_registry import render_hooks_json_text
@@ -663,6 +665,11 @@ class ProjectedPluginArtifactAuthority:
             semantic_key=identity.semantic_key,
             incarnation=identity.incarnation_id,
         )
+        skill_entries = tuple(
+            (skill.name, managed_skill_relative_path(skill.name).as_posix())
+            for skill in sorted(plan.catalog.skills, key=lambda item: item.name)
+        )
+        validate_managed_skill_entries(skill_entries)
         return PluginLaunchBinding(
             load_mode=load_mode,
             plugin_dir=plan.destination,
@@ -675,6 +682,7 @@ class ProjectedPluginArtifactAuthority:
                 semantic_key=identity.semantic_key,
                 incarnation=identity.incarnation_id,
             ),
+            skill_entries=skill_entries,
         )
 
 

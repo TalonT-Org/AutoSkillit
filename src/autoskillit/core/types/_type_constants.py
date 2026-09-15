@@ -61,6 +61,7 @@ __all__ = [
     "CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR",
     "CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR",
     "CODEX_ARCHIVED_SESSIONS_SUBDIR",
+    "CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE",
     "CODEX_SESSIONS_SUBDIR",
     "SESSION_ADD_DIR_SUBDIR",
     "RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE",
@@ -349,6 +350,10 @@ CODEX_ARCHIVED_SESSIONS_SUBDIR: str = "codex-archived-sessions"
 CODEX_ACTIVE_VIEWS_SUBDIR: str = "codex-active-sessions"
 CODEX_ATTEMPT_RECONCILIATIONS_SUBDIR: str = "codex-attempt-reconciliations"
 CODEX_ATTEMPT_RECONCILIATION_TOMBSTONES_SUBDIR: str = "codex-attempt-reconciliation-tombstones"
+CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE: str = (
+    "Automatic Codex context compaction was blocked. Start an explicit new session, "
+    "or compact manually and deliberately resume."
+)
 SESSION_ADD_DIR_SUBDIR: str = "add-dir"
 
 RECIPE_EXECUTION_ATTESTATION_MISSING_MESSAGE: str = (

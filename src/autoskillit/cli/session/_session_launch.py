@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, NoReturn, overload
 
 from autoskillit.core import (
     AUTOSKILLIT_STATE_ROOT_ENV_VAR,
+    CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
     LAUNCH_ID_ENV_VAR,
     InfraExitCategory,
     NamedResume,
@@ -647,10 +648,7 @@ def _launch_cook_session(
                 return
             if isinstance(session_signal, _InfraExitSignal):
                 if session_signal.category == InfraExitCategory.CONTEXT_EXHAUSTED:
-                    print(
-                        "Automatic Codex context compaction was blocked. Start an explicit new "
-                        "session, or compact manually and deliberately resume."
-                    )
+                    print(CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE)
                     return
                 infra_resume_count += 1
                 if infra_resume_count >= _max_infra_resumes:

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, assert_never
 
 from autoskillit.core import (
+    CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
     ChannelConfirmation,
     CliSubtype,
     ClosureAuthoritySpec,
@@ -269,10 +270,7 @@ def _make_controlled_context_exhaustion_result(
             result=result,
             session=session,
             success=False,
-            result_text=(
-                "Automatic Codex context compaction was blocked. Start an explicit new "
-                "session, or compact manually and deliberately resume."
-            ),
+            result_text=CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE,
             subtype=CliSubtype.CONTEXT_EXHAUSTION.value,
             needs_retry=needs_retry,
             retry_reason=retry_reason,
@@ -675,8 +673,7 @@ def _build_skill_result(
         )
 
     result_text = (
-        "Automatic Codex context compaction was blocked. Start an explicit new session, "
-        "or compact manually and deliberately resume."
+        CODEX_AUTO_COMPACTION_BLOCKED_MESSAGE
         if controlled_context_exhaustion
         else session.agent_result
     )

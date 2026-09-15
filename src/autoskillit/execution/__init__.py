@@ -205,7 +205,10 @@ from autoskillit.execution.runtime.db import (
 from autoskillit.execution.runtime.db import (
     _execute_readonly_query as execute_readonly_query,
 )
-from autoskillit.execution.runtime.launch_resolution import DefaultLaunchResolver
+from autoskillit.execution.runtime.launch_resolution import (
+    DefaultLaunchResolver,
+    resolve_backend_override,
+)
 from autoskillit.execution.runtime.testing import (
     DefaultTestRunner,
     build_sanitized_env,
@@ -313,6 +316,7 @@ __all__ = [
     "run_headless_core",
     "DefaultHeadlessExecutor",
     "DefaultLaunchResolver",
+    "resolve_backend_override",
     "assert_interactive_ordering",
     "resolve_model_pin",
     # testing

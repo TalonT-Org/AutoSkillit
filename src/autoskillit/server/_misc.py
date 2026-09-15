@@ -18,9 +18,6 @@ from autoskillit.core import (
     MARKETPLACE_PREFIX,
     ArtifactLease,
     ArtifactLeaseContention,
-    BackendAuthority,
-    BackendAuthorityKind,
-    BackendAuthorityTier,
     ensure_project_temp,
     get_logger,
     pipeline_tracker_directory,
@@ -54,6 +51,9 @@ from autoskillit.execution import (
 )
 from autoskillit.execution import (
     oauth_admission_lock_path as oauth_admission_lock_path,
+)
+from autoskillit.execution import (
+    resolve_backend_override as resolve_backend_override,
 )
 from autoskillit.execution import (
     resolve_log_dir as resolve_log_dir,
@@ -97,25 +97,9 @@ from autoskillit.workspace import (
 
 if TYPE_CHECKING:
     from autoskillit.config import QuotaGuardConfig
-    from autoskillit.core import CodingAgentBackend, LaunchResolver, SkillResult
+    from autoskillit.core import SkillResult
 
 logger = get_logger(__name__)
-
-
-def resolve_backend_override(
-    name: str,
-    *,
-    launch_resolver: LaunchResolver,
-) -> CodingAgentBackend:
-    """Resolve a caller backend override through the configured authority boundary."""
-    return launch_resolver.backend_for_authority(
-        BackendAuthority(
-            backend=name,
-            kind=BackendAuthorityKind.CALLER,
-            tier=BackendAuthorityTier.CALLER,
-            key_path="request.backend",
-        )
-    )
 
 
 _HOOK_CONFIG_FILENAME: str = _HOOK_CONFIG_PATH_COMPONENTS[-1]

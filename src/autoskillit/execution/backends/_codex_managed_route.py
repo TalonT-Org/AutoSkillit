@@ -22,6 +22,48 @@ if TYPE_CHECKING:
     from autoskillit.execution.backends.codex import CodexBackend
 
 
+def _rendered_codex_guard_scripts(hooks: object) -> set[str]:
+    """Collect guard script names from the rendered Codex hook tables."""
+    if not isinstance(hooks, dict):
+        return set()
+    return {
+        command.rsplit(" ", 1)[-1].removeprefix("guards/")
+        for entries in hooks.values()
+        if isinstance(entries, list)
+        for entry in entries
+        if isinstance(entry, dict)
+        for hook in entry.get("hooks", [])
+        if isinstance(hook, dict)
+        for command in (hook.get("command"),)
+        if isinstance(command, str)
+    }
+
+
+def _managed_codex_catalog_error(
+    catalog_path: Path,
+    *,
+    attestation: ManagedJoinAttestation,
+) -> str | None:
+    """Validate the projected catalog and its attested digest."""
+    try:
+        catalog_bytes = catalog_path.read_bytes()
+        catalog = json.loads(catalog_bytes)
+        models = catalog["models"]
+        selected = [model for model in models if model.get("slug") == attestation.resolved_model]
+        if len(selected) != 1:
+            raise ValueError("selected model is not unique")
+        model = selected[0]
+        if model.get("tool_mode") != "direct" or model.get("apply_patch_tool_type") is not None:
+            raise ValueError("selected model is not direct-mode projected")
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return f"managed Codex catalog is invalid: {type(exc).__name__}: {exc}"
+
+    actual_digest = hashlib.sha256(catalog_bytes).hexdigest()
+    if actual_digest != attestation.codex_catalog_digest:
+        return "managed Codex catalog does not match the attested projection"
+    return None
+
+
 def _managed_codex_config_errors(
     session_dir: Path,
     *,
@@ -45,43 +87,15 @@ def _managed_codex_config_errors(
         errors.append("managed Codex config has no autoskillit MCP server")
     elif server.get("enabled_tools") != list(managed_codex_mcp_tools(route)):
         errors.append("managed Codex config has a divergent direct-tool allow-list")
-    hooks = config.get("hooks")
-    rendered_scripts = (
-        {
-            command.rsplit(" ", 1)[-1].removeprefix("guards/")
-            for entries in hooks.values()
-            if isinstance(entries, list)
-            for entry in entries
-            if isinstance(entry, dict)
-            for hook in entry.get("hooks", [])
-            if isinstance(hook, dict)
-            for command in (hook.get("command"),)
-            if isinstance(command, str)
-        }
-        if isinstance(hooks, dict)
-        else set()
-    )
+    rendered_scripts = _rendered_codex_guard_scripts(config.get("hooks"))
     missing_guards = [
         guard for guard in managed_codex_guard_set(route) if guard not in rendered_scripts
     ]
     if missing_guards:
         errors.append(f"managed Codex config is missing guards: {', '.join(missing_guards)}")
-    try:
-        catalog_bytes = catalog_path.read_bytes()
-        catalog = json.loads(catalog_bytes)
-        models = catalog["models"]
-        selected = [model for model in models if model.get("slug") == attestation.resolved_model]
-        if len(selected) != 1:
-            raise ValueError("selected model is not unique")
-        model = selected[0]
-        if model.get("tool_mode") != "direct" or model.get("apply_patch_tool_type") is not None:
-            raise ValueError("selected model is not direct-mode projected")
-    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        errors.append(f"managed Codex catalog is invalid: {type(exc).__name__}: {exc}")
-    else:
-        actual_digest = hashlib.sha256(catalog_bytes).hexdigest()
-        if actual_digest != attestation.codex_catalog_digest:
-            errors.append("managed Codex catalog does not match the attested projection")
+    catalog_error = _managed_codex_catalog_error(catalog_path, attestation=attestation)
+    if catalog_error is not None:
+        errors.append(catalog_error)
     return errors
 
 

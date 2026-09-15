@@ -21,7 +21,7 @@ import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoskillit.core import (
     CODEX_RESERVED_HOME_ENV_VARS,
@@ -30,6 +30,9 @@ from autoskillit.core import (
 )
 from autoskillit.execution.backends._codex_cmd_builders import CodexFlags
 from autoskillit.execution.backends._codex_config import _format_toml_value
+
+if TYPE_CHECKING:
+    from autoskillit.execution.process._lifecycle.owned_group import OwnedProcessGroup
 
 logger = get_logger(__name__)
 
@@ -61,6 +64,58 @@ def _terminate_probe(owner: object) -> None:
         for stream in (owner.process.stdout, owner.process.stderr):
             if stream is not None:
                 stream.close()
+
+
+def _drain_bounded_probe(
+    owner: OwnedProcessGroup,
+    selector: selectors.BaseSelector,
+    output: dict[str, bytearray],
+    deadline: float,
+    stream_limit_bytes: int,
+) -> _BoundedProbeResult | None:
+    process = owner.process
+    assert process.stdout is not None
+    assert process.stderr is not None
+    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+    while selector.get_map() or owner.observe_exit() is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _terminate_probe(owner)
+            return _BoundedProbeResult(
+                returncode=None,
+                stdout=bytes(output["stdout"]),
+                stderr=bytes(output["stderr"]),
+                failure="timed out",
+            )
+        if not selector.get_map():
+            time.sleep(min(0.01, remaining))
+            continue
+        events = selector.select(timeout=min(0.1, remaining))
+        for key, _ in events:
+            stream_name = key.data
+            try:
+                file_descriptor = (
+                    key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
+                )
+                chunk = os.read(file_descriptor, 8192)
+            except OSError:
+                chunk = b""
+            if not chunk:
+                selector.unregister(key.fileobj)
+                continue
+            target = output[stream_name]
+            target.extend(chunk)
+            if len(target) > stream_limit_bytes:
+                del target[stream_limit_bytes:]
+                _terminate_probe(owner)
+                return _BoundedProbeResult(
+                    returncode=None,
+                    stdout=bytes(output["stdout"]),
+                    stderr=bytes(output["stderr"]),
+                    failure=f"{stream_name} exceeded {stream_limit_bytes} bytes",
+                )
+    return None
 
 
 def _run_bounded_codex_probe(
@@ -95,7 +150,6 @@ def _run_bounded_codex_probe(
             start_new_session=True,
             tether=TetherSpec(origin="codex_probe", ceiling_seconds=3600.0),
         )
-        process = owner.process
     except OSError as exc:
         return _BoundedProbeResult(
             returncode=None,
@@ -108,49 +162,13 @@ def _run_bounded_codex_probe(
     output = {"stdout": bytearray(), "stderr": bytearray()}
     deadline = time.monotonic() + timeout_seconds
     try:
-        assert process.stdout is not None
-        assert process.stderr is not None
         selector_factory = selectors.DefaultSelector
         selector = selector_factory()
-        selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-        selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-        while selector.get_map() or owner.observe_exit() is None:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                _terminate_probe(owner)
-                return _BoundedProbeResult(
-                    returncode=None,
-                    stdout=bytes(output["stdout"]),
-                    stderr=bytes(output["stderr"]),
-                    failure="timed out",
-                )
-            if not selector.get_map():
-                time.sleep(min(0.01, remaining))
-                continue
-            events = selector.select(timeout=min(0.1, remaining))
-            for key, _ in events:
-                stream_name = key.data
-                try:
-                    file_descriptor = (
-                        key.fileobj if isinstance(key.fileobj, int) else key.fileobj.fileno()
-                    )
-                    chunk = os.read(file_descriptor, 8192)
-                except OSError:
-                    chunk = b""
-                if not chunk:
-                    selector.unregister(key.fileobj)
-                    continue
-                target = output[stream_name]
-                target.extend(chunk)
-                if len(target) > stream_limit_bytes:
-                    del target[stream_limit_bytes:]
-                    _terminate_probe(owner)
-                    return _BoundedProbeResult(
-                        returncode=None,
-                        stdout=bytes(output["stdout"]),
-                        stderr=bytes(output["stderr"]),
-                        failure=f"{stream_name} exceeded {stream_limit_bytes} bytes",
-                    )
+        terminal_result = _drain_bounded_probe(
+            owner, selector, output, deadline, stream_limit_bytes
+        )
+        if terminal_result is not None:
+            return terminal_result
         returncode, cleanup_result = owner.settle_evidence(
             timeout=max(0.0, deadline - time.monotonic())
         )
@@ -165,7 +183,7 @@ def _run_bounded_codex_probe(
         )
     except BaseException as exc:
         # settle_evidence() never raises, so any BaseException here is unrelated to cleanup.
-        if process.returncode is None:
+        if owner.process.returncode is None:
             try:
                 _terminate_probe(owner)
             except BaseException as cleanup_exc:
@@ -175,7 +193,7 @@ def _run_bounded_codex_probe(
     finally:
         if selector is not None:
             selector.close()
-        for stream in (process.stdout, process.stderr):
+        for stream in (owner.process.stdout, owner.process.stderr):
             if stream is not None:
                 stream.close()
     return _BoundedProbeResult(
@@ -220,6 +238,30 @@ def _string_array(value: Any) -> list[str] | None:
     return value
 
 
+def _validate_string_array_field(
+    expected: Any,
+    actual: Any,
+    field: str,
+    errors: list[str],
+    *,
+    ordered: bool,
+) -> None:
+    expected_values = _string_array(expected)
+    actual_values = _string_array(actual)
+    if expected_values is None:
+        errors.append(f"Final Codex config autoskillit {field} are not an array of strings")
+    if actual_values is None:
+        errors.append(f"Codex MCP autoskillit {field} are not an array of strings")
+        return
+    if expected_values is None:
+        return
+    matches = (
+        actual_values == expected_values if ordered else set(actual_values) == set(expected_values)
+    )
+    if not matches:
+        errors.append(f"Codex MCP autoskillit {field} do not match final config")
+
+
 def _validate_codex_mcp_inventory(stdout: bytes, config_bytes: bytes) -> list[str]:
     try:
         document = json.loads(stdout.decode("utf-8"))
@@ -253,22 +295,20 @@ def _validate_codex_mcp_inventory(stdout: bytes, config_bytes: bytes) -> list[st
         errors.append("Codex MCP autoskillit transport is not stdio")
     if transport.get("command") != expected.get("command"):
         errors.append("Codex MCP autoskillit command does not match final config")
-    expected_args = _string_array(expected.get("args", []))
-    actual_args = _string_array(transport.get("args", []))
-    if expected_args is None:
-        errors.append("Final Codex config autoskillit args are not an array of strings")
-    if actual_args is None:
-        errors.append("Codex MCP autoskillit args are not an array of strings")
-    elif expected_args is not None and actual_args != expected_args:
-        errors.append("Codex MCP autoskillit args do not match final config")
-    expected_env_vars = _string_array(expected.get("env_vars", []))
-    actual_env_vars = _string_array(transport.get("env_vars", []))
-    if expected_env_vars is None:
-        errors.append("Final Codex config autoskillit env_vars are not an array of strings")
-    if actual_env_vars is None:
-        errors.append("Codex MCP autoskillit env_vars are not an array of strings")
-    elif expected_env_vars is not None and set(actual_env_vars) != set(expected_env_vars):
-        errors.append("Codex MCP autoskillit env_vars do not match final config")
+    _validate_string_array_field(
+        expected.get("args", []),
+        transport.get("args", []),
+        "args",
+        errors,
+        ordered=True,
+    )
+    _validate_string_array_field(
+        expected.get("env_vars", []),
+        transport.get("env_vars", []),
+        "env_vars",
+        errors,
+        ordered=False,
+    )
     for key in ("startup_timeout_sec", "tool_timeout_sec"):
         if key in expected and actual.get(key) != expected[key]:
             errors.append(f"Codex MCP autoskillit {key} does not match final config")

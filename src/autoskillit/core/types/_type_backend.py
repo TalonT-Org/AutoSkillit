@@ -20,10 +20,13 @@ from ._type_native_shell_capture import (
     ManagedHeadlessSessionLineageRef,
     NativeShellCaptureDecision,
 )
-from ._type_plugin_source import PluginLaunchBinding, normalize_inherited_fds
+from ._type_plugin_source import (
+    PluginLaunchBinding,
+    normalize_inherited_fds,
+    validate_skill_entries,
+)
 from ._type_recipe_delivery import RecipeDeliveryBudgetDef
 from ._type_results import ValidatedAddDir
-from ._type_skill_identity import validate_skill_entries
 from ._type_skill_semantics import SKILL_MODEL_CLASS_REGISTRY, SKILL_REASONING_EFFORTS
 
 __all__ = [

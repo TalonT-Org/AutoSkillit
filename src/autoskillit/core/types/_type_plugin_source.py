@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -11,11 +11,42 @@ from pathlib import Path
 from typing import Protocol, TypeGuard
 from uuid import UUID, uuid4
 
-from ._type_skill_identity import validate_skill_entries
-
 logger = logging.getLogger(__name__)  # noqa: TID251 — IL-0 types cannot import core.logging
 
+MANAGED_SKILL_FILENAME = "SKILL.md"
+
+
+def skill_relative_path(name: str) -> Path:
+    """Return the canonical relative path for one skill catalog entry."""
+    return Path(name) / MANAGED_SKILL_FILENAME
+
+
+def validate_skill_entries(
+    entries: Sequence[tuple[str, str]],
+) -> dict[str, Path]:
+    """Return canonical relative paths after validating skill entry identity.
+
+    Shared by managed and projected skill catalogs: both use the same
+    (name, relative_path) identity contract. Lives here (rather than in
+    _type_skill_contract, which PluginLaunchBinding's own __post_init__
+    validation cannot import without a cycle through _type_launch ->
+    _type_backend) since this module has no sibling _type_* imports.
+    """
+    validated: dict[str, Path] = {}
+    for name, relative_path in entries:
+        if not name or Path(name).name != name or name.startswith("."):
+            raise ValueError(f"invalid skill name: {name!r}")
+        if name in validated:
+            raise ValueError(f"duplicate skill name: {name}")
+        expected_path = skill_relative_path(name)
+        if Path(relative_path) != expected_path:
+            raise ValueError(f"skill entry {name!r} must use {expected_path.as_posix()!r}")
+        validated[name] = expected_path
+    return validated
+
+
 __all__ = [
+    "MANAGED_SKILL_FILENAME",
     "DirectInstall",
     "LegacyRetiringEvidence",
     "PluginArtifactKind",
@@ -33,6 +64,8 @@ __all__ = [
     "is_canonical_plugin_artifact_incarnation_id",
     "new_plugin_artifact_incarnation_id",
     "normalize_inherited_fds",
+    "skill_relative_path",
+    "validate_skill_entries",
 ]
 
 

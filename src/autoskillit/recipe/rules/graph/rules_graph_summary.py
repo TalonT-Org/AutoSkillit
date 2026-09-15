@@ -88,12 +88,9 @@ def _is_simple_boolean_gate(recipe: Recipe, ref: str) -> bool:
 
 
 def _candidate_labels(direct_labels: set[str], gate_ref: str) -> set[str]:
-    """Normalized labels a summary token could plausibly use for this step.
+    """Return caller-provided direct labels plus the normalized gating ingredient name.
 
-    Includes the step's own key, its resolved skill name, and the name of
-    the ingredient gating it — recipes sometimes label a cluster of steps
-    sharing one gate with the gate's own name (e.g. remediation.yaml's
-    "(open_pr?)" covers prepare_pr/run_arch_lenses/compose_pr/review_pr).
+    A summary may label several steps with the name of their shared gate.
     """
     labels = direct_labels.copy()
     gate_name = _ingredient_name_from_ref(gate_ref)

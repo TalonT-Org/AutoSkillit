@@ -22,11 +22,7 @@ from autoskillit.execution.evidence._session_retention import (
     prune_execution_candidate_manifests_at_root,
 )
 from autoskillit.execution.evidence.linux_tracing import TraceEnrollmentRecord, read_enrollment
-from autoskillit.execution.evidence.session_log import (
-    _protected_campaign_ids,
-    flush_session_log,
-    resolve_log_dir,
-)
+from autoskillit.execution.evidence.session_log import flush_session_log, resolve_log_dir
 
 logger = get_logger(__name__)
 
@@ -216,7 +212,11 @@ def recover_crashed_sessions(
     try:
         log_root = resolve_log_dir(log_dir)
         if (log_root / "execution-candidates").is_dir():
-            protected_ids = _protected_campaign_ids(project_dir, build_protected_campaign_ids)
+            protected_ids = (
+                build_protected_campaign_ids(Path(project_dir))
+                if project_dir and build_protected_campaign_ids is not None
+                else frozenset()
+            )
             prune_execution_candidate_manifests_at_root(
                 log_root,
                 max_sessions=max_sessions,
